@@ -18,6 +18,13 @@ const (
 	ReadingStatusDidNotFinish     = "did_not_finish"
 )
 
+// ReadingStatusFilterNone filters book listings to Books with no Reading
+// Status. It's a filter value only; no Book has it as its status.
+const (
+	//tygo:emit export type ReadingStatusFilter = ReadingStatus | typeof ReadingStatusFilterNone;
+	ReadingStatusFilterNone = "none"
+)
+
 // Read-through outcomes.
 const (
 	//tygo:emit export type ReadThroughOutcome = typeof ReadThroughOutcomeUnderway | typeof ReadThroughOutcomeFinished | typeof ReadThroughOutcomeAbandoned;

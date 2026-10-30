@@ -211,7 +211,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       );
       exitSelectionMode();
     } catch (error) {
-      toastRequestError(error, "Failed to update review state");
+      toastRequestError(error, "Failed to update review status");
     }
   };
 

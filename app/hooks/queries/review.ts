@@ -16,7 +16,7 @@ export enum QueryKey {
   ReviewCriteria = "ReviewCriteria",
 }
 
-// Book pages read the criteria to explain review state, and the settings page
+// Book pages read the criteria to explain review status, and the settings page
 // edits them, so the route accepts Books Read or Config Read.
 export const useReviewCriteria = () =>
   useQuery<ReviewCriteriaResponse, ShishoAPIError>({

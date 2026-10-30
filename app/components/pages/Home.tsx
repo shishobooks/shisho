@@ -32,8 +32,17 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
+import { useUpdateSearchParams } from "@/hooks/useUpdateSearchParams";
 import { isNotFoundError, toastRequestError } from "@/libraries/api";
 import { resetPaging } from "@/libraries/pagination";
+import {
+  hasReadingFilters,
+  parseReadingFilters,
+  readingFilterQuery,
+  setRatingRangeParams,
+  toggleReadingStatusParam,
+  writeReadingFilters,
+} from "@/libraries/readingFilters";
 import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
@@ -43,7 +52,13 @@ import {
   sortSpecsEqual,
   type SortLevel,
 } from "@/libraries/sortSpec";
-import type { Book, Genre, ReviewedFilter, Tag } from "@/types";
+import type {
+  Book,
+  Genre,
+  ReadingStatusFilter,
+  ReviewedFilter,
+  Tag,
+} from "@/types";
 import {
   ALL_TAGS_SCOPE,
   tagScopeParams,
@@ -79,7 +94,8 @@ const selectedFilters = (
 
 const HomeContent = () => {
   const { libraryId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
+  const updateSearchParams = useUpdateSearchParams();
   const libraryQuery = useUserLibrary(libraryId);
 
   usePageTitle(libraryQuery.data?.name ?? "Books");
@@ -91,6 +107,8 @@ const HomeContent = () => {
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
   const languageParam = searchParams.get("language") ?? "";
   const reviewedFilterParam = searchParams.get("reviewed_filter") ?? "";
+  const readingFilters = parseReadingFilters(searchParams);
+  const readingFiltersActive = hasReadingFilters(readingFilters);
   const sortParam = searchParams.get("sort") ?? "";
   const urlSort: SortLevel[] | null = sortParam
     ? parseSortSpec(sortParam)
@@ -274,95 +292,68 @@ const HomeContent = () => {
 
   const seriesId = seriesIdParam ? parseInt(seriesIdParam, 10) : undefined;
 
-  // Toggle file type filter
-  const toggleFileType = (fileType: string) => {
-    const newFileTypes = selectedFileTypes.includes(fileType)
-      ? selectedFileTypes.filter((ft) => ft !== fileType)
-      : [...selectedFileTypes, fileType];
-    setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev);
-      if (newFileTypes.length > 0) {
-        newParams.set("file_types", newFileTypes.join(","));
-      } else {
-        newParams.delete("file_types");
-      }
-      resetPaging(newParams);
-      return newParams;
+  // Filters edit the URL through updateFilters, which builds on any change
+  // still on its way, so fast clicks don't drop one another. Each filter
+  // change goes back to the first page.
+  const updateFilters = (update: (params: URLSearchParams) => void) =>
+    updateSearchParams((params) => {
+      update(params);
+      resetPaging(params);
     });
+
+  // Adds id to the comma-separated list in key, or takes it out.
+  const toggleListParam = (
+    params: URLSearchParams,
+    key: string,
+    id: string,
+  ) => {
+    const ids = (params.get(key) ?? "").split(",").filter(Boolean);
+    const next = ids.includes(id) ? ids.filter((v) => v !== id) : [...ids, id];
+    if (next.length > 0) params.set(key, next.join(","));
+    else params.delete(key);
   };
 
-  // Toggle genre filter
-  const toggleGenreFilter = (genreId: number) => {
-    const newParams = new URLSearchParams(searchParams);
-    const newGenreIds = selectedGenreIds.includes(genreId)
-      ? selectedGenreIds.filter((id) => id !== genreId)
-      : [...selectedGenreIds, genreId];
+  const toggleFileType = (fileType: string) =>
+    updateFilters((params) => toggleListParam(params, "file_types", fileType));
 
-    if (newGenreIds.length > 0) {
-      newParams.set("genre_ids", newGenreIds.join(","));
-    } else {
-      newParams.delete("genre_ids");
-    }
-    resetPaging(newParams);
-    setSearchParams(newParams);
-  };
+  const toggleGenreFilter = (genreId: number) =>
+    updateFilters((params) =>
+      toggleListParam(params, "genre_ids", String(genreId)),
+    );
 
-  // Toggle tag filter
-  const toggleTagFilter = (tagId: number) => {
-    const newParams = new URLSearchParams(searchParams);
-    const newTagIds = selectedTagIds.includes(tagId)
-      ? selectedTagIds.filter((id) => id !== tagId)
-      : [...selectedTagIds, tagId];
+  const toggleTagFilter = (tagId: number) =>
+    updateFilters((params) =>
+      toggleListParam(params, "tag_ids", String(tagId)),
+    );
 
-    if (newTagIds.length > 0) {
-      newParams.set("tag_ids", newTagIds.join(","));
-    } else {
-      newParams.delete("tag_ids");
-    }
-    resetPaging(newParams);
-    setSearchParams(newParams);
-  };
-
-  // Set language filter
-  const setLanguageFilter = (value: string) => {
-    setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev);
-      if (value && value !== "all") {
-        newParams.set("language", value);
-      } else {
-        newParams.delete("language");
-      }
-      resetPaging(newParams);
-      return newParams;
+  // "all" or empty clears a single-value filter.
+  const setSingleFilter = (key: string, value: string) =>
+    updateFilters((params) => {
+      if (value && value !== "all") params.set(key, value);
+      else params.delete(key);
     });
-  };
 
-  // Set reviewed filter
-  const setReviewedFilter = (value: string) => {
-    setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev);
-      if (value && value !== "all") {
-        newParams.set("reviewed_filter", value);
-      } else {
-        newParams.delete("reviewed_filter");
-      }
-      resetPaging(newParams);
-      return newParams;
-    });
-  };
+  const setLanguageFilter = (value: string) =>
+    setSingleFilter("language", value);
 
-  const clearAllFilters = () => {
-    setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev);
-      newParams.delete("file_types");
-      newParams.delete("genre_ids");
-      newParams.delete("tag_ids");
-      newParams.delete("language");
-      newParams.delete("reviewed_filter");
-      resetPaging(newParams);
-      return newParams;
+  const setReviewedFilter = (value: string) =>
+    setSingleFilter("reviewed_filter", value);
+
+  const toggleReadingStatus = (status: ReadingStatusFilter) =>
+    updateFilters((params) => toggleReadingStatusParam(params, status));
+
+  const setRatingRange = (min: number | undefined, max: number | undefined) =>
+    updateFilters((params) => setRatingRangeParams(params, min, max));
+
+  const clearAllFilters = () =>
+    updateFilters((params) => {
+      writeReadingFilters(params, { statuses: [] });
+      params.delete("file_types");
+      params.delete("genre_ids");
+      params.delete("tag_ids");
+      params.delete("language");
+      params.delete("reviewed_filter");
     });
-  };
 
   const handleSaveSortAsDefault = () => {
     if (libraryIdNum === undefined) return;
@@ -372,20 +363,18 @@ const HomeContent = () => {
       {
         onError: (error) =>
           toastRequestError(error, "Failed to save the default sort"),
-        onSuccess: () => {
-          setSearchParams((prev) => {
-            const params = new URLSearchParams(prev);
-            params.delete("sort");
-            return params;
-          });
-        },
+        // The saved sort is the default now, so the URL drops it, unless
+        // the sort changed while saving.
+        onSuccess: () =>
+          updateSearchParams((params) => {
+            if (params.get("sort") === serialized) params.delete("sort");
+          }),
       },
     );
   };
 
-  const applySortLevels = (next: readonly SortLevel[]) => {
-    setSearchParams((prev) => {
-      const params = new URLSearchParams(prev);
+  const applySortLevels = (next: readonly SortLevel[]) =>
+    updateSearchParams((params) => {
       const serialized = serializeSortSpec(next);
       if (serialized && !sortSpecsEqual(next, defaultSort)) {
         params.set("sort", serialized);
@@ -393,11 +382,10 @@ const HomeContent = () => {
         params.delete("sort");
       }
       resetPaging(params);
-      return params;
     });
-  };
 
   const hasActiveFilters =
+    readingFiltersActive ||
     selectedFileTypes.length > 0 ||
     selectedGenreIds.length > 0 ||
     selectedTagIds.length > 0 ||
@@ -410,6 +398,7 @@ const HomeContent = () => {
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     series_id: seriesId,
+    ...readingFilterQuery(readingFilters),
   };
 
   // Add search if present
@@ -462,6 +451,7 @@ const HomeContent = () => {
     tagIds: selectedTagIds,
     language: languageParam,
     reviewedFilter: reviewedFilterParam,
+    reading: readingFilters,
     sort: sortParam,
   });
   const [confirmedFilterKey, setConfirmedFilterKey] = useState<string | null>(
@@ -479,6 +469,7 @@ const HomeContent = () => {
       setConfirmedFilterKey(currentFilterKey);
       setConfirmedHasFilters(
         searchQuery !== "" ||
+          readingFiltersActive ||
           selectedFileTypes.length > 0 ||
           selectedGenreIds.length > 0 ||
           selectedTagIds.length > 0 ||
@@ -491,6 +482,7 @@ const HomeContent = () => {
     booksQuery.isFetching,
     currentFilterKey,
     searchQuery,
+    readingFiltersActive,
     selectedFileTypes.length,
     selectedGenreIds.length,
     selectedTagIds.length,
@@ -561,12 +553,15 @@ const HomeContent = () => {
             onClearAll={clearAllFilters}
             onGenreSearchChange={setGenreSearchInput}
             onLanguageChange={setLanguageFilter}
+            onRatingChange={setRatingRange}
             onReviewedFilterChange={setReviewedFilter}
             onTagScopeChange={setTagScope}
             onTagSearchChange={setTagSearchInput}
             onToggleFileType={toggleFileType}
             onToggleGenre={toggleGenreFilter}
+            onToggleReadingStatus={toggleReadingStatus}
             onToggleTag={toggleTagFilter}
+            reading={readingFilters}
             reviewedFilter={reviewedFilterParam}
             selectedFileTypes={selectedFileTypes}
             selectedGenreIds={selectedGenreIds}
@@ -617,10 +612,13 @@ const HomeContent = () => {
           languageParam={languageParam}
           onClearAll={clearAllFilters}
           onClearLanguage={() => setLanguageFilter("all")}
+          onClearRating={() => setRatingRange(undefined, undefined)}
           onClearReviewedFilter={() => setReviewedFilter("all")}
           onToggleFileType={toggleFileType}
           onToggleGenre={toggleGenreFilter}
+          onToggleReadingStatus={toggleReadingStatus}
           onToggleTag={toggleTagFilter}
+          reading={readingFilters}
           reviewedFilter={reviewedFilterParam}
           selectedFileTypes={selectedFileTypes}
           selectedGenres={selectedGenres}
@@ -633,13 +631,7 @@ const HomeContent = () => {
             const next = effectiveSort.filter((_, i) => i !== index);
             applySortLevels(next);
           }}
-          onReset={() => {
-            setSearchParams((prev) => {
-              const params = new URLSearchParams(prev);
-              params.delete("sort");
-              return params;
-            });
-          }}
+          onReset={() => updateSearchParams((params) => params.delete("sort"))}
         />
       </div>
 

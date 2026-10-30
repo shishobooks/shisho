@@ -187,8 +187,17 @@ func (s *Service) HoldsBook(ctx context.Context, r *Reach, libraryID, bookID int
 	return onList, errors.WithStack(err)
 }
 
+// ReaderID is the id of r's user, whose reading data the reading sorts and
+// filters read, or nil without one.
+func (r *Reach) ReaderID() *int {
+	if r.User == nil {
+		return nil
+	}
+	return &r.User.ID
+}
+
 // narrow returns opts narrowed to what r reaches: its rules' source File
-// Types, its list, and its libraries. It returns false when r reaches
+// Types, its list, and its libraries. Its user reads the reading sorts. It returns false when r reaches
 // nothing opts could match, since the books filters read an empty library
 // list as no filter.
 func (r *Reach) narrow(opts books.ListBooksOptions) (books.ListBooksOptions, bool) {
@@ -197,6 +206,7 @@ func (r *Reach) narrow(opts books.ListBooksOptions) (books.ListBooksOptions, boo
 	}
 	opts.MainFileTypes = r.SourceFileTypes()
 	opts.ListID = r.listID
+	opts.ReaderID = r.ReaderID()
 	if opts.LibraryID != nil {
 		return opts, r.HoldsLibrary(*opts.LibraryID)
 	}

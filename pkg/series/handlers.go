@@ -289,11 +289,17 @@ func (h *handler) seriesBooks(c echo.Context) error {
 		return err
 	}
 
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+
 	booksList, total, err := h.bookService.ListBooksWithTotal(ctx, books.ListBooksOptions{
 		SeriesID: &id,
 		Limit:    &params.Limit,
 		Offset:   &params.Offset,
 		Sort:     sortLevels,
+		ReaderID: &user.ID,
 	})
 	if err != nil {
 		return errors.WithStack(err)
@@ -305,10 +311,6 @@ func (h *handler) seriesBooks(c echo.Context) error {
 			aspectRatio = b.Library.CoverAspectRatio
 		}
 		b.CoverCacheKey = covers.CacheKey(b.Files, aspectRatio)
-	}
-	user, err := auth.RequireUser(c)
-	if err != nil {
-		return err
 	}
 	if err := reading.AttachReading(ctx, h.seriesService.db, user.ID, booksList); err != nil {
 		return err

@@ -49,7 +49,11 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { MAX_SORT_LEVELS, type SortLevel } from "@/libraries/sortSpec";
+import {
+  initialSortDirection,
+  MAX_SORT_LEVELS,
+  type SortLevel,
+} from "@/libraries/sortSpec";
 
 /*
  * SortSheet is intentionally controlled — it holds NO local state for
@@ -213,7 +217,7 @@ const SortSheetContent = <F extends string>({
   };
 
   const addLevel = (field: F) => {
-    onChange([...levels, { field, direction: "asc" }]);
+    onChange([...levels, { field, direction: initialSortDirection(field) }]);
   };
 
   const changeField = (index: number, field: F) => {

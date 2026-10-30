@@ -287,3 +287,39 @@ func TestSeriesBooks_AttachesOnlyTheCallersReadingStatus(t *testing.T) {
 	assert.Equal(t, models.ReadingStatusCurrentlyReading, *got[first.BookID])
 	assert.Nil(t, statuses(other)[first.BookID])
 }
+
+// Sorting a series' books by rating orders them by the caller's own Rating.
+func TestSeriesBooks_SortsByTheCallersRating(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	seriesID := seedSeriesWithBooks(t, db, []string{"One", "Two", "Three"})
+	h := newSeriesHandler(db)
+	reader := &models.User{Username: "reader", PasswordHash: "x", RoleID: 1, IsActive: true}
+	_, err := db.NewInsert().Model(reader).Exec(ctx)
+	require.NoError(t, err)
+
+	var bookIDs []int
+	require.NoError(t, db.NewSelect().Model((*models.BookSeries)(nil)).Column("book_id").Where("series_id = ?", seriesID).Order("sort_order").Scan(ctx, &bookIDs))
+	svc := reading.NewService(db)
+	for i, units := range []int{8, 20, 12} {
+		require.NoError(t, svc.SetRating(ctx, reader.ID, bookIDs[i], &units))
+	}
+
+	e := newTestEchoSeries(t)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/?sort=rating:desc", nil), rec)
+	reader.LibraryAccess = []*models.UserLibraryAccess{{}}
+	auth.SetUser(c, reader)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(seriesID))
+	require.NoError(t, h.seriesBooks(c))
+
+	var resp ListSeriesBooksResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	got := []int{}
+	for _, b := range resp.Items {
+		got = append(got, b.ID)
+	}
+	assert.Equal(t, []int{bookIDs[1], bookIDs[2], bookIDs[0]}, got)
+}

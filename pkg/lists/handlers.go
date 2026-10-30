@@ -287,10 +287,16 @@ func (h *handler) listBooks(c echo.Context) error {
 	if params.Sort != nil {
 		sort = *params.Sort
 	}
+	readingFilter := reading.Filter{Statuses: params.ReadingStatuses, RatingMin: params.RatingMin, RatingMax: params.RatingMax}
+	if err := readingFilter.Validate(); err != nil {
+		return err
+	}
 
 	opts := ListBooksOptions{
 		ListID:     id,
 		LibraryIDs: user.GetAccessibleLibraryIDs(),
+		ReaderID:   &user.ID,
+		Reading:    readingFilter,
 		Sort:       sort,
 		Limit:      &params.Limit,
 		Offset:     &params.Offset,
@@ -804,7 +810,7 @@ func (h *handler) copyToToRead(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	bookIDs, err := h.listsService.BookIDs(ctx, id, list.DefaultSort, user.GetAccessibleLibraryIDs())
+	bookIDs, err := h.listsService.BookIDs(ctx, id, list.DefaultSort, user.ID, user.GetAccessibleLibraryIDs())
 	if err != nil {
 		return err
 	}

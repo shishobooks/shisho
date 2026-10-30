@@ -15,6 +15,12 @@ const (
 	FieldDateReleased = "date_released"
 	FieldPageCount    = "page_count"
 	FieldDuration     = "duration"
+	// FieldReadingStatus, FieldRating, and FieldDateFinished sort on the
+	// reader's own Reading Status, Rating, and latest finished Read-through,
+	// so they need a reader.
+	FieldReadingStatus = "reading_status"
+	FieldRating        = "rating"
+	FieldDateFinished  = "date_finished"
 )
 
 // AllFields returns the canonical field list in UI display order.
@@ -27,6 +33,9 @@ func AllFields() []string {
 		FieldDateReleased,
 		FieldPageCount,
 		FieldDuration,
+		FieldReadingStatus,
+		FieldRating,
+		FieldDateFinished,
 	}
 }
 
@@ -35,7 +44,8 @@ func IsValidField(s string) bool {
 	switch s {
 	case FieldTitle, FieldAuthor, FieldSeries,
 		FieldDateAdded, FieldDateReleased,
-		FieldPageCount, FieldDuration:
+		FieldPageCount, FieldDuration,
+		FieldReadingStatus, FieldRating, FieldDateFinished:
 		return true
 	}
 	return false

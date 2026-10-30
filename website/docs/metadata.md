@@ -68,7 +68,7 @@ When **Organize file structure during scans** is enabled, applying path-affectin
 
 Use **Edit** on a book or file for direct changes. Use **Identify** to search configured metadata plugins, compare proposed book and file values, and choose which fields to apply. Results from all plugins are listed together, best match first, when the plugin reports how confident it is in each match. Review every checked field when identifying a second edition because shared book metadata may differ between editions.
 
-If **Save Changes** fails in **Edit Book** or **Edit File**, the dialog shows an error banner above the save buttons and keeps your edits so you can retry. This includes a rejected cover upload, such as an image file Shisho cannot fully decode. A review-state update can fail after metadata has already saved; the error does not roll back that saved metadata.
+If **Save Changes** fails in **Edit Book** or **Edit File**, the dialog shows an error banner above the save buttons and keeps your edits so you can retry. This includes a rejected cover upload, such as an image file Shisho cannot fully decode. A review status update can fail after metadata has already saved; the error does not roll back that saved metadata.
 
 When [file organization](./libraries.md#file-organization) is enabled for the library, Identify reorganizes files after applying path-affecting changes. This includes an explicitly selected file **Name** and removal of the final series membership, which removes obsolete series-number suffixes from organized CBZ and hybrid book folders.
 
@@ -130,17 +130,17 @@ Use refresh or reset only after reviewing what will be replaced. Keep sidecars a
 
 ## Reviewing Metadata
 
-Review state is tracked per main file. A book is **Reviewed** only when all of its main files are reviewed; if any main file needs review, the book appears under **Needs review**. Supplements do not affect the result.
+Review status is tracked per main file. A book is **Reviewed** only when all of its main files are reviewed; if any main file needs review, the book appears under **Needs review**. Supplements do not affect the result.
 
 Automatic review checks the fields configured under **Administration > Review Criteria**. Defaults require authors, description, cover, and genres for every main file, plus narrators for M4B files. Adding a missing required value can mark the file reviewed, and removing one can return it to needs review.
 
 On a book's page, a **Needs review** badge on the cover lists what is missing when you hover over it. Select it to open the editor that can fill the gap: the book's when a book field is missing, otherwise the file's. A file's page shows the same badge for that file alone.
 
-To set review state by hand, check or uncheck **Reviewed** under **Review** in **Edit**. A manual **Reviewed** or **Needs review** choice overrides automatic calculation in either direction. The override is sticky until it is cleared, even if metadata or review criteria later change. Admins can change the required fields and recompute review state from **Review Criteria**.
+To set review status by hand, check or uncheck **Reviewed** under **Review** in **Edit**. A manual **Reviewed** or **Needs review** choice overrides automatic calculation in either direction. The override is sticky until it is cleared, even if metadata or review criteria later change. Admins can change the required fields and recompute review status from **Review Criteria**.
 
-To clear the override on one book or file, select **Use automatic** next to the line that says when it was set by hand, then save. Review state follows the review criteria again. On a book, this clears the override on every main file, including when only some of them were set by hand. **Use automatic** also undoes a change to **Reviewed** that you haven't saved yet.
+To clear the override on one book or file, select **Use automatic** next to the line that says when it was set by hand, then save. Review status follows the review criteria again. On a book, this clears the override on every main file, including when only some of them were set by hand. **Use automatic** also undoes a change to **Reviewed** that you haven't saved yet.
 
-Use the gallery's **Review state** filter to work through the queue. Bulk selection offers **Mark reviewed** and **Mark needs review**.
+Use the gallery's **Review status** filter to work through the queue. Bulk selection offers **Mark reviewed** and **Mark needs review**.
 
 ## Chapters
 

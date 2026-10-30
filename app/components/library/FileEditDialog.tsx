@@ -508,7 +508,7 @@ export function FileEditDialog({
       }
 
       // Apply a pending review change: an override, or null to go back to
-      // the review criteria. A supplement has no review state, and the server
+      // the review criteria. A supplement has no review status, and the server
       // rejects one, so the draft is dropped when the role changes to it.
       if (
         fileRole !== FileRoleSupplement &&

@@ -93,6 +93,9 @@ describe("SORT_FIELDS", () => {
       "date_released",
       "page_count",
       "duration",
+      "reading_status",
+      "rating",
+      "date_finished",
     ]);
   });
 });

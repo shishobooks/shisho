@@ -11,7 +11,7 @@ func TestOrderClauses_SingleLevel(t *testing.T) {
 
 	got := OrderClauses([]SortLevel{
 		{Field: FieldTitle, Direction: DirAsc},
-	})
+	}, nil)
 
 	// Title maps directly to b.sort_title. NULLS LAST is emulated with a
 	// leading "IS NULL" term.
@@ -24,7 +24,7 @@ func TestOrderClauses_DescDirection(t *testing.T) {
 
 	got := OrderClauses([]SortLevel{
 		{Field: FieldDateAdded, Direction: DirDesc},
-	})
+	}, nil)
 	assert.Equal(t, "b.created_at IS NULL, b.created_at DESC", got[0].Expression)
 }
 
@@ -33,7 +33,7 @@ func TestOrderClauses_SeriesIncludesOmnibusOrdering(t *testing.T) {
 
 	got := OrderClauses([]SortLevel{
 		{Field: FieldSeries, Direction: DirDesc},
-	})
+	}, nil)
 
 	// Series expands to name, range discriminator, start, and endpoint.
 	// Position clauses are always ASC regardless of the chosen name direction.
@@ -64,7 +64,7 @@ func TestOrderClauses_NewestFileFallback(t *testing.T) {
 
 	got := OrderClauses([]SortLevel{
 		{Field: FieldPageCount, Direction: DirAsc},
-	})
+	}, nil)
 
 	// page_count uses the COALESCE(newest file, any file with value)
 	// pattern. The generated SQL must prefer the newest file (f.id DESC).
@@ -96,7 +96,7 @@ func TestOrderClauses_NewestFileCoalesce_AllFields(t *testing.T) {
 			t.Parallel()
 			got := OrderClauses([]SortLevel{
 				{Field: tt.field, Direction: DirDesc},
-			})
+			}, nil)
 			assert.Len(t, got, 1)
 			assert.Contains(t, got[0].Expression, "COALESCE")
 			assert.NotContains(t, got[0].Expression, "primary_file_id")
@@ -112,7 +112,7 @@ func TestOrderClauses_MultiLevel(t *testing.T) {
 	got := OrderClauses([]SortLevel{
 		{Field: FieldAuthor, Direction: DirAsc},
 		{Field: FieldTitle, Direction: DirAsc},
-	})
+	}, nil)
 	assert.Len(t, got, 2)
 	assert.Contains(t, got[0].Expression, "sort_name") // author
 	assert.Contains(t, got[1].Expression, "sort_title")
@@ -120,6 +120,23 @@ func TestOrderClauses_MultiLevel(t *testing.T) {
 
 func TestOrderClauses_Empty(t *testing.T) {
 	t.Parallel()
-	assert.Empty(t, OrderClauses(nil))
-	assert.Empty(t, OrderClauses([]SortLevel{}))
+	assert.Empty(t, OrderClauses(nil, nil))
+	assert.Empty(t, OrderClauses([]SortLevel{}, nil))
+}
+
+// The reading sorts read the reader's own data, and need a reader.
+func TestOrderClauses_ReadingFieldsNeedAReader(t *testing.T) {
+	t.Parallel()
+
+	levels := []SortLevel{
+		{Field: FieldRating, Direction: DirDesc},
+		{Field: FieldDateFinished, Direction: DirAsc},
+	}
+	assert.Empty(t, OrderClauses(levels, nil))
+
+	reader := 7
+	got := OrderClauses(levels, &reader)
+	assert.Len(t, got, 2)
+	assert.Contains(t, got[0].Expression, "ubr.user_id = 7")
+	assert.Contains(t, got[1].Expression, "rtf.user_id = 7")
 }

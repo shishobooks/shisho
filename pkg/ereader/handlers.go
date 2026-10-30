@@ -974,6 +974,7 @@ func typesFilterFor(r *reach.Reach, typesFilter string) string {
 func (h *handler) listBooksPaginated(ctx context.Context, r *reach.Reach, opts books.ListBooksOptions, page int, typesFilter string) ([]*models.Book, int, error) {
 	opts.ListID = r.ListID()
 	opts.MainFileTypes = r.SourceFileTypes()
+	opts.ReaderID = r.ReaderID()
 	if typesFilter != "" && typesFilter != "all" {
 		opts.MainFileMatches = reach.DeliveredAs(r.Rules, strings.ToLower(typesFilter))
 	}

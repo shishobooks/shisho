@@ -1,4 +1,13 @@
-import { Bookmark, Eye, File, Languages, Tags, X } from "lucide-react";
+import {
+  Bookmark,
+  BookOpenCheck,
+  Eye,
+  File,
+  Languages,
+  Star,
+  Tags,
+  X,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +20,24 @@ export interface SelectedFilter {
 }
 
 export type FilterChipKind =
-  "fileType" | "genre" | "tag" | "language" | "reviewState";
+  | "readingStatus"
+  | "rating"
+  | "fileType"
+  | "genre"
+  | "tag"
+  | "language"
+  | "reviewStatus";
 
 const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
   {
+    readingStatus: {
+      icon: <BookOpenCheck className="h-3 w-3 shrink-0" />,
+      color: "text-chart-1",
+    },
+    rating: {
+      icon: <Star className="h-3 w-3 shrink-0" />,
+      color: "text-amber-500",
+    },
     fileType: {
       icon: <File className="h-3 w-3 shrink-0" />,
       color: "text-chart-5",
@@ -31,7 +54,7 @@ const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
       icon: <Languages className="h-3 w-3 shrink-0" />,
       color: "text-chart-5",
     },
-    reviewState: {
+    reviewStatus: {
       icon: <Eye className="h-3 w-3 shrink-0" />,
       color: "text-chart-3",
     },

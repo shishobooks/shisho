@@ -187,6 +187,11 @@ func (h *handler) list(c echo.Context) error {
 		explicitSort = parsed
 	}
 
+	readingFilter := reading.Filter{Statuses: params.ReadingStatuses, RatingMin: params.RatingMin, RatingMax: params.RatingMax}
+	if err := readingFilter.Validate(); err != nil {
+		return err
+	}
+
 	reviewedFilter := params.ReviewedFilter
 	if reviewedFilter == "all" {
 		reviewedFilter = ""
@@ -218,6 +223,8 @@ func (h *handler) list(c echo.Context) error {
 	if params.ToRead {
 		opts.ToReadUserID = &user.ID
 	}
+	opts.ReaderID = &user.ID
+	opts.Reading = readingFilter
 
 	// Resolve the sort: explicit param wins, then stored per-(user, library)
 	// preference, then nil (service applies its hard-coded default). The

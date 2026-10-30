@@ -5,34 +5,48 @@ import {
 import { Button } from "@/components/ui/button";
 import { FILE_TYPE_OPTIONS } from "@/constants/fileTypes";
 import { getLanguageName } from "@/constants/languages";
+import {
+  ratingRangeLabel,
+  READING_STATUS_FILTER_OPTIONS,
+  type ReadingFilters,
+} from "@/libraries/readingFilters";
+import type { ReadingStatusFilter } from "@/types";
 
 const REVIEWED_FILTER_LABELS: Record<string, string> = {
   needs_review: "Needs review",
   reviewed: "Reviewed",
 };
 
+// The library's own filters are optional, since a List has only the reading
+// filters.
 interface ActiveFilterChipsProps {
   hasActiveFilters: boolean;
-  selectedFileTypes: string[];
-  selectedGenres: SelectedFilter[];
-  selectedTags: SelectedFilter[];
-  languageParam: string;
-  reviewedFilter: string;
-  onToggleFileType: (fileType: string) => void;
-  onToggleGenre: (genreId: number) => void;
-  onToggleTag: (tagId: number) => void;
-  onClearLanguage: () => void;
-  onClearReviewedFilter: () => void;
+  reading: ReadingFilters;
+  onToggleReadingStatus: (status: ReadingStatusFilter) => void;
+  onClearRating: () => void;
+  selectedFileTypes?: string[];
+  selectedGenres?: SelectedFilter[];
+  selectedTags?: SelectedFilter[];
+  languageParam?: string;
+  reviewedFilter?: string;
+  onToggleFileType?: (fileType: string) => void;
+  onToggleGenre?: (genreId: number) => void;
+  onToggleTag?: (tagId: number) => void;
+  onClearLanguage?: () => void;
+  onClearReviewedFilter?: () => void;
   onClearAll: () => void;
 }
 
 export const ActiveFilterChips = ({
   hasActiveFilters,
-  selectedFileTypes,
-  selectedGenres,
-  selectedTags,
-  languageParam,
-  reviewedFilter,
+  reading,
+  onToggleReadingStatus,
+  onClearRating,
+  selectedFileTypes = [],
+  selectedGenres = [],
+  selectedTags = [],
+  languageParam = "",
+  reviewedFilter = "",
   onToggleFileType,
   onToggleGenre,
   onToggleTag,
@@ -45,15 +59,39 @@ export const ActiveFilterChips = ({
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-xs text-muted-foreground">Filtering by</span>
-      {selectedFileTypes.map((fileType) => (
+      {/* In the picker's order, whatever order they were picked in. */}
+      {READING_STATUS_FILTER_OPTIONS.filter((option) =>
+        reading.statuses.includes(option.value),
+      ).map((option) => (
         <FilterChip
-          key={fileType}
+          key={option.value}
+          kind="readingStatus"
+          label={option.label}
+          onRemove={() => onToggleReadingStatus(option.value)}
+        />
+      ))}
+      {(reading.ratingMin !== undefined || reading.ratingMax !== undefined) && (
+        <FilterChip
+          kind="rating"
+          label={ratingRangeLabel(reading.ratingMin, reading.ratingMax)}
+          onRemove={onClearRating}
+        />
+      )}
+      {/* In the picker's order, as the status chips are. A type the picker
+          doesn't offer (from an old link) still filters, so it keeps a chip. */}
+      {[
+        ...FILE_TYPE_OPTIONS.filter((option) =>
+          selectedFileTypes.includes(option.value),
+        ),
+        ...selectedFileTypes
+          .filter((type) => !FILE_TYPE_OPTIONS.some((o) => o.value === type))
+          .map((type) => ({ value: type, label: type })),
+      ].map((option) => (
+        <FilterChip
+          key={option.value}
           kind="fileType"
-          label={
-            FILE_TYPE_OPTIONS.find((o) => o.value === fileType)?.label ??
-            fileType
-          }
-          onRemove={() => onToggleFileType(fileType)}
+          label={option.label}
+          onRemove={() => onToggleFileType?.(option.value)}
         />
       ))}
       {selectedGenres.map((genre) => (
@@ -61,7 +99,7 @@ export const ActiveFilterChips = ({
           key={genre.id}
           kind="genre"
           label={genre.name}
-          onRemove={() => onToggleGenre(genre.id)}
+          onRemove={() => onToggleGenre?.(genre.id)}
         />
       ))}
       {selectedTags.map((tag) => (
@@ -69,21 +107,21 @@ export const ActiveFilterChips = ({
           key={tag.id}
           kind="tag"
           label={tag.name}
-          onRemove={() => onToggleTag(tag.id)}
+          onRemove={() => onToggleTag?.(tag.id)}
         />
       ))}
       {languageParam && (
         <FilterChip
           kind="language"
           label={getLanguageName(languageParam) ?? languageParam}
-          onRemove={onClearLanguage}
+          onRemove={() => onClearLanguage?.()}
         />
       )}
       {reviewedFilter && reviewedFilter !== "all" && (
         <FilterChip
-          kind="reviewState"
+          kind="reviewStatus"
           label={REVIEWED_FILTER_LABELS[reviewedFilter] ?? reviewedFilter}
-          onRemove={onClearReviewedFilter}
+          onRemove={() => onClearReviewedFilter?.()}
         />
       )}
       <Button

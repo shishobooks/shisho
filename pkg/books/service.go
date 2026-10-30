@@ -21,6 +21,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/shishobooks/shisho/pkg/sortname"
@@ -51,6 +52,16 @@ type ListBooksOptions struct {
 	Search         *string  // Search query for title/author
 	ReviewedFilter string   // "" (default = all), "needs_review", "reviewed"
 	ToReadUserID   *int     // Filter to this user's To Read, ordered by its queue whatever the Sort
+
+	// CurrentlyReadingUserID filters to this user's Books with a
+	// Read-through underway, the ones being read before the paused ones,
+	// whatever the Sort.
+	CurrentlyReadingUserID *int
+
+	// ReaderID is the user whose reading data Reading and the rating and
+	// date_finished sorts read. Without it, those are ignored.
+	ReaderID *int
+	Reading  reading.Filter
 
 	// MainFileMatches keeps the books that meet at least one of the matches.
 	// Nil means no filter; an empty list matches no book.
@@ -394,7 +405,8 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	}
 
 	// Apply ordering.
-	// Precedence: orderByRecent (internal flag) > To Read's queue > explicit Sort >
+	// Precedence: orderByRecent (internal flag) > To Read's queue >
+	// Currently Reading's order > explicit Sort >
 	// series-number (when SeriesID is set) > sortspec.BuiltinDefault.
 	switch {
 	case opts.orderByRecent:
@@ -404,8 +416,12 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.OrderExpr("(SELECT ub_q.to_read_position FROM user_books ub_q WHERE ub_q.user_id = ? AND ub_q.book_id = b.id) ASC", *opts.ToReadUserID).
 			Order("b.id ASC")
 
+	case opts.CurrentlyReadingUserID != nil:
+		q = q.OrderExpr(reading.UnderwayOrderExpr(*opts.CurrentlyReadingUserID, "b.id")).
+			Order("b.id ASC")
+
 	case len(opts.Sort) > 0:
-		for _, clause := range sortspec.OrderClauses(opts.Sort) {
+		for _, clause := range sortspec.OrderClauses(opts.Sort, opts.ReaderID) {
 			q = q.OrderExpr(clause.Expression)
 		}
 		// Stable tiebreaker: ensures deterministic pagination when the
@@ -430,7 +446,7 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		// ordering when neither the URL nor a stored preference overrides
 		// it. Keep a stable id tiebreaker for the same pagination reason
 		// as the explicit-sort branch.
-		for _, clause := range sortspec.OrderClauses(sortspec.BuiltinDefault()) {
+		for _, clause := range sortspec.OrderClauses(sortspec.BuiltinDefault(), nil) {
 			q = q.OrderExpr(clause.Expression)
 		}
 		q = q.Order("b.id ASC")
@@ -476,6 +492,12 @@ func applyBookFilters(q *bun.SelectQuery, opts ListBooksOptions) *bun.SelectQuer
 	}
 	if opts.ToReadUserID != nil {
 		q = q.Where("b.id IN (SELECT ub_f.book_id FROM user_books ub_f WHERE ub_f.user_id = ? AND ub_f.to_read_position IS NOT NULL)", *opts.ToReadUserID)
+	}
+	if opts.CurrentlyReadingUserID != nil {
+		q = q.Where(reading.UnderwayFilterExpr(*opts.CurrentlyReadingUserID, "b.id"))
+	}
+	if opts.ReaderID != nil {
+		q = opts.Reading.Apply(q, *opts.ReaderID, "b.id")
 	}
 
 	// Filter by author (person). Subquery rather than JOIN so it composes

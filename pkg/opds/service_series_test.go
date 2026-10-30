@@ -52,7 +52,7 @@ func TestOPDSLibrarySeriesBooks_SeriesFromOtherLibrary_Returns404(t *testing.T) 
 
 	svc := NewService(db, books.NewService(db, appsettings.NewService(db)))
 	build := func(libraryID int) (*Feed, error) {
-		return svc.BuildLibrarySeriesBooksFeed(ctx, "http://x", delivery.BuiltInRules(), libraryID, s.ID, 10, 0, nil)
+		return svc.BuildLibrarySeriesBooksFeed(ctx, "http://x", delivery.BuiltInRules(), libraryID, s.ID, 10, 0, nil, nil)
 	}
 	feed, err := build(libs[0].ID)
 	var codeErr *errcodes.Error

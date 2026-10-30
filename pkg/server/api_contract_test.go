@@ -175,6 +175,21 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A rating is in quarter stars from 0.25 to 5.",
 		},
 		{
+			name:   "book listing with an unknown reading status",
+			method: http.MethodGet, path: "/api/books?reading_status=finished",
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
+			name:   "book listing with a rating range upside down",
+			method: http.MethodGet, path: "/api/books?rating_min=4&rating_max=3",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "The minimum rating is above the maximum.",
+		},
+		{
+			name:   "list books with a rating outside the scale",
+			method: http.MethodGet, path: "/api/lists/999999/books?rating_min=0",
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "page flow that isn't paginated or scrolled",
 			method: http.MethodPut, path: fmt.Sprintf("/api/reading/books/%d/page-flow", fileBook.ID),
 			body:   `{"page_flow":"sideways"}`,

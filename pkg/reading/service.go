@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/database"
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -75,6 +76,89 @@ func StatusExpr(userID int, bookIDColumn string) string {
 		models.ReadingStatusCurrentlyReading, models.ReadingStatusPaused, models.ReadingStatusToRead,
 		models.ReadingStatusRead, models.ReadingStatusDidNotFinish,
 	)
+}
+
+// StatusRankExpr is the SQL expression ranking userID's Reading Status of
+// the Book whose id is in bookIDColumn, for sorting: Currently Reading 1,
+// Paused 2, To Read 3, Read 4, Did Not Finish 5, and no status 6.
+// bookIDColumn is interpolated as in StatusExpr.
+func StatusRankExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`(CASE %s WHEN '%s' THEN 1 WHEN '%s' THEN 2 WHEN '%s' THEN 3 WHEN '%s' THEN 4 WHEN '%s' THEN 5 ELSE 6 END)`,
+		StatusExpr(userID, bookIDColumn),
+		models.ReadingStatusCurrentlyReading, models.ReadingStatusPaused, models.ReadingStatusToRead,
+		models.ReadingStatusRead, models.ReadingStatusDidNotFinish)
+}
+
+// RatingUnitsExpr is the SQL expression for userID's Rating, in
+// quarter-star units, of the Book whose id is in bookIDColumn, or NULL when
+// unrated. bookIDColumn is interpolated as in StatusExpr.
+func RatingUnitsExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`(SELECT ubr.rating FROM user_books ubr WHERE ubr.user_id = %d AND ubr.book_id = %s)`, userID, bookIDColumn)
+}
+
+// LastFinishedDayExpr is the SQL expression for the end day of userID's
+// latest finished Read-through of the Book whose id is in bookIDColumn, or
+// NULL when no finished Read-through has an end day. bookIDColumn is
+// interpolated as in StatusExpr.
+func LastFinishedDayExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`(SELECT MAX(rtf.end_day) FROM read_throughs rtf WHERE rtf.user_id = %d AND rtf.book_id = %s AND rtf.outcome = '%s')`,
+		userID, bookIDColumn, models.ReadThroughOutcomeFinished)
+}
+
+// UnderwayOrderExpr is the SQL ORDER BY for userID's Books underway, the
+// Book whose id is in bookIDColumn: the ones being read before the paused
+// ones, each most recently begun first. bookIDColumn is interpolated as in
+// StatusExpr.
+func UnderwayOrderExpr(userID int, bookIDColumn string) string {
+	underway := func(column string) string {
+		return fmt.Sprintf(`(SELECT rtu.%s FROM read_throughs rtu WHERE rtu.user_id = %d AND rtu.book_id = %s AND rtu.outcome = '%s')`,
+			column, userID, bookIDColumn, models.ReadThroughOutcomeUnderway)
+	}
+	return fmt.Sprintf("%[1]s ASC, %[2]s IS NULL, %[2]s DESC, %[3]s DESC", underway("paused"), underway("begin_day"), underway("id"))
+}
+
+// UnderwayFilterExpr is the SQL condition that userID has a Read-through
+// underway on the Book whose id is in bookIDColumn, interpolated as in
+// StatusExpr.
+func UnderwayFilterExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`EXISTS (SELECT 1 FROM read_throughs rtu WHERE rtu.user_id = %d AND rtu.book_id = %s AND rtu.outcome = '%s')`,
+		userID, bookIDColumn, models.ReadThroughOutcomeUnderway)
+}
+
+// Filter keeps the Books whose reader's Reading Status is any of Statuses,
+// where models.ReadingStatusFilterNone matches Books with none, and that the
+// reader rated within RatingMin and RatingMax stars, both ends included.
+// Empty fields don't filter.
+type Filter struct {
+	Statuses  []string
+	RatingMin *float64
+	RatingMax *float64
+}
+
+// Validate refuses a rating range whose minimum is above its maximum.
+func (f Filter) Validate() error {
+	if f.RatingMin != nil && f.RatingMax != nil && *f.RatingMin > *f.RatingMax {
+		return errcodes.ValidationError("The minimum rating is above the maximum.")
+	}
+	return nil
+}
+
+// Apply adds f, read from readerID's reading data, to q, whose Book id is
+// in bookIDColumn, interpolated as in StatusExpr.
+func (f Filter) Apply(q *bun.SelectQuery, readerID int, bookIDColumn string) *bun.SelectQuery {
+	if len(f.Statuses) > 0 {
+		// No status reads as "none", so one IN matches any mix of values
+		// and the status is derived once per row.
+		q = q.Where(fmt.Sprintf("COALESCE(%s, '%s') IN (?)", StatusExpr(readerID, bookIDColumn), models.ReadingStatusFilterNone), bun.List(f.Statuses))
+	}
+	rating := RatingUnitsExpr(readerID, bookIDColumn)
+	if f.RatingMin != nil {
+		q = q.Where(rating+" >= ?", *f.RatingMin*4)
+	}
+	if f.RatingMax != nil {
+		q = q.Where(rating+" <= ?", *f.RatingMax*4)
+	}
+	return q
 }
 
 // AttachReading sets ReadingStatus and Rating on each Book to userID's.

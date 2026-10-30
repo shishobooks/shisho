@@ -1,5 +1,7 @@
+import * as SliderPrimitive from "@radix-ui/react-slider";
 import {
   Bookmark,
+  BookOpenCheck,
   ChevronsUpDown,
   Eye,
   File,
@@ -7,9 +9,17 @@ import {
   ListFilter,
   Square,
   SquareCheckBig,
+  Star,
   Tags,
 } from "lucide-react";
-import { forwardRef, useId, useState, type ReactNode } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import {
   FilterChip,
@@ -62,13 +72,23 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import {
+  ratingRangeLabel,
+  READING_STATUS_FILTER_OPTIONS,
+  type ReadingFilters,
+} from "@/libraries/readingFilters";
 import { cn } from "@/libraries/utils";
-import type { Genre, Tag } from "@/types";
+import type { Genre, ReadingStatusFilter, Tag } from "@/types";
+import { formatCount } from "@/utils/format";
 import { splitTagNamespace, type TagScope } from "@/utils/tagNamespaces";
 
 type FilterOptionsQuery = RetryableQuery & { data: unknown };
 
 interface FilterSheetProps {
+  /** The reading filters, which read the signed-in user's own reading. */
+  reading: ReadingFilters;
+  onToggleReadingStatus: (status: ReadingStatusFilter) => void;
+  onRatingChange: (min: number | undefined, max: number | undefined) => void;
   selectedFileTypes: string[];
   fileTypeOptions: readonly { value: string; label: string }[];
   onToggleFileType: (fileType: string) => void;
@@ -273,6 +293,256 @@ const FilterCombobox = ({
   );
 };
 
+/**
+ * A combobox of a few fixed options, any number of them chosen. The trigger
+ * names the chosen ones, so the sheet stays short however many there are.
+ */
+const MultiSelectCombobox = <V extends string>({
+  labelId,
+  options,
+  selected,
+  onToggle,
+  placeholder,
+}: {
+  /** The id of the section header, which names the trigger. */
+  labelId: string;
+  options: readonly { value: V; label: string }[];
+  selected: readonly V[];
+  onToggle: (value: V) => void;
+  /** What the trigger says with nothing chosen. */
+  placeholder: string;
+}) => {
+  const [open, setOpen] = useState(false);
+  const commandRef = useRef<HTMLDivElement>(null);
+  const chosen = options.filter((o) => selected.includes(o.value));
+  return (
+    <Popover modal onOpenChange={setOpen} open={open}>
+      <PopoverTrigger asChild>
+        <Button
+          aria-expanded={open}
+          aria-labelledby={labelId}
+          className={cn(
+            "w-full justify-between font-normal",
+            chosen.length === 0 && "text-muted-foreground",
+          )}
+          role="combobox"
+          variant="outline"
+        >
+          <span className="truncate">
+            {chosen.length > 0
+              ? chosen.map((o) => o.label).join(", ")
+              : placeholder}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        // With no search box, cmdk's root takes focus so the arrow keys and
+        // Enter reach it.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          commandRef.current?.focus();
+        }}
+      >
+        <Command
+          className="outline-none"
+          ref={commandRef}
+          shouldFilter={false}
+          tabIndex={-1}
+        >
+          <CommandList>
+            <CommandGroup>
+              {options.map((option) => {
+                const isSelected = selected.includes(option.value);
+                return (
+                  <CommandItem
+                    key={option.value}
+                    onSelect={() => onToggle(option.value)}
+                    value={option.value}
+                  >
+                    {isSelected ? (
+                      <SquareCheckBig className="mr-2 h-4 w-4" />
+                    ) : (
+                      <Square className="mr-2 h-4 w-4" />
+                    )}
+                    {option.label}
+                    {/* cmdk's aria-selected marks the highlighted option,
+                        so the chosen state is spoken as text. */}
+                    {isSelected && <span className="sr-only">(chosen)</span>}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+// The rating slider's ends. Each end at its edge of the track sets no bound.
+const RATING_FLOOR = 0;
+const RATING_CEILING = 5;
+
+const ratingEndText = (stars: number, edge: number) =>
+  stars === edge ? "Any" : formatCount(stars, "star");
+
+/**
+ * The rating range as a slider with a thumb for each end, in quarter stars.
+ * Either thumb at its edge of the track leaves that end unbounded, so the
+ * whole track is any rating, unrated books included.
+ */
+const RatingRangeSlider = ({
+  labelId,
+  min,
+  max,
+  onChange,
+}: {
+  labelId: string;
+  min: number | undefined;
+  max: number | undefined;
+  onChange: (min: number | undefined, max: number | undefined) => void;
+}) => {
+  const committed: [number, number] = [
+    min ?? RATING_FLOOR,
+    max ?? RATING_CEILING,
+  ];
+  // The range shown while dragging, before it's committed to the URL.
+  const [preview, setPreview] = useState<[number, number] | null>(null);
+  // Radix reports a key press's commit before its change, so the preview
+  // clears after the render that follows a commit, or once a new range
+  // arrives, rather than on commit itself. A commit that changes nothing
+  // (an end clamped back) still clears it.
+  const [commits, setCommits] = useState(0);
+  useEffect(() => setPreview(null), [min, max, commits]);
+  const [low, high] = preview ?? committed;
+  const range = (lo: number, hi: number) => ({
+    min: lo === RATING_FLOOR ? undefined : lo,
+    // The top of the range is at least the lowest rating there is.
+    max: hi === RATING_CEILING ? undefined : Math.max(hi, 0.25),
+  });
+  const shown = range(low, high);
+
+  return (
+    <div className="space-y-2">
+      <div className="text-right text-xs tabular-nums text-muted-foreground">
+        {ratingRangeLabel(shown.min, shown.max)}
+      </div>
+      <SliderPrimitive.Root
+        aria-labelledby={labelId}
+        className="relative flex w-full touch-none select-none items-center py-2"
+        max={RATING_CEILING}
+        min={RATING_FLOOR}
+        minStepsBetweenThumbs={0}
+        onValueChange={([lo, hi]) => setPreview([lo, hi])}
+        onValueCommit={([lo, hi]) => {
+          setCommits((n) => n + 1);
+          const next = range(lo, hi);
+          onChange(next.min, next.max);
+        }}
+        step={0.25}
+        value={[low, high]}
+      >
+        <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-amber-400/20">
+          <SliderPrimitive.Range className="absolute h-full bg-amber-400" />
+        </SliderPrimitive.Track>
+        {(
+          [
+            ["Lowest rating", low, RATING_FLOOR],
+            ["Highest rating", high, RATING_CEILING],
+          ] as const
+        ).map(([label, stars, edge]) => (
+          <SliderPrimitive.Thumb
+            aria-label={label}
+            aria-valuetext={ratingEndText(stars, edge)}
+            // Radix's Home and End move the first and last thumbs; these
+            // move the focused end as far as it goes instead.
+            className="block h-4 w-4 rounded-full border border-amber-500 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            key={label}
+            onKeyDown={(e) => {
+              if (e.key !== "Home" && e.key !== "End") return;
+              e.preventDefault();
+              const isLow = edge === RATING_FLOOR;
+              const lo = isLow ? (e.key === "Home" ? RATING_FLOOR : high) : low;
+              const hi = isLow ? high : e.key === "Home" ? low : RATING_CEILING;
+              setCommits((n) => n + 1);
+              const next = range(lo, hi);
+              onChange(next.min, next.max);
+            }}
+          />
+        ))}
+      </SliderPrimitive.Root>
+      <div
+        aria-hidden
+        className="flex justify-between text-[10px] text-muted-foreground"
+      >
+        <span>Any</span>
+        <span>Any</span>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * The Reading Status and rating filters. Both read the signed-in user's own
+ * reading, so they're the same on a library and on a List.
+ */
+export const ReadingFilterSection = ({
+  filters,
+  onToggleStatus,
+  onRatingChange,
+}: {
+  filters: ReadingFilters;
+  onToggleStatus: (status: ReadingStatusFilter) => void;
+  /** Undefined leaves that end of the range open. */
+  onRatingChange: (min: number | undefined, max: number | undefined) => void;
+}) => {
+  const statusLabelId = useId();
+  const ratingLabelId = useId();
+
+  return (
+    <>
+      <div>
+        <SectionHeader
+          colorClass="bg-chart-1/20 text-chart-1"
+          detail={
+            filters.statuses.length > 0
+              ? `${filters.statuses.length} selected`
+              : undefined
+          }
+          icon={<BookOpenCheck className="h-3 w-3" />}
+          label="Reading status"
+          labelId={statusLabelId}
+        />
+        <MultiSelectCombobox
+          labelId={statusLabelId}
+          onToggle={onToggleStatus}
+          options={READING_STATUS_FILTER_OPTIONS}
+          placeholder="Any status"
+          selected={filters.statuses}
+        />
+      </div>
+
+      <div>
+        <SectionHeader
+          colorClass="bg-amber-400/20 text-amber-500"
+          icon={<Star className="h-3 w-3" />}
+          label="Rating"
+          labelId={ratingLabelId}
+        />
+        <RatingRangeSlider
+          labelId={ratingLabelId}
+          max={filters.ratingMax}
+          min={filters.ratingMin}
+          onChange={onRatingChange}
+        />
+      </div>
+    </>
+  );
+};
+
 const scopeKey = (scope: TagScope) =>
   scope.kind === "namespace" ? `ns:${scope.namespace}` : scope.kind;
 
@@ -332,6 +602,9 @@ const TagScopeSwitch = ({
 };
 
 const FilterContent = ({
+  reading,
+  onToggleReadingStatus,
+  onRatingChange,
   selectedFileTypes,
   fileTypeOptions,
   onToggleFileType,
@@ -367,6 +640,12 @@ const FilterContent = ({
   const reviewLabelId = useId();
   return (
     <div className="space-y-6">
+      <ReadingFilterSection
+        filters={reading}
+        onRatingChange={onRatingChange}
+        onToggleStatus={onToggleReadingStatus}
+      />
+
       {/* File Type */}
       <div>
         <SectionHeader
@@ -380,31 +659,13 @@ const FilterContent = ({
           label="File type"
           labelId={fileTypeLabelId}
         />
-        <div
-          aria-labelledby={fileTypeLabelId}
-          className="flex flex-wrap gap-1.5"
-          role="group"
-        >
-          {fileTypeOptions.map((option) => {
-            const isSelected = selectedFileTypes.includes(option.value);
-            return (
-              <Button
-                aria-pressed={isSelected}
-                className={cn(
-                  "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors",
-                  isSelected
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-border bg-card hover:bg-accent",
-                )}
-                key={option.value}
-                onClick={() => onToggleFileType(option.value)}
-                variant="unstyled"
-              >
-                {option.label}
-              </Button>
-            );
-          })}
-        </div>
+        <MultiSelectCombobox
+          labelId={fileTypeLabelId}
+          onToggle={onToggleFileType}
+          options={fileTypeOptions}
+          placeholder="Any file type"
+          selected={selectedFileTypes}
+        />
       </div>
 
       {/* Genres */}
@@ -523,12 +784,12 @@ const FilterContent = ({
         </div>
       )}
 
-      {/* Review state */}
+      {/* Review status */}
       <div>
         <SectionHeader
           colorClass="bg-chart-3/20 text-chart-3"
           icon={<Eye className="h-3 w-3" />}
-          label="Review state"
+          label="Review status"
           labelId={reviewLabelId}
         />
         <RadioGroup
@@ -590,8 +851,24 @@ const FilterButton = forwardRef<
 ));
 FilterButton.displayName = "FilterButton";
 
-export const FilterSheet = (props: FilterSheetProps) => {
-  const { onClearAll, hasActiveFilters, ...filterContentProps } = props;
+interface FilterPanelProps {
+  hasActiveFilters: boolean;
+  onClearAll: () => void;
+  /** Says what the filters filter by, for screen readers. */
+  description: string;
+  children: ReactNode;
+}
+
+/**
+ * The Filter button and the sheet (a drawer on phones) it opens, holding
+ * children as the filter sections.
+ */
+export const FilterPanel = ({
+  hasActiveFilters,
+  onClearAll,
+  description,
+  children,
+}: FilterPanelProps) => {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   if (isDesktop) {
@@ -607,7 +884,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
           <SheetHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <SheetTitle>Filters</SheetTitle>
             <SheetDescription className="sr-only">
-              Filter books by file type, genre, tag, or language
+              {description}
             </SheetDescription>
             {hasActiveFilters && (
               <Button
@@ -619,9 +896,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
               </Button>
             )}
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto pr-1">
-            <FilterContent {...filterContentProps} />
-          </div>
+          <div className="flex-1 overflow-y-auto pr-1">{children}</div>
           <SheetFooter className="pt-4">
             <SheetClose asChild>
               <Button className="w-full sm:w-auto">Done</Button>
@@ -644,7 +919,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
         <DrawerHeader className="flex flex-row items-center justify-between">
           <DrawerTitle>Filters</DrawerTitle>
           <DrawerDescription className="sr-only">
-            Filter books by file type, genre, tag, or language
+            {description}
           </DrawerDescription>
           {hasActiveFilters && (
             <Button
@@ -656,9 +931,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
             </Button>
           )}
         </DrawerHeader>
-        <div className="overflow-y-auto px-4 pb-4 max-h-[70vh]">
-          <FilterContent {...filterContentProps} />
-        </div>
+        <div className="overflow-y-auto px-4 pb-4 max-h-[70vh]">{children}</div>
         <DrawerFooter>
           <DrawerClose asChild>
             <Button>Done</Button>
@@ -666,5 +939,18 @@ export const FilterSheet = (props: FilterSheetProps) => {
         </DrawerFooter>
       </DrawerContent>
     </Drawer>
+  );
+};
+
+export const FilterSheet = (props: FilterSheetProps) => {
+  const { onClearAll, hasActiveFilters, ...filterContentProps } = props;
+  return (
+    <FilterPanel
+      description="Filter books by reading status, rating, file type, genre, tag, or language"
+      hasActiveFilters={hasActiveFilters}
+      onClearAll={onClearAll}
+    >
+      <FilterContent {...filterContentProps} />
+    </FilterPanel>
   );
 };

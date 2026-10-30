@@ -39,7 +39,7 @@ func TestFileStateChecksAreInvalidState(t *testing.T) {
 		{
 			name: "review state on a supplement", fileType: "txt", role: models.FileRoleSupplement,
 			method: http.MethodPatch, path: "/review", body: `{"override":"reviewed"}`,
-			message: "Cannot set review state on a supplement file",
+			message: "Cannot set review status on a supplement file",
 		},
 		{
 			name: "cover page on a file without pages", fileType: models.FileTypeEPUB, role: models.FileRoleMain,

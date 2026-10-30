@@ -27,7 +27,7 @@ Use HTTPS whenever the catalog is reachable outside a trusted local network.
 
 The user's role needs Books Read. Without it, every catalog feed, cover, and download returns `403 Forbidden`, the same rule [Kobo Sync](./kobo-sync.md) and [eReader Browser](./ereader-browser.md) URLs follow.
 
-The root catalog lists only libraries the authenticated user can access that have something to download, followed by a **To Read** entry when the user's [To Read](./reading-tracking.md#to-read) queue has something to download, then a **Lists** entry when the user owns or has been shared a [list](./lists.md) with something to download. A library's feed leaves out **Series** or **Authors** when none of them has anything to download, so no entry opens to an empty feed. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in with the account password for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client. A Device sign-in is checked on every request.
+The root catalog lists only libraries the authenticated user can access that have something to download, followed by a **Currently Reading** entry when a book the user is reading or has paused has something to download, then a **To Read** entry when the user's [To Read](./reading-tracking.md#to-read) queue has something to download, then a **Lists** entry when the user owns or has been shared a [list](./lists.md) with something to download. A library's feed leaves out **Series** or **Authors** when none of them has anything to download, so no entry opens to an empty feed. Library feeds, covers, and downloads enforce the same [library access](./users-and-permissions.md), and return `403 Forbidden` for a library the user cannot access. OPDS remembers a successful sign-in with the account password for up to a minute, so a change to the user's role or library access, or deactivating the user, can take that long to reach a connected client. A Device sign-in is checked on every request.
 
 ### Sign In as a Device
 
@@ -39,7 +39,7 @@ Give each reading app its own Device so it gets its own Delivery Rules and scope
 
 A new OPDS app Device follows your default Delivery Rules until you change its rules on its page; see [Devices](./users-and-permissions.md#delivery-rules-of-a-device). The credential is accepted only with its owner's username, in any letter case, and only exactly as shown. A wrong credential, or another user's, gets the same `401 Unauthorized` as a wrong password. Only an OPDS app Device's credential signs in to OPDS; a Kobo, Kindle, or Browser Device's does not.
 
-A Device scoped to one library shows only that library in the root catalog, with no **Lists** entry, and its **To Read** holds only that library's books. A Device scoped to a list shows only that list, plus **To Read** holding only the books on that list. A library, list, book, cover, or download outside the scope returns `404 Not Found`, as one that does not exist would.
+A Device scoped to one library shows only that library in the root catalog, with no **Lists** entry, and its **Currently Reading** and **To Read** hold only that library's books. A Device scoped to a list shows only that list, plus **Currently Reading** and **To Read** holding only the books on that list. A library, list, book, cover, or download outside the scope returns `404 Not Found`, as one that does not exist would.
 
 ## Catalog Structure
 
@@ -54,6 +54,7 @@ After the root catalog, clients follow these routes under `/opds/v1`:
 | Authors list | `/libraries/{libraryID}/authors` |
 | Books by an author | `/libraries/{libraryID}/authors/{authorName}` |
 | Search | `/libraries/{libraryID}/search?q={query}` |
+| The books the user is [reading](./reading-tracking.md#reading-status), most recently started first, paused ones last | `/currently-reading` |
 | The user's To Read, in queue order | `/to-read` |
 | Lists the user owns or has been shared | `/lists` |
 | Books in a list | `/lists/{listID}` |

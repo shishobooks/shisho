@@ -14,11 +14,12 @@ The search field in the library gallery searches books only. Use it with **Filte
 
 Open **Filter** on the library gallery to combine any of these criteria:
 
+- **Reading status** and **Rating**, from your own [reading](./reading-tracking.md#finding-books-by-status-and-rating)
 - **File type**
 - **Genres**
 - **Tags**
 - **Language**
-- **Review state**, including **Needs review** and **Reviewed**
+- **Review status**, including **Needs review** and **Reviewed**
 
 Active filters appear as removable chips. Filters apply together, so a book must satisfy the current combination.
 
@@ -26,7 +27,7 @@ In a library with [tag namespaces](./metadata.md#tag-namespaces), the **Tags** p
 
 ## Gallery Sort
 
-Open **Sort** to build a multi-level sort. Add levels, choose ascending or descending direction, remove levels, and drag them into priority order. Available fields include **Title**, **Author**, **Series**, **Date added**, **Date released**, **Page count**, and **Duration**.
+Open **Sort** to build a multi-level sort. Add levels, choose ascending or descending direction, remove levels, and drag them into priority order. Available fields include **Title**, **Author**, **Series**, **Date added**, **Date released**, **Page count**, **Duration**, and your own **Reading status**, **Rating**, and **Date finished** (see [Finding Books by Status and Rating](./reading-tracking.md#finding-books-by-status-and-rating)).
 
 A sort in the page URL is temporary and can be bookmarked or shared. **Save as my default for this library** stores the current sort for the current user and library. Each user can therefore choose a different default for every library.
 

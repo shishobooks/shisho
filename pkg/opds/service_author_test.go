@@ -131,6 +131,7 @@ func TestListBooksByAuthor_HonorsSort(t *testing.T) {
 		10,
 		0,
 		[]sortspec.SortLevel{{Field: sortspec.FieldTitle, Direction: sortspec.DirAsc}},
+		nil,
 	)
 	require.NoError(t, err)
 	require.Equal(t, 2, total, "alice has two books, bob's book filtered out")
@@ -160,6 +161,7 @@ func TestListBooksByAuthor_RespectsLimitOffset(t *testing.T) {
 		1,
 		0,
 		[]sortspec.SortLevel{{Field: sortspec.FieldDateAdded, Direction: sortspec.DirDesc}},
+		nil,
 	)
 	require.NoError(t, err)
 	require.Equal(t, 2, total, "total still reports the full filtered count")
@@ -175,6 +177,7 @@ func TestListBooksByAuthor_RespectsLimitOffset(t *testing.T) {
 		1,
 		1,
 		[]sortspec.SortLevel{{Field: sortspec.FieldDateAdded, Direction: sortspec.DirDesc}},
+		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, page2, 1)
@@ -199,6 +202,7 @@ func TestListBooksByAuthor_UnknownAuthor(t *testing.T) {
 		nil,
 		10,
 		0,
+		nil,
 		nil,
 	)
 	require.NoError(t, err)

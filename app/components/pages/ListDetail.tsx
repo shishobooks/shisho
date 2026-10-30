@@ -1,12 +1,17 @@
 import { format, formatDistanceToNow } from "date-fns";
 import { BookmarkPlus, Edit, Save, Share2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
 import BookItem from "@/components/library/BookItem";
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { DraggableBookList } from "@/components/library/DraggableBookList";
+import {
+  FilterPanel,
+  ReadingFilterSection,
+} from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
@@ -38,20 +43,37 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useUpdateSearchParams } from "@/hooks/useUpdateSearchParams";
 import {
   DEMO_MODE_MESSAGE,
   isLoadFailure,
   toastRequestError,
 } from "@/libraries/api";
+import { resetPaging } from "@/libraries/pagination";
+import {
+  hasReadingFilters,
+  parseReadingFilters,
+  readingFilterQuery,
+  setRatingRangeParams,
+  toggleReadingStatusParam,
+  writeReadingFilters,
+} from "@/libraries/readingFilters";
 import {
   ListSortAddedAtAsc,
   ListSortAddedAtDesc,
   ListSortAuthorAsc,
   ListSortAuthorDesc,
+  ListSortDateFinishedAsc,
+  ListSortDateFinishedDesc,
+  ListSortRatingAsc,
+  ListSortRatingDesc,
+  ListSortReadingStatusAsc,
+  ListSortReadingStatusDesc,
   ListSortTitleAsc,
   ListSortTitleDesc,
   type ListBook,
   type ListSort,
+  type ReadingStatusFilter,
   type UpdateListPayload,
 } from "@/types";
 import { formatCount } from "@/utils/format";
@@ -63,12 +85,40 @@ const SORT_OPTIONS = [
   { value: ListSortTitleDesc, label: "Title (Z-A)" },
   { value: ListSortAuthorAsc, label: "Author (A-Z)" },
   { value: ListSortAuthorDesc, label: "Author (Z-A)" },
+  { value: ListSortReadingStatusAsc, label: "Currently Reading First" },
+  { value: ListSortReadingStatusDesc, label: "Currently Reading Last" },
+  { value: ListSortRatingDesc, label: "Rating (high to low)" },
+  { value: ListSortRatingAsc, label: "Rating (low to high)" },
+  { value: ListSortDateFinishedDesc, label: "Recently Finished" },
+  { value: ListSortDateFinishedAsc, label: "Earliest Finished" },
 ];
+
+const isSortOption = (value: string | null): value is ListSort =>
+  SORT_OPTIONS.some((option) => option.value === value);
 
 const ListDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const listId = id ? parseInt(id, 10) : undefined;
+  // The reading filters read each viewer's own reading, so anyone who can
+  // see the books can filter them.
+  const [searchParams] = useSearchParams();
+  const readingFilters = parseReadingFilters(searchParams);
+  const isFiltered = hasReadingFilters(readingFilters);
+  // Filter and sort changes build on any change still on its way, so fast
+  // clicks don't drop one another, and go back to the first page.
+  const updateSearchParams = useUpdateSearchParams();
+  const updateListView = (update: (params: URLSearchParams) => void) =>
+    updateSearchParams((params) => {
+      update(params);
+      resetPaging(params);
+    });
+  const toggleReadingStatus = (status: ReadingStatusFilter) =>
+    updateListView((params) => toggleReadingStatusParam(params, status));
+  const setRatingRange = (min: number | undefined, max: number | undefined) =>
+    updateListView((params) => setRatingRangeParams(params, min, max));
+  const clearReadingFilters = () =>
+    updateListView((params) => writeReadingFilters(params, { statuses: [] }));
   // A list's books and their covers come from Books Read routes. A role
   // without it still sees the list and can manage it, but not its books.
   const canReadBooks = useCan("books:read");
@@ -89,12 +139,27 @@ const ListDetail = () => {
     saveSizeAsDefault,
   } = useGallerySizeParam();
 
-  const [sort, setSort] = useState<ListSort | undefined>(undefined);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const listQuery = useList(listId);
+
+  // A sort chosen on an unordered list lives in the URL, left out when it's
+  // the list's default. An ordered list always shows its manual order.
+  const sortParam = searchParams.get("sort");
+  const sort =
+    listQuery.data && !listQuery.data.is_ordered && isSortOption(sortParam)
+      ? sortParam
+      : undefined;
+  const setSort = (value: ListSort | undefined) =>
+    updateListView((params) => {
+      if (value && value !== listQuery.data?.default_sort) {
+        params.set("sort", value);
+      } else {
+        params.delete("sort");
+      }
+    });
   // A list can hold books from several libraries; each book's cover takes
   // the shape its own library's gallery gives it.
   const userLibrariesQuery = useUserLibraries();
@@ -113,10 +178,12 @@ const ListDetail = () => {
 
   // Reordering needs every book on screen at once, so an ordered list the
   // user can edit loads whole, up to the API's page limit, instead of a page
-  // sized to the window. That keeps reordering offered at every width.
+  // sized to the window. That keeps reordering offered at every width. A
+  // filtered list shows only some books, so it pages instead.
   const canReorder =
     Boolean(listQuery.data?.is_ordered) &&
     canEdit &&
+    !isFiltered &&
     (listQuery.data?.book_count ?? 0) <= GALLERY_MAX_PAGE_SIZE;
 
   // The whole list shows no pages, so a page position left in the URL would
@@ -131,7 +198,12 @@ const ListDetail = () => {
     listId,
     canReorder
       ? { sort, limit: GALLERY_MAX_PAGE_SIZE, offset: 0 }
-      : { sort, limit: itemsPerPage, offset },
+      : {
+          sort,
+          limit: itemsPerPage,
+          offset,
+          ...readingFilterQuery(readingFilters),
+        },
     { enabled: pageSizeResolved && listQuery.isSuccess },
   );
   const updateListMutation = useUpdateList();
@@ -317,45 +389,84 @@ const ListDetail = () => {
           </p>
         </div>
 
-        {/* Sort dropdown for unordered lists */}
-        {!list.is_ordered && bookCount > 0 && canReadBooks && (
-          <div className="mb-6 flex items-center gap-2">
-            <span
-              className="text-sm text-muted-foreground"
-              id="list-sort-label"
-            >
-              Sort by:
-            </span>
-            <Select
-              onValueChange={(value) => setSort(value as ListSort)}
-              value={sort ?? list.default_sort ?? ListSortAddedAtDesc}
-            >
-              <SelectTrigger aria-labelledby="list-sort-label" className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SORT_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {canManage && sort && sort !== list.default_sort && (
-              <Button
-                disabled={updateListMutation.isPending}
-                onClick={() => {
-                  // handleUpdate displays the error; no dialog awaits this action.
-                  void handleUpdate({ default_sort: sort }).catch(() => {});
-                }}
-                size="sm"
-                title="Save as default sort"
-                variant="ghost"
+        {/* Filters, and the sort for unordered lists */}
+        {bookCount > 0 && canReadBooks && (
+          <div className="mb-6 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <FilterPanel
+                description="Filter books by reading status or rating"
+                hasActiveFilters={isFiltered}
+                onClearAll={clearReadingFilters}
               >
-                <Save className="h-4 w-4 mr-1" />
-                Save as default
-              </Button>
-            )}
+                <div className="space-y-6">
+                  <ReadingFilterSection
+                    filters={readingFilters}
+                    onRatingChange={setRatingRange}
+                    onToggleStatus={toggleReadingStatus}
+                  />
+                </div>
+              </FilterPanel>
+              {!list.is_ordered && (
+                <>
+                  <span
+                    className="ml-2 text-sm text-muted-foreground"
+                    id="list-sort-label"
+                  >
+                    Sort by:
+                  </span>
+                  <Select
+                    onValueChange={(value) => setSort(value as ListSort)}
+                    value={sort ?? list.default_sort ?? ListSortAddedAtDesc}
+                  >
+                    <SelectTrigger
+                      aria-labelledby="list-sort-label"
+                      className="w-48"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SORT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {canManage && sort && sort !== list.default_sort && (
+                    <Button
+                      disabled={updateListMutation.isPending}
+                      onClick={() => {
+                        // handleUpdate displays the error; no dialog awaits this action.
+                        // The URL drops the saved sort, unless the sort
+                        // changed while saving.
+                        void handleUpdate({ default_sort: sort })
+                          .then(() =>
+                            updateListView((params) => {
+                              if (params.get("sort") === sort) {
+                                params.delete("sort");
+                              }
+                            }),
+                          )
+                          .catch(() => {});
+                      }}
+                      size="sm"
+                      title="Save as default sort"
+                      variant="ghost"
+                    >
+                      <Save className="h-4 w-4 mr-1" />
+                      Save as default
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+            <ActiveFilterChips
+              hasActiveFilters={isFiltered}
+              onClearAll={clearReadingFilters}
+              onClearRating={() => setRatingRange(undefined, undefined)}
+              onToggleReadingStatus={toggleReadingStatus}
+              reading={readingFilters}
+            />
           </div>
         )}
 
@@ -376,6 +487,14 @@ const ListDetail = () => {
                     (drag to reorder)
                   </span>
                 )}
+                {list.is_ordered &&
+                  canEdit &&
+                  isFiltered &&
+                  bookCount <= GALLERY_MAX_PAGE_SIZE && (
+                    <span className="text-sm font-normal text-muted-foreground ml-2">
+                      (clear the filters to reorder)
+                    </span>
+                  )}
               </h2>
               <div className="hidden sm:flex">
                 <SizePopover
@@ -417,6 +536,11 @@ const ListDetail = () => {
               <Gallery
                 columns={columns}
                 currentPage={currentPage}
+                emptyMessage={
+                  isFiltered
+                    ? "No books on this list match your filters."
+                    : undefined
+                }
                 isLoading={listBooksQuery.isLoading}
                 itemLabel="books"
                 items={books}
@@ -439,7 +563,9 @@ const ListDetail = () => {
                     />
                   ) : null
                 }
-                total={listBooksQuery.data?.total ?? bookCount}
+                total={
+                  listBooksQuery.data?.total ?? (isFiltered ? 0 : bookCount)
+                }
               />
             )}
           </section>
