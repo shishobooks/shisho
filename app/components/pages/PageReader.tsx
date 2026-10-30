@@ -1,7 +1,9 @@
 import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import React, {
+  memo,
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -19,15 +21,23 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useFileChapters } from "@/hooks/queries/chapters";
+import { useBookReading, useSetPageFlow } from "@/hooks/queries/reading";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
+import { pagesToProbe, useDetectedPageFlow } from "@/hooks/useDetectedPageFlow";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import type { Chapter, UserSettingsPayload } from "@/types";
+import {
+  ThumbnailSize256,
+  type Chapter,
+  type PageFlow,
+  type ThumbnailSize,
+  type UserSettingsPayload,
+} from "@/types";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
 const flattenChapters = (chapters: Chapter[]): Chapter[] => {
@@ -43,12 +53,137 @@ const flattenChapters = (chapters: Chapter[]): Chapter[] => {
   return result;
 };
 
+// Big enough that rounding moves a page's measured shape by under 1%.
+const PROBE_THUMBNAIL_SIZE = ThumbnailSize256;
+
+// How long the scrolled flow waits for the page to settle before writing it
+// to the URL. Browsers cap how often a page may rewrite its URL, and
+// scrolling can change the page every frame.
+const URL_SETTLE_MS = 300;
+
+const FLOW_LABELS: Record<PageFlow, string> = {
+  paginated: "Paginated",
+  scrolled: "Scrolled",
+};
+
+// Failures share one toast id, so quick changes that all fail show one toast
+// instead of a stack.
+const toastSaveError = (error: unknown) =>
+  toastRequestError(error, "Failed to save reader settings", {
+    id: "reader-settings-error",
+  });
+
+// In the scrolled flow, the page crossing this line (a fraction of the view's
+// height from its top) is the current page.
+const CURRENT_PAGE_LINE = 0.1;
+
+// The scrolled flow's current page: the one crossing the line, or the last
+// page once scrolled to the end, since a short last page may never reach it.
+const pageInView = (
+  scroller: HTMLElement,
+  pages: (HTMLElement | null)[],
+): number => {
+  if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1) {
+    return pages.length - 1;
+  }
+  const line =
+    scroller.getBoundingClientRect().top +
+    scroller.clientHeight * CURRENT_PAGE_LINE;
+  let low = 0;
+  let high = pages.length - 1;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const top = pages[mid]?.getBoundingClientRect().top ?? Infinity;
+    if (top <= line) low = mid;
+    else high = mid - 1;
+  }
+  return low;
+};
+
+interface ScrolledPageProps {
+  alt: string;
+  src: string;
+  scrollerRef: React.RefObject<HTMLElement | null>;
+  ref: (el: HTMLDivElement | null) => void;
+}
+
+// One page of the scrolled flow. Until its image loads it holds a screen's
+// height, so lazy loading leaves the pages far below alone. The reader turns
+// off the browser's scroll anchoring, which Safari lacks, so a page wholly
+// above the view that grows on load moves the view down by as much itself,
+// keeping what the reader is looking at in place.
+const ScrolledPage = memo(function ScrolledPage({
+  alt,
+  src,
+  scrollerRef,
+  ref,
+}: ScrolledPageProps) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const placeholder = useRef<{ height: number; above: boolean } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!loaded) return;
+    const box = boxRef.current;
+    const scroller = scrollerRef.current;
+    const before = placeholder.current;
+    placeholder.current = null;
+    if (!before?.above || !box || !scroller) return;
+    scroller.scrollTop += box.offsetHeight - before.height;
+  }, [loaded, scrollerRef]);
+
+  // The image stays out of the layout until it loads, so the box still has
+  // its placeholder height here.
+  const handleDone = () => {
+    const box = boxRef.current;
+    const scroller = scrollerRef.current;
+    if (box && scroller) {
+      placeholder.current = {
+        height: box.offsetHeight,
+        above:
+          box.getBoundingClientRect().bottom <=
+          scroller.getBoundingClientRect().top + 1,
+      };
+    }
+    setLoaded(true);
+  };
+
+  return (
+    <div
+      className={cn("relative", !loaded && "h-dvh")}
+      ref={(el) => {
+        boxRef.current = el;
+        ref(el);
+      }}
+    >
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <LoadingSpinner />
+        </div>
+      )}
+      <img
+        alt={alt}
+        className={
+          loaded
+            ? "block h-auto w-full"
+            : "absolute inset-0 h-full w-full opacity-0"
+        }
+        loading="lazy"
+        onError={handleDone}
+        onLoad={handleDone}
+        src={src}
+      />
+    </div>
+  );
+});
+
 interface PageReaderProps {
   fileId: number;
   bookId: number;
   libraryId: string;
   totalPages: number;
-  getPageUrl: (pageNum: number) => string;
+  // A page's image URL, or its thumbnail's when given a size.
+  getPageUrl: (pageNum: number, size?: ThumbnailSize) => string;
   title?: string;
 }
 
@@ -63,20 +198,70 @@ export default function PageReader({
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Parse page from URL, default to 0
-  const urlPage = parseInt(searchParams.get("page") || "0", 10);
-  const [currentPage, setCurrentPage] = useState(isNaN(urlPage) ? 0 : urlPage);
+  // Parse page from URL, default to 0, and keep it within the file
+  const [currentPage, setCurrentPage] = useState(() => {
+    const urlPage = parseInt(searchParams.get("page") || "0", 10);
+    if (isNaN(urlPage)) return 0;
+    return Math.max(0, Math.min(urlPage, totalPages - 1));
+  });
 
   // Image loading state
   const [imageLoading, setImageLoading] = useState(true);
   const currentPageUrl = getPageUrl(currentPage);
   const imgRef = useRef<HTMLImageElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const pageRefs = useRef<(HTMLElement | null)[]>([]);
 
-  // Reset scroll position on page change (layout effect to avoid flash)
+  // The flow: the one chosen while open, else the one saved for the Book,
+  // else the one the page shapes suggest. Undefined until it is known. The
+  // flow is a per-Book choice: some comics are made for vertical scrolling.
+  const readingQuery = useBookReading(bookId);
+  const setPageFlow = useSetPageFlow();
+  const [chosenFlow, setChosenFlow] = useState<PageFlow | null>(null);
+  // A failed load leaves nothing saved, and the page shapes decide.
+  const savedFlowKnown = !readingQuery.isLoading;
+  const savedFlow = readingQuery.data?.page_flow ?? null;
+  // Thumbnails keep the page's shape at a fraction of its bytes, so a slow
+  // connection still learns the shape before the probe gives up.
+  const detectedFlow = useDetectedPageFlow(
+    savedFlowKnown && !savedFlow && !chosenFlow
+      ? pagesToProbe(totalPages).map((page) =>
+          getPageUrl(page, PROBE_THUMBNAIL_SIZE),
+        )
+      : null,
+  );
+  const flow: PageFlow | undefined =
+    chosenFlow ?? (savedFlowKnown ? (savedFlow ?? detectedFlow) : undefined);
+  const scrolled = flow === "scrolled";
+
+  // Reset scroll position on page change (layout effect to avoid flash).
+  // The scrolled flow moves the view itself.
   useLayoutEffect(() => {
-    mainRef.current?.scrollTo(0, 0);
-  }, [currentPage]);
+    if (!scrolled) mainRef.current?.scrollTo(0, 0);
+  }, [currentPage, scrolled]);
+
+  // Entering the scrolled flow shows the current page, and takes focus so
+  // the arrow keys, Space, and Page Down scroll the pages.
+  const showCurrentPage = useEffectEvent(() => {
+    pageRefs.current[currentPage]?.scrollIntoView({ block: "start" });
+    mainRef.current?.focus({ preventScroll: true });
+  });
+  useLayoutEffect(() => {
+    if (scrolled) showCurrentPage();
+  }, [scrolled]);
+
+  // Scrolling moves the current page, at most once a frame.
+  const scrollFrame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(scrollFrame.current), []);
+  const handleScroll = () => {
+    if (scrollFrame.current) return;
+    scrollFrame.current = requestAnimationFrame(() => {
+      scrollFrame.current = 0;
+      const main = mainRef.current;
+      if (!main) return;
+      setCurrentPage(pageInView(main, pageRefs.current.slice(0, totalPages)));
+    });
+  };
 
   // Reset loading state when the page URL changes
   useEffect(() => {
@@ -101,15 +286,11 @@ export default function PageReader({
   const fitMode = settings?.fit_mode ?? "fit-height";
   const hideChrome = settings?.viewer_hide_chrome ?? false;
   const settingsReady = !settingsLoading && settings != null;
-  // Failures share one toast id, so quick changes that all fail show one
-  // toast instead of a stack.
   const saveSetting = (payload: UserSettingsPayload, onFailure?: () => void) =>
     updateSettings.mutate(payload, {
       onError: (error) => {
         onFailure?.();
-        toastRequestError(error, "Failed to save reader settings", {
-          id: "reader-settings-error",
-        });
+        toastSaveError(error);
       },
     });
   // The preload slider shows a local draft while it is dragged and saves once
@@ -122,13 +303,45 @@ export default function PageReader({
 
   const { chromeVisible, toggleChrome } = useAutoHideChrome(hideChrome);
 
-  // Sync URL with current page
+  const chooseFlow = (next: PageFlow) => {
+    setChosenFlow(next);
+    setPageFlow.mutate(
+      { bookId, payload: { page_flow: next } },
+      {
+        onError: (error) => {
+          setChosenFlow(null);
+          toastSaveError(error);
+        },
+      },
+    );
+  };
+
+  // Sync URL with current page, once it settles in the scrolled flow
   useEffect(() => {
     const urlPage = parseInt(searchParams.get("page") || "0", 10);
-    if (urlPage !== currentPage) {
+    if (urlPage === currentPage) return;
+    const write = () =>
       setSearchParams({ page: currentPage.toString() }, { replace: true });
+    if (!scrolled) {
+      write();
+      return;
     }
-  }, [currentPage, searchParams, setSearchParams]);
+    const timer = setTimeout(write, URL_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [currentPage, scrolled, searchParams, setSearchParams]);
+
+  // One stable ref callback per page, so a page change doesn't re-render
+  // every page of the scrolled flow.
+  const pageRefSetters = useMemo(
+    () =>
+      Array.from(
+        { length: totalPages },
+        (_, page) => (el: HTMLElement | null) => {
+          pageRefs.current[page] = el;
+        },
+      ),
+    [totalPages],
+  );
 
   // Navigate to page
   const goToPage = useCallback(
@@ -140,8 +353,11 @@ export default function PageReader({
         return;
       }
       setCurrentPage(page);
+      if (scrolled) {
+        pageRefs.current[page]?.scrollIntoView({ block: "start" });
+      }
     },
-    [totalPages, navigate, libraryId, bookId],
+    [totalPages, navigate, libraryId, bookId, scrolled],
   );
 
   // Keyboard navigation
@@ -264,37 +480,71 @@ export default function PageReader({
                   />
                 </div>
                 <div>
-                  <label
-                    className="text-sm font-medium"
-                    id="page-fit-mode-label"
-                  >
-                    Fit Mode
+                  <label className="text-sm font-medium" id="page-flow-label">
+                    Flow
                   </label>
                   <div
-                    aria-labelledby="page-fit-mode-label"
+                    aria-labelledby="page-flow-label"
                     className="flex gap-2 mt-2"
                     role="group"
                   >
-                    <Button
-                      aria-pressed={fitMode === "fit-height"}
-                      disabled={!settingsReady}
-                      onClick={() => saveSetting({ fit_mode: "fit-height" })}
-                      size="sm"
-                      variant={fitMode === "fit-height" ? "default" : "outline"}
-                    >
-                      Fit Height
-                    </Button>
-                    <Button
-                      aria-pressed={fitMode === "fit-width"}
-                      disabled={!settingsReady}
-                      onClick={() => saveSetting({ fit_mode: "fit-width" })}
-                      size="sm"
-                      variant={fitMode === "fit-width" ? "default" : "outline"}
-                    >
-                      Fit Width
-                    </Button>
+                    {(["paginated", "scrolled"] as const).map((f) => (
+                      <Button
+                        aria-pressed={flow === f}
+                        disabled={!flow}
+                        key={f}
+                        onClick={() => chooseFlow(f)}
+                        size="sm"
+                        variant={flow === f ? "default" : "outline"}
+                      >
+                        {FLOW_LABELS[f]}
+                      </Button>
+                    ))}
                   </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {chosenFlow || savedFlow
+                      ? "Saved for this book."
+                      : "Picked from the page shapes until you choose."}
+                  </p>
                 </div>
+                {!scrolled && (
+                  <div>
+                    <label
+                      className="text-sm font-medium"
+                      id="page-fit-mode-label"
+                    >
+                      Fit Mode
+                    </label>
+                    <div
+                      aria-labelledby="page-fit-mode-label"
+                      className="flex gap-2 mt-2"
+                      role="group"
+                    >
+                      <Button
+                        aria-pressed={fitMode === "fit-height"}
+                        disabled={!settingsReady}
+                        onClick={() => saveSetting({ fit_mode: "fit-height" })}
+                        size="sm"
+                        variant={
+                          fitMode === "fit-height" ? "default" : "outline"
+                        }
+                      >
+                        Fit Height
+                      </Button>
+                      <Button
+                        aria-pressed={fitMode === "fit-width"}
+                        disabled={!settingsReady}
+                        onClick={() => saveSetting({ fit_mode: "fit-width" })}
+                        size="sm"
+                        variant={
+                          fitMode === "fit-width" ? "default" : "outline"
+                        }
+                      >
+                        Fit Width
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <label className="text-sm font-medium" htmlFor="hide-chrome">
                     Auto-hide controls
@@ -321,68 +571,114 @@ export default function PageReader({
           hideChrome
             ? "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)]"
             : "flex-1",
-          fitMode === "fit-width"
-            ? "items-start justify-start overflow-auto"
-            : "items-center justify-center overflow-hidden",
+          scrolled
+            ? "flex-col items-center overflow-y-auto outline-none [overflow-anchor:none]"
+            : fitMode === "fit-width"
+              ? "items-start justify-start overflow-auto"
+              : "items-center justify-center overflow-hidden",
         )}
+        onScroll={scrolled ? handleScroll : undefined}
         ref={mainRef}
+        tabIndex={scrolled ? -1 : undefined}
       >
-        {/* Tap zones for mobile navigation. They duplicate the labeled
-            footer buttons for pointer users only, so assistive tech, the
-            tab order, and mouse focus skip them. */}
-        <Button
-          aria-hidden
-          className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
-          disabled={currentPage === 0}
-          onClick={() => goToPage(currentPage - 1)}
-          onMouseDown={(e) => e.preventDefault()}
-          tabIndex={-1}
-          variant="ghost"
-        />
-        <Button
-          aria-hidden
-          className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
-          onClick={() => goToPage(currentPage + 1)}
-          onMouseDown={(e) => e.preventDefault()}
-          tabIndex={-1}
-          variant="ghost"
-        />
-
-        {/* Center tap zone: toggle chrome on mobile */}
-        {hideChrome && (
-          <Button
-            aria-label="Toggle controls"
-            className="absolute left-1/3 top-0 w-1/3 h-full z-10 opacity-0"
-            onClick={toggleChrome}
-            variant="ghost"
-          />
-        )}
-
-        {/* Loading spinner */}
-        {imageLoading && (
-          <div className="absolute inset-0 flex items-center justify-center z-[5] bg-black/60">
+        {!flow && (
+          <div className="m-auto">
             <LoadingSpinner />
           </div>
         )}
 
-        <img
-          alt={`Page ${(currentPage + 1).toLocaleString()}`}
-          className={
-            fitMode === "fit-height"
-              ? "max-h-full w-auto object-contain"
-              : "w-full h-auto"
-          }
-          onError={() => setImageLoading(false)}
-          onLoad={() => setImageLoading(false)}
-          ref={imgRef}
-          src={currentPageUrl}
-        />
-        {/* Preloaded images (hidden) */}
-        {preloadedPages
-          .filter((p) => p !== currentPage)
-          .map((p) => (
-            <link as="image" href={getPageUrl(p)} key={p} rel="prefetch" />
-          ))}
+        {/* Scrolled flow: every page in one column. With auto-hide on, a
+            tap anywhere toggles the controls, since there are no tap zones
+            to turn pages; keyboard users get a button that shows on focus. */}
+        {scrolled && hideChrome && (
+          <Button
+            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:bottom-24 focus-visible:left-1/2 focus-visible:z-30 focus-visible:-translate-x-1/2"
+            onClick={toggleChrome}
+            variant="secondary"
+          >
+            Toggle controls
+          </Button>
+        )}
+        {scrolled && (
+          <div
+            className="w-full max-w-3xl"
+            onClick={hideChrome ? toggleChrome : undefined}
+          >
+            {Array.from({ length: totalPages }, (_, page) => (
+              <ScrolledPage
+                alt={`Page ${(page + 1).toLocaleString()}`}
+                key={page}
+                ref={pageRefSetters[page]}
+                scrollerRef={mainRef}
+                src={getPageUrl(page)}
+              />
+            ))}
+          </div>
+        )}
+
+        {flow === "paginated" && (
+          <>
+            {/* Tap zones for mobile navigation. They duplicate the labeled
+                footer buttons for pointer users only, so assistive tech, the
+                tab order, and mouse focus skip them. */}
+            <Button
+              aria-hidden
+              className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
+              disabled={currentPage === 0}
+              onClick={() => goToPage(currentPage - 1)}
+              onMouseDown={(e) => e.preventDefault()}
+              tabIndex={-1}
+              variant="ghost"
+            />
+            <Button
+              aria-hidden
+              className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
+              onClick={() => goToPage(currentPage + 1)}
+              onMouseDown={(e) => e.preventDefault()}
+              tabIndex={-1}
+              variant="ghost"
+            />
+
+            {/* Center tap zone: toggle chrome on mobile */}
+            {hideChrome && (
+              <Button
+                aria-label="Toggle controls"
+                className="absolute left-1/3 top-0 w-1/3 h-full z-10 opacity-0"
+                onClick={toggleChrome}
+                variant="ghost"
+              />
+            )}
+
+            {/* Loading spinner */}
+            {imageLoading && (
+              <div className="absolute inset-0 flex items-center justify-center z-[5] bg-black/60">
+                <LoadingSpinner />
+              </div>
+            )}
+
+            <img
+              alt={`Page ${(currentPage + 1).toLocaleString()}`}
+              className={
+                fitMode === "fit-height"
+                  ? "max-h-full w-auto object-contain"
+                  : "w-full h-auto"
+              }
+              onError={() => setImageLoading(false)}
+              onLoad={() => setImageLoading(false)}
+              ref={imgRef}
+              src={currentPageUrl}
+            />
+          </>
+        )}
+
+        {/* Preloaded images (hidden). The scrolled flow's lazy images
+            already load the pages near the view. */}
+        {!scrolled &&
+          preloadedPages
+            .filter((p) => p !== currentPage)
+            .map((p) => (
+              <link as="image" href={getPageUrl(p)} key={p} rel="prefetch" />
+            ))}
       </main>
 
       {/* Controls */}

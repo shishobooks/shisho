@@ -169,7 +169,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/reading"
     output_path: "app/types/generated/reading.ts"
     frontmatter: |
-      import { ReadThrough, ReadingStatus } from "@/types";
+      import { PageFlow, ReadThrough, ReadingStatus } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/settings"

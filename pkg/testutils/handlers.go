@@ -197,8 +197,12 @@ type createBookRequest struct {
 	AudiobookCodec           *string  `json:"audiobookCodec"`
 	// WithFileOnDisk writes a minimal valid file to a temporary directory and
 	// points the file at it, so downloads and the reader get a real file.
-	// Only for the "epub" and "mobi" file types; filepath is ignored.
+	// Only for the "epub", "mobi", and "cbz" file types; filepath is ignored.
 	WithFileOnDisk bool `json:"withFileOnDisk"`
+	// The size of each page of a CBZ written to disk, 600 by 900 by default.
+	// Its page count is pageCount, 3 by default.
+	PageWidth  int `json:"pageWidth"`
+	PageHeight int `json:"pageHeight"`
 }
 
 // createBookResponse is the response body for creating a test book.
@@ -233,11 +237,24 @@ func (h *handler) createBook(c echo.Context) error {
 		fileType = models.FileTypeEPUB
 	}
 	if req.WithFileOnDisk {
-		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title)
+		pages := pageSpec{count: 3, width: 600, height: 900}
+		if req.PageCount != nil {
+			pages.count = *req.PageCount
+		}
+		if req.PageWidth > 0 {
+			pages.width = req.PageWidth
+		}
+		if req.PageHeight > 0 {
+			pages.height = req.PageHeight
+		}
+		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title, pages)
 		if err != nil {
 			return err
 		}
 		filepath = base
+		if fileType == models.FileTypeCBZ {
+			req.PageCount = &pages.count
+		}
 	}
 
 	// Create book

@@ -21,6 +21,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	g.POST("/books/:id/finish", h.finish)
 	g.POST("/books/:id/abandon", h.abandon)
 	g.PUT("/books/:id/rating", h.setRating)
+	g.PUT("/books/:id/page-flow", h.setPageFlow)
 	g.POST("/books/:id/to-read", h.addToRead)
 	g.DELETE("/books/:id/to-read", h.removeFromToRead)
 	g.PUT("/to-read/order", h.reorderToRead)
