@@ -3,6 +3,8 @@ package sortspec
 import (
 	"fmt"
 	"strings"
+
+	"github.com/shishobooks/shisho/pkg/reading"
 )
 
 // OrderClause is one unit of ordering for a Bun query, ready to pass
@@ -25,7 +27,10 @@ type OrderClause struct {
 // Every clause includes a NULLS-LAST indicator (`<expr> IS NULL`) so
 // books missing the sort key always sit at the end regardless of
 // direction. SQLite has no native NULLS LAST.
-func OrderClauses(levels []SortLevel) []OrderClause {
+//
+// The rating and date_finished levels sort on readerID's reading data, and
+// are skipped when readerID is nil.
+func OrderClauses(levels []SortLevel, readerID *int) []OrderClause {
 	if len(levels) == 0 {
 		return nil
 	}
@@ -79,6 +84,16 @@ func OrderClauses(levels []SortLevel) []OrderClause {
 
 		case FieldDuration:
 			out = append(out, nullsLast(newestFileCoalesce("audiobook_duration_seconds"), l.Direction))
+
+		case FieldRating:
+			if readerID != nil {
+				out = append(out, nullsLast(reading.RatingUnitsExpr(*readerID, "b.id"), l.Direction))
+			}
+
+		case FieldDateFinished:
+			if readerID != nil {
+				out = append(out, nullsLast(reading.LastFinishedDayExpr(*readerID, "b.id"), l.Direction))
+			}
 		}
 	}
 	return out

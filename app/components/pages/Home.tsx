@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
+import CurrentlyReadingRow from "@/components/library/CurrentlyReadingRow";
 import type { SelectedFilter } from "@/components/library/FilterChip";
 import { FilterSheet } from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
@@ -34,6 +35,13 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { isNotFoundError, toastRequestError } from "@/libraries/api";
 import { resetPaging } from "@/libraries/pagination";
+import {
+  hasReadingFilters,
+  parseReadingFilters,
+  readingFilterQuery,
+  writeReadingFilters,
+  type ReadingFilters,
+} from "@/libraries/readingFilters";
 import {
   BUILTIN_DEFAULT_SORT,
   parseSortSpec,
@@ -91,6 +99,8 @@ const HomeContent = () => {
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
   const languageParam = searchParams.get("language") ?? "";
   const reviewedFilterParam = searchParams.get("reviewed_filter") ?? "";
+  const readingFilters = parseReadingFilters(searchParams);
+  const readingFiltersActive = hasReadingFilters(readingFilters);
   const sortParam = searchParams.get("sort") ?? "";
   const urlSort: SortLevel[] | null = sortParam
     ? parseSortSpec(sortParam)
@@ -351,9 +361,19 @@ const HomeContent = () => {
     });
   };
 
+  const setReadingFilters = (next: ReadingFilters) => {
+    setSearchParams((prev) => {
+      const newParams = new URLSearchParams(prev);
+      writeReadingFilters(newParams, next);
+      resetPaging(newParams);
+      return newParams;
+    });
+  };
+
   const clearAllFilters = () => {
     setSearchParams((prev) => {
       const newParams = new URLSearchParams(prev);
+      writeReadingFilters(newParams, { statuses: [] });
       newParams.delete("file_types");
       newParams.delete("genre_ids");
       newParams.delete("tag_ids");
@@ -398,6 +418,7 @@ const HomeContent = () => {
   };
 
   const hasActiveFilters =
+    readingFiltersActive ||
     selectedFileTypes.length > 0 ||
     selectedGenreIds.length > 0 ||
     selectedTagIds.length > 0 ||
@@ -410,6 +431,7 @@ const HomeContent = () => {
     offset,
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     series_id: seriesId,
+    ...readingFilterQuery(readingFilters),
   };
 
   // Add search if present
@@ -462,6 +484,7 @@ const HomeContent = () => {
     tagIds: selectedTagIds,
     language: languageParam,
     reviewedFilter: reviewedFilterParam,
+    reading: readingFilters,
     sort: sortParam,
   });
   const [confirmedFilterKey, setConfirmedFilterKey] = useState<string | null>(
@@ -479,6 +502,7 @@ const HomeContent = () => {
       setConfirmedFilterKey(currentFilterKey);
       setConfirmedHasFilters(
         searchQuery !== "" ||
+          readingFiltersActive ||
           selectedFileTypes.length > 0 ||
           selectedGenreIds.length > 0 ||
           selectedTagIds.length > 0 ||
@@ -491,6 +515,7 @@ const HomeContent = () => {
     booksQuery.isFetching,
     currentFilterKey,
     searchQuery,
+    readingFiltersActive,
     selectedFileTypes.length,
     selectedGenreIds.length,
     selectedTagIds.length,
@@ -540,6 +565,15 @@ const HomeContent = () => {
         </div>
       )}
 
+      {/* The library's own page, not a series within it. */}
+      {!seriesId && libraryId && settingsResolved && (
+        <CurrentlyReadingRow
+          columns={columns}
+          coverAspectRatio={coverAspectRatio}
+          libraryId={libraryId}
+        />
+      )}
+
       {/* Search and Filters */}
       <div className="mb-6 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -561,12 +595,14 @@ const HomeContent = () => {
             onClearAll={clearAllFilters}
             onGenreSearchChange={setGenreSearchInput}
             onLanguageChange={setLanguageFilter}
+            onReadingChange={setReadingFilters}
             onReviewedFilterChange={setReviewedFilter}
             onTagScopeChange={setTagScope}
             onTagSearchChange={setTagSearchInput}
             onToggleFileType={toggleFileType}
             onToggleGenre={toggleGenreFilter}
             onToggleTag={toggleTagFilter}
+            reading={readingFilters}
             reviewedFilter={reviewedFilterParam}
             selectedFileTypes={selectedFileTypes}
             selectedGenreIds={selectedGenreIds}
@@ -618,9 +654,11 @@ const HomeContent = () => {
           onClearAll={clearAllFilters}
           onClearLanguage={() => setLanguageFilter("all")}
           onClearReviewedFilter={() => setReviewedFilter("all")}
+          onReadingChange={setReadingFilters}
           onToggleFileType={toggleFileType}
           onToggleGenre={toggleGenreFilter}
           onToggleTag={toggleTagFilter}
+          reading={readingFilters}
           reviewedFilter={reviewedFilterParam}
           selectedFileTypes={selectedFileTypes}
           selectedGenres={selectedGenres}

@@ -13,7 +13,9 @@ export type SortField =
   | "date_added"
   | "date_released"
   | "page_count"
-  | "duration";
+  | "duration"
+  | "rating"
+  | "date_finished";
 
 /**
  * One field and direction. The field defaults to the book gallery's fields;
@@ -33,6 +35,8 @@ export const SORT_FIELDS: readonly SortField[] = [
   "date_released",
   "page_count",
   "duration",
+  "rating",
+  "date_finished",
 ] as const;
 
 /** Human-readable labels for each field. */
@@ -44,7 +48,22 @@ export const SORT_FIELD_LABELS: Record<SortField, string> = {
   date_released: "Date released",
   page_count: "Page count",
   duration: "Duration",
+  rating: "Rating",
+  date_finished: "Date finished",
 };
+
+/**
+ * Fields a newly added sort level orders descending: the reader's best
+ * rated and most recently finished books come first.
+ */
+const DESCENDING_FIRST: ReadonlySet<string> = new Set([
+  "rating",
+  "date_finished",
+]);
+
+/** The direction a newly added level of field starts in. */
+export const initialSortDirection = (field: string): SortDirection =>
+  DESCENDING_FIRST.has(field) ? "desc" : "asc";
 
 /**
  * The fields a sorted view offers and the order it shows when the URL has no

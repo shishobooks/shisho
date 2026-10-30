@@ -17,6 +17,15 @@ type ListBooksQuery struct {
 	Sort           string   `query:"sort" json:"sort,omitempty" validate:"omitempty,max=200"`
 	ReviewedFilter string   `query:"reviewed_filter" json:"reviewed_filter,omitempty" validate:"omitempty,oneof=all needs_review reviewed" tstype:"ReviewedFilter"` // "" or "all" = all books, "needs_review", "reviewed"
 	ToRead         bool     `query:"to_read" json:"to_read,omitempty"`                                                                                              // Only the caller's To Read, in queue order, whatever the sort
+	// Only the caller's Books with a Read-through underway, the ones being
+	// read before the paused ones, whatever the sort.
+	CurrentlyReading bool `query:"currently_reading" json:"currently_reading,omitempty"`
+	// Only Books whose caller's Reading Status is any of these; "none"
+	// matches Books with no status.
+	ReadingStatuses []string `query:"reading_status" json:"reading_status,omitempty" validate:"omitempty,max=6,dive,oneof=currently_reading paused to_read read did_not_finish none" tstype:"ReadingStatusFilter[]"`
+	// Only Books the caller rated in this range of stars, both ends included.
+	RatingMin *float64 `query:"rating_min" json:"rating_min,omitempty" validate:"omitempty,min=0.25,max=5" tstype:"number"`
+	RatingMax *float64 `query:"rating_max" json:"rating_max,omitempty" validate:"omitempty,min=0.25,max=5" tstype:"number"`
 }
 
 // ListBooksResponse is the list-endpoint envelope for books.

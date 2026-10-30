@@ -31,6 +31,9 @@ Unordered lists can sort by:
 - **Recently Added** or **Oldest Added**
 - **Title (A-Z)** or **Title (Z-A)**
 - **Author (A-Z)** or **Author (Z-A)**
+- **Rating (high to low)** or **Rating (low to high)**, and **Recently Finished** or **Earliest Finished**, by each viewer's own [reading](./reading-tracking.md#finding-books-by-status-and-rating)
+
+Any list can also be filtered by reading status and rating with **Filter**. A filtered ordered list can't be reordered until the filters are cleared.
 
 Save the chosen sort as the list default when you want other visits to open in that order.
 

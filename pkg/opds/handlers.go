@@ -113,6 +113,20 @@ func (h *handler) catalog(c echo.Context) error {
 	return respondXML(c, feed)
 }
 
+// currentlyReading handles the user's Currently Reading feed.
+func (h *handler) currentlyReading(c echo.Context) error {
+	r, err := h.reachFor(c)
+	if err != nil {
+		return err
+	}
+	limit, offset := getPaginationParams(c)
+	feed, err := h.opdsService.BuildCurrentlyReadingFeed(c.Request().Context(), getBaseURL(c), r, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return respondXML(c, feed)
+}
+
 // toRead handles the user's To Read feed.
 func (h *handler) toRead(c echo.Context) error {
 	r, err := h.reachFor(c)
@@ -172,7 +186,7 @@ func (h *handler) libraryAllBooks(c echo.Context) error {
 	baseURL := getBaseURL(c)
 	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, r.Rules, libraryID, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibraryAllBooksFeed(ctx, baseURL, r.Rules, libraryID, limit, offset, sort, r.ReaderID())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -232,7 +246,7 @@ func (h *handler) librarySeriesBooks(c echo.Context) error {
 	baseURL := getBaseURL(c)
 	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, r.Rules, libraryID, seriesID, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibrarySeriesBooksFeed(ctx, baseURL, r.Rules, libraryID, seriesID, limit, offset, sort, r.ReaderID())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -292,7 +306,7 @@ func (h *handler) libraryAuthorBooks(c echo.Context) error {
 	baseURL := getBaseURL(c)
 	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, r.Rules, libraryID, authorName, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibraryAuthorBooksFeed(ctx, baseURL, r.Rules, libraryID, authorName, limit, offset, sort, r.ReaderID())
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -325,7 +339,7 @@ func (h *handler) librarySearch(c echo.Context) error {
 	baseURL := getBaseURL(c)
 	sort := h.resolveSort(c.Request().Context(), r.User, libraryID)
 
-	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, r.Rules, libraryID, query, limit, offset, sort)
+	feed, err := h.opdsService.BuildLibrarySearchFeed(ctx, baseURL, r.Rules, libraryID, query, limit, offset, sort, r.ReaderID())
 	if err != nil {
 		return errors.WithStack(err)
 	}

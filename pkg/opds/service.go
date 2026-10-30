@@ -48,8 +48,8 @@ func NewService(db *bun.DB, bookService *books.Service) *Service {
 }
 
 // BuildCatalogFeed builds the root navigation feed for what r reaches: the
-// libraries with something to deliver when withLibraries, then To Read when
-// it holds something in r to deliver, then a Lists entry when withLists and
+// libraries with something to deliver when withLibraries, then Currently
+// Reading and To Read when each holds something in r to deliver, then a Lists entry when withLists and
 // the user owns or has been shared a list with something to deliver. A
 // list-scoped Device gets an entry for its list instead of Lists, when the
 // list has something to deliver. No entry opens empty.
@@ -79,6 +79,18 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, r *rea
 			entry.AddLink(RelSubsection, fmt.Sprintf("%s/libraries/%d", baseURL, lib.ID), MimeTypeNavigation)
 			feed.AddEntry(entry)
 		}
+	}
+
+	hasCurrentlyReading, err := svc.reachService.HasBooks(ctx, r, books.ListBooksOptions{CurrentlyReadingUserID: &r.User.ID})
+	if err != nil {
+		return nil, err
+	}
+	if hasCurrentlyReading {
+		currentlyReadingURL := baseURL + "/currently-reading"
+		entry := NewEntry(currentlyReadingURL, "Currently Reading")
+		entry.Content = &Content{Type: "text", Value: "What you're reading now"}
+		entry.AddLink(RelSubsection, currentlyReadingURL, MimeTypeAcquisition)
+		feed.AddEntry(entry)
 	}
 
 	hasToRead, err := svc.reachService.HasBooks(ctx, r, books.ListBooksOptions{ToReadUserID: &r.User.ID})
@@ -190,6 +202,7 @@ func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL string, r *r
 		LibraryIDs:    libraryIDs,
 		MainFileTypes: types,
 		Search:        query,
+		ReaderID:      &r.User.ID,
 		Sort:          list.DefaultSort,
 		Limit:         &limit,
 		Offset:        &offset,
@@ -230,6 +243,42 @@ func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL string, r *r
 			aspectRatio = lb.Book.Library.CoverAspectRatio
 		}
 		feed.AddEntry(svc.bookToEntry(baseURL, lb.Book, aspectRatio, r.Rules))
+	}
+
+	return feed, nil
+}
+
+// BuildCurrentlyReadingFeed builds an acquisition feed of the user's Books
+// with a Read-through underway, the ones being read before the paused ones.
+// Only books in r with something to deliver are included.
+func (svc *Service) BuildCurrentlyReadingFeed(ctx context.Context, baseURL string, r *reach.Reach, limit, offset int) (*Feed, error) {
+	underway, total, err := svc.reachService.ListBooks(ctx, r, books.ListBooksOptions{
+		CurrentlyReadingUserID: &r.User.ID,
+		Limit:                  &limit,
+		Offset:                 &offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	catalogURL := baseURL + "/catalog"
+	currentlyReadingURL := baseURL + "/currently-reading"
+
+	feed := NewFeed(currentlyReadingURL, "Currently Reading")
+	feed.Author = &Author{Name: "Shisho"}
+	feed.AddLink(RelSelf, fmt.Sprintf("%s?limit=%d&offset=%d", currentlyReadingURL, limit, offset), MimeTypeAcquisition)
+	feed.AddLink(RelStart, catalogURL, MimeTypeNavigation)
+	feed.AddLink(RelUp, catalogURL, MimeTypeNavigation)
+	addPaginationLinks(feed, currentlyReadingURL, limit, offset, total)
+
+	// Currently Reading spans libraries, so each book takes its own
+	// library's cover aspect ratio.
+	for _, book := range underway {
+		aspectRatio := ""
+		if book.Library != nil {
+			aspectRatio = book.Library.CoverAspectRatio
+		}
+		feed.AddEntry(svc.bookToEntry(baseURL, book, aspectRatio, r.Rules))
 	}
 
 	return feed, nil
@@ -320,7 +369,7 @@ func (svc *Service) BuildLibraryCatalogFeed(ctx context.Context, baseURL string,
 }
 
 // BuildLibraryAllBooksFeed builds an acquisition feed with all books in a library.
-func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
+func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID, limit, offset int, sort []sortspec.SortLevel, readerID *int) (*Feed, error) {
 	types := delivery.SourceFileTypes(rules)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
@@ -336,6 +385,7 @@ func (svc *Service) BuildLibraryAllBooksFeed(ctx context.Context, baseURL string
 		LibraryID:     &libraryID,
 		MainFileTypes: types,
 		Sort:          sort,
+		ReaderID:      readerID,
 	})
 	if err != nil {
 		return nil, err
@@ -433,7 +483,7 @@ func (svc *Service) retrieveLibrarySeries(ctx context.Context, libraryID, series
 }
 
 // BuildLibrarySeriesBooksFeed builds an acquisition feed with books in a series.
-func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID, seriesID, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
+func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID, seriesID, limit, offset int, sort []sortspec.SortLevel, readerID *int) (*Feed, error) {
 	types := delivery.SourceFileTypes(rules)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
@@ -455,6 +505,7 @@ func (svc *Service) BuildLibrarySeriesBooksFeed(ctx context.Context, baseURL str
 		SeriesID:      &seriesID,
 		MainFileTypes: types,
 		Sort:          sort,
+		ReaderID:      readerID,
 	})
 	if err != nil {
 		return nil, err
@@ -596,7 +647,7 @@ func (svc *Service) BuildLibraryAuthorsListFeed(ctx context.Context, baseURL str
 // generates itself is already canonical; the change only affects OPDS
 // clients that hand-craft URLs with non-canonical casing — those now
 // resolve instead of 404ing.
-func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, authorName string, fileTypes []string, limit, offset int, sort []sortspec.SortLevel) ([]*models.Book, int, error) {
+func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, authorName string, fileTypes []string, limit, offset int, sort []sortspec.SortLevel, readerID *int) ([]*models.Book, int, error) {
 	person, err := svc.peopleService.RetrievePerson(ctx, people.RetrievePersonOptions{
 		Name:      &authorName,
 		LibraryID: &libraryID,
@@ -619,11 +670,12 @@ func (svc *Service) ListBooksByAuthor(ctx context.Context, libraryID int, author
 		PersonID:      &person.ID,
 		MainFileTypes: fileTypes,
 		Sort:          sort,
+		ReaderID:      readerID,
 	})
 }
 
 // BuildLibraryAuthorBooksFeed builds an acquisition feed with books by an author.
-func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID int, authorName string, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
+func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID int, authorName string, limit, offset int, sort []sortspec.SortLevel, readerID *int) (*Feed, error) {
 	types := delivery.SourceFileTypes(rules)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
@@ -633,7 +685,7 @@ func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL str
 		return nil, err
 	}
 
-	booksResult, total, err := svc.ListBooksByAuthor(ctx, libraryID, authorName, types, limit, offset, sort)
+	booksResult, total, err := svc.ListBooksByAuthor(ctx, libraryID, authorName, types, limit, offset, sort, readerID)
 	if err != nil {
 		return nil, err
 	}
@@ -663,7 +715,7 @@ func (svc *Service) BuildLibraryAuthorBooksFeed(ctx context.Context, baseURL str
 }
 
 // BuildLibrarySearchFeed builds an acquisition feed with search results.
-func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID int, query string, limit, offset int, sort []sortspec.SortLevel) (*Feed, error) {
+func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL string, rules []delivery.Rule, libraryID int, query string, limit, offset int, sort []sortspec.SortLevel, readerID *int) (*Feed, error) {
 	types := delivery.SourceFileTypes(rules)
 
 	lib, err := svc.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
@@ -680,6 +732,7 @@ func (svc *Service) BuildLibrarySearchFeed(ctx context.Context, baseURL string, 
 		MainFileTypes: types,
 		Search:        &query,
 		Sort:          sort,
+		ReaderID:      readerID,
 	})
 	if err != nil {
 		return nil, err

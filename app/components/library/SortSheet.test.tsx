@@ -62,6 +62,32 @@ describe("SortSheet", () => {
     ]);
   });
 
+  it("starts a rating or finish date level highest and latest first", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = vi.fn();
+    render(
+      <SortSheet
+        fieldLabels={SORT_FIELD_LABELS}
+        fields={SORT_FIELDS}
+        isDirty={false}
+        isSaving={false}
+        levels={[]}
+        onChange={onChange}
+        onSaveAsDefault={vi.fn()}
+        trigger={<Trigger />}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Open Sort/i }));
+    await user.click(screen.getByRole("button", { name: /^Rating$/ }));
+    expect(onChange).toHaveBeenLastCalledWith([
+      { field: "rating", direction: "desc" },
+    ]);
+    await user.click(screen.getByRole("button", { name: /^Date finished$/ }));
+    expect(onChange).toHaveBeenLastCalledWith([
+      { field: "date_finished", direction: "desc" },
+    ]);
+  });
+
   it("toggles direction when the arrow button is clicked", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onChange = vi.fn();

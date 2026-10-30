@@ -41,6 +41,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 
 	// Root catalog - lists libraries
 	v1.GET("/catalog", h.catalog)
+	v1.GET("/currently-reading", h.currentlyReading)
 	v1.GET("/to-read", h.toRead)
 
 	// Library catalog and browsing

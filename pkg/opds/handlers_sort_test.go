@@ -112,6 +112,7 @@ func TestLibraryAllBooksFeed_HonorsStoredSort(t *testing.T) {
 		10,
 		0,
 		mustParseSortSpec(t, *resolved.SortSpec),
+		nil,
 	)
 	require.NoError(t, err)
 	require.Len(t, feed.Entries, 2)
@@ -175,6 +176,7 @@ func TestLibraryAllBooksFeed_NilSortUsesBuiltinDefault(t *testing.T) {
 		lib.ID,
 		10,
 		0,
+		nil,
 		nil,
 	)
 	require.NoError(t, err)

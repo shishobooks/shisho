@@ -40,7 +40,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/books"
     output_path: "app/types/generated/books.ts"
     frontmatter: |
-      import { AuthorRole, Book, FileRole, ReviewOverride, ReviewedFilter, SeriesNumberUnit } from "@/types";
+      import { AuthorRole, Book, FileRole, ReadingStatusFilter, ReviewOverride, ReviewedFilter, SeriesNumberUnit } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/config"
@@ -163,7 +163,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/lists"
     output_path: "app/types/generated/lists.ts"
     frontmatter: |
-      import { List, ListBook, ListPermission, ListSort } from "@/types";
+      import { List, ListBook, ListPermission, ListSort, ReadingStatusFilter } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/reading"

@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
@@ -345,7 +346,11 @@ type ListBooksOptions struct {
 	MainFileTypes []string
 	// Search keeps only books matching this full-text query. Empty means no
 	// filter.
-	Search       string
+	Search string
+	// ReaderID is the user whose reading data Reading and the rating and
+	// finish date sorts read. Without it, those are ignored.
+	ReaderID     *int
+	Reading      reading.Filter
 	Sort         string
 	Limit        *int
 	Offset       *int
@@ -401,7 +406,11 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 		q = q.Where("lb.book_id IN (SELECT book_id FROM books_fts WHERE books_fts MATCH ?)", ftsQuery)
 	}
 
-	q = orderListBooks(q, opts.Sort)
+	if opts.ReaderID != nil {
+		q = opts.Reading.Apply(q, *opts.ReaderID, "lb.book_id")
+	}
+
+	q = orderListBooks(q, opts.Sort, opts.ReaderID)
 
 	if opts.Limit != nil {
 		q = q.Limit(int64(*opts.Limit))
@@ -428,8 +437,14 @@ func (svc *Service) listBooksWithTotal(ctx context.Context, opts ListBooksOption
 	return listBooks, int(total), nil
 }
 
-// orderListBooks orders a query over list_books, aliased lb, by sort.
-func orderListBooks(q *bun.SelectQuery, sort string) *bun.SelectQuery {
+// orderListBooks orders a query over list_books, aliased lb, by sort. The
+// rating and finish date sorts read readerID's reading data, and fall back
+// to the default without one.
+func orderListBooks(q *bun.SelectQuery, sort string, readerID *int) *bun.SelectQuery {
+	if readerID == nil && (sort == models.ListSortRatingDesc || sort == models.ListSortRatingAsc ||
+		sort == models.ListSortDateFinishedDesc || sort == models.ListSortDateFinishedAsc) {
+		sort = models.ListSortAddedAtDesc
+	}
 	switch sort {
 	case models.ListSortManual:
 		q = q.Order("lb.sort_order ASC NULLS LAST", "lb.added_at DESC")
@@ -443,6 +458,14 @@ func orderListBooks(q *bun.SelectQuery, sort string) *bun.SelectQuery {
 		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) ASC NULLS LAST")
 	case models.ListSortAuthorDesc:
 		q = q.OrderExpr("(SELECT p.sort_name FROM authors a JOIN persons p ON p.id = a.person_id WHERE a.book_id = lb.book_id LIMIT 1) DESC NULLS LAST")
+	case models.ListSortRatingDesc:
+		q = q.OrderExpr(reading.RatingUnitsExpr(*readerID, "lb.book_id") + " DESC NULLS LAST")
+	case models.ListSortRatingAsc:
+		q = q.OrderExpr(reading.RatingUnitsExpr(*readerID, "lb.book_id") + " ASC NULLS LAST")
+	case models.ListSortDateFinishedDesc:
+		q = q.OrderExpr(reading.LastFinishedDayExpr(*readerID, "lb.book_id") + " DESC NULLS LAST")
+	case models.ListSortDateFinishedAsc:
+		q = q.OrderExpr(reading.LastFinishedDayExpr(*readerID, "lb.book_id") + " ASC NULLS LAST")
 	default: // added_at_desc
 		q = q.Order("lb.added_at DESC")
 	}
@@ -453,9 +476,9 @@ func orderListBooks(q *bun.SelectQuery, sort string) *bun.SelectQuery {
 	return q
 }
 
-// BookIDs returns the ids of listID's Books in sort's order, limited to
-// libraryIDs when it isn't nil.
-func (svc *Service) BookIDs(ctx context.Context, listID int, sort string, libraryIDs []int) ([]int, error) {
+// BookIDs returns the ids of listID's Books in sort's order, as readerID
+// sees it, limited to libraryIDs when it isn't nil.
+func (svc *Service) BookIDs(ctx context.Context, listID int, sort string, readerID int, libraryIDs []int) ([]int, error) {
 	ids := []int{}
 	q := svc.db.NewSelect().
 		Model((*models.ListBook)(nil)).
@@ -464,7 +487,7 @@ func (svc *Service) BookIDs(ctx context.Context, listID int, sort string, librar
 	if libraryIDs != nil {
 		q = q.Where("lb.book_id IN (SELECT id FROM books WHERE library_id IN (?))", bun.List(libraryIDs))
 	}
-	err := orderListBooks(q, sort).Scan(ctx, &ids)
+	err := orderListBooks(q, sort, &readerID).Scan(ctx, &ids)
 	return ids, errors.WithStack(err)
 }
 

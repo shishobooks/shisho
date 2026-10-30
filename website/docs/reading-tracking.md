@@ -46,6 +46,23 @@ To queue a whole [list](./lists.md), use [Copy to To Read](./lists.md#copying-to
 
 Reading apps can download from your queue through the [OPDS catalog](./opds.md#catalog-structure).
 
+## Finding Books by Status and Rating
+
+Your statuses and ratings are ways to browse, in a library's gallery and on any [list](./lists.md). Each user filters and sorts by their own.
+
+- **Filter** has a **Reading status** section, where you can pick one or more statuses, and **No status** for books you have never tracked. A book matching any picked status shows. It also has a **Rating** range: choose the lowest rating, the highest, or both, in half stars. Unrated books never match a rating range.
+- **Sort** offers **Rating** and **Date finished**, which start highest and latest first. Date finished is the end date of your latest finished read; a book you abandoned, or finished with no end date, has none. Books with no rating or finish date come last in either direction. A list's sort menu offers **Rating (high to low)**, **Rating (low to high)**, **Recently Finished**, and **Earliest Finished**.
+
+Filters apply before the gallery or list pages, so the count and every page hold only matching books. An ordered list can't be dragged into a new order while it's filtered.
+
+A list's saved default sort can be by rating or finish date. Each person viewing the list then sees it in the order of their own ratings or reads. A library's saved default sort can be too, and it orders that library in the [OPDS](./opds.md) catalog and [eReader Browser](./ereader-browser.md) by your ratings or reads.
+
+## Currently Reading
+
+A library's gallery opens with a **Currently Reading** row when you are reading or have paused any of its books. Books you are reading come first, the most recently started first, then the paused ones. The row is one gallery row wide; when more books are underway, **Show all** filters the gallery to **Currently Reading** and **Paused**. The row isn't shown on a series' page.
+
+Reading apps can download the books you're reading through the [OPDS catalog](./opds.md#catalog-structure).
+
 ## Reading History
 
 Each time you read a book is a **Read-through**: when it started, when it ended, and whether you finished or abandoned it. Once a book has a Read-through, its page shows **Reading history** below its files, with a summary such as "Read twice, last finished Mar 2024" and every Read-through, newest first.

@@ -16,7 +16,7 @@ const (
 
 // List default sort options.
 const (
-	//tygo:emit export type ListSort = typeof ListSortManual | typeof ListSortAddedAtDesc | typeof ListSortAddedAtAsc | typeof ListSortTitleAsc | typeof ListSortTitleDesc | typeof ListSortAuthorAsc | typeof ListSortAuthorDesc;
+	//tygo:emit export type ListSort = typeof ListSortManual | typeof ListSortAddedAtDesc | typeof ListSortAddedAtAsc | typeof ListSortTitleAsc | typeof ListSortTitleDesc | typeof ListSortAuthorAsc | typeof ListSortAuthorDesc | typeof ListSortRatingDesc | typeof ListSortRatingAsc | typeof ListSortDateFinishedDesc | typeof ListSortDateFinishedAsc;
 	ListSortAddedAtDesc = "added_at_desc"
 	ListSortAddedAtAsc  = "added_at_asc"
 	ListSortTitleAsc    = "title_asc"
@@ -24,6 +24,12 @@ const (
 	ListSortAuthorAsc   = "author_asc"
 	ListSortAuthorDesc  = "author_desc"
 	ListSortManual      = "manual"
+	// The rating and finish date sorts order by each viewer's own Rating
+	// and latest finished Read-through.
+	ListSortRatingDesc       = "rating_desc"
+	ListSortRatingAsc        = "rating_asc"
+	ListSortDateFinishedDesc = "date_finished_desc"
+	ListSortDateFinishedAsc  = "date_finished_asc"
 )
 
 type List struct {

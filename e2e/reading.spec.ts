@@ -1,6 +1,7 @@
 /**
  * E2E test for reading tracking: marking a book read from its page, rating
- * it in quarter stars, and seeing its status on the library's book card.
+ * it in quarter stars, seeing its status on the library's book card, and
+ * seeing a book being read in the library's Currently Reading row.
  *
  * Running:
  *   pnpm e2e:chromium e2e/reading.spec.ts   # Chromium only
@@ -14,6 +15,7 @@ const PASSWORD = "password123";
 
 let libraryId: number;
 let bookId: number;
+let underwayBookId: number;
 
 test.describe("Reading", () => {
   test.beforeAll(async ({ browser }) => {
@@ -37,6 +39,12 @@ test.describe("Reading", () => {
       })
     ).json()) as { id: number };
     bookId = book.id;
+    const underway = (await (
+      await apiContext.post("/api/test/books", {
+        data: { libraryId, title: "Underway Book", fileType: "epub" },
+      })
+    ).json()) as { id: number };
+    underwayBookId = underway.id;
     await apiContext.dispose();
   });
 
@@ -49,7 +57,7 @@ test.describe("Reading", () => {
     await apiContext.dispose();
   });
 
-  test("marks a book read, rates it, and shows the status on its card", async ({
+  test("marks a book read, rates it, and shows the status on its card and in Currently Reading", async ({
     page,
   }) => {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -98,5 +106,32 @@ test.describe("Reading", () => {
       card.getByRole("img", { name: "Read", exact: true }),
     ).toBeVisible();
     await expect(card.getByLabel("Rated 3.75 stars")).toBeVisible();
+
+    // Nothing is underway yet, so the library has no Currently Reading row.
+    await expect(
+      page.getByRole("region", { name: "Currently Reading" }),
+    ).toHaveCount(0);
+
+    await page.goto(`/libraries/${libraryId}/books/${underwayBookId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page
+      .getByRole("button", { name: "Reading status: Track reading" })
+      .click();
+    await page.getByRole("menuitem", { name: "Start reading" }).click();
+    await expect(
+      page.getByRole("button", { name: "Reading status: Currently Reading" }),
+    ).toBeVisible();
+
+    await page.goto(`/libraries/${libraryId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    const row = page.getByRole("region", { name: "Currently Reading" });
+    await expect(
+      row.getByRole("link").filter({ hasText: "Underway Book" }).first(),
+    ).toBeVisible();
+    await expect(
+      row.getByRole("link").filter({ hasText: "Tracked Book" }),
+    ).toHaveCount(0);
   });
 });

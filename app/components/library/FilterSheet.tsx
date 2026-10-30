@@ -1,5 +1,6 @@
 import {
   Bookmark,
+  BookOpenCheck,
   ChevronsUpDown,
   Eye,
   File,
@@ -7,6 +8,7 @@ import {
   ListFilter,
   Square,
   SquareCheckBig,
+  Star,
   Tags,
 } from "lucide-react";
 import { forwardRef, useId, useState, type ReactNode } from "react";
@@ -62,13 +64,22 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import {
+  RATING_FILTER_STEPS,
+  READING_STATUS_FILTER_OPTIONS,
+  type ReadingFilters,
+} from "@/libraries/readingFilters";
 import { cn } from "@/libraries/utils";
 import type { Genre, Tag } from "@/types";
+import { formatCount } from "@/utils/format";
 import { splitTagNamespace, type TagScope } from "@/utils/tagNamespaces";
 
 type FilterOptionsQuery = RetryableQuery & { data: unknown };
 
 interface FilterSheetProps {
+  /** The reading filters, which read the signed-in user's own reading. */
+  reading: ReadingFilters;
+  onReadingChange: (next: ReadingFilters) => void;
   selectedFileTypes: string[];
   fileTypeOptions: readonly { value: string; label: string }[];
   onToggleFileType: (fileType: string) => void;
@@ -273,6 +284,152 @@ const FilterCombobox = ({
   );
 };
 
+// A pressed-or-not chip in a group of options, as the file types show.
+const toggleClass = (pressed: boolean) =>
+  cn(
+    "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors",
+    pressed
+      ? "border-primary bg-primary/5 text-primary"
+      : "border-border bg-card hover:bg-accent",
+  );
+
+const ANY_RATING = "any";
+
+// One end of the rating range. Ends that would put the range's minimum above
+// its maximum are disabled.
+const RatingEndSelect = ({
+  label,
+  value,
+  onChange,
+  isAllowed,
+}: {
+  label: string;
+  value: number | undefined;
+  onChange: (value: number | undefined) => void;
+  isAllowed: (stars: number) => boolean;
+}) => (
+  <Select
+    onValueChange={(next) =>
+      onChange(next === ANY_RATING ? undefined : Number(next))
+    }
+    value={value === undefined ? ANY_RATING : String(value)}
+  >
+    <SelectTrigger aria-label={label} className="w-full">
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value={ANY_RATING}>Any</SelectItem>
+      {RATING_FILTER_STEPS.map((stars) => (
+        <SelectItem
+          disabled={!isAllowed(stars)}
+          key={stars}
+          value={String(stars)}
+        >
+          {formatCount(stars, "star")}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+);
+
+/**
+ * The Reading Status and rating filters. Both read the signed-in user's own
+ * reading, so they're the same on a library and on a List.
+ */
+export const ReadingFilterSection = ({
+  filters,
+  onChange,
+}: {
+  filters: ReadingFilters;
+  onChange: (next: ReadingFilters) => void;
+}) => {
+  const statusLabelId = useId();
+  const ratingLabelId = useId();
+  const { ratingMin, ratingMax } = filters;
+
+  // Rebuilds filters with one end of the range changed, leaving an unset
+  // end out rather than undefined.
+  const withRange = (min: number | undefined, max: number | undefined) => {
+    const next: ReadingFilters = { statuses: filters.statuses };
+    if (min !== undefined) next.ratingMin = min;
+    if (max !== undefined) next.ratingMax = max;
+    return next;
+  };
+
+  return (
+    <>
+      <div>
+        <SectionHeader
+          colorClass="bg-chart-1/20 text-chart-1"
+          detail={
+            filters.statuses.length > 0
+              ? `${filters.statuses.length} selected`
+              : undefined
+          }
+          icon={<BookOpenCheck className="h-3 w-3" />}
+          label="Reading status"
+          labelId={statusLabelId}
+        />
+        <div
+          aria-labelledby={statusLabelId}
+          className="flex flex-wrap gap-1.5"
+          role="group"
+        >
+          {READING_STATUS_FILTER_OPTIONS.map((option) => {
+            const isSelected = filters.statuses.includes(option.value);
+            return (
+              <Button
+                aria-pressed={isSelected}
+                className={toggleClass(isSelected)}
+                key={option.value}
+                onClick={() =>
+                  onChange({
+                    ...filters,
+                    statuses: isSelected
+                      ? filters.statuses.filter((s) => s !== option.value)
+                      : [...filters.statuses, option.value],
+                  })
+                }
+                variant="unstyled"
+              >
+                {option.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <SectionHeader
+          colorClass="bg-chart-4/20 text-chart-4"
+          icon={<Star className="h-3 w-3" />}
+          label="Rating"
+          labelId={ratingLabelId}
+        />
+        <div
+          aria-labelledby={ratingLabelId}
+          className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"
+          role="group"
+        >
+          <RatingEndSelect
+            isAllowed={(stars) => ratingMax === undefined || stars <= ratingMax}
+            label="Lowest rating"
+            onChange={(min) => onChange(withRange(min, ratingMax))}
+            value={ratingMin}
+          />
+          <span className="text-xs text-muted-foreground">to</span>
+          <RatingEndSelect
+            isAllowed={(stars) => ratingMin === undefined || stars >= ratingMin}
+            label="Highest rating"
+            onChange={(max) => onChange(withRange(ratingMin, max))}
+            value={ratingMax}
+          />
+        </div>
+      </div>
+    </>
+  );
+};
+
 const scopeKey = (scope: TagScope) =>
   scope.kind === "namespace" ? `ns:${scope.namespace}` : scope.kind;
 
@@ -332,6 +489,8 @@ const TagScopeSwitch = ({
 };
 
 const FilterContent = ({
+  reading,
+  onReadingChange,
   selectedFileTypes,
   fileTypeOptions,
   onToggleFileType,
@@ -367,6 +526,8 @@ const FilterContent = ({
   const reviewLabelId = useId();
   return (
     <div className="space-y-6">
+      <ReadingFilterSection filters={reading} onChange={onReadingChange} />
+
       {/* File Type */}
       <div>
         <SectionHeader
@@ -390,12 +551,7 @@ const FilterContent = ({
             return (
               <Button
                 aria-pressed={isSelected}
-                className={cn(
-                  "inline-flex h-8 items-center rounded-md border px-3 text-xs font-medium transition-colors",
-                  isSelected
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-border bg-card hover:bg-accent",
-                )}
+                className={toggleClass(isSelected)}
                 key={option.value}
                 onClick={() => onToggleFileType(option.value)}
                 variant="unstyled"
@@ -590,8 +746,24 @@ const FilterButton = forwardRef<
 ));
 FilterButton.displayName = "FilterButton";
 
-export const FilterSheet = (props: FilterSheetProps) => {
-  const { onClearAll, hasActiveFilters, ...filterContentProps } = props;
+interface FilterPanelProps {
+  hasActiveFilters: boolean;
+  onClearAll: () => void;
+  /** Says what the filters filter by, for screen readers. */
+  description: string;
+  children: ReactNode;
+}
+
+/**
+ * The Filter button and the sheet (a drawer on phones) it opens, holding
+ * children as the filter sections.
+ */
+export const FilterPanel = ({
+  hasActiveFilters,
+  onClearAll,
+  description,
+  children,
+}: FilterPanelProps) => {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
   if (isDesktop) {
@@ -607,7 +779,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
           <SheetHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
             <SheetTitle>Filters</SheetTitle>
             <SheetDescription className="sr-only">
-              Filter books by file type, genre, tag, or language
+              {description}
             </SheetDescription>
             {hasActiveFilters && (
               <Button
@@ -619,9 +791,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
               </Button>
             )}
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto pr-1">
-            <FilterContent {...filterContentProps} />
-          </div>
+          <div className="flex-1 overflow-y-auto pr-1">{children}</div>
           <SheetFooter className="pt-4">
             <SheetClose asChild>
               <Button className="w-full sm:w-auto">Done</Button>
@@ -644,7 +814,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
         <DrawerHeader className="flex flex-row items-center justify-between">
           <DrawerTitle>Filters</DrawerTitle>
           <DrawerDescription className="sr-only">
-            Filter books by file type, genre, tag, or language
+            {description}
           </DrawerDescription>
           {hasActiveFilters && (
             <Button
@@ -656,9 +826,7 @@ export const FilterSheet = (props: FilterSheetProps) => {
             </Button>
           )}
         </DrawerHeader>
-        <div className="overflow-y-auto px-4 pb-4 max-h-[70vh]">
-          <FilterContent {...filterContentProps} />
-        </div>
+        <div className="overflow-y-auto px-4 pb-4 max-h-[70vh]">{children}</div>
         <DrawerFooter>
           <DrawerClose asChild>
             <Button>Done</Button>
@@ -666,5 +834,18 @@ export const FilterSheet = (props: FilterSheetProps) => {
         </DrawerFooter>
       </DrawerContent>
     </Drawer>
+  );
+};
+
+export const FilterSheet = (props: FilterSheetProps) => {
+  const { onClearAll, hasActiveFilters, ...filterContentProps } = props;
+  return (
+    <FilterPanel
+      description="Filter books by reading status, rating, file type, genre, tag, or language"
+      hasActiveFilters={hasActiveFilters}
+      onClearAll={onClearAll}
+    >
+      <FilterContent {...filterContentProps} />
+    </FilterPanel>
   );
 };

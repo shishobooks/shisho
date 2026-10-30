@@ -272,7 +272,12 @@ describe("Home active filter chips", () => {
     renderHome("/libraries/1?tag_ids=abc,0,-1,1.5,5&genre_ids=xyz");
     await flush();
 
-    const booksCall = request.mock.calls.find((call) => call[1] === "/books");
+    // The gallery's request, not the Currently Reading row's.
+    const booksCall = request.mock.calls.find(
+      (call) =>
+        call[1] === "/books" &&
+        !(call[3] as { currently_reading?: boolean }).currently_reading,
+    );
     expect(booksCall?.[3]).toMatchObject({ tag_ids: [5] });
     expect(booksCall?.[3]).not.toHaveProperty("genre_ids");
     const tagPaths = requestedPaths(request).filter((path: string) =>
