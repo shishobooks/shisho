@@ -32,11 +32,11 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 ## To Read
 
-**To Read** is your queue of books to read next, in the order you plan to read them. Open it from **To Read** in a library's sidebar or in the user menu. It lists the books on it from every library you can access.
+**To Read** is your queue of books to read next, in the order you plan to read them. Open it from the top of **Lists** or from **To Read** in the user menu. It sits with your lists and opens like one, but it isn't a list: it's yours alone, can't be shared, renamed, or deleted, and follows your reading as described below. It lists the books on it from every library you can access.
 
-- **Add a book** from the status button on its page, or from the **⋯** menu on its card wherever books are listed. A book joins at the end of the queue.
+- **Add a book** from the status button on its page, from the **⋯** menu on its card wherever books are listed, or by checking **To Read** at the top of **Add to list**. A book joins at the end of the queue.
 - **Reorder** by dragging books on the To Read page, as on an [ordered list](./lists.md#sorting-and-reordering). Dragging is available when the whole queue fits on one page of up to 100 books.
-- **Remove a book** from the same status button or card menu.
+- **Remove a book** from any of the same places.
 
 A queued book's page shows its place beside the status button, such as **#3 on To Read**, counting only books you can access. Choose it to open To Read.
 

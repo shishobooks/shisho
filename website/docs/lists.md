@@ -1,6 +1,6 @@
 # Lists
 
-Lists are virtual collections of books from one or more libraries. Use them for favorites, rankings, or any collection that should not change the filesystem. For your own queue of books to read next, use [To Read](./reading-tracking.md#to-read).
+Lists are virtual collections of books from one or more libraries. Use them for favorites, rankings, or any collection that should not change the filesystem. For your own queue of books to read next, use [To Read](./reading-tracking.md#to-read), which is pinned at the top of **Lists** and of **Add to list**. It isn't a list, so nothing on this page applies to it.
 
 ## Creating Lists
 

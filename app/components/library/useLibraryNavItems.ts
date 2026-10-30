@@ -1,7 +1,6 @@
 import {
   Book,
   Bookmark,
-  BookmarkCheck,
   Building2,
   Layers,
   Settings,
@@ -51,15 +50,6 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
       label: "Books",
       isActive: isBooksActive,
       show: canReadBooks,
-    },
-    // To Read spans every library, so it opens outside the library's pages,
-    // where this sidebar isn't shown.
-    {
-      to: "/to-read",
-      Icon: BookmarkCheck,
-      label: "To Read",
-      isActive: false,
-      show: can(ROUTE_PERMISSIONS.toRead),
     },
     {
       to: `${basePath}/series`,

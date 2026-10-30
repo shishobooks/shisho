@@ -1,5 +1,5 @@
 import { List, Loader2, MoreHorizontal, Plus } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import { AddToListDialog } from "@/components/library/AddToListDialog";
@@ -20,8 +20,15 @@ import {
   useListLists,
   useRemoveBooksFromList,
 } from "@/hooks/queries/lists";
-import { firstFailedQuery, toastRequestError } from "@/libraries/api";
+import { useBookReading, useSetOnToRead } from "@/hooks/queries/reading";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  DEMO_MODE_MESSAGE,
+  firstFailedQuery,
+  toastRequestError,
+} from "@/libraries/api";
 import type { CreateListPayload, ListResponse } from "@/types";
+import { canQueueToRead } from "@/utils/readingStatus";
 
 interface AddToListPopoverProps {
   bookId: number;
@@ -52,6 +59,34 @@ const AddToListPopover = ({
   const addMutation = useAddBooksToList();
   const removeMutation = useRemoveBooksFromList();
   const createListMutation = useCreateList();
+
+  // To Read sits above the lists, as the one queue every user has. It isn't
+  // a List: it's the user's own, and a Book being read can't join it.
+  const { demoMode } = useAuth();
+  const toReadHintId = useId();
+  const readingQuery = useBookReading(bookId, { enabled: open });
+  const toReadMutation = useSetOnToRead();
+  const reading = readingQuery.data;
+  const onToRead = Boolean(reading?.on_to_read);
+  const toReadHint = demoMode
+    ? DEMO_MODE_MESSAGE
+    : reading && !canQueueToRead(reading.status)
+      ? "You're reading this book."
+      : null;
+  const toReadDisabled = toReadHint !== null || toReadMutation.isPending;
+
+  const handleToReadToggle = async () => {
+    if (toReadDisabled) return;
+    try {
+      await toReadMutation.mutateAsync({ bookId, onToRead: !onToRead });
+      toast.success(onToRead ? "Removed from To Read" : "Added to To Read");
+    } catch (error) {
+      toastRequestError(
+        error,
+        onToRead ? "Failed to remove from To Read" : "Failed to add to To Read",
+      );
+    }
+  };
 
   // A viewer cannot change a list, so the popover leaves it out rather than
   // offer a toggle the server rejects.
@@ -141,6 +176,45 @@ const AddToListPopover = ({
         <p className="text-xs font-medium text-muted-foreground px-3 py-2">
           Add to List
         </p>
+
+        {reading && (
+          <div className="border-b px-1 pb-1 mb-1">
+            <div
+              aria-checked={onToRead}
+              aria-describedby={toReadHint ? toReadHintId : undefined}
+              aria-disabled={toReadDisabled}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-accent text-left w-full text-sm cursor-pointer aria-disabled:opacity-50 aria-disabled:cursor-not-allowed"
+              onClick={handleToReadToggle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleToReadToggle();
+                }
+              }}
+              role="menuitemcheckbox"
+              tabIndex={0}
+            >
+              {toReadMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+              ) : (
+                <Checkbox
+                  checked={onToRead}
+                  className="pointer-events-none"
+                  tabIndex={-1}
+                />
+              )}
+              <span className="truncate">To Read</span>
+            </div>
+            {toReadHint && (
+              <p
+                className="px-2 pb-1 text-xs text-muted-foreground"
+                id={toReadHintId}
+              >
+                {toReadHint}
+              </p>
+            )}
+          </div>
+        )}
 
         {isLoading && <LoadingSpinner className="py-3" />}
 
