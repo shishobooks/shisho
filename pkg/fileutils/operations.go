@@ -7,6 +7,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -594,6 +595,26 @@ func matchesIgnoredPattern(filename string, patterns []string) bool {
 		}
 	}
 	return false
+}
+
+// WalkDirFollowingRoot is filepath.WalkDir, except that a root that is a
+// symlink to a directory is walked into. filepath.WalkDir reports such a root
+// as a single entry, so a library path pointing through a symlink would look
+// empty and its Books would be treated as deleted. Every path passed to fn is
+// clean, the root's included.
+func WalkDirFollowingRoot(root string, fn fs.WalkDirFunc) error {
+	root = filepath.Clean(root)
+	walkRoot := root
+	if !strings.HasSuffix(walkRoot, string(filepath.Separator)) {
+		// A trailing separator makes the walk's Lstat resolve the symlink.
+		walkRoot += string(filepath.Separator)
+	}
+	return filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
+		if path == walkRoot {
+			path = root
+		}
+		return fn(path, d, err)
+	})
 }
 
 // IsWithin reports whether path is dir or inside it. Unlike a string prefix

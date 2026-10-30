@@ -791,6 +791,24 @@ func TestProcessScanJob_MissingLibraryPathSkipsOnlyItsLibrary(t *testing.T) {
 	assert.ElementsMatch(t, []string{"Kept", "Gone", "New"}, titles)
 }
 
+// A library path that is a symlink to a directory is scanned through the
+// link, and its Books survive a rescan.
+func TestProcessScanJob_SymlinkedLibraryPath(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	target := testgen.TempLibraryDir(t)
+	link := filepath.Join(testgen.TempLibraryDir(t), "books")
+	require.NoError(t, os.Symlink(target, link))
+	tc.createLibrary([]string{link})
+	testgen.GenerateEPUB(t, testgen.CreateSubDir(t, target, "Book"), "book.epub", testgen.EPUBOptions{Title: "Linked", Authors: []string{"A"}})
+
+	require.NoError(t, tc.runScan())
+	require.Len(t, tc.listBooks(), 1)
+	require.NoError(t, tc.runScan())
+	assert.Len(t, tc.listBooks(), 1)
+}
+
 func TestProcessScanJob_MetadataUpdateOnRescan(t *testing.T) {
 	t.Parallel()
 	tc := newTestContext(t)

@@ -400,10 +400,7 @@ func TestCreateLibrary_CleansLibraryPaths(t *testing.T) {
 	}
 	require.NoError(t, svc.CreateLibrary(ctx, library))
 
-	var stored []string
-	require.NoError(t, db.NewSelect().Model((*models.LibraryPath)(nil)).Column("filepath").
-		Where("library_id = ?", library.ID).Order("filepath ASC").Scan(ctx, &stored))
-	assert.Equal(t, []string{"/tmp/audio", "/tmp/books"}, stored)
+	assert.Equal(t, []string{"/tmp/audio", "/tmp/books"}, storedLibraryPaths(t, db, library.ID))
 }
 
 func TestUpdateLibrary_CleansLibraryPaths(t *testing.T) {
@@ -423,10 +420,7 @@ func TestUpdateLibrary_CleansLibraryPaths(t *testing.T) {
 	library.LibraryPaths = []*models.LibraryPath{{Filepath: "/tmp/replacement/"}, {Filepath: "/tmp/replacement"}}
 	require.NoError(t, svc.UpdateLibrary(ctx, library, UpdateLibraryOptions{UpdateLibraryPaths: true}))
 
-	var stored []string
-	require.NoError(t, db.NewSelect().Model((*models.LibraryPath)(nil)).Column("filepath").
-		Where("library_id = ?", library.ID).Scan(ctx, &stored))
-	assert.Equal(t, []string{"/tmp/replacement"}, stored)
+	assert.Equal(t, []string{"/tmp/replacement"}, storedLibraryPaths(t, db, library.ID))
 }
 
 // A non-nil empty LibraryIDs means the caller reaches no library, so the

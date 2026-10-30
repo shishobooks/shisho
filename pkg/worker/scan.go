@@ -410,11 +410,15 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 
 	jobLog.Info("processing libraries", logger.Data{"count": len(allLibraries)})
 
-	// A library with a path that can't be read, like an unmounted drive, is
-	// skipped whole: scanning only its other paths would let orphan cleanup
-	// treat every file under the missing one as deleted. The other libraries
-	// are still scanned, and the job fails at the end naming what it skipped.
+	// A library with a path that can't be read is skipped whole: scanning
+	// only its other paths would let orphan cleanup treat every file under
+	// the unreadable one as deleted. The other libraries are still scanned,
+	// and the job fails at the end naming what it skipped.
 	var skipped []string
+	skip := func(library *models.Library, libraryPath string, err error) {
+		jobLog.Error("skipping library: a library path can't be read", err, logger.Data{"library_id": library.ID, "library_path": libraryPath})
+		skipped = append(skipped, fmt.Sprintf("library %d (%s): %s", library.ID, libraryPath, err.Error()))
+	}
 
 libraries:
 	for _, library := range allLibraries {
@@ -450,22 +454,10 @@ libraries:
 			}
 		}
 
-		for _, libraryPath := range library.LibraryPaths {
-			info, err := os.Stat(libraryPath.Filepath)
-			if err == nil && !info.IsDir() {
-				err = errors.New("not a directory")
-			}
-			if err != nil {
-				jobLog.Error("skipping library: a library path can't be read", err, logger.Data{"library_id": library.ID, "library_path": libraryPath.Filepath})
-				skipped = append(skipped, fmt.Sprintf("library %d (%s): %s", library.ID, libraryPath.Filepath, err))
-				continue libraries
-			}
-		}
-
 		// Go through all the library paths to find all the .cbz files.
 		for _, libraryPath := range library.LibraryPaths {
 			jobLog.Info("processing library path", logger.Data{"library_path_id": libraryPath.ID, "library_path": libraryPath.Filepath})
-			err := filepath.WalkDir(libraryPath.Filepath, func(path string, info fs.DirEntry, err error) error {
+			err := fileutils.WalkDirFollowingRoot(libraryPath.Filepath, func(path string, info fs.DirEntry, err error) error {
 				// Stop walking the tree if the worker is shutting down. Returning
 				// the cancellation error aborts the outer WalkDir call so we bail
 				// out of the library rather than enumerating thousands more paths.
@@ -528,8 +520,7 @@ libraries:
 				return ctxErr
 			}
 			if err != nil {
-				jobLog.Error("skipping library: failed to walk a library path", err, logger.Data{"library_id": library.ID, "library_path": libraryPath.Filepath})
-				skipped = append(skipped, fmt.Sprintf("library %d (%s): %s", library.ID, libraryPath.Filepath, err.Error()))
+				skip(library, libraryPath.Filepath, err)
 				continue libraries
 			}
 		}

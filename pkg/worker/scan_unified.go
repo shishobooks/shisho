@@ -668,8 +668,10 @@ func (w *Worker) removeFileRecord(ctx context.Context, file *models.File, book *
 
 	bookDeleted := false
 	if hasMainFiles {
-		// Other main files exist, just clean up empty dirs
-		if fileDir != bookPath {
+		// Other main files exist, just clean up empty dirs. Only climb from
+		// inside the book's folder: a book keyed by a file or a synthetic
+		// path has no folder to stop at, and the climb would run past it.
+		if fileDir != bookPath && fileutils.IsWithin(fileDir, bookPath) {
 			if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
 				logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
 			}
@@ -739,7 +741,7 @@ func (w *Worker) removeFileRecord(ctx context.Context, file *models.File, book *
 					}
 				}
 			}
-		} else if fileDir != bookPath {
+		} else if fileDir != bookPath && fileutils.IsWithin(fileDir, bookPath) {
 			if err := fileutils.CleanupEmptyParentDirectories(fileDir, bookPath, cleanupIgnoredPatterns...); err != nil {
 				logWarn("failed to cleanup empty directories", logger.Data{"path": fileDir, "error": err.Error()})
 			}

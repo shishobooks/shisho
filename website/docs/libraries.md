@@ -8,7 +8,7 @@ Go to **Administration > Libraries**, then select **Add Library**. Choose a name
 
 Paths must be visible from inside the Shisho container. A host path such as `/mnt/books` is not usable unless it is mounted into the container, and the library path must use the container side of that mount. Shisho also needs suitable read and write permissions if file organization is enabled.
 
-Shisho saves each path without surrounding spaces or a trailing slash, and a path entered twice is saved once.
+A path may be a symbolic link to a directory. A path entered twice in one library is saved once.
 
 Saving a library queues a global scan of all libraries, unless a scan is already pending or running. The new library may therefore take a little time to appear populated. If your role has Jobs Read, follow progress under **Administration > Jobs**.
 
@@ -75,9 +75,9 @@ A scan walks every configured library path and updates Shisho to reflect support
 
 A normal scan preserves higher-priority values, including manual edits. Use the refresh and reset choices only when you intentionally want to replace metadata. See [Metadata](./metadata.md#normal-scans-refresh-and-reset).
 
-Review the job log when a scan finishes with warnings. Common causes include unreadable paths, unsupported or damaged files, plugin failures, and files changing while the scan is running.
+Review the job log when a scan finishes with warnings. Common causes include unreadable files, unsupported or damaged files, plugin failures, and files changing while the scan is running.
 
-If a library path cannot be read, for example because its drive is not mounted, the scan skips that whole library and leaves its books as they were, rather than treating its files as removed. The other libraries are still scanned. The scan job then fails, and its log under **Administration > Jobs** names each library and path it skipped.
+A scan skips a whole library, leaving its books as they were rather than treating its files as removed, when one of its paths does not exist or a folder inside it cannot be read. The other libraries are still scanned. The scan job then fails, and its log under **Administration > Jobs** names each library and path it skipped. A path that exists but is empty is scanned as empty, so a drive that is not mounted but leaves an empty mount point behind looks like every file was removed. Make sure library storage is mounted before a scan runs.
 
 ## File Identity and Move Detection
 

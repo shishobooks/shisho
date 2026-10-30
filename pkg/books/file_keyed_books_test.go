@@ -318,3 +318,27 @@ func TestDeleteFileAndCleanup_Organized_KeepsLibraryRoot(t *testing.T) {
 	require.NoError(t, err)
 	assert.DirExists(t, f.libDir)
 }
+
+// Cleaning up after a move stops at the library path the source folder is
+// under, not the library's first path, so a second path is never removed.
+func TestMoveFilesToBook_Organized_CleanupStopsAtSourceLibraryPath(t *testing.T) {
+	t.Parallel()
+	f := newOrganizeFixture(t)
+
+	second := filepath.Join(t.TempDir(), "second")
+	require.NoError(t, os.MkdirAll(second, 0755))
+	_, err := f.db.NewInsert().Model(&models.LibraryPath{LibraryID: f.library.ID, Filepath: second}).Exec(f.ctx)
+	require.NoError(t, err)
+
+	targetDir := filepath.Join(f.libDir, "Target")
+	target := f.addBook("Target", targetDir)
+	f.addFile(target, filepath.Join(targetDir, "t.epub"), true)
+	sourceDir := filepath.Join(second, "Source")
+	source := f.addBook("Source", sourceDir)
+	file := f.addFile(source, filepath.Join(sourceDir, "s.epub"), true)
+
+	_, err = f.moveFiles(&target.ID, file)
+	require.NoError(t, err)
+	assert.NoDirExists(t, sourceDir)
+	assert.DirExists(t, second, "the second library path survives")
+}

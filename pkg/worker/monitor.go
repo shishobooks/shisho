@@ -14,6 +14,7 @@ import (
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/fileutils"
 	"github.com/shishobooks/shisho/pkg/fingerprint"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -247,7 +248,8 @@ type dirWatcher interface {
 // Returns the number of directories added.
 func (m *Monitor) watchRecursive(watcher dirWatcher, root string) (int, error) {
 	count := 0
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+	// Follow a library path that is a symlink to a directory.
+	err := fileutils.WalkDirFollowingRoot(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // skip inaccessible directories
 		}
@@ -299,7 +301,7 @@ func (m *Monitor) addDirWatch(watcher dirWatcher, dir string) bool {
 // library path is a prefix of the given path. Returns 0 if no match.
 func (m *Monitor) findLibraryID(path string) int {
 	for lp, libID := range m.pathToLibrary {
-		if strings.HasPrefix(path, lp+string(os.PathSeparator)) || path == lp {
+		if fileutils.IsWithin(path, lp) {
 			return libID
 		}
 	}
