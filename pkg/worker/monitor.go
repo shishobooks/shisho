@@ -223,7 +223,7 @@ func (m *Monitor) setupWatches(watcher *fsnotify.Watcher) (int, error) {
 	for _, lib := range libs {
 		for _, lp := range lib.LibraryPaths {
 			m.pathToLibrary[lp.Filepath] = lib.ID
-			n, watchErr := m.watchRecursive(watcher, lp.Filepath)
+			n, watchErr := m.watchLibraryPath(watcher, lp.Filepath)
 			if watchErr != nil {
 				m.log.Warn("failed to watch library path", logger.Data{
 					"path":  lp.Filepath,
@@ -244,12 +244,24 @@ type dirWatcher interface {
 	Remove(name string) error
 }
 
-// watchRecursive adds watches on root and all its subdirectories.
+// watchLibraryPath adds watches on a library path and all its
+// subdirectories, following the library path when it is a symlink to a
+// directory, as the full scan does.
+func (m *Monitor) watchLibraryPath(watcher dirWatcher, root string) (int, error) {
+	return m.watchDirs(watcher, root, fileutils.WalkDirFollowingRoot)
+}
+
+// watchRecursive adds watches on root and all its subdirectories. A root that
+// is a symlink is not followed: the full scan only follows a library path, so
+// watching through a link inside a library would import files it never sees.
 // Returns the number of directories added.
 func (m *Monitor) watchRecursive(watcher dirWatcher, root string) (int, error) {
+	return m.watchDirs(watcher, root, filepath.WalkDir)
+}
+
+func (m *Monitor) watchDirs(watcher dirWatcher, root string, walk func(string, fs.WalkDirFunc) error) (int, error) {
 	count := 0
-	// Follow a library path that is a symlink to a directory.
-	err := fileutils.WalkDirFollowingRoot(root, func(path string, d os.DirEntry, err error) error {
+	err := walk(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // skip inaccessible directories
 		}
