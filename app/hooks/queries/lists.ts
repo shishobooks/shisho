@@ -8,6 +8,7 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   AddBooksPayload,
+  CopyToToReadResponse,
   CreateListPayload,
   CreateSharePayload,
   List,
@@ -24,8 +25,10 @@ import type {
   UpdateSharePayload,
 } from "@/types";
 
+import { QueryKey as BooksQueryKey } from "./books";
 import { QueryKey as DevicesQueryKey } from "./devices";
 import { useRequires } from "./permissions";
+import { QueryKey as ReadingQueryKey } from "./reading";
 
 export enum QueryKey {
   ListLists = "ListLists",
@@ -269,6 +272,26 @@ export const useReorderListBooks = () => {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.ListBooks, variables.listId],
+      });
+    },
+  });
+};
+
+// Appends a List's Books, in the List's order, to the caller's To Read.
+// Their statuses change, so book listings (the To Read page included) and
+// any loaded reading records refetch.
+export const useCopyListToToRead = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation<CopyToToReadResponse, ShishoAPIError, { listId: number }>({
+    mutationFn: ({ listId }) => {
+      return API.request("POST", `/lists/${listId}/copy-to-to-read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({
+        queryKey: [ReadingQueryKey.BookReading],
       });
     },
   });

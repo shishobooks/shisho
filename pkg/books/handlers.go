@@ -215,6 +215,9 @@ func (h *handler) list(c echo.Context) error {
 	if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
 		opts.LibraryIDs = libraryIDs
 	}
+	if params.ToRead {
+		opts.ToReadUserID = &user.ID
+	}
 
 	// Resolve the sort: explicit param wins, then stored per-(user, library)
 	// preference, then nil (service applies its hard-coded default). The

@@ -219,6 +219,17 @@ func (s *Service) HasBooks(ctx context.Context, r *Reach, opts books.ListBooksOp
 	return has, errors.WithStack(err)
 }
 
+// ListBooks returns a page of the books opts matches, narrowed to what r
+// reaches, and how many there are in all.
+func (s *Service) ListBooks(ctx context.Context, r *Reach, opts books.ListBooksOptions) ([]*models.Book, int, error) {
+	opts, ok := r.narrow(opts)
+	if !ok {
+		return []*models.Book{}, 0, nil
+	}
+	result, total, err := s.bookService.ListBooksWithTotal(ctx, opts)
+	return result, total, errors.WithStack(err)
+}
+
 // Libraries returns the libraries in reach that have a book with something
 // to deliver, so a channel never lists one that opens empty. One query
 // finds them, however many libraries there are.

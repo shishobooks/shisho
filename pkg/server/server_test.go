@@ -209,6 +209,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"POST /api/reading/books/:id/finish", "POST /api/reading/books/:id/abandon",
 				"PUT /api/reading/books/:id/rating", "PATCH /api/reading/read-throughs/:id",
 				"DELETE /api/reading/read-throughs/:id",
+				"POST /api/reading/books/:id/to-read", "DELETE /api/reading/books/:id/to-read",
+				"PUT /api/reading/to-read/order", "POST /api/lists/:id/copy-to-to-read",
 			} {
 				assert.True(t, routes[route], route)
 			}

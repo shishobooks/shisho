@@ -293,6 +293,10 @@ export const useDeleteBook = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // Deleting a queued Book moves every Book after it up To Read.
+      queryClient.invalidateQueries({
+        queryKey: [ReadingQueryKey.BookReading],
+      });
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],
       });
@@ -329,6 +333,10 @@ export const useDeleteBooks = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
+      // Deleting a queued Book moves every Book after it up To Read.
+      queryClient.invalidateQueries({
+        queryKey: [ReadingQueryKey.BookReading],
+      });
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],
       });

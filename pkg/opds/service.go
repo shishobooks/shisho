@@ -48,10 +48,11 @@ func NewService(db *bun.DB, bookService *books.Service) *Service {
 }
 
 // BuildCatalogFeed builds the root navigation feed for what r reaches: the
-// libraries with something to deliver when withLibraries, then a Lists
-// entry when withLists and the user owns or has been shared a list with
-// something to deliver. A list-scoped Device gets an entry for its list
-// instead, when the list has something to deliver. No entry opens empty.
+// libraries with something to deliver when withLibraries, then To Read when
+// it holds something in r to deliver, then a Lists entry when withLists and
+// the user owns or has been shared a list with something to deliver. A
+// list-scoped Device gets an entry for its list instead of Lists, when the
+// list has something to deliver. No entry opens empty.
 func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, r *reach.Reach, withLibraries, withLists bool) (*Feed, error) {
 	feed := NewFeed(
 		baseURL+"/catalog",
@@ -78,6 +79,18 @@ func (svc *Service) BuildCatalogFeed(ctx context.Context, baseURL string, r *rea
 			entry.AddLink(RelSubsection, fmt.Sprintf("%s/libraries/%d", baseURL, lib.ID), MimeTypeNavigation)
 			feed.AddEntry(entry)
 		}
+	}
+
+	hasToRead, err := svc.reachService.HasBooks(ctx, r, books.ListBooksOptions{ToReadUserID: &r.User.ID})
+	if err != nil {
+		return nil, err
+	}
+	if hasToRead {
+		toReadURL := baseURL + "/to-read"
+		entry := NewEntry(toReadURL, "To Read")
+		entry.Content = &Content{Type: "text", Value: "What you plan to read next"}
+		entry.AddLink(RelSubsection, toReadURL, MimeTypeAcquisition)
+		feed.AddEntry(entry)
 	}
 
 	if listID := r.ListID(); listID != nil {
@@ -217,6 +230,41 @@ func (svc *Service) BuildListBooksFeed(ctx context.Context, baseURL string, r *r
 			aspectRatio = lb.Book.Library.CoverAspectRatio
 		}
 		feed.AddEntry(svc.bookToEntry(baseURL, lb.Book, aspectRatio, r.Rules))
+	}
+
+	return feed, nil
+}
+
+// BuildToReadFeed builds an acquisition feed of the user's To Read in queue
+// order. Only books in r with something to deliver are included.
+func (svc *Service) BuildToReadFeed(ctx context.Context, baseURL string, r *reach.Reach, limit, offset int) (*Feed, error) {
+	queued, total, err := svc.reachService.ListBooks(ctx, r, books.ListBooksOptions{
+		ToReadUserID: &r.User.ID,
+		Limit:        &limit,
+		Offset:       &offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	catalogURL := baseURL + "/catalog"
+	toReadURL := baseURL + "/to-read"
+
+	feed := NewFeed(toReadURL, "To Read")
+	feed.Author = &Author{Name: "Shisho"}
+	feed.AddLink(RelSelf, fmt.Sprintf("%s?limit=%d&offset=%d", toReadURL, limit, offset), MimeTypeAcquisition)
+	feed.AddLink(RelStart, catalogURL, MimeTypeNavigation)
+	feed.AddLink(RelUp, catalogURL, MimeTypeNavigation)
+	addPaginationLinks(feed, toReadURL, limit, offset, total)
+
+	// To Read spans libraries, so each book takes its own library's cover
+	// aspect ratio.
+	for _, book := range queued {
+		aspectRatio := ""
+		if book.Library != nil {
+			aspectRatio = book.Library.CoverAspectRatio
+		}
+		feed.AddEntry(svc.bookToEntry(baseURL, book, aspectRatio, r.Rules))
 	}
 
 	return feed, nil

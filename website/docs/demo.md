@@ -25,7 +25,7 @@ The demo runs with [Demo Mode](./configuration.md#demo-mode) on, which rejects e
 
 - Editing books, files, metadata, series, and lists, including cover uploads, rescans, and deletion.
 - Sharing a list with other users.
-- Tracking reading: the reading status, rating, and history controls on a book's page are visible but disabled.
+- Tracking reading: the reading status, rating, and history controls on a book's page, the **To Read** checkbox in **Add to list**, **Copy to To Read** on a list, and reordering To Read are visible but disabled.
 - Downloading files: the download controls for files, supplements, and whole books are hidden, and direct links to an unmodified file, a conversion such as KePub, or a bulk download are also blocked.
 - Administration: libraries, users, roles, plugins, and security settings.
 - Integrations: [OPDS](./opds.md), [Kobo Sync](./kobo-sync.md), the [eReader Browser](./ereader-browser.md), and [Share Links](./sharing.md) are not available.

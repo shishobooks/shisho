@@ -175,6 +175,26 @@ func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int)
 	return result, nil
 }
 
+// ToReadPlace returns bookID's 1-based place on userID's To Read, counting
+// only Books in libraryIDs (nil for every library), as the To Read page
+// lists them. Call it only for a Book on To Read.
+func (svc *Service) ToReadPlace(ctx context.Context, userID, bookID int, libraryIDs []int) (int, error) {
+	q := svc.db.NewSelect().
+		TableExpr("user_books AS other").
+		Join("JOIN user_books AS this ON this.user_id = other.user_id AND this.book_id = ?", bookID).
+		Where("other.user_id = ? AND other.to_read_position IS NOT NULL", userID).
+		// The To Read listing orders by position, then book id.
+		Where("(other.to_read_position < this.to_read_position OR (other.to_read_position = this.to_read_position AND other.book_id < this.book_id))")
+	if libraryIDs != nil {
+		q = q.Where("other.book_id IN (SELECT id FROM books WHERE library_id IN (?))", bun.List(libraryIDs))
+	}
+	ahead, err := q.Count(ctx)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	return int(ahead) + 1, nil
+}
+
 // Start begins a new Read-through on today and takes the Book off To Read.
 // Reading a finished or abandoned Book again is the same transition.
 func (svc *Service) Start(ctx context.Context, userID, bookID int, today string) error {
@@ -197,14 +217,19 @@ func (svc *Service) Start(ctx context.Context, userID, bookID int, today string)
 			return errors.WithStack(err)
 		}
 
-		_, err = tx.NewUpdate().
-			Model((*models.UserBook)(nil)).
-			Set("to_read_position = NULL").
-			Set("updated_at = ?", now).
-			Where("user_id = ? AND book_id = ? AND to_read_position IS NOT NULL", userID, bookID).
-			Exec(ctx)
-		return errors.WithStack(err)
+		return leaveToRead(ctx, tx, userID, bookID, now)
 	})
+}
+
+// leaveToRead takes bookID off userID's To Read, if it's there.
+func leaveToRead(ctx context.Context, db bun.IDB, userID, bookID int, now time.Time) error {
+	_, err := db.NewUpdate().
+		Model((*models.UserBook)(nil)).
+		Set("to_read_position = NULL").
+		Set("updated_at = ?", now).
+		Where("user_id = ? AND book_id = ? AND to_read_position IS NOT NULL", userID, bookID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // SetPaused pauses or resumes the Read-through underway.
@@ -233,6 +258,8 @@ func (svc *Service) SetPaused(ctx context.Context, userID, bookID int, paused bo
 // End ends the Read-through underway on today with outcome. Finishing with
 // nothing underway records a finished Read-through with no begin day, for a
 // Book read before the user tracked it; abandoning needs one underway.
+// Either way the Book leaves To Read, so a queued Book marked read shows
+// Read; adding it again afterwards plans a reread.
 func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today string) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		now := time.Now()
@@ -254,7 +281,10 @@ func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today 
 					Outcome:   outcome,
 				}).
 				Exec(ctx)
-			return errors.WithStack(err)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			return leaveToRead(ctx, tx, userID, bookID, now)
 		}
 
 		underway.Outcome = outcome
@@ -266,7 +296,10 @@ func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today 
 			Column("outcome", "paused", "end_day", "updated_at").
 			WherePK().
 			Exec(ctx)
-		return errors.WithStack(err)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		return leaveToRead(ctx, tx, userID, bookID, now)
 	})
 }
 
@@ -326,6 +359,144 @@ func (svc *Service) UpdateReadThroughDays(ctx context.Context, rt *models.ReadTh
 func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThrough) error {
 	_, err := svc.db.NewDelete().Model(rt).WherePK().Exec(ctx)
 	return errors.WithStack(err)
+}
+
+// AddToRead puts bookID at the end of userID's To Read. A Book already on
+// To Read keeps its place. A Book with a Read-through underway is refused
+// with ErrAlreadyUnderway: starting takes a Book off To Read, and its status
+// would stay Currently Reading or Paused.
+func (svc *Service) AddToRead(ctx context.Context, userID, bookID int) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		underway, err := retrieveUnderway(ctx, tx, userID, bookID)
+		if err != nil {
+			return err
+		}
+		if underway != nil {
+			return ErrAlreadyUnderway
+		}
+		_, err = appendToRead(ctx, tx, userID, []int{bookID})
+		return err
+	})
+}
+
+// AppendToRead puts bookIDs at the end of userID's To Read in their order,
+// skipping Books already on it and Books with a Read-through underway, and
+// returns how many it added. The caller checks the user can reach each Book.
+func (svc *Service) AppendToRead(ctx context.Context, userID int, bookIDs []int) (int, error) {
+	added := 0
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var err error
+		added, err = appendToRead(ctx, tx, userID, bookIDs)
+		return err
+	})
+	return added, err
+}
+
+// appendToRead puts bookIDs after the last Book on userID's To Read, in
+// their order, skipping any already on it or with a Read-through underway,
+// and returns how many it added. It reads the last position once, so run
+// it in a transaction; the server's one database connection runs
+// transactions one at a time, so a concurrent add can't take the same
+// positions.
+func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int) (int, error) {
+	var last int
+	err := tx.NewSelect().
+		Model((*models.UserBook)(nil)).
+		ColumnExpr("COALESCE(MAX(to_read_position), 0)").
+		Where("user_id = ?", userID).
+		Scan(ctx, &last)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+
+	added := 0
+	now := time.Now()
+	for _, bookID := range bookIDs {
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO user_books (user_id, book_id, created_at, updated_at, to_read_position)
+			SELECT ?, ?, ?, ?, ?
+			WHERE NOT EXISTS (SELECT 1 FROM read_throughs WHERE user_id = ? AND book_id = ? AND outcome = ?)
+			ON CONFLICT (user_id, book_id) DO UPDATE
+				SET to_read_position = EXCLUDED.to_read_position, updated_at = EXCLUDED.updated_at
+				WHERE user_books.to_read_position IS NULL`,
+			userID, bookID, now, now, last+added+1,
+			userID, bookID, models.ReadThroughOutcomeUnderway,
+		)
+		if err != nil {
+			return 0, errors.WithStack(err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return 0, errors.WithStack(err)
+		}
+		added += int(n)
+	}
+	return added, nil
+}
+
+// RemoveFromToRead takes bookID off userID's To Read, if it's there.
+func (svc *Service) RemoveFromToRead(ctx context.Context, userID, bookID int) error {
+	return leaveToRead(ctx, svc.db, userID, bookID, time.Now())
+}
+
+// ReorderToRead puts bookIDs in this order on userID's To Read. The Books
+// it names move among the places they held, so Books it leaves out (in a
+// library the user can no longer reach) keep theirs; ids not on To Read are
+// ignored. Positions are renumbered from 1.
+func (svc *Service) ReorderToRead(ctx context.Context, userID int, bookIDs []int) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var current []*models.UserBook
+		err := tx.NewSelect().
+			Model(&current).
+			Where("ub.user_id = ? AND ub.to_read_position IS NOT NULL", userID).
+			Order("ub.to_read_position ASC", "ub.book_id ASC").
+			Scan(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+
+		queued := make(map[int]bool, len(current))
+		for _, ub := range current {
+			queued[ub.BookID] = true
+		}
+		named := make([]int, 0, len(bookIDs))
+		seen := make(map[int]bool, len(bookIDs))
+		for _, id := range bookIDs {
+			if queued[id] && !seen[id] {
+				named = append(named, id)
+				seen[id] = true
+			}
+		}
+
+		order := make([]int, len(current))
+		next := 0
+		for i, ub := range current {
+			if seen[ub.BookID] {
+				order[i] = named[next]
+				next++
+			} else {
+				order[i] = ub.BookID
+			}
+		}
+
+		now := time.Now()
+		for i, bookID := range order {
+			position := i + 1
+			if current[i].BookID == bookID && *current[i].ToReadPosition == position {
+				continue
+			}
+			_, err := tx.NewUpdate().
+				Model((*models.UserBook)(nil)).
+				Set("to_read_position = ?", position).
+				Set("updated_at = ?", now).
+				Where("user_id = ? AND book_id = ?", userID, bookID).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+		}
+		return nil
+	})
 }
 
 // RatingStars converts quarter-star units to stars, keeping nil as nil.

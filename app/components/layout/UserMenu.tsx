@@ -1,4 +1,5 @@
 import {
+  BookmarkCheck,
   List,
   LogOut,
   Settings,
@@ -22,9 +23,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 const UserMenu = () => {
-  const { demoMode, user, logout } = useAuth();
+  const { can, demoMode, user, logout } = useAuth();
   const navigate = useNavigate();
 
   // Administration opens the first administration page the role may see.
@@ -65,6 +67,14 @@ const UserMenu = () => {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {can(ROUTE_PERMISSIONS.toRead) && (
+          <DropdownMenuItem asChild>
+            <Link to="/to-read">
+              <BookmarkCheck className="h-4 w-4" />
+              To Read
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link to="/lists">
             <List className="h-4 w-4" />

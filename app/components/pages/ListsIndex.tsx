@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { BookmarkCheck, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -9,16 +9,20 @@ import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ContentWidth } from "@/contexts/ContentWidth";
+import { useBooks } from "@/hooks/queries/books";
 import {
   useCreateList,
   useCreateListFromTemplate,
   useListLists,
   useListTemplates,
 } from "@/hooks/queries/lists";
+import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
 import type { CreateListPayload, ListResponse, ListTemplate } from "@/types";
 import { formatCount } from "@/utils/format";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 const ListsIndex = () => {
   usePageTitle("Lists");
@@ -29,6 +33,13 @@ const ListsIndex = () => {
   const templatesQuery = useListTemplates();
   const createListMutation = useCreateList();
   const createFromTemplateMutation = useCreateListFromTemplate();
+
+  // To Read is pinned above the lists: it's every user's own queue, opened
+  // like a list, but not one (it can't be shared, renamed, or deleted).
+  // It shows when the role passes the To Read page's route guard.
+  const canReadBooks = useCan(ROUTE_PERMISSIONS.toRead);
+  const toReadCountQuery = useBooks({ to_read: true, limit: 1 });
+  const toReadCount = toReadCountQuery.data?.total;
 
   const lists = listsQuery.data?.items ?? [];
   const templates = templatesQuery.data ?? [];
@@ -102,7 +113,7 @@ const ListsIndex = () => {
   return (
     <div>
       <TopNav />
-      <div className="max-w-3xl w-full px-4 md:px-6 py-4 md:py-8">
+      <ContentWidth className="px-4 py-4 md:px-6 md:py-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 md:mb-8">
           <div>
             <h1 className="text-2xl font-semibold mb-1 md:mb-2">Lists</h1>
@@ -121,6 +132,33 @@ const ListsIndex = () => {
             </Button>
           </div>
         </div>
+
+        {canReadBooks && (
+          <Link
+            className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 md:p-4 rounded-md border bg-card hover:bg-muted/50 transition-colors"
+            to="/to-read"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <BookmarkCheck
+                aria-hidden
+                className="h-5 w-5 shrink-0 text-sky-500"
+              />
+              <div className="flex flex-col gap-1 min-w-0">
+                <span className="font-medium text-sm md:text-base">
+                  To Read
+                </span>
+                <span className="text-xs md:text-sm text-muted-foreground line-clamp-1">
+                  What you plan to read next
+                </span>
+              </div>
+            </div>
+            {toReadCount !== undefined && (
+              <Badge className="self-start sm:self-auto" variant="secondary">
+                {formatCount(toReadCount, "book")}
+              </Badge>
+            )}
+          </Link>
+        )}
 
         {listsQuery.isLoading && <LoadingSpinner />}
 
@@ -151,7 +189,7 @@ const ListsIndex = () => {
         {listsQuery.data && hasLists && (
           <div className="space-y-2">{lists.map(renderListCard)}</div>
         )}
-      </div>
+      </ContentWidth>
 
       <CreateListDialog
         isPending={createListMutation.isPending}

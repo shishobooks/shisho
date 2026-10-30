@@ -1,5 +1,5 @@
 import { format, formatDistanceToNow } from "date-fns";
-import { Edit, Save, Share2, Trash2 } from "lucide-react";
+import { BookmarkPlus, Edit, Save, Share2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -27,16 +27,22 @@ import { GALLERY_MAX_PAGE_SIZE } from "@/constants/gallerySize";
 import { ContentWidth } from "@/contexts/ContentWidth";
 import { useUserLibraries } from "@/hooks/queries/libraries";
 import {
+  useCopyListToToRead,
   useDeleteList,
   useList,
   useListBooks,
   useReorderListBooks,
   useUpdateList,
 } from "@/hooks/queries/lists";
+import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { isLoadFailure, toastRequestError } from "@/libraries/api";
+import {
+  DEMO_MODE_MESSAGE,
+  isLoadFailure,
+  toastRequestError,
+} from "@/libraries/api";
 import {
   ListSortAddedAtAsc,
   ListSortAddedAtDesc,
@@ -66,6 +72,7 @@ const ListDetail = () => {
   // A list's books and their covers come from Books Read routes. A role
   // without it still sees the list and can manage it, but not its books.
   const canReadBooks = useCan("books:read");
+  const { demoMode } = useAuth();
 
   const {
     savedSize,
@@ -130,6 +137,22 @@ const ListDetail = () => {
   const updateListMutation = useUpdateList();
   const deleteListMutation = useDeleteList();
   const reorderMutation = useReorderListBooks();
+  const copyToToReadMutation = useCopyListToToRead();
+
+  // Anyone who can see the list's books can copy them: To Read is their own.
+  const handleCopyToToRead = async () => {
+    if (!listId) return;
+    try {
+      const { added } = await copyToToReadMutation.mutateAsync({ listId });
+      toast.success(
+        added > 0
+          ? `Added ${formatCount(added, "book")} to To Read`
+          : "Every book here is already on To Read or being read",
+      );
+    } catch (error) {
+      toastRequestError(error, "Failed to copy to To Read");
+    }
+  };
 
   const handleReorder = async (bookIds: number[]) => {
     if (!listId) return;
@@ -221,9 +244,20 @@ const ListDetail = () => {
             <h1 className="text-2xl font-semibold min-w-0 break-words">
               {list.name}
             </h1>
-            {/* Managers and owners can also edit, so canEdit covers every action. */}
-            {canEdit && (
-              <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
+              {canReadBooks && bookCount > 0 && (
+                <Button
+                  aria-label="Copy to To Read"
+                  disabled={demoMode || copyToToReadMutation.isPending}
+                  onClick={handleCopyToToRead}
+                  size="sm"
+                  variant="outline"
+                >
+                  <BookmarkPlus className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Copy to To Read</span>
+                </Button>
+              )}
+              {canEdit && (
                 <Button
                   aria-label="Edit"
                   onClick={() => setEditDialogOpen(true)}
@@ -233,31 +267,36 @@ const ListDetail = () => {
                   <Edit className="h-4 w-4 sm:mr-2" />
                   <span className="hidden sm:inline">Edit</span>
                 </Button>
-                {canManage && (
-                  <Button
-                    aria-label="Share"
-                    onClick={() => setShareDialogOpen(true)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <Share2 className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Share</span>
-                  </Button>
-                )}
-                {isOwner && (
-                  <Button
-                    aria-label="Delete"
-                    onClick={() => setDeleteDialogOpen(true)}
-                    size="sm"
-                    variant="outline"
-                  >
-                    <Trash2 className="h-4 w-4 sm:mr-2" />
-                    <span className="hidden sm:inline">Delete</span>
-                  </Button>
-                )}
-              </div>
-            )}
+              )}
+              {canManage && (
+                <Button
+                  aria-label="Share"
+                  onClick={() => setShareDialogOpen(true)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Share2 className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Share</span>
+                </Button>
+              )}
+              {isOwner && (
+                <Button
+                  aria-label="Delete"
+                  onClick={() => setDeleteDialogOpen(true)}
+                  size="sm"
+                  variant="outline"
+                >
+                  <Trash2 className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Delete</span>
+                </Button>
+              )}
+            </div>
           </div>
+          {demoMode && canReadBooks && bookCount > 0 && (
+            <p className="text-xs text-muted-foreground mb-2">
+              {DEMO_MODE_MESSAGE}
+            </p>
+          )}
           {list.description && (
             <p className="text-sm md:text-base text-muted-foreground mb-2">
               {list.description}
@@ -357,10 +396,17 @@ const ListDetail = () => {
                 />
               ) : listBooksQuery.data ? (
                 <DraggableBookList
-                  books={books}
+                  addedByUsernameFor={(bookId) =>
+                    isOwner
+                      ? undefined
+                      : books.find((listBook) => listBook.book_id === bookId)
+                          ?.added_by_user?.username
+                  }
+                  books={books.flatMap((listBook) =>
+                    listBook.book ? [listBook.book] : [],
+                  )}
                   columns={columns}
                   coverAspectRatioFor={coverAspectRatioFor}
-                  isOwner={isOwner}
                   onReorder={handleReorder}
                 />
               ) : (

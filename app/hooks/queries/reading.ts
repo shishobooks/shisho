@@ -9,6 +9,7 @@ import {
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   BookReadingResponse,
+  ReorderToReadPayload,
   SetRatingPayload,
   UpdateReadThroughPayload,
 } from "@/types";
@@ -40,13 +41,25 @@ export const useBookReading = (
 
 // Every reading write returns the Book's whole reading record. The status
 // also shows on book cards, so book listings (library and List alike, which
-// share the ListBooks key) refetch.
+// share the ListBooks key) refetch. A Book joining or leaving To Read moves
+// every Book after it, so other Books' records refetch for their places.
 const onReadingChanged = (
   queryClient: QueryClient,
   data: BookReadingResponse,
 ) => {
   queryClient.setQueryData([QueryKey.BookReading, data.book_id], data);
   queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+  invalidateOtherBookReadings(queryClient, data.book_id);
+};
+
+const invalidateOtherBookReadings = (
+  queryClient: QueryClient,
+  exceptBookId?: number,
+) => {
+  queryClient.invalidateQueries({
+    queryKey: [QueryKey.BookReading],
+    predicate: (query) => query.queryKey[1] !== exceptBookId,
+  });
 };
 
 // Transitions that date a Read-through send the browser's local day.
@@ -130,5 +143,42 @@ export const useDeleteReadThrough = () => {
       return API.request("DELETE", `/reading/read-throughs/${id}`, null, null);
     },
     onSuccess: (data) => onReadingChanged(queryClient, data),
+  });
+};
+
+interface SetOnToReadVariables {
+  bookId: number;
+  onToRead: boolean;
+}
+
+// Adds a Book to the end of To Read, or takes it off. The To Read page is a
+// book listing, so onReadingChanged refetches it.
+export const useSetOnToRead = () => {
+  const queryClient = useQueryClient();
+  return useMutation<BookReadingResponse, ShishoAPIError, SetOnToReadVariables>(
+    {
+      mutationFn: ({ bookId, onToRead }) => {
+        return API.request(
+          onToRead ? "POST" : "DELETE",
+          `/reading/books/${bookId}/to-read`,
+          null,
+          null,
+        );
+      },
+      onSuccess: (data) => onReadingChanged(queryClient, data),
+    },
+  );
+};
+
+export const useReorderToRead = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, ShishoAPIError, ReorderToReadPayload>({
+    mutationFn: (payload) => {
+      return API.request("PUT", "/reading/to-read/order", payload, null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      invalidateOtherBookReadings(queryClient);
+    },
   });
 };

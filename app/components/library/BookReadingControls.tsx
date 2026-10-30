@@ -1,4 +1,5 @@
 import { BookOpen, ChevronDown, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import StarRating from "@/components/library/StarRating";
 import { Button } from "@/components/ui/button";
@@ -6,17 +7,20 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   useBookReading,
   useReadingTransition,
+  useSetOnToRead,
   useSetRating,
 } from "@/hooks/queries/reading";
 import { useAuth } from "@/hooks/useAuth";
 import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
 import type { ReadingStatus } from "@/types";
 import {
+  canQueueToRead,
   readingStatusLabel,
   readingTransitions,
   type ReadingTransition,
@@ -55,13 +59,15 @@ interface BookReadingControlsProps {
 }
 
 // The signed-in user's Reading Status and Rating for a Book. The status
-// menu offers only the transitions valid from the current status. In Demo
-// Mode both render disabled with the demo's explanation.
+// menu offers only the transitions valid from the current status, plus
+// adding to or removing from To Read while the Book isn't being read. In
+// Demo Mode both render disabled with the demo's explanation.
 const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const { demoMode } = useAuth();
   const readingQuery = useBookReading(bookId);
   const transitionMutation = useReadingTransition();
   const ratingMutation = useSetRating();
+  const toReadMutation = useSetOnToRead();
 
   // A failed load leaves the controls out; the history section reports it.
   const reading = readingQuery.data;
@@ -76,6 +82,17 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       await transitionMutation.mutateAsync({ bookId, transition });
     } catch (error) {
       toastRequestError(error, transitionFailure[transition]);
+    }
+  };
+
+  const handleToRead = async (onToRead: boolean) => {
+    try {
+      await toReadMutation.mutateAsync({ bookId, onToRead });
+    } catch (error) {
+      toastRequestError(
+        error,
+        onToRead ? "Failed to add to To Read" : "Failed to remove from To Read",
+      );
     }
   };
 
@@ -112,8 +129,29 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
                 {transitionLabel(transition, status)}
               </DropdownMenuItem>
             ))}
+            {canQueueToRead(status) && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => handleToRead(!reading.on_to_read)}
+                >
+                  {reading.on_to_read
+                    ? "Remove from To Read"
+                    : "Add to To Read"}
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {reading.to_read_place != null && (
+          <Link
+            className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+            to="/to-read"
+          >
+            #{reading.to_read_place.toLocaleString()} on To Read
+          </Link>
+        )}
 
         <div className="flex items-center gap-1">
           {/* Not disabled while a save is pending: a disabled slider

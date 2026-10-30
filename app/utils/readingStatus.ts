@@ -35,6 +35,13 @@ export const readingTransitions = (
   }
 };
 
+// Whether a Book with status can join or leave To Read. A Book being read
+// can't: starting takes a Book off To Read. Elsewhere a Book is on To Read
+// exactly when its status is To Read.
+export const canQueueToRead = (
+  status: ReadingStatus | null | undefined,
+): boolean => status !== "currently_reading" && status !== "paused";
+
 const times = (count: number): string => {
   if (count === 1) return "once";
   if (count === 2) return "twice";

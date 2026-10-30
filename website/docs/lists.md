@@ -1,20 +1,15 @@
 # Lists
 
-Lists are virtual collections of books from one or more libraries. Use them for a reading queue, favorites, rankings, or any collection that should not change the filesystem.
+Lists are virtual collections of books from one or more libraries. Use them for favorites, rankings, or any collection that should not change the filesystem. For your own queue of books to read next, use [To Read](./reading-tracking.md#to-read), which is pinned at the top of **Lists** and of **Add to list**. It isn't a list, so nothing on this page applies to it.
 
-## Creating Lists and Using Templates
+## Creating Lists
 
 Create a list from **Lists**. Set its name and optional description, and choose whether it is ordered:
 
 - With **Ordered list** selected, the list has a manual sequence.
 - With **Ordered list** clear, the list uses an automatic sort. This page calls these unordered lists.
 
-Built-in templates provide a quick starting point:
-
-- **To Be Read** creates an ordered reading queue.
-- **Favorites** creates an unordered collection.
-
-Templates set initial values only. You can edit the resulting list normally.
+The **Favorites** template creates an unordered collection. It sets initial values only, and you can edit the resulting list normally.
 
 If creating or editing a list fails, an error notification appears and the dialog keeps your name, description, and ordering choice. Correct the problem and retry without re-entering them.
 
@@ -38,6 +33,10 @@ Unordered lists can sort by:
 - **Author (A-Z)** or **Author (Z-A)**
 
 Save the chosen sort as the list default when you want other visits to open in that order.
+
+## Copying to To Read
+
+**Copy to To Read** on a list's page adds its books to the end of your [To Read](./reading-tracking.md#to-read) queue, in the list's order: its manual order for an ordered list, its default sort otherwise. Books already on To Read, books you're reading, and books in libraries you can't access are skipped. It needs only view access to the list, including a list shared with you as **Viewer**, and it changes your own queue, not the list.
 
 ## Converting List Modes
 

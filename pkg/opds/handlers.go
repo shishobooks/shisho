@@ -113,6 +113,20 @@ func (h *handler) catalog(c echo.Context) error {
 	return respondXML(c, feed)
 }
 
+// toRead handles the user's To Read feed.
+func (h *handler) toRead(c echo.Context) error {
+	r, err := h.reachFor(c)
+	if err != nil {
+		return err
+	}
+	limit, offset := getPaginationParams(c)
+	feed, err := h.opdsService.BuildToReadFeed(c.Request().Context(), getBaseURL(c), r, limit, offset)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return respondXML(c, feed)
+}
+
 // libraryCatalog handles the library catalog feed.
 func (h *handler) libraryCatalog(c echo.Context) error {
 	ctx := c.Request().Context()

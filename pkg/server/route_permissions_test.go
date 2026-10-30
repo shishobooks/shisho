@@ -402,6 +402,9 @@ func TestListBooks_RequireBooksRead(t *testing.T) {
 
 	f.expect(noBooks, http.MethodGet, fmt.Sprintf("/api/lists/%d/books", noBooksList.ID), "", http.StatusForbidden)
 	f.expect(viewer, http.MethodGet, fmt.Sprintf("/api/lists/%d/books", viewerList.ID), "", http.StatusOK)
+	// Copying to To Read needs Books Read too, as the reading routes do.
+	f.expect(noBooks, http.MethodPost, fmt.Sprintf("/api/lists/%d/copy-to-to-read", noBooksList.ID), "", http.StatusForbidden)
+	f.expect(viewer, http.MethodPost, fmt.Sprintf("/api/lists/%d/copy-to-to-read", viewerList.ID), "", http.StatusOK)
 	// The list itself stays readable without Books Read.
 	f.expect(noBooks, http.MethodGet, fmt.Sprintf("/api/lists/%d", noBooksList.ID), "", http.StatusOK)
 }

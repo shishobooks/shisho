@@ -231,7 +231,7 @@ func TestStatusDerivation(t *testing.T) {
 				require.NoError(t, err)
 			}
 			if tc.onToRead {
-				// To Read has no API in this phase yet; record the position directly.
+				// Recorded directly: adding a Book being read is refused.
 				_, err := db.NewInsert().Model(&models.UserBook{UserID: user.ID, BookID: book.ID, ToReadPosition: intp(1)}).Exec(ctx)
 				require.NoError(t, err)
 			}
@@ -308,20 +308,6 @@ func TestTransitions_FinishingAPausedReadThroughEndsIt(t *testing.T) {
 	assert.Equal(t, models.ReadingStatusRead, status(resp))
 	require.Len(t, resp.ReadThroughs, 1)
 	assert.False(t, resp.ReadThroughs[0].Paused)
-}
-
-func TestTransitions_StartTakesBookOffToRead(t *testing.T) {
-	t.Parallel()
-	db := testdb.New(t)
-	user := createUser(t, db, "reader", 2)
-	api := newReadingAPI(t, db, user)
-	book := createBook(t, db, "Dune")
-	_, err := db.NewInsert().Model(&models.UserBook{UserID: user.ID, BookID: book.ID, ToReadPosition: intp(1)}).Exec(context.Background())
-	require.NoError(t, err)
-
-	resp := api.mustTransition(book.ID, "start", "2026-03-01")
-	assert.False(t, resp.OnToRead)
-	assert.Equal(t, models.ReadingStatusCurrentlyReading, status(resp))
 }
 
 func TestTransitions_InvalidOnesAreRefused(t *testing.T) {

@@ -141,6 +141,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book is already being read.",
 		},
 		{
+			name:   "adding a book being read to To Read",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/to-read", seeded.bookID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book is already being read.",
+		},
+		{
+			name:   "list template that no longer exists",
+			method: http.MethodPost, path: "/api/lists/templates/tbr",
+			status: http.StatusNotFound, code: "not_found", message: "Template not found.",
+		},
+		{
 			name:   "end date on a Read-through still underway",
 			method: http.MethodPatch, path: fmt.Sprintf("/api/reading/read-throughs/%d", underway.ReadThroughs[0].ID),
 			body:   `{"begin_day":"2026-03-01","end_day":"2026-03-05"}`,

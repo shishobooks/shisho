@@ -17,6 +17,7 @@ import AddToListPopover from "@/components/library/AddToListPopover";
 import BookDetailHeader from "@/components/library/BookDetailHeader";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import BookFileRow from "@/components/library/BookFileRow";
+import BookReadingBookmark from "@/components/library/BookReadingBookmark";
 import BookReadingControls from "@/components/library/BookReadingControls";
 import BookRelatedPanel from "@/components/library/BookRelatedPanel";
 import BookReviewBadge from "@/components/library/BookReviewBadge";
@@ -454,6 +455,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
             />
           )
         }
+        coverBookmark={!isShareLink && <BookReadingBookmark bookId={book.id} />}
         coverUrl={coverUrl}
         coverVariant={coverVariant}
         isShareLink={isShareLink}
