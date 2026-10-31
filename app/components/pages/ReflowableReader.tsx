@@ -1,4 +1,10 @@
-import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Settings,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -23,6 +29,7 @@ import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { File, ReadingPosition, UserSettingsPayload } from "@/types";
 import { fileTitle } from "@/utils/format";
+import { readerAtEnd, type EndRenderer } from "@/utils/readerEnd";
 import { pageTurnForKey } from "@/utils/readerKeys";
 
 import "@/libraries/foliate/view.js";
@@ -43,13 +50,13 @@ interface RelocateDetail {
   fraction: number;
   tocItem?: { label?: string; href?: string } | null;
   cfi?: string;
+  section?: { current?: number } | null;
   // Why foliate moved (a Shisho patch in view.js). "anchor" is a re-layout
   // that keeps the place, such as a resize or a font change.
   reason?: string;
 }
 
-type FoliateRenderer = {
-  atEnd?: boolean;
+type FoliateRenderer = EndRenderer & {
   setStyles?: (styles: string | [string, string]) => void;
   setAttribute?: (name: string, value: string) => void;
 };
@@ -273,11 +280,12 @@ export default function ReflowableReader({
         // Where it opened isn't a move, so until the reader moves it reports
         // the saved place as it was: foliate's location for the page it laid
         // out differs on another screen size.
-        const openedView = view as HTMLElement & {
-          lastLocation?: { cfi?: string; fraction?: number } | null;
-          renderer?: FoliateRenderer;
-        };
-        const location = openedView.lastLocation;
+        // Only a move reaches the end, so where it opened never does.
+        const location = (
+          view as HTMLElement & {
+            lastLocation?: { cfi?: string; fraction?: number } | null;
+          }
+        ).lastLocation;
         if (restored && saved?.cfi) {
           opened(
             { cfi: saved.cfi, percentage: saved.percentage, atEnd: false },
@@ -287,7 +295,7 @@ export default function ReflowableReader({
           opened({
             cfi: location.cfi,
             percentage: location.fraction ?? 0,
-            atEnd: openedView.renderer?.atEnd ?? false,
+            atEnd: false,
           });
         }
       }
@@ -366,12 +374,18 @@ export default function ReflowableReader({
       if (restoringRef.current || detail.reason === "anchor" || !detail.cfi) {
         return;
       }
-      const renderer = (view as HTMLElement & { renderer?: FoliateRenderer })
-        .renderer;
+      const foliate = view as HTMLElement & {
+        renderer?: FoliateRenderer;
+        book?: { sections?: Array<{ linear?: string }> };
+      };
       moved({
         cfi: detail.cfi,
         percentage: detail.fraction ?? 0,
-        atEnd: renderer?.atEnd ?? false,
+        atEnd: readerAtEnd(
+          foliate.renderer,
+          detail.section?.current,
+          foliate.book?.sections,
+        ),
       });
     };
 
@@ -537,26 +551,35 @@ export default function ReflowableReader({
         )}
       >
         <div className="flex items-center gap-2">
+          {/* A native select, since its options can be disabled headings,
+              styled like the app's other selects: the browser's own arrow
+              sits against the edge, so it's hidden for an inset chevron. */}
           {toc.length > 0 && (
-            <select
-              aria-label="Jump to chapter"
-              className="text-sm bg-transparent border rounded px-2 py-1 cursor-pointer"
-              onChange={(e) => handleTocChange(e.target.value)}
-              value={currentTocValue}
-            >
-              {currentTocHref === null && <option value="">—</option>}
-              {toc.map((entry, index) =>
-                entry.href ? (
-                  <option key={`${index}-${entry.href}`} value={entry.href}>
-                    {tocIndent(entry.depth) + entry.label}
-                  </option>
-                ) : (
-                  <option disabled key={index} value={`heading-${index}`}>
-                    {tocIndent(entry.depth) + entry.label}
-                  </option>
-                ),
-              )}
-            </select>
+            <div className="relative">
+              <select
+                aria-label="Jump to chapter"
+                className="h-9 max-w-[50vw] appearance-none truncate rounded-md border border-input bg-transparent pl-3 pr-9 text-sm shadow-sm cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                onChange={(e) => handleTocChange(e.target.value)}
+                value={currentTocValue}
+              >
+                {currentTocHref === null && <option value="">—</option>}
+                {toc.map((entry, index) =>
+                  entry.href ? (
+                    <option key={`${index}-${entry.href}`} value={entry.href}>
+                      {tocIndent(entry.depth) + entry.label}
+                    </option>
+                  ) : (
+                    <option disabled key={index} value={`heading-${index}`}>
+                      {tocIndent(entry.depth) + entry.label}
+                    </option>
+                  ),
+                )}
+              </select>
+              <ChevronDown
+                aria-hidden
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50"
+              />
+            </div>
           )}
           <Popover>
             <PopoverTrigger asChild>
