@@ -13,6 +13,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -471,9 +472,9 @@ export default function PageReader({
             <PopoverContent align="end" className="w-64">
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">
+                  <p className="text-sm font-medium">
                     Preload Count: {preloadDraft ?? preloadCount}
-                  </label>
+                  </p>
                   <Slider
                     className="mt-2"
                     disabled={!settingsReady}
@@ -491,9 +492,9 @@ export default function PageReader({
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium" id="page-flow-label">
+                  <p className="text-sm font-medium" id="page-flow-label">
                     Flow
-                  </label>
+                  </p>
                   <div
                     aria-labelledby="page-flow-label"
                     className="flex gap-2 mt-2"
@@ -520,12 +521,9 @@ export default function PageReader({
                 </div>
                 {!scrolled && (
                   <div>
-                    <label
-                      className="text-sm font-medium"
-                      id="page-fit-mode-label"
-                    >
+                    <p className="text-sm font-medium" id="page-fit-mode-label">
                       Fit Mode
-                    </label>
+                    </p>
                     <div
                       aria-labelledby="page-fit-mode-label"
                       className="flex gap-2 mt-2"
@@ -557,9 +555,7 @@ export default function PageReader({
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium" htmlFor="hide-chrome">
-                    Auto-hide controls
-                  </label>
+                  <Label htmlFor="hide-chrome">Auto-hide controls</Label>
                   <Switch
                     checked={hideChrome}
                     disabled={!settingsReady}

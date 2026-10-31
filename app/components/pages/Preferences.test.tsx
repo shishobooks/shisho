@@ -137,6 +137,24 @@ describe("Preferences – gallery size section", () => {
   });
 });
 
+describe("Preferences – gallery size name", () => {
+  it("names the size buttons by their heading", () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m" },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+
+    renderPage();
+
+    expect(
+      screen.getByRole("group", { name: "Gallery cover size" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Preferences – theme section", () => {
   it("marks the current theme as pressed within the Theme group", () => {
     vi.mocked(useUserSettings).mockReturnValue({

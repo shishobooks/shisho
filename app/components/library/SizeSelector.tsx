@@ -7,15 +7,19 @@ interface SizeSelectorProps {
   value: GallerySize;
   onChange: (size: GallerySize) => void;
   className?: string;
+  // The id of the text naming the buttons, where there is one.
+  "aria-labelledby"?: string;
 }
 
 export const SizeSelector = ({
   value,
   onChange,
   className,
+  "aria-labelledby": labelledBy,
 }: SizeSelectorProps) => {
   return (
     <div
+      aria-labelledby={labelledBy}
       // inline-flex keeps the segmented control at its intrinsic width
       // so clicking between sizes never resizes the buttons under the
       // user's cursor — even when the parent (e.g. the size popover)

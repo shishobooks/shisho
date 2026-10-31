@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -265,13 +266,14 @@ export function MetadataMergeDialog({
               onValueChange={(v) => setAction(v as "merge" | "set-child")}
               value={action}
             >
-              <label
+              <Label
                 className={cn(
                   "flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors",
                   action === "merge"
                     ? "border-primary bg-primary/5"
                     : "border-border",
                 )}
+                variant="unstyled"
               >
                 <RadioGroupItem className="mt-0.5 shrink-0" value="merge" />
                 <div>
@@ -282,10 +284,10 @@ export function MetadataMergeDialog({
                     {selectedEntity.name}".
                   </p>
                 </div>
-              </label>
+              </Label>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <label
+                  <Label
                     aria-disabled={setChildDisabled || undefined}
                     className={cn(
                       "flex items-start gap-3 rounded-md border p-3 transition-colors",
@@ -296,6 +298,7 @@ export function MetadataMergeDialog({
                         ? "border-primary bg-primary/5"
                         : "border-border",
                     )}
+                    variant="unstyled"
                   >
                     <RadioGroupItem
                       className="mt-0.5 shrink-0"
@@ -315,7 +318,7 @@ export function MetadataMergeDialog({
                         </p>
                       )}
                     </div>
-                  </label>
+                  </Label>
                 </TooltipTrigger>
                 {setChildDisabled && (
                   <TooltipContent>

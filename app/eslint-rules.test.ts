@@ -399,6 +399,9 @@ export const Fixture = ({ n }: { n: number }) => {
       <textarea aria-label="notes" />
       <progress value={1} />
       <hr />
+      <label htmlFor="q">Query</label>
+      <input aria-label="q" id="q" />
+      <input aria-label="cover" className="hidden" type="file" />
     </div>
   );
 };
@@ -431,8 +434,11 @@ describe("ESLint UI convention rules", () => {
     expect(count("raw <textarea>")).toBe(1);
     expect(count("raw <progress>")).toBe(1);
     expect(count("raw <hr>")).toBe(1);
+    expect(count("raw <label>")).toBe(1);
+    // A file picker has no ui component, so only the text input counts.
+    expect(count("raw <input>")).toBe(1);
     expect(count("formatCount")).toBe(3);
-    expect(messages).toHaveLength(16);
+    expect(messages).toHaveLength(18);
   });
 
   it("allows them in tests", async () => {

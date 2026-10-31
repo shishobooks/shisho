@@ -20,6 +20,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MergeBooksDialog } from "@/components/library/MergeBooksDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -254,9 +255,10 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           const isChecked =
             isAvailable && selectedDownloadTypes.includes(option.value);
           return (
-            <label
+            <Label
               className="flex items-center gap-2 text-sm cursor-pointer"
               key={option.value}
+              variant="unstyled"
             >
               <Checkbox
                 checked={isChecked}
@@ -270,7 +272,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
               >
                 {option.label}
               </span>
-            </label>
+            </Label>
           );
         })}
       </div>

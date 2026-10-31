@@ -101,10 +101,21 @@ const uiConventions = [
     ["textarea", "Textarea from @/components/ui/textarea"],
     ["progress", "Progress from @/components/ui/progress"],
     ["hr", "Separator from @/components/ui/separator"],
+    [
+      "label",
+      'Label from @/components/ui/label (variant="unstyled" for a row or card that wraps its checkbox or radio). Text naming a slider or a group of buttons isn\'t a label: make it plain text with an id the group points at with aria-labelledby',
+    ],
   ].map(([element, component]) => ({
     selector: `JSXOpeningElement[name.name="${element}"]`,
     message: `Use ${component}, not a raw <${element}>.`,
   })),
+  {
+    // A file picker has no ui component, so it stays a hidden raw input.
+    selector:
+      'JSXOpeningElement[name.name="input"]:not(:has(JSXAttribute[name.name="type"][value.value="file"]))',
+    message:
+      "Use Input from @/components/ui/input, not a raw <input>. An input that must sit unboxed inside another field (a chip input) disables this rule on its line with the reason.",
+  },
   // `n === 1 ? "" : "s"` and `n > 1 ? "books" : "book"`: a hand-built plural,
   // which also leaves the count without thousands separators. Only string
   // branches that look like a plural (one empty or ending in "s") count, so

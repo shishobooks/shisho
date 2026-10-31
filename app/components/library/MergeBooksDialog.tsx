@@ -169,7 +169,7 @@ export function MergeBooksDialog({
                   {books.map((book) => {
                     const isSelected = String(book.id) === selectedTargetId;
                     return (
-                      <label
+                      <Label
                         className={cn(
                           "flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors",
                           isSelected
@@ -178,6 +178,7 @@ export function MergeBooksDialog({
                         )}
                         htmlFor={`book-${book.id}`}
                         key={book.id}
+                        variant="unstyled"
                       >
                         <RadioGroupItem
                           className="mt-0.5"
@@ -205,7 +206,7 @@ export function MergeBooksDialog({
                             )}
                           </div>
                         </div>
-                      </label>
+                      </Label>
                     );
                   })}
                 </RadioGroup>
