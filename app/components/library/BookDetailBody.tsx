@@ -51,6 +51,7 @@ import { useSharingSettings } from "@/hooks/queries/sharing";
 import { useBookRelatedTabs } from "@/hooks/useBookRelatedTabs";
 import { useCan } from "@/hooks/useCan";
 import { useFileDownload } from "@/hooks/useFileDownload";
+import { useLeaveDeletedBook } from "@/hooks/useLeaveDeletedBook";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type {
@@ -132,6 +133,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const isShareLink = !!shareLink;
   const libraryId = book.library_id;
   const navigate = useNavigate();
+  const leaveDeletedBook = useLeaveDeletedBook();
   // Metadata, covers, chapters, review status, identify, rescan, merge, move,
   // and delete all require Books Write. List membership is governed by the
   // list's own permission and stays available to everyone.
@@ -207,7 +209,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       });
       if ("book_deleted" in result && result.book_deleted) {
         toast.success("Book removed (no files remain)");
-        navigate("/");
+        leaveDeletedBook(book, result.removed);
       } else if ("file_deleted" in result && result.file_deleted) {
         toast.success("File removed (no longer on disk, or DRM-protected)");
       } else {
@@ -228,7 +230,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       });
       if ("book_deleted" in result && result.book_deleted) {
         toast.success("Book removed (no files remain)");
-        navigate("/");
+        leaveDeletedBook(book, result.removed);
       } else {
         toast.success("Book rescanned");
       }
@@ -239,9 +241,9 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
 
   const handleDeleteBook = async () => {
     try {
-      await deleteBookMutation.mutateAsync(book.id);
+      const result = await deleteBookMutation.mutateAsync(book.id);
       toast.success("Book deleted");
-      navigate("/");
+      leaveDeletedBook(book, result.removed);
     } catch (error) {
       toastRequestError(error, "Failed to delete book");
     }
@@ -255,7 +257,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
       setFileToDelete(null);
       if (result.book_deleted) {
         toast.success("Book deleted");
-        navigate("/");
+        leaveDeletedBook(book, result.removed);
       } else {
         toast.success("File deleted");
       }

@@ -1825,6 +1825,13 @@ func (h *handler) resyncFile(c echo.Context) error {
 		return err
 	}
 
+	// Loaded before the scan, which may delete it, to report which of its
+	// entities are gone.
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &file.BookID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	// Perform resync
 	forceRefresh, skipPlugins, reset := params.resolveScanMode()
 	result, err := h.scanner.Scan(ctx, ScanOptions{
@@ -1843,6 +1850,7 @@ func (h *handler) resyncFile(c echo.Context) error {
 		return c.JSON(http.StatusOK, ResyncFileResponse{
 			FileDeleted: true,
 			BookDeleted: result.BookDeleted,
+			Removed:     h.removedEntities(ctx, log, book, emptyRemovedEntities()),
 		})
 	}
 
@@ -1894,6 +1902,7 @@ func (h *handler) resyncBook(c echo.Context) error {
 	if result.BookDeleted {
 		return c.JSON(http.StatusOK, ResyncBookResponse{
 			BookDeleted: true,
+			Removed:     h.removedEntities(ctx, log, book, emptyRemovedEntities()),
 		})
 	}
 
@@ -2415,10 +2424,11 @@ func (h *handler) deleteBook(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
+	cleaned := CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
 
 	return c.JSON(http.StatusOK, DeleteBookResponse{
 		FilesDeleted: result.FilesDeleted,
+		Removed:      h.removedEntities(ctx, log, book, cleaned),
 	})
 }
 
@@ -2461,6 +2471,12 @@ func (h *handler) deleteFile(c echo.Context) error {
 		}
 	}
 
+	// Loaded before the delete, to report which of its entities are gone.
+	book, err := h.bookService.RetrieveBook(ctx, RetrieveBookOptions{ID: &file.BookID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+
 	// The book's books_fts row lists the file's path and narrators. When the
 	// last main file goes the book is deleted too, and its book_series rows
 	// CASCADE away, so collect its Series first.
@@ -2473,13 +2489,14 @@ func (h *handler) deleteFile(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	var cleaned RemovedEntities
 	if result.BookDeleted {
-		CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
+		cleaned = CleanupOrphanedEntities(ctx, log, h.orphanCleanupServices())
 	} else {
 		// The deleted file's narrators may have narrated nothing else. Only
 		// the people kind runs, so a file delete does not start sweeping up
 		// other kinds of orphans that the full cleanup would remove.
-		CleanupOrphanedPeople(ctx, log, h.orphanCleanupServices())
+		cleaned = CleanupOrphanedPeople(ctx, log, h.orphanCleanupServices())
 	}
 
 	// If a supplement was promoted, scan it to extract cover and update metadata
@@ -2491,6 +2508,7 @@ func (h *handler) deleteFile(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, DeleteFileResponse{
 		BookDeleted: result.BookDeleted,
+		Removed:     h.removedEntities(ctx, log, book, cleaned),
 	})
 }
 

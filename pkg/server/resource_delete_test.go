@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/books/review"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
@@ -63,6 +65,14 @@ func newResourceDeleteFixture(t *testing.T) *resourceDeleteFixture {
 func (f *resourceDeleteFixture) delete(path string) {
 	f.t.Helper()
 	f.request(http.MethodDelete, path, "", http.StatusNoContent)
+}
+
+// fileDeleteResponse decodes the body of DELETE /api/books/files/:id.
+func (f *resourceDeleteFixture) fileDeleteResponse(body string) books.DeleteFileResponse {
+	f.t.Helper()
+	var resp books.DeleteFileResponse
+	require.NoError(f.t, json.Unmarshal([]byte(body), &resp), body)
+	return resp
 }
 
 // request sends an authenticated admin request with an optional JSON body,
@@ -380,7 +390,7 @@ func TestDeleteFile_ReindexesSurvivingBook(t *testing.T) {
 
 	body := f.request(http.MethodDelete, fmt.Sprintf("/api/books/files/%d", seeded.fileID), "", http.StatusOK)
 
-	assert.JSONEq(t, `{"book_deleted":false}`, body, "the Book survives with its EPUB File")
+	assert.False(t, f.fileDeleteResponse(body).BookDeleted, "the Book survives with its EPUB File")
 	assert.Empty(t, f.searchBookIDs("Brackenridge"), "the deleted File's narrator no longer matches the Book")
 	assert.Equal(t, []int{seeded.bookID}, f.searchBookIDs("Harbor"), "the surviving Book stays in the search index")
 }

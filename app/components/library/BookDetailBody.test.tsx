@@ -2,7 +2,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Outlet,
+  Route,
+  RouterProvider,
+  Routes,
+} from "react-router-dom";
 import { toast } from "sonner";
 import {
   afterEach,
@@ -14,10 +21,17 @@ import {
   vi,
 } from "vitest";
 
+import { NavigationHistoryProvider } from "@/contexts/NavigationHistory";
 import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { emulatePhoneWidth } from "@/testing/phoneWidth";
-import type { Book, File, Rule, SharingSettingsResponse } from "@/types";
+import type {
+  Book,
+  File,
+  RemovedEntities,
+  Rule,
+  SharingSettingsResponse,
+} from "@/types";
 import type { Permission } from "@/utils/permissions";
 
 import BookDetailBody, { type ShareLinkContext } from "./BookDetailBody";
@@ -87,13 +101,14 @@ beforeEach(() => {
   sharing.settings = { enabled: false, require_expiration: false };
   resync.file = undefined;
   resync.book = undefined;
+  deletion.book = undefined;
   delivery.rules = undefined;
   delivery.pending = false;
   review.criteria = { book_fields: [], audio_fields: [] };
   relatedTabs.tabs = [{ key: "series", label: "Series" }];
 });
 
-const { idle, review, resync } = vi.hoisted(() => ({
+const { idle, review, resync, deletion } = vi.hoisted(() => ({
   idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
   review: {
     criteria: { book_fields: [] as string[], audio_fields: [] as string[] },
@@ -102,10 +117,16 @@ const { idle, review, resync } = vi.hoisted(() => ({
     file: undefined as undefined | ((...args: never[]) => Promise<unknown>),
     book: undefined as undefined | ((...args: never[]) => Promise<unknown>),
   },
+  deletion: {
+    book: undefined as undefined | ((...args: never[]) => Promise<unknown>),
+  },
 }));
 
 vi.mock("@/hooks/queries/books", () => ({
-  useDeleteBook: idle,
+  useDeleteBook: () => ({
+    ...idle(),
+    ...(deletion.book ? { mutateAsync: deletion.book } : {}),
+  }),
   useDeleteFile: idle,
   useResyncBook: () => ({
     ...idle(),
@@ -1419,7 +1440,7 @@ describe("BookDetailBody rescans that remove the book", () => {
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter initialEntries={["/libraries/1/books/1"]}>
           <Routes>
-            <Route element={<div>Home page</div>} path="/" />
+            <Route element={<div>Library page</div>} path="/libraries/1" />
             <Route element={<BookDetailBody book={book} />} path="*" />
           </Routes>
         </MemoryRouter>
@@ -1442,7 +1463,7 @@ describe("BookDetailBody rescans that remove the book", () => {
 
     await rescanFirstFile();
 
-    expect(await screen.findByText("Home page")).toBeInTheDocument();
+    expect(await screen.findByText("Library page")).toBeInTheDocument();
   });
 
   it("stays on the book page when a file rescan removes only the file", async () => {
@@ -1460,7 +1481,7 @@ describe("BookDetailBody rescans that remove the book", () => {
         "File removed (no longer on disk, or DRM-protected)",
       ),
     );
-    expect(screen.queryByText("Home page")).not.toBeInTheDocument();
+    expect(screen.queryByText("Library page")).not.toBeInTheDocument();
   });
 
   it("leaves the book page when a book rescan removes the book", async () => {
@@ -1472,6 +1493,92 @@ describe("BookDetailBody rescans that remove the book", () => {
     await user.click(screen.getByRole("menuitem", { name: "Rescan book" }));
     await user.click(screen.getByRole("button", { name: "Rescan" }));
 
-    expect(await screen.findByText("Home page")).toBeInTheDocument();
+    expect(await screen.findByText("Library page")).toBeInTheDocument();
   });
+});
+
+describe("BookDetailBody leaving a removed book", () => {
+  const nothingRemoved: RemovedEntities = {
+    series_ids: [],
+    person_ids: [],
+    genre_ids: [],
+    tag_ids: [],
+    publisher_ids: [],
+  };
+
+  const deleteBook = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByLabelText("Book actions"));
+    await user.click(screen.getByRole("menuitem", { name: "Delete book" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+  };
+  const rescanBook = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByLabelText("Book actions"));
+    await user.click(screen.getByRole("menuitem", { name: "Rescan book" }));
+    await user.click(screen.getByRole("button", { name: "Rescan" }));
+  };
+
+  // Opens the book from Series 4's page, then removes it with `action`.
+  const removeFromSeriesPage = async (
+    action: typeof deleteBook,
+    removed: RemovedEntities,
+  ) => {
+    deletion.book = vi.fn(async () => ({ files_deleted: 1, removed }));
+    resync.book = vi.fn(async () => ({ book_deleted: true, removed }));
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <NavigationHistoryProvider>
+              <Outlet />
+            </NavigationHistoryProvider>
+          ),
+          children: [
+            { path: "libraries/1", element: <div>Library page</div> },
+            { path: "libraries/1/series/4", element: <div>Series page</div> },
+            {
+              path: "libraries/1/books/7",
+              element: <BookDetailBody book={book} />,
+            },
+          ],
+        },
+      ],
+      { initialEntries: ["/libraries/1/series/4"] },
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+    await act(() => router.navigate("/libraries/1/books/7"));
+
+    await action(userEvent.setup({ advanceTimers: vi.advanceTimersByTime }));
+  };
+
+  it.each([
+    ["a delete", deleteBook],
+    ["a rescan", rescanBook],
+  ])(
+    "returns to the page the book was opened from after %s",
+    async (_name, action) => {
+      await removeFromSeriesPage(action, nothingRemoved);
+
+      expect(await screen.findByText("Series page")).toBeInTheDocument();
+    },
+  );
+
+  it.each([
+    ["a delete", deleteBook],
+    ["a rescan", rescanBook],
+  ])(
+    "goes to the library when %s removed that page's series",
+    async (_name, action) => {
+      await removeFromSeriesPage(action, {
+        ...nothingRemoved,
+        series_ids: [4],
+      });
+
+      expect(await screen.findByText("Library page")).toBeInTheDocument();
+    },
+  );
 });
