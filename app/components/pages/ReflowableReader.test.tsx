@@ -173,9 +173,9 @@ describe("ReflowableReader", () => {
 
     try {
       const { container } = renderReader();
-      const menu = (await screen.findByRole("combobox", {
+      const menu = await screen.findByRole("combobox", {
         name: "Jump to chapter",
-      })) as HTMLSelectElement;
+      });
       // foliate reports a heading as the current item with a null href.
       act(() => {
         container.querySelector("foliate-view")!.dispatchEvent(
@@ -187,7 +187,7 @@ describe("ReflowableReader", () => {
           }),
         );
       });
-      expect(menu.selectedOptions[0]?.textContent).toBe("Part Two");
+      expect(menu).toHaveTextContent(/^Part Two$/);
     } finally {
       mockToc = [];
     }
@@ -211,21 +211,29 @@ describe("ReflowableReader", () => {
     } as never);
 
     try {
-      renderReader();
+      const { container } = renderReader();
       const menu = await screen.findByRole("combobox", {
         name: "Jump to chapter",
       });
-      // The first option is the placeholder shown before a location is known.
-      const options = (
-        Array.from(menu.querySelectorAll("option")) as HTMLOptionElement[]
-      ).slice(1);
-      const labels = options.map((o) => o.textContent?.trim());
-      expect(labels).toEqual(["Part Two", "Chapter 3", "Afterword"]);
-      expect(options[0].disabled).toBe(true);
-      expect(options[1].disabled).toBe(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(menu);
+      const options = await screen.findAllByRole("option");
+      expect(options.map((o) => o.textContent)).toEqual([
+        "Part Two",
+        "Chapter 3",
+        "Afterword",
+      ]);
+      expect(options[0]).toHaveAttribute("aria-disabled", "true");
+      expect(options[1]).not.toHaveAttribute("aria-disabled", "true");
       // Nested chapters are indented under their heading.
-      expect(options[1].textContent).toMatch(/^\u00a0+Chapter 3$/);
-      expect(options[2].textContent).toBe("Afterword");
+      expect(options[1].style.paddingLeft).toBe("1.5rem");
+      expect(options[2].style.paddingLeft).toBe("0.5rem");
+
+      await user.click(options[2]);
+      const view = container.querySelector("foliate-view") as unknown as {
+        goTo: ReturnType<typeof vi.fn>;
+      };
+      expect(view.goTo).toHaveBeenCalledWith("after.xhtml");
     } finally {
       mockToc = [];
     }

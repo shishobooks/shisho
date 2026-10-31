@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   PluginStatusActive,
   usePluginRepositories,
@@ -191,9 +192,7 @@ export const InstalledTab = () => {
       <div className="space-y-3">
         {enabled.map(renderRow)}
 
-        {enabled.length > 0 && disabled.length > 0 && (
-          <hr className="border-border" />
-        )}
+        {enabled.length > 0 && disabled.length > 0 && <Separator />}
 
         {disabled.map(renderRow)}
       </div>

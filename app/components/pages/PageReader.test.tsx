@@ -26,8 +26,10 @@ vi.mock("@/hooks/queries/settings", () => ({
   useUpdateUserSettings: () => ({ mutate: settings.mutate }),
 }));
 
+const chapters = vi.hoisted(() => ({ data: [] as unknown[] }));
+
 vi.mock("@/hooks/queries/chapters", () => ({
-  useFileChapters: () => ({ data: [] }),
+  useFileChapters: () => ({ data: chapters.data }),
 }));
 
 // The saved flow, the flow the page shapes suggest, and the save mutation.
@@ -74,6 +76,7 @@ afterEach(() => {
   flow.detectedFrom = undefined;
   flow.readingLoading = false;
   settings.hideChrome = false;
+  chapters.data = [];
 });
 
 // Shows the reader's URL query, which it updates as the page changes.
@@ -364,5 +367,25 @@ describe("PageReader auto-hide in the scrolled flow", () => {
     expect(
       screen.getByRole("button", { name: "Toggle controls" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("PageReader chapter menu", () => {
+  it("shows the current chapter and jumps to the one chosen", async () => {
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 4 },
+    ];
+    settings.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader(10);
+
+    const menu = screen.getByRole("combobox", { name: "Jump to chapter" });
+    expect(menu).toHaveTextContent(/^Opening$/);
+
+    await user.click(menu);
+    await user.click(await screen.findByRole("option", { name: "Middle" }));
+    expect(screen.getByText("Page 5 of 10")).toBeInTheDocument();
+    expect(menu).toHaveTextContent(/^Middle$/);
   });
 });

@@ -1,10 +1,4 @@
-import {
-  AlertCircle,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Settings,
-} from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -14,6 +8,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useFilePosition } from "@/hooks/queries/reading";
@@ -79,9 +80,9 @@ const flattenToc = (
   return out;
 };
 
-// A select cannot nest options, so nesting is shown with leading
-// non-breaking spaces, which the browser does not collapse.
-const tocIndent = (depth: number) => "\u00a0\u00a0\u00a0".repeat(depth);
+// A nested entry's left padding in the chapter menu, a step per level past
+// the menu's own.
+const tocIndent = (depth: number) => ({ paddingLeft: `${0.5 + depth}rem` });
 
 export default function ReflowableReader({
   file,
@@ -479,16 +480,17 @@ export default function ReflowableReader({
     return () => window.removeEventListener("keydown", handler);
   }, [bookReady, goNext, goPrev]);
 
-  // The menu value for the current location. foliate reports a heading as
-  // the current item with no href, so a heading is found by its label.
-  const currentHeadingIndex = currentTocHref
-    ? -1
+  // The menu value for the current location. Entries are keyed by place in the menu, since a book can list one href
+  // twice. foliate reports a heading as the current item with no href, so a
+  // heading is found by its label.
+  const currentTocIndex = currentTocHref
+    ? toc.findIndex((e) => e.href === currentTocHref)
     : toc.findIndex((e) => !e.href && e.label === currentTocLabel);
-  const currentTocValue =
-    currentTocHref ??
-    (currentHeadingIndex >= 0 ? `heading-${currentHeadingIndex}` : "");
+  const currentTocValue = currentTocIndex >= 0 ? String(currentTocIndex) : "";
 
-  const handleTocChange = (href: string) => {
+  const handleTocChange = (value: string) => {
+    const href = toc[Number(value)]?.href;
+    if (!href) return;
     const view = viewRef.current as
       (HTMLElement & { goTo?: (target: string) => void }) | null;
     view?.goTo?.(href);
@@ -551,35 +553,28 @@ export default function ReflowableReader({
         )}
       >
         <div className="flex items-center gap-2">
-          {/* A native select, since its options can be disabled headings,
-              styled like the app's other selects: the browser's own arrow
-              sits against the edge, so it's hidden for an inset chevron. */}
           {toc.length > 0 && (
-            <div className="relative">
-              <select
+            <Select onValueChange={handleTocChange} value={currentTocValue}>
+              <SelectTrigger
                 aria-label="Jump to chapter"
-                className="h-9 max-w-[50vw] appearance-none truncate rounded-md border border-input bg-transparent pl-3 pr-9 text-sm shadow-sm cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                onChange={(e) => handleTocChange(e.target.value)}
-                value={currentTocValue}
+                className="w-auto max-w-[50vw] gap-2"
               >
-                {currentTocHref === null && <option value="">—</option>}
-                {toc.map((entry, index) =>
-                  entry.href ? (
-                    <option key={`${index}-${entry.href}`} value={entry.href}>
-                      {tocIndent(entry.depth) + entry.label}
-                    </option>
-                  ) : (
-                    <option disabled key={index} value={`heading-${index}`}>
-                      {tocIndent(entry.depth) + entry.label}
-                    </option>
-                  ),
-                )}
-              </select>
-              <ChevronDown
-                aria-hidden
-                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50"
-              />
-            </div>
+                <SelectValue placeholder="Chapters" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {toc.map((entry, index) => (
+                  <SelectItem
+                    // Headings have nowhere to jump to.
+                    disabled={!entry.href}
+                    key={index}
+                    style={tocIndent(entry.depth)}
+                    value={String(index)}
+                  >
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
           <Popover>
             <PopoverTrigger asChild>

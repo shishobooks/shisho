@@ -395,6 +395,10 @@ export const Fixture = ({ n }: { n: number }) => {
       <span>{String(clipboard)} Chicago</span>
       <button type="button">x</button>
       <Button type="button">x</Button>
+      <select aria-label="pick"><option>a</option></select>
+      <textarea aria-label="notes" />
+      <progress value={1} />
+      <hr />
     </div>
   );
 };
@@ -423,8 +427,12 @@ describe("ESLint UI convention rules", () => {
     expect(count("cn()")).toBe(1);
     expect(count("Deep-link tabs")).toBe(1);
     expect(count("raw <button>")).toBe(1);
+    expect(count("raw <select>")).toBe(1);
+    expect(count("raw <textarea>")).toBe(1);
+    expect(count("raw <progress>")).toBe(1);
+    expect(count("raw <hr>")).toBe(1);
     expect(count("formatCount")).toBe(3);
-    expect(messages).toHaveLength(12);
+    expect(messages).toHaveLength(16);
   });
 
   it("allows them in tests", async () => {

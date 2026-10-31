@@ -18,6 +18,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useFileChapters } from "@/hooks/queries/chapters";
@@ -429,25 +436,29 @@ export default function PageReader({
         <div className="flex items-center gap-2">
           {/* Chapter dropdown */}
           {flatChapters.length > 0 && (
-            <select
-              aria-label="Jump to chapter"
-              className="text-sm bg-transparent border rounded px-2 py-1"
-              onChange={(e) => {
-                const ch = flatChapters.find(
-                  (c) => c.id === Number(e.target.value),
-                );
+            <Select
+              onValueChange={(value) => {
+                const ch = flatChapters.find((c) => c.id === Number(value));
                 if (ch?.start_page != null) {
                   goToPage(ch.start_page);
                 }
               }}
-              value={currentChapter?.id ?? ""}
+              value={currentChapter ? String(currentChapter.id) : ""}
             >
-              {flatChapters.map((ch) => (
-                <option key={ch.id} value={ch.id}>
-                  {ch.title}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                aria-label="Jump to chapter"
+                className="w-auto max-w-[50vw] gap-2"
+              >
+                <SelectValue placeholder="Chapters" />
+              </SelectTrigger>
+              <SelectContent align="end">
+                {flatChapters.map((ch) => (
+                  <SelectItem key={ch.id} value={String(ch.id)}>
+                    {ch.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
 
           {/* Settings */}
