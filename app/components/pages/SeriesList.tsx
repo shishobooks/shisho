@@ -229,8 +229,11 @@ const SeriesList = () => {
             ? "No series found matching your search."
             : "No series in this library yet."
         }
+        // A background refetch (an SSE event) keeps the loaded items on
+        // screen. A new page or search shows the spinner, not the previous
+        // key's items kept as placeholder data.
         isLoading={
-          seriesQuery.isLoading || seriesQuery.isFetching || isStaleData
+          seriesQuery.isLoading || seriesQuery.isPlaceholderData || isStaleData
         }
         itemLabel="series"
         items={seriesQuery.data?.items ?? []}

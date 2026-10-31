@@ -648,8 +648,11 @@ const HomeContent = () => {
               ? "No books found matching your search or filters."
               : "No books in this library yet."
           }
+          // A background refetch (a reading change, an SSE event) keeps the
+          // loaded items on screen. A new page or filter shows the spinner,
+          // not the previous key's items kept as placeholder data.
           isLoading={
-            booksQuery.isLoading || booksQuery.isFetching || isStaleData
+            booksQuery.isLoading || booksQuery.isPlaceholderData || isStaleData
           }
           itemLabel="books"
           items={booksQuery.data?.items ?? []}
