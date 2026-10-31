@@ -172,6 +172,33 @@ describe("ResourceList", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("keeps the loaded results on screen during a background refetch", () => {
+    renderList({
+      ...settled,
+      data: { items: [{ id: 1, name: "Fantasy" }], total: 1 },
+      isSuccess: true,
+      isFetching: true,
+      isPlaceholderData: false,
+    });
+
+    expect(screen.getByText("Fantasy")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1-1 of 1 genres")).toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
+
+  it("shows the spinner, not the previous page, while the next page loads", () => {
+    renderList({
+      ...settled,
+      data: { items: [{ id: 1, name: "Fantasy" }], total: 1 },
+      isSuccess: true,
+      isFetching: true,
+      isPlaceholderData: true,
+    });
+
+    expect(screen.queryByText("Fantasy")).not.toBeInTheDocument();
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+  });
+
   it("asks for the last page, replacing history, when the page is past the end", () => {
     const handlePageChange = vi.fn();
     const pastTheEnd: Partial<UseQueryResult<ResourceListResponse<Item>>> = {

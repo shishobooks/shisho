@@ -13,7 +13,7 @@ import { formatShowingRange } from "@/utils/format";
 interface GalleryProps<T> {
   items: T[];
   total: number;
-  /** True while the shown items are not the current ones (loading, refetching, stale). */
+  /** True while the shown items are not the current ones (first load, another key's placeholder, a pending search). */
   isLoading: boolean;
   /** The query behind the items, for the error report and its Retry. */
   query: RetryableQuery & { data: unknown; isPlaceholderData: boolean };

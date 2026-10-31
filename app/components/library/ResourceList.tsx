@@ -102,8 +102,12 @@ const ResourceList = <T extends { id: number }, F extends string>({
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
   const showing = formatShowingRange(offset, limit, total, itemLabel);
+  // A background refetch (an SSE event) keeps the loaded results on screen.
+  // A new page or search shows the spinner, not the previous key's results
+  // kept as placeholder data.
+  const isLoading = query.isLoading || query.isPlaceholderData || isStaleData;
   // Loaded results for the current search, not a page still loading.
-  const showsResults = !query.isFetching && !isStaleData;
+  const showsResults = !isLoading;
 
   const renderItem = (item: T) => {
     const config = itemConfig(item);
@@ -200,11 +204,9 @@ const ResourceList = <T extends { id: number }, F extends string>({
         )}
       </div>
 
-      {(query.isLoading || query.isFetching || isStaleData) && (
-        <LoadingSpinner />
-      )}
+      {isLoading && <LoadingSpinner />}
 
-      {query.error && !query.data && !query.isFetching && !isStaleData && (
+      {query.error && !query.data && !isLoading && (
         <QueryError fallback={`Failed to load ${itemLabel}`} query={query} />
       )}
 
