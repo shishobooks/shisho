@@ -92,7 +92,7 @@ func TestDeleteBook_ReindexesSurvivingSeries(t *testing.T) {
 		},
 		"delete last file": func(f *resourceDeleteFixture, doomed, _ reviewedBook) {
 			body := f.request(http.MethodDelete, fmt.Sprintf("/api/books/files/%d", doomed.fileID), "", http.StatusOK)
-			require.JSONEq(f.t, `{"book_deleted":true}`, body)
+			require.True(f.t, f.fileDeleteResponse(body).BookDeleted, body)
 		},
 		"move all files": func(f *resourceDeleteFixture, doomed, survivor reviewedBook) {
 			f.request(http.MethodPost, fmt.Sprintf("/api/books/%d/move-files", doomed.bookID), fmt.Sprintf(`{"file_ids":[%d],"target_book_id":%d}`, doomed.fileID, survivor.bookID), http.StatusOK)

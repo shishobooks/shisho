@@ -16,6 +16,7 @@ export {
   type MergeBooksResponse,
   type MoveFilesPayload,
   type MoveFilesResponse,
+  type RemovedEntities,
   type ResyncBookResponse,
   type ResyncFileResponse,
   type ResyncMode,
