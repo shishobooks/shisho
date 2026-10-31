@@ -1680,6 +1680,8 @@ export function IdentifyReviewForm({
                         return result as {
                           data?: SeriesEntry[];
                           isLoading: boolean;
+                          isPlaceholderData: boolean;
+                          isError: boolean;
                         };
                       },
                       label: "Series",

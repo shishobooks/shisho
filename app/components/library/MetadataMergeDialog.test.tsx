@@ -1,12 +1,54 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
+import { useDebounce } from "@/hooks/useDebounce";
 import { ShishoAPIError } from "@/libraries/api";
 import { watchUnhandledRejections } from "@/testing/mutations";
+import {
+  advancePastSearch,
+  createSearchQuery,
+  SEARCH_LATENCY_MS,
+} from "@/testing/searchQuery";
 
 import { MetadataMergeDialog } from "./MetadataMergeDialog";
+
+const SOURCES = [
+  { id: 30, name: "Ace", countText: "1 book" },
+  { id: 40, name: "Bantam", countText: "2 books" },
+  { id: 10, name: "Dutton", countText: "5 books" },
+  { id: 20, name: "Riverhead", countText: "3 books" },
+];
+
+// Renders the dialog over a real search query, debounced as the detail
+// pages do, and waits for the first results.
+async function renderSearching() {
+  const { useSearch, wrapper } = createSearchQuery(SOURCES, (e) => e.name);
+  const Harness = () => {
+    const [search, setSearch] = useState("");
+    const debounced = useDebounce(search, 200);
+    const results = useSearch(debounced);
+    return (
+      <MetadataMergeDialog
+        entities={results.data ?? []}
+        entityType="publisher"
+        isLoadingEntities={results.isLoading}
+        isPending={false}
+        isSearchPending={search !== debounced || results.isPlaceholderData}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={setSearch}
+        open={true}
+        targetId={1}
+        targetName="Penguin"
+      />
+    );
+  };
+  render(<Harness />, { wrapper });
+  await act(() => vi.advanceTimersByTimeAsync(SEARCH_LATENCY_MS));
+}
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -17,6 +59,99 @@ const entities = [
 ];
 
 describe("MetadataMergeDialog", () => {
+  it("highlights the first source once results for the typed text arrive, so Enter picks it", async () => {
+    const user = createUser();
+    await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("riv");
+    await advancePastSearch();
+    await user.keyboard("{Enter}");
+
+    expect(screen.getByRole("combobox")).toHaveTextContent("Riverhead");
+  });
+
+  it("holds an Enter pressed before results arrive and picks the first fresh source", async () => {
+    const user = createUser();
+    await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("riv{Enter}");
+    // Past the debounce, the previous results still show while the search
+    // runs.
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    // The open popover hides the trigger from the accessibility tree.
+    expect(
+      screen.getByRole("combobox", {
+        hidden: true,
+        name: "Publisher to merge",
+      }),
+    ).toHaveTextContent("Select publisher");
+    await advancePastSearch();
+
+    expect(screen.getByRole("combobox")).toHaveTextContent("Riverhead");
+  });
+
+  it("keeps the picked source on the picker and merges it after a search that no longer lists it", async () => {
+    const user = createUser();
+    const onMerge = vi.fn().mockResolvedValue(undefined);
+    const { useSearch, wrapper } = createSearchQuery(SOURCES, (e) => e.name);
+    const Harness = () => {
+      const [search, setSearch] = useState("");
+      const debounced = useDebounce(search, 200);
+      const results = useSearch(debounced);
+      return (
+        <MetadataMergeDialog
+          entities={results.data ?? []}
+          entityType="publisher"
+          isLoadingEntities={results.isLoading}
+          isPending={false}
+          isSearchPending={search !== debounced || results.isPlaceholderData}
+          onMerge={onMerge}
+          onOpenChange={vi.fn()}
+          onSearch={setSearch}
+          open={true}
+          targetId={1}
+          targetName="Penguin"
+        />
+      );
+    };
+    render(<Harness />, { wrapper });
+    await act(() => vi.advanceTimersByTimeAsync(SEARCH_LATENCY_MS));
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /Dutton/ }));
+    // Search again for something else, and leave without picking.
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("riv");
+    await advancePastSearch();
+    await user.keyboard("{Escape}");
+
+    expect(
+      screen.getByRole("combobox", { name: "Publisher to merge" }),
+    ).toHaveTextContent("Dutton (5 books)");
+    expect(screen.getByText(/from "Dutton"/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+    expect(onMerge).toHaveBeenCalledExactlyOnceWith(10);
+  });
+
+  it("drops a held Enter when the source picker closes", async () => {
+    const user = createUser();
+    await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("riv{Enter}");
+    // The modal popover turns off pointer events outside it, which
+    // userEvent refuses to click through unless told not to check.
+    await user
+      .setup({ pointerEventsCheck: 0 })
+      .click(screen.getByRole("heading", { hidden: true, name: /Merge into/ }));
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    await advancePastSearch();
+
+    expect(screen.getByRole("combobox")).toHaveTextContent("Select publisher");
+  });
+
   it("names the source picker and its search box by what they pick", async () => {
     const user = createUser();
 
@@ -26,6 +161,7 @@ describe("MetadataMergeDialog", () => {
         entityType="genre"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={vi.fn()}
         onOpenChange={vi.fn()}
         onSearch={vi.fn()}
@@ -54,6 +190,7 @@ describe("MetadataMergeDialog", () => {
         entityType="genre"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={vi.fn()}
         onOpenChange={vi.fn()}
         onSearch={vi.fn()}
@@ -77,6 +214,7 @@ describe("MetadataMergeDialog", () => {
       entities,
       entityType: "publisher" as const,
       isLoadingEntities: false,
+      isSearchPending: false,
       isPending: false,
       onMerge: vi.fn(),
       onOpenChange: vi.fn(),
@@ -127,6 +265,7 @@ describe("MetadataMergeDialog", () => {
         entityType="publisher"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={onMerge}
         onOpenChange={vi.fn()}
         onSearch={onSearch}
@@ -162,6 +301,7 @@ describe("MetadataMergeDialog", () => {
         entityType="publisher"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={vi.fn()}
         onOpenChange={vi.fn()}
         onSearch={onSearch}
@@ -202,6 +342,7 @@ describe("MetadataMergeDialog", () => {
         entityType="publisher"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={vi.fn()}
         onOpenChange={onOpenChange}
         onSearch={onSearch}
@@ -243,6 +384,7 @@ describe("MetadataMergeDialog failures", () => {
         entityType="genre"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={onMerge}
         onOpenChange={onOpenChange}
         onSearch={vi.fn()}
@@ -288,6 +430,7 @@ describe("MetadataMergeDialog failures", () => {
         entityType="publisher"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={vi.fn()}
         onOpenChange={onOpenChange}
         onSearch={vi.fn()}
@@ -322,6 +465,7 @@ describe("MetadataMergeDialog failures", () => {
         entityType="genre"
         isLoadingEntities={false}
         isPending={false}
+        isSearchPending={false}
         onMerge={vi.fn()}
         onOpenChange={vi.fn()}
         onSearch={vi.fn()}

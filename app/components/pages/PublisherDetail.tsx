@@ -221,6 +221,9 @@ const PublisherDetail = () => {
               countText: formatCount(p.file_count ?? 0, "file"),
             })) ?? [],
           isLoadingEntities: publishersListQuery.isLoading,
+          isSearchPending:
+            mergeSearchRaw !== mergeSearch ||
+            publishersListQuery.isPlaceholderData,
           isPending: mergePublisherMutation.isPending,
           onMerge: handleMerge,
           onSearch: setMergeSearchRaw,

@@ -1,6 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import {
+  advancePastFailedSearch,
+  advancePastSearch,
+  createSearchQuery,
+  SEARCH_LATENCY_MS,
+} from "@/testing/searchQuery";
 
 import { EntityCombobox } from "./EntityCombobox";
 
@@ -10,10 +17,52 @@ interface Person {
 }
 
 function makeHook(items: Person[], isLoading = false) {
-  return () => ({ data: items, isLoading });
+  return () => ({
+    data: items,
+    isLoading,
+    isPlaceholderData: false,
+    isError: false,
+  });
+}
+
+const PUBLISHERS: Person[] = [
+  { id: 1, name: "Ace Books" },
+  { id: 4, name: "Bantam" },
+  { id: 2, name: "Tor Books" },
+  { id: 3, name: "Tordotcom" },
+];
+
+// Renders the combobox over a real search query and waits for the first
+// results, as the edit dialogs do.
+async function renderSearching(onChange = vi.fn()) {
+  const { useSearch, wrapper } = createSearchQuery(PUBLISHERS, (p) => p.name);
+  render(
+    <EntityCombobox<Person>
+      getOptionKey={(p) => p.id}
+      getOptionLabel={(p) => p.name}
+      hook={useSearch}
+      label="Publisher"
+      onChange={onChange}
+      value={null}
+    />,
+    { wrapper },
+  );
+  await act(() => vi.advanceTimersByTimeAsync(SEARCH_LATENCY_MS));
+  return onChange;
 }
 
 describe("EntityCombobox", () => {
+  it("highlights the first option once results for the typed text arrive, so Enter picks it", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("tor");
+    await advancePastSearch();
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith({ id: 2, name: "Tor Books" });
+  });
+
   it("names the trigger and its search box by the field, not the value shown", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
@@ -33,6 +82,90 @@ describe("EntityCombobox", () => {
     expect(
       screen.getByRole("combobox", { name: "Search publisher" }),
     ).toBeInTheDocument();
+  });
+
+  it("holds an Enter pressed before results arrive and picks the first fresh option", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("tor{Enter}");
+    // Past the debounce, the previous results still show while the search
+    // runs.
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(onChange).not.toHaveBeenCalled();
+    await advancePastSearch();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({
+      id: 2,
+      name: "Tor Books",
+    });
+  });
+
+  it("drops a held Enter when the search fails", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = vi.fn();
+    const { useSearch, wrapper } = createSearchQuery(
+      PUBLISHERS,
+      (p) => p.name,
+      (query) => query === "tor",
+    );
+    render(
+      <EntityCombobox<Person>
+        getOptionKey={(p) => p.id}
+        getOptionLabel={(p) => p.name}
+        hook={useSearch}
+        label="Publisher"
+        onChange={onChange}
+        value={null}
+      />,
+      { wrapper },
+    );
+    await act(() => vi.advanceTimersByTimeAsync(SEARCH_LATENCY_MS));
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("tor{Enter}");
+    await advancePastFailedSearch();
+
+    // Only the create option is left, but the Enter was for results that
+    // never came.
+    expect(
+      screen.getByRole("option", { name: /Create new publisher/ }),
+    ).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("leaves an Enter that commits an IME composition to the input", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("tor");
+    // Safari sends the composition-committing Enter with keyCode 229 and
+    // isComposing false; cmdk ignores it too.
+    fireEvent.keyDown(
+      screen.getByRole("combobox", { name: "Search publisher" }),
+      {
+        key: "Enter",
+        keyCode: 229,
+      },
+    );
+    await advancePastSearch();
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("drops a held Enter when the dropdown closes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("tor{Enter}");
+    // The modal popover turns off pointer events outside it, which
+    // userEvent refuses to click through unless told not to check.
+    await user.setup({ pointerEventsCheck: 0 }).click(document.body);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    await advancePastSearch();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("calls onChange with an existing match when the user selects it", async () => {

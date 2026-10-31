@@ -83,6 +83,7 @@ const defaultProps = {
   mergeConfig: {
     entities: [],
     isLoadingEntities: false,
+    isSearchPending: false,
     isPending: false,
     onMerge: vi.fn(),
     onSearch: vi.fn(),
@@ -251,6 +252,7 @@ describe("ResourceDetail", () => {
           mergeConfig={{
             entities,
             isLoadingEntities: false,
+            isSearchPending: false,
             isPending: false,
             onMerge,
             onSearch: vi.fn(),
@@ -288,6 +290,7 @@ describe("ResourceDetail", () => {
           mergeConfig={{
             entities: [{ id: 10, name: "Fantasy", countText: "5 books" }],
             isLoadingEntities: false,
+            isSearchPending: false,
             isPending: false,
             onMerge,
             onSearch: vi.fn(),

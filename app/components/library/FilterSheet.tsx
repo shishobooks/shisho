@@ -71,6 +71,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useHighlightFirstOption } from "@/hooks/useHighlightFirstOption";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import {
   ratingRangeLabel,
@@ -96,6 +97,9 @@ interface FilterSheetProps {
   selectedGenres: SelectedFilter[];
   genres: Genre[];
   genresLoading: boolean;
+  /** `genres` don't answer the search text yet: it changed, or its
+   * results are still loading. */
+  genresSearchPending: boolean;
   /** The genres query, for its error report and Retry. */
   genresQuery: FilterOptionsQuery;
   genreSearchInput: string;
@@ -105,6 +109,9 @@ interface FilterSheetProps {
   selectedTags: SelectedFilter[];
   tags: Tag[];
   tagsLoading: boolean;
+  /** `tags` don't answer the search text or scope yet: one changed, or
+   * its results are still loading. */
+  tagsSearchPending: boolean;
   /** The tags query, for its error report and Retry. */
   tagsQuery: FilterOptionsQuery;
   tagSearchInput: string;
@@ -171,6 +178,7 @@ const FilterCombobox = ({
   selected,
   options,
   loading,
+  searchPending,
   query,
   errorFallback,
   searchInput,
@@ -188,6 +196,8 @@ const FilterCombobox = ({
   selected: SelectedFilter[];
   options: FilterComboboxOption[];
   loading: boolean;
+  /** `options` don't answer the search text yet. */
+  searchPending: boolean;
   query: FilterOptionsQuery;
   errorFallback: string;
   searchInput: string;
@@ -207,6 +217,16 @@ const FilterCombobox = ({
 }) => {
   const [open, setOpen] = useState(false);
   const selectedIds = new Set(selected.map((s) => s.id));
+  const highlight = useHighlightFirstOption({
+    options: options.map((opt) => ({
+      value: opt.name,
+      select: () => onToggle(opt.id),
+    })),
+    loading,
+    pending: searchPending,
+    failed: !!query.error,
+    open,
+  });
 
   return (
     <div className="space-y-2">
@@ -239,7 +259,11 @@ const FilterCombobox = ({
           align="start"
           className="w-[var(--radix-popover-trigger-width)] p-0"
         >
-          <Command label={`Search ${label.toLowerCase()}`} shouldFilter={false}>
+          <Command
+            label={`Search ${label.toLowerCase()}`}
+            shouldFilter={false}
+            {...highlight}
+          >
             <CommandInput
               onValueChange={onSearchChange}
               placeholder={searchPlaceholder}
@@ -612,6 +636,7 @@ const FilterContent = ({
   selectedGenres,
   genres,
   genresLoading,
+  genresSearchPending,
   genresQuery,
   genreSearchInput,
   onGenreSearchChange,
@@ -620,6 +645,7 @@ const FilterContent = ({
   selectedTags,
   tags,
   tagsLoading,
+  tagsSearchPending,
   tagsQuery,
   tagSearchInput,
   onTagSearchChange,
@@ -693,6 +719,7 @@ const FilterContent = ({
           options={genres}
           query={genresQuery}
           searchInput={genreSearchInput}
+          searchPending={genresSearchPending}
           searchPlaceholder="Search genres..."
           selected={selectedGenres}
           triggerLabel="Add genres..."
@@ -746,6 +773,7 @@ const FilterContent = ({
           options={tags}
           query={tagsQuery}
           searchInput={tagSearchInput}
+          searchPending={tagsSearchPending}
           searchPlaceholder={
             tagScope.kind === "namespace"
               ? `Search ${tagScope.namespace}...`

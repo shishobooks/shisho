@@ -16,12 +16,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import type { OptionSearch } from "@/hooks/queries/entity-search";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useHighlightFirstOption } from "@/hooks/useHighlightFirstOption";
 
 interface MultiSelectComboboxProps<T> {
   values: string[];
   onChange: (values: string[]) => void;
-  hook: (query: string) => { data?: T[]; isLoading: boolean };
+  hook: (query: string) => OptionSearch<T>;
   /** Names the search box ("Search genre"), and the trigger too unless
    * labelId is set. */
   label: string;
@@ -52,7 +54,12 @@ export function MultiSelectCombobox<T>({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 200);
-  const { data: items = [], isLoading } = hook(debouncedSearch);
+  const {
+    data: items = [],
+    isLoading,
+    isPlaceholderData,
+    isError,
+  } = hook(debouncedSearch);
 
   const chipCounts = useRef(new Map<string, number>());
   if (getOptionCount) {
@@ -104,6 +111,22 @@ export function MultiSelectCombobox<T>({
     }
     setSearch("");
   };
+
+  const highlight = useHighlightFirstOption({
+    options: [
+      ...filtered.map((opt) => ({
+        value: getOptionLabel(opt),
+        select: () => handleSelect(opt),
+      })),
+      ...(showCreate
+        ? [{ value: `create-${trimmed}`, select: handleCreate }]
+        : []),
+    ],
+    loading: isLoading,
+    pending: isPlaceholderData || search !== debouncedSearch,
+    failed: isError,
+    open,
+  });
 
   const handleRemove = (value: string) => {
     onChange(values.filter((v) => v !== value));
@@ -168,7 +191,11 @@ export function MultiSelectCombobox<T>({
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-full p-0">
-          <Command label={`Search ${label.toLowerCase()}`} shouldFilter={false}>
+          <Command
+            label={`Search ${label.toLowerCase()}`}
+            shouldFilter={false}
+            {...highlight}
+          >
             <CommandInput
               onValueChange={setSearch}
               placeholder={`Search ${label.toLowerCase()}...`}
