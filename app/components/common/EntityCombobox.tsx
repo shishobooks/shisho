@@ -19,12 +19,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import type { OptionSearch } from "@/hooks/queries/entity-search";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useHighlightFirstOption } from "@/hooks/useHighlightFirstOption";
 
 export type { EntityStatus };
 
 export interface EntityComboboxProps<T extends object> {
-  hook: (query: string) => { data?: T[]; isLoading: boolean };
+  hook: (query: string) => OptionSearch<T>;
   /** Names the search box ("Search publisher"), and the trigger too unless
    * labelId is set. */
   label: string;
@@ -65,7 +67,12 @@ export function EntityCombobox<T extends object>({
   // edit-dialog blocks debounced at the parent level via useDebounce; we
   // hold that contract here so callers don't need to repeat the pattern.
   const debouncedSearch = useDebounce(search, 200);
-  const { data: items = [], isLoading } = hook(debouncedSearch);
+  const {
+    data: items = [],
+    isLoading,
+    isPlaceholderData,
+    isError,
+  } = hook(debouncedSearch);
 
   const filtered = exclude ? items.filter((i) => !exclude(i)) : items;
   const trimmed = search.trim();
@@ -75,6 +82,33 @@ export function EntityCombobox<T extends object>({
     !filtered.some(
       (i) => getOptionLabel(i).toLowerCase() === trimmed.toLowerCase(),
     );
+
+  const choose = (next: T | { __create: string }) => {
+    onChange(next);
+    setOpen(false);
+    setSearch("");
+  };
+
+  const highlight = useHighlightFirstOption({
+    options: [
+      ...filtered.map((item) => ({
+        value: getOptionLabel(item),
+        select: () => choose(item),
+      })),
+      ...(showCreate
+        ? [
+            {
+              value: `create-${trimmed}`,
+              select: () => choose({ __create: trimmed }),
+            },
+          ]
+        : []),
+    ],
+    loading: isLoading,
+    pending: isPlaceholderData || search !== debouncedSearch,
+    failed: isError,
+    open,
+  });
 
   const triggerLabel =
     value == null
@@ -100,7 +134,11 @@ export function EntityCombobox<T extends object>({
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-full p-0">
-          <Command label={`Search ${label.toLowerCase()}`} shouldFilter={false}>
+          <Command
+            label={`Search ${label.toLowerCase()}`}
+            shouldFilter={false}
+            {...highlight}
+          >
             <CommandInput
               onValueChange={setSearch}
               placeholder={`Search ${label.toLowerCase()}...`}
@@ -129,11 +167,7 @@ export function EntityCombobox<T extends object>({
                       <CommandItem
                         className="cursor-pointer"
                         key={key}
-                        onSelect={() => {
-                          onChange(item);
-                          setOpen(false);
-                          setSearch("");
-                        }}
+                        onSelect={() => choose(item)}
                         value={getOptionLabel(item)}
                       >
                         <span className="truncate">{getOptionLabel(item)}</span>
@@ -153,11 +187,7 @@ export function EntityCombobox<T extends object>({
                   <CommandGroup>
                     <CommandItem
                       className="cursor-pointer"
-                      onSelect={() => {
-                        onChange({ __create: trimmed });
-                        setOpen(false);
-                        setSearch("");
-                      }}
+                      onSelect={() => choose({ __create: trimmed })}
                       value={`create-${trimmed}`}
                     >
                       <Plus className="mr-2 h-4 w-4 shrink-0" />

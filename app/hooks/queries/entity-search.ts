@@ -19,6 +19,19 @@ import {
   type ListTagsData,
 } from "./tags";
 
+/**
+ * What a combobox's search hook returns. `isPlaceholderData` is TanStack
+ * Query's flag for options that still answer an earlier search: the app's
+ * queries keep the previous data while a new search runs, so `isLoading`
+ * stays false then.
+ */
+export interface OptionSearch<T> {
+  data?: T[];
+  isLoading: boolean;
+  isPlaceholderData: boolean;
+  isError: boolean;
+}
+
 interface NameOption {
   name: string;
 }
@@ -43,8 +56,8 @@ export function usePeopleSearch(
   libraryId: number | undefined,
   enabled: boolean,
   query: string,
-): { data?: PersonOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePeopleList(
+): OptionSearch<PersonOption> {
+  const { data, isLoading, isPlaceholderData, isError } = usePeopleList(
     {
       library_id: libraryId,
       limit: 50,
@@ -58,14 +71,14 @@ export function usePeopleSearch(
     authored_book_count: p.authored_book_count,
     narrated_file_count: p.narrated_file_count,
   }));
-  return { data: adapted, isLoading };
+  return { data: adapted, isLoading, isPlaceholderData, isError };
 }
 
 export function useAuthorSearch(
   libraryId: number | undefined,
   enabled: boolean,
   query: string,
-): { data?: (AuthorInput & PersonOption)[]; isLoading: boolean } {
+): OptionSearch<AuthorInput & PersonOption> {
   return usePeopleSearch(libraryId, enabled, query);
 }
 
@@ -73,8 +86,8 @@ export function useSeriesSearch(
   libraryId: number | undefined,
   enabled: boolean,
   query: string,
-): { data?: NameWithBookCount[]; isLoading: boolean } {
-  const { data, isLoading } = useSeriesList(
+): OptionSearch<NameWithBookCount> {
+  const { data, isLoading, isPlaceholderData, isError } = useSeriesList(
     {
       library_id: libraryId,
       limit: 50,
@@ -86,15 +99,15 @@ export function useSeriesSearch(
     name: s.name,
     book_count: s.book_count,
   }));
-  return { data: adapted, isLoading };
+  return { data: adapted, isLoading, isPlaceholderData, isError };
 }
 
 export function usePublisherSearch(
   libraryId: number | undefined,
   enabled: boolean,
   query: string,
-): { data?: NameWithFileCount[]; isLoading: boolean } {
-  const { data, isLoading } = usePublishersList(
+): OptionSearch<NameWithFileCount> {
+  const { data, isLoading, isPlaceholderData, isError } = usePublishersList(
     {
       library_id: libraryId,
       limit: 50,
@@ -106,7 +119,7 @@ export function usePublisherSearch(
     name: p.name,
     file_count: p.file_count,
   }));
-  return { data: adapted, isLoading };
+  return { data: adapted, isLoading, isPlaceholderData, isError };
 }
 
 export interface PublisherIdOption {
@@ -120,8 +133,8 @@ export function useParentPublisherSearch(
   excludeIds: number[],
   enabled: boolean,
   query: string,
-): { data?: PublisherIdOption[]; isLoading: boolean } {
-  const { data, isLoading } = usePublishersList(
+): OptionSearch<PublisherIdOption> {
+  const { data, isLoading, isPlaceholderData, isError } = usePublishersList(
     {
       library_id: libraryId,
       limit: 50,
@@ -135,15 +148,15 @@ export function useParentPublisherSearch(
     name: p.name,
     file_count: p.file_count,
   }));
-  return { data: adapted, isLoading };
+  return { data: adapted, isLoading, isPlaceholderData, isError };
 }
 
 export function useGenreSearch(
   libraryId: number | undefined,
   enabled: boolean,
   query: string,
-): { data?: NameWithBookCount[]; isLoading: boolean } {
-  const { data, isLoading } = useGenresList(
+): OptionSearch<NameWithBookCount> {
+  const { data, isLoading, isPlaceholderData, isError } = useGenresList(
     {
       library_id: libraryId,
       limit: 50,
@@ -155,15 +168,15 @@ export function useGenreSearch(
     name: g.name,
     book_count: g.book_count,
   }));
-  return { data: adapted, isLoading };
+  return { data: adapted, isLoading, isPlaceholderData, isError };
 }
 
 export function useTagSearch(
   libraryId: number | undefined,
   enabled: boolean,
   query: string,
-): { data?: NameWithBookCount[]; isLoading: boolean } {
-  const { data, isLoading } = useTagsList(
+): OptionSearch<NameWithBookCount> {
+  const { data, isLoading, isPlaceholderData, isError } = useTagsList(
     {
       library_id: libraryId,
       limit: 50,
@@ -175,7 +188,7 @@ export function useTagSearch(
     name: t.name,
     book_count: t.book_count,
   }));
-  return { data: adapted, isLoading };
+  return { data: adapted, isLoading, isPlaceholderData, isError };
 }
 
 export function useGenreItemCounts(

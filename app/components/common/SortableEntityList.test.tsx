@@ -9,7 +9,12 @@ interface Person {
   name: string;
 }
 
-const HOOK = () => ({ data: [] as Person[], isLoading: false });
+const HOOK = () => ({
+  data: [] as Person[],
+  isLoading: false,
+  isPlaceholderData: false,
+  isError: false,
+});
 
 describe("SortableEntityList", () => {
   it("renders one row per item with the entity label", () => {
@@ -108,6 +113,8 @@ describe("SortableEntityList", () => {
     const hook = () => ({
       data: [{ id: 9, name: "Carol" }],
       isLoading: false,
+      isPlaceholderData: false,
+      isError: false,
     });
 
     render(

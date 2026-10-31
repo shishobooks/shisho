@@ -1,7 +1,14 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { useDebounce } from "@/hooks/useDebounce";
+import {
+  advancePastSearch,
+  createSearchQuery,
+  SEARCH_LATENCY_MS,
+} from "@/testing/searchQuery";
 import type { Genre, Tag } from "@/types";
 import type { TagScope } from "@/utils/tagNamespaces";
 
@@ -25,6 +32,69 @@ beforeAll(() => {
   });
 });
 
+const GENRES = [
+  { id: 1, name: "Action", book_count: 1 },
+  { id: 2, name: "Biography", book_count: 1 },
+  { id: 3, name: "Fantasy", book_count: 1 },
+] as unknown as Genre[];
+
+// Renders the sheet over a real genre search, debounced as Home does, waits
+// for the first results, and opens the genre picker.
+async function openGenrePicker(
+  user: ReturnType<typeof userEvent.setup>,
+  onToggleGenre = vi.fn(),
+) {
+  const { useSearch, wrapper } = createSearchQuery(GENRES, (g) => g.name);
+  const Harness = () => {
+    const [search, setSearch] = useState("");
+    const debounced = useDebounce(search, 300);
+    const results = useSearch(debounced);
+    return (
+      <FilterSheet
+        fileTypeOptions={[]}
+        genreSearchInput={search}
+        genres={results.data ?? []}
+        genresLoading={results.isLoading}
+        genresQuery={query}
+        genresSearchPending={search !== debounced || results.isPlaceholderData}
+        hasActiveFilters={false}
+        languageOptions={[{ value: "en", label: "English" }]}
+        languageParam=""
+        onClearAll={vi.fn()}
+        onGenreSearchChange={setSearch}
+        onLanguageChange={vi.fn()}
+        onRatingChange={vi.fn()}
+        onReviewedFilterChange={vi.fn()}
+        onTagScopeChange={vi.fn()}
+        onTagSearchChange={vi.fn()}
+        onToggleFileType={vi.fn()}
+        onToggleGenre={onToggleGenre}
+        onToggleReadingStatus={vi.fn()}
+        onToggleTag={vi.fn()}
+        reading={{ statuses: [] }}
+        reviewedFilter=""
+        selectedFileTypes={[]}
+        selectedGenreIds={[]}
+        selectedGenres={[]}
+        selectedTagIds={[]}
+        selectedTags={[]}
+        tagNamespaces={[]}
+        tagScope={{ kind: "all" }}
+        tagSearchInput=""
+        tags={[]}
+        tagsLoading={false}
+        tagsQuery={query}
+        tagsSearchPending={false}
+      />
+    );
+  };
+  render(<Harness />, { wrapper });
+  await act(() => vi.advanceTimersByTimeAsync(SEARCH_LATENCY_MS));
+  await user.click(screen.getByRole("button", { name: "Filter" }));
+  await user.click(screen.getByRole("combobox", { name: "Genres" }));
+  return onToggleGenre;
+}
+
 const query = {
   data: [],
   error: null,
@@ -34,6 +104,47 @@ const query = {
 };
 
 describe("FilterSheet", () => {
+  it("highlights the first genre once results for the typed text arrive, so Enter toggles it", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onToggleGenre = await openGenrePicker(user);
+
+    await user.keyboard("fan");
+    await advancePastSearch();
+    await user.keyboard("{Enter}");
+
+    expect(onToggleGenre).toHaveBeenCalledWith(3);
+  });
+
+  it("holds an Enter pressed before results arrive and toggles the first fresh genre", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onToggleGenre = await openGenrePicker(user);
+
+    await user.keyboard("fan{Enter}");
+    // Past the debounce, the previous results still show while the search
+    // runs.
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(onToggleGenre).not.toHaveBeenCalled();
+    await advancePastSearch();
+
+    expect(onToggleGenre).toHaveBeenCalledExactlyOnceWith(3);
+  });
+
+  it("drops a held Enter when the genre picker closes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onToggleGenre = await openGenrePicker(user);
+
+    await user.keyboard("fan{Enter}");
+    // The modal popover turns off pointer events outside it, which
+    // userEvent refuses to click through unless told not to check.
+    await user
+      .setup({ pointerEventsCheck: 0 })
+      .click(screen.getByRole("heading", { hidden: true, name: "Filters" }));
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    await advancePastSearch();
+
+    expect(onToggleGenre).not.toHaveBeenCalled();
+  });
+
   it("names each filter control by its section, not the prompt or value shown", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(
@@ -43,6 +154,7 @@ describe("FilterSheet", () => {
         genres={[]}
         genresLoading={false}
         genresQuery={query}
+        genresSearchPending={false}
         hasActiveFilters={false}
         languageOptions={[{ value: "en", label: "English" }]}
         languageParam=""
@@ -70,6 +182,7 @@ describe("FilterSheet", () => {
         tags={[]}
         tagsLoading={false}
         tagsQuery={query}
+        tagsSearchPending={false}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Filter" }));
@@ -103,6 +216,7 @@ describe("FilterSheet", () => {
         genres={genres}
         genresLoading={false}
         genresQuery={query}
+        genresSearchPending={false}
         hasActiveFilters
         languageOptions={[]}
         languageParam=""
@@ -130,6 +244,7 @@ describe("FilterSheet", () => {
         tags={[]}
         tagsLoading={false}
         tagsQuery={query}
+        tagsSearchPending={false}
       />,
     );
     await user.click(screen.getByRole("button", { name: /Filter/ }));
@@ -179,6 +294,7 @@ describe("FilterSheet", () => {
           genres={[]}
           genresLoading={false}
           genresQuery={query}
+          genresSearchPending={false}
           hasActiveFilters={false}
           languageOptions={[]}
           languageParam=""
@@ -206,6 +322,7 @@ describe("FilterSheet", () => {
           tags={tags}
           tagsLoading={false}
           tagsQuery={query}
+          tagsSearchPending={false}
         />,
       );
 

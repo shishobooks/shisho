@@ -547,6 +547,10 @@ const HomeContent = () => {
             genres={genres}
             genresLoading={genresQuery.isLoading}
             genresQuery={genresQuery}
+            genresSearchPending={
+              genreSearchInput !== debouncedGenreSearch ||
+              genresQuery.isPlaceholderData
+            }
             hasActiveFilters={hasActiveFilters}
             languageOptions={languageOptions}
             languageParam={languageParam}
@@ -574,6 +578,10 @@ const HomeContent = () => {
             tags={tags}
             tagsLoading={tagsQuery.isLoading}
             tagsQuery={tagsQuery}
+            tagsSearchPending={
+              tagSearchInput !== debouncedTagSearch ||
+              tagsQuery.isPlaceholderData
+            }
           />
           <SortSheet
             fieldLabels={SORT_FIELD_LABELS}

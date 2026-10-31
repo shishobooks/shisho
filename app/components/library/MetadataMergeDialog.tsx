@@ -29,6 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useHighlightFirstOption } from "@/hooks/useHighlightFirstOption";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
@@ -63,6 +64,9 @@ interface MetadataMergeDialogProps {
   isPending: boolean;
   entities: EntityOption[];
   isLoadingEntities: boolean;
+  /** `entities` don't answer the search text yet: it changed, or its
+   * results are still loading. */
+  isSearchPending: boolean;
   onSearch: (search: string) => void;
   /** When provided, shows a "Set as child" option alongside Merge */
   setChildConfig?: SetChildConfig;
@@ -94,10 +98,16 @@ export function MetadataMergeDialog({
   isPending,
   entities,
   isLoadingEntities,
+  isSearchPending,
   onSearch,
   setChildConfig,
 }: MetadataMergeDialogProps) {
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // The picked source itself, not its id: a later search can drop it from
+  // `entities`, and the picker and Merge must still agree on what merges.
+  const [selectedEntity, setSelectedEntity] = useState<EntityOption | null>(
+    null,
+  );
+  const selectedId = selectedEntity?.id ?? null;
   const [comboboxOpen, setComboboxOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [action, setAction] = useState<"merge" | "set-child">("merge");
@@ -107,13 +117,32 @@ export function MetadataMergeDialog({
     return entities.filter((e) => e.id !== targetId);
   }, [entities, targetId]);
 
-  const selectedEntity = availableEntities.find((e) => e.id === selectedId);
-
   // Determine if "Set as child" is disabled for the selected entity (would create cycle)
   const setChildDisabled = useMemo(() => {
     if (!setChildConfig || !selectedId) return false;
     return setChildConfig.disabledIds.includes(selectedId);
   }, [setChildConfig, selectedId]);
+
+  const handleSelect = (entity: EntityOption) => {
+    setSelectedEntity(entity);
+    setComboboxOpen(false);
+    if (
+      setChildConfig?.disabledIds.includes(entity.id) &&
+      action === "set-child"
+    ) {
+      setAction("merge");
+    }
+  };
+
+  const highlight = useHighlightFirstOption({
+    options: availableEntities.map((entity) => ({
+      value: String(entity.id),
+      select: () => handleSelect(entity),
+    })),
+    loading: isLoadingEntities,
+    pending: isSearchPending,
+    open: comboboxOpen,
+  });
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -121,7 +150,7 @@ export function MetadataMergeDialog({
   };
 
   const resetDialogState = () => {
-    setSelectedId(null);
+    setSelectedEntity(null);
     setSearch("");
     onSearch("");
     if (setChildConfig) setAction("merge");
@@ -193,6 +222,7 @@ export function MetadataMergeDialog({
               <Command
                 label={`Search ${ENTITY_PLURALS[entityType]}`}
                 shouldFilter={false}
+                {...highlight}
               >
                 <CommandInput
                   onValueChange={handleSearchChange}
@@ -215,16 +245,7 @@ export function MetadataMergeDialog({
                       {availableEntities.map((entity) => (
                         <CommandItem
                           key={entity.id}
-                          onSelect={() => {
-                            setSelectedId(entity.id);
-                            setComboboxOpen(false);
-                            if (
-                              setChildConfig?.disabledIds.includes(entity.id) &&
-                              action === "set-child"
-                            ) {
-                              setAction("merge");
-                            }
-                          }}
+                          onSelect={() => handleSelect(entity)}
                           value={String(entity.id)}
                         >
                           <Check

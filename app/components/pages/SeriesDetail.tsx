@@ -257,6 +257,10 @@ const SeriesDetail = () => {
             entityType="series"
             isLoadingEntities={seriesListQuery.isLoading}
             isPending={mergeSeriesMutation.isPending}
+            isSearchPending={
+              mergeSearch !== debouncedMergeSearch ||
+              seriesListQuery.isPlaceholderData
+            }
             onMerge={handleMerge}
             onOpenChange={setMergeOpen}
             onSearch={setMergeSearch}
