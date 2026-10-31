@@ -29,7 +29,7 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 - **Mark as Did Not Finish** ends the read you're on as abandoned, dated today.
 - **Mark as not started** takes back the read you're on, as if you had never started it: it's deleted from the history, every file of the book opens at the start again, and a book that left To Read when you started it goes back to its place there.
 
-"Today" is the date on your device when you choose the action.
+"Today" is the date in [your time zone](#your-time-zone) when you choose the action.
 
 ## Reading in Shisho
 
@@ -53,7 +53,7 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 
 ### Your Time Zone
 
-Automatic starts and finishes are dated by the day in your time zone, under **Preferences > Reading > Time zone**. Shisho fills it in from your browser while it's unset. Changing it later, when you travel for example, doesn't change any date already recorded.
+Starts and finishes are dated by the day in your time zone, under **Preferences > Reading > Time zone**, whether you choose them from the status menu or they happen as you read. Shisho fills it in from your browser while it's unset. Changing it later, when you travel for example, doesn't change any date already recorded.
 
 ## To Read
 

@@ -21,11 +21,13 @@ import {
   type UpdatePositionPayload,
   type UpdatePositionResponse,
   type UpdateReadThroughPayload,
+  type UserSettingsResponse,
 } from "@/types";
 import { todayDay, type ReadingTransition } from "@/utils/readingStatus";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
+import { QueryKey as SettingsQueryKey } from "./settings";
 
 export enum QueryKey {
   BookReading = "BookReading",
@@ -118,7 +120,8 @@ const invalidateOtherBookReadings = (
   });
 };
 
-// Transitions that date a Read-through send the browser's local day.
+// Transitions that date a Read-through send today in the user's time zone,
+// from the settings the app loads at start.
 const DATED_TRANSITIONS: ReadingTransition[] = ["start", "finish", "abandon"];
 
 interface ReadingTransitionVariables {
@@ -134,8 +137,11 @@ export const useReadingTransition = () => {
     ReadingTransitionVariables
   >({
     mutationFn: ({ bookId, transition }) => {
+      const timeZone = queryClient.getQueryData<UserSettingsResponse>([
+        SettingsQueryKey.UserSettings,
+      ])?.time_zone;
       const body = DATED_TRANSITIONS.includes(transition)
-        ? { today: todayDay() }
+        ? { today: todayDay(timeZone) }
         : null;
       return API.request(
         "POST",

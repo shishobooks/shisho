@@ -336,8 +336,9 @@ const PreferencesPage = () => {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Decides the day a book you read in Shisho starts or finishes.
-                Changing it doesn&apos;t change dates already recorded.
+                Decides the day reading starts and finishes, from the status
+                menu or as you read. Changing it doesn&apos;t change dates
+                already recorded.
               </p>
             </div>
           </div>

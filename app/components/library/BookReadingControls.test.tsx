@@ -218,6 +218,36 @@ describe("BookReadingControls", () => {
     ).toBeInTheDocument();
   });
 
+  it("marks a book read with the day in the user's time zone", async () => {
+    vi.setSystemTime(new Date("2026-10-31T20:00:00Z"));
+    const request = vi
+      .spyOn(API, "request")
+      .mockImplementation(((_method: string, endpoint: string) =>
+        Promise.resolve(
+          endpoint === "/settings/user"
+            ? { time_zone: "Pacific/Kiritimati" }
+            : reading(),
+        )) as never);
+    const client = new QueryClient();
+    client.setQueryData(["UserSettings"], { time_zone: "Pacific/Kiritimati" });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <BookReadingControls bookId={7} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await openStatusMenu("Track reading");
+    await user().click(screen.getByRole("menuitem", { name: "Mark as read" }));
+
+    expect(request).toHaveBeenCalledWith(
+      "POST",
+      "/reading/books/7/finish",
+      { today: "2026-11-01" },
+      null,
+    );
+  });
+
   it("marks a book read with the browser's local day", async () => {
     vi.setSystemTime(new Date(2026, 9, 28, 23, 30));
     const request = renderControls(reading());

@@ -23,6 +23,7 @@ import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { File, ReadingPosition, UserSettingsPayload } from "@/types";
 import { fileTitle } from "@/utils/format";
+import { pageTurnForKey } from "@/utils/readerKeys";
 
 import "@/libraries/foliate/view.js";
 
@@ -113,10 +114,17 @@ export default function ReflowableReader({
   });
   const positionFailed =
     Boolean(positionQuery.error) && !positionQuery.isFetching;
-  const positionSettled =
-    (positionQuery.isFetchedAfterMount && !positionQuery.isFetching) ||
-    positionFailed ||
-    !positionQuery.isEnabled;
+  // Once settled it stays settled, so a refetch from an invalidation can't
+  // cancel the book while it opens.
+  const [positionSettled, setPositionSettled] = useState(false);
+  if (
+    !positionSettled &&
+    ((positionQuery.isFetchedAfterMount && !positionQuery.isFetching) ||
+      positionFailed ||
+      !positionQuery.isEnabled)
+  ) {
+    setPositionSettled(true);
+  }
   useEffect(() => {
     if (positionFailed) {
       toastRequestError(
@@ -449,9 +457,9 @@ export default function ReflowableReader({
   useEffect(() => {
     if (!bookReady) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") goNext();
-      else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A")
-        goPrev();
+      const turn = pageTurnForKey(e);
+      if (turn === "next") goNext();
+      else if (turn === "prev") goPrev();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
