@@ -186,23 +186,60 @@ func TestCheckVisibility_ResponseShape(t *testing.T) {
 	assert.Equal(t, 0, resp.Total)
 }
 
-func TestTemplates_ResponseShape(t *testing.T) {
-	t.Parallel()
+func getTemplates(t *testing.T, h *handler, user *models.User) []ListTemplate {
+	t.Helper()
 	e := newTestEcho(t)
-	h := &handler{}
-
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	auth.SetUser(c, user)
 
 	require.NoError(t, h.templates(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []ListTemplate
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+func TestTemplates_ResponseShape(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	h := newTestHandler(db)
+	user := createTestUser(t, db, "owner")
+
+	resp := getTemplates(t, h, user)
 	require.Len(t, resp, 1)
 	assert.Equal(t, "favorites", resp[0].Name)
 	assert.Equal(t, models.ListSortAddedAtDesc, resp[0].DefaultSort)
+}
+
+// A template whose name the caller already owns would fail as a duplicate,
+// so it isn't offered. Another user's list, or one shared with the caller,
+// doesn't take the name.
+func TestTemplates_OmitsNamesTheCallerOwns(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	h := newTestHandler(db)
+	owner := createTestUser(t, db, "owner")
+	other := createTestUser(t, db, "other")
+	shared, err := h.listsService.CreateList(t.Context(), CreateListOptions{UserID: other.ID, Name: "Favorites"})
+	require.NoError(t, err)
+	_, err = h.listsService.CreateShare(t.Context(), CreateShareOptions{
+		ListID:         shared.ID,
+		UserID:         owner.ID,
+		Permission:     models.ListPermissionViewer,
+		SharedByUserID: other.ID,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, getTemplates(t, h, owner), 1, "a list shared with the caller doesn't take the name")
+
+	_, err = h.listsService.CreateList(t.Context(), CreateListOptions{UserID: owner.ID, Name: "favorites"})
+	require.NoError(t, err)
+
+	assert.Empty(t, getTemplates(t, h, owner))
+	assert.Empty(t, getTemplates(t, h, other))
 }
 
 // To Read replaced the "To Be Read" template.
