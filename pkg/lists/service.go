@@ -122,6 +122,17 @@ func (svc *Service) ListListsWithTotal(ctx context.Context, opts ListListsOption
 	return svc.listListsWithTotal(ctx, opts)
 }
 
+// OwnsListNamed reports whether userID owns a list called name, ignoring
+// case the way the unique name index does.
+func (svc *Service) OwnsListNamed(ctx context.Context, userID int, name string) (bool, error) {
+	exists, err := svc.db.NewSelect().
+		Model((*models.List)(nil)).
+		Where("l.user_id = ?", userID).
+		Where("l.name = ? COLLATE NOCASE", name).
+		Exists(ctx)
+	return exists, errors.WithStack(err)
+}
+
 // HasLists reports whether userID owns or has been shared a list, with a
 // book deliverable matches when it is non-nil.
 func (svc *Service) HasLists(ctx context.Context, userID int, deliverable *DeliverableBooks) (bool, error) {

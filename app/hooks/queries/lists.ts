@@ -158,6 +158,7 @@ export const useCreateList = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListTemplates] });
     },
   });
 };
@@ -178,6 +179,7 @@ export const useUpdateList = () => {
         queryKey: [QueryKey.RetrieveList, variables.listId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListTemplates] });
     },
   });
 };
@@ -192,6 +194,7 @@ export const useDeleteList = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.BookLists] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListTemplates] });
     },
   });
 };
@@ -364,9 +367,16 @@ export const useCreateListFromTemplate = () => {
     mutationFn: ({ templateName }) => {
       return API.request("POST", `/lists/templates/${templateName}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] });
-    },
+    // Returning the refetch keeps the mutation pending until the new list
+    // replaces the template, so the template can't be clicked twice. It runs
+    // on failure too: a duplicate name means the page is stale. A failed
+    // refetch doesn't fail the mutation, since invalidateQueries swallows
+    // refetch errors.
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: [QueryKey.ListLists] }),
+        queryClient.invalidateQueries({ queryKey: [QueryKey.ListTemplates] }),
+      ]),
   });
 };
 
