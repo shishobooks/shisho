@@ -6,12 +6,17 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
+
+// ErrListNameTaken is returned when a create or rename would give a user two
+// lists with the same name, ignoring case.
+var ErrListNameTaken = errors.New("the user already has a list with this name")
 
 type Service struct {
 	db *bun.DB
@@ -56,6 +61,9 @@ func (svc *Service) CreateList(ctx context.Context, opts CreateListOptions) (*mo
 		Model(list).
 		Returning("*").
 		Exec(ctx)
+	if database.IsUniqueViolation(err) {
+		return nil, ErrListNameTaken
+	}
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -264,6 +272,9 @@ func (svc *Service) UpdateList(ctx context.Context, list *models.List, opts Upda
 			Column(columns...).
 			WherePK().
 			Exec(ctx)
+		if database.IsUniqueViolation(err) {
+			return ErrListNameTaken
+		}
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return errcodes.NotFound("List")
