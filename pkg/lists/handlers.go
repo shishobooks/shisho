@@ -121,6 +121,15 @@ func (h *handler) retrieve(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
+// listWriteError renders a failed create or rename, turning a taken name
+// into a 422 the user can act on.
+func listWriteError(err error) error {
+	if errors.Is(err, ErrListNameTaken) {
+		return errcodes.ValidationError("You already have a list with this name.")
+	}
+	return errors.WithStack(err)
+}
+
 func (h *handler) create(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -147,7 +156,7 @@ func (h *handler) create(c echo.Context) error {
 		DefaultSort: defaultSort,
 	})
 	if err != nil {
-		return errors.WithStack(err)
+		return listWriteError(err)
 	}
 
 	return errors.WithStack(c.JSON(http.StatusCreated, list))
@@ -206,7 +215,7 @@ func (h *handler) update(c echo.Context) error {
 
 	err = h.listsService.UpdateList(ctx, list, opts)
 	if err != nil {
-		return errors.WithStack(err)
+		return listWriteError(err)
 	}
 
 	// Reload
@@ -716,7 +725,7 @@ func (h *handler) createFromTemplate(c echo.Context) error {
 		DefaultSort: defaultSort,
 	})
 	if err != nil {
-		return errors.WithStack(err)
+		return listWriteError(err)
 	}
 
 	return errors.WithStack(c.JSON(http.StatusCreated, list))

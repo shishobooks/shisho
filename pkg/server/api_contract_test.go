@@ -118,6 +118,11 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, fmt.Sprintf("/api/reading/books/%d/start", seeded.bookID), `{"today":"2026-03-01"}`, http.StatusOK)), &underway))
 	require.Len(t, underway.ReadThroughs, 1)
+	f.request(http.MethodPost, "/api/lists", `{"name":"Favorites"}`, http.StatusCreated)
+	var classics struct {
+		ID int `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, "/api/lists", `{"name":"Classics"}`, http.StatusCreated)), &classics))
 
 	tests := []struct {
 		name   string
@@ -144,6 +149,23 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			name:   "adding a book being read to To Read",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/to-read", seeded.bookID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book is already being read.",
+		},
+		{
+			name:   "list named like one the user already has",
+			method: http.MethodPost, path: "/api/lists",
+			body:   `{"name":"favorites"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "You already have a list with this name.",
+		},
+		{
+			name:   "list renamed to one the user already has",
+			method: http.MethodPatch, path: fmt.Sprintf("/api/lists/%d", classics.ID),
+			body:   `{"name":"Favorites"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "You already have a list with this name.",
+		},
+		{
+			name:   "list template the user already made",
+			method: http.MethodPost, path: "/api/lists/templates/favorites",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "You already have a list with this name.",
 		},
 		{
 			name:   "list template that no longer exists",
