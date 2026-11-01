@@ -306,8 +306,9 @@ func revertAutoFinish(ctx context.Context, tx bun.Tx, userID, fileID int, occurr
 }
 
 // reopenAutoFinished makes the finished Read-through rtID underway again
-// and clears its update's automatic finish, so it's undone only once. It
-// returns nil when rtID is no longer finished.
+// and clears its update's automatic finish, so it's undone only once. A Book
+// added to To Read since leaves it, as a Book underway can't be on To Read.
+// It returns nil when rtID is no longer finished.
 func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time) (*models.ReadThrough, error) {
 	rt := &models.ReadThrough{}
 	err := tx.NewSelect().Model(rt).Where("rt.id = ? AND rt.outcome = ?", rtID, models.ReadThroughOutcomeFinished).Scan(ctx)
@@ -328,7 +329,10 @@ func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time)
 		Set("auto_finished = FALSE").
 		Where("read_through_id = ? AND auto_finished", rtID).
 		Exec(ctx)
-	return rt, errors.WithStack(err)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return rt, leaveToRead(ctx, tx, rt.UserID, rt.BookID, now)
 }
 
 // UndoAutoFinish undoes the automatic finish of rt, for Undo on the finish

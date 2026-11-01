@@ -168,14 +168,12 @@ export const useReadingProgress = (
     };
   }, [active, save]);
 
-  // Where the reader opened, which isn't reading: it's saved only with a
-  // session or once the reader moves. A place restored from the server
-  // passes the time it was saved, so a session saved with it can't win over
-  // a newer place from another browser.
-  const opened = useCallback((position: ReaderPosition, savedAt?: string) => {
+  // Where the reader opened, which isn't reading: nothing saves it, and until
+  // the reader moves a session goes out with no position.
+  const opened = useCallback((position: ReaderPosition) => {
     const tracked = {
       ...position,
-      occurredAt: savedAt ?? new Date().toISOString(),
+      occurredAt: new Date().toISOString(),
     };
     currentRef.current = tracked;
     savedRef.current = tracked;

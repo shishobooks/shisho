@@ -754,3 +754,31 @@ func TestRecordSession_BelongsToTheReadThroughUnderway(t *testing.T) {
 	require.NoError(t, f.db.NewSelect().Model(&session).Scan(f.ctx))
 	assert.Equal(t, f.readThroughs()[0].ID, *session.ReadThroughID)
 }
+
+func TestUndoingAFinish_TakesTheBookOffToRead(t *testing.T) {
+	t.Parallel()
+	for name, undo := range map[string]func(f *positionsFixture, rtID int){
+		"from the toast": func(f *positionsFixture, rtID int) {
+			rt, err := f.svc.RetrieveReadThrough(f.ctx, f.user.ID, rtID)
+			require.NoError(f.t, err)
+			require.NoError(f.t, f.svc.UndoAutoFinish(f.ctx, rt))
+		},
+		"by going back": func(f *positionsFixture, _ int) {
+			require.True(f.t, f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false).Reverted)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newPositionsFixture(t)
+			f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+			result := f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+			// Planning a reread right after finishing.
+			f.addToRead()
+
+			undo(f, *result.FinishedReadThroughID)
+
+			assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+			assert.Equal(t, 0, f.toReadPlace(f.book), "a Book underway isn't on To Read")
+		})
+	}
+}

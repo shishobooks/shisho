@@ -279,10 +279,11 @@ export default function ReflowableReader({
           }
         ).lastLocation;
         if (restored && saved?.cfi) {
-          opened(
-            { cfi: saved.cfi, percentage: saved.percentage, atEnd: false },
-            saved.occurred_at,
-          );
+          opened({
+            cfi: saved.cfi,
+            percentage: saved.percentage,
+            atEnd: false,
+          });
         } else if (location?.cfi) {
           opened({
             cfi: location.cfi,
