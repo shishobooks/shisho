@@ -149,7 +149,6 @@ func TestPositionRoutes_ASessionWithoutAPositionRecordsOnlyTheSession(t *testing
 	api := newReadingAPI(t, f.db, f.user)
 
 	rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", f.file.ID), map[string]any{
-		"percentage": 0.125,
 		"session": map[string]any{
 			"started_at": "2026-10-15T11:59:00Z", "ended_at": "2026-10-15T12:00:00Z",
 			"start_percentage": 0.125, "end_percentage": 0.125,

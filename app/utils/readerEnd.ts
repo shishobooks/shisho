@@ -7,6 +7,11 @@ export interface EndRenderer {
   viewSize?: number;
 }
 
+// Whether a scrolled reader is still on its section's first screen, where
+// scrolling a little isn't reading yet.
+export const withinFirstScreen = (renderer: EndRenderer | undefined): boolean =>
+  Boolean(renderer?.scrolled) && (renderer?.start ?? 0) < (renderer?.size ?? 0);
+
 // How close to the bottom counts as there, as foliate's own scrolling
 // allows.
 const SCROLL_SLACK_PX = 2;

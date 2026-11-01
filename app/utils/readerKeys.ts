@@ -9,6 +9,8 @@ const CONTROL_KEYS =
 export const pageTurnForKey = (
   event: KeyboardEvent,
 ): "next" | "prev" | null => {
+  // Browser shortcuts such as Cmd+D and Alt+Left aren't page turns.
+  if (event.ctrlKey || event.metaKey || event.altKey) return null;
   const target = event.target as Element | null;
   if (target?.closest?.(CONTROL_KEYS)) return null;
   switch (event.key) {

@@ -811,6 +811,7 @@ describe("ReflowableReader resuming", () => {
       ]);
       expect(saves[0].cfi).toBeUndefined();
       expect(saves[0].at_end).toBeUndefined();
+      expect(saves[0].percentage).toBeUndefined();
     },
   );
 
@@ -830,6 +831,86 @@ describe("ReflowableReader resuming", () => {
         cfi: "epubcfi(/6/6!/4/2)",
         session: expect.anything(),
       }),
+    ]);
+  });
+
+  it("sends a place again after its save failed", async () => {
+    const view = await openBook();
+    const request = vi.mocked(API.request);
+    const respond = request.getMockImplementation()!;
+    request.mockImplementationOnce((method, endpoint) =>
+      method === "POST"
+        ? Promise.reject(new Error("offline"))
+        : (respond as never as typeof API.request)(method, endpoint),
+    );
+    mockAtEnd = true;
+    relocate(view, { cfi: "epubcfi(/6/40!/4/2)", fraction: 1, reason: "page" });
+    await act(async () => {});
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    const saves = positionSaves();
+    expect(saves).toHaveLength(2);
+    expect(saves[1]).toEqual(
+      expect.objectContaining({
+        cfi: "epubcfi(/6/40!/4/2)",
+        at_end: true,
+        occurred_at: saves[0].occurred_at,
+      }),
+    );
+  });
+
+  it("refreshes the book's status when reading resumes it", async () => {
+    const client = new QueryClient();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
+    const view = await openBook(client);
+    saveResult = { resumed: true };
+    relocate(view, {
+      cfi: "epubcfi(/6/4!/4/2)",
+      fraction: 0.1,
+      reason: "page",
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: ["BookReading", 3],
+    });
+  });
+
+  it("doesn't count scrolling within the first screen in scrolled flow", async () => {
+    const view = await openBook();
+    const renderer = (
+      view as unknown as {
+        renderer: { scrolled: boolean; start: number; size: number };
+      }
+    ).renderer;
+    renderer.scrolled = true;
+    renderer.size = 800;
+    renderer.start = 120;
+    relocate(view, {
+      cfi: "epubcfi(/6/2!/4/4)",
+      fraction: 0.01,
+      reason: "scroll",
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    expect(positionSaves()).toEqual([]);
+
+    renderer.start = 900;
+    relocate(view, {
+      cfi: "epubcfi(/6/2!/4/8)",
+      fraction: 0.05,
+      reason: "scroll",
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    expect(positionSaves()).toEqual([
+      expect.objectContaining({ cfi: "epubcfi(/6/2!/4/8)" }),
     ]);
   });
 

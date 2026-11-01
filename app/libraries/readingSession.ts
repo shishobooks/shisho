@@ -22,7 +22,12 @@ interface OpenSession {
 
 // Input on the page. The readers forward input inside their own frames
 // (foliate's book iframe) through recordActivity.
-const ACTIVITY_EVENTS = ["pointerdown", "keydown", "wheel", "touchstart"];
+export const ACTIVITY_EVENTS = [
+  "pointerdown",
+  "keydown",
+  "wheel",
+  "touchstart",
+];
 
 // Times Reading Sessions for one reader, shared by every web reader. Time
 // counts while the page is visible and there was input in the last five

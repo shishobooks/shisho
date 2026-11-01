@@ -559,6 +559,14 @@ func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int) (in
 		if err != nil {
 			return 0, errors.WithStack(err)
 		}
+		if n == 0 {
+			continue
+		}
+		// Joining To Read plans a read from the start, so a Book read before
+		// doesn't open at the old last page.
+		if err := resetPositions(ctx, tx, userID, bookID, 0); err != nil {
+			return 0, err
+		}
 		added += int(n)
 	}
 	return added, nil

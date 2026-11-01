@@ -30,6 +30,8 @@ describe("ReaderChapterSelect", () => {
   it("shows the current entry, disables headings, and indents nesting", async () => {
     const { trigger, user } = setup();
     expect(trigger).toHaveTextContent(/^Afterword$/);
+    // A long title truncates, so hovering shows all of it.
+    expect(trigger).toHaveAttribute("title", "Afterword");
 
     await user.click(trigger);
     const options = await screen.findAllByRole("option");

@@ -74,7 +74,8 @@ export const useReadingProgress = (
       // Nothing moved since the last save (or since opening, which isn't
       // reading): only a session has anything to report, and it goes alone
       // so where the reader opened can't start or finish a Read-through.
-      const moved = current !== savedRef.current;
+      const previous = savedRef.current;
+      const moved = current !== previous;
       if (!moved && !session) return;
       savedRef.current = current;
 
@@ -108,12 +109,13 @@ export const useReadingProgress = (
               occurred_at: current.occurredAt,
               session,
             }
-          : { percentage: current.percentage, session },
+          : { session },
         keepalive,
       )
         .then((result) => {
           if (
             result.started ||
+            result.resumed ||
             result.reverted ||
             result.finished_read_through_id
           ) {
@@ -133,6 +135,9 @@ export const useReadingProgress = (
           }
         })
         .catch((error: unknown) => {
+          // The next save sends the place again, with when the reader got
+          // there, so a dropped save can't lose a move or a finish.
+          if (savedRef.current === current) savedRef.current = previous;
           toastRequestError(error, "Failed to save your reading position", {
             id: "reading-position",
           });
@@ -145,8 +150,6 @@ export const useReadingProgress = (
     if (!active) return;
     const tracker = new ReadingSessionTracker({
       getPercentage: () => currentRef.current?.percentage ?? null,
-      // A session needs a position to go with, which the reader reports
-      // as soon as the book opens.
       onSessionEnd: (session, reason) => save(session, reason !== "idle"),
     });
     trackerRef.current = tracker;

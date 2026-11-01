@@ -369,6 +369,13 @@ func (h *handler) reorderToRead(c echo.Context) error {
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
+// maxSessionLength and sessionClockSlack bound the Reading Sessions a web
+// reader reports.
+const (
+	maxSessionLength  = 24 * time.Hour
+	sessionClockSlack = 5 * time.Minute
+)
+
 // requireFile resolves the :id File the caller may reach, returning its id.
 func (h *handler) requireFile(c echo.Context) (int, error) {
 	id, err := httputil.ParamID(c, "id", "File")
@@ -420,14 +427,19 @@ func (h *handler) updatePosition(c echo.Context) error {
 	if params.CFI == nil && params.Session == nil {
 		return errcodes.ValidationError("A position is required.")
 	}
+	if params.CFI != nil && params.Percentage == nil {
+		return errcodes.ValidationError("A position needs its percentage.")
+	}
 	update := PositionUpdate{
 		UserID:     user.ID,
 		FileID:     fileID,
 		Source:     models.ReadingSourceWebReader,
 		Locator:    models.ReadingLocator{CFI: params.CFI},
-		Percentage: *params.Percentage,
 		AtEnd:      params.AtEnd,
 		OccurredAt: params.OccurredAt,
+	}
+	if params.Percentage != nil {
+		update.Percentage = *params.Percentage
 	}
 	if s := params.Session; s != nil {
 		if s.EndedAt.Before(s.StartedAt) {

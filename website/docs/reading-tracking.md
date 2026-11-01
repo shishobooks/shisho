@@ -65,7 +65,7 @@ Starts and finishes are dated by the day in your time zone, under **Preferences 
 
 A queued book's page shows its place beside the status button, such as **#3 on To Read**, counting only books you can access. Choose it to open To Read. The **Lists** tab of the page's Related panel also shows To Read first, up to its first 100 books.
 
-Starting a book, or marking it read, takes it off To Read. To plan a reread, add a book you have finished: it shows **To Read** again, and its earlier reads stay in the history.
+Starting a book, or marking it read, takes it off To Read. To plan a reread, add a book you have finished: it shows **To Read** again and opens at the start, and its earlier reads stay in the history.
 
 To queue a whole [list](./lists.md), use [Copy to To Read](./lists.md#copying-to-to-read) on its page.
 

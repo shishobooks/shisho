@@ -32,6 +32,7 @@ const ReaderChapterSelect = ({
   value,
   onValueChange,
 }: ReaderChapterSelectProps) => {
+  const current = entries.find((entry) => entry.value === value);
   const usedPointerRef = useRef(false);
   const markPointer = () => {
     usedPointerRef.current = true;
@@ -47,6 +48,7 @@ const ReaderChapterSelect = ({
         className="w-auto max-w-[50vw] gap-2 [&>span]:truncate"
         onKeyDown={markKeyboard}
         onPointerDown={markPointer}
+        title={current?.label}
       >
         <SelectValue placeholder="Chapters" />
       </SelectTrigger>

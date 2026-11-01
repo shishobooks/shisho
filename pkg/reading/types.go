@@ -59,8 +59,9 @@ type SetPageFlowPayload struct {
 // finished. A reader that hasn't moved since opening sends only the
 // session, which changes no position or status.
 type UpdatePositionPayload struct {
-	CFI        *string  `json:"cfi,omitempty" validate:"omitempty,min=1,max=4096"`
-	Percentage *float64 `json:"percentage" validate:"required,min=0,max=1" tstype:",required"`
+	CFI *string `json:"cfi,omitempty" validate:"omitempty,min=1,max=4096"`
+	// Percentage is required with a position.
+	Percentage *float64 `json:"percentage,omitempty" validate:"omitempty,min=0,max=1"`
 	// AtEnd is the reader at the end of the File, which finishes the
 	// Read-through underway.
 	AtEnd bool `json:"at_end,omitempty"`
@@ -88,6 +89,8 @@ type UpdatePositionResponse struct {
 	Accepted bool `json:"accepted"`
 	// Started is true when the update started a Read-through.
 	Started bool `json:"started"`
+	// Resumed is true when the update resumed a paused Read-through.
+	Resumed bool `json:"resumed"`
 	// Reverted is true when the update undid an automatic finish.
 	Reverted bool `json:"reverted"`
 	// FinishedReadThroughID is the Read-through the update finished, which

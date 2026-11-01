@@ -158,6 +158,24 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A reading session can't end before it starts.",
 		},
 		{
+			name:   "reading session longer than a day",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
+			body:   `{"session":{"started_at":"2026-03-01T00:00:00Z","ended_at":"2026-03-03T00:00:00Z","start_percentage":0.4,"end_percentage":0.5}}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A reading session must be in the past and last at most a day.",
+		},
+		{
+			name:   "position update with no percentage",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
+			body:   `{"cfi":"epubcfi(/6/4!/4/2)"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A position needs its percentage.",
+		},
+		{
+			name:   "time zone that does not exist",
+			method: http.MethodPut, path: "/api/settings/user",
+			body:   `{"time_zone":"Mars/Olympus_Mons"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "position of a file that does not exist",
 			method: http.MethodGet, path: "/api/reading/files/999999/position",
 			status: http.StatusNotFound, code: "not_found", message: "File not found.",

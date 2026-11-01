@@ -15,13 +15,6 @@ import (
 // the end to check the back matter and went back hasn't finished.
 const RevertWindow = 15 * time.Minute
 
-// maxSessionLength and sessionClockSlack bound the Reading Sessions the web
-// readers report.
-const (
-	maxSessionLength  = 24 * time.Hour
-	sessionClockSlack = 5 * time.Minute
-)
-
 // ErrFileNotFound is returned for a position update on a File that doesn't
 // exist.
 var ErrFileNotFound = errors.New("file not found")
@@ -106,15 +99,17 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		}
 
 		if stored != nil && occurredAt.Before(stored.OccurredAt) {
-			return recordSession(ctx, tx, u, underway, now)
+			return recordSession(ctx, tx, u.UserID, u.FileID, u.Source, u.Session, underway, now)
 		}
 		result.Accepted = true
 
 		// Turning past the first screen is reading; reopening where the
-		// reader already was is not.
-		progress := u.Percentage > 0 && (stored == nil || !stored.Equal(u.Locator))
+		// reader already was is not. Going back all the way to the start is
+		// still going back, so it can undo a finish.
+		moved := stored == nil || !stored.Equal(u.Locator)
+		progress := u.Percentage > 0 && moved
 
-		if underway == nil && !u.AtEnd && progress {
+		if underway == nil && !u.AtEnd && moved {
 			reverted, err := revertAutoFinish(ctx, tx, u.UserID, u.FileID, occurredAt, now)
 			if err != nil {
 				return err
@@ -156,6 +151,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
+			result.Resumed = true
 		}
 
 		autoFinished := false
@@ -219,7 +215,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			return errors.WithStack(err)
 		}
 
-		return recordSession(ctx, tx, u, underway, now)
+		return recordSession(ctx, tx, u.UserID, u.FileID, u.Source, u.Session, underway, now)
 	})
 	if err != nil {
 		return nil, err
@@ -236,8 +232,7 @@ func readThroughID(rt *models.ReadThrough) *int {
 
 // RecordSession records a Reading Session a source finished without
 // moving, such as a reader opened and closed where it was. It changes no
-// Reading Position and no Read-through, and belongs to the Read-through
-// underway, if any. It returns the File's Book.
+// Reading Position and no Read-through. It returns the File's Book.
 func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, source string, session SessionInput) (int, error) {
 	var bookID int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
@@ -252,28 +247,48 @@ func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, sourc
 		if err != nil {
 			return err
 		}
-		return recordSession(ctx, tx, PositionUpdate{UserID: userID, FileID: fileID, Source: source, Session: &session}, underway, svc.now())
+		return recordSession(ctx, tx, userID, fileID, source, &session, underway, svc.now())
 	})
 	return bookID, err
 }
 
-// recordSession records u's session, if it has one, on rt.
-func recordSession(ctx context.Context, tx bun.Tx, u PositionUpdate, rt *models.ReadThrough, now time.Time) error {
-	if u.Session == nil {
+// recordSession records session, if there is one, on rt, the Read-through
+// underway. With nothing underway, it belongs to the Read-through that was
+// while it ran: one that finished during it, say, since a reader sends a
+// session when it ends, after the update that finished the Book.
+func recordSession(ctx context.Context, tx bun.Tx, userID, fileID int, source string, session *SessionInput, rt *models.ReadThrough, now time.Time) error {
+	if session == nil {
 		return nil
 	}
-	fileID := u.FileID
+	sessionReadThrough := readThroughID(rt)
+	if sessionReadThrough == nil {
+		var ranDuring int
+		err := tx.NewSelect().
+			Model((*models.ReadingPositionUpdate)(nil)).
+			Column("rpu.read_through_id").
+			Where("rpu.user_id = ? AND rpu.file_id = ? AND rpu.read_through_id IS NOT NULL", userID, fileID).
+			Where("rpu.occurred_at >= ?", session.StartedAt).
+			OrderExpr("rpu.id DESC").
+			Limit(1).
+			Scan(ctx, &ranDuring)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return errors.WithStack(err)
+		}
+		if err == nil {
+			sessionReadThrough = &ranDuring
+		}
+	}
 	_, err := tx.NewInsert().Model(&models.ReadingSession{
 		CreatedAt:       now,
-		UserID:          u.UserID,
+		UserID:          userID,
 		FileID:          &fileID,
-		ReadThroughID:   readThroughID(rt),
-		Source:          u.Source,
-		StartedAt:       u.Session.StartedAt,
-		EndedAt:         u.Session.EndedAt,
-		StartPercentage: u.Session.StartPercentage,
-		EndPercentage:   u.Session.EndPercentage,
-		Measured:        u.Session.Measured,
+		ReadThroughID:   sessionReadThrough,
+		Source:          source,
+		StartedAt:       session.StartedAt,
+		EndedAt:         session.EndedAt,
+		StartPercentage: session.StartPercentage,
+		EndPercentage:   session.EndPercentage,
+		Measured:        session.Measured,
 	}).Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -290,6 +305,8 @@ func revertAutoFinish(ctx context.Context, tx bun.Tx, userID, fileID int, occurr
 		Model(finish).
 		Where("rpu.user_id = ? AND rpu.file_id = ? AND rpu.auto_finished", userID, fileID).
 		Where("NOT EXISTS (SELECT 1 FROM reading_position_updates AS later WHERE later.user_id = rpu.user_id AND later.file_id = rpu.file_id AND later.id > rpu.id AND NOT later.at_end)").
+		// A newer Read-through, such as a Mark as read since, stands.
+		Where("NOT EXISTS (SELECT 1 FROM read_throughs AS this JOIN read_throughs AS newer ON newer.user_id = this.user_id AND newer.book_id = this.book_id AND newer.id > this.id WHERE this.id = rpu.read_through_id)").
 		OrderExpr("rpu.id DESC").
 		Limit(1).
 		Scan(ctx)

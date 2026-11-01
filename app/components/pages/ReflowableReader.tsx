@@ -22,10 +22,15 @@ import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
 import type { File, ReadingPosition, UserSettingsPayload } from "@/types";
 import { fileTitle } from "@/utils/format";
-import { readerAtEnd, type EndRenderer } from "@/utils/readerEnd";
+import {
+  readerAtEnd,
+  withinFirstScreen,
+  type EndRenderer,
+} from "@/utils/readerEnd";
 import { pageTurnForKey } from "@/utils/readerKeys";
 
 import "@/libraries/foliate/view.js";
@@ -143,6 +148,8 @@ export default function ReflowableReader({
   });
   // True while the book opens at its saved location, which isn't reading.
   const restoringRef = useRef(true);
+  // The section it opened in, whose first screen isn't past the start yet.
+  const openedSectionRef = useRef<number | undefined>(undefined);
 
   // Events inside the book's iframe never reach the window, so the listeners
   // that foliate's "load" event adds to each section read the latest values
@@ -275,9 +282,14 @@ export default function ReflowableReader({
         // Only a move reaches the end, so where it opened never does.
         const location = (
           view as HTMLElement & {
-            lastLocation?: { cfi?: string; fraction?: number } | null;
+            lastLocation?: {
+              cfi?: string;
+              fraction?: number;
+              section?: { current?: number };
+            } | null;
           }
         ).lastLocation;
+        openedSectionRef.current = location?.section?.current;
         if (restored && saved?.cfi) {
           opened({
             cfi: saved.cfi,
@@ -328,7 +340,7 @@ export default function ReflowableReader({
       const { doc } = (evt as CustomEvent<{ doc: Document }>).detail;
       // Input inside the book's frame never reaches the window, where the
       // reading-session tracker listens.
-      for (const name of ["pointerdown", "keydown", "wheel", "touchstart"]) {
+      for (const name of ACTIVITY_EVENTS) {
         doc.addEventListener(name, () =>
           bookEventsRef.current.recordActivity(),
         );
@@ -371,6 +383,14 @@ export default function ReflowableReader({
         renderer?: FoliateRenderer;
         book?: { sections?: Array<{ linear?: string }> };
       };
+      // A nudge of the wheel on the first screen isn't reading yet.
+      if (
+        detail.reason === "scroll" &&
+        detail.section?.current === openedSectionRef.current &&
+        withinFirstScreen(foliate.renderer)
+      ) {
+        return;
+      }
       moved({
         cfi: detail.cfi,
         percentage: detail.fraction ?? 0,
@@ -472,9 +492,9 @@ export default function ReflowableReader({
     return () => window.removeEventListener("keydown", handler);
   }, [bookReady, goNext, goPrev]);
 
-  // The menu value for the current location. Entries are keyed by place in the menu, since a book can list one href
-  // twice. foliate reports a heading as the current item with no href, so a
-  // heading is found by its label.
+  // The menu value for the current location. Entries are keyed by place in
+  // the menu, since a book can list one href twice. foliate reports a heading
+  // as the current item with no href, so a heading is found by its label.
   const currentTocIndex = currentTocHref
     ? toc.findIndex((e) => e.href === currentTocHref)
     : toc.findIndex((e) => !e.href && e.label === currentTocLabel);

@@ -322,8 +322,9 @@ export const saveFilePosition = (
   );
 
 // A position update can start, resume, finish, or reopen a Read-through,
-// which shows on the book page and on cards. Starting one resets the Book's
-// other Files' positions; the reader keeps its own File's cache current.
+// which shows on the book page and on cards, and can take the Book off To
+// Read, which moves every Book after it. Starting one resets the Book's other
+// Files' positions; the reader keeps its own File's cache current.
 export const invalidateAfterPositionUpdate = (
   queryClient: QueryClient,
   bookId: number,
@@ -335,6 +336,7 @@ export const invalidateAfterPositionUpdate = (
     queryKey: [QueryKey.FilePosition],
     predicate: (query) => query.queryKey[1] !== fileId,
   });
+  invalidateOtherBookReadings(queryClient, bookId);
 };
 
 // Undoes the finish a reader's position update made, for Undo on the finish

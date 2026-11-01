@@ -782,3 +782,141 @@ func TestUndoingAFinish_TakesTheBookOffToRead(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdatePosition_GoingBackToTheVeryStartUndoesAFinish(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+
+	f.clock.advance(time.Minute)
+	result := f.read(f.file, "epubcfi(/6/2!/4/2)", 0, false)
+
+	assert.True(t, result.Reverted)
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+}
+
+func TestUpdatePosition_ANewerReadThroughKeepsAnOlderFinish(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	require.NoError(t, f.svc.End(f.ctx, f.user.ID, f.book.ID, models.ReadThroughOutcomeFinished, "2026-10-15"))
+
+	f.clock.advance(time.Minute)
+	result := f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+
+	assert.False(t, result.Reverted)
+	assert.Equal(t, models.ReadingStatusRead, f.status())
+}
+
+func TestUpdatePosition_ReportsAResume(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/4!/4/2)", 0.1, false)
+	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
+
+	f.clock.advance(time.Hour)
+	assert.True(t, f.read(f.file, "epubcfi(/6/6!/4/2)", 0.15, false).Resumed)
+	f.clock.advance(time.Hour)
+	assert.False(t, f.read(f.file, "epubcfi(/6/8!/4/2)", 0.2, false).Resumed)
+}
+
+func TestRecordSession_AfterAFinishBelongsToTheReadThroughItFinished(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.clock.advance(5 * time.Minute)
+	result := f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	require.NotNil(t, result.FinishedReadThroughID)
+
+	// The reader closes with the session still open when the book finished.
+	f.clock.advance(time.Minute)
+	_, err := f.svc.RecordSession(f.ctx, f.user.ID, f.file.ID, models.ReadingSourceWebReader, SessionInput{
+		StartedAt: f.clock.now.Add(-4 * time.Minute), EndedAt: f.clock.now,
+		StartPercentage: 0.5, EndPercentage: 1, Measured: true,
+	})
+	require.NoError(t, err)
+
+	var session models.ReadingSession
+	require.NoError(t, f.db.NewSelect().Model(&session).Scan(f.ctx))
+	require.NotNil(t, session.ReadThroughID)
+	assert.Equal(t, *result.FinishedReadThroughID, *session.ReadThroughID)
+
+	rt, err := f.svc.RetrieveReadThrough(f.ctx, f.user.ID, *result.FinishedReadThroughID)
+	require.NoError(t, err)
+	require.NoError(t, f.svc.DeleteReadThrough(f.ctx, rt))
+	assert.Equal(t, 0, f.count("reading_sessions"))
+}
+
+func TestRecordSession_LongAfterAFinishBelongsToNoReadThrough(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+
+	// Looking something up the next day, with the place unchanged.
+	f.clock.advance(24 * time.Hour)
+	_, err := f.svc.RecordSession(f.ctx, f.user.ID, f.file.ID, models.ReadingSourceWebReader, SessionInput{
+		StartedAt: f.clock.now.Add(-time.Minute), EndedAt: f.clock.now,
+		StartPercentage: 1, EndPercentage: 1, Measured: true,
+	})
+	require.NoError(t, err)
+
+	var session models.ReadingSession
+	require.NoError(t, f.db.NewSelect().Model(&session).Scan(f.ctx))
+	assert.Nil(t, session.ReadThroughID)
+}
+
+func TestAddToRead_PlansARereadFromTheStart(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	require.NotNil(t, f.position(f.file))
+
+	f.clock.advance(time.Hour)
+	f.addToRead()
+
+	assert.Nil(t, f.position(f.file), "a planned reread opens at the start")
+}
+
+func TestAppendToRead_LeavesABookAlreadyQueuedOrUnderway(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+
+	_, err := f.svc.AppendToRead(f.ctx, f.user.ID, []int{f.book.ID})
+	require.NoError(t, err)
+
+	assert.NotNil(t, f.position(f.file), "a Book underway isn't added, so it keeps its place")
+}
+
+func TestMergeBooks_KeepsTheToReadPlaceAReadThroughLeft(t *testing.T) {
+	t.Parallel()
+	for name, targetUnderway := range map[string]bool{"collapsing into the target's": true, "moving to the target": false} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newPositionsFixture(t)
+			first, third := f.queueWithBookSecond()
+			require.NoError(t, f.svc.Start(f.ctx, f.user.ID, f.book.ID, "2026-10-15"))
+			target := createBook(t, f.db, "Target")
+			if targetUnderway {
+				require.NoError(t, f.svc.Start(f.ctx, f.user.ID, target.ID, "2026-10-16"))
+			}
+
+			require.NoError(t, f.db.RunInTx(f.ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+				return MergeBooks(ctx, tx, f.book.ID, target.ID)
+			}))
+
+			reading, err := f.svc.RetrieveBookReading(f.ctx, f.user.ID, target.ID)
+			require.NoError(t, err)
+			require.Len(t, reading.ReadThroughs, 1)
+			require.NoError(t, f.svc.DeleteReadThrough(f.ctx, reading.ReadThroughs[0]))
+
+			assert.Equal(t, 1, f.toReadPlace(first))
+			assert.Equal(t, 2, f.toReadPlace(target), "back in the place it left")
+			assert.Equal(t, 3, f.toReadPlace(third))
+		})
+	}
+}

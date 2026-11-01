@@ -49,4 +49,13 @@ describe("pageTurnForKey", () => {
     bar.setAttribute("role", "slider");
     expect(pageTurnForKey(keyOn("ArrowRight", bar))).toBe("next");
   });
+
+  it("leaves browser shortcuts alone", () => {
+    const shortcut = (init: KeyboardEventInit) =>
+      pageTurnForKey(new KeyboardEvent("keydown", { bubbles: true, ...init }));
+    expect(shortcut({ key: "d", metaKey: true })).toBeNull();
+    expect(shortcut({ key: "a", ctrlKey: true })).toBeNull();
+    expect(shortcut({ key: "ArrowLeft", altKey: true })).toBeNull();
+    expect(shortcut({ key: "D", shiftKey: true })).toBe("next");
+  });
 });
