@@ -1,8 +1,9 @@
 // Where the arrow keys and A and D belong to a control (the font size slider
-// in the reader's settings popover, the chapter menu), not to page turns. A
-// stray page turn would count as reading and could resume or finish a book.
+// in the reader's settings popover, the chapter menu and its open list), not
+// to page turns. A stray page turn would count as reading and could resume or
+// finish a book.
 const CONTROL_KEYS =
-  '[role="dialog"], input, select, textarea, [contenteditable="true"]';
+  '[role="dialog"], [role="combobox"], [role="listbox"], input, select, textarea, [contenteditable="true"]';
 
 // The page turn a keydown in the reader asks for, or null for none.
 export const pageTurnForKey = (

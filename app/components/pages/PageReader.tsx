@@ -12,6 +12,7 @@ import React, {
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -19,13 +20,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useFileChapters } from "@/hooks/queries/chapters";
@@ -437,7 +431,11 @@ export default function PageReader({
         <div className="flex items-center gap-2">
           {/* Chapter dropdown */}
           {flatChapters.length > 0 && (
-            <Select
+            <ReaderChapterSelect
+              entries={flatChapters.map((ch) => ({
+                value: String(ch.id),
+                label: ch.title,
+              }))}
               onValueChange={(value) => {
                 const ch = flatChapters.find((c) => c.id === Number(value));
                 if (ch?.start_page != null) {
@@ -445,21 +443,7 @@ export default function PageReader({
                 }
               }}
               value={currentChapter ? String(currentChapter.id) : ""}
-            >
-              <SelectTrigger
-                aria-label="Jump to chapter"
-                className="w-auto max-w-[50vw] gap-2"
-              >
-                <SelectValue placeholder="Chapters" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {flatChapters.map((ch) => (
-                  <SelectItem key={ch.id} value={String(ch.id)}>
-                    {ch.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            />
           )}
 
           {/* Settings */}

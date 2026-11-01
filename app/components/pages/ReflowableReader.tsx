@@ -2,6 +2,7 @@ import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -9,13 +10,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useFilePosition } from "@/hooks/queries/reading";
@@ -80,10 +74,6 @@ const flattenToc = (
   }
   return out;
 };
-
-// A nested entry's left padding in the chapter menu, a step per level past
-// the menu's own.
-const tocIndent = (depth: number) => ({ paddingLeft: `${0.5 + depth}rem` });
 
 export default function ReflowableReader({
   file,
@@ -555,27 +545,16 @@ export default function ReflowableReader({
       >
         <div className="flex items-center gap-2">
           {toc.length > 0 && (
-            <Select onValueChange={handleTocChange} value={currentTocValue}>
-              <SelectTrigger
-                aria-label="Jump to chapter"
-                className="w-auto max-w-[50vw] gap-2"
-              >
-                <SelectValue placeholder="Chapters" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {toc.map((entry, index) => (
-                  <SelectItem
-                    // Headings have nowhere to jump to.
-                    disabled={!entry.href}
-                    key={index}
-                    style={tocIndent(entry.depth)}
-                    value={String(index)}
-                  >
-                    {entry.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <ReaderChapterSelect
+              entries={toc.map((entry, index) => ({
+                value: String(index),
+                label: entry.label,
+                disabled: !entry.href,
+                depth: entry.depth,
+              }))}
+              onValueChange={handleTocChange}
+              value={currentTocValue}
+            />
           )}
           <Popover>
             <PopoverTrigger asChild>

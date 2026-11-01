@@ -28,10 +28,20 @@ describe("pageTurnForKey", () => {
     popover.append(slider);
     const select = document.createElement("select");
     const input = document.createElement("input");
+    // The chapter menu's closed trigger and its open list, which take typed
+    // letters to jump to an entry.
+    const trigger = document.createElement("button");
+    trigger.setAttribute("role", "combobox");
+    const list = document.createElement("div");
+    list.setAttribute("role", "listbox");
+    const option = document.createElement("div");
+    list.append(option);
 
     expect(pageTurnForKey(keyOn("ArrowLeft", slider))).toBeNull();
     expect(pageTurnForKey(keyOn("ArrowRight", select))).toBeNull();
     expect(pageTurnForKey(keyOn("d", input))).toBeNull();
+    expect(pageTurnForKey(keyOn("ArrowRight", trigger))).toBeNull();
+    expect(pageTurnForKey(keyOn("d", option))).toBeNull();
   });
 
   it("still turns pages from the reading progress bar", () => {
