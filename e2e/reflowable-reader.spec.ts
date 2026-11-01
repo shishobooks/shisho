@@ -39,7 +39,11 @@ async function openReader(page: Page, bookId: number) {
 // Waits for the frame showing text. foliate's modules load on first use,
 // which a cold dev server compiles on demand, so this allows more than the
 // default expect timeout.
-async function bookFrame(page: Page, text: string): Promise<Frame> {
+async function bookFrame(
+  page: Page,
+  text: string,
+  timeout = 20_000,
+): Promise<Frame> {
   let found: Frame | undefined;
   await expect
     .poll(
@@ -56,10 +60,22 @@ async function bookFrame(page: Page, text: string): Promise<Frame> {
         }
         return false;
       },
-      { timeout: 20_000 },
+      { timeout },
     )
     .toBe(true);
   return found!;
+}
+
+// Turns the page until text shows. foliate ignores a turn for a moment after
+// the last one lands, which the new chapter's text can appear before, so a
+// click can be dropped. Retrying can't skip a chapter: a click during a slow
+// load is dropped the same way.
+async function turnPageTo(page: Page, text: string) {
+  const next = page.getByRole("button", { name: "Next page" });
+  await expect(async () => {
+    await next.click();
+    await bookFrame(page, text, 2_000);
+  }).toPass({ timeout: 30_000 });
 }
 
 test.describe("Reflowable reader", () => {
@@ -167,11 +183,8 @@ test.describe("Reflowable reader", () => {
     await openReader(page, resumeBookId);
     await bookFrame(page, "Test chapter.");
 
-    const next = page.getByRole("button", { name: "Next page" });
-    await next.click();
-    await bookFrame(page, "Chapter Two text.");
-    await next.click();
-    await bookFrame(page, "Chapter Three text.");
+    await turnPageTo(page, "Chapter Two text.");
+    await turnPageTo(page, "Chapter Three text.");
 
     // Moves save a few seconds apart, so wait for the last one to be saved.
     const fileId = page.url().match(/\/files\/(\d+)\/read$/)![1];
@@ -206,15 +219,9 @@ test.describe("Reflowable reader", () => {
     await openReader(page, finishBookId);
     await bookFrame(page, "Test chapter.");
 
-    const next = page.getByRole("button", { name: "Next page" });
-    for (const text of [
-      "Chapter Two text.",
-      "Chapter Three text.",
-      "Chapter Four text.",
-    ]) {
-      await next.click();
-      await bookFrame(page, text);
-    }
+    await turnPageTo(page, "Chapter Two text.");
+    await turnPageTo(page, "Chapter Three text.");
+    await turnPageTo(page, "Chapter Four text.");
 
     await expect(page.getByText("Marked as read")).toBeVisible();
     await page.goto(`/libraries/${libraryId}/books/${finishBookId}`, {

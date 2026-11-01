@@ -189,6 +189,8 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			name:   "undoing a finish no position update made",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/read-throughs/%d/undo-finish", underway.ReadThroughs[0].ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This finish can't be undone.",
+		},
+		{
 			name:   "list named like one the user already has",
 			method: http.MethodPost, path: "/api/lists",
 			body:   `{"name":"favorites"}`,
