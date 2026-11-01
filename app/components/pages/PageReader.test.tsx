@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { toast } from "sonner";
@@ -387,5 +387,29 @@ describe("PageReader chapter menu", () => {
     await user.click(await screen.findByRole("option", { name: "Middle" }));
     expect(screen.getByText("Page 5 of 10")).toBeInTheDocument();
     expect(menu).toHaveTextContent(/^Middle$/);
+  });
+});
+
+describe("PageReader keyboard", () => {
+  it("turns pages with the arrow keys, but not while a control has them", async () => {
+    chapters.data = [{ id: 1, title: "Opening", start_page: 0 }];
+    settings.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader(10);
+
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(screen.getByText("Page 2 of 10")).toBeInTheDocument();
+
+    const menu = screen.getByRole("combobox", { name: "Jump to chapter" });
+    fireEvent.keyDown(menu, { key: "ArrowRight" });
+    fireEvent.keyDown(menu, { key: "d" });
+    expect(screen.getByText("Page 2 of 10")).toBeInTheDocument();
+
+    await openSettings(user);
+    fireEvent.keyDown(
+      await screen.findByRole("slider", { name: "Preload count" }),
+      { key: "ArrowRight" },
+    );
+    expect(screen.getByText("Page 2 of 10")).toBeInTheDocument();
   });
 });

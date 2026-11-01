@@ -40,6 +40,7 @@ import {
   type ThumbnailSize,
   type UserSettingsPayload,
 } from "@/types";
+import { pageTurnForKey } from "@/utils/readerKeys";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
 const flattenChapters = (chapters: Chapter[]): Chapter[] => {
@@ -365,11 +366,9 @@ export default function PageReader({
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
-        goToPage(currentPage + 1);
-      } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
-        goToPage(currentPage - 1);
-      }
+      const turn = pageTurnForKey(e);
+      if (turn === "next") goToPage(currentPage + 1);
+      else if (turn === "prev") goToPage(currentPage - 1);
     };
 
     window.addEventListener("keydown", handleKeyDown);
