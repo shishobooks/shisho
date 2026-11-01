@@ -1,5 +1,5 @@
 import { Check, Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { useTheme, type Theme } from "@/components/contexts/Theme/context";
@@ -13,6 +13,7 @@ import {
   PasswordSection,
 } from "@/components/preferences/PasswordSection";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { GallerySize } from "@/types";
 import { DELIVERY_RULES_SECTION_ID } from "@/utils/delivery";
+import { timeZoneOptions } from "@/utils/timeZone";
 
 interface ThemeOptionProps {
   theme: Theme;
@@ -141,6 +143,18 @@ const PreferencesPage = () => {
     }
   }, [hash, deliveryRulesLoaded, settingsLoaded]);
 
+  const timeZone = userSettingsQuery.data?.time_zone ?? undefined;
+  const timeZones = useMemo(() => timeZoneOptions(timeZone), [timeZone]);
+  const handleTimeZoneChange = (zone: string) => {
+    updateUserSettings.mutate(
+      { time_zone: zone },
+      {
+        onError: (error) =>
+          toastRequestError(error, "Failed to update time zone"),
+      },
+    );
+  };
+
   const handleGallerySizeChange = (next: GallerySize) => {
     updateUserSettings.mutate(
       { gallery_size: next },
@@ -194,10 +208,11 @@ const PreferencesPage = () => {
                 theme="system"
               />
               <div className="mt-6 flex flex-col gap-2">
-                <label className="text-sm font-medium">
+                <p className="text-sm font-medium" id="gallery-size-label">
                   Gallery cover size
-                </label>
+                </p>
                 <SizeSelector
+                  aria-labelledby="gallery-size-label"
                   onChange={handleGallerySizeChange}
                   value={gallerySize}
                 />
@@ -224,12 +239,7 @@ const PreferencesPage = () => {
             <div className="border border-border rounded-md p-4 md:p-6">
               <h2 className="text-lg font-semibold mb-4">Library</h2>
               <div className="flex flex-col gap-2">
-                <label
-                  className="text-sm font-medium"
-                  htmlFor="default-library-setting"
-                >
-                  Default library
-                </label>
+                <Label htmlFor="default-library-setting">Default library</Label>
                 <Select
                   disabled={!userSettingsQuery.data}
                   onValueChange={handleDefaultLibraryChange}
@@ -262,12 +272,7 @@ const PreferencesPage = () => {
             <h2 className="text-lg font-semibold mb-4">Reader</h2>
             <div className="flex items-center justify-between">
               <div>
-                <label
-                  className="text-sm font-medium"
-                  htmlFor="hide-chrome-setting"
-                >
-                  Auto-hide controls
-                </label>
+                <Label htmlFor="hide-chrome-setting">Auto-hide controls</Label>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Hide the header and footer in the reader. Move your mouse or
                   tap the screen to reveal them.
@@ -290,6 +295,38 @@ const PreferencesPage = () => {
                   )
                 }
               />
+            </div>
+          </div>
+
+          {/* Reading Settings */}
+          <div className="border border-border rounded-md p-4 md:p-6">
+            <h2 className="text-lg font-semibold mb-4">Reading</h2>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="time-zone-setting">Time zone</Label>
+              <Select
+                disabled={!userSettingsQuery.data}
+                onValueChange={handleTimeZoneChange}
+                value={timeZone}
+              >
+                <SelectTrigger
+                  className="w-full sm:w-72"
+                  id="time-zone-setting"
+                >
+                  <SelectValue placeholder="Not set" />
+                </SelectTrigger>
+                <SelectContent>
+                  {timeZones.map((zone) => (
+                    <SelectItem key={zone} value={zone}>
+                      {zone}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Decides the day reading starts and finishes, from the status
+                menu or as you read. Changing it doesn&apos;t change dates
+                already recorded.
+              </p>
             </div>
           </div>
 

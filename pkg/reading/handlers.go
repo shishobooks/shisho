@@ -108,6 +108,7 @@ var refusedTransitions = []refusal{
 	{ErrNothingUnderway, "This book isn't being read."},
 	{ErrAlreadyPaused, "This book is already paused."},
 	{ErrNotPaused, "This book isn't paused."},
+	{ErrNotAutoFinished, "This finish can't be undone."},
 }
 
 // rejectedDays are the date edits rendered as 422 validation_error.
@@ -366,4 +367,133 @@ func (h *handler) reorderToRead(c echo.Context) error {
 		return err
 	}
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
+}
+
+// maxSessionLength and sessionClockSlack bound the Reading Sessions a web
+// reader reports.
+const (
+	maxSessionLength  = 24 * time.Hour
+	sessionClockSlack = 5 * time.Minute
+)
+
+// requireFile resolves the :id File the caller may reach, returning its id.
+func (h *handler) requireFile(c echo.Context) (int, error) {
+	id, err := httputil.ParamID(c, "id", "File")
+	if err != nil {
+		return 0, err
+	}
+	libraryID, err := h.readingService.FileLibraryID(c.Request().Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, errcodes.NotFound("File")
+	}
+	if err != nil {
+		return 0, err
+	}
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+func (h *handler) retrievePosition(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	fileID, err := h.requireFile(c)
+	if err != nil {
+		return err
+	}
+	position, err := h.readingService.RetrievePosition(c.Request().Context(), user.ID, fileID)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, FilePositionResponse{Position: position}))
+}
+
+func (h *handler) updatePosition(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	fileID, err := h.requireFile(c)
+	if err != nil {
+		return err
+	}
+	params := UpdatePositionPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if params.CFI == nil && params.Session == nil {
+		return errcodes.ValidationError("A position is required.")
+	}
+	if params.CFI != nil && params.Percentage == nil {
+		return errcodes.ValidationError("A position needs its percentage.")
+	}
+	update := PositionUpdate{
+		UserID:     user.ID,
+		FileID:     fileID,
+		Source:     models.ReadingSourceWebReader,
+		Locator:    models.ReadingLocator{CFI: params.CFI},
+		AtEnd:      params.AtEnd,
+		OccurredAt: params.OccurredAt,
+	}
+	if params.Percentage != nil {
+		update.Percentage = *params.Percentage
+	}
+	if s := params.Session; s != nil {
+		if s.EndedAt.Before(s.StartedAt) {
+			return errcodes.ValidationError("A reading session can't end before it starts.")
+		}
+		// A session ends after a few idle minutes, so one longer than a day,
+		// or ending later than a clock running a little fast allows, is
+		// wrong and would skew reading time.
+		if s.EndedAt.Sub(s.StartedAt) > maxSessionLength || s.EndedAt.After(time.Now().Add(sessionClockSlack)) {
+			return errcodes.ValidationError("A reading session must be in the past and last at most a day.")
+		}
+		update.Session = &SessionInput{
+			StartedAt:       s.StartedAt,
+			EndedAt:         s.EndedAt,
+			StartPercentage: *s.StartPercentage,
+			EndPercentage:   *s.EndPercentage,
+			Measured:        true,
+		}
+	}
+	// A session with no position is a reader closed where it opened: it
+	// records only the time.
+	if params.CFI == nil {
+		bookID, err := h.readingService.RecordSession(c.Request().Context(), user.ID, fileID, update.Source, *update.Session)
+		if errors.Is(err, ErrFileNotFound) {
+			return errcodes.NotFound("File")
+		}
+		if err != nil {
+			return err
+		}
+		return errors.WithStack(c.JSON(http.StatusOK, UpdatePositionResponse{BookID: bookID}))
+	}
+	result, err := h.readingService.UpdatePosition(c.Request().Context(), update)
+	if errors.Is(err, ErrFileNotFound) {
+		return errcodes.NotFound("File")
+	}
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, result))
+}
+
+// undoFinish undoes a finish a position update made, for Undo on the
+// reader's finish toast.
+func (h *handler) undoFinish(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	rt, err := h.requireReadThrough(c, user)
+	if err != nil {
+		return err
+	}
+	if err := h.readingService.UndoAutoFinish(c.Request().Context(), rt); err != nil {
+		return transitionError(err)
+	}
+	return h.respond(c, user, rt.BookID)
 }

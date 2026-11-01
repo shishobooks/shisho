@@ -4,6 +4,7 @@ import { useState } from "react";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useBooks } from "@/hooks/queries/books";
@@ -79,14 +80,15 @@ export function BookSelectionList({
         value={selectedBookId}
       >
         {showCreateNew && (
-          <label
+          <Label
             className="flex items-center space-x-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
             htmlFor="new"
+            variant="unstyled"
           >
             <RadioGroupItem className="shrink-0" id="new" value="new" />
             <Plus className="h-4 w-4 shrink-0" />
             <span>Create new book</span>
-          </label>
+          </Label>
         )}
 
         {booksQuery.isLoading && <LoadingSpinner />}
@@ -129,7 +131,7 @@ function BookSelectionItem({ book, isSelected }: BookSelectionItemProps) {
   ].join(", ");
 
   return (
-    <label
+    <Label
       className={cn(
         "flex items-start gap-3 p-2 rounded-md border cursor-pointer transition-colors overflow-hidden",
         isSelected
@@ -137,6 +139,7 @@ function BookSelectionItem({ book, isSelected }: BookSelectionItemProps) {
           : "border-transparent hover:bg-muted/50",
       )}
       htmlFor={`book-${book.id}`}
+      variant="unstyled"
     >
       <RadioGroupItem
         className="mt-0.5 shrink-0"
@@ -161,6 +164,6 @@ function BookSelectionItem({ book, isSelected }: BookSelectionItemProps) {
           )}
         </div>
       </div>
-    </label>
+    </Label>
   );
 }

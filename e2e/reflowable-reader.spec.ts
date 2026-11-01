@@ -17,6 +17,8 @@ const PASSWORD = "password123";
 let libraryId: number;
 let mobiBookId: number;
 let epubBookId: number;
+let resumeBookId: number;
+let finishBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -37,7 +39,11 @@ async function openReader(page: Page, bookId: number) {
 // Waits for the frame showing text. foliate's modules load on first use,
 // which a cold dev server compiles on demand, so this allows more than the
 // default expect timeout.
-async function bookFrame(page: Page, text: string): Promise<Frame> {
+async function bookFrame(
+  page: Page,
+  text: string,
+  timeout = 20_000,
+): Promise<Frame> {
   let found: Frame | undefined;
   await expect
     .poll(
@@ -54,10 +60,22 @@ async function bookFrame(page: Page, text: string): Promise<Frame> {
         }
         return false;
       },
-      { timeout: 20_000 },
+      { timeout },
     )
     .toBe(true);
   return found!;
+}
+
+// Turns the page until text shows. foliate ignores a turn for a moment after
+// the last one lands, which the new chapter's text can appear before, so a
+// click can be dropped. Retrying can't skip a chapter: a click during a slow
+// load is dropped the same way.
+async function turnPageTo(page: Page, text: string) {
+  const next = page.getByRole("button", { name: "Next page" });
+  await expect(async () => {
+    await next.click();
+    await bookFrame(page, text, 2_000);
+  }).toPass({ timeout: 30_000 });
 }
 
 test.describe("Reflowable reader", () => {
@@ -86,6 +104,8 @@ test.describe("Reflowable reader", () => {
     };
     mobiBookId = await seed("Kindle Only Book", "mobi");
     epubBookId = await seed("Styled Book", "epub");
+    resumeBookId = await seed("Resume Book", "epub");
+    finishBookId = await seed("Finish Book", "epub");
     await apiContext.dispose();
   });
 
@@ -144,6 +164,72 @@ test.describe("Reflowable reader", () => {
       text: "rgb(232, 232, 232)",
       link: "rgb(138, 180, 248)",
     });
+  });
+
+  // Paginated with the controls showing, so the page buttons are on screen.
+  async function setPaginatedReader(page: Page) {
+    const put = await page.request.put("/api/settings/user", {
+      data: {
+        viewer_reflowable_flow: "paginated",
+        viewer_hide_chrome: false,
+      },
+    });
+    expect(put.ok()).toBe(true);
+  }
+
+  test("reopens where you left off", async ({ page }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, resumeBookId);
+    await bookFrame(page, "Test chapter.");
+
+    await turnPageTo(page, "Chapter Two text.");
+    await turnPageTo(page, "Chapter Three text.");
+
+    // Moves save a few seconds apart, so wait for the last one to be saved.
+    const fileId = page.url().match(/\/files\/(\d+)\/read$/)![1];
+    const percent = await page
+      .getByRole("slider", { name: "Reading progress" })
+      .getAttribute("aria-valuenow");
+    await expect
+      .poll(
+        async () => {
+          const resp = await page.request.get(
+            `/api/reading/files/${fileId}/position`,
+          );
+          const body = (await resp.json()) as {
+            position: { percentage: number } | null;
+          };
+          return body.position
+            ? String(Math.round(body.position.percentage * 100))
+            : null;
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(percent);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await bookFrame(page, "Chapter Three text.");
+    await expect(page.getByText("Preparing book…")).toBeHidden();
+  });
+
+  test("reading to the end marks the book read", async ({ page }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, finishBookId);
+    await bookFrame(page, "Test chapter.");
+
+    await turnPageTo(page, "Chapter Two text.");
+    await turnPageTo(page, "Chapter Three text.");
+    await turnPageTo(page, "Chapter Four text.");
+
+    await expect(page.getByText("Marked as read")).toBeVisible();
+    await page.goto(`/libraries/${libraryId}/books/${finishBookId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("button", { name: "Reading status: Read" }),
+    ).toBeVisible();
   });
 
   test("moving the pointer over a scrolled book shows hidden controls", async ({

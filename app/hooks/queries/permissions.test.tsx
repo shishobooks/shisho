@@ -103,6 +103,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useDeliveryRules: authenticated([]),
   // reading
   useBookReading: requires("books:read", [1]),
+  useFilePosition: requires("books:read", [1]),
   // entity-search
   usePeopleSearch: requires("people:read", [1, true, "a"]),
   useAuthorSearch: requires("people:read", [1, true, "a"]),

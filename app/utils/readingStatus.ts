@@ -5,9 +5,24 @@ import { formatMonthYear, localDay } from "@/utils/format";
 export type ReadingTransition =
   "start" | "pause" | "resume" | "finish" | "abandon";
 
-// The browser's local day as YYYY-MM-DD. A Read-through's days are days in
-// the user's time zone, so "today" comes from the browser, not the server.
-export const todayDay = (): string => localDay(new Date());
+// Today as YYYY-MM-DD in timeZone, the user's time zone from Preferences,
+// or the browser's local day while it's unset. A Read-through's days are
+// days in the user's time zone, which also dates automatic starts and
+// finishes, so the two agree.
+export const todayDay = (timeZone?: string | null): string => {
+  if (!timeZone) return localDay(new Date());
+  try {
+    // en-CA formats a date as YYYY-MM-DD.
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    return localDay(new Date());
+  }
+};
 
 const STATUS_LABELS: Record<ReadingStatus, string> = {
   currently_reading: "Currently Reading",

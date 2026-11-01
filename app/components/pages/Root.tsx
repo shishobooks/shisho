@@ -7,8 +7,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { ContentWidthProvider } from "@/contexts/ContentWidth";
 import { MobileNavProvider } from "@/contexts/MobileNav";
 import { NavigationHistoryProvider } from "@/contexts/NavigationHistory";
+import { useFillTimeZone } from "@/hooks/useFillTimeZone";
 
 const Root = () => {
+  useFillTimeZone();
   return (
     <NavigationHistoryProvider>
       <MobileNavProvider>

@@ -1,6 +1,8 @@
 package settings
 
 import (
+	"time"
+
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 )
@@ -25,6 +27,7 @@ type UserSettingsPayload struct {
 	HideChrome         *bool                `json:"viewer_hide_chrome,omitempty"`
 	PlaybackSpeed      *float64             `json:"viewer_playback_speed,omitempty" tstype:"PlaybackSpeed"`
 	DefaultLibraryID   httputil.NullableInt `json:"default_library_id,omitempty" tstype:"number | null"`
+	TimeZone           *string              `json:"time_zone,omitempty"`
 }
 
 // UserSettingsResponse is the response for user settings.
@@ -38,6 +41,9 @@ type UserSettingsResponse struct {
 	HideChrome         bool    `json:"viewer_hide_chrome"`
 	PlaybackSpeed      float64 `json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
 	DefaultLibraryID   *int    `json:"default_library_id" tstype:"number | null"`
+	// TimeZone is the IANA zone that dates automatic Read-through days,
+	// null until the browser fills it in.
+	TimeZone *string `json:"time_zone" tstype:"string | null"`
 }
 
 // ValidFitModes returns all valid fit mode values.
@@ -85,6 +91,16 @@ func IsValidPlaybackSpeed(speed float64) bool {
 		}
 	}
 	return false
+}
+
+// IsValidTimeZone returns true if zone names an IANA time zone. "Local"
+// names the server's zone, not the user's, so it isn't one.
+func IsValidTimeZone(zone string) bool {
+	if zone == "" || zone == "Local" {
+		return false
+	}
+	_, err := time.LoadLocation(zone)
+	return err == nil
 }
 
 // IsValidGallerySize returns true if the size is a supported gallery size.

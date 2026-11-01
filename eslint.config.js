@@ -91,6 +91,31 @@ const uiConventions = [
     message:
       'Use Button from @/components/ui/button, not a raw <button>: size="icon", "icon-sm", or "icon-xs" for icon-only buttons (with an aria-label), variant="link" for inline text, variant="unstyled" for caller-styled rows, cards, and tiles (with aria-pressed inside a role="group" for segmented controls and single-select rows), BadgeRemoveButton for a Badge\'s X, or the ui Checkbox or RadioGroup for form toggles.',
   },
+  // Raw form and layout elements the ui kit already wraps skip its shared
+  // styles, so they drift from the rest of the app.
+  ...[
+    [
+      "select",
+      "Select from @/components/ui/select (SelectItem takes disabled for unselectable entries)",
+    ],
+    ["textarea", "Textarea from @/components/ui/textarea"],
+    ["progress", "Progress from @/components/ui/progress"],
+    ["hr", "Separator from @/components/ui/separator"],
+    [
+      "label",
+      'Label from @/components/ui/label (variant="unstyled" for a row or card that wraps its checkbox or radio). Text naming a slider or a group of buttons isn\'t a label: make it plain text with an id the group points at with aria-labelledby',
+    ],
+  ].map(([element, component]) => ({
+    selector: `JSXOpeningElement[name.name="${element}"]`,
+    message: `Use ${component}, not a raw <${element}>.`,
+  })),
+  {
+    // A file picker has no ui component, so it stays a hidden raw input.
+    selector:
+      'JSXOpeningElement[name.name="input"]:not(:has(JSXAttribute[name.name="type"][value.value="file"]))',
+    message:
+      "Use Input from @/components/ui/input, not a raw <input>. An input that must sit unboxed inside another field (a chip input) disables this rule on its line with the reason.",
+  },
   // `n === 1 ? "" : "s"` and `n > 1 ? "books" : "book"`: a hand-built plural,
   // which also leaves the count without thousands separators. Only string
   // branches that look like a plural (one empty or ending in "s") count, so

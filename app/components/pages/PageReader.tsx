@@ -12,7 +12,9 @@ import React, {
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -38,6 +40,7 @@ import {
   type ThumbnailSize,
   type UserSettingsPayload,
 } from "@/types";
+import { pageTurnForKey } from "@/utils/readerKeys";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
 const flattenChapters = (chapters: Chapter[]): Chapter[] => {
@@ -363,11 +366,9 @@ export default function PageReader({
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
-        goToPage(currentPage + 1);
-      } else if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
-        goToPage(currentPage - 1);
-      }
+      const turn = pageTurnForKey(e);
+      if (turn === "next") goToPage(currentPage + 1);
+      else if (turn === "prev") goToPage(currentPage - 1);
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -429,25 +430,19 @@ export default function PageReader({
         <div className="flex items-center gap-2">
           {/* Chapter dropdown */}
           {flatChapters.length > 0 && (
-            <select
-              aria-label="Jump to chapter"
-              className="text-sm bg-transparent border rounded px-2 py-1"
-              onChange={(e) => {
-                const ch = flatChapters.find(
-                  (c) => c.id === Number(e.target.value),
-                );
+            <ReaderChapterSelect
+              entries={flatChapters.map((ch) => ({
+                value: String(ch.id),
+                label: ch.title,
+              }))}
+              onValueChange={(value) => {
+                const ch = flatChapters.find((c) => c.id === Number(value));
                 if (ch?.start_page != null) {
                   goToPage(ch.start_page);
                 }
               }}
-              value={currentChapter?.id ?? ""}
-            >
-              {flatChapters.map((ch) => (
-                <option key={ch.id} value={ch.id}>
-                  {ch.title}
-                </option>
-              ))}
-            </select>
+              value={currentChapter ? String(currentChapter.id) : ""}
+            />
           )}
 
           {/* Settings */}
@@ -460,9 +455,9 @@ export default function PageReader({
             <PopoverContent align="end" className="w-64">
               <div className="space-y-4">
                 <div>
-                  <label className="text-sm font-medium">
+                  <p className="text-sm font-medium">
                     Preload Count: {preloadDraft ?? preloadCount}
-                  </label>
+                  </p>
                   <Slider
                     className="mt-2"
                     disabled={!settingsReady}
@@ -480,9 +475,9 @@ export default function PageReader({
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-medium" id="page-flow-label">
+                  <p className="text-sm font-medium" id="page-flow-label">
                     Flow
-                  </label>
+                  </p>
                   <div
                     aria-labelledby="page-flow-label"
                     className="flex gap-2 mt-2"
@@ -509,12 +504,9 @@ export default function PageReader({
                 </div>
                 {!scrolled && (
                   <div>
-                    <label
-                      className="text-sm font-medium"
-                      id="page-fit-mode-label"
-                    >
+                    <p className="text-sm font-medium" id="page-fit-mode-label">
                       Fit Mode
-                    </label>
+                    </p>
                     <div
                       aria-labelledby="page-fit-mode-label"
                       className="flex gap-2 mt-2"
@@ -546,9 +538,7 @@ export default function PageReader({
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium" htmlFor="hide-chrome">
-                    Auto-hide controls
-                  </label>
+                  <Label htmlFor="hide-chrome">Auto-hide controls</Label>
                   <Switch
                     checked={hideChrome}
                     disabled={!settingsReady}

@@ -296,6 +296,7 @@ export function PublisherEditDialog({
                   />
                 </Badge>
               ))}
+              {/* eslint-disable-next-line no-restricted-syntax -- the chip field draws the box, so a bordered Input would nest one inside it */}
               <input
                 className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 id="publisher-aliases"

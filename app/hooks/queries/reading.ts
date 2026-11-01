@@ -13,19 +13,25 @@ import {
   PageFlowPaginated,
   PageFlowScrolled,
   type BookReadingResponse,
+  type FilePositionResponse,
   type PageFlow,
   type ReorderToReadPayload,
   type SetPageFlowPayload,
   type SetRatingPayload,
+  type UpdatePositionPayload,
+  type UpdatePositionResponse,
   type UpdateReadThroughPayload,
+  type UserSettingsResponse,
 } from "@/types";
 import { todayDay, type ReadingTransition } from "@/utils/readingStatus";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
+import { QueryKey as SettingsQueryKey } from "./settings";
 
 export enum QueryKey {
   BookReading = "BookReading",
+  FilePosition = "FilePosition",
 }
 
 // In Demo Mode, a Book's Page flow is a reader setting like the others: it
@@ -92,12 +98,15 @@ export const useBookReading = (
 // also shows on book cards, so book listings (library and List alike, which
 // share the ListBooks key) refetch. A Book joining or leaving To Read moves
 // every Book after it, so other Books' records refetch for their places.
+// Starting a Read-through or deleting the one underway resets the Book's
+// Reading Positions, so positions refetch too.
 const onReadingChanged = (
   queryClient: QueryClient,
   data: BookReadingResponse,
 ) => {
   queryClient.setQueryData([QueryKey.BookReading, data.book_id], data);
   queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.FilePosition] });
   invalidateOtherBookReadings(queryClient, data.book_id);
 };
 
@@ -111,7 +120,8 @@ const invalidateOtherBookReadings = (
   });
 };
 
-// Transitions that date a Read-through send the browser's local day.
+// Transitions that date a Read-through send today in the user's time zone,
+// from the settings the app loads at start.
 const DATED_TRANSITIONS: ReadingTransition[] = ["start", "finish", "abandon"];
 
 interface ReadingTransitionVariables {
@@ -127,8 +137,11 @@ export const useReadingTransition = () => {
     ReadingTransitionVariables
   >({
     mutationFn: ({ bookId, transition }) => {
+      const timeZone = queryClient.getQueryData<UserSettingsResponse>([
+        SettingsQueryKey.UserSettings,
+      ])?.time_zone;
       const body = DATED_TRANSITIONS.includes(transition)
-        ? { today: todayDay() }
+        ? { today: todayDay(timeZone) }
         : null;
       return API.request(
         "POST",
@@ -266,5 +279,79 @@ export const useReorderToRead = () => {
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       invalidateOtherBookReadings(queryClient);
     },
+  });
+};
+
+// The signed-in user's Reading Position in a File, which a reader opens at.
+export const useFilePosition = (
+  fileId?: number,
+  options: Omit<
+    UseQueryOptions<FilePositionResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<FilePositionResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? Boolean(fileId)),
+    queryKey: [QueryKey.FilePosition, fileId],
+    queryFn: ({ signal }) =>
+      API.request(
+        "GET",
+        `/reading/files/${fileId}/position`,
+        null,
+        null,
+        signal,
+      ),
+  });
+};
+
+// Saves where the reader is in a File. Readers send it as they read, so it
+// isn't a mutation hook; keepalive is for a save as the page closes.
+export const saveFilePosition = (
+  fileId: number,
+  payload: UpdatePositionPayload,
+  keepalive = false,
+) =>
+  API.request<UpdatePositionResponse>(
+    "POST",
+    `/reading/files/${fileId}/position`,
+    payload,
+    null,
+    undefined,
+    { keepalive },
+  );
+
+// A position update can start, resume, finish, or reopen a Read-through,
+// which shows on the book page and on cards, and can take the Book off To
+// Read, which moves every Book after it. Starting one resets the Book's other
+// Files' positions; the reader keeps its own File's cache current.
+export const invalidateAfterPositionUpdate = (
+  queryClient: QueryClient,
+  bookId: number,
+  fileId: number,
+) => {
+  queryClient.invalidateQueries({ queryKey: [QueryKey.BookReading, bookId] });
+  queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+  queryClient.invalidateQueries({
+    queryKey: [QueryKey.FilePosition],
+    predicate: (query) => query.queryKey[1] !== fileId,
+  });
+  invalidateOtherBookReadings(queryClient, bookId);
+};
+
+// Undoes the finish a reader's position update made, for Undo on the finish
+// toast.
+export const useUndoAutoFinish = () => {
+  const queryClient = useQueryClient();
+  return useMutation<BookReadingResponse, ShishoAPIError, number>({
+    mutationFn: (readThroughId) => {
+      return API.request(
+        "POST",
+        `/reading/read-throughs/${readThroughId}/undo-finish`,
+        null,
+        null,
+      );
+    },
+    onSuccess: (data) => onReadingChanged(queryClient, data),
   });
 };

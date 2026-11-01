@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import ReadOnlyNotice from "@/components/library/ReadOnlyNotice";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   useSharingSettings,
@@ -36,9 +37,7 @@ const SettingRow = ({
 }: SettingRowProps) => (
   <div className="flex items-start justify-between gap-4">
     <div>
-      <label className="text-sm font-medium" htmlFor={id}>
-        {label}
-      </label>
+      <Label htmlFor={id}>{label}</Label>
       <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
     </div>
     <Switch

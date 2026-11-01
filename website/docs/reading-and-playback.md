@@ -2,7 +2,7 @@
 
 Users with Books Read permission and access to a book's library can open supported files directly in Shisho. Select **Read** for EPUB, KePub, MOBI, AZW3, CBZ, and PDF files or **Listen** for M4B files.
 
-Reader preferences are saved to your Shisho account and follow you between browsers. Reading and listening positions are not saved as progress records.
+Reader preferences are saved to your Shisho account and follow you between browsers. The EPUB, KePub, MOBI, and AZW3 reader also remembers your place and keeps your reading history current, as described in [Reading in Shisho](./reading-tracking.md#reading-in-shisho). CBZ, PDF, and M4B positions are not saved.
 
 ## EPUB, MOBI, and AZW3 Reader
 
@@ -18,7 +18,7 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 
 Use the **Settings** button inside the reader to change font size, theme, flow, and control visibility. These settings apply to all of these formats, so a theme chosen while reading a MOBI also applies to EPUBs. In paginated mode, click or tap the left and right sides to change pages. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page (paginated) or the text (scrolled).
 
-Reading position is not persisted. Reopening a book starts from the beginning.
+Reopening a book returns to where you left off. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
 
 ## CBZ and PDF Readers
 

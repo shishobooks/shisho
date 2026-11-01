@@ -32,6 +32,14 @@ describe("todayDay", () => {
     expect(todayDay()).toBe("2026-10-28");
   });
 
+  it("is the day in the user's time zone when they have one", () => {
+    // 3pm on Oct 31 in Chicago is already Nov 1 in Kiritimati (UTC+14).
+    vi.setSystemTime(new Date("2026-10-31T20:00:00Z"));
+    expect(todayDay("Pacific/Kiritimati")).toBe("2026-11-01");
+    expect(todayDay("America/Chicago")).toBe("2026-10-31");
+    expect(todayDay(null)).toBe("2026-10-31");
+  });
+
   it("pads the month and day", () => {
     vi.setSystemTime(new Date(2026, 0, 5, 12));
     expect(todayDay()).toBe("2026-01-05");

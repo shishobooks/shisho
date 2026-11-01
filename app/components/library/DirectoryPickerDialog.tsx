@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useFilesystemBrowse } from "@/hooks/queries/filesystem";
 import type { Entry } from "@/types";
 import { formatCount } from "@/utils/format";
@@ -279,13 +280,16 @@ const DirectoryPickerDialog = ({
                 value={search}
               />
             </div>
-            <label className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer">
+            <Label
+              className="flex items-center gap-2 text-sm whitespace-nowrap cursor-pointer"
+              variant="unstyled"
+            >
               <Checkbox
                 checked={showHidden}
                 onCheckedChange={handleShowHiddenChange}
               />
               Show hidden files
-            </label>
+            </Label>
           </div>
 
           {/* Directory listing */}

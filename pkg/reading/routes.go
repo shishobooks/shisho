@@ -8,7 +8,7 @@ import (
 // RegisterRoutes registers the reading routes on a group the server has
 // already configured with authentication and Books Read. Reading data is
 // the caller's own, so every route acts only on the signed-in user's
-// records and needs no further permission; each that names a Book checks
+// records and needs no further permission; each that names a Book or File checks
 // its library access. Every write is a POST, PATCH, PUT, or DELETE, which
 // Demo Mode rejects.
 func RegisterRoutes(g *echo.Group, db *bun.DB) {
@@ -27,4 +27,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	g.PUT("/to-read/order", h.reorderToRead)
 	g.PATCH("/read-throughs/:id", h.updateReadThrough)
 	g.DELETE("/read-throughs/:id", h.deleteReadThrough)
+	g.POST("/read-throughs/:id/undo-finish", h.undoFinish)
+	g.GET("/files/:id/position", h.retrievePosition)
+	g.POST("/files/:id/position", h.updatePosition)
 }

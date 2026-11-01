@@ -39,7 +39,7 @@ Some of the other files (e.g. `fb2.js`, `progress.js`, `search.js`, `tts.js`) ar
 
 ## Local patches
 
-`mobi.js` carries changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the patched helper and fails when a patch or its call site is missing.
+`mobi.js`, `paginator.js`, and `view.js` carry changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the patched `mobi.js` helper and fails when a patch or its call site is missing.
 
 ## To update
 

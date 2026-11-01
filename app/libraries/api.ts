@@ -176,6 +176,9 @@ class ShishoAPI {
     payload?: U,
     query?: V,
     signal?: AbortSignal,
+    // keepalive lets the request finish after the page unloads, for a
+    // reader saving its position as the tab closes.
+    options: { keepalive?: boolean } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
       "content-type": "application/json; charset=utf-8",
@@ -200,6 +203,7 @@ class ShishoAPI {
       headers,
       body,
       signal,
+      keepalive: options.keepalive,
     }).then((response) => this.checkStatus<T>(response));
   }
 }

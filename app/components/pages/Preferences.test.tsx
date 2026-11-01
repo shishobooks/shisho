@@ -137,6 +137,24 @@ describe("Preferences – gallery size section", () => {
   });
 });
 
+describe("Preferences – gallery size name", () => {
+  it("names the size buttons by their heading", () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m" },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+
+    renderPage();
+
+    expect(
+      screen.getByRole("group", { name: "Gallery cover size" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Preferences – theme section", () => {
   it("marks the current theme as pressed within the Theme group", () => {
     vi.mocked(useUserSettings).mockReturnValue({
@@ -535,5 +553,42 @@ describe("Preferences – Password link target", () => {
       expect(scrolled.map((el) => el.id)).toEqual(["password"]),
     );
     setAuth({ user: null });
+  });
+});
+
+describe("Preferences – time zone", () => {
+  it("shows the saved time zone", () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m", time_zone: "America/Chicago" },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({
+      mutate: vi.fn(),
+    } as never);
+
+    renderPage();
+
+    expect(
+      screen.getByRole("combobox", { name: /time zone/i }),
+    ).toHaveTextContent("America/Chicago");
+  });
+
+  it("saves the chosen time zone", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const mutate = vi.fn();
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { gallery_size: "m", time_zone: "America/Chicago" },
+      isLoading: false,
+    } as never);
+    vi.mocked(useUpdateUserSettings).mockReturnValue({ mutate } as never);
+
+    renderPage();
+
+    await user.click(screen.getByRole("combobox", { name: /time zone/i }));
+    await user.click(await screen.findByRole("option", { name: "UTC" }));
+    expect(mutate).toHaveBeenLastCalledWith(
+      { time_zone: "UTC" },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
   });
 });
