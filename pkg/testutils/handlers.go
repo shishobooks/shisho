@@ -203,6 +203,8 @@ type createBookRequest struct {
 	// Its page count is pageCount, 3 by default.
 	PageWidth  int `json:"pageWidth"`
 	PageHeight int `json:"pageHeight"`
+	// Filler paragraphs in an EPUB written to disk, for tests that turn pages.
+	EPUBParagraphs int `json:"epubParagraphs"`
 }
 
 // createBookResponse is the response body for creating a test book.
@@ -247,7 +249,7 @@ func (h *handler) createBook(c echo.Context) error {
 		if req.PageHeight > 0 {
 			pages.height = req.PageHeight
 		}
-		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title, pages)
+		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title, pages, req.EPUBParagraphs)
 		if err != nil {
 			return err
 		}

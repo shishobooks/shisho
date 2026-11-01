@@ -16,7 +16,7 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 - Font sizes from 50% to 200%
 - Optional automatic hiding of the header and footer
 
-Use the **Settings** button inside the reader to change font size, theme, flow, and control visibility. These settings apply to all of these formats, so a theme chosen while reading a MOBI also applies to EPUBs. In paginated mode, click or tap the left and right sides to change pages. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page (paginated) or the text (scrolled).
+Use the **Settings** button inside the reader to change font size, theme, flow, and control visibility. These settings apply to all of these formats, so a theme chosen while reading a MOBI also applies to EPUBs. In paginated mode, click or tap the left and right sides to change pages, or swipe from anywhere on the page (fixed-layout books don't support swiping). The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page or its top or bottom edge (paginated) or the text (scrolled).
 
 Reopening a book returns to where you left off. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
 

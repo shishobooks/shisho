@@ -58,9 +58,15 @@ interface RelocateDetail {
 }
 
 type FoliateRenderer = EndRenderer & {
+  page?: number;
+  getContents?: () => Array<{ doc: Document }>;
   setStyles?: (styles: string | [string, string]) => void;
   setAttribute?: (name: string, value: string) => void;
 };
+
+// Things in a book that a tap operates, which shouldn't also turn the page.
+const BOOK_CONTROLS =
+  "button, input, select, textarea, label, summary, audio, video";
 
 // Flattens foliate's table of contents into menu entries, keeping headings
 // (entries without an href) so the menu shows the book's structure.
@@ -151,24 +157,6 @@ export default function ReflowableReader({
   // The section it opened in, whose first screen isn't past the start yet.
   const openedSectionRef = useRef<number | undefined>(undefined);
 
-  // Events inside the book's iframe never reach the window, so the listeners
-  // that foliate's "load" event adds to each section read the latest values
-  // through this ref.
-  const bookEventsRef = useRef({
-    flow,
-    revealChrome,
-    toggleChrome,
-    recordActivity,
-  });
-  useEffect(() => {
-    bookEventsRef.current = {
-      flow,
-      revealChrome,
-      toggleChrome,
-      recordActivity,
-    };
-  });
-
   // Local draft state lets the slider thumb and label update live while the
   // user drags, without firing a PUT on every tick. We only commit to the API
   // on `onValueCommit` (pointer up). The draft is reset to the server value
@@ -199,6 +187,17 @@ export default function ReflowableReader({
   }, [isLoading]);
 
   const viewRef = useRef<HTMLElement | null>(null);
+  // Retrying after a failed load mounts a new element, so listeners on it
+  // follow this rather than the ref.
+  const [viewElement, setViewElement] = useState<HTMLElement | null>(null);
+  const attachView = useCallback((el: HTMLElement | null) => {
+    viewRef.current = el;
+    setViewElement(el);
+  }, []);
+  // The section and page foliate last reported.
+  const placeRef = useRef("");
+  const headerRef = useRef<HTMLElement | null>(null);
+  const footerRef = useRef<HTMLElement | null>(null);
   const [toc, setToc] = useState<TocEntry[]>([]);
   const [fraction, setFraction] = useState(0);
   const [currentTocHref, setCurrentTocHref] = useState<string | null>(null);
@@ -329,15 +328,86 @@ export default function ReflowableReader({
     };
   }, [blob, fileType, positionSettled, opened]);
 
-  // Pointer movement over the book shows auto-hidden controls, as it does
-  // over the rest of the page. In scrolled flow there are no tap zones over
-  // the book, so a click on its text (not a link or a selection) toggles them.
+  const goPrev = useCallback(() => {
+    const view = viewRef.current as
+      (HTMLElement & { goLeft?: () => void }) | null;
+    view?.goLeft?.();
+  }, []);
+  const goNext = useCallback(() => {
+    const view = viewRef.current as
+      (HTMLElement & { goRight?: () => void }) | null;
+    view?.goRight?.();
+  }, []);
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      const turn = pageTurnForKey(e);
+      if (turn === "next") goNext();
+      else if (turn === "prev") goPrev();
+    },
+    [goNext, goPrev],
+  );
+
+  // Keyboard navigation (only when a book is loaded).
   useEffect(() => {
+    if (!bookReady) return;
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [bookReady, handleKeyDown]);
+
+  // A tap on a paginated book, at a position in the page's coordinates.
+  const handlePageTap = (x: number, y: number) => {
     const view = viewRef.current;
+    if (!view) return;
+    const { left, width, top, bottom } = view.getBoundingClientRect();
+    // Hidden controls leave the screen, so the page is what a tap on the gear
+    // lands on. Where the bars were brings them back instead of turning.
+    if (!chromeVisible) {
+      const headerHeight = headerRef.current?.offsetHeight ?? 0;
+      const footerHeight = footerRef.current?.offsetHeight ?? 0;
+      if (y < top + headerHeight || y > bottom - footerHeight) {
+        revealChrome();
+        return;
+      }
+    }
+    const position = (x - left) / width;
+    if (position < 1 / 3) goPrev();
+    else if (position > 2 / 3) goNext();
+    else toggleChrome();
+  };
+
+  // Events inside the book's iframe never reach the window, so the listeners
+  // that foliate's "load" event adds to each section read the latest values
+  // through this ref.
+  const bookEventsRef = useRef({
+    flow,
+    handleKeyDown,
+    handlePageTap,
+    revealChrome,
+    toggleChrome,
+    recordActivity,
+  });
+  useEffect(() => {
+    bookEventsRef.current = {
+      flow,
+      handleKeyDown,
+      handlePageTap,
+      revealChrome,
+      toggleChrome,
+      recordActivity,
+    };
+  });
+
+  // Input over the book goes to the section's document and to foliate's
+  // margins. Nothing may sit on top of foliate here: it reads swipes from the
+  // same two places, so an overlay would swallow them.
+  useEffect(() => {
+    const view = viewElement;
     if (!view) return;
 
     const handleLoad = (evt: Event) => {
       const { doc } = (evt as CustomEvent<{ doc: Document }>).detail;
+      let selectedAtPress = false;
       // Input inside the book's frame never reaches the window, where the
       // reading-session tracker listens.
       for (const name of ACTIVITY_EVENTS) {
@@ -348,21 +418,76 @@ export default function ReflowableReader({
       doc.addEventListener("pointermove", (e) => {
         if (isMouseMove(e)) bookEventsRef.current.revealChrome();
       });
+      doc.addEventListener("keydown", (e) => {
+        bookEventsRef.current.handleKeyDown(e);
+      });
+      // The press clears a selection before the click arrives, so a tap that
+      // dismisses one only shows at the press.
+      doc.addEventListener("pointerdown", () => {
+        selectedAtPress = doc.getSelection()?.isCollapsed === false;
+      });
+      // foliate scrolls a paginated book to whatever takes focus, on the next
+      // frame. A tap's press and click arrive together, so a focused link would
+      // scroll back over its own jump. Tabbing to a link still focuses it.
+      doc.addEventListener("mousedown", (e) => {
+        const target = e.target as Element | null;
+        if (
+          bookEventsRef.current.flow !== "scrolled" &&
+          target?.closest?.("a[href]")
+        ) {
+          e.preventDefault();
+        }
+      });
       doc.addEventListener("click", (e) => {
         const events = bookEventsRef.current;
-        if (events.flow !== "scrolled") return;
         // The target comes from the iframe's realm, so `instanceof Element`
         // is false for it; check for closest() instead.
         const target = e.target as Element | null;
         if (target?.closest?.("a[href]")) return;
         if (doc.getSelection()?.isCollapsed === false) return;
-        events.toggleChrome();
+        if (events.flow === "scrolled") {
+          events.toggleChrome();
+          return;
+        }
+        if (selectedAtPress || target?.closest?.(BOOK_CONTROLS)) return;
+        // The click's position is within the frame, which is as wide as the
+        // whole section and scrolled sideways (and scaled, in a fixed-layout
+        // book), so it says nothing about where on screen the tap was.
+        const frame = doc.defaultView?.frameElement as HTMLElement | null;
+        if (!frame) return;
+        const rect = frame.getBoundingClientRect();
+        const scale = rect.width / frame.offsetWidth;
+        events.handlePageTap(
+          rect.left + e.clientX * scale,
+          rect.top + e.clientY * scale,
+        );
       });
+    };
+    const handleMarginClick = (e: MouseEvent) => {
+      const events = bookEventsRef.current;
+      if (events.flow === "scrolled") return;
+      // A press out here leaves the frame's selection in place, so the tap
+      // clears it, as a tap on the text does, instead of turning the page.
+      const selections = (
+        view as HTMLElement & { renderer?: FoliateRenderer }
+      ).renderer
+        ?.getContents?.()
+        .map(({ doc }) => doc.getSelection())
+        .filter((selection) => selection?.isCollapsed === false);
+      if (selections?.length) {
+        selections.forEach((selection) => selection?.removeAllRanges());
+        return;
+      }
+      events.handlePageTap(e.clientX, e.clientY);
     };
 
     view.addEventListener("load", handleLoad);
-    return () => view.removeEventListener("load", handleLoad);
-  }, []);
+    view.addEventListener("click", handleMarginClick);
+    return () => {
+      view.removeEventListener("load", handleLoad);
+      view.removeEventListener("click", handleMarginClick);
+    };
+  }, [viewElement]);
 
   // Wire the relocate event for progress tracking.
   useEffect(() => {
@@ -375,6 +500,15 @@ export default function ReflowableReader({
       if (typeof detail.fraction === "number") setFraction(detail.fraction);
       setCurrentTocHref(detail.tocItem?.href ?? null);
       setCurrentTocLabel(detail.tocItem?.label ?? null);
+      // A drag that doesn't reach the next page snaps back to where it was, and
+      // the location foliate then reports can differ from a saved one taken at
+      // another screen size.
+      const renderer = (view as HTMLElement & { renderer?: FoliateRenderer })
+        .renderer;
+      const place = `${detail.section?.current}:${renderer?.page}`;
+      const samePlace = place === placeRef.current;
+      placeRef.current = place;
+      if (detail.reason === "snap" && samePlace) return;
       // Opening at the saved location and re-layouts aren't moves.
       if (restoringRef.current || detail.reason === "anchor" || !detail.cfi) {
         return;
@@ -469,29 +603,6 @@ export default function ReflowableReader({
     renderer.setAttribute?.("flow", flow);
   }, [bookReady, fontSize, theme, flow]);
 
-  const goPrev = useCallback(() => {
-    const view = viewRef.current as
-      (HTMLElement & { goLeft?: () => void }) | null;
-    view?.goLeft?.();
-  }, []);
-  const goNext = useCallback(() => {
-    const view = viewRef.current as
-      (HTMLElement & { goRight?: () => void }) | null;
-    view?.goRight?.();
-  }, []);
-
-  // Keyboard navigation (only when a book is loaded).
-  useEffect(() => {
-    if (!bookReady) return;
-    const handler = (e: KeyboardEvent) => {
-      const turn = pageTurnForKey(e);
-      if (turn === "next") goNext();
-      else if (turn === "prev") goPrev();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [bookReady, goNext, goPrev]);
-
   // The menu value for the current location. Entries are keyed by place in
   // the menu, since a book can list one href twice. foliate reports a heading
   // as the current item with no href, so a heading is found by its label.
@@ -563,6 +674,7 @@ export default function ReflowableReader({
             "fixed top-[var(--demo-banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           hideChrome && !chromeVisible && "-translate-y-full",
         )}
+        ref={headerRef}
       >
         <div className="flex items-center gap-2">
           {toc.length > 0 && (
@@ -690,44 +802,20 @@ export default function ReflowableReader({
           </div>
         )}
 
-        {/* Tap zones for page turns. They duplicate the labeled footer
-            buttons for pointer users only, so assistive tech, the tab
-            order, and mouse focus skip them. */}
-        {flow !== "scrolled" && (
-          <>
-            <Button
-              aria-hidden
-              className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
-              onClick={goPrev}
-              onMouseDown={(e) => e.preventDefault()}
-              tabIndex={-1}
-              variant="ghost"
-            />
-            <Button
-              aria-hidden
-              className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
-              onClick={goNext}
-              onMouseDown={(e) => e.preventDefault()}
-              tabIndex={-1}
-              variant="ghost"
-            />
-          </>
-        )}
-
-        {/* Center tap zone: toggle chrome on mobile (paginated only) */}
+        {/* Tapping the page toggles the controls; keyboard users get a button
+            that shows on focus and doesn't otherwise cover the book. */}
         {hideChrome && flow !== "scrolled" && (
           <Button
-            aria-label="Toggle controls"
-            className="absolute left-1/3 top-0 w-1/3 h-full z-10 opacity-0"
+            className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:bottom-24 focus-visible:left-1/2 focus-visible:z-30 focus-visible:-translate-x-1/2"
             onClick={toggleChrome}
-            variant="ghost"
-          />
+            variant="secondary"
+          >
+            Toggle controls
+          </Button>
         )}
 
         <foliate-view
-          ref={(el) => {
-            viewRef.current = el;
-          }}
+          ref={attachView}
           style={{
             display: "block",
             position: "absolute",
@@ -743,6 +831,7 @@ export default function ReflowableReader({
             "fixed bottom-0 inset-x-0 z-20 transition-transform duration-300",
           hideChrome && !chromeVisible && "translate-y-full",
         )}
+        ref={footerRef}
       >
         {/* The window's arrow-key handler already turns pages, so the bar
             adds only Home and End for keyboard seeking. */}

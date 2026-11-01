@@ -23,11 +23,11 @@ type pageSpec struct {
 // writeFileOnDisk writes a small valid file of fileType for withFileOnDisk
 // and returns its path without the extension, as books store it. Only the
 // types the E2E tests open have a writer.
-func writeFileOnDisk(root, fileType, title string, pages pageSpec) (string, error) {
+func writeFileOnDisk(root, fileType, title string, pages pageSpec, epubParagraphs int) (string, error) {
 	var write func(path, title string) error
 	switch fileType {
 	case models.FileTypeEPUB:
-		write = writeMinimalEPUB
+		write = func(path, title string) error { return writeMinimalEPUB(path, title, epubParagraphs) }
 	case models.FileTypeMOBI:
 		write = writeMinimalMOBI
 	case models.FileTypeCBZ:

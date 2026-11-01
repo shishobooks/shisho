@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -14,8 +15,9 @@ import (
 // chapters, so the reader e2e tests can turn pages and reach the end. The
 // first is styled with a white body and black text the way Project Gutenberg
 // EPUBs are, so the reader e2e test can check that themes override book
-// colors.
-func writeMinimalEPUB(path, title string) (err error) {
+// colors. extraParagraphs adds filler text to the first chapter, so a test
+// can turn pages within a chapter as well as across chapters.
+func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 	f, err := os.Create(path)
 	if err != nil {
 		return errors.WithStack(err)
@@ -37,6 +39,7 @@ func writeMinimalEPUB(path, title string) (err error) {
 	}
 
 	escaped := html.EscapeString(title)
+	filler := strings.Repeat("<p>"+strings.Repeat("Filler text to fill a page. ", 10)+"</p>", extraParagraphs)
 	entries := []struct{ name, body string }{
 		{"META-INF/container.xml", `<?xml version="1.0" encoding="UTF-8"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -69,7 +72,7 @@ func writeMinimalEPUB(path, title string) (err error) {
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><title>` + escaped + `</title>
 <style>body { color: black; background-color: white; } a { color: blue; }</style></head>
-<body><p>Test chapter. <a href="#end">A link.</a></p><p id="end">The end.</p></body>
+<body><p>Test chapter. <a href="#end">A link.</a></p>` + filler + `<p id="end">The end.</p></body>
 </html>`},
 	}
 	for i, name := range []string{"Two", "Three", "Four"} {
