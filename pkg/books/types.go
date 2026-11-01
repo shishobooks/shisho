@@ -156,16 +156,32 @@ type DeleteBooksResponse struct {
 	FilesDeleted int `json:"files_deleted"`
 }
 
+// RemovedEntities lists the Series, People, Genres, Tags, and Publishers a
+// Book was linked to that no longer exist after the Book or one of its Files
+// was deleted, whether this request's orphan cleanup removed them or another
+// one did. The book page reads it to avoid going Back to one of their pages.
+type RemovedEntities struct {
+	SeriesIDs    []int `json:"series_ids"`
+	PersonIDs    []int `json:"person_ids"`
+	GenreIDs     []int `json:"genre_ids"`
+	TagIDs       []int `json:"tag_ids"`
+	PublisherIDs []int `json:"publisher_ids"`
+}
+
 // DeleteBookResponse is the response for deleting a single book. It reports the
-// number of files that cascaded with the book.
+// number of files that cascaded with the book and which of its linked entities
+// are gone.
 type DeleteBookResponse struct {
-	FilesDeleted int `json:"files_deleted"`
+	FilesDeleted int             `json:"files_deleted"`
+	Removed      RemovedEntities `json:"removed"`
 }
 
 // DeleteFileResponse is the response for deleting a single file. It reports
-// whether deleting the file's last file also deleted the parent book.
+// whether deleting the file's last file also deleted the parent book, and which
+// of the book's linked entities are gone.
 type DeleteFileResponse struct {
-	BookDeleted bool `json:"book_deleted"`
+	BookDeleted bool            `json:"book_deleted"`
+	Removed     RemovedEntities `json:"removed"`
 }
 
 // ResyncFileResponse is returned by the file resync endpoint when the resync
@@ -174,8 +190,9 @@ type DeleteFileResponse struct {
 // consequences (the file was deleted, and possibly its parent book). When the
 // file still exists, the endpoint returns the refreshed File model instead.
 type ResyncFileResponse struct {
-	FileDeleted bool `json:"file_deleted"`
-	BookDeleted bool `json:"book_deleted"`
+	FileDeleted bool            `json:"file_deleted"`
+	BookDeleted bool            `json:"book_deleted"`
+	Removed     RemovedEntities `json:"removed"`
 }
 
 // ResyncBookResponse is returned by the book resync endpoint when the resync
@@ -183,7 +200,8 @@ type ResyncFileResponse struct {
 // consequence (the book was deleted). When the book still exists, the endpoint
 // returns the refreshed Book model instead.
 type ResyncBookResponse struct {
-	BookDeleted bool `json:"book_deleted"`
+	BookDeleted bool            `json:"book_deleted"`
+	Removed     RemovedEntities `json:"removed"`
 }
 
 // UpdateFileCoverPagePayload is the request body for PUT

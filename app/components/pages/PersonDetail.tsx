@@ -179,6 +179,8 @@ const PersonDetail = () => {
             ),
           })) ?? [],
         isLoadingEntities: peopleListQuery.isLoading,
+        isSearchPending:
+          mergeSearchRaw !== mergeSearch || peopleListQuery.isPlaceholderData,
         isPending: mergePersonMutation.isPending,
         onMerge: handleMerge,
         onSearch: setMergeSearchRaw,

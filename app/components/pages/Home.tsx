@@ -547,6 +547,10 @@ const HomeContent = () => {
             genres={genres}
             genresLoading={genresQuery.isLoading}
             genresQuery={genresQuery}
+            genresSearchPending={
+              genreSearchInput !== debouncedGenreSearch ||
+              genresQuery.isPlaceholderData
+            }
             hasActiveFilters={hasActiveFilters}
             languageOptions={languageOptions}
             languageParam={languageParam}
@@ -574,6 +578,10 @@ const HomeContent = () => {
             tags={tags}
             tagsLoading={tagsQuery.isLoading}
             tagsQuery={tagsQuery}
+            tagsSearchPending={
+              tagSearchInput !== debouncedTagSearch ||
+              tagsQuery.isPlaceholderData
+            }
           />
           <SortSheet
             fieldLabels={SORT_FIELD_LABELS}
@@ -648,8 +656,11 @@ const HomeContent = () => {
               ? "No books found matching your search or filters."
               : "No books in this library yet."
           }
+          // A background refetch (a reading change, an SSE event) keeps the
+          // loaded items on screen. A new page or filter shows the spinner,
+          // not the previous key's items kept as placeholder data.
           isLoading={
-            booksQuery.isLoading || booksQuery.isFetching || isStaleData
+            booksQuery.isLoading || booksQuery.isPlaceholderData || isStaleData
           }
           itemLabel="books"
           items={booksQuery.data?.items ?? []}

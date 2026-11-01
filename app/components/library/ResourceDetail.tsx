@@ -51,6 +51,9 @@ interface CountLabel {
 interface MergeConfig {
   entities: EntityOption[];
   isLoadingEntities: boolean;
+  /** `entities` don't answer the search text yet: it changed, or its
+   * results are still loading. */
+  isSearchPending: boolean;
   isPending: boolean;
   onMerge: (sourceId: number) => Promise<unknown>;
   onSearch: (search: string) => void;
@@ -260,6 +263,7 @@ export function ResourceDetail({
           entityType={entityType}
           isLoadingEntities={mergeConfig.isLoadingEntities}
           isPending={mergeConfig.isPending}
+          isSearchPending={mergeConfig.isSearchPending}
           onMerge={async (sourceId) => {
             await mergeConfig.onMerge(sourceId);
             setMergeOpen(false);

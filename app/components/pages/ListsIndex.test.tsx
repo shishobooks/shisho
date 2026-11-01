@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { toast } from "sonner";
 import {
   afterEach,
   beforeAll,
@@ -11,7 +13,7 @@ import {
   vi,
 } from "vitest";
 
-import { API } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 
 import ListsIndex from "./ListsIndex";
@@ -22,6 +24,7 @@ beforeAll(() => {
 });
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/components/library/TopNav", () => ({ default: () => null }));
 
 const stubRequests = ({ lists = [] as unknown[], queued = 3 } = {}) =>
@@ -90,5 +93,116 @@ describe("ListsIndex To Read", () => {
     expect(
       screen.queryByRole("link", { name: /To Read/ }),
     ).not.toBeInTheDocument();
+  });
+});
+
+const favoritesTemplate = {
+  name: "favorites",
+  display_name: "Favorites",
+  description: "My favorite books",
+  is_ordered: false,
+  default_sort: "added_at_desc",
+};
+const favoritesList = { id: 5, name: "Favorites", permission: "owner" };
+
+// Stubs the Lists page around a Favorites template POST: before it, the
+// user has no lists; after it, the server has a Favorites list. Lists and
+// templates fetched after the POST wait for `refetched`.
+const stubTemplateCreate = ({
+  createFails = false,
+  refetched = Promise.resolve(),
+} = {}) => {
+  let created = false;
+  const request = vi
+    .spyOn(API, "request")
+    .mockImplementation(async (method, path) => {
+      if (method === "POST" && path === "/lists/templates/favorites") {
+        created = true;
+        if (createFails)
+          throw new ShishoAPIError(
+            "You already have a list with this name.",
+            "validation_error",
+            422,
+          );
+        return favoritesList;
+      }
+      if (path === "/lists") {
+        if (!created) return { items: [], total: 0 };
+        await refetched;
+        return { items: [favoritesList], total: 1 };
+      }
+      if (path === "/lists/templates") {
+        if (!created) return [favoritesTemplate];
+        await refetched;
+        return [];
+      }
+      if (path === "/books") return { items: [], total: 0 };
+      return [];
+    });
+  const refetchesStarted = () =>
+    request.mock.calls.filter(
+      ([method, path]) =>
+        method === "GET" && (path === "/lists" || path === "/lists/templates"),
+    ).length - 2;
+  return { refetchesStarted };
+};
+
+describe("ListsIndex templates", () => {
+  beforeEach(() => {
+    setAuth({ permissions: ["books:read"] });
+    vi.mocked(toast.success).mockClear();
+    vi.mocked(toast.error).mockClear();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  // Until the refetched lists replace the template, a second click would
+  // try to create a duplicate list.
+  it("keeps a template disabled until the new list replaces it", async () => {
+    let releaseRefetch = () => {};
+    const refetched = new Promise<void>((resolve) => {
+      releaseRefetch = resolve;
+    });
+    const { refetchesStarted } = stubTemplateCreate({ refetched });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderLists();
+
+    const template = await screen.findByRole("button", { name: /Favorites/ });
+    await user.click(template);
+
+    await waitFor(() => expect(refetchesStarted()).toBe(2));
+    // Give a mutation that didn't wait for the refetches time to settle.
+    await act(() => vi.advanceTimersByTimeAsync(50));
+    expect(template).toBeDisabled();
+    expect(toast.success).not.toHaveBeenCalled();
+
+    releaseRefetch();
+    expect(
+      await screen.findByRole("link", { name: /Favorites/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Favorites/ }),
+    ).not.toBeInTheDocument();
+    expect(toast.success).toHaveBeenCalledWith('Created "Favorites" list');
+  });
+
+  // A page opened before Favorites was created elsewhere still offers the
+  // template; the failed create refreshes it to show the existing list.
+  it("replaces a stale template with the existing list when creating fails", async () => {
+    stubTemplateCreate({ createFails: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderLists();
+
+    await user.click(await screen.findByRole("button", { name: /Favorites/ }));
+
+    expect(
+      await screen.findByRole("link", { name: /Favorites/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Favorites/ }),
+    ).not.toBeInTheDocument();
+    expect(toast.error).toHaveBeenCalledWith(
+      "You already have a list with this name.",
+      undefined,
+    );
   });
 });

@@ -35,15 +35,23 @@ type orphanKind struct {
 // publishers that no Book or File references any more, and removes each from
 // its FTS table, which foreign keys do not clean up. Failures are logged and
 // skipped so one failing kind does not block the rest. The book and file
-// delete handlers and the worker's scan and monitor all call it.
-func CleanupOrphanedEntities(ctx context.Context, log logger.Logger, svcs OrphanCleanupServices) {
-	cleanupOrphanKinds(ctx, log, []orphanKind{
+// delete handlers and the worker's scan and monitor all call it. It returns
+// what it deleted, in every library.
+func CleanupOrphanedEntities(ctx context.Context, log logger.Logger, svcs OrphanCleanupServices) RemovedEntities {
+	deleted := cleanupOrphanKinds(ctx, log, []orphanKind{
 		{"series", "series", "series_id", svcs.Books.CleanupOrphanedSeries, svcs.Search.DeleteFromSeriesIndex},
 		peopleOrphanKind(svcs),
 		{"genres", "genre", "genre_id", svcs.Genres.CleanupOrphanedGenres, svcs.Search.DeleteFromGenreIndex},
 		{"tags", "tag", "tag_id", svcs.Tags.CleanupOrphanedTags, svcs.Search.DeleteFromTagIndex},
 		{"publishers", "publisher", "publisher_id", svcs.Publishers.CleanupOrphanedPublishers, svcs.Search.DeleteFromPublisherIndex},
 	})
+	removed := emptyRemovedEntities()
+	removed.SeriesIDs = append(removed.SeriesIDs, deleted["series"]...)
+	removed.PersonIDs = append(removed.PersonIDs, deleted["people"]...)
+	removed.GenreIDs = append(removed.GenreIDs, deleted["genres"]...)
+	removed.TagIDs = append(removed.TagIDs, deleted["tags"]...)
+	removed.PublisherIDs = append(removed.PublisherIDs, deleted["publishers"]...)
+	return removed
 }
 
 // CleanupOrphanedPeople runs only the people kind of CleanupOrphanedEntities:
@@ -51,21 +59,27 @@ func CleanupOrphanedEntities(ctx context.Context, log logger.Logger, svcs Orphan
 // removes each from persons_fts. Deleting one File of a surviving Book calls
 // it, because the File's Narrators may have narrated nothing else, and the
 // full sweep would widen what a File delete removes.
-func CleanupOrphanedPeople(ctx context.Context, log logger.Logger, svcs OrphanCleanupServices) {
-	cleanupOrphanKinds(ctx, log, []orphanKind{peopleOrphanKind(svcs)})
+func CleanupOrphanedPeople(ctx context.Context, log logger.Logger, svcs OrphanCleanupServices) RemovedEntities {
+	deleted := cleanupOrphanKinds(ctx, log, []orphanKind{peopleOrphanKind(svcs)})
+	removed := emptyRemovedEntities()
+	removed.PersonIDs = append(removed.PersonIDs, deleted["people"]...)
+	return removed
 }
 
 func peopleOrphanKind(svcs OrphanCleanupServices) orphanKind {
 	return orphanKind{"people", "person", "person_id", svcs.People.CleanupOrphanedPeople, svcs.Search.DeleteFromPersonIndex}
 }
 
-func cleanupOrphanKinds(ctx context.Context, log logger.Logger, kinds []orphanKind) {
+// cleanupOrphanKinds returns the IDs it deleted, keyed by each kind's plural.
+func cleanupOrphanKinds(ctx context.Context, log logger.Logger, kinds []orphanKind) map[string][]int {
+	deleted := make(map[string][]int, len(kinds))
 	for _, kind := range kinds {
 		deletedIDs, err := kind.cleanup(ctx)
 		if err != nil {
 			log.Warn("failed to cleanup orphaned "+kind.plural, logger.Data{"error": err.Error()})
 			continue
 		}
+		deleted[kind.plural] = deletedIDs
 		for _, id := range deletedIDs {
 			if err := kind.unindex(ctx, id); err != nil {
 				log.Warn("failed to remove orphaned "+kind.singular+" from search index", logger.Data{kind.idKey: id, "error": err.Error()})
@@ -75,4 +89,5 @@ func cleanupOrphanKinds(ctx context.Context, log logger.Logger, kinds []orphanKi
 			log.Info("cleaned up orphaned "+kind.plural, logger.Data{"count": len(deletedIDs)})
 		}
 	}
+	return deleted
 }

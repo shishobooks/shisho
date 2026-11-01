@@ -3,6 +3,7 @@ package lists
 import (
 	"context"
 	"net/http"
+	"slices"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -121,6 +122,15 @@ func (h *handler) retrieve(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
+// listWriteError renders a failed create or rename, turning a taken name
+// into a 422 the user can act on.
+func listWriteError(err error) error {
+	if errors.Is(err, ErrListNameTaken) {
+		return errcodes.ValidationError("You already have a list with this name.")
+	}
+	return errors.WithStack(err)
+}
+
 func (h *handler) create(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -147,7 +157,7 @@ func (h *handler) create(c echo.Context) error {
 		DefaultSort: defaultSort,
 	})
 	if err != nil {
-		return errors.WithStack(err)
+		return listWriteError(err)
 	}
 
 	return errors.WithStack(c.JSON(http.StatusCreated, list))
@@ -206,7 +216,7 @@ func (h *handler) update(c echo.Context) error {
 
 	err = h.listsService.UpdateList(ctx, list, opts)
 	if err != nil {
-		return errors.WithStack(err)
+		return listWriteError(err)
 	}
 
 	// Reload
@@ -684,6 +694,18 @@ func (h *handler) checkVisibility(c echo.Context) error {
 
 // Template handlers
 
+// listTemplates are the built-in lists a user can create in one click. A
+// template's DisplayName becomes the new list's name.
+var listTemplates = []ListTemplate{
+	{
+		Name:        "favorites",
+		DisplayName: "Favorites",
+		Description: "My favorite books",
+		IsOrdered:   false,
+		DefaultSort: models.ListSortAddedAtDesc,
+	},
+}
+
 func (h *handler) createFromTemplate(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -694,46 +716,48 @@ func (h *handler) createFromTemplate(c echo.Context) error {
 		return err
 	}
 
-	var name, description string
-	var isOrdered bool
-	var defaultSort string
-
-	switch templateName {
-	case "favorites":
-		name = "Favorites"
-		description = "My favorite books"
-		isOrdered = false
-		defaultSort = models.ListSortAddedAtDesc
-	default:
+	idx := slices.IndexFunc(listTemplates, func(t ListTemplate) bool { return t.Name == templateName })
+	if idx < 0 {
 		return errcodes.NotFound("Template")
 	}
+	template := listTemplates[idx]
 
 	list, err := h.listsService.CreateList(ctx, CreateListOptions{
 		UserID:      user.ID,
-		Name:        name,
-		Description: &description,
-		IsOrdered:   isOrdered,
-		DefaultSort: defaultSort,
+		Name:        template.DisplayName,
+		Description: &template.Description,
+		IsOrdered:   template.IsOrdered,
+		DefaultSort: template.DefaultSort,
 	})
 	if err != nil {
-		return errors.WithStack(err)
+		return listWriteError(err)
 	}
 
 	return errors.WithStack(c.JSON(http.StatusCreated, list))
 }
 
+// templates lists the templates the caller can still create: one whose name
+// the caller already owns would fail as a duplicate, so it's left out.
 func (h *handler) templates(c echo.Context) error {
-	templates := []ListTemplate{
-		{
-			Name:        "favorites",
-			DisplayName: "Favorites",
-			Description: "My favorite books",
-			IsOrdered:   false,
-			DefaultSort: models.ListSortAddedAtDesc,
-		},
+	ctx := c.Request().Context()
+
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
 	}
 
-	return errors.WithStack(c.JSON(http.StatusOK, templates))
+	available := make([]ListTemplate, 0, len(listTemplates))
+	for _, template := range listTemplates {
+		taken, err := h.listsService.OwnsListNamed(ctx, user.ID, template.DisplayName)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if !taken {
+			available = append(available, template)
+		}
+	}
+
+	return errors.WithStack(c.JSON(http.StatusOK, available))
 }
 
 func (h *handler) moveBookPosition(c echo.Context) error {

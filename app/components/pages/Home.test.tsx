@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
@@ -6,6 +10,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 
@@ -31,10 +36,12 @@ vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-const renderHome = (entry = "/libraries/1") => {
-  const queryClient = new QueryClient({
+const renderHome = (
+  entry = "/libraries/1",
+  queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  }),
+) => {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[entry]}>
@@ -177,6 +184,79 @@ describe("Home search failure", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /^Failed to load books/,
     );
+  });
+});
+
+describe("Home background refetch", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    setAuth({ permissions: ["books:read"] });
+  });
+
+  it("keeps the loaded gallery on screen while the books refetch", async () => {
+    // The first books request answers; the refetch never does, so the test
+    // sees the page mid-refetch.
+    let booksRequests = 0;
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/settings/user") return { gallery_size: "m" };
+      if (path === "/settings/libraries/1") return { sort_spec: null };
+      if (path === "/user/libraries" || path.endsWith("/languages")) return [];
+      if (path === "/books" && ++booksRequests > 1) {
+        return new Promise(() => {});
+      }
+      return { items: [], total: 0 };
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderHome("/libraries/1", queryClient);
+    expect(
+      await screen.findByText("No books in this library yet."),
+    ).toBeInTheDocument();
+
+    // What a reading change (adding a Book to To Read) does to listings.
+    act(() => {
+      void queryClient.invalidateQueries({
+        queryKey: [BooksQueryKey.ListBooks],
+      });
+    });
+    await flush();
+
+    expect(booksRequests).toBe(2);
+    expect(
+      screen.getByText("No books in this library yet."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the spinner, not the previous page, while the next page loads", async () => {
+    // The first page answers; the second never does. The app's client keeps
+    // previous data as a placeholder, so the old page would otherwise linger.
+    vi.spyOn(API, "request").mockImplementation(
+      async (_method, path, _payload, query) => {
+        if (path === "/settings/user") return { gallery_size: "m" };
+        if (path === "/settings/libraries/1") return { sort_spec: null };
+        if (path === "/user/libraries" || path.endsWith("/languages"))
+          return [];
+        if (path === "/books" && (query as { offset?: number })?.offset) {
+          return new Promise(() => {});
+        }
+        return { items: [], total: 100 };
+      },
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, placeholderData: keepPreviousData },
+      },
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderHome("/libraries/1", queryClient);
+    expect(await screen.findByText(/^Showing 1/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Go to next page" }));
+    await flush();
+
+    expect(screen.queryByText(/^Showing 1/)).not.toBeInTheDocument();
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
   });
 });
 

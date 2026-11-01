@@ -120,6 +120,8 @@ const GenreDetail = () => {
             countText: formatCount(g.book_count ?? 0, "book"),
           })) ?? [],
         isLoadingEntities: genresListQuery.isLoading,
+        isSearchPending:
+          mergeSearchRaw !== mergeSearch || genresListQuery.isPlaceholderData,
         isPending: mergeGenreMutation.isPending,
         onMerge: handleMerge,
         onSearch: setMergeSearchRaw,

@@ -137,6 +137,8 @@ const TagDetail = () => {
             countText: formatCount(t.book_count ?? 0, "book"),
           })) ?? [],
         isLoadingEntities: tagsListQuery.isLoading,
+        isSearchPending:
+          mergeSearchRaw !== mergeSearch || tagsListQuery.isPlaceholderData,
         isPending: mergeTagMutation.isPending,
         onMerge: handleMerge,
         onSearch: setMergeSearchRaw,

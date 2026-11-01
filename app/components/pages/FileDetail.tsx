@@ -49,6 +49,7 @@ import { useUserLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
 import { useCan } from "@/hooks/useCan";
 import { useFileDownload } from "@/hooks/useFileDownload";
+import { useLeaveDeletedBook } from "@/hooks/useLeaveDeletedBook";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { isLoadFailure, toastRequestError } from "@/libraries/api";
@@ -81,6 +82,7 @@ const FileDetail = () => {
     tab?: string;
   }>();
   const navigate = useNavigate();
+  const leaveDeletedBook = useLeaveDeletedBook();
   // File metadata, chapters, rescan, move, and delete all require Books
   // Write. People pages need People Read; without it names are plain text.
   const canWriteBooks = useCan("books:write");
@@ -174,7 +176,7 @@ const FileDetail = () => {
       setRescanOpen(false);
       if ("book_deleted" in result && result.book_deleted) {
         toast.success("Book removed (no files remain)");
-        navigate("/");
+        leaveDeletedBook(book, result.removed);
       } else if ("file_deleted" in result && result.file_deleted) {
         toast.success("File removed (no longer on disk, or DRM-protected)");
         navigate(bookUrl);
@@ -192,7 +194,7 @@ const FileDetail = () => {
       setDeleteOpen(false);
       if (result.book_deleted) {
         toast.success("Book deleted");
-        navigate("/");
+        leaveDeletedBook(book, result.removed);
       } else {
         toast.success("File deleted");
         navigate(bookUrl);

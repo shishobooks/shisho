@@ -1,6 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import {
+  advancePastSearch,
+  createSearchQuery,
+  SEARCH_LATENCY_MS,
+} from "@/testing/searchQuery";
 
 import { MultiSelectCombobox } from "./MultiSelectCombobox";
 
@@ -10,14 +16,130 @@ interface NameWithCount {
 }
 
 function makeHook(items: string[], isLoading = false) {
-  return () => ({ data: items, isLoading });
+  return () => ({
+    data: items,
+    isLoading,
+    isPlaceholderData: false,
+    isError: false,
+  });
 }
 
 function makeCountHook(items: NameWithCount[], isLoading = false) {
-  return () => ({ data: items, isLoading });
+  return () => ({
+    data: items,
+    isLoading,
+    isPlaceholderData: false,
+    isError: false,
+  });
+}
+
+const TAGS = ["Action", "Fantasy", "Horror", "Urban Fantasy"];
+
+// Renders the combobox over a real search query and waits for the first
+// results, as the edit dialogs do.
+async function renderSearching(onChange = vi.fn()) {
+  const { useSearch, wrapper } = createSearchQuery(TAGS, (s) => s);
+  render(
+    <MultiSelectCombobox
+      getOptionLabel={(s) => s}
+      hook={useSearch}
+      label="Tag"
+      onChange={onChange}
+      values={[]}
+    />,
+    { wrapper },
+  );
+  await act(() => vi.advanceTimersByTimeAsync(SEARCH_LATENCY_MS));
+  return onChange;
 }
 
 describe("MultiSelectCombobox", () => {
+  it("highlights the first option once results for the typed text arrive, so Enter adds it", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("fan");
+    await advancePastSearch();
+    expect(screen.getByRole("option", { name: "Fantasy" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith(["Fantasy"]);
+  });
+
+  it("holds an Enter pressed before results arrive and adds the first fresh option", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("fan{Enter}");
+    // Past the debounce, the previous results still show while the search
+    // runs.
+    await act(() => vi.advanceTimersByTimeAsync(250));
+    expect(onChange).not.toHaveBeenCalled();
+    await advancePastSearch();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(["Fantasy"]);
+  });
+
+  it("drops a held Enter when the user keeps typing", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("fan{Enter}t");
+    await advancePastSearch();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("drops a held Enter when the user clicks an option instead", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("fan{Enter}");
+    await user.click(screen.getByRole("option", { name: "Horror" }));
+    await advancePastSearch();
+
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(["Horror"]);
+  });
+
+  it("drops a held Enter when the dropdown closes", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("fan{Enter}");
+    // The modal popover turns off pointer events outside it, which
+    // userEvent refuses to click through unless told not to check.
+    await user.setup({ pointerEventsCheck: 0 }).click(document.body);
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    await advancePastSearch();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("holds an Enter pressed before results arrive and creates the typed tag when none match", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("cozy{Enter}");
+    await advancePastSearch();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(["cozy"]);
+  });
+
+  it("highlights the create option when nothing matches the typed text", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const onChange = await renderSearching();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.keyboard("cozy");
+    await advancePastSearch();
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenCalledWith(["cozy"]);
+  });
+
   it("names the trigger and its search box by the field, not the prompt shown", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
