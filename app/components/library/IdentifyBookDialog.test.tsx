@@ -183,12 +183,13 @@ function renderDialog(book: Book) {
     },
   });
   const onOpenChange = vi.fn();
-  const view = render(
+  const dialogTree = (current: Book) => (
     <QueryClientProvider client={queryClient}>
-      <IdentifyBookDialog book={book} onOpenChange={onOpenChange} open />
-    </QueryClientProvider>,
+      <IdentifyBookDialog book={current} onOpenChange={onOpenChange} open />
+    </QueryClientProvider>
   );
-  return { ...view, onOpenChange };
+  const view = render(dialogTree(book));
+  return { ...view, onOpenChange, dialogTree };
 }
 
 describe("IdentifyBookDialog search sequencing", () => {
@@ -317,6 +318,28 @@ describe("IdentifyBookDialog search sequencing", () => {
 
     await user.type(input, "Query B");
     expect(search).toBeEnabled();
+  });
+
+  it("keeps the review open and its edits when the book refreshes behind it", async () => {
+    const user = createUser();
+    const book = makeBook({ title: "Query A" });
+    const { rerender, dialogTree } = renderDialog(book);
+
+    await waitFor(() => expect(requestMock).toHaveBeenCalled());
+    deferredFor("Query A").resolve(response("Picked result"));
+    await user.click(
+      await screen.findByRole("button", { name: /Picked result/ }),
+    );
+    const title = await screen.findByDisplayValue("Picked result");
+    await user.type(title, " edited");
+
+    // A refetch delivers equal data in new objects.
+    rerender(dialogTree(structuredClone(book)));
+
+    expect(
+      await screen.findByDisplayValue("Picked result edited"),
+    ).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Search by title/i)).toBeNull();
   });
 
   it("renders an omnibus range in a plugin search result", async () => {

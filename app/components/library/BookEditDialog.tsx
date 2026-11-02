@@ -141,6 +141,8 @@ export function BookEditDialog({
   const [tags, setTags] = useState<string[]>(
     book.book_tags?.map((bt) => bt.tag?.name || "").filter(Boolean) || [],
   );
+  const [genresPending, setGenresPending] = useState(false);
+  const [tagsPending, setTagsPending] = useState(false);
 
   const [saveError, setSaveError] = useState<string | null>(null);
   const updateBookMutation = useUpdateBook();
@@ -256,6 +258,8 @@ export function BookEditDialog({
       !equal(seriesEntries, initialValues.series) ||
       !equal([...genres].sort(), initialValues.genres) ||
       !equal([...tags].sort(), initialValues.tags) ||
+      genresPending ||
+      tagsPending ||
       reviewDraftChanged(draftReviewOverride, initialValues.reviewOverrides)
     );
   }, [
@@ -267,6 +271,8 @@ export function BookEditDialog({
     seriesEntries,
     genres,
     tags,
+    genresPending,
+    tagsPending,
     draftReviewOverride,
     initialValues,
   ]);
@@ -818,6 +824,7 @@ export function BookEditDialog({
               label="Genre"
               labelId="book-genres-label"
               onChange={setGenres}
+              onPendingChange={setGenresPending}
               placeholder="Add genres..."
               useSelectedItemCounts={function useGenreCounts(v) {
                 return useGenreItemCounts(book.library_id, v);
@@ -839,6 +846,7 @@ export function BookEditDialog({
               label="Tag"
               labelId="book-tags-label"
               onChange={setTags}
+              onPendingChange={setTagsPending}
               placeholder="Add tags..."
               useSelectedItemCounts={function useTagCounts(v) {
                 return useTagItemCounts(book.library_id, v);
@@ -876,13 +884,17 @@ export function BookEditDialog({
             disabled={
               updateBookMutation.isPending ||
               setBookReviewMutation.isPending ||
-              hasInvalidSeriesRange
+              hasInvalidSeriesRange ||
+              genresPending ||
+              tagsPending
             }
             onClick={handleSubmit}
             size="sm"
           >
             {(updateBookMutation.isPending ||
-              setBookReviewMutation.isPending) && (
+              setBookReviewMutation.isPending ||
+              genresPending ||
+              tagsPending) && (
               <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
             )}
             Save Changes

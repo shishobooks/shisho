@@ -713,6 +713,8 @@ export function IdentifyReviewForm({
   );
   const [genres, setGenres] = useState<string[]>(defaults.genres.value);
   const [tags, setTags] = useState<string[]>(defaults.tags.value);
+  const [genresPending, setGenresPending] = useState(false);
+  const [tagsPending, setTagsPending] = useState(false);
   const [publisher, setPublisher] = useState(defaults.publisher.value);
   const [releaseDate, setReleaseDate] = useState(defaults.releaseDate.value);
   const [url, setUrl] = useState(defaults.url.value);
@@ -1209,8 +1211,8 @@ export function IdentifyReviewForm({
   ]);
 
   useEffect(() => {
-    onHasChangesChange?.(hasChanges);
-  }, [hasChanges, onHasChangesChange]);
+    onHasChangesChange?.(hasChanges || genresPending || tagsPending);
+  }, [hasChanges, genresPending, tagsPending, onHasChangesChange]);
 
   // ---- Submit ----
   const handleSubmit = async () => {
@@ -1815,6 +1817,7 @@ export function IdentifyReviewForm({
                     label="Genre"
                     labelId={`${fieldId}-genres-label`}
                     onChange={setGenres}
+                    onPendingChange={setGenresPending}
                     placeholder="Add genres..."
                     useSelectedItemCounts={function useGenreCounts(v) {
                       return useGenreItemCounts(book.library_id, v);
@@ -1848,6 +1851,7 @@ export function IdentifyReviewForm({
                     label="Tag"
                     labelId={`${fieldId}-tags-label`}
                     onChange={setTags}
+                    onPendingChange={setTagsPending}
                     placeholder="Add tags..."
                     useSelectedItemCounts={function useTagCounts(v) {
                       return useTagItemCounts(book.library_id, v);
@@ -2349,12 +2353,17 @@ export function IdentifyReviewForm({
               applyMutation.isPending ||
               totalSelected === 0 ||
               titleValidationError !== undefined ||
-              seriesValidationError !== undefined
+              seriesValidationError !== undefined ||
+              genresPending ||
+              tagsPending
             }
             onClick={handleSubmit}
             size="sm"
             type="button"
           >
+            {genresPending || tagsPending ? (
+              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            ) : null}
             {applyMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />

@@ -29,7 +29,14 @@ export interface OptionSearch<T> {
   data?: T[];
   isLoading: boolean;
   isPlaceholderData: boolean;
+  /**
+   * Offline, so the search is waiting to run. `isLoading` is false then. Like
+   * `error`, only the searches behind a MultiSelectCombobox need to set this.
+   */
+  isPaused?: boolean;
   isError: boolean;
+  /** Why the search failed, for the message reporting it. */
+  error?: unknown;
 }
 
 interface NameOption {
@@ -156,19 +163,27 @@ export function useGenreSearch(
   enabled: boolean,
   query: string,
 ): OptionSearch<NameWithBookCount> {
-  const { data, isLoading, isPlaceholderData, isError } = useGenresList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
+  const { data, isLoading, isPlaceholderData, isPaused, isError, error } =
+    useGenresList(
+      {
+        library_id: libraryId,
+        limit: 50,
+        search: query.trim() || undefined,
+      },
+      { enabled: enabled && !!libraryId },
+    );
   const adapted = data?.items.map((g) => ({
     name: g.name,
     book_count: g.book_count,
   }));
-  return { data: adapted, isLoading, isPlaceholderData, isError };
+  return {
+    data: adapted,
+    isLoading,
+    isPlaceholderData,
+    isPaused,
+    isError,
+    error,
+  };
 }
 
 export function useTagSearch(
@@ -176,19 +191,27 @@ export function useTagSearch(
   enabled: boolean,
   query: string,
 ): OptionSearch<NameWithBookCount> {
-  const { data, isLoading, isPlaceholderData, isError } = useTagsList(
-    {
-      library_id: libraryId,
-      limit: 50,
-      search: query.trim() || undefined,
-    },
-    { enabled: enabled && !!libraryId },
-  );
+  const { data, isLoading, isPlaceholderData, isPaused, isError, error } =
+    useTagsList(
+      {
+        library_id: libraryId,
+        limit: 50,
+        search: query.trim() || undefined,
+      },
+      { enabled: enabled && !!libraryId },
+    );
   const adapted = data?.items.map((t) => ({
     name: t.name,
     book_count: t.book_count,
   }));
-  return { data: adapted, isLoading, isPlaceholderData, isError };
+  return {
+    data: adapted,
+    isLoading,
+    isPlaceholderData,
+    isPaused,
+    isError,
+    error,
+  };
 }
 
 export function useGenreItemCounts(

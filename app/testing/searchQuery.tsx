@@ -77,7 +77,9 @@ export function createSearchQuery<T>(
       data: q.data,
       isLoading: q.isLoading,
       isPlaceholderData: q.isPlaceholderData,
+      isPaused: q.isPaused,
       isError: q.isError,
+      error: q.error,
     };
   }
 

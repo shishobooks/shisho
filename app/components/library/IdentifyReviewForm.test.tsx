@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   afterAll,
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -146,12 +147,13 @@ vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 setAuth({ permissions: ALL_PERMISSIONS });
 
+const optionSearch = vi.hoisted(() => ({ searching: false }));
 vi.mock("@/hooks/queries/entity-search", () => ({
   usePeopleSearch: () => ({ data: [], isLoading: false }),
   useSeriesSearch: () => ({ data: [], isLoading: false }),
   usePublisherSearch: () => ({ data: [], isLoading: false }),
-  useGenreSearch: () => ({ data: [], isLoading: false }),
-  useTagSearch: () => ({ data: [], isLoading: false }),
+  useGenreSearch: () => ({ data: [], isLoading: optionSearch.searching }),
+  useTagSearch: () => ({ data: [], isLoading: optionSearch.searching }),
   useGenreItemCounts: () => new Map(),
   useTagItemCounts: () => new Map(),
 }));
@@ -188,6 +190,9 @@ beforeAll(() => {
 });
 afterAll(() => {
   console.error = originalConsoleError;
+});
+afterEach(() => {
+  optionSearch.searching = false;
 });
 
 const createUser = () =>
@@ -895,6 +900,35 @@ describe("IdentifyReviewForm component", () => {
     expect(payload.file_name).toBe("Edition Suffix");
     expect(payload.sources.file_name).toBe("user");
   });
+
+  it.each(["Genres", "Tags"])(
+    "holds Apply until an entry in %s lands",
+    async (field) => {
+      optionSearch.searching = true;
+      const user = createUser();
+      const onHasChangesChange = vi.fn();
+      renderForm({
+        onHasChangesChange,
+        result: makeResult({ genres: ["Proposed"], tags: ["Proposed"] }),
+      });
+      // Held from here: the open popover hides the form from role queries.
+      const apply = getApplyButton();
+      expect(apply).toBeEnabled();
+
+      await user.click(
+        screen.getByRole("combobox", { name: new RegExp(`^${field}$`, "i") }),
+      );
+      await user.keyboard("cozy{Enter}");
+      expect(apply).toBeDisabled();
+      expect(onHasChangesChange).toHaveBeenLastCalledWith(true);
+
+      // The search answers; the next keystroke re-renders the waiting search.
+      optionSearch.searching = false;
+      await user.keyboard("x");
+      expect(apply).toBeEnabled();
+      expect(screen.getByText(/cozy/)).toBeInTheDocument();
+    },
+  );
 
   it("disables Apply with nothing selected and enables it again for one selection", async () => {
     const user = createUser();
