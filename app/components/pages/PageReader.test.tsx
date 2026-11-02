@@ -1,13 +1,26 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { toast } from "sonner";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
+import { POSITION_SAVE_DELAY_MS } from "@/hooks/useReadingProgress";
+import { setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { PageFlow } from "@/types";
 
 import PageReader from "./PageReader";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const settings = vi.hoisted(() => ({
   mutate: undefined as unknown as (...args: never[]) => void,
@@ -41,7 +54,45 @@ const flow = vi.hoisted(() => ({
   mutate: undefined as unknown as (...args: never[]) => void,
 }));
 
+// The saved position, whether it has loaded, and what saves were sent.
+const position = vi.hoisted(() => ({
+  savedPage: null as number | null,
+  loading: false,
+  loadFails: false,
+  saves: [] as Array<Record<string, unknown>>,
+}));
+
 vi.mock("@/hooks/queries/reading", () => ({
+  QueryKey: { FilePosition: "FilePosition" },
+  invalidateAfterPositionUpdate: () => {},
+  markBookReadingStale: () => {},
+  useUndoAutoFinish: () => ({ mutate: () => {} }),
+  useFilePosition: () => ({
+    data:
+      position.loading || position.loadFails
+        ? undefined
+        : {
+            position:
+              position.savedPage === null
+                ? null
+                : { page: position.savedPage, percentage: 0.5 },
+          },
+    error: position.loadFails ? new Error("offline") : null,
+    isEnabled: true,
+    isFetching: position.loading,
+    isFetchedAfterMount: !position.loading,
+  }),
+  saveFilePosition: (_fileId: number, payload: Record<string, unknown>) => {
+    position.saves.push(payload);
+    return Promise.resolve({
+      book_id: 7,
+      accepted: true,
+      started: false,
+      resumed: false,
+      reverted: false,
+      finished_read_through_id: null,
+    });
+  },
   useBookReading: (bookId?: number) => ({
     data:
       bookId && !flow.readingLoading
@@ -77,29 +128,52 @@ afterEach(() => {
   flow.readingLoading = false;
   settings.hideChrome = false;
   chapters.data = [];
+  position.savedPage = null;
+  position.loading = false;
+  position.loadFails = false;
+});
+
+beforeEach(() => {
+  setAuth({ permissions: ["books:read"] });
+  // The last test's reader closes after its afterEach, and saves its session.
+  position.saves = [];
+  settings.mutate = vi.fn();
 });
 
 // Shows the reader's URL query, which it updates as the page changes.
 function LocationProbe() {
-  return <output data-testid="location">{useLocation().search}</output>;
+  const location = useLocation();
+  return (
+    <output data-state={JSON.stringify(location.state)} data-testid="location">
+      {location.search}
+    </output>
+  );
 }
+
+const queryClient = new QueryClient();
 
 const getPageUrl = (page: number, size?: number) =>
   size ? `/page-${page}?size=${size}` : `/page-${page}`;
 
-const renderReader = (totalPages = 10, title?: string, initialPath = "/") =>
+const renderReader = (
+  totalPages = 10,
+  title?: string,
+  initialPath: string | { search: string; state: unknown } = "/",
+) =>
   render(
-    <MemoryRouter initialEntries={[initialPath]}>
-      <PageReader
-        bookId={7}
-        fileId={42}
-        getPageUrl={getPageUrl}
-        libraryId="1"
-        title={title}
-        totalPages={totalPages}
-      />
-      <LocationProbe />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialPath]}>
+        <PageReader
+          bookId={7}
+          fileId={42}
+          getPageUrl={getPageUrl}
+          libraryId="1"
+          title={title}
+          totalPages={totalPages}
+        />
+        <LocationProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 const openSettings = async (user: ReturnType<typeof userEvent.setup>) =>
@@ -242,15 +316,17 @@ describe("PageReader flow", () => {
 
     flow.readingLoading = false;
     rerender(
-      <MemoryRouter>
-        <PageReader
-          bookId={7}
-          fileId={42}
-          getPageUrl={getPageUrl}
-          libraryId="1"
-          totalPages={5}
-        />
-      </MemoryRouter>,
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <PageReader
+            bookId={7}
+            fileId={42}
+            getPageUrl={getPageUrl}
+            libraryId="1"
+            totalPages={5}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
     // Now probing, still nothing shown.
     expect(flow.detectedFrom).toEqual(["/page-1?size=256", "/page-2?size=256"]);
@@ -703,5 +779,233 @@ describe("PageReader swiping", () => {
     flow.saved = "scrolled";
     swipe(openOnPage(3), [300, 400], [100, 400]);
     expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+  });
+});
+
+describe("PageReader position", () => {
+  const nextPage = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+  const flush = () => act(() => vi.advanceTimersByTime(0));
+
+  it("opens at the saved page and saves nothing for opening there", () => {
+    position.savedPage = 12;
+    renderReader(20);
+
+    expect(screen.getByText("Page 13 of 20")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Page 13" })).toBeInTheDocument();
+    flush();
+    expect(position.saves).toEqual([]);
+  });
+
+  it("opens at the start with nothing saved", () => {
+    renderReader(20);
+
+    expect(screen.getByText("Page 1 of 20")).toBeInTheDocument();
+    expect(position.saves).toEqual([]);
+  });
+
+  it("keeps to the file when the saved page is past its end", () => {
+    position.savedPage = 50;
+    renderReader(20);
+
+    expect(screen.getByText("Page 20 of 20")).toBeInTheDocument();
+  });
+
+  it("shows no page until the saved position has loaded", () => {
+    position.savedPage = 12;
+    position.loading = true;
+    renderReader(20);
+
+    expect(screen.queryByRole("img", { name: /^Page / })).toBeNull();
+  });
+
+  it("saves each page turned to, 0-indexed, as far through as it is", () => {
+    renderReader(11);
+
+    nextPage();
+
+    expect(position.saves).toHaveLength(1);
+    expect(position.saves[0]).toMatchObject({ page: 1, percentage: 0.1 });
+    expect(position.saves[0].at_end).toBeUndefined();
+
+    act(() => vi.advanceTimersByTime(1000));
+    nextPage();
+    expect(position.saves).toHaveLength(2);
+    expect(position.saves[1]).toMatchObject({ page: 2, percentage: 0.2 });
+  });
+
+  it("lets a page in the URL win, and saves it as opened, not read", () => {
+    position.savedPage = 12;
+    renderReader(20, undefined, "/?page=3");
+
+    expect(screen.getByText("Page 4 of 20")).toBeInTheDocument();
+    expect(position.saves).toHaveLength(1);
+    expect(position.saves[0]).toMatchObject({ page: 3, opened: true });
+  });
+
+  it("does not report the end for a link to the last page", () => {
+    renderReader(20, undefined, "/?page=19");
+
+    expect(position.saves).toHaveLength(1);
+    expect(position.saves[0]).toMatchObject({ page: 19, opened: true });
+    expect(position.saves[0].at_end).toBeUndefined();
+  });
+
+  it("reports a turn after opening from a link as reading", () => {
+    renderReader(20, undefined, "/?page=3");
+    act(() => vi.advanceTimersByTime(1000));
+
+    nextPage();
+
+    expect(position.saves).toHaveLength(2);
+    expect(position.saves[1]).toMatchObject({ page: 4 });
+    expect(position.saves[1].opened).toBeUndefined();
+  });
+
+  it("marks the page it writes to the URL as its own", () => {
+    renderReader(20);
+
+    nextPage();
+
+    const location = screen.getByTestId("location");
+    expect(location).toHaveTextContent("?page=1");
+    expect(location.dataset.state).toContain("readerPage");
+  });
+
+  // Back, or a reload of a tab left open while reading elsewhere, lands on a
+  // URL the reader wrote itself, which is no link to that page.
+  it("prefers the saved page over a page the reader wrote to the URL itself", () => {
+    position.savedPage = 12;
+    renderReader(20, undefined, {
+      search: "?page=3",
+      state: { readerPage: true },
+    });
+
+    expect(screen.getByText("Page 13 of 20")).toBeInTheDocument();
+    expect(position.saves).toEqual([]);
+  });
+
+  it("saves nothing when the saved position fails to load", () => {
+    position.loadFails = true;
+    renderReader(20);
+
+    nextPage();
+    act(() => vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS));
+
+    expect(screen.getByText("Page 2 of 20")).toBeInTheDocument();
+    expect(position.saves).toEqual([]);
+  });
+
+  it("sends the first of quick page turns at once and the last soon after", () => {
+    renderReader(20);
+
+    nextPage();
+    nextPage();
+    nextPage();
+    expect(position.saves).toHaveLength(1);
+    expect(position.saves[0]).toMatchObject({ page: 1 });
+
+    act(() => vi.advanceTimersByTime(1000));
+    expect(position.saves).toHaveLength(2);
+    expect(position.saves[1]).toMatchObject({ page: 3 });
+  });
+
+  it("saves nothing when the URL names the saved page", () => {
+    position.savedPage = 3;
+    renderReader(20, undefined, "/?page=3");
+
+    expect(screen.getByText("Page 4 of 20")).toBeInTheDocument();
+    expect(position.saves).toEqual([]);
+  });
+
+  it("saves the last page as the end", () => {
+    position.savedPage = 18;
+    renderReader(20);
+
+    nextPage();
+
+    expect(position.saves[0]).toMatchObject({
+      page: 19,
+      percentage: 1,
+      at_end: true,
+    });
+  });
+
+  it("does not report the end for opening on the last page", () => {
+    position.savedPage = 19;
+    renderReader(20);
+
+    flush();
+    expect(position.saves).toEqual([]);
+  });
+
+  describe("in the scrolled flow", () => {
+    const scrollTo = (page: number, { atBottom = false, pages = 20 } = {}) => {
+      const main = screen.getByRole("main");
+      const images = screen.getAllByRole("img", { name: /^Page / });
+      expect(images).toHaveLength(pages);
+      images.forEach((img, index) => {
+        img.parentElement!.getBoundingClientRect = () =>
+          ({ top: (index - page) * 1000 }) as DOMRect;
+      });
+      main.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+      Object.defineProperties(main, {
+        scrollTop: { configurable: true, value: 1 },
+        clientHeight: { configurable: true, value: 500 },
+        scrollHeight: { configurable: true, value: atBottom ? 501 : 99999 },
+      });
+      fireEvent.scroll(main);
+      act(() => vi.advanceTimersToNextFrame());
+    };
+
+    it("scrolls to the saved page once the flow is known", () => {
+      flow.saved = "scrolled";
+      position.savedPage = 12;
+      renderReader(20);
+
+      expect(scrollIntoView.mock.contexts[0]).toBe(
+        screen.getByRole("img", { name: "Page 13" }).parentElement,
+      );
+    });
+
+    it("saves a page settled on by scrolling, not every page passed", () => {
+      flow.saved = "scrolled";
+      renderReader(20);
+
+      fireEvent.wheel(window);
+      scrollTo(3);
+      scrollTo(4);
+      scrollTo(5);
+      expect(position.saves).toEqual([]);
+
+      act(() => vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS));
+
+      expect(position.saves).toHaveLength(1);
+      expect(position.saves[0]).toMatchObject({ page: 5 });
+    });
+
+    // Pages near a short last page settling as they load can leave the view
+    // at the bottom, which reads as the last page.
+    it("saves nothing for a scroll nobody made", () => {
+      flow.saved = "scrolled";
+      position.savedPage = 18;
+      renderReader(20);
+
+      scrollTo(19, { atBottom: true });
+      act(() => vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS));
+
+      expect(position.saves).toEqual([]);
+    });
+
+    it("finishes at the bottom once the reader scrolls there", () => {
+      flow.saved = "scrolled";
+      position.savedPage = 18;
+      renderReader(20);
+
+      fireEvent.wheel(window);
+      scrollTo(19, { atBottom: true });
+
+      expect(position.saves[0]).toMatchObject({ page: 19, at_end: true });
+    });
   });
 });

@@ -2,7 +2,7 @@
 
 Users with Books Read permission and access to a book's library can open supported files directly in Shisho. Select **Read** for EPUB, KePub, MOBI, AZW3, CBZ, and PDF files or **Listen** for M4B files.
 
-Reader preferences are saved to your Shisho account and follow you between browsers. The EPUB, KePub, MOBI, and AZW3 reader also remembers your place and keeps your reading history current, as described in [Reading in Shisho](./reading-tracking.md#reading-in-shisho). CBZ, PDF, and M4B positions are not saved.
+Reader preferences are saved to your Shisho account and follow you between browsers. Every reader also remembers your place and keeps your reading history current, as described in [Reading in Shisho](./reading-tracking.md#reading-in-shisho).
 
 ## EPUB, MOBI, and AZW3 Reader
 
@@ -33,7 +33,7 @@ CBZ and PDF use the same page-based reader. It provides:
 
 A CBZ or PDF file's page shows its pages as a grid; select one to open the reader on that page.
 
-The current page is stored in the URL as `?page=`, so refreshing or bookmarking that URL returns to the same page. It is not stored as account-level reading progress.
+Reopening a comic or PDF returns to the page you left. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off). The current page is also in the URL as `?page=`, so you can bookmark or share a link to a page.
 
 Use the Left Arrow or `A` for the previous page and the Right Arrow or `D` for the next page. In the **Paginated** flow, you can also tap the left and right sides or swipe from anywhere on the page. In the **Scrolled** flow, the Up and Down Arrows, Space, and Page Up and Page Down scroll the pages.
 
@@ -52,7 +52,7 @@ The audiobook player provides:
 - Chapter navigation when chapters are available
 - Playback speeds from 0.5x to 3x
 
-The selected playback speed is saved to your account. Listening position is not saved, so reopening an audiobook starts from the beginning.
+The selected playback speed is saved to your account. Reopening an audiobook returns to where you stopped. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
 
 Browser audio support depends on the file's codec, and some audiobooks play only in certain browsers. See [Audiobook Browser Compatibility](./supported-formats.md#audiobook-browser-compatibility).
 

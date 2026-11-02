@@ -64,6 +64,59 @@ func TestPositionRoutes_SaveReadAndFinish(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, again.Code, again.Body.String())
 }
 
+func TestPositionRoutes_SaveAPageAndSeconds(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	comic := f.addComic()
+	audio := f.addAudiobook(3600)
+	api := newReadingAPI(t, f.db, f.user)
+
+	rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", comic.ID), map[string]any{"page": 12, "percentage": 0.6})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got := decode[FilePositionResponse](t, api.do(http.MethodGet, fmt.Sprintf("/files/%d/position", comic.ID), nil).Body.Bytes())
+	require.NotNil(t, got.Position)
+	assert.Equal(t, 12, *got.Position.Page)
+
+	rec = api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", audio.ID), map[string]any{"seconds": 90.5, "percentage": 0.025})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got = decode[FilePositionResponse](t, api.do(http.MethodGet, fmt.Sprintf("/files/%d/position", audio.ID), nil).Body.Bytes())
+	require.NotNil(t, got.Position)
+	assert.InDelta(t, 90.5, *got.Position.Seconds, 1e-9)
+
+	// The first page is a position too, though zero.
+	rec = api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", comic.ID), map[string]any{"page": 0, "percentage": 0})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got = decode[FilePositionResponse](t, api.do(http.MethodGet, fmt.Sprintf("/files/%d/position", comic.ID), nil).Body.Bytes())
+	assert.Equal(t, 0, *got.Position.Page)
+}
+
+func TestPositionRoutes_OpenedSavesWithoutStarting(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	comic := f.addComic()
+	api := newReadingAPI(t, f.db, f.user)
+
+	rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", comic.ID), map[string]any{"page": 19, "percentage": 1, "opened": true})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	resp := decode[UpdatePositionResponse](t, rec.Body.Bytes())
+	assert.False(t, resp.Started)
+	assert.Nil(t, resp.FinishedReadThroughID)
+	assert.Empty(t, f.status())
+}
+
+func TestPositionRoutes_BookReadingIncludesPositions(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	api := newReadingAPI(t, f.db, f.user)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+
+	rec := api.do(http.MethodGet, fmt.Sprintf("/books/%d", f.book.ID), nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	resp := decode[BookReadingResponse](t, rec.Body.Bytes())
+	require.Len(t, resp.Positions, 1)
+	assert.Equal(t, f.file.ID, resp.Positions[0].FileID)
+}
+
 func TestPositionRoutes_RejectInvalidUpdates(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
@@ -72,6 +125,10 @@ func TestPositionRoutes_RejectInvalidUpdates(t *testing.T) {
 
 	for name, body := range map[string]map[string]any{
 		"no position":         {"percentage": 0.5},
+		"two forms":           {"cfi": "epubcfi(/6/4!/4/2)", "page": 3, "percentage": 0.5},
+		"negative page":       {"page": -1, "percentage": 0.5},
+		"negative seconds":    {"seconds": -1, "percentage": 0.5},
+		"page, no percentage": {"page": 3},
 		"percentage above 1":  {"cfi": "epubcfi(/6/4!/4/2)", "percentage": 1.5},
 		"negative percentage": {"cfi": "epubcfi(/6/4!/4/2)", "percentage": -0.1},
 		"session ends before it starts": {"cfi": "epubcfi(/6/4!/4/2)", "percentage": 0.5, "session": map[string]any{

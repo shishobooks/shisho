@@ -1,4 +1,10 @@
-import type { ReadingStatus, ReadThrough } from "@/types";
+import {
+  FileTypeCBZ,
+  FileTypeM4B,
+  FileTypePDF,
+  type ReadingStatus,
+  type ReadThrough,
+} from "@/types";
 import { formatMonthYear, localDay } from "@/utils/format";
 
 // A reading transition, named by its route (pkg/reading/routes.go).
@@ -83,4 +89,21 @@ export const readingSummary = (readThroughs: ReadThrough[]): string | null => {
     parts.push(`Didn't finish ${times(abandoned.length)}`);
   }
   return parts.length > 0 ? parts.join(" · ") : null;
+};
+
+// How far through a File the user is, by the kind of reading it is: a Book's
+// ebook and audiobook keep separate positions.
+export const fileProgressLabel = (
+  percentage: number,
+  fileType: string,
+): string => {
+  const kind =
+    fileType === FileTypeM4B
+      ? "audiobook"
+      : fileType === FileTypeCBZ
+        ? "comic"
+        : fileType === FileTypePDF
+          ? "PDF"
+          : "ebook";
+  return `${Math.round(percentage * 100)}% · ${kind}`;
 };

@@ -339,6 +339,20 @@ export const invalidateAfterPositionUpdate = (
   invalidateOtherBookReadings(queryClient, bookId);
 };
 
+// A save changed the progress the book page shows. An open reader has no use
+// for that, so the record just refetches the next time something shows it,
+// or now if the reader has closed and something may already be showing it.
+export const markBookReadingStale = (
+  queryClient: QueryClient,
+  bookId: number,
+  readerClosed: boolean,
+) => {
+  queryClient.invalidateQueries({
+    queryKey: [QueryKey.BookReading, bookId],
+    refetchType: readerClosed ? "active" : "none",
+  });
+};
+
 // Undoes the finish a reader's position update made, for Undo on the finish
 // toast.
 export const useUndoAutoFinish = () => {

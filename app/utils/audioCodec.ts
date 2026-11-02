@@ -33,6 +33,12 @@
  */
 export const SEEK_TIMEOUT_MS = 5000;
 
+/**
+ * The same wait for the seek to the saved place as the player opens: it may
+ * land hours into a file nothing has buffered yet.
+ */
+export const RESTORE_SEEK_TIMEOUT_MS = 15000;
+
 /** The outcome of checking the File's stored codec against the browser. */
 export interface CodecSupport {
   /** Whether a plain progressive stream of this codec is expected to play. */

@@ -466,7 +466,11 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         key={book.id}
         linkPeople={linkPeople}
         linkSeries={linkSeries}
-        reading={!isShareLink && <BookReadingControls bookId={book.id} />}
+        reading={
+          !isShareLink && (
+            <BookReadingControls bookId={book.id} files={book.files ?? []} />
+          )
+        }
         sidePanel={relatedPanel}
         tagNamespaces={tagNamespaces}
       />

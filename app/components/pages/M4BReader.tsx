@@ -27,6 +27,8 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useReadingProgress } from "@/hooks/useReadingProgress";
+import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
@@ -38,6 +40,7 @@ import {
 import {
   resolveCodecSupport,
   resolveRuntimeFailureMessage,
+  RESTORE_SEEK_TIMEOUT_MS,
   SEEK_TIMEOUT_MS,
   shouldIgnoreMediaError,
 } from "@/utils/audioCodec";
@@ -50,6 +53,9 @@ import {
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { fileStreamUrl } from "@/utils/downloadUrl";
 import { fileTitle, formatPlayerTime } from "@/utils/format";
+
+// How often the place saves while playing. Pausing and seeking save at once.
+const SAVE_WHILE_PLAYING_MS = 15_000;
 
 interface M4BReaderProps {
   file: File;
@@ -204,12 +210,34 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   }, []);
   useEffect(() => cancelSeekGuard, [cancelSeekGuard]);
 
-  // Seek the audio element and keep our currentTime in sync. Centralized so the
-  // buttons, dropdown, and keyboard shortcuts all go through one path. Writes
-  // the time ref eagerly (before the state update flushes) so the keydown
-  // handler always reads the freshest position.
-  const seekTo = useCallback(
-    (seconds: number) => {
+  // Where the listener is, as the Reading Position saves it. Time counts while
+  // audio plays, even in a background tab. The server decides what counts as
+  // real progress and as the end; this reports only playback actually ending.
+  const {
+    saved,
+    settled: positionSettled,
+    failed: positionFailed,
+  } = useSavedPosition(file.id);
+  const { opened, moved, setPlaying } = useReadingProgress(file.id, {
+    // Audio that can't play is going nowhere, so its controls mustn't replace
+    // a place saved in a browser where it does.
+    enabled: !positionFailed && !playbackWarning,
+    timing: "playback",
+  });
+  const positionAt = useCallback((seconds: number, atEnd = false) => {
+    const total = durationRef.current;
+    return {
+      seconds,
+      percentage: atEnd ? 1 : total > 0 ? Math.min(seconds / total, 1) : 0,
+      atEnd,
+    };
+  }, []);
+
+  // Move the audio element and keep our currentTime in sync. Writes the time
+  // ref eagerly (before the state update flushes) so the keydown handler always
+  // reads the freshest position.
+  const moveElementTo = useCallback(
+    (seconds: number, seekTimeoutMs = SEEK_TIMEOUT_MS) => {
       const audio = audioRef.current;
       if (audio) {
         audio.currentTime = seconds;
@@ -221,13 +249,49 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
             el.pause();
             setRuntimeFailed(true);
           }
-        }, SEEK_TIMEOUT_MS);
+        }, seekTimeoutMs);
       }
       currentTimeRef.current = seconds;
       setCurrentTime(seconds);
     },
     [cancelSeekGuard],
   );
+
+  // Seeking by the listener. Centralized so the buttons, dropdown, and keyboard
+  // shortcuts all go through one path. A seek before the saved position loads
+  // replaces it.
+  const restoredRef = useRef(false);
+  const seekTo = useCallback(
+    (seconds: number) => {
+      restoredRef.current = true;
+      moveElementTo(seconds);
+      moved(positionAt(seconds), { saveAfterMs: 0 });
+    },
+    [moveElementTo, moved, positionAt],
+  );
+
+  // Once the element can seek and the saved position is known, go there. Where
+  // it opened isn't listening, so nothing saves. A stream the browser can't
+  // decode hangs on any seek, so it stays put.
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
+  useEffect(() => {
+    if (restoredRef.current || !metadataLoaded || !positionSettled) return;
+    restoredRef.current = true;
+    const seconds = codecSupport.playable ? (saved?.seconds ?? 0) : 0;
+    if (seconds > 0) moveElementTo(seconds, RESTORE_SEEK_TIMEOUT_MS);
+    opened({
+      ...positionAt(seconds),
+      percentage: seconds > 0 && saved ? saved.percentage : 0,
+    });
+  }, [
+    codecSupport.playable,
+    metadataLoaded,
+    moveElementTo,
+    opened,
+    positionAt,
+    positionSettled,
+    saved,
+  ]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
@@ -540,7 +604,11 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           // undecodable stream never fires canplay, so real failures stick.
           setRuntimeFailed(false);
         }}
-        onEnded={() => setIsPlaying(false)}
+        onEnded={(e) => {
+          setIsPlaying(false);
+          const el = e.currentTarget;
+          moved(positionAt(el.currentTime, true));
+        }}
         onError={(e) => {
           if (!shouldIgnoreMediaError(e.currentTarget.error?.code)) {
             setRuntimeFailed(true);
@@ -551,13 +619,28 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           if (Number.isFinite(el.duration) && el.duration > 0) {
             setMediaDuration(el.duration);
           }
+          setMetadataLoaded(true);
           // The media load algorithm resets playbackRate to the default as
           // part of loading the resource, which can land after the effect
           // applied the persisted speed. Re-apply it once metadata arrives.
           el.playbackRate = playbackSpeed;
         }}
-        onPause={() => setIsPlaying(false)}
-        onPlay={() => setIsPlaying(true)}
+        onPause={(e) => {
+          setIsPlaying(false);
+          // The element pauses as playback ends, which is the end, not a place
+          // to stop. It goes first, or its session would save without it.
+          const el = e.currentTarget;
+          if (restoredRef.current) {
+            moved(positionAt(el.currentTime, el.ended), {
+              saveAfterMs: SAVE_WHILE_PLAYING_MS,
+            });
+          }
+          setPlaying(false);
+        }}
+        onPlay={() => {
+          setIsPlaying(true);
+          setPlaying(true);
+        }}
         onSeeked={cancelSeekGuard}
         onStalled={(e) => {
           // Runtime backstop for undecodable streams: the xHE-AAC stuck
@@ -574,6 +657,10 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           const time = e.currentTarget.currentTime;
           currentTimeRef.current = time;
           setCurrentTime(time);
+          // A timeupdate while paused is a seek landing, not listening.
+          if (restoredRef.current && !e.currentTarget.paused) {
+            moved(positionAt(time), { saveAfterMs: SAVE_WHILE_PLAYING_MS });
+          }
         }}
         preload="metadata"
         ref={audioRef}

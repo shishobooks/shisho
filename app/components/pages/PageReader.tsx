@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
@@ -32,8 +32,11 @@ import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { pagesToProbe, useDetectedPageFlow } from "@/hooks/useDetectedPageFlow";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { usePreloadImages } from "@/hooks/usePreloadImages";
+import { useReadingProgress } from "@/hooks/useReadingProgress";
+import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { usePinchZoomed, useSwipeTurn } from "@/hooks/useSwipeTurn";
 import { toastRequestError } from "@/libraries/api";
+import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
 import {
   ThumbnailSize256,
@@ -207,12 +210,44 @@ export default function PageReader({
 }: PageReaderProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
-  // Parse page from URL, default to 0, and keep it within the file
-  const [currentPage, setCurrentPage] = useState(() => {
-    const urlPage = parseInt(searchParams.get("page") || "0", 10);
-    if (isNaN(urlPage)) return 0;
-    return Math.max(0, Math.min(urlPage, totalPages - 1));
+  const clampPage = (page: number) =>
+    Math.max(0, Math.min(page, totalPages - 1));
+
+  // Parse page from URL, default to 0, and keep it within the file. A page
+  // this reader wrote there itself, which Back or a reload lands on, follows
+  // along and isn't a link to that page.
+  const [opening] = useState(() => {
+    const urlPage = parseInt(searchParams.get("page") ?? "", 10);
+    const named = !isNaN(urlPage);
+    return {
+      page: named ? clampPage(urlPage) : 0,
+      fromLink:
+        named &&
+        !(location.state as { readerPage?: boolean } | null)?.readerPage,
+    };
+  });
+  const urlNamedPage = opening.fromLink;
+  const [currentPage, setCurrentPage] = useState(opening.page);
+
+  // The saved page, which a page in the URL overrides, is set while rendering
+  // so the first render with a flow already has it, the way a page in the URL
+  // does.
+  const {
+    saved,
+    settled: positionSettled,
+    failed: positionFailed,
+  } = useSavedPosition(fileId);
+  const [restored, setRestored] = useState(false);
+  if (!restored && positionSettled) {
+    setRestored(true);
+    if (!urlNamedPage && saved?.page != null) {
+      setCurrentPage(clampPage(saved.page));
+    }
+  }
+  const { opened, openedFromLink, moved } = useReadingProgress(fileId, {
+    enabled: !positionFailed,
   });
 
   // Image loading state
@@ -224,8 +259,9 @@ export default function PageReader({
   const pageRefs = useRef<(HTMLElement | null)[]>([]);
 
   // The flow: the one chosen while open, else the one saved for the Book,
-  // else the one the page shapes suggest. Undefined until it is known. The
-  // flow is a per-Book choice: some comics are made for vertical scrolling.
+  // else the one the page shapes suggest. Undefined until it is known, and
+  // until the saved page is, so no page shows or saves before it. The flow is
+  // a per-Book choice: some comics are made for vertical scrolling.
   const readingQuery = useBookReading(bookId);
   const setPageFlow = useSetPageFlow();
   const [chosenFlow, setChosenFlow] = useState<PageFlow | null>(null);
@@ -241,9 +277,55 @@ export default function PageReader({
         )
       : null,
   );
-  const flow: PageFlow | undefined =
-    chosenFlow ?? (savedFlowKnown ? (savedFlow ?? detectedFlow) : undefined);
+  const flow: PageFlow | undefined = !restored
+    ? undefined
+    : (chosenFlow ??
+      (savedFlowKnown ? (savedFlow ?? detectedFlow) : undefined));
   const scrolled = flow === "scrolled";
+
+  // Once a page shows, where it opened isn't reading, unless a page in the URL
+  // moved it from the saved one, which saves. After that each page change
+  // saves: at once from a page turn, and a few seconds apart while scrolling,
+  // which can change the page every frame. The end is the last page. A scroll
+  // with no input yet is pages settling as they load, not reading.
+  const openedRef = useRef(false);
+  const inputSeenRef = useRef(false);
+  useEffect(() => {
+    const seen = () => {
+      inputSeenRef.current = true;
+    };
+    const options = { capture: true, passive: true };
+    for (const name of ACTIVITY_EVENTS) {
+      window.addEventListener(name, seen, options);
+    }
+    return () => {
+      for (const name of ACTIVITY_EVENTS) {
+        window.removeEventListener(name, seen, options);
+      }
+    };
+  }, []);
+  const reportPage = useEffectEvent((page: number) => {
+    const position = {
+      page,
+      percentage: totalPages > 1 ? page / (totalPages - 1) : 0,
+      atEnd: page === totalPages - 1,
+    };
+    if (openedRef.current) {
+      if (scrolled && !inputSeenRef.current) return;
+      moved(position, scrolled ? undefined : { saveAfterMs: 0 });
+      return;
+    }
+    openedRef.current = true;
+    if (urlNamedPage && (saved?.page ?? 0) !== page) {
+      openedFromLink(position);
+    } else {
+      opened({ ...position, atEnd: false });
+    }
+  });
+  const pageShowing = flow !== undefined;
+  useEffect(() => {
+    if (pageShowing) reportPage(currentPage);
+  }, [pageShowing, currentPage]);
 
   // Reset scroll position on page change (layout effect to avoid flash).
   // The scrolled flow moves the view itself.
@@ -337,7 +419,10 @@ export default function PageReader({
     const urlPage = parseInt(searchParams.get("page") || "0", 10);
     if (urlPage === currentPage) return;
     const write = () =>
-      setSearchParams({ page: currentPage.toString() }, { replace: true });
+      setSearchParams(
+        { page: currentPage.toString() },
+        { replace: true, state: { readerPage: true } },
+      );
     if (!scrolled) {
       write();
       return;

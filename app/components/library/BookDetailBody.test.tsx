@@ -160,6 +160,7 @@ vi.mock("@/hooks/queries/reading", () => ({
       status: "read",
       rating: 4,
       on_to_read: false,
+      positions: [],
       read_throughs: [
         {
           id: 1,

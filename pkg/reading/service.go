@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"time"
 
@@ -216,6 +217,10 @@ type BookReading struct {
 	OnToRead     bool
 	PageFlow     *string
 	ReadThroughs []*models.ReadThrough
+	// Positions holds each File's Reading Position while a Read-through is
+	// underway. With none underway a place left behind isn't progress, so
+	// it's empty.
+	Positions []*models.ReadingPosition
 }
 
 // BookLibraryID returns the library of bookID, or sql.ErrNoRows when there
@@ -235,7 +240,7 @@ func (svc *Service) BookLibraryID(ctx context.Context, bookID int) (int, error) 
 
 // RetrieveBookReading loads userID's reading record for bookID.
 func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int) (*BookReading, error) {
-	result := &BookReading{ReadThroughs: []*models.ReadThrough{}}
+	result := &BookReading{ReadThroughs: []*models.ReadThrough{}, Positions: []*models.ReadingPosition{}}
 
 	err := svc.db.NewSelect().
 		ColumnExpr(StatusExpr(userID, strconv.Itoa(bookID))+" AS status").
@@ -265,6 +270,21 @@ func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int)
 		result.RatingUnits = userBook.Rating
 		result.OnToRead = userBook.ToReadPosition != nil
 		result.PageFlow = userBook.PageFlow
+	}
+
+	underway := slices.ContainsFunc(result.ReadThroughs, func(rt *models.ReadThrough) bool {
+		return rt.Outcome == models.ReadThroughOutcomeUnderway
+	})
+	if underway {
+		err = svc.db.NewSelect().
+			Model(&result.Positions).
+			Where("rp.user_id = ?", userID).
+			Where("rp.file_id IN (SELECT id FROM files WHERE book_id = ?)", bookID).
+			OrderExpr("rp.file_id").
+			Scan(ctx)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
 	}
 
 	return result, nil

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReadThrough } from "@/types";
 
 import {
+  fileProgressLabel,
   readingStatusLabel,
   readingSummary,
   readingTransitions,
@@ -122,5 +123,18 @@ describe("readingStatusLabel", () => {
     expect(readingStatusLabel("to_read")).toBe("To Read");
     expect(readingStatusLabel("read")).toBe("Read");
     expect(readingStatusLabel("did_not_finish")).toBe("Did Not Finish");
+  });
+});
+
+describe("fileProgressLabel", () => {
+  it.each([
+    ["m4b", 0.62, "62% · audiobook"],
+    ["cbz", 0.5, "50% · comic"],
+    ["pdf", 0.125, "13% · PDF"],
+    ["epub", 1, "100% · ebook"],
+    ["kepub", 0, "0% · ebook"],
+    ["mobi", 0.004, "0% · ebook"],
+  ])("labels a %s %d of the way through", (fileType, percentage, label) => {
+    expect(fileProgressLabel(percentage, fileType)).toBe(label);
   });
 });

@@ -6,9 +6,14 @@ export const READING_IDLE_MS = 5 * 60 * 1000;
 
 // Why a session ended. "close" is the page unloading, so whoever delivers
 // it needs a request that survives unload.
-export type SessionEndReason = "idle" | "hidden" | "close" | "stop";
+export type SessionEndReason = "idle" | "hidden" | "close" | "stop" | "paused";
+
+// What counts as time spent: "activity" is a visible page with recent input,
+// for reading; "playback" is audio playing, whatever the tab is doing.
+export type SessionTiming = "activity" | "playback";
 
 interface ReadingSessionTrackerOptions {
+  timing?: SessionTiming;
   // How far through the File the reader is now, or null before it knows.
   getPercentage: () => number | null;
   onSessionEnd: (session: SessionPayload, reason: SessionEndReason) => void;
@@ -32,7 +37,9 @@ export const ACTIVITY_EVENTS = [
 // Times Reading Sessions for one reader, shared by every web reader. Time
 // counts while the page is visible and there was input in the last five
 // minutes. A session ends after five idle minutes (at its last input), when
-// the page is hidden, when it closes, or on stop.
+// the page is hidden, when it closes, or on stop. With "playback" timing,
+// time counts from setPlaying(true) until setPlaying(false), the page closing,
+// or stop, in a hidden tab too, and input means nothing.
 export class ReadingSessionTracker {
   private readonly options: ReadingSessionTrackerOptions;
   private session: OpenSession | null = null;
@@ -47,11 +54,12 @@ export class ReadingSessionTracker {
   start() {
     if (this.started) return;
     this.started = true;
+    window.addEventListener("pagehide", this.handlePageHide);
+    if (this.options.timing === "playback") return;
     for (const name of ACTIVITY_EVENTS) {
       window.addEventListener(name, this.recordActivity, { passive: true });
     }
     document.addEventListener("visibilitychange", this.handleVisibility);
-    window.addEventListener("pagehide", this.handlePageHide);
     this.recordActivity();
   }
 
@@ -67,8 +75,28 @@ export class ReadingSessionTracker {
     this.end("stop", Date.now());
   }
 
+  // Audio started or stopped playing, with "playback" timing.
+  setPlaying(playing: boolean) {
+    if (!this.started || this.options.timing !== "playback") return;
+    if (!playing) {
+      this.end("paused", Date.now());
+    } else if (!this.session) {
+      this.session = {
+        startedAt: Date.now(),
+        startPercentage: this.options.getPercentage(),
+        lastActivityAt: Date.now(),
+      };
+    }
+  }
+
   recordActivity = () => {
-    if (!this.started || document.visibilityState !== "visible") return;
+    if (
+      !this.started ||
+      this.options.timing === "playback" ||
+      document.visibilityState !== "visible"
+    ) {
+      return;
+    }
     const now = Date.now();
     if (!this.session) {
       this.session = {

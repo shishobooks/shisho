@@ -33,22 +33,24 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 ## Reading in Shisho
 
-The EPUB, KePub, MOBI, and AZW3 reader keeps your place and your reading history current as you read, with nothing to click. [Reading and Playback](./reading-and-playback.md) covers the reader itself.
+Every reader keeps your place and your reading history current as you read or listen, with nothing to click: EPUB, KePub, MOBI, and AZW3 books, CBZ comics, PDFs, and M4B audiobooks. [Reading and Playback](./reading-and-playback.md) covers the reader itself.
 
 ### Resuming Where You Left Off
 
-A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own.
+A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own, so listening to a book's audiobook doesn't move your page in its ebook. While you're reading a book, its page shows how far through each file you are, such as **62% · audiobook**.
 
-- The reader saves your place a few seconds after you turn pages, and right away when you switch to another tab or close the reader.
+- The ebook reader saves your place a few seconds after you turn pages, and right away when you switch to another tab or close the reader.
+- The comic and PDF reader saves each page you turn to. In the **Scrolled** flow, it saves every few seconds as you scroll, and right away when you switch to another tab or close the reader. A link to a page, such as a shared `?page=` link, a page thumbnail, or a chapter, opens that page and saves it as your place, but doesn't start or finish the book until you turn a page.
+- The audiobook player saves every 15 seconds while playing, and right away when you pause or seek.
 - Reading the same book in two browsers, the place you reached most recently wins, so opening the book on your laptop after reading on your phone continues from the phone's place.
 - **Read again**, or deleting the Read-through you're on from **Reading history**, sends every file of the book back to the start.
 
 ### Starting and Finishing Automatically
 
-- **Starting**: turning past the first page of a book you have never read starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing.
+- **Starting**: turning past the first page of a book you have never read, or reaching a minute into its audiobook, starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing, and neither does listening within the first minute.
 - **Rereading**: a book you have read or abandoned starts again only when you choose **Read again**, or when you've added it back to To Read to plan a reread. Otherwise you can open it to look something up, and only your place in it is saved.
-- **Resuming**: turning a page of a paused book makes it **Currently Reading** again.
-- **Finishing**: reaching the last page finishes the Read-through, dated today. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
+- **Resuming**: turning a page of a paused book, or playing it past the first minute, makes it **Currently Reading** again.
+- **Finishing**: reaching the last page finishes the Read-through, dated today. An audiobook finishes when playback ends or you're within its last 60 seconds, so end credits don't stop it being marked read. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
 - **Peeking at the end**: going back before the end within 15 minutes of an automatic finish undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way. After 15 minutes, the book stays **Read**.
 
 ### Your Time Zone

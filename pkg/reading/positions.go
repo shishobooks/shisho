@@ -15,6 +15,15 @@ import (
 // the end to check the back matter and went back hasn't finished.
 const RevertWindow = 15 * time.Minute
 
+const (
+	// AudioStartSeconds is how far into an audiobook counts as real progress:
+	// a minute in, not a few seconds of checking what it sounds like.
+	AudioStartSeconds = 60.0
+	// AudioEndSeconds is how close to an audiobook's end counts as reaching
+	// it, so end credits don't stop it being marked read.
+	AudioEndSeconds = 60.0
+)
+
 // ErrFileNotFound is returned for a position update on a File that doesn't
 // exist.
 var ErrFileNotFound = errors.New("file not found")
@@ -35,9 +44,15 @@ type PositionUpdate struct {
 	Locator models.ReadingLocator
 	// Percentage is how far through the File the position is, from 0 to 1.
 	Percentage float64
-	// AtEnd is the source reporting the end of the File, which finishes
-	// the Read-through underway.
+	// AtEnd is the source reporting the end of the File, such as a
+	// reflowable reader's final location or playback ending, which finishes
+	// the Read-through underway. The last page and an audiobook's last
+	// minute count as the end whether or not the source says so.
 	AtEnd bool
+	// Opened is a reader opened at this place by a link, such as a page
+	// thumbnail or a shared URL, which saves it as the place but isn't
+	// reading: it starts, resumes, finishes, and undoes nothing.
+	Opened bool
 	// OccurredAt is when the source was at the position, for an update
 	// sent later. Nil is now, and an instant after now counts as now.
 	OccurredAt *time.Time
@@ -79,14 +94,19 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			occurredAt = *u.OccurredAt
 		}
 
-		var bookID int
-		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", u.FileID).Scan(ctx, &bookID)
+		file := &models.File{}
+		err := tx.NewSelect().
+			Model(file).
+			Column("f.book_id", "f.page_count", "f.audiobook_duration_seconds").
+			Where("f.id = ?", u.FileID).
+			Scan(ctx)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrFileNotFound
 		}
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		bookID := file.BookID
 		result.BookID = bookID
 
 		stored, err := retrievePosition(ctx, tx, u.UserID, u.FileID)
@@ -107,9 +127,10 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		// reader already was is not. Going back all the way to the start is
 		// still going back, so it can undo a finish.
 		moved := stored == nil || !stored.Equal(u.Locator)
-		progress := u.Percentage > 0 && moved
+		atEnd := !u.Opened && (u.AtEnd || locatorAtEnd(file, u.Locator))
+		progress := moved && !u.Opened && (u.AtEnd || isRealProgress(u))
 
-		if underway == nil && !u.AtEnd && moved {
+		if underway == nil && !atEnd && moved && !u.Opened {
 			reverted, err := revertAutoFinish(ctx, tx, u.UserID, u.FileID, occurredAt, now)
 			if err != nil {
 				return err
@@ -128,8 +149,10 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			}
 		}
 		// Staying at the end, as a reader closed there after Undo reports,
-		// doesn't finish again.
-		finishing := u.AtEnd && progress
+		// doesn't finish again, and neither does playing on through the last
+		// minute. Playback ending still does.
+		stayedAtEnd := stored != nil && !u.AtEnd && locatorAtEnd(file, stored.ReadingLocator)
+		finishing := atEnd && progress && !stayedAtEnd
 		var day string
 		if starting || finishing && underway != nil {
 			day, err = userDay(ctx, tx, u.UserID, occurredAt)
@@ -145,7 +168,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 				return err
 			}
 			result.Started = true
-		case underway != nil && underway.Paused && progress && !u.AtEnd:
+		case underway != nil && underway.Paused && progress && !atEnd:
 			underway.Paused = false
 			underway.UpdatedAt = now
 			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {
@@ -208,7 +231,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			Percentage:     u.Percentage,
 			Source:         u.Source,
 			OccurredAt:     occurredAt,
-			AtEnd:          u.AtEnd,
+			AtEnd:          atEnd,
 			AutoFinished:   autoFinished,
 		}).Exec(ctx)
 		if err != nil {
@@ -221,6 +244,35 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		return nil, err
 	}
 	return result, nil
+}
+
+// isRealProgress reports whether u's position is past where merely opening
+// the File leaves a reader: past the first page or screen, or a minute into
+// audio.
+func isRealProgress(u PositionUpdate) bool {
+	switch {
+	case u.Locator.Seconds != nil:
+		return *u.Locator.Seconds >= AudioStartSeconds
+	case u.Locator.Page != nil:
+		return *u.Locator.Page > 0
+	default:
+		return u.Percentage > 0
+	}
+}
+
+// locatorAtEnd reports whether the position is at the end of file, for the
+// forms where the File's own length says so: its last page, or its last
+// minute of audio. A length the scan didn't record leaves it to the source.
+func locatorAtEnd(file *models.File, locator models.ReadingLocator) bool {
+	switch {
+	case locator.Page != nil:
+		return file.PageCount != nil && *file.PageCount > 0 && *locator.Page >= *file.PageCount-1
+	case locator.Seconds != nil:
+		return file.AudiobookDurationSeconds != nil && *file.AudiobookDurationSeconds > 0 &&
+			*locator.Seconds >= *file.AudiobookDurationSeconds-AudioEndSeconds
+	default:
+		return false
+	}
 }
 
 func readThroughID(rt *models.ReadThrough) *int {

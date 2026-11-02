@@ -61,11 +61,14 @@ const requestedPaths = async (
 ) => {
   const request = vi
     .spyOn(API, "request")
-    .mockImplementation(async (_method, path) =>
-      path === SHARING_SETTINGS
-        ? { enabled: true, require_expiration: false }
-        : [],
-    );
+    .mockImplementation(async (_method, path) => {
+      if (path === SHARING_SETTINGS) {
+        return { enabled: true, require_expiration: false };
+      }
+      return path.startsWith("/reading/books/")
+        ? { read_throughs: [], positions: [] }
+        : [];
+    });
   render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>

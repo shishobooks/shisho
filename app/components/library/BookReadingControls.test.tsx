@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
-import type { BookReadingResponse, ReadingStatus, ReadThrough } from "@/types";
+import type {
+  BookReadingResponse,
+  File,
+  ReadingPosition,
+  ReadingStatus,
+  ReadThrough,
+} from "@/types";
 
 import BookReadingControls from "./BookReadingControls";
 import ReadingHistory from "./ReadingHistory";
@@ -21,6 +27,7 @@ const reading = (
   rating: null,
   on_to_read: false,
   read_throughs: [],
+  positions: [],
   ...overrides,
 });
 
@@ -36,12 +43,15 @@ const readThrough = (overrides: Partial<ReadThrough>): ReadThrough => ({
   ...overrides,
 });
 
-const renderControls = (initial: BookReadingResponse) => {
+const renderControls = (
+  initial: BookReadingResponse,
+  files: Array<Pick<File, "id" | "file_type">> = [],
+) => {
   const request = vi.spyOn(API, "request").mockResolvedValue(initial);
   render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>
-        <BookReadingControls bookId={7} />
+        <BookReadingControls bookId={7} files={files} />
         <ReadingHistory bookId={7} />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -63,6 +73,34 @@ const menuItems = () =>
 describe("BookReadingControls", () => {
   beforeEach(() => setAuth({ permissions: ["books:read"] }));
   afterEach(() => vi.restoreAllMocks());
+
+  it("shows each file's progress", async () => {
+    renderControls(
+      reading({
+        status: "currently_reading",
+        positions: [
+          { file_id: 1, percentage: 0.4 },
+          { file_id: 2, percentage: 0.62 },
+        ] as ReadingPosition[],
+      }),
+      [
+        { id: 1, file_type: "epub" },
+        { id: 2, file_type: "m4b" },
+      ],
+    );
+
+    expect(await screen.findByText("40% · ebook")).toBeInTheDocument();
+    expect(screen.getByText("62% · audiobook")).toBeInTheDocument();
+  });
+
+  it("shows no progress with no positions", async () => {
+    renderControls(reading({ status: "read", positions: [] }), [
+      { id: 1, file_type: "epub" },
+    ]);
+
+    await screen.findByRole("button", { name: "Reading status: Read" });
+    expect(screen.queryByText(/% · /)).not.toBeInTheDocument();
+  });
 
   it.each<[ReadingStatus | null, string, string[]]>([
     [
@@ -233,7 +271,7 @@ describe("BookReadingControls", () => {
     render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <BookReadingControls bookId={7} />
+          <BookReadingControls bookId={7} files={[]} />
         </MemoryRouter>
       </QueryClientProvider>,
     );
