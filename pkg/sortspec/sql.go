@@ -28,7 +28,7 @@ type OrderClause struct {
 // books missing the sort key always sit at the end regardless of
 // direction. SQLite has no native NULLS LAST.
 //
-// The reading_status, rating, and date_finished levels sort on readerID's
+// The reading_status, rating, date_finished, and last_read levels sort on readerID's
 // reading data, and are skipped when readerID is nil.
 func OrderClauses(levels []SortLevel, readerID *int) []OrderClause {
 	if len(levels) == 0 {
@@ -102,6 +102,11 @@ func OrderClauses(levels []SortLevel, readerID *int) []OrderClause {
 		case FieldDateFinished:
 			if readerID != nil {
 				out = append(out, nullsLast(reading.LastFinishedDayExpr(*readerID, "b.id"), l.Direction))
+			}
+
+		case FieldLastRead:
+			if readerID != nil {
+				out = append(out, nullsLast(reading.LastReadExpr(*readerID, "b.id"), l.Direction))
 			}
 		}
 	}

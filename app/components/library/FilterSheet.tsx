@@ -88,6 +88,8 @@ type FilterOptionsQuery = RetryableQuery & { data: unknown };
 interface FilterSheetProps {
   /** The reading filters, which read the signed-in user's own reading. */
   reading: ReadingFilters;
+  /** Leaves out the status filter, for a page that's already one status. */
+  hideReadingStatus?: boolean;
   onToggleReadingStatus: (status: ReadingStatusFilter) => void;
   onRatingChange: (min: number | undefined, max: number | undefined) => void;
   selectedFileTypes: string[];
@@ -515,10 +517,13 @@ const RatingRangeSlider = ({
  */
 export const ReadingFilterSection = ({
   filters,
+  hideStatus = false,
   onToggleStatus,
   onRatingChange,
 }: {
   filters: ReadingFilters;
+  /** Leaves out the status filter, for a page that's already one status. */
+  hideStatus?: boolean;
   onToggleStatus: (status: ReadingStatusFilter) => void;
   /** Undefined leaves that end of the range open. */
   onRatingChange: (min: number | undefined, max: number | undefined) => void;
@@ -528,26 +533,28 @@ export const ReadingFilterSection = ({
 
   return (
     <>
-      <div>
-        <SectionHeader
-          colorClass="bg-chart-1/20 text-chart-1"
-          detail={
-            filters.statuses.length > 0
-              ? `${filters.statuses.length} selected`
-              : undefined
-          }
-          icon={<BookOpenCheck className="h-3 w-3" />}
-          label="Reading status"
-          labelId={statusLabelId}
-        />
-        <MultiSelectCombobox
-          labelId={statusLabelId}
-          onToggle={onToggleStatus}
-          options={READING_STATUS_FILTER_OPTIONS}
-          placeholder="Any status"
-          selected={filters.statuses}
-        />
-      </div>
+      {!hideStatus && (
+        <div>
+          <SectionHeader
+            colorClass="bg-chart-1/20 text-chart-1"
+            detail={
+              filters.statuses.length > 0
+                ? `${filters.statuses.length} selected`
+                : undefined
+            }
+            icon={<BookOpenCheck className="h-3 w-3" />}
+            label="Reading status"
+            labelId={statusLabelId}
+          />
+          <MultiSelectCombobox
+            labelId={statusLabelId}
+            onToggle={onToggleStatus}
+            options={READING_STATUS_FILTER_OPTIONS}
+            placeholder="Any status"
+            selected={filters.statuses}
+          />
+        </div>
+      )}
 
       <div>
         <SectionHeader
@@ -627,6 +634,7 @@ const TagScopeSwitch = ({
 
 const FilterContent = ({
   reading,
+  hideReadingStatus,
   onToggleReadingStatus,
   onRatingChange,
   selectedFileTypes,
@@ -668,6 +676,7 @@ const FilterContent = ({
     <div className="space-y-6">
       <ReadingFilterSection
         filters={reading}
+        hideStatus={hideReadingStatus}
         onRatingChange={onRatingChange}
         onToggleStatus={onToggleReadingStatus}
       />
@@ -974,7 +983,11 @@ export const FilterSheet = (props: FilterSheetProps) => {
   const { onClearAll, hasActiveFilters, ...filterContentProps } = props;
   return (
     <FilterPanel
-      description="Filter books by reading status, rating, file type, genre, tag, or language"
+      description={
+        props.hideReadingStatus
+          ? "Filter books by rating, file type, genre, tag, or language"
+          : "Filter books by reading status, rating, file type, genre, tag, or language"
+      }
       hasActiveFilters={hasActiveFilters}
       onClearAll={onClearAll}
     >

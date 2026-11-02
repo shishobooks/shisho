@@ -45,6 +45,7 @@ import {
 } from "@/libraries/readingFilters";
 import {
   BUILTIN_DEFAULT_SORT,
+  CURRENTLY_READING_DEFAULT_SORT,
   parseSortSpec,
   serializeSortSpec,
   SORT_FIELD_LABELS,
@@ -92,13 +93,22 @@ const selectedFilters = (
     return [{ id, name: `${label} #${id}` }];
   });
 
-const HomeContent = () => {
+interface HomeProps {
+  /** The Currently Reading page: this gallery, of the books being read. */
+  currentlyReading?: boolean;
+}
+
+const HomeContent = ({ currentlyReading = false }: HomeProps) => {
   const { libraryId } = useParams();
   const [searchParams] = useSearchParams();
   const updateSearchParams = useUpdateSearchParams();
   const libraryQuery = useUserLibrary(libraryId);
 
-  usePageTitle(libraryQuery.data?.name ?? "Books");
+  usePageTitle(
+    currentlyReading
+      ? "Currently Reading"
+      : (libraryQuery.data?.name ?? "Books"),
+  );
   const { isSelectionMode, enterSelectionMode, exitSelectionMode } =
     useBulkSelection();
   const seriesIdParam = searchParams.get("series_id");
@@ -107,7 +117,11 @@ const HomeContent = () => {
   const tagIdsParam = searchParams.get("tag_ids") ?? "";
   const languageParam = searchParams.get("language") ?? "";
   const reviewedFilterParam = searchParams.get("reviewed_filter") ?? "";
-  const readingFilters = parseReadingFilters(searchParams);
+  // The Currently Reading page is one status, whatever the URL names.
+  const urlReadingFilters = parseReadingFilters(searchParams);
+  const readingFilters = currentlyReading
+    ? { ...urlReadingFilters, statuses: [] }
+    : urlReadingFilters;
   const readingFiltersActive = hasReadingFilters(readingFilters);
   const sortParam = searchParams.get("sort") ?? "";
   const urlSort: SortLevel[] | null = sortParam
@@ -157,8 +171,11 @@ const HomeContent = () => {
   const storedSort: SortLevel[] | null = librarySettingsQuery.data?.sort_spec
     ? parseSortSpec(librarySettingsQuery.data.sort_spec)
     : null;
-  const defaultSort: readonly SortLevel[] =
-    storedSort && storedSort.length > 0 ? storedSort : BUILTIN_DEFAULT_SORT;
+  const defaultSort: readonly SortLevel[] = currentlyReading
+    ? CURRENTLY_READING_DEFAULT_SORT
+    : storedSort && storedSort.length > 0
+      ? storedSort
+      : BUILTIN_DEFAULT_SORT;
   const effectiveSort: readonly SortLevel[] =
     urlSort && urlSort.length > 0 ? urlSort : defaultSort;
 
@@ -399,6 +416,7 @@ const HomeContent = () => {
     library_id: libraryId ? parseInt(libraryId, 10) : undefined,
     series_id: seriesId,
     ...readingFilterQuery(readingFilters),
+    ...(currentlyReading && { reading_status: ["currently_reading"] }),
   };
 
   // Add search if present
@@ -514,6 +532,7 @@ const HomeContent = () => {
       libraryId={libraryId!}
       pageBookIds={pageBookIds}
       seriesId={seriesId}
+      showLastRead={currentlyReading}
     />
   );
 
@@ -552,6 +571,7 @@ const HomeContent = () => {
               genresQuery.isPlaceholderData
             }
             hasActiveFilters={hasActiveFilters}
+            hideReadingStatus={currentlyReading}
             languageOptions={languageOptions}
             languageParam={languageParam}
             onClearAll={clearAllFilters}
@@ -590,7 +610,9 @@ const HomeContent = () => {
             isSaving={updateLibrarySettings.isPending}
             levels={effectiveSort}
             onChange={(next) => applySortLevels(next)}
-            onSaveAsDefault={handleSaveSortAsDefault}
+            onSaveAsDefault={
+              currentlyReading ? undefined : handleSaveSortAsDefault
+            }
             trigger={<SortButton isDirty={isSortDirty} />}
           />
           <div className="hidden sm:flex">
@@ -654,7 +676,9 @@ const HomeContent = () => {
           emptyMessage={
             confirmedHasFilters
               ? "No books found matching your search or filters."
-              : "No books in this library yet."
+              : currentlyReading
+                ? "You aren't reading any books in this library."
+                : "No books in this library yet."
           }
           // A background refetch (a reading change, an SSE event) keeps the
           // loaded items on screen. A new page or filter shows the spinner,
@@ -677,9 +701,9 @@ const HomeContent = () => {
   );
 };
 
-const Home = () => (
+const Home = ({ currentlyReading }: HomeProps) => (
   <BulkSelectionProvider>
-    <HomeContent />
+    <HomeContent currentlyReading={currentlyReading} />
   </BulkSelectionProvider>
 );
 

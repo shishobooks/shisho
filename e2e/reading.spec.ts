@@ -118,6 +118,15 @@ test.describe("Reading", () => {
       page.getByRole("button", { name: "Reading status: Currently Reading" }),
     ).toBeVisible();
 
+    // The Currently Reading page lists only that book.
+    await page.goto(`/libraries/${libraryId}/currently-reading`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("link").filter({ hasText: "Underway Book" }),
+    ).toBeVisible();
+    await expect(page.getByText("Tracked Book")).not.toBeVisible();
+
     // Currently Reading comes before Read ascending, and after it
     // descending.
     const cardTitles = page

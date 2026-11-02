@@ -25,11 +25,11 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 - **Add to To Read** or **Remove from To Read** puts the book at the end of your [To Read](#to-read) queue or takes it off. It isn't offered while you're reading the book or have paused it.
 - **Start reading** begins a new read dated today. It's called **Read again** once you have read the book before, and the earlier reads stay in the history.
 - **Pause** sets aside the book you're reading. **Resume** picks it back up with its original start date.
-- **Mark as read** finishes the read you're on, dated today. With nothing underway, it records a finished read that ended today with no start date, for a book you read before you used Shisho.
-- **Mark as Did Not Finish** ends the read you're on as abandoned, dated today.
+- **Mark as read** finishes the read you're on, dated [the day you last read it](#last-read). With nothing underway, it records a finished read that ended today with no start date, for a book you read before you used Shisho.
+- **Mark as Did Not Finish** ends the read you're on as abandoned, dated the same way.
 - **Mark as not started** takes back the read you're on, as if you had never started it: it's deleted from the history, every main file of the book opens at the start again, and a book that left To Read when you started it goes back to its place there.
 
-"Today" is the date in [your time zone](#your-time-zone) when you choose the action.
+"Today" is the date in [your time zone](#your-time-zone) when you choose the action. To correct a date afterwards, use **Edit dates** in [Reading History](#reading-history).
 
 ## Reading in Shisho
 
@@ -37,7 +37,7 @@ Every reader keeps your place and your reading history current as you read or li
 
 ### Resuming Where You Left Off
 
-A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own, so listening to a book's audiobook doesn't move your page in its ebook. Each file on a book's page with a saved place shows how far through it you are, as a ring with the percentage. While you're reading a book, its bookmark shows your progress through the book in place of its icon: the furthest you've reached in any of its main files. Wherever books are listed, its cover also has a bar showing the same progress.
+A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own, so listening to a book's audiobook doesn't move your page in its ebook. Each file on a book's page with a saved place shows how far through it you are, as a ring with the percentage. While you're reading a book, its bookmark shows your progress through the book in place of its icon: the furthest you've reached in any of its main files. Wherever books are listed, a bar sits under its cover showing the same progress.
 
 - The ebook reader saves your place a few seconds after you turn pages, and right away when you switch to another tab or close the reader.
 - The comic and PDF reader saves each page you turn to. In the **Scrolled** flow, it saves every few seconds as you scroll, and right away when you switch to another tab or close the reader. A link to a page, such as a shared `?page=` link, a page thumbnail, or a chapter, opens that page and saves it as your place, but doesn't start or finish the book until you turn a page.
@@ -55,7 +55,23 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 
 ### Supplements
 
-A supplement keeps your place like any other file, and shows how far through it you are, but reading it never changes the book's status: it doesn't start, resume, or finish a read. Starting a read doesn't send a supplement back to the start either.
+A supplement keeps your place like any other file, and shows how far through it you are, but reading it never changes the book's status: it doesn't start, resume, or finish a read. Starting a read doesn't send a supplement back to the start either. Supplements don't count toward [last read](#last-read).
+
+### Last Read
+
+The page of a book you're reading or have paused shows when you last read it, such as **Last read 4 hours ago** or **Last read 5 days ago**, and so does its card on the [Currently Reading page](#currently-reading-page). Hovering over it shows the exact date and time. Last read is the latest reading on any of the book's main files during the read you're on. Opening a place from a link, such as a page thumbnail or a shared `?page=` link, doesn't count as reading. A book you have read or abandoned shows no last read, even if you open it again to look something up.
+
+**Mark as read** and **Mark as Did Not Finish** date the read's end by the day you last read the book, not today, so a book you put down before the epilogue and close out a week later shows when you really stopped. With no reading to go on, such as a book you marked **Start reading** and read elsewhere, they use today.
+
+### Currently Reading Page
+
+**Currently Reading** in a library's sidebar lists the books in that library you're reading, most recently read first. It works like **Books**, with the same search, filters, sort, and selection, except:
+
+- Each card shows when you last read the book.
+- There's no **Reading status** filter, since the page is already one status.
+- Sorting here can't be saved as the library's default.
+
+Paused books aren't listed until you resume them. To find them, filter **Books** by the **Paused** status.
 
 ### Your Time Zone
 
@@ -82,9 +98,9 @@ Reading apps can download from your queue through the [OPDS catalog](./opds.md#c
 Your statuses and ratings are ways to browse, in a library's gallery and on any [list](./lists.md). Each user filters and sorts by their own.
 
 - **Filter** has a **Reading status** picker, where you can choose one or more statuses, and **No status** for books you have never tracked. A book matching any chosen status shows. Below it, the **Rating** slider sets a range in quarter stars: drag the left end up to set the lowest rating, and the right end down to set the highest. An end left at its edge, marked **Any**, sets no limit on that side. Unrated books match only while both ends are at **Any**.
-- **Sort** offers **Reading status**, **Rating**, and **Date finished**.
+- **Sort** offers **Reading status**, **Rating**, **Date finished**, and **Last read**.
   - **Reading status** orders books Currently Reading, Paused, To Read, Read, Did Not Finish, then books with no status, so the books you're reading come first. Reverse it to put them last. Add another level, such as **Date added**, to order books with the same status.
-  - **Rating** and **Date finished** start highest and latest first. Date finished is the end date of your latest finished read; a book you abandoned, or finished with no end date, has none. Books with no rating or finish date come last in either direction.
+  - **Rating**, **Date finished**, and **Last read** start highest and latest first. Date finished is the end date of your latest finished read; a book you abandoned, or finished with no end date, has none. [Last read](#last-read) only applies to books you're reading or have paused. Books with no rating or date come last in either direction.
   - A list's sort menu offers **Currently Reading First**, **Currently Reading Last**, **Rating (high to low)**, **Rating (low to high)**, **Recently Finished**, and **Earliest Finished**.
 
 Filters apply before the gallery or list pages, so the count and every page hold only matching books. An ordered list can't be dragged into a new order while it's filtered.

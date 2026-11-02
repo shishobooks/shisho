@@ -58,8 +58,8 @@ type ListBooksOptions struct {
 	// whatever the Sort.
 	CurrentlyReadingUserID *int
 
-	// ReaderID is the user whose reading data Reading and the rating and
-	// date_finished sorts read. Without it, those are ignored.
+	// ReaderID is the user whose reading data Reading and the rating,
+	// date_finished, and last_read sorts read. Without it, those are ignored.
 	ReaderID *int
 	Reading  reading.Filter
 

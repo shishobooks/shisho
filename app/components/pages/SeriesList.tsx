@@ -95,7 +95,7 @@ export const SeriesCard = ({
             />
           )}
         </div>
-        <TruncatedText className="mt-2 group-hover:underline text-sm font-bold line-clamp-2">
+        <TruncatedText className="mt-3 group-hover:underline text-sm font-bold line-clamp-2">
           {seriesItem.name}
         </TruncatedText>
       </Link>

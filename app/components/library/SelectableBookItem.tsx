@@ -10,6 +10,7 @@ interface SelectableBookItemProps {
   coverAspectRatio?: string;
   addedByUsername?: string;
   pageBookIds: number[];
+  showLastRead?: boolean;
 }
 
 export const SelectableBookItem = ({
@@ -19,6 +20,7 @@ export const SelectableBookItem = ({
   coverAspectRatio,
   addedByUsername,
   pageBookIds,
+  showLastRead,
 }: SelectableBookItemProps) => {
   const { isSelectionMode, isSelected, toggleBook, selectRange } =
     useBulkSelection();
@@ -34,6 +36,7 @@ export const SelectableBookItem = ({
       onSelect={() => toggleBook(book.id)}
       onShiftSelect={() => selectRange(book.id, pageBookIds)}
       seriesId={seriesId}
+      showLastRead={showLastRead}
     />
   );
 };

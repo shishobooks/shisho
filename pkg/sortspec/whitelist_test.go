@@ -41,7 +41,7 @@ func TestAllFields_Stable(t *testing.T) {
 		"title", "author", "series",
 		"date_added", "date_released",
 		"page_count", "duration",
-		"reading_status", "rating", "date_finished",
+		"reading_status", "rating", "date_finished", "last_read",
 	}
 	assert.Equal(t, expected, AllFields())
 }

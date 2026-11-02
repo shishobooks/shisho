@@ -344,6 +344,17 @@ export const routes: RouteObject[] = [
         ),
       },
       {
+        path: "libraries/:libraryId/currently-reading",
+        element: (
+          <ProtectedRoute
+            checkLibraryAccess
+            requiredPermission={ROUTE_PERMISSIONS.libraryCurrentlyReading}
+          >
+            <Home currentlyReading key="currently-reading" />
+          </ProtectedRoute>
+        ),
+      },
+      {
         path: "libraries/:libraryId/settings",
         element: (
           <ProtectedRoute

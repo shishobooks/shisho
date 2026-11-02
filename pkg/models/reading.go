@@ -143,6 +143,8 @@ type ReadingPositionUpdate struct {
 	OccurredAt     time.Time `json:"occurred_at"`
 	AtEnd          bool      `bun:",notnull" json:"at_end"`
 	AutoFinished   bool      `bun:",notnull" json:"auto_finished"`
+	// Opened marks a place a link opened, which isn't reading.
+	Opened bool `bun:",notnull" json:"opened"`
 }
 
 // ReadingSession is one stretch of reading or listening to a File. See

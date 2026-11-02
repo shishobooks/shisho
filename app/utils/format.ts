@@ -1,3 +1,5 @@
+import { differenceInCalendarDays, formatDistance, startOfDay } from "date-fns";
+
 // Shared formatting utilities
 
 import { FileTypeKePub } from "@/types";
@@ -186,6 +188,21 @@ export const localDay = (date: Date): string => {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
+};
+
+/**
+ * An instant as a calendar day relative to now, in the browser's time zone.
+ * A clock running ahead of the browser's reads as today.
+ * @example formatDaysAgo("2026-11-01T12:00:00Z") // "yesterday"
+ * @example formatDaysAgo("2026-10-28T12:00:00Z") // "5 days ago"
+ */
+export const formatDaysAgo = (instant: string, now = new Date()): string => {
+  const days = differenceInCalendarDays(now, new Date(instant));
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  return formatDistance(startOfDay(new Date(instant)), startOfDay(now), {
+    addSuffix: true,
+  });
 };
 
 /**

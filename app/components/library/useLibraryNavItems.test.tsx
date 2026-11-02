@@ -31,7 +31,13 @@ describe("useLibraryNavItems", () => {
   it("hides Series and People without their Read permissions", () => {
     setAuth({ permissions: ["books:read"] });
 
-    expect(shownLabels()).toEqual(["Books", "Genres", "Tags", "Publishers"]);
+    expect(shownLabels()).toEqual([
+      "Books",
+      "Currently Reading",
+      "Genres",
+      "Tags",
+      "Publishers",
+    ]);
   });
 
   it("shows Series and People with their Read permissions", () => {
@@ -39,6 +45,7 @@ describe("useLibraryNavItems", () => {
 
     expect(shownLabels()).toEqual([
       "Books",
+      "Currently Reading",
       "Series",
       "People",
       "Genres",
@@ -55,5 +62,29 @@ describe("useLibraryNavItems", () => {
       permissions: ["books:read", "libraries:read", "libraries:write"],
     });
     expect(shownLabels()).toContain("Settings");
+  });
+
+  it("marks Currently Reading active on its page, and Books not", () => {
+    setAuth({ permissions: ["books:read"] });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <MemoryRouter initialEntries={["/libraries/1/currently-reading"]}>
+        <Routes>
+          <Route element={children} path="/libraries/:libraryId/*" />
+        </Routes>
+      </MemoryRouter>
+    );
+    const items = renderHook(() => useLibraryNavItems(), { wrapper }).result
+      .current!;
+
+    expect(
+      items.find((item) => item.label === "Currently Reading"),
+    ).toMatchObject({ isActive: true, to: "/libraries/1/currently-reading" });
+    expect(items.find((item) => item.label === "Books")?.isActive).toBe(false);
+  });
+
+  it("hides Currently Reading without Books Read", () => {
+    setAuth({ permissions: ["shares:write"] });
+
+    expect(shownLabels()).not.toContain("Currently Reading");
   });
 });
