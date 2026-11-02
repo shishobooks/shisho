@@ -80,6 +80,14 @@ describe("ListsIndex To Read", () => {
       { to_read: true, limit: 1 },
       expect.anything(),
     );
+    expect(
+      await screen.findByText(
+        "Get started with a template or create a custom list.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/You don't have any lists yet/),
+    ).not.toBeInTheDocument();
   });
 
   it("leaves To Read out for a role without Books Read", async () => {

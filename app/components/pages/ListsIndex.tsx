@@ -169,9 +169,11 @@ const ListsIndex = () => {
         {listsQuery.data && !hasLists && (
           <div className="space-y-6">
             <div className="text-center py-8">
+              {/* To Read reads as a list, so claiming there are none would
+                  contradict the card pinned above. */}
               <p className="text-muted-foreground mb-4">
-                You don't have any lists yet. Get started with a template or
-                create a custom list.
+                {!canReadBooks && "You don't have any lists yet. "}
+                Get started with a template or create a custom list.
               </p>
             </div>
 

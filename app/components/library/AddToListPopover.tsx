@@ -27,6 +27,7 @@ import {
   firstFailedQuery,
   toastRequestError,
 } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 import type { CreateListPayload, ListResponse } from "@/types";
 import { canQueueToRead } from "@/utils/readingStatus";
 
@@ -106,6 +107,9 @@ const AddToListPopover = ({
   // either replaces the menu.
   const failedQuery = firstFailedQuery(listsQuery, bookListsQuery);
   const hasLists = lists.length > 0;
+  // To Read reads as a list, so "No lists yet" beneath it would contradict
+  // the row above. Without lists, To Read is the whole menu.
+  const onlyToRead = reading && !failedQuery && allLists.length === 0;
 
   const handleToggle = async (list: ListResponse) => {
     const isInList = bookListIds.has(list.id);
@@ -191,7 +195,7 @@ const AddToListPopover = ({
         )}
 
         {!isLoading && reading && (
-          <div className="border-b px-1 pb-1 mb-1">
+          <div className={cn("px-1 pb-1", !onlyToRead && "border-b mb-1")}>
             <div
               aria-checked={onToRead}
               aria-describedby={toReadHint ? toReadHintId : undefined}
@@ -239,7 +243,7 @@ const AddToListPopover = ({
           />
         )}
 
-        {!isLoading && !failedQuery && !hasLists && (
+        {!isLoading && !failedQuery && !hasLists && !onlyToRead && (
           <p className="text-sm text-muted-foreground px-3 py-3 text-center">
             {allLists.length > 0 ? "No lists you can edit" : "No lists yet"}
           </p>
