@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
 import { FileRoleMain, ReviewOverrideReviewed, type Book } from "@/types";
@@ -11,6 +11,7 @@ import { BookEditDialog } from "./BookEditDialog";
 const mocks = vi.hoisted(() => ({
   updateBook: vi.fn().mockResolvedValue(undefined),
   setBookReview: vi.fn().mockResolvedValue(undefined),
+  searching: false,
 }));
 
 vi.mock("@/hooks/queries/books", () => ({
@@ -20,10 +21,10 @@ vi.mock("@/hooks/queries/books", () => ({
 vi.mock("@/hooks/queries/entity-search", () => ({
   useAuthorSearch: () => ({ data: [], isLoading: false }),
   useGenreItemCounts: () => new Map(),
-  useGenreSearch: () => ({ data: [], isLoading: false }),
+  useGenreSearch: () => ({ data: [], isLoading: mocks.searching }),
   useSeriesSearch: () => ({ data: [], isLoading: false }),
   useTagItemCounts: () => new Map(),
-  useTagSearch: () => ({ data: [], isLoading: false }),
+  useTagSearch: () => ({ data: [], isLoading: mocks.searching }),
 }));
 
 vi.mock("@/hooks/queries/review", () => ({
@@ -101,6 +102,55 @@ function renderDialog(book: Book, onOpenChange = vi.fn()) {
     <BookEditDialog book={book} onOpenChange={onOpenChange} open={true} />,
   );
 }
+
+describe("BookEditDialog early Enter", () => {
+  afterEach(() => {
+    mocks.searching = false;
+  });
+
+  it.each(["Genres", "Tags"])(
+    "holds Save until an entry in %s lands",
+    async (field) => {
+      mocks.searching = true;
+      const user = userEvent.setup({
+        advanceTimers: vi.advanceTimersByTime,
+        delay: null,
+      });
+      renderDialog(makeBook("cbz"));
+      const save = screen.getByRole("button", { name: "Save Changes" });
+      expect(save).toBeEnabled();
+
+      await user.click(screen.getByRole("combobox", { name: field }));
+      await user.keyboard("cozy{Enter}");
+      expect(save).toBeDisabled();
+
+      // The search answers; the next keystroke re-renders the waiting search.
+      mocks.searching = false;
+      await user.keyboard("x");
+      expect(save).toBeEnabled();
+      expect(screen.getByText("cozy")).toBeInTheDocument();
+    },
+  );
+
+  it("warns before closing over an entry still waiting for its search", async () => {
+    mocks.searching = true;
+    const onOpenChange = vi.fn();
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      delay: null,
+    });
+    renderDialog(makeBook("cbz"), onOpenChange);
+
+    await user.click(screen.getByRole("combobox", { name: "Tags" }));
+    await user.keyboard("cozy{Enter}{Escape}");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(
+      screen.getByRole("heading", { name: /unsaved changes/i }),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("BookEditDialog series range editing", () => {
   it("includes an edited range end in the update payload", async () => {

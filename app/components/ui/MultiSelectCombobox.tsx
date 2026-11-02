@@ -1,5 +1,5 @@
-import { ChevronsUpDown, Plus, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
 import type { OptionSearch } from "@/hooks/queries/entity-search";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useHighlightFirstOption } from "@/hooks/useHighlightFirstOption";
+import { toastRequestError } from "@/libraries/api";
 
 interface MultiSelectComboboxProps<T> {
   values: string[];
@@ -37,6 +38,40 @@ interface MultiSelectComboboxProps<T> {
   getOptionCount?: (item: T) => number | undefined;
   placeholder?: string;
   useSelectedItemCounts?: (values: string[]) => Map<string, number>;
+  /**
+   * Whether a pressed Enter is still waiting for its search, so `values` is
+   * about to change. A form holds its save until this turns false.
+   */
+  onPendingChange?: (pending: boolean) => void;
+}
+
+/**
+ * Runs the search for one Enter pressed before its results arrived, apart from
+ * the search behind the box, which has moved on to whatever is typed next.
+ */
+function EarlyEnterSearch<T>({
+  text,
+  hook,
+  onAnswer,
+  onFailure,
+}: {
+  text: string;
+  hook: (query: string) => OptionSearch<T>;
+  onAnswer: (items: T[]) => void;
+  onFailure: (error: unknown) => void;
+}) {
+  const { data, isLoading, isPlaceholderData, isPaused, isError, error } =
+    hook(text);
+  const waiting = isLoading || isPlaceholderData || isPaused;
+  // Strict Mode reruns the effect, and a second answer would add the next match.
+  const finished = useRef(false);
+  useEffect(() => {
+    if (finished.current || (waiting && !isError)) return;
+    finished.current = true;
+    if (isError) onFailure(error);
+    else onAnswer(data ?? []);
+  });
+  return null;
 }
 
 export function MultiSelectCombobox<T>({
@@ -50,10 +85,25 @@ export function MultiSelectCombobox<T>({
   getOptionCount,
   placeholder,
   useSelectedItemCounts,
+  onPendingChange,
 }: MultiSelectComboboxProps<T>) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 200);
+  const [earlyEnters, setEarlyEnters] = useState<
+    { id: number; text: string; valuesAtEnter: string[] }[]
+  >([]);
+  const nextEarlyEnterId = useRef(0);
+  // Early Enters can answer in one render, so each adds to what the last added.
+  const latestValues = useRef(values);
+  latestValues.current = values;
+
+  const hasEarlyEnters = earlyEnters.length > 0;
+  useEffect(() => {
+    onPendingChange?.(hasEarlyEnters);
+    // Unmounting drops the wait, and a form must not stay held by it.
+    return () => onPendingChange?.(false);
+  }, [hasEarlyEnters, onPendingChange]);
   const {
     data: items = [],
     isLoading,
@@ -62,12 +112,11 @@ export function MultiSelectCombobox<T>({
   } = hook(debouncedSearch);
 
   const chipCounts = useRef(new Map<string, number>());
-  if (getOptionCount) {
-    for (const item of items) {
-      const c = getOptionCount(item);
-      if (c != null) chipCounts.current.set(getOptionLabel(item), c);
-    }
-  }
+  const rememberCount = (item: T) => {
+    const count = getOptionCount?.(item);
+    if (count != null) chipCounts.current.set(getOptionLabel(item), count);
+  };
+  items.forEach(rememberCount);
 
   const missingValues = values.filter((v) => !chipCounts.current.has(v));
   const selectedCounts = useSelectedItemCounts
@@ -94,22 +143,61 @@ export function MultiSelectCombobox<T>({
     ) &&
     !values.some((v) => v.toLowerCase() === trimmed.toLowerCase());
 
+  const addValue = (value: string) => {
+    latestValues.current = [...latestValues.current, value];
+    onChange(latestValues.current);
+  };
+
+  const hasValue = (value: string) =>
+    latestValues.current.some((v) => v.toLowerCase() === value.toLowerCase());
+
   const handleSelect = (item: T) => {
     const itemLabel = getOptionLabel(item);
-    if (!values.includes(itemLabel)) {
-      onChange([...values, itemLabel]);
+    if (!hasValue(itemLabel)) {
+      addValue(itemLabel);
     }
     setSearch("");
   };
 
   const handleCreate = () => {
-    if (
-      trimmed &&
-      !values.some((v) => v.toLowerCase() === trimmed.toLowerCase())
-    ) {
-      onChange([...values, trimmed]);
+    if (trimmed && !hasValue(trimmed)) {
+      addValue(trimmed);
     }
     setSearch("");
+  };
+
+  const handleEarlyEnter = () => {
+    if (!trimmed) return;
+    const id = nextEarlyEnterId.current++;
+    setEarlyEnters((prev) => [
+      ...prev,
+      { id, text: trimmed, valuesAtEnter: latestValues.current },
+    ]);
+    setSearch("");
+  };
+
+  const finishEarlyEnter = (id: number) =>
+    setEarlyEnters((prev) => prev.filter((enter) => enter.id !== id));
+
+  // Picks what Enter would have, had the results for the text been showing:
+  // the first match not yet chosen when it was pressed. If that match has been
+  // chosen since (a click, the same text entered twice), it's already done, and
+  // moving on to the next match would add a tag nobody asked for.
+  const answerEarlyEnter = (
+    {
+      id,
+      text,
+      valuesAtEnter,
+    }: { id: number; text: string; valuesAtEnter: string[] },
+    answer: T[],
+  ) => {
+    finishEarlyEnter(id);
+    const wasChosen = (name: string) =>
+      valuesAtEnter.some((v) => v.toLowerCase() === name.toLowerCase());
+    const first = answer.find((item) => !wasChosen(getOptionLabel(item)));
+    const picked = first ? getOptionLabel(first) : text;
+    if (first) rememberCount(first);
+    if (!hasValue(picked)) addValue(picked);
   };
 
   const highlight = useHighlightFirstOption({
@@ -123,9 +211,15 @@ export function MultiSelectCombobox<T>({
         : []),
     ],
     loading: isLoading,
-    pending: isPlaceholderData || search !== debouncedSearch,
+    // An empty box has no search to wait for, and an option moved to on it can
+    // be picked as shown.
+    pending: !!trimmed && (isPlaceholderData || search !== debouncedSearch),
     failed: isError,
     open,
+    // An empty box asked for nothing, so Enter must not add the list's first
+    // option. Only typing or moving to an option gives Enter something to pick.
+    highlightFirst: !!trimmed,
+    onEnterWhileWaiting: handleEarlyEnter,
   });
 
   const handleRemove = (value: string) => {
@@ -134,7 +228,20 @@ export function MultiSelectCombobox<T>({
 
   return (
     <div className="space-y-2">
-      {values.length > 0 && (
+      {/* Outside the popover: a pressed Enter counts even if it closes. */}
+      {earlyEnters.map((enter) => (
+        <EarlyEnterSearch
+          hook={hook}
+          key={enter.id}
+          onAnswer={(answer) => answerEarlyEnter(enter, answer)}
+          onFailure={(error) => {
+            finishEarlyEnter(enter.id);
+            toastRequestError(error, `Failed to search for "${enter.text}"`);
+          }}
+          text={enter.text}
+        />
+      ))}
+      {(values.length > 0 || hasEarlyEnters) && (
         <div className="flex flex-wrap items-center gap-2">
           {values.map((value) => {
             const count = chipCounts.current.get(value);
@@ -164,6 +271,17 @@ export function MultiSelectCombobox<T>({
               </Badge>
             );
           })}
+          {earlyEnters.map(({ id, text }) => (
+            <Badge
+              className="flex items-center gap-1 max-w-full"
+              data-testid="ms-pending-chip"
+              key={id}
+              variant="outline"
+            >
+              <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+              <span className="truncate">{text}</span>
+            </Badge>
+          ))}
           {values.length > 1 && (
             <button
               className="text-xs text-muted-foreground hover:text-destructive cursor-pointer"

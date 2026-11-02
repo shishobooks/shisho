@@ -151,8 +151,10 @@ export function IdentifyBookDialog({
           : null,
       );
     }
+    // Only opening, or a different book, starts over. A refetch delivers new
+    // objects for this book, and resetting then would discard the review.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, book.title, book.authors, book.files, mainFiles]);
+  }, [open, book.id]);
 
   const handleSearch = () => {
     if (!query.trim()) return;
