@@ -31,6 +31,7 @@ import {
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { pagesToProbe, useDetectedPageFlow } from "@/hooks/useDetectedPageFlow";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useSwipeTurn } from "@/hooks/useSwipeTurn";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
@@ -375,6 +376,13 @@ export default function PageReader({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentPage, goToPage]);
 
+  const handleSwipe = useCallback(
+    (turn: "next" | "prev") =>
+      goToPage(currentPage + (turn === "next" ? 1 : -1)),
+    [currentPage, goToPage],
+  );
+  const swipeHandlers = useSwipeTurn(handleSwipe);
+
   // Preload pages
   const preloadedPages = useMemo(() => {
     const pages: number[] = [];
@@ -566,10 +574,13 @@ export default function PageReader({
             : fitMode === "fit-width"
               ? "items-start justify-start overflow-auto"
               : "items-center justify-center overflow-hidden",
+          // Keeps a sideways drag for the swipe handlers below.
+          flow === "paginated" && "touch-pan-y touch-pinch-zoom",
         )}
         onScroll={scrolled ? handleScroll : undefined}
         ref={mainRef}
         tabIndex={scrolled ? -1 : undefined}
+        {...(flow === "paginated" ? swipeHandlers : {})}
       >
         {!flow && (
           <div className="m-auto">

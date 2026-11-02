@@ -35,7 +35,7 @@ A CBZ or PDF file's page shows its pages as a grid; select one to open the reade
 
 The current page is stored in the URL as `?page=`, so refreshing or bookmarking that URL returns to the same page. It is not stored as account-level reading progress.
 
-Use the Left Arrow or `A` for the previous page and the Right Arrow or `D` for the next page. In the **Scrolled** flow, the Up and Down Arrows, Space, and Page Up and Page Down scroll the pages.
+Use the Left Arrow or `A` for the previous page and the Right Arrow or `D` for the next page. In the **Paginated** flow, you can also tap the left and right sides or swipe from anywhere on the page. In the **Scrolled** flow, the Up and Down Arrows, Space, and Page Up and Page Down scroll the pages.
 
 ### Scrolled Flow for Webtoons
 

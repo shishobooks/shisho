@@ -413,3 +413,85 @@ describe("PageReader keyboard", () => {
     expect(screen.getByText("Page 2 of 10")).toBeInTheDocument();
   });
 });
+
+describe("PageReader swiping", () => {
+  const touch = (clientX: number, clientY: number) => ({ clientX, clientY });
+  const swipe = (
+    target: Element,
+    from: [number, number],
+    to: [number, number],
+  ) => {
+    fireEvent.touchStart(target, {
+      touches: [touch(...from)],
+      changedTouches: [touch(...from)],
+    });
+    fireEvent.touchEnd(target, {
+      touches: [],
+      changedTouches: [touch(...to)],
+    });
+  };
+  const openOnPage = (page: number) => {
+    settings.mutate = vi.fn();
+    renderReader(10, undefined, `/?page=${page}`);
+    return screen.getByRole("main");
+  };
+
+  it("turns to the next page on a swipe to the left", () => {
+    swipe(openOnPage(3), [300, 400], [100, 410]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=4");
+  });
+
+  it("turns to the previous page on a swipe to the right", () => {
+    swipe(openOnPage(3), [100, 400], [300, 410]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=2");
+  });
+
+  it("turns the page when the swipe starts on a tap zone", () => {
+    const main = openOnPage(3);
+    const zone = main.querySelector('button[aria-hidden="true"]')!;
+    swipe(zone, [100, 400], [300, 400]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=2");
+  });
+
+  it("ignores a short drag and a mostly vertical one", () => {
+    const main = openOnPage(3);
+    swipe(main, [300, 400], [270, 400]);
+    swipe(main, [300, 400], [200, 700]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+  });
+
+  it("ignores a gesture with a second finger, such as a pinch", () => {
+    const main = openOnPage(3);
+    fireEvent.touchStart(main, {
+      touches: [touch(300, 400)],
+      changedTouches: [touch(300, 400)],
+    });
+    fireEvent.touchStart(main, {
+      touches: [touch(300, 400), touch(100, 400)],
+      changedTouches: [touch(100, 400)],
+    });
+    fireEvent.touchEnd(main, {
+      touches: [touch(100, 400)],
+      changedTouches: [touch(100, 400)],
+    });
+    fireEvent.touchEnd(main, { touches: [], changedTouches: [touch(90, 400)] });
+    expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+  });
+
+  // A drag on a zoomed page pans around it.
+  it("ignores a swipe while the page is zoomed in", () => {
+    vi.stubGlobal("visualViewport", { scale: 2 });
+    try {
+      swipe(openOnPage(3), [300, 400], [100, 400]);
+      expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("leaves swipes alone in the scrolled flow", () => {
+    flow.saved = "scrolled";
+    swipe(openOnPage(3), [300, 400], [100, 400]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+  });
+});
