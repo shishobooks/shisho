@@ -21,6 +21,10 @@ type CacheMetadata struct {
 	GeneratedAt       time.Time `json:"generated_at"`
 	LastAccessedAt    time.Time `json:"last_accessed_at"`
 	SizeBytes         int64     `json:"size_bytes"`
+	// DocumentHash is the file's KOReader document hash once it's been
+	// recorded. Empty for a file cached before Shisho recorded them, or
+	// whose recording failed; the next time it's served records it.
+	DocumentHash string `json:"document_hash,omitempty"`
 	// Failure records a build that failed after bytes were sent. It applies
 	// only while the file's fingerprint still matches, and a successful
 	// build replaces it.

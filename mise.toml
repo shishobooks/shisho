@@ -150,6 +150,15 @@ run = "mkdir -p ./tmp && pnpm e2e:chromium"
 description = "Run E2E tests in Firefox"
 run = "mkdir -p ./tmp && pnpm e2e:firefox"
 
+[tasks.koreader]
+description = "Drive a real, headless KOReader in Docker against a running Shisho (mise koreader help)"
+run = "go run ./tools/koreaderharness"
+
+[tasks."test:koreader"]
+description = "Run the KOReader round-trip scenarios against a test server (needs Docker)"
+env = { TZ = "America/Chicago", CI = "true" }
+run = "go test -tags koreaderharness -count=1 -v -timeout 12m ./tools/koreaderharness"
+
 [tasks."e2e:docs"]
 description = "Run documentation theme E2E tests"
 run = "pnpm e2e:docs"

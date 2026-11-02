@@ -353,3 +353,70 @@ func TestListForFile_Empty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, fps)
 }
+
+func TestDocumentHashes_MapToEveryFileWithThoseBytes(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	svc := fingerprints.NewService(db)
+
+	first := insertTestFile(t, db, insertTestBook(t, db, insertTestLibrary(t, db, "One")))
+	second := insertTestFile(t, db, insertTestBook(t, db, insertTestLibrary(t, db, "Two")))
+
+	require.NoError(t, svc.RecordDocumentHash(ctx, first.ID, models.FileTypeEPUB, "abc"))
+	require.NoError(t, svc.RecordDocumentHash(ctx, first.ID, models.FileTypeEPUB, "abc"), "recording a hash again is fine")
+	require.NoError(t, svc.RecordDocumentHash(ctx, second.ID, models.FileTypeKePub, "abc"))
+
+	found, err := svc.FindDocumentHash(ctx, "abc")
+	require.NoError(t, err)
+	require.Len(t, found, 2)
+	assert.Equal(t, first.ID, found[0].FileID)
+	assert.Equal(t, models.FileTypeEPUB, found[0].DeliveredFileType)
+	assert.Equal(t, second.ID, found[1].FileID)
+	assert.Equal(t, models.FileTypeKePub, found[1].DeliveredFileType)
+	assert.Equal(t, second.LibraryID, found[1].File.LibraryID)
+	assert.Equal(t, second.BookID, found[1].File.BookID)
+
+	none, err := svc.FindDocumentHash(ctx, "unknown")
+	require.NoError(t, err)
+	assert.Empty(t, none)
+}
+
+// A copy on a device keeps its old hash after the file changes, so a change
+// removes what says the file's current bytes are hashed, and leaves the map.
+func TestDocumentHashes_OutliveFingerprintInvalidation(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	svc := fingerprints.NewService(db)
+	file := insertTestFile(t, db, insertTestBook(t, db, insertTestLibrary(t, db, "One")))
+
+	require.NoError(t, svc.RecordOriginalDocumentHash(ctx, file.ID, models.FileTypeEPUB, "old"))
+	missing, err := svc.ListMainFilesMissingAlgorithm(ctx, file.LibraryID, models.FingerprintAlgorithmKOReaderPartialMD5)
+	require.NoError(t, err)
+	assert.Empty(t, missing)
+
+	require.NoError(t, svc.DeleteForFile(ctx, file.ID))
+
+	missing, err = svc.ListMainFilesMissingAlgorithm(ctx, file.LibraryID, models.FingerprintAlgorithmKOReaderPartialMD5)
+	require.NoError(t, err)
+	assert.Equal(t, []int{file.ID}, missing)
+	found, err := svc.FindDocumentHash(ctx, "old")
+	require.NoError(t, err)
+	assert.Len(t, found, 1)
+}
+
+// Nothing reads a supplement in KOReader, so only main Files need a hash.
+func TestListMainFilesMissingAlgorithm_SkipsSupplements(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	svc := fingerprints.NewService(db)
+	file := insertTestFile(t, db, insertTestBook(t, db, insertTestLibrary(t, db, "One")))
+	_, err := db.NewUpdate().Model(file).Set("file_role = ?", models.FileRoleSupplement).WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	missing, err := svc.ListMainFilesMissingAlgorithm(ctx, file.LibraryID, models.FingerprintAlgorithmKOReaderPartialMD5)
+	require.NoError(t, err)
+	assert.Empty(t, missing)
+}

@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"os"
 	"testing"
 
 	"github.com/robinjoseph08/golib/logger"
@@ -131,9 +132,9 @@ func TestHashGenerationJob_Idempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify there's only one fingerprint row — no duplicates
-	count, err := tc.fingerprintService.CountForFile(tc.ctx, file1.ID)
+	sha256s, err := tc.fingerprintService.ListForFile(tc.ctx, file1.ID, models.FingerprintAlgorithmSHA256)
 	require.NoError(t, err)
-	assert.Equal(t, 1, count)
+	assert.Len(t, sha256s, 1)
 }
 
 func TestHashGenerationJob_MissingFileContinues(t *testing.T) {
@@ -232,4 +233,52 @@ func TestEnsureHashGenerationJob_Dedupes(t *testing.T) {
 	assert.Len(t, pendingJobs, 1)
 	assert.Equal(t, models.JobTypeHashGeneration, pendingJobs[0].Type)
 	assert.Equal(t, 1, *pendingJobs[0].LibraryID)
+}
+
+func TestHashGenerationJob_RecordsKOReaderHashes(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+
+	path := testgen.WriteFile(t, libraryPath, "book.epub", []byte("original bytes"))
+	book := &models.Book{
+		LibraryID: 1, Filepath: libraryPath, Title: "Book", TitleSource: models.DataSourceFilepath,
+		SortTitle: "Book", AuthorSource: models.DataSourceFilepath,
+	}
+	require.NoError(t, tc.bookService.CreateBook(tc.ctx, book))
+	file := &models.File{
+		LibraryID: 1, BookID: book.ID, Filepath: path, FileType: models.FileTypeEPUB,
+		FileRole: models.FileRoleMain, FilesizeBytes: 14,
+	}
+	require.NoError(t, tc.bookService.CreateFile(tc.ctx, file))
+
+	run := func() {
+		job := &models.Job{Type: models.JobTypeHashGeneration, DataParsed: &models.JobHashGenerationData{LibraryID: 1}}
+		require.NoError(t, tc.worker.ProcessHashGenerationJob(tc.ctx, job, tc.jobLogService.NewJobLogger(tc.ctx, 0, logger.FromContext(tc.ctx))))
+	}
+	run()
+
+	oldHash, err := fingerprint.ComputeKOReaderPartialMD5(path)
+	require.NoError(t, err)
+	found, err := tc.fingerprintService.FindDocumentHash(tc.ctx, oldHash)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, file.ID, found[0].FileID)
+	assert.Equal(t, models.FileTypeEPUB, found[0].DeliveredFileType)
+
+	// The file's bytes change, as a scan notices: the new hash is added and a
+	// copy of the old bytes on a device still resolves.
+	require.NoError(t, os.WriteFile(path, []byte("replaced bytes"), 0o644))
+	require.NoError(t, tc.fingerprintService.DeleteForFile(tc.ctx, file.ID))
+	run()
+
+	newHash, err := fingerprint.ComputeKOReaderPartialMD5(path)
+	require.NoError(t, err)
+	require.NotEqual(t, oldHash, newHash)
+	for _, hash := range []string{oldHash, newHash} {
+		found, err := tc.fingerprintService.FindDocumentHash(tc.ctx, hash)
+		require.NoError(t, err)
+		assert.Len(t, found, 1, hash)
+	}
 }

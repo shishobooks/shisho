@@ -100,19 +100,83 @@ func (svc *Service) CountForFile(ctx context.Context, fileID int) (int, error) {
 // benefit from content-hash move/rename detection just like main files.
 // Callers that only want main files should filter the result in Go.
 func (svc *Service) ListFilesMissingAlgorithm(ctx context.Context, libraryID int, algorithm string) ([]int, error) {
+	return svc.listMissingAlgorithm(ctx, libraryID, algorithm, false)
+}
+
+// ListMainFilesMissingAlgorithm is ListFilesMissingAlgorithm for main Files
+// alone, for fingerprints only something that reads the File needs.
+func (svc *Service) ListMainFilesMissingAlgorithm(ctx context.Context, libraryID int, algorithm string) ([]int, error) {
+	return svc.listMissingAlgorithm(ctx, libraryID, algorithm, true)
+}
+
+func (svc *Service) listMissingAlgorithm(ctx context.Context, libraryID int, algorithm string, mainOnly bool) ([]int, error) {
 	var ids []int
-	err := svc.db.
+	q := svc.db.
 		NewSelect().
 		Model((*models.File)(nil)).
 		Column("f.id").
 		Join("LEFT JOIN file_fingerprints AS ffp ON ffp.file_id = f.id AND ffp.algorithm = ?", algorithm).
 		Where("f.library_id = ?", libraryID).
-		Where("ffp.id IS NULL").
-		Scan(ctx, &ids)
+		Where("ffp.id IS NULL")
+	if mainOnly {
+		q = q.Where("f.file_role = ?", models.FileRoleMain)
+	}
+	err := q.Scan(ctx, &ids)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.WithStack(err)
 	}
 	return ids, nil
+}
+
+// RecordDocumentHash maps a KOReader document hash to fileID delivered as
+// deliveredFileType. Recording one already mapped is a no-op.
+func (svc *Service) RecordDocumentHash(ctx context.Context, fileID int, deliveredFileType, hash string) error {
+	return recordDocumentHash(ctx, svc.db, fileID, deliveredFileType, hash)
+}
+
+func recordDocumentHash(ctx context.Context, db bun.IDB, fileID int, deliveredFileType, hash string) error {
+	_, err := db.NewInsert().
+		Model(&models.DocumentHash{Hash: hash, FileID: fileID, DeliveredFileType: deliveredFileType, CreatedAt: time.Now()}).
+		On("CONFLICT DO NOTHING").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// RecordOriginalDocumentHash maps the hash of fileID's Original File, and
+// marks its current bytes as hashed. fileType is the File's own type.
+func (svc *Service) RecordOriginalDocumentHash(ctx context.Context, fileID int, fileType, hash string) error {
+	return svc.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		if err := recordDocumentHash(ctx, tx, fileID, fileType, hash); err != nil {
+			return err
+		}
+		_, err := tx.NewInsert().
+			Model(&models.FileFingerprint{
+				FileID:    fileID,
+				Algorithm: models.FingerprintAlgorithmKOReaderPartialMD5,
+				Value:     hash,
+				CreatedAt: time.Now(),
+			}).
+			On("CONFLICT (file_id, algorithm) DO NOTHING").
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+}
+
+// FindDocumentHash returns every File a KOReader document hash maps to, each
+// with its File loaded, oldest File first. The caller resolves them through
+// the user's library access.
+func (svc *Service) FindDocumentHash(ctx context.Context, hash string) ([]*models.DocumentHash, error) {
+	hashes := []*models.DocumentHash{}
+	err := svc.db.NewSelect().
+		Model(&hashes).
+		Relation("File").
+		Where("kdh.hash = ?", hash).
+		Order("kdh.file_id ASC", "kdh.delivered_file_type ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return hashes, nil
 }
 
 // ListForFile returns all fingerprints for a file matching the given algorithm.

@@ -52,8 +52,9 @@ var typeRules = map[string]deviceTypeRules{
 			{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeAZW3},
 		},
 	},
-	DeviceTypeOPDS:    {},
-	DeviceTypeBrowser: {},
+	DeviceTypeKOReader: {},
+	DeviceTypeOPDS:     {},
+	DeviceTypeBrowser:  {},
 }
 
 // AllowsFileType reports whether a Device of deviceType can receive a File
@@ -131,6 +132,8 @@ func TypeLabel(deviceType string) string {
 		return "Kobo"
 	case DeviceTypeKindle:
 		return "Kindle"
+	case DeviceTypeKOReader:
+		return "KOReader"
 	case DeviceTypeOPDS:
 		return "OPDS app"
 	}

@@ -65,18 +65,20 @@ type DeviceDeliveryRule struct {
 }
 
 const (
-	//tygo:emit export type DeviceType = typeof DeviceTypeKobo | typeof DeviceTypeKindle | typeof DeviceTypeOPDS | typeof DeviceTypeBrowser;
-	DeviceTypeKobo    = "kobo"
-	DeviceTypeKindle  = "kindle"
-	DeviceTypeOPDS    = "opds"
-	DeviceTypeBrowser = "browser"
+	//tygo:emit export type DeviceType = typeof DeviceTypeKobo | typeof DeviceTypeKindle | typeof DeviceTypeKOReader | typeof DeviceTypeOPDS | typeof DeviceTypeBrowser;
+	DeviceTypeKobo     = "kobo"
+	DeviceTypeKindle   = "kindle"
+	DeviceTypeKOReader = "koreader"
+	DeviceTypeOPDS     = "opds"
+	DeviceTypeBrowser  = "browser"
 )
 
 const (
-	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser | typeof ConnectionOPDS;
+	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser | typeof ConnectionOPDS | typeof ConnectionKOReaderSync;
 	ConnectionKoboSync       = "kobo_sync"
 	ConnectionEReaderBrowser = "ereader_browser"
 	ConnectionOPDS           = "opds"
+	ConnectionKOReaderSync   = "koreader_sync"
 )
 
 const (

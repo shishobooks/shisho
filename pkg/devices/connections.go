@@ -7,10 +7,11 @@ import "slices"
 // connect: every connection uses the same credential and reaches the same
 // scope, so turning one off would protect nothing.
 var typeConnections = map[string][]string{
-	DeviceTypeKobo:    {ConnectionKoboSync, ConnectionEReaderBrowser},
-	DeviceTypeKindle:  {ConnectionEReaderBrowser},
-	DeviceTypeOPDS:    {ConnectionOPDS},
-	DeviceTypeBrowser: {ConnectionEReaderBrowser},
+	DeviceTypeKobo:     {ConnectionKoboSync, ConnectionEReaderBrowser},
+	DeviceTypeKindle:   {ConnectionEReaderBrowser},
+	DeviceTypeKOReader: {ConnectionOPDS, ConnectionKOReaderSync},
+	DeviceTypeOPDS:     {ConnectionOPDS},
+	DeviceTypeBrowser:  {ConnectionEReaderBrowser},
 }
 
 // HasConnection reports whether the Device's type connects through

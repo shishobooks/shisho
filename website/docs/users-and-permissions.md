@@ -137,7 +137,7 @@ A user with Users Write permission can open another account under **Administrati
 
 ## Devices
 
-A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra, KOReader on that same Kobo, or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md), the [eReader Browser](./ereader-browser.md), and the [OPDS Catalog](./opds.md#sign-in-as-a-device) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
+A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra, KOReader on that same Kobo, or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md), [KOReader](./koreader.md), the [eReader Browser](./ereader-browser.md), and the [OPDS Catalog](./opds.md#sign-in-as-a-device) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
 
 ### Device Types
 
@@ -147,10 +147,11 @@ Choose the type when adding a Device. It decides which connections the Device ca
 |------|-------------|-------------|-------------|
 | **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: KePub as KePub, then EPUB as KePub, then CBZ as KePub, then AZW3 as KePub, then MOBI as KePub |
 | **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI, then EPUB as AZW3, then KePub as AZW3, then CBZ as AZW3 |
-| **OPDS app** | OPDS, for reading apps such as KOReader, Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
+| **KOReader** | OPDS and KOReader's progress sync | Any file type | Your default Delivery Rules |
+| **OPDS app** | OPDS, for other reading apps such as Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 
-The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response; an OPDS client given a credential from a Device without OPDS gets `401 Unauthorized`.
+The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response; an OPDS client given a credential from a Device without OPDS, or KOReader's progress sync given one from a Device that isn't a KOReader Device, gets `401 Unauthorized`.
 
 **Change Type** on a Device's page switches its type and keeps its credential and scope. Its connections change to the new type's, and its Delivery Rules go back to what the new type starts with, so a custom list is discarded.
 
@@ -159,7 +160,7 @@ The type alone decides how a Device connects, and the Device's page shows setup 
 Each Device has one credential that all its connections use. It is 16 lowercase letters with no `l`, `i`, or `o`, so it can be typed on an e-ink keyboard. Shisho accepts it only exactly as shown: no spaces, hyphens, or capital letters. The Device's page always shows the credential, with a copy button.
 
 :::warning[Regenerating a Credential]
-**Regenerate** on a Device's page replaces its credential immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, and any unexpired setup URL stops redirecting. Set up each connection again with the new credential. Regenerate when a credential may have leaked; delete the Device when the hardware is lost for good.
+**Regenerate** on a Device's page replaces its credential immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, KOReader's progress sync and OPDS stop signing in with it, and any unexpired setup URL stops redirecting. Set up each connection again with the new credential. Regenerate when a credential may have leaked; delete the Device when the hardware is lost for good.
 :::
 
 Treat the credential, and every URL that contains it, like a password.

@@ -2,9 +2,11 @@ package devices
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec // KOReader's protocol sends the password's MD5.
 	"crypto/rand"
 	"crypto/subtle"
 	"database/sql"
+	"encoding/hex"
 	"time"
 
 	"github.com/google/uuid"
@@ -163,6 +165,32 @@ func (s *Service) GetByOwnerCredential(ctx context.Context, username, credential
 	var match *Device
 	for _, device := range devices {
 		if subtle.ConstantTimeCompare([]byte(device.Credential), []byte(credential)) == 1 {
+			match = device
+		}
+	}
+	return match, nil
+}
+
+// GetByOwnerCredentialMD5 returns the Device of the user named username (in
+// any case) that uses connection and whose credential has the MD5 key, or nil.
+// KOReader's progress sync sends only the MD5 of its password. It compares
+// against every matching Device in constant time, so a guess reveals nothing
+// about how close it came.
+func (s *Service) GetByOwnerCredentialMD5(ctx context.Context, username, key, connection string) (*Device, error) {
+	if username == "" || key == "" {
+		return nil, nil
+	}
+	devices := []*Device{}
+	err := s.selectDevices(&devices).
+		Where("d.user_id IN (SELECT id FROM users WHERE username = ? COLLATE NOCASE)", username).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var match *Device
+	for _, device := range devices {
+		sum := md5.Sum([]byte(device.Credential)) //nolint:gosec // KOReader's protocol sends the password's MD5.
+		if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(key)) == 1 && device.HasConnection(connection) {
 			match = device
 		}
 	}

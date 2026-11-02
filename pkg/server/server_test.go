@@ -154,7 +154,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			for _, route := range e.Routes() {
 				routes[route.Method+" "+route.Path] = true
 				if demo {
-					for _, prefix := range []string{"/opds", "/ereader", "/e/", "/kobo", "/api/plugins", "/api/test", "/api/share/"} {
+					for _, prefix := range []string{"/opds", "/ereader", "/e/", "/kobo", "/koreader", "/api/plugins", "/api/test", "/api/share/"} {
 						assert.False(t, strings.HasPrefix(route.Path, prefix), "unexpected route: %s %s", route.Method, route.Path)
 					}
 					assert.NotContains(t, route.Path, "/plugins/")
@@ -166,6 +166,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /ereader/key/:credential/",
 				"GET /e/:shortCode",
 				"GET /kobo/:credential/v1/library/sync",
+				"PUT /koreader/syncs/progress",
 				"GET /kobo/:credential/all/v1/library/sync",
 				"GET /kobo/:credential/library/:scopeId/v1/library/sync",
 				"GET /api/plugins/installed",

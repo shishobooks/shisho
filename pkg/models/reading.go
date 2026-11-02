@@ -80,8 +80,9 @@ type UserBook struct {
 // Reading sources: what reported a Reading Position update or a Reading
 // Session.
 const (
-	//tygo:emit export type ReadingSource = typeof ReadingSourceWebReader;
+	//tygo:emit export type ReadingSource = typeof ReadingSourceWebReader | typeof ReadingSourceKOReader;
 	ReadingSourceWebReader = "web_reader"
+	ReadingSourceKOReader  = "koreader"
 )
 
 // ReadingLocator is where in a File a reader is, in exactly one form: an
@@ -121,9 +122,17 @@ type ReadingPosition struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 	ReadingLocator `tstype:",extends"`
-	Percentage     float64   `bun:",notnull" json:"percentage"`
-	Source         string    `bun:",nullzero" json:"source" tstype:"ReadingSource"`
-	OccurredAt     time.Time `json:"occurred_at"`
+	Percentage     float64 `bun:",notnull" json:"percentage"`
+	Source         string  `bun:",nullzero" json:"source" tstype:"ReadingSource"`
+	// SourceDeviceID is the Device that reported the position, when a Device
+	// did and still exists.
+	SourceDeviceID *string `json:"-"`
+	// ReportedDevice and ReportedDeviceID are how the source named itself,
+	// when it did. KOReader gets them back with its own position, and
+	// ignores a position carrying them.
+	ReportedDevice   *string   `json:"-"`
+	ReportedDeviceID *string   `json:"-"`
+	OccurredAt       time.Time `json:"occurred_at"`
 }
 
 // ReadingPositionUpdate is one accepted update in the append-only log. It
@@ -140,6 +149,7 @@ type ReadingPositionUpdate struct {
 	ReadingLocator `tstype:",extends"`
 	Percentage     float64   `bun:",notnull" json:"percentage"`
 	Source         string    `bun:",nullzero" json:"source" tstype:"ReadingSource"`
+	SourceDeviceID *string   `json:"-"`
 	OccurredAt     time.Time `json:"occurred_at"`
 	AtEnd          bool      `bun:",notnull" json:"at_end"`
 	AutoFinished   bool      `bun:",notnull" json:"auto_finished"`

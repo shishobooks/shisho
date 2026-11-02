@@ -31,13 +31,13 @@ The root catalog lists only libraries the authenticated user can access that hav
 
 ### Sign In as a Device
 
-Give each reading app its own Device so it gets its own Delivery Rules and scope, for example comics only in Panels and every EPUB in KOReader:
+Give each reading app its own Device so it gets its own Delivery Rules and scope, for example comics only in Panels and every EPUB in Thorium. For KOReader, add a [KOReader Device](./koreader.md) instead, which also syncs its reading position.
 
 1. Open the user menu, select **Devices**, and click **Add Device**. Name it, choose **OPDS app**, and click **Add Device**.
 2. Under **OPDS** on the Device's page, copy the **OPDS URL**, **Username**, and **Password**.
 3. In the reading app, add an OPDS catalog with that URL, your username, and the Device's credential as the password.
 
-A new OPDS app Device follows your default Delivery Rules until you change its rules on its page; see [Devices](./users-and-permissions.md#delivery-rules-of-a-device). The credential is accepted only with its owner's username, in any letter case, and only exactly as shown. A wrong credential, or another user's, gets the same `401 Unauthorized` as a wrong password. Only an OPDS app Device's credential signs in to OPDS; a Kobo, Kindle, or Browser Device's does not.
+A new OPDS app Device follows your default Delivery Rules until you change its rules on its page; see [Devices](./users-and-permissions.md#delivery-rules-of-a-device). The credential is accepted only with its owner's username, in any letter case, and only exactly as shown. A wrong credential, or another user's, gets the same `401 Unauthorized` as a wrong password. Only an OPDS app or KOReader Device's credential signs in to OPDS; a Kobo, Kindle, or Browser Device's does not.
 
 A Device scoped to one library shows only that library in the root catalog, with no **Lists** entry, and its **Currently Reading** and **To Read** hold only that library's books. A Device scoped to a list shows only that list, plus **Currently Reading** and **To Read** holding only the books on that list. A library, list, book, cover, or download outside the scope returns `404 Not Found`, as one that does not exist would.
 
@@ -74,9 +74,7 @@ Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clien
 
 ### KOReader
 
-Add an **OPDS app** Device for KOReader, as in [Sign In as a Device](#sign-in-as-a-device), even when KOReader runs on a Kobo: Kobo's own reader and KOReader are separate Devices. In KOReader, open **OPDS catalog** from the top menu's search tab, add a catalog with the plus button, and enter the catalog URL, your username, and the Device's credential.
-
-Deliver EPUBs as EPUB to KOReader. It renders a KePub the same as an EPUB, so converting gains nothing and costs a wait on each first download.
+Add a **KOReader** Device and follow the [KOReader](./koreader.md) page, which covers the catalog and syncing your reading position.
 
 ## Troubleshooting
 

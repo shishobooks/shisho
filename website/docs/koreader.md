@@ -1,0 +1,60 @@
+# KOReader
+
+[KOReader](https://koreader.rocks/) can browse your library over OPDS and keep its reading position in Shisho through its own Progress sync. Reading in KOReader then shows up in [your reading history](./reading-tracking.md): a book you start becomes **Currently Reading**, a paused one resumes, and reaching its last pages marks it **Read**.
+
+## Add a KOReader Device
+
+Add one Device for each copy of KOReader, even when it runs on a Kobo: Kobo's own reader and KOReader are separate Devices.
+
+1. Open the user menu, select **Devices**, and click **Add Device**.
+2. Name it, choose **KOReader**, and click **Add Device**.
+
+The Device's page shows everything to enter below. A new KOReader Device follows your default [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) until you change its rules on its page. Deliver EPUBs as EPUB: KOReader renders a KePub the same as an EPUB, so converting gains nothing and costs a wait on each first download.
+
+## Browse Over OPDS
+
+In KOReader, open **OPDS catalog** from the top menu's search tab, add a catalog with the plus button, and enter the **OPDS URL**, **Username**, and **Password** from the Device's page. The [OPDS Catalog](./opds.md) page covers what the catalog offers.
+
+## Turn On Progress Sync
+
+With a book open in KOReader, open the tools menu and select **Progress sync**.
+
+1. Choose **Custom sync server** and enter the **Custom sync server** URL from the Device's page.
+2. Choose **Register / Login**, enter your Shisho username and the Device's password, and tap **Login**. **Register** does not work here: it shows a message pointing you to the Devices page, because the Device is your account.
+3. Keep **Document matching method** on **Binary**, KOReader's default. Shisho does not support **Filename** matching.
+4. Turn on **Automatically keep documents in sync**. KOReader's setting is off by default, and without it, positions move only when you choose **Push progress from this device now** or **Pull progress from other devices now**.
+
+Regenerating the Device's credential stops the old one working for sync as well as OPDS. Log in again in KOReader with the new one.
+
+## Which Books Sync
+
+KOReader identifies a book by a hash of the file's bytes, so a book syncs when its file is one Shisho produced or holds:
+
+- **Downloaded from Shisho**, over OPDS or from the web interface, individually or in a bulk download. A copy keeps syncing after you edit the book's metadata, without downloading it again.
+- **Copied over by hand**, as long as it is an unmodified copy of the file in your library.
+
+A book in a library you can't access, or outside the Device's [scope](./users-and-permissions.md#scope), syncs as if Shisho didn't have it.
+
+A copy that differs from those by even one byte does not sync, such as one edited elsewhere. KOReader also remembers a book's hash, so a file replaced in place on the device keeps reporting the hash of the copy it replaced. Delete the book and its metadata from KOReader, then download it again.
+
+A copy downloaded from an older version of Shisho that didn't record these hashes shows as no progress too. Download it again.
+
+## Moving Between Readers
+
+A KOReader Device never moves itself. KOReader ignores a position it pushed, so pulling on the same device leaves you where you are, and KOReader says the latest progress is coming from this device.
+
+For comics and PDFs, the page carries between KOReader and other readers: the web reader opens on the page KOReader pushed, and KOReader offers to jump to the page you reached in the web reader or on another KOReader Device. For EPUB and other reflowable formats, a position saved by another reader or another KOReader Device shows as no progress in KOReader.
+
+## Finishing a Book
+
+Pushing a position 99% or more through a book marks it **Read**, as a streaming service counts an episode watched once the credits start. The last pages are usually back matter, and KOReader's continuous view never reports exactly 100%. Going back before that point within 15 minutes undoes the finish, as it does in the [Shisho reader](./reading-tracking.md#starting-and-finishing-automatically).
+
+## Troubleshooting
+
+### Login Fails
+
+KOReader shows the message from Shisho. Check that the username is your Shisho username and the password is the credential of a KOReader Device, not your account password or the credential of another type of Device. If you regenerated the credential, log in with the new one. A deactivated user, or a role without Books Read, cannot log in.
+
+### KOReader Says "No Progress Found"
+
+Either Shisho has no position yet for that file, or it doesn't recognize the file; see [Which Books Sync](#which-books-sync). Shisho logs each hash it doesn't recognize, under **koreader document not recognized**, at the info level. To see which book it was, turn on **Send document metadata** under **Progress sync** in KOReader: a push then logs the title too.

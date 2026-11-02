@@ -25,6 +25,7 @@ Guidance for coding agents (Claude Code, Codex, Pi, etc.) working in this reposi
 | `website/AGENTS.md` | Docs site: Docusaurus, versioning, deployment |
 | `e2e/AGENTS.md` | E2E testing: Playwright, per-browser isolation, fixtures |
 | `tools/gotestsplit/AGENTS.md` | Timing-aware Go test sharding |
+| `tools/koreaderharness/AGENTS.md` | Headless KOReader for QA of KOReader sync |
 
 Repo-wide topic docs:
 
@@ -63,7 +64,7 @@ All tasks are in `mise.toml` (`mise tasks` lists them). The ones with non-obviou
 - `mise setup` installs tools and dependencies and generates types. Run it after creating a worktree.
 - `mise start` runs the API with hot reload plus Vite. Several worktrees can run it at once, so each server may land on a different port than usual: read the URL it prints.
 - `mise build` is the only way to refresh the frontend embedded in the binary; `pnpm build` alone does not. Never overwrite the tracked `pkg/frontend/dist/placeholder.html` with build output: it lets plain `go build` and `go test ./...` work without a frontend build.
-- `mise check:quiet` runs every check except Firefox e2e (CI runs it) and serializes across worktrees via `flock` (`brew install flock` on macOS). Use it instead of `mise check`.
+- `mise check:quiet` runs every check except Firefox e2e and the KOReader harness (CI runs them) and serializes across worktrees via `flock` (`brew install flock` on macOS). Use it instead of `mise check`.
 - `app/types/generated/` is gitignored output of `mise tygo`; change the Go structs, never the generated files.
 
 While iterating, run only the checks for what you touched. Separate mise tasks with `:::` (`mise lint test` passes `test` to the linter and silently skips the tests):
@@ -72,6 +73,7 @@ While iterating, run only the checks for what you touched. Separate mise tasks w
 - Frontend → `mise run lint:js ::: test:unit`
 - Scripts under `scripts/` → `mise test:scripts`
 - Migrations → also `mise db:rollback && mise db:migrate`. `db:rollback` rolls back the last migration group, so the round trip only checks your migration when it is alone in its group. Run `mise db:migrate` before adding the migration so it lands in a group of its own. If `mise start` applied every migration as one group, the rollback runs every down, including the initial schema's, which drops every table.
+- KOReader sync (`pkg/koreader`, document hashes) → also `mise test:koreader`, which needs Docker
 - App E2E flows you touched → `mise e2e:chromium`; documentation theme flows → `mise e2e:docs`
 
 Run `mise check:quiet` once when the work is done, before pushing or opening a PR.

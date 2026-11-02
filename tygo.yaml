@@ -166,6 +166,10 @@ packages:
       import { List, ListBook, ListPermission, ListSort, ReadingStatusFilter } from "@/types";
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/koreader"
+    output_path: "app/types/generated/koreader.ts"
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/reading"
     output_path: "app/types/generated/reading.ts"
     frontmatter: |

@@ -48,7 +48,7 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Integrations",
       collapsed: true,
-      items: ["opds", "kobo-sync", "ereader-browser"],
+      items: ["opds", "koreader", "kobo-sync", "ereader-browser"],
     },
     "troubleshooting",
     {

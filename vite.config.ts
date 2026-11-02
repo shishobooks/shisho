@@ -73,6 +73,10 @@ export default defineConfig({
       "/e": {
         target: `http://localhost:${getApiPort()}`,
       },
+      // KOReader progress sync (Device credential auth)
+      "/koreader": {
+        target: `http://localhost:${getApiPort()}`,
+      },
       // Kobo sync routes (API key auth for Kobo device sync)
       "/kobo": {
         target: `http://localhost:${getApiPort()}`,
