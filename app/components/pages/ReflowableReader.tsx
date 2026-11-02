@@ -21,6 +21,7 @@ import {
 import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
+import { createSwipeHandlers } from "@/hooks/useSwipeTurn";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
@@ -405,8 +406,37 @@ export default function ReflowableReader({
     const view = viewElement;
     if (!view) return;
 
+    const isFixedLayout = () =>
+      (view as HTMLElement & { isFixedLayout?: boolean }).isFixedLayout ===
+      true;
+    // A fixed-layout book can't scroll, whatever the setting says.
+    const isScrolled = () =>
+      bookEventsRef.current.flow === "scrolled" && !isFixedLayout();
+
+    // foliate's paginator reads swipes itself, but its fixed-layout renderer
+    // has no touch handling.
+    const swipe = createSwipeHandlers((turn) =>
+      turn === "next" ? goNext() : goPrev(),
+    );
+    const listenForSwipes = (target: EventTarget) => {
+      const on = (type: string, handler: (e: TouchEvent) => void) =>
+        target.addEventListener(type, (e) => {
+          if (isFixedLayout()) handler(e as TouchEvent);
+        });
+      on("touchstart", swipe.onTouchStart);
+      on("touchend", swipe.onTouchEnd);
+      on("touchcancel", swipe.onTouchCancel);
+    };
+    listenForSwipes(view);
+
     const handleLoad = (evt: Event) => {
       const { doc } = (evt as CustomEvent<{ doc: Document }>).detail;
+      listenForSwipes(doc);
+      if (isFixedLayout()) {
+        // Keeps a sideways drag for the swipe handlers.
+        view.style.touchAction = "pan-y pinch-zoom";
+        doc.documentElement.style.touchAction = "pan-y pinch-zoom";
+      }
       let selectedAtPress = false;
       // Input inside the book's frame never reaches the window, where the
       // reading-session tracker listens.
@@ -431,12 +461,7 @@ export default function ReflowableReader({
       // scroll back over its own jump. Tabbing to a link still focuses it.
       doc.addEventListener("mousedown", (e) => {
         const target = e.target as Element | null;
-        if (
-          bookEventsRef.current.flow !== "scrolled" &&
-          target?.closest?.("a[href]")
-        ) {
-          e.preventDefault();
-        }
+        if (!isScrolled() && target?.closest?.("a[href]")) e.preventDefault();
       });
       doc.addEventListener("click", (e) => {
         const events = bookEventsRef.current;
@@ -445,7 +470,7 @@ export default function ReflowableReader({
         const target = e.target as Element | null;
         if (target?.closest?.("a[href]")) return;
         if (doc.getSelection()?.isCollapsed === false) return;
-        if (events.flow === "scrolled") {
+        if (isScrolled()) {
           events.toggleChrome();
           return;
         }
@@ -465,7 +490,7 @@ export default function ReflowableReader({
     };
     const handleMarginClick = (e: MouseEvent) => {
       const events = bookEventsRef.current;
-      if (events.flow === "scrolled") return;
+      if (isScrolled()) return;
       // A press out here leaves the frame's selection in place, so the tap
       // clears it, as a tap on the text does, instead of turning the page.
       const selections = (
@@ -487,7 +512,7 @@ export default function ReflowableReader({
       view.removeEventListener("load", handleLoad);
       view.removeEventListener("click", handleMarginClick);
     };
-  }, [viewElement]);
+  }, [viewElement, goNext, goPrev]);
 
   // Wire the relocate event for progress tracking.
   useEffect(() => {

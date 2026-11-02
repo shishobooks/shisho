@@ -102,18 +102,13 @@ test.describe("Reflowable reader", () => {
     });
     libraryId = ((await libraryResp.json()) as { id: number }).id;
 
-    const seed = async (
-      title: string,
-      fileType: string,
-      epubParagraphs = 0,
-    ) => {
+    const seed = async (title: string, fileType: string) => {
       const resp = await apiContext.post("/api/test/books", {
         data: {
           libraryId,
           title,
           fileType,
           withFileOnDisk: true,
-          epubParagraphs,
         },
       });
       expect(resp.ok()).toBe(true);
@@ -275,7 +270,7 @@ test.describe("Reflowable reader", () => {
     await expect(settings).toBeInViewport();
   });
 
-  test.describe("on a phone", () => {
+  test.describe("on a touch screen", () => {
     const WIDTH = 390;
     const HEIGHT = 844;
     test.use({ hasTouch: true, viewport: { width: WIDTH, height: HEIGHT } });
@@ -293,28 +288,37 @@ test.describe("Reflowable reader", () => {
 
     // Seeds a book for one test, since each book resumes where the last test
     // left it.
-    const openNewBook = async (page: Page, epubParagraphs: number) => {
+    const openNewBook = async (
+      page: Page,
+      seed: Record<string, unknown>,
+      firstPageText = "Test chapter.",
+    ) => {
       const resp = await page.request.post("/api/test/books", {
         data: {
           libraryId,
           title: "Phone Book",
           fileType: "epub",
           withFileOnDisk: true,
-          epubParagraphs,
+          ...seed,
         },
       });
       expect(resp.ok()).toBe(true);
       await openReader(page, ((await resp.json()) as { id: number }).id);
-      const frame = await bookFrame(page, "Test chapter.");
+      const frame = await bookFrame(page, firstPageText);
       await expect(page.getByText("Preparing book…")).toBeHidden();
       return frame;
     };
 
     // Opens a long book a few pages in, so turning either way shows.
-    const openMidBook = async (page: Page, hideChrome: boolean) => {
+    const openMidBook = async (
+      page: Page,
+      hideChrome: boolean,
+      seed: Record<string, unknown> = { epubParagraphs: 120 },
+      firstPageText?: string,
+    ) => {
       await login(page);
       await setReaderSettings(page, hideChrome);
-      await openNewBook(page, 120);
+      await openNewBook(page, seed, firstPageText);
       for (let i = 0; i < 3; i++) {
         const before = await progress(page);
         // foliate drops a turn for a moment after the last one lands.
@@ -405,6 +409,75 @@ test.describe("Reflowable reader", () => {
         await saved;
       });
 
+      test.describe("in a fixed-layout book", () => {
+        const openFixed = (page: Page, seed = {}) =>
+          openMidBook(
+            page,
+            false,
+            { fixedLayout: true, ...seed },
+            "Fixed page 1.",
+          );
+
+        for (const [zone, x] of [
+          ["left", WIDTH * 0.3],
+          ["center", WIDTH * 0.5],
+          ["right", WIDTH * 0.9],
+        ] as const) {
+          test(`a next-page swipe from the ${zone} third turns the page`, async ({
+            page,
+          }) => {
+            const start = await openFixed(page);
+            await swipe(page, x, 2);
+            await expect.poll(() => progress(page)).toBeGreaterThan(start);
+          });
+        }
+
+        for (const [zone, x] of [
+          ["left", WIDTH * 0.1],
+          ["center", WIDTH * 0.5],
+          ["right", WIDTH * 0.7],
+        ] as const) {
+          test(`a previous-page swipe from the ${zone} third turns the page`, async ({
+            page,
+          }) => {
+            const start = await openFixed(page);
+            await swipe(page, x, WIDTH - 2);
+            await expect.poll(() => progress(page)).toBeLessThan(start);
+          });
+        }
+
+        test("a swipe on the blank space around the page turns it", async ({
+          page,
+        }) => {
+          const start = await openFixed(page);
+          // The header bar ends near y 50, and the page is centered below it.
+          await swipe(page, WIDTH * 0.9, 2, 70);
+          await expect.poll(() => progress(page)).toBeGreaterThan(start);
+        });
+
+        test("a swipe to the right moves forward when pages run right to left", async ({
+          page,
+        }) => {
+          await login(page);
+          await setReaderSettings(page, false);
+          await openNewBook(
+            page,
+            { fixedLayout: true, fixedLayoutRTL: true },
+            "Fixed page 1.",
+          );
+          const start = await progress(page);
+          await swipe(page, WIDTH * 0.1, WIDTH - 2);
+          await expect.poll(() => progress(page)).toBeGreaterThan(start);
+        });
+
+        test("a small drag doesn't turn the page", async ({ page }) => {
+          const start = await openFixed(page);
+          await swipe(page, WIDTH * 0.5, WIDTH * 0.5 - 20);
+          await page.waitForTimeout(300);
+          expect(await progress(page)).toBe(start);
+        });
+      });
+
       test("a swipe on the margin above the text turns the page", async ({
         page,
       }) => {
@@ -435,7 +508,7 @@ test.describe("Reflowable reader", () => {
     test("tapping a link follows it", async ({ page }) => {
       await login(page);
       await setReaderSettings(page, false);
-      const frame = await openNewBook(page, 120);
+      const frame = await openNewBook(page, { epubParagraphs: 120 });
 
       // The link goes to the chapter's end, far beyond a single page turn.
       const box = (await frame.locator("a").first().boundingBox())!;
@@ -448,7 +521,7 @@ test.describe("Reflowable reader", () => {
     }) => {
       await login(page);
       await setReaderSettings(page, false);
-      await openNewBook(page, 0);
+      await openNewBook(page, {});
 
       await expect(async () => {
         await page.touchscreen.tap(WIDTH * 0.9, HEIGHT / 2);
@@ -461,6 +534,81 @@ test.describe("Reflowable reader", () => {
       }).toPass({ timeout: 20_000 });
 
       await turnPageTo(page, "Chapter Three text.");
+    });
+
+    test("tapping a fixed-layout book turns its pages, wherever it's scaled to", async ({
+      page,
+    }) => {
+      const start = await openMidBook(
+        page,
+        false,
+        { fixedLayout: true },
+        "Fixed page 1.",
+      );
+
+      await page.touchscreen.tap(WIDTH * 0.9, HEIGHT / 2);
+      await expect.poll(() => progress(page)).toBeGreaterThan(start);
+      const afterNext = await progress(page);
+
+      await page.waitForTimeout(150);
+      await page.touchscreen.tap(WIDTH / 2, HEIGHT / 2);
+      await page.waitForTimeout(300);
+      expect(await progress(page)).toBe(afterNext);
+
+      await page.touchscreen.tap(WIDTH * 0.1, HEIGHT / 2);
+      await expect.poll(() => progress(page)).toBeLessThan(afterNext);
+    });
+
+    test.describe("with two fixed-layout pages side by side", () => {
+      const WIDE = { width: 1280, height: 720 };
+      test.use({ viewport: WIDE });
+
+      test("clicking follows the whole screen's thirds, not each page's", async ({
+        page,
+      }) => {
+        await login(page);
+        await setReaderSettings(page, false);
+        await openNewBook(page, { fixedLayout: true }, "Fixed page 1.");
+        // One spread in, with spreads left on both sides.
+        const first = await progress(page);
+        await expect(async () => {
+          await page.keyboard.press("ArrowRight");
+          expect(await progress(page)).toBeGreaterThan(first);
+        }).toPass();
+        await page.waitForTimeout(150);
+        const start = await progress(page);
+
+        // Inside the right-hand page, on its left half: the screen's middle
+        // third, where nothing turns.
+        await page.mouse.click(WIDE.width * 0.55, WIDE.height / 2);
+        await page.waitForTimeout(300);
+        expect(await progress(page)).toBe(start);
+
+        await page.mouse.click(WIDE.width * 0.7, WIDE.height / 2);
+        await expect.poll(() => progress(page)).toBeGreaterThan(start);
+        const afterNext = await progress(page);
+
+        await page.waitForTimeout(150);
+        await page.mouse.click(WIDE.width * 0.3, WIDE.height / 2);
+        await expect.poll(() => progress(page)).toBeLessThan(afterNext);
+      });
+    });
+
+    test("tapping a link in a fixed-layout book follows it", async ({
+      page,
+    }) => {
+      await login(page);
+      await setReaderSettings(page, false);
+      const frame = await openNewBook(
+        page,
+        { fixedLayout: true },
+        "Fixed page 1.",
+      );
+      const start = await progress(page);
+
+      const box = (await frame.locator("a").first().boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect.poll(() => progress(page)).toBeGreaterThan(start + 25);
     });
 
     test("with the controls hidden, a tap where the gear was brings them back", async ({

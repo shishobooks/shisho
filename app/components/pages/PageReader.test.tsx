@@ -415,7 +415,7 @@ describe("PageReader keyboard", () => {
 });
 
 describe("PageReader swiping", () => {
-  const touch = (clientX: number, clientY: number) => ({ clientX, clientY });
+  const touch = (screenX: number, screenY: number) => ({ screenX, screenY });
   const swipe = (
     target: Element,
     from: [number, number],

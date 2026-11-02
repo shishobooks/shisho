@@ -780,6 +780,83 @@ describe("ReflowableReader", () => {
     expect(view.goRight).toHaveBeenCalledTimes(1);
   });
 
+  describe("a fixed-layout book", () => {
+    const touchEvent = (type: string, screenX: number, screenY = 400) =>
+      Object.assign(new Event(type, { bubbles: true }), {
+        touches: type === "touchend" ? [] : [{ screenX, screenY }],
+        changedTouches: [{ screenX, screenY }],
+      });
+
+    const setup = (flow: "paginated" | "scrolled", isFixedLayout = true) => {
+      vi.mocked(useUserSettings).mockReturnValue({
+        data: {
+          viewer_reflowable_font_size: 100,
+          viewer_reflowable_theme: "light",
+          viewer_reflowable_flow: flow,
+        },
+        isLoading: false,
+      } as never);
+      vi.mocked(useReflowableBlob).mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        error: null,
+        refetch: vi.fn(),
+      } as never);
+      const { container } = renderReader();
+      const view = container.querySelector(
+        "foliate-view",
+      ) as unknown as HTMLElement & {
+        goLeft: ReturnType<typeof vi.fn>;
+        goRight: ReturnType<typeof vi.fn>;
+        isFixedLayout: boolean;
+      };
+      view.isFixedLayout = isFixedLayout;
+      view.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 300, right: 300, bottom: 800 }) as DOMRect;
+      const frame = document.createElement("iframe");
+      container.append(frame);
+      const doc = frame.contentDocument!;
+      act(() => {
+        view.dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+      });
+      return { view, doc };
+    };
+    const swipe = (target: EventTarget, from: number, to: number) => {
+      target.dispatchEvent(touchEvent("touchstart", from));
+      target.dispatchEvent(touchEvent("touchend", to));
+    };
+
+    it("turns the page on a swipe inside the page's frame", () => {
+      const { view, doc } = setup("paginated");
+      swipe(doc, 300, 100);
+      expect(view.goRight).toHaveBeenCalledTimes(1);
+      swipe(doc, 100, 300);
+      expect(view.goLeft).toHaveBeenCalledTimes(1);
+    });
+
+    it("turns the page on a swipe on the space around the page", () => {
+      const { view } = setup("paginated");
+      swipe(view, 300, 100);
+      expect(view.goRight).toHaveBeenCalledTimes(1);
+    });
+
+    // It can't scroll, so the Scrolled setting changes nothing for it.
+    it("turns the page by swipe and tap under the Scrolled setting too", () => {
+      const { view, doc } = setup("scrolled");
+      swipe(doc, 300, 100);
+      expect(view.goRight).toHaveBeenCalledTimes(1);
+      fireEvent.click(view, { clientX: 295, clientY: 400 });
+      expect(view.goRight).toHaveBeenCalledTimes(2);
+    });
+
+    it("leaves a reflowable book's swipes to foliate", () => {
+      const { view, doc } = setup("paginated", false);
+      swipe(doc, 300, 100);
+      swipe(view, 300, 100);
+      expect(view.goRight).not.toHaveBeenCalled();
+    });
+  });
+
   it("leaves a margin click alone in scrolled flow", () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: {
