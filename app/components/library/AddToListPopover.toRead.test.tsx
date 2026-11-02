@@ -58,7 +58,10 @@ describe("AddToListPopover To Read", () => {
 
     const item = await toReadItem();
     expect(item).toHaveAttribute("aria-checked", "false");
-    expect(screen.getByText("No lists yet")).toBeInTheDocument();
+    expect(screen.queryByText("No lists yet")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create New List" }),
+    ).toBeInTheDocument();
   });
 
   it("adds the book to To Read", async () => {

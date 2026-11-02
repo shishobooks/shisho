@@ -67,6 +67,18 @@ describe("AddToListPopover", () => {
     expect(screen.queryByText("No lists yet")).not.toBeInTheDocument();
   });
 
+  it("says there are no lists when the role can't see To Read", async () => {
+    setAuth({ permissions: [] });
+    stubRequests([]);
+
+    renderPopover(true);
+
+    expect(await screen.findByText("No lists yet")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /To Read/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("sends no request while closed", async () => {
     const request = stubRequests();
 
