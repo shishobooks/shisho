@@ -20,6 +20,8 @@ let comicBookId: number;
 let comicFileId: number;
 let swipeBookId: number;
 let swipeFileId: number;
+let tallBookId: number;
+let tallFileId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -44,7 +46,9 @@ const pageTop = (page: Page, pageNumber: number) =>
     );
   }, `Page ${pageNumber}`);
 
-const pageImages = (page: Page) => page.locator("main img");
+// The pages a reader sees or scrolls to. A paginated page's neighbors wait
+// off-screen, hidden from assistive tech.
+const pageImages = (page: Page) => page.locator("main").getByRole("img");
 
 test.describe("Page reader flows", () => {
   test.beforeAll(async ({ browser }) => {
@@ -94,6 +98,11 @@ test.describe("Page reader flows", () => {
       "Swiped Comic",
       600,
       900,
+    ));
+    ({ id: tallBookId, fileId: tallFileId } = await seed(
+      "Tall Comic",
+      200,
+      1000,
     ));
     await apiContext.dispose();
   });
@@ -252,6 +261,159 @@ test.describe("Page reader flows", () => {
         await expect(page.getByText("Page 2 of 6")).toBeVisible();
       });
     }
+
+    const touch = async (page: Page) => {
+      const cdp = await page.context().newCDPSession(page);
+      const y = HEIGHT / 2;
+      return (type: "touchStart" | "touchMove" | "touchEnd", x?: number) =>
+        cdp.send("Input.dispatchTouchEvent", {
+          type,
+          touchPoints: x === undefined ? [] : [{ x, y }],
+        });
+    };
+
+    // Where a page's image is across the screen. Neighbors have no alt text,
+    // so this goes by src, which holds the 0-indexed page.
+    const imageLeft = (page: Page, zeroIndexedPage: number) =>
+      page.evaluate((n) => {
+        const image = Array.from(
+          document.querySelectorAll<HTMLImageElement>("main img"),
+        ).find((img) => new RegExp(`/pages?/${n}\\b`).test(img.src));
+        return image ? Math.round(image.getBoundingClientRect().left) : null;
+      }, zeroIndexedPage);
+
+    test("the next page comes in under the finger", async ({ page }) => {
+      await openComic(page, 3);
+      const send = await touch(page);
+      await send("touchStart", WIDTH * 0.9);
+      await send("touchMove", WIDTH * 0.7);
+      await send("touchMove", WIDTH * 0.5);
+
+      const nextLeft = await imageLeft(page, 3);
+      expect(nextLeft).toBeGreaterThan(0);
+      expect(nextLeft).toBeLessThan(WIDTH);
+
+      await send("touchEnd");
+      await expect(page.getByText("Page 4 of 6")).toBeVisible();
+      await expect.poll(() => imageLeft(page, 3)).toBe(0);
+    });
+
+    test("no spinner shows after a turn, since the page already loaded", async ({
+      page,
+    }) => {
+      await openComic(page, 3);
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            Array.from(document.querySelectorAll("main img")).every(
+              (img) => (img as HTMLImageElement).complete,
+            ),
+          ),
+        )
+        .toBe(true);
+      // Record whether the spinner ever appears during the turn.
+      await page.evaluate(() => {
+        const main = document.querySelector("main")!;
+        (window as unknown as { spun: boolean }).spun = false;
+        new MutationObserver(() => {
+          if (main.querySelector(".bg-black\\/60")) {
+            (window as unknown as { spun: boolean }).spun = true;
+          }
+        }).observe(main, { childList: true, subtree: true });
+      });
+
+      await swipe(page, WIDTH * 0.9, WIDTH * 0.3);
+      await expect(page.getByText("Page 4 of 6")).toBeVisible();
+      await page.waitForTimeout(200);
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { spun: boolean }).spun,
+        ),
+      ).toBe(false);
+    });
+
+    test("a drag too short to turn springs back", async ({ page }) => {
+      await openComic(page, 3);
+      const send = await touch(page);
+      await send("touchStart", WIDTH * 0.5);
+      await send("touchMove", WIDTH * 0.5 - 30);
+      await send("touchEnd");
+      await expect.poll(() => imageLeft(page, 2)).toBe(0);
+      await expect(page.getByText("Page 3 of 6")).toBeVisible();
+    });
+
+    test.describe("in Fit Width", () => {
+      test.afterEach(async ({ page }) => {
+        await page.request.put("/api/settings/user", {
+          data: { fit_mode: "fit-height" },
+        });
+      });
+
+      const setFitWidth = async (page: Page) => {
+        await login(page);
+        const put = await page.request.put("/api/settings/user", {
+          data: { fit_mode: "fit-width" },
+        });
+        expect(put.ok()).toBe(true);
+      };
+
+      const gaps = (page: Page, name: string) =>
+        page.evaluate((alt) => {
+          const main = document.querySelector("main")!.getBoundingClientRect();
+          const image = document
+            .querySelector(`main img[alt="${alt}"]`)!
+            .getBoundingClientRect();
+          return {
+            above: Math.round(image.top - main.top),
+            below: Math.round(main.bottom - image.bottom),
+          };
+        }, name);
+
+      test("a page shorter than the screen sits in the middle", async ({
+        page,
+      }) => {
+        await setFitWidth(page);
+        await page.goto(readerUrl(swipeBookId, swipeFileId, 1), {
+          waitUntil: "domcontentloaded",
+        });
+        await expect(
+          page.getByRole("img", { name: "Page 2", exact: true }),
+        ).toBeVisible();
+        await expect
+          .poll(async () => {
+            const { above, below } = await gaps(page, "Page 2");
+            return above > 0 && Math.abs(above - below) <= 1;
+          })
+          .toBe(true);
+      });
+
+      test("a page taller than the screen starts at its top and scrolls", async ({
+        page,
+      }) => {
+        await setFitWidth(page);
+        // Flow is per book: a tall strip asked to stay paginated.
+        await page.goto(readerUrl(tallBookId, tallFileId, 1), {
+          waitUntil: "domcontentloaded",
+        });
+        await page.getByRole("button", { name: "Reader settings" }).click();
+        await page
+          .getByRole("button", { name: "Paginated", exact: true })
+          .click();
+        await page.keyboard.press("Escape");
+        await expect(
+          page.getByRole("img", { name: "Page 2", exact: true }),
+        ).toBeVisible();
+        await expect
+          .poll(async () => (await gaps(page, "Page 2")).above)
+          .toBe(0);
+        await page.evaluate(() =>
+          document.querySelector("main")!.scrollTo(0, 300),
+        );
+        expect(
+          await page.evaluate(() => document.querySelector("main")!.scrollTop),
+        ).toBe(300);
+      });
+    });
 
     test("a tap still turns the page", async ({ page }) => {
       await openComic(page, 3);
