@@ -24,6 +24,43 @@ const renderDialog = (
   );
 
 describe("MetadataDeleteDialog", () => {
+  it.each([
+    [1, "It will be removed from 1 book."],
+    [1234, "It will be removed from 1,234 books."],
+  ])("states the impact on %i affected books", (affectedBookCount, impact) => {
+    render(
+      <MetadataDeleteDialog
+        affectedBookCount={affectedBookCount}
+        entityName="Fantasy"
+        entityType="genre"
+        isPending={false}
+        onDelete={vi.fn()}
+        onOpenChange={vi.fn()}
+        open={true}
+      />,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(impact);
+    expect(dialog).toHaveTextContent(
+      "A metadata refresh or reset can add it back if a book's files or plugins still name it.",
+    );
+  });
+
+  it("wraps the name at word boundaries", () => {
+    renderDialog(vi.fn());
+
+    expect(screen.getByText('"Fantasy"')).toHaveClass("break-words");
+  });
+
+  it("states no impact when nothing is affected", () => {
+    renderDialog(vi.fn());
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).not.toHaveTextContent("It will be removed from");
+    expect(dialog).not.toHaveTextContent("can add it back");
+  });
+
   it("toasts a rejected delete and stays open", async () => {
     const toastError = vi.spyOn(toast, "error");
     // A plain async function, not a vi.fn: Vitest's spy handles the promise
