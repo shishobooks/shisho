@@ -599,6 +599,81 @@ describe("PageReader swiping", () => {
       expect(screen.getByRole("img")).toBe(next);
     });
 
+    it("takes a new swipe that starts while the last one is landing", () => {
+      const main = openOnPage(3);
+      drag(main, 300, 150);
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(50));
+
+      drag(main, 300, 150);
+      expect(track().style.transform).toBe("translateX(-150px)");
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(500));
+      expect(screen.getByTestId("location")).toHaveTextContent("page=5");
+    });
+
+    it("clears the offsets it used, so they can't add blank scroll", () => {
+      const main = openOnPage(3);
+      Object.defineProperty(main, "scrollTop", {
+        value: 1000,
+        configurable: true,
+      });
+      drag(main, 300, 150);
+      expect(track().style.getPropertyValue("--panel-top")).toBe("1000px");
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(500));
+      expect(track().style.getPropertyValue("--panel-top")).toBe("");
+      expect(track().style.getPropertyValue("--panel-height")).toBe("");
+    });
+
+    it("asks for the current page first, ahead of its neighbors", () => {
+      openOnPage(3);
+      const sources = Array.from(document.querySelectorAll("main img")).map(
+        (image) => image.getAttribute("src"),
+      );
+      expect(sources[0]).toBe("/page-3");
+    });
+
+    // A neighbor that failed off-screen fires no more events by itself.
+    it("retries a neighbor that failed, rather than spinning forever", () => {
+      const main = openOnPage(3);
+      const next = pageImage(4) as HTMLImageElement;
+      Object.defineProperty(next, "complete", { value: true });
+      Object.defineProperty(next, "naturalWidth", { value: 0 });
+      const assigned = vi.spyOn(next, "src", "set");
+
+      drag(main, 300, 150);
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(500));
+      expect(assigned).toHaveBeenCalledWith("/page-4");
+      expect(document.querySelector('main [role="status"]')).not.toBeNull();
+
+      fireEvent.error(next);
+      expect(document.querySelector('main [role="status"]')).toBeNull();
+    });
+
+    // touch-action pan-y would stop a zoomed page panning sideways.
+    it("gives sideways drags back to the browser while zoomed in", () => {
+      const viewport = Object.assign(new EventTarget(), { scale: 1 });
+      vi.stubGlobal("visualViewport", viewport);
+      try {
+        const main = openOnPage(3);
+        expect(main).toHaveClass("touch-pan-y");
+        act(() => {
+          viewport.scale = 2;
+          viewport.dispatchEvent(new Event("resize"));
+        });
+        expect(main).not.toHaveClass("touch-pan-y");
+        act(() => {
+          viewport.scale = 1;
+          viewport.dispatchEvent(new Event("resize"));
+        });
+        expect(main).toHaveClass("touch-pan-y");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it("lets a key press replace a turn that's still sliding", () => {
       const main = openOnPage(3);
       drag(main, 300, 150);
@@ -612,7 +687,10 @@ describe("PageReader swiping", () => {
 
   // A drag on a zoomed page pans around it.
   it("ignores a swipe while the page is zoomed in", () => {
-    vi.stubGlobal("visualViewport", { scale: 2 });
+    vi.stubGlobal(
+      "visualViewport",
+      Object.assign(new EventTarget(), { scale: 2 }),
+    );
     try {
       swipe(openOnPage(3), [300, 400], [100, 400]);
       expect(screen.getByTestId("location")).toHaveTextContent("page=3");

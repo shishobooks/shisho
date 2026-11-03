@@ -605,13 +605,8 @@ test.describe("Reflowable reader", () => {
         pageNumber: number,
         forward = "Next page",
       ) => {
-        const next = page.getByRole("button", { name: forward });
-        await expect(async () => {
-          await next.click();
-          await expect(footerPage(page, pageNumber)).toBeVisible({
-            timeout: 1_000,
-          });
-        }).toPass();
+        await page.getByRole("button", { name: forward }).click();
+        await expect(footerPage(page, pageNumber)).toBeVisible();
       };
 
       const open = async (page: Page, seed: Record<string, unknown>) => {
@@ -624,20 +619,36 @@ test.describe("Reflowable reader", () => {
         );
       };
 
-      // A finish saves at once, so a wrong one shows within a moment.
-      const expectNotFinished = async (page: Page) => {
+      // Everything the reader has told the server was the end of the book.
+      const watchFinishes = (page: Page) => {
+        const finishes: string[] = [];
+        page.on("request", (request) => {
+          if (
+            request.method() === "POST" &&
+            /\/reading\/files\/\d+\/position/.test(request.url()) &&
+            (request.postDataJSON() as { at_end?: boolean }).at_end
+          ) {
+            finishes.push(request.url());
+          }
+        });
+        return finishes;
+      };
+
+      // A finish saves at once, so a wrong one is on its way by now.
+      const expectNotFinished = async (page: Page, finishes: string[]) => {
         await page.waitForTimeout(500);
-        await expect(page.getByText("Marked as read")).toHaveCount(0);
+        expect(finishes).toEqual([]);
       };
 
       test("the last page marks it read, and not the page before", async ({
         page,
       }) => {
+        const finishes = watchFinishes(page);
         await open(page, {});
         for (const pageNumber of [2, 3, 4, 5, 6, 7]) {
           await turnToPage(page, pageNumber);
         }
-        await expectNotFinished(page);
+        await expectNotFinished(page, finishes);
 
         await turnToPage(page, 8);
         await expect(page.getByText("Marked as read")).toBeVisible();
@@ -661,11 +672,12 @@ test.describe("Reflowable reader", () => {
         test(`the last spread's later page marks it read, ${direction}`, async ({
           page,
         }) => {
+          const finishes = watchFinishes(page);
           await open(page, seed);
           for (const pageNumber of [2, 3, 4, 5, 6]) {
             await turnToPage(page, pageNumber, forward);
           }
-          await expectNotFinished(page);
+          await expectNotFinished(page, finishes);
 
           await turnToPage(page, 7, forward);
           await expect(page.getByText("Marked as read")).toBeVisible();
@@ -676,6 +688,7 @@ test.describe("Reflowable reader", () => {
         test.use({ viewport: { width: 1280, height: 720 } });
 
         test("reaching the last spread marks it read", async ({ page }) => {
+          const finishes = watchFinishes(page);
           await open(page, { fixedLayoutPages: 7 });
           const next = page.getByRole("button", { name: "Next page" });
           // The spreads are 1, 2-3, 4-5, and 6-7.
@@ -683,11 +696,28 @@ test.describe("Reflowable reader", () => {
             await next.click();
             await expect(footerPage(page, before * 2)).toBeVisible();
           }
-          await expectNotFinished(page);
+          await expectNotFinished(page, finishes);
 
           await next.click();
           await expect(page.getByText("Marked as read")).toBeVisible();
         });
+      });
+
+      // A jump within the spread on screen, which a page turn doesn't take.
+      test("jumping to the last page from the one before marks it read", async ({
+        page,
+      }) => {
+        const finishes = watchFinishes(page);
+        await open(page, { fixedLayoutPages: 7 });
+        for (const pageNumber of [2, 3, 4, 5, 6]) {
+          await turnToPage(page, pageNumber);
+        }
+        await expectNotFinished(page, finishes);
+
+        await page.getByRole("slider", { name: "Reading progress" }).focus();
+        await page.keyboard.press("End");
+        await expect(footerPage(page, 7)).toBeVisible();
+        await expect(page.getByText("Marked as read")).toBeVisible();
       });
 
       test("reopening resumes on the page you left", async ({ page }) => {

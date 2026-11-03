@@ -849,6 +849,30 @@ describe("ReflowableReader", () => {
       expect(view.goRight).toHaveBeenCalledTimes(2);
     });
 
+    it("gives sideways drags back to the browser while zoomed in", () => {
+      const viewport = Object.assign(new EventTarget(), { scale: 1 });
+      vi.stubGlobal("visualViewport", viewport);
+      try {
+        const { view, doc } = setup("paginated");
+        (
+          view as unknown as { renderer: { getContents: () => unknown[] } }
+        ).renderer.getContents = () => [{ doc }];
+        act(() => {
+          view.dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+        });
+        expect(doc.documentElement.style.touchAction).toBe("pan-y pinch-zoom");
+
+        act(() => {
+          viewport.scale = 2;
+          viewport.dispatchEvent(new Event("resize"));
+        });
+        expect(doc.documentElement.style.touchAction).toBe("");
+        expect(view.style.touchAction).toBe("");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
     it("leaves a reflowable book's swipes to foliate", () => {
       const { view, doc } = setup("paginated", false);
       swipe(doc, 300, 100);

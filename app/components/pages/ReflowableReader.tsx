@@ -21,7 +21,7 @@ import {
 import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
-import { createSwipeHandlers } from "@/hooks/useSwipeTurn";
+import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
@@ -418,23 +418,43 @@ export default function ReflowableReader({
     const swipe = createSwipeHandlers((turn) =>
       turn === "next" ? goNext() : goPrev(),
     );
-    const listenForSwipes = (target: EventTarget) => {
+    const stopListening = new AbortController();
+    const listenForSwipes = (target: EventTarget, signal?: AbortSignal) => {
       const on = (type: string, handler: (e: TouchEvent) => void) =>
-        target.addEventListener(type, (e) => {
-          if (isFixedLayout()) handler(e as TouchEvent);
-        });
+        target.addEventListener(
+          type,
+          (e) => {
+            if (isFixedLayout()) handler(e as TouchEvent);
+          },
+          { signal },
+        );
       on("touchstart", swipe.onTouchStart);
       on("touchend", swipe.onTouchEnd);
       on("touchcancel", swipe.onTouchCancel);
     };
-    listenForSwipes(view);
+    listenForSwipes(view, stopListening.signal);
+    // Keeps a sideways drag for the swipe handlers, except on a zoomed page,
+    // where the browser needs it to pan.
+    const updateTouchAction = () => {
+      if (!isFixedLayout()) return;
+      const touchAction = isZoomed() ? "" : "pan-y pinch-zoom";
+      view.style.touchAction = touchAction;
+      (view as HTMLElement & { renderer?: FoliateRenderer }).renderer
+        ?.getContents?.()
+        .forEach(({ doc }) => {
+          doc.documentElement.style.touchAction = touchAction;
+        });
+    };
+    globalThis.visualViewport?.addEventListener("resize", updateTouchAction, {
+      signal: stopListening.signal,
+    });
 
     const handleLoad = (evt: Event) => {
       const { doc } = (evt as CustomEvent<{ doc: Document }>).detail;
       listenForSwipes(doc);
-      if (isFixedLayout()) {
-        // Keeps a sideways drag for the swipe handlers.
-        view.style.touchAction = "pan-y pinch-zoom";
+      updateTouchAction();
+      if (isFixedLayout() && !isZoomed()) {
+        // foliate's list of frames may not hold this one yet.
         doc.documentElement.style.touchAction = "pan-y pinch-zoom";
       }
       let selectedAtPress = false;
@@ -511,6 +531,7 @@ export default function ReflowableReader({
     return () => {
       view.removeEventListener("load", handleLoad);
       view.removeEventListener("click", handleMarginClick);
+      stopListening.abort();
     };
   }, [viewElement, goNext, goPrev]);
 

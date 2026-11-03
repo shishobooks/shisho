@@ -316,7 +316,7 @@ test.describe("Page reader flows", () => {
         const main = document.querySelector("main")!;
         (window as unknown as { spun: boolean }).spun = false;
         new MutationObserver(() => {
-          if (main.querySelector(".bg-black\\/60")) {
+          if (main.querySelector('[role="status"]')) {
             (window as unknown as { spun: boolean }).spun = true;
           }
         }).observe(main, { childList: true, subtree: true });
@@ -330,6 +330,42 @@ test.describe("Page reader flows", () => {
           () => (window as unknown as { spun: boolean }).spun,
         ),
       ).toBe(false);
+    });
+
+    test("a zoomed page pans sideways instead of turning", async ({ page }) => {
+      await openComic(page, 3);
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Input.synthesizePinchGesture", {
+        x: WIDTH / 2,
+        y: HEIGHT / 2,
+        scaleFactor: 3,
+      });
+      const viewport = () =>
+        page.evaluate(() => ({
+          scale: globalThis.visualViewport!.scale,
+          left: Math.round(globalThis.visualViewport!.pageLeft),
+        }));
+      await expect
+        .poll(async () => (await viewport()).scale)
+        .toBeGreaterThan(1.5);
+      // The pinch keeps settling after the scale passes that, which would also
+      // move the view.
+      await expect(async () => {
+        const first = await viewport();
+        await page.waitForTimeout(300);
+        expect(await viewport()).toEqual(first);
+      }).toPass();
+      const before = (await viewport()).left;
+
+      const send = await touch(page);
+      await send("touchStart", WIDTH * 0.7);
+      for (const x of [0.6, 0.5, 0.4, 0.3]) {
+        await send("touchMove", WIDTH * x);
+        await page.waitForTimeout(16);
+      }
+      await send("touchEnd");
+      await expect.poll(async () => (await viewport()).left).not.toBe(before);
+      await expect(page.getByText("Page 3 of 6")).toBeAttached();
     });
 
     test("a drag too short to turn springs back", async ({ page }) => {
@@ -414,9 +450,21 @@ test.describe("Page reader flows", () => {
         ).toBe(300);
       });
     });
+  });
 
-    test("a tap still turns the page", async ({ page }) => {
-      await openComic(page, 3);
+  test.describe("tapping on a phone", () => {
+    const WIDTH = 390;
+    const HEIGHT = 844;
+    test.use({ hasTouch: true, viewport: { width: WIDTH, height: HEIGHT } });
+
+    test("a tap turns the page", async ({ page }) => {
+      await login(page);
+      await page.goto(readerUrl(swipeBookId, swipeFileId, 2), {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(
+        page.getByRole("img", { name: "Page 3", exact: true }),
+      ).toBeVisible();
       await page.touchscreen.tap(WIDTH * 0.9, HEIGHT / 2);
       await expect(page.getByText("Page 4 of 6")).toBeVisible();
     });

@@ -275,7 +275,13 @@ export class FixedLayout extends HTMLElement {
     async goToSpread(index, side, reason) {
         if (index < 0 || index > this.#spreads.length - 1) return
         if (index === this.#index) {
+            // Shisho patch: upstream shows the other page of the spread here
+            // without noting it or saying so, so a jump to the last page from
+            // the one before it never reached the reader.
+            const moved = side && side !== this.#side
+            if (side) this.#side = side
             this.#render(side)
+            if (moved) this.#reportLocation(reason)
             return
         }
         this.#index = index

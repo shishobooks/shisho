@@ -32,7 +32,7 @@ import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { pagesToProbe, useDetectedPageFlow } from "@/hooks/useDetectedPageFlow";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { usePreloadImages } from "@/hooks/usePreloadImages";
-import { useSwipeTurn } from "@/hooks/useSwipeTurn";
+import { usePinchZoomed, useSwipeTurn } from "@/hooks/useSwipeTurn";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
@@ -42,7 +42,7 @@ import {
   type ThumbnailSize,
   type UserSettingsPayload,
 } from "@/types";
-import { pageTurnForKey } from "@/utils/readerKeys";
+import { pageTurnForKey, type PageTurn } from "@/utils/readerKeys";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
 const flattenChapters = (chapters: Chapter[]): Chapter[] => {
@@ -65,6 +65,11 @@ const PROBE_THUMBNAIL_SIZE = ThumbnailSize256;
 // to the URL. Browsers cap how often a page may rewrite its URL, and
 // scrolling can change the page every frame.
 const URL_SETTLE_MS = 300;
+
+// How long a swiped page takes to land.
+const SLIDE_MS = 180;
+// How much of a drag moves the page when there's no page beyond it.
+const EDGE_RESISTANCE = 0.25;
 
 const FLOW_LABELS: Record<PageFlow, string> = {
   paginated: "Paginated",
@@ -111,11 +116,6 @@ interface ScrolledPageProps {
   scrollerRef: React.RefObject<HTMLElement | null>;
   ref: (el: HTMLDivElement | null) => void;
 }
-
-// How long a swiped page takes to land.
-const SLIDE_MS = 180;
-// How much of a drag moves the page when there's no page beyond it.
-const EDGE_RESISTANCE = 0.25;
 
 // One page of the scrolled flow. Until its image loads it holds a screen's
 // height, so lazy loading leaves the pages far below alone. The reader turns
@@ -277,11 +277,15 @@ export default function PageReader({
   // Reset loading state when the page URL changes
   useEffect(() => {
     // If the image is already cached by the browser, it may be complete immediately
-    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+    const image = imgRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
       setImageLoading(false);
-    } else {
-      setImageLoading(true);
+      return;
     }
+    setImageLoading(true);
+    // A neighbor that failed off-screen keeps its element and fires nothing
+    // more when it becomes the current page, so ask for it again.
+    if (image?.complete) image.src = currentPageUrl;
   }, [currentPageUrl]);
 
   usePageTitle(title ? `Reading: ${title}` : "Reader");
@@ -395,24 +399,24 @@ export default function PageReader({
     track.style.transform = `translateX(${x}px)`;
   }, []);
 
-  // Whatever turned the page, its neighbors are in place now.
+  // Whatever turned the page, its neighbors are in place now. Cleaning up on
+  // each change also stops a slide that a key press or a jump replaced.
   useLayoutEffect(() => {
-    if (slideRef.current) window.clearTimeout(slideRef.current.timer);
-    slideRef.current = null;
     const track = trackRef.current;
-    if (!track) return;
-    track.style.transition = "none";
-    track.style.transform = "";
-  }, [currentPage]);
-  useEffect(
-    () => () => {
+    if (track) {
+      track.style.transition = "none";
+      track.style.transform = "";
+      track.style.removeProperty("--panel-top");
+      track.style.removeProperty("--panel-height");
+    }
+    return () => {
       if (slideRef.current) window.clearTimeout(slideRef.current.timer);
-    },
-    [],
-  );
+      slideRef.current = null;
+    };
+  }, [currentPage]);
 
   const handleSwipe = useCallback(
-    (turn: "next" | "prev") => {
+    (turn: PageTurn) => {
       const target = currentPage + (turn === "next" ? 1 : -1);
       const reduceMotion = window.matchMedia?.(
         "(prefers-reduced-motion: reduce)",
@@ -451,6 +455,7 @@ export default function PageReader({
     handleSwipe,
     swipeDrag,
   );
+  const zoomed = usePinchZoomed();
   const swipeHandlers = {
     ...swipeRest,
     onTouchStart: (e: React.TouchEvent) => {
@@ -462,7 +467,8 @@ export default function PageReader({
 
   // The current page and its neighbors are the reader's own images, so a
   // swipe can show the next page as it comes in.
-  const panelPages = [currentPage - 1, currentPage, currentPage + 1].filter(
+  // The current page comes first, so it's first in line for a PDF render.
+  const panelPages = [currentPage, currentPage + 1, currentPage - 1].filter(
     (page) => page >= 0 && page < totalPages,
   );
   // The pages past those, nearest first.
@@ -654,11 +660,11 @@ export default function PageReader({
             : "flex-1",
           scrolled
             ? "flex-col items-center overflow-y-auto outline-none [overflow-anchor:none]"
-            : fitMode === "fit-width"
+            : fitWidth
               ? "items-stretch justify-start overflow-y-auto overflow-x-hidden"
               : "items-center justify-center overflow-hidden",
           // Keeps a sideways drag for the swipe handlers below.
-          flow === "paginated" && "touch-pan-y touch-pinch-zoom",
+          flow === "paginated" && !zoomed && "touch-pan-y touch-pinch-zoom",
         )}
         onScroll={scrolled ? handleScroll : undefined}
         ref={mainRef}

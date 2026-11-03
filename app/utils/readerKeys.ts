@@ -5,10 +5,10 @@
 const CONTROL_KEYS =
   '[role="dialog"], [role="combobox"], [role="listbox"], input, select, textarea, [contenteditable="true"]';
 
+export type PageTurn = "next" | "prev";
+
 // The page turn a keydown in the reader asks for, or null for none.
-export const pageTurnForKey = (
-  event: KeyboardEvent,
-): "next" | "prev" | null => {
+export const pageTurnForKey = (event: KeyboardEvent): PageTurn | null => {
   // Browser shortcuts such as Cmd+D and Alt+Left aren't page turns.
   if (event.ctrlKey || event.metaKey || event.altKey) return null;
   // Shift+Arrow extends a selection in the book.
