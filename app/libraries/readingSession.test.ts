@@ -250,6 +250,17 @@ describe("ReadingSessionTracker", () => {
       expect(ended[0].session.ended_at).toBe(at(minutes(2)));
     });
 
+    it("says how long the open session has played", () => {
+      expect(tracker.openSessionSeconds()).toBe(0);
+
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      expect(tracker.openSessionSeconds()).toBe(60);
+
+      tracker.setPlaying(false);
+      expect(tracker.openSessionSeconds()).toBe(0);
+    });
+
     it("starts a new session each time playback starts", () => {
       tracker.setPlaying(true);
       vi.advanceTimersByTime(minutes(1));

@@ -880,6 +880,17 @@ describe("M4BReader position", () => {
     expect(position.saves).toEqual([]);
   });
 
+  it("reports how long the open session has played with each save", () => {
+    renderReader();
+    fireEvent.loadedMetadata(getAudio());
+    startPlaying();
+
+    playTo(10);
+    act(() => vi.advanceTimersByTime(SAVE_EVERY_MS));
+
+    expect(position.saves[0]).toMatchObject({ listened_seconds: 15 });
+  });
+
   it("saves on pause, with the session", () => {
     renderReader();
     fireEvent.loadedMetadata(getAudio());

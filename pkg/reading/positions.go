@@ -16,8 +16,9 @@ import (
 const RevertWindow = 15 * time.Minute
 
 const (
-	// AudioStartSeconds is how far into an audiobook counts as real progress:
-	// a minute in, not a few seconds of checking what it sounds like.
+	// AudioStartSeconds is how much listening counts as real progress: a
+	// minute of it, not a few seconds of checking what it sounds like or a
+	// seek to somewhere later.
 	AudioStartSeconds = 60.0
 	// AudioEndSeconds is how close to an audiobook's end counts as reaching
 	// it, so end credits don't stop it being marked read.
@@ -49,6 +50,9 @@ type PositionUpdate struct {
 	// the Read-through underway. The last page and an audiobook's last
 	// minute count as the end whether or not the source says so.
 	AtEnd bool
+	// ListenedSeconds is how long a source timing audio has played in the
+	// session still open, which no recorded session holds yet.
+	ListenedSeconds float64
 	// Opened is a reader opened at this place by a link, such as a page
 	// thumbnail or a shared URL, which saves it as the place but isn't
 	// reading: it starts, resumes, finishes, and undoes nothing.
@@ -128,7 +132,6 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		// still going back, so it can undo a finish.
 		moved := stored == nil || !stored.Equal(u.Locator)
 		atEnd := !u.Opened && (u.AtEnd || locatorAtEnd(file, u.Locator))
-		progress := moved && !u.Opened && (u.AtEnd || isRealProgress(u))
 
 		if underway == nil && !atEnd && moved && !u.Opened {
 			reverted, err := revertAutoFinish(ctx, tx, u.UserID, u.FileID, occurredAt, now)
@@ -138,6 +141,14 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			if reverted != nil {
 				underway = reverted
 				result.Reverted = true
+			}
+		}
+
+		progress := moved && !u.Opened && atEnd
+		if moved && !u.Opened && !atEnd {
+			progress, err = isRealProgress(ctx, tx, u, underway)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -247,28 +258,60 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 }
 
 // isRealProgress reports whether u's position is past where merely opening
-// the File leaves a reader: past the first page or screen, or a minute into
-// audio.
-func isRealProgress(u PositionUpdate) bool {
+// the File leaves a reader: past the first page or screen, or a minute of
+// listening.
+func isRealProgress(ctx context.Context, tx bun.Tx, u PositionUpdate, underway *models.ReadThrough) (bool, error) {
 	switch {
 	case u.Locator.Seconds != nil:
-		return *u.Locator.Seconds >= AudioStartSeconds
+		return hasListenedEnough(ctx, tx, u, underway)
 	case u.Locator.Page != nil:
-		return *u.Locator.Page > 0
+		return *u.Locator.Page > 0, nil
 	default:
-		return u.Percentage > 0
+		return u.Percentage > 0, nil
 	}
+}
+
+// hasListenedEnough adds up the listening that can start or resume a
+// Read-through: this update's, and the sessions recorded since a paused
+// Read-through was paused, or with nothing underway, those on no Read-through.
+// Only a start or a resume asks, so a Read-through already going needs nothing.
+func hasListenedEnough(ctx context.Context, tx bun.Tx, u PositionUpdate, underway *models.ReadThrough) (bool, error) {
+	if underway != nil && !underway.Paused {
+		return true, nil
+	}
+	listened := u.ListenedSeconds
+	if u.Session != nil {
+		listened += u.Session.EndedAt.Sub(u.Session.StartedAt).Seconds()
+	}
+	var sessions []*models.ReadingSession
+	q := tx.NewSelect().
+		Model(&sessions).
+		Column("rs.started_at", "rs.ended_at").
+		Where("rs.user_id = ? AND rs.file_id = ? AND rs.measured", u.UserID, u.FileID)
+	if underway != nil {
+		q = q.Where("rs.read_through_id = ? AND rs.started_at >= ?", underway.ID, underway.UpdatedAt)
+	} else {
+		q = q.Where("rs.read_through_id IS NULL")
+	}
+	if err := q.Scan(ctx); err != nil {
+		return false, errors.WithStack(err)
+	}
+	for _, session := range sessions {
+		listened += session.EndedAt.Sub(session.StartedAt).Seconds()
+	}
+	return listened >= AudioStartSeconds, nil
 }
 
 // locatorAtEnd reports whether the position is at the end of file, for the
 // forms where the File's own length says so: its last page, or its last
-// minute of audio. A length the scan didn't record leaves it to the source.
+// minute of audio. A length the scan didn't record leaves it to the source, as
+// does audio no longer than that minute, which would be at its end throughout.
 func locatorAtEnd(file *models.File, locator models.ReadingLocator) bool {
 	switch {
 	case locator.Page != nil:
 		return file.PageCount != nil && *file.PageCount > 0 && *locator.Page >= *file.PageCount-1
 	case locator.Seconds != nil:
-		return file.AudiobookDurationSeconds != nil && *file.AudiobookDurationSeconds > 0 &&
+		return file.AudiobookDurationSeconds != nil && *file.AudiobookDurationSeconds > AudioEndSeconds &&
 			*locator.Seconds >= *file.AudiobookDurationSeconds-AudioEndSeconds
 	default:
 		return false

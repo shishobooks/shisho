@@ -452,6 +452,9 @@ func (h *handler) updatePosition(c echo.Context) error {
 	if params.Percentage != nil {
 		update.Percentage = *params.Percentage
 	}
+	if params.ListenedSeconds != nil {
+		update.ListenedSeconds = *params.ListenedSeconds
+	}
 	if s := params.Session; s != nil {
 		if s.EndedAt.Before(s.StartedAt) {
 			return errcodes.ValidationError("A reading session can't end before it starts.")

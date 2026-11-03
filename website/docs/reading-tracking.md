@@ -47,9 +47,9 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 
 ### Starting and Finishing Automatically
 
-- **Starting**: turning past the first page of a book you have never read, or reaching a minute into its audiobook, starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing, and neither does listening within the first minute.
+- **Starting**: turning past the first page of a book you have never read, or listening to a minute of its audiobook, starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing, and neither does seeking through an audiobook or listening to less than a minute of it, which adds up across sittings.
 - **Rereading**: a book you have read or abandoned starts again only when you choose **Read again**, or when you've added it back to To Read to plan a reread. Otherwise you can open it to look something up, and only your place in it is saved.
-- **Resuming**: turning a page of a paused book, or playing it past the first minute, makes it **Currently Reading** again.
+- **Resuming**: turning a page of a paused book, or listening to a minute of it, makes it **Currently Reading** again.
 - **Finishing**: reaching the last page finishes the Read-through, dated today. An audiobook finishes when playback ends or you're within its last 60 seconds, so end credits don't stop it being marked read. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
 - **Peeking at the end**: going back before the end within 15 minutes of an automatic finish undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way. After 15 minutes, the book stays **Read**.
 

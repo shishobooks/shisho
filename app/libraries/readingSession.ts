@@ -89,6 +89,11 @@ export class ReadingSessionTracker {
     }
   }
 
+  // How long the open session has run, for a save sent before it ends.
+  openSessionSeconds() {
+    return this.session ? (Date.now() - this.session.startedAt) / 1000 : 0;
+  }
+
   recordActivity = () => {
     if (
       !this.started ||

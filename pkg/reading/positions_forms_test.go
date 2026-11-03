@@ -58,6 +58,34 @@ func (f *positionsFixture) listen(file *models.File, seconds, percentage float64
 	return result
 }
 
+// listenFor reports a place with seconds of listening so far in a session
+// still open.
+func (f *positionsFixture) listenFor(file *models.File, seconds, listened float64) *UpdatePositionResponse {
+	f.t.Helper()
+	result, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
+		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
+		Locator: models.ReadingLocator{Seconds: &seconds}, Percentage: seconds / 3600, ListenedSeconds: listened,
+	})
+	require.NoError(f.t, err)
+	return result
+}
+
+// listenWithSession reports a place with the session that ended there, as
+// pausing does.
+func (f *positionsFixture) listenWithSession(file *models.File, seconds, listened float64) *UpdatePositionResponse {
+	f.t.Helper()
+	ended := f.clock.now
+	result, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
+		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
+		Locator: models.ReadingLocator{Seconds: &seconds}, Percentage: seconds / 3600,
+		Session: &SessionInput{
+			StartedAt: ended.Add(-time.Duration(listened * float64(time.Second))), EndedAt: ended, Measured: true,
+		},
+	})
+	require.NoError(f.t, err)
+	return result
+}
+
 func TestUpdatePosition_StoresAPage(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
@@ -128,36 +156,82 @@ func TestUpdatePosition_GoingBackFromTheLastPageUndoesTheFinish(t *testing.T) {
 	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
 }
 
-func TestUpdatePosition_AudioStartsAtAMinuteIn(t *testing.T) {
+func TestUpdatePosition_AudioStartsAfterAMinuteOfListening(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
 	audio := f.addAudiobook(3600)
 
-	for _, seconds := range []float64{15, 30, 59.9} {
-		result := f.listen(audio, seconds, seconds/3600, false)
-		assert.False(t, result.Started, "at %v seconds", seconds)
+	for _, listened := range []float64{15, 30, 59.9} {
+		result := f.listenFor(audio, listened, listened)
+		assert.False(t, result.Started, "after %v seconds", listened)
 	}
 	assert.Empty(t, f.status())
 	assert.Empty(t, f.readThroughs())
 	require.NotNil(t, f.position(audio), "the place is saved even before it counts as reading")
 
-	result := f.listen(audio, 60, 60.0/3600, false)
+	result := f.listenFor(audio, 60, 60)
 	assert.True(t, result.Started)
 	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
 }
 
-func TestUpdatePosition_AudioUnderAMinuteDoesNotResumeAPausedRead(t *testing.T) {
+func TestUpdatePosition_SeekingPastAMinuteIsNotListening(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
 	audio := f.addAudiobook(3600)
-	f.listen(audio, 120, 120.0/3600, false)
-	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
 
-	assert.False(t, f.listen(audio, 30, 30.0/3600, false).Resumed)
+	result := f.listen(audio, 1200, 1200.0/3600, false)
+
+	assert.False(t, result.Started)
+	assert.Empty(t, f.status())
+	assert.InDelta(t, 1200, *f.position(audio).Seconds, 1e-9)
+}
+
+func TestUpdatePosition_ListeningAddsUpAcrossSessions(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+
+	first := f.listenWithSession(audio, 40, 40)
+	assert.False(t, first.Started)
+
+	f.clock.advance(24 * time.Hour)
+	assert.False(t, f.listenFor(audio, 50, 10).Started)
+	assert.True(t, f.listenFor(audio, 60, 20).Started)
+}
+
+func TestUpdatePosition_AFinishedSessionCountsInItsOwnUpdate(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+
+	assert.True(t, f.listenWithSession(audio, 60, 60).Started)
+}
+
+func TestUpdatePosition_ResumingAudioTakesAMinuteOfListeningSincePausing(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	f.listenWithSession(audio, 120, 120)
+	require.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+	f.clock.advance(time.Hour)
+	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
+	f.clock.advance(time.Hour)
+
+	assert.False(t, f.listen(audio, 1000, 1000.0/3600, false).Resumed)
+	assert.False(t, f.listenFor(audio, 1030, 30).Resumed)
 	assert.Equal(t, models.ReadingStatusPaused, f.status())
 
-	assert.True(t, f.listen(audio, 90, 90.0/3600, false).Resumed)
+	assert.True(t, f.listenFor(audio, 1060, 60).Resumed)
 	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+}
+
+func TestUpdatePosition_AudioThisShortFinishesOnlyWhenPlaybackEnds(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(40)
+
+	assert.Nil(t, f.listenFor(audio, 15, 15).FinishedReadThroughID)
+	assert.Empty(t, f.status())
 }
 
 func TestUpdatePosition_AudioFinishesWithinTheLastMinute(t *testing.T) {
@@ -206,6 +280,7 @@ func TestUpdatePosition_AudioWithNoKnownLengthFinishesOnlyWhenPlaybackEnds(t *te
 	f := newPositionsFixture(t)
 	audio := f.addAudiobook(0)
 
+	f.listenFor(audio, 100, 60)
 	assert.Nil(t, f.listen(audio, 5000, 0.9, false).FinishedReadThroughID)
 	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
 }

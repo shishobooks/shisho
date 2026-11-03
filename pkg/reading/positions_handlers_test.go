@@ -90,6 +90,25 @@ func TestPositionRoutes_SaveAPageAndSeconds(t *testing.T) {
 	assert.Equal(t, 0, *got.Position.Page)
 }
 
+func TestPositionRoutes_ListenedSecondsCountTowardStarting(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	api := newReadingAPI(t, f.db, f.user)
+	path := fmt.Sprintf("/files/%d/position", audio.ID)
+
+	rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 30})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.False(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
+
+	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": 60})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.True(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
+
+	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": -1})
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+}
+
 func TestPositionRoutes_OpenedSavesWithoutStarting(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)

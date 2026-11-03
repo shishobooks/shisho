@@ -138,6 +138,11 @@ export const useReadingProgress = (
               percentage: current.percentage,
               at_end: current.atEnd || undefined,
               opened: current.linked || undefined,
+              // A session ending goes with this save and counts itself.
+              listened_seconds:
+                timing === "playback"
+                  ? trackerRef.current?.openSessionSeconds()
+                  : undefined,
               occurred_at: current.occurredAt,
               session,
             }
@@ -181,7 +186,7 @@ export const useReadingProgress = (
           });
         });
     },
-    [fileId, queryClient],
+    [fileId, queryClient, timing],
   );
 
   useEffect(() => {

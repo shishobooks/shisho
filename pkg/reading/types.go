@@ -71,6 +71,10 @@ type UpdatePositionPayload struct {
 	// AtEnd is the reader at the end of the File, or playback ending, which
 	// finishes the Read-through underway.
 	AtEnd bool `json:"at_end,omitempty"`
+	// ListenedSeconds is how long the player has played in the session still
+	// open, which counts toward the minute of listening that starts a
+	// Read-through. A session sent with the update counts on its own.
+	ListenedSeconds *float64 `json:"listened_seconds,omitempty" validate:"omitempty,min=0"`
 	// Opened is the reader opened at this place by a link, which saves it as
 	// the place without counting as reading.
 	Opened bool `json:"opened,omitempty"`
