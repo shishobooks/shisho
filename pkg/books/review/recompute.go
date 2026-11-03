@@ -82,9 +82,11 @@ const RecomputeBatchSize = 500
 // transaction so a concurrent edit can't land between a batch's read and write.
 // Don't wrap a large call in a transaction: that holds the connection for the
 // whole run. When a batch fails, its books are retried one at a time, so a bad
-// row costs only its own book; the first such error is returned and names it.
+// row costs only its own book; the returned error counts them and names the
+// first.
 func RecomputeForBooks(ctx context.Context, db bun.IDB, bookIDs []int, criteria Criteria) error {
 	var firstErr error
+	var firstBookID, failed int
 	for batch := range slices.Chunk(bookIDs, RecomputeBatchSize) {
 		err := recomputeInTx(ctx, db, batch, criteria)
 		if err == nil {
@@ -95,13 +97,18 @@ func RecomputeForBooks(ctx context.Context, db bun.IDB, bookIDs []int, criteria 
 			return err
 		}
 		for _, bookID := range batch {
-			err := recomputeInTx(ctx, db, []int{bookID}, criteria)
-			if err != nil && firstErr == nil {
-				firstErr = errors.Wrapf(err, "book %d", bookID)
+			if err := recomputeInTx(ctx, db, []int{bookID}, criteria); err != nil {
+				failed++
+				if firstErr == nil {
+					firstErr, firstBookID = err, bookID
+				}
 			}
 		}
 	}
-	return firstErr
+	if firstErr != nil {
+		return errors.Wrapf(firstErr, "%d of %d books failed, first book %d", failed, len(bookIDs), firstBookID)
+	}
+	return nil
 }
 
 func recomputeInTx(ctx context.Context, db bun.IDB, bookIDs []int, criteria Criteria) error {

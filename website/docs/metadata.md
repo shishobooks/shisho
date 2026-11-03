@@ -59,7 +59,7 @@ Merging these resources moves their relationships to the target, adds the source
 The **Delete** button on a genre or tag page appears whether or not books use it. Its confirmation states how many books will lose that genre or tag.
 
 :::warning[Deleting a Genre or Tag in Use]
-Deleting a genre or tag removes it from every book that has it, and the delete cannot be undone. Those books keep their other genres and tags, and the field counts as a manual edit from then on. To keep those books grouped under another genre or tag instead, [merge](#aliases-and-resource-merges) it into that one.
+Deleting a genre or tag removes it from every book that has it, and the delete cannot be undone. Those books keep their other genres and tags, and the field counts as a manual edit from then on. Files and sidecars on disk are not changed. Check the book count in the confirmation first. To keep those books grouped under another genre or tag instead, [merge](#aliases-and-resource-merges) it into that one.
 :::
 
 On a person, series, or publisher page, **Delete** appears only when nothing uses that resource. A person must have no authored books and no narrated files. A series must have no books. A publisher must have no files, including files of any publisher below it in the hierarchy. To take one of these out of your library while it is still in use, [merge](#aliases-and-resource-merges) it into another one instead.

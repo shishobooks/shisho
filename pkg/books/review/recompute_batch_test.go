@@ -276,7 +276,7 @@ func TestRecomputeForBooks_IsolatesAFailingBook(t *testing.T) {
 
 	err = RecomputeForBooks(ctx, db, ids, Default())
 
-	require.ErrorContains(t, err, fmt.Sprintf("book %d", ids[1]))
+	require.ErrorContains(t, err, fmt.Sprintf("1 of %d books failed, first book %d", count, ids[1]))
 	stale, err := db.NewSelect().Model((*models.File)(nil)).Where("reviewed = ?", true).Where("id != ?", fileIDs[1]).Count(ctx)
 	require.NoError(t, err)
 	assert.Zero(t, stale, "every other file is recomputed")
@@ -290,7 +290,11 @@ func TestRecomputeForBooks_StopsWhenCanceled(t *testing.T) {
 	cancel()
 	db := testdb.New(t)
 
+	counter := &queryCounter{}
+	testdb.AddQueryHook(t, db, counter)
+
 	require.ErrorIs(t, RecomputeForBooks(ctx, db, []int{1, 2, 3}, Default()), context.Canceled)
+	assert.Equal(t, int64(1), counter.total.Load(), "no book is retried")
 }
 
 // A file whose book is gone violates a foreign key, so it takes already bad

@@ -231,3 +231,24 @@ func TestProcessRecomputeReviewJob_StopsBetweenBatchesWhenCanceled(t *testing.T)
 	require.ErrorIs(t, err, context.Canceled)
 	assert.Equal(t, remaining, filesStillReviewed(ctx, t, tc), "only the batch after the cancel is left")
 }
+
+// One unreadable row fails the job but costs only its own book: later batches
+// still pick up the criteria, so a rerun isn't stuck at the same row.
+func TestProcessRecomputeReviewJob_FinishesLaterBatchesAfterAFailingBook(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	tc := newTestContext(t)
+	job := seedRecomputeJob(ctx, t, tc, review.RecomputeBatchSize+1)
+	var firstFile models.File
+	require.NoError(t, tc.db.NewSelect().Model(&firstFile).Order("f.id ASC").Limit(1).Scan(ctx))
+	_, err := tc.db.NewUpdate().Model((*models.File)(nil)).Set("created_at = 'not a time'").Where("id = ?", firstFile.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	err = tc.worker.ProcessRecomputeReviewJob(ctx, job, nil)
+
+	require.ErrorContains(t, err, fmt.Sprintf("first book %d", firstFile.BookID))
+	assert.Equal(t, 1, filesStillReviewed(ctx, t, tc), "only the unreadable file is left")
+	var got models.Job
+	require.NoError(t, tc.db.NewSelect().Model(&got).Where("j.id = ?", job.ID).Scan(ctx))
+	assert.Equal(t, 100, got.Progress)
+}

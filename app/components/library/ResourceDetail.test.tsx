@@ -238,6 +238,33 @@ describe("ResourceDetail", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
+  // The dialog states the book count, which a scan or a book deleted from this
+  // page may have changed since the page loaded.
+  it("refetches the entity when Delete opens the dialog", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const query = { ...defaultProps.query, refetch: vi.fn() };
+    render(wrap(<ResourceDetail {...defaultProps} query={query} />));
+    expect(query.refetch).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /Delete/ }));
+
+    expect(query.refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refetch a disabled entity query when Delete opens", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const query = {
+      ...defaultProps.query,
+      isEnabled: false,
+      refetch: vi.fn(),
+    };
+    render(wrap(<ResourceDetail {...defaultProps} query={query} />));
+
+    await user.click(screen.getByRole("button", { name: /Delete/ }));
+
+    expect(query.refetch).not.toHaveBeenCalled();
+  });
+
   it("closes merge dialog after onMerge resolves", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const onMerge = vi.fn().mockResolvedValue(undefined);

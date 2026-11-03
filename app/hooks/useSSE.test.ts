@@ -5,9 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthContext } from "@/components/contexts/Auth/context";
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
-import { QueryKey as GenresQueryKey } from "@/hooks/queries/genres";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
-import { QueryKey as TagsQueryKey } from "@/hooks/queries/tags";
 import { authValue, setAuth } from "@/testing/auth";
 
 import { useSSE } from "./useSSE";
@@ -202,30 +200,6 @@ describe("useSSE", () => {
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({ queryKey: [BooksQueryKey.ListBooks] }),
     );
-  });
-
-  it("refreshes open genre and tag pages when a scan completes", () => {
-    const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
-
-    renderHook(() => useSSE(), {
-      wrapper: createWrapper(true, queryClient),
-    });
-
-    act(() => {
-      MockEventSource.instances[0].simulateEvent(
-        "job.status_changed",
-        '{"job_id":1,"status":"completed","type":"scan"}',
-      );
-    });
-
-    for (const key of [
-      GenresQueryKey.RetrieveGenre,
-      TagsQueryKey.RetrieveTag,
-    ]) {
-      expect(invalidateSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ queryKey: [key] }),
-      );
-    }
   });
 
   it("does not invalidate book queries for non-scan job completion", () => {

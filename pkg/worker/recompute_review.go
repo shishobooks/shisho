@@ -67,13 +67,21 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 		return err
 	}
 
+	var firstErr error
 	done := 0
 	for batch := range slices.Chunk(bookIDs, review.RecomputeBatchSize) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		// A failing book doesn't stop the job, or a rerun would stick at the
+		// same row and later books would never pick up the criteria.
 		if err := review.RecomputeForBooks(ctx, w.db, batch, criteria); err != nil {
-			return errors.WithStack(err)
+			if ctx.Err() != nil {
+				return errors.WithStack(err)
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 		done += len(batch)
 		pct := int(float64(done) / float64(len(bookIDs)) * 100)
@@ -85,5 +93,5 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 			return errors.WithStack(err)
 		}
 	}
-	return nil
+	return errors.WithStack(firstErr)
 }
