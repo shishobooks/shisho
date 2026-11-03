@@ -862,6 +862,18 @@ describe("PageReader position", () => {
     expect(position.saves[1].opened).toBeUndefined();
   });
 
+  // Back to it later, or a reload, is no new link: reading on elsewhere since
+  // must not be replaced by the page the link named.
+  it("makes a link's page its own once it has opened there", () => {
+    position.savedPage = 12;
+    renderReader(20, undefined, "/?page=3");
+
+    expect(position.saves).toHaveLength(1);
+    const location = screen.getByTestId("location");
+    expect(location).toHaveTextContent("?page=3");
+    expect(location.dataset.state).toContain("readerPage");
+  });
+
   it("marks the page it writes to the URL as its own", () => {
     renderReader(20);
 

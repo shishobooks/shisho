@@ -316,6 +316,14 @@ export default function PageReader({
       return;
     }
     openedRef.current = true;
+    // A link counts once: Back to this entry later, or a reload, takes the saved
+    // page like any other page the reader wrote there.
+    if (urlNamedPage) {
+      setSearchParams(
+        { page: page.toString() },
+        { replace: true, state: { readerPage: true } },
+      );
+    }
     if (urlNamedPage && (saved?.page ?? 0) !== page) {
       openedFromLink(position);
     } else {
