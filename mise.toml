@@ -78,10 +78,6 @@ outputs = ["app/types/generated/**/*.ts"]
 
 [tasks.lint]
 description = "Run Go linting"
-# Per-worktree cache so concurrent worktrees don't trip golangci-lint's
-# "parallel golangci-lint is running" lock against each other. Cold cache
-# costs ~30s extra on the first run in a fresh worktree; warm cache is ~3s.
-env = { GOLANGCI_LINT_CACHE = "{{config_root}}/tmp/golangci-lint-cache" }
 depends = ["lint:emdash", "lint:docrefs", "lint:versions"]
 run = "golangci-lint run"
 
