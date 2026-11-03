@@ -44,6 +44,9 @@ jobs:
             go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
             go-lint-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
       - run: mise lint
+        env:
+          # Keeps the cache at the path the restore and save steps use.
+          GOLANGCI_LINT_CACHE: ${{ github.workspace }}/tmp/golangci-lint-cache
       - run: mise test:scripts
       - name: Save Go and golangci-lint caches
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'

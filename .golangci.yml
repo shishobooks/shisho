@@ -1,4 +1,8 @@
 version: "2"
+run:
+  # The default lock is one file in the system temp dir, shared by every project
+  # on the machine, so another project's lint could fail ours after 5 seconds.
+  allow-parallel-runners: true
 linters:
   default: none
   enable:
