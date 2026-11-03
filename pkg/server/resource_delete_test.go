@@ -175,7 +175,7 @@ func (f *resourceDeleteFixture) seedReviewedBook(fileType string, shared *review
 	require.NoError(f.t, f.searchSvc.ReindexBookByID(f.ctx, book.ID))
 	criteria, err := review.Load(f.ctx, appsettings.NewService(f.db))
 	require.NoError(f.t, err)
-	require.NoError(f.t, review.RecomputeForBook(f.ctx, f.db, book.ID, criteria))
+	require.NoError(f.t, review.RecomputeForBooks(f.ctx, f.db, []int{book.ID}, criteria))
 	require.True(f.t, f.reviewed(file.ID), "precondition: the File is reviewed before the delete")
 	return seeded
 }
@@ -298,7 +298,7 @@ func TestDeleteSeries_RecomputesReviewedForAffectedBooks(t *testing.T) {
 	criteria := review.Default()
 	criteria.BookFields = append(criteria.BookFields, review.FieldSeries)
 	require.NoError(t, review.Save(f.ctx, appsettings.NewService(f.db), criteria))
-	require.NoError(t, review.RecomputeForBook(f.ctx, f.db, seeded.bookID, criteria))
+	require.NoError(t, review.RecomputeForBooks(f.ctx, f.db, []int{seeded.bookID}, criteria))
 	require.True(t, f.reviewed(seeded.fileID), "precondition: the File is reviewed while it has a series")
 
 	f.delete(fmt.Sprintf("/api/series/%d", series.ID))
@@ -338,7 +338,7 @@ func (f *resourceDeleteFixture) setPublisher(seeded reviewedBook, publisher *mod
 		Where("id = ?", seeded.fileID).
 		Exec(f.ctx)
 	require.NoError(f.t, err)
-	require.NoError(f.t, review.RecomputeForBook(f.ctx, f.db, seeded.bookID, criteria))
+	require.NoError(f.t, review.RecomputeForBooks(f.ctx, f.db, []int{seeded.bookID}, criteria))
 	require.True(f.t, f.reviewed(seeded.fileID), "precondition: the File is reviewed while it has a publisher")
 }
 

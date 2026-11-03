@@ -87,8 +87,6 @@ func storedReviewed(ctx context.Context, t *testing.T, db *bun.DB, fileID int) *
 	return file.Reviewed
 }
 
-func ptrTo[T any](v T) *T { return &v }
-
 // Each file state the single-file path handles gets the same answer from a
 // batch, whichever way its stored value starts.
 func TestRecomputeForBooks_AppliesEveryFileState(t *testing.T) {
@@ -109,28 +107,28 @@ func TestRecomputeForBooks_AppliesEveryFileState(t *testing.T) {
 	}
 	cases := map[string]want{
 		"a book missing a required field": {
-			insertFile(ctx, t, db, incomplete, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(true)}), ptrTo(false),
+			insertFile(ctx, t, db, incomplete, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(true)}), ptrBool(false),
 		},
 		"a complete book": {
-			insertFile(ctx, t, db, complete, fileOptions{name: "b.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(false)}), ptrTo(true),
+			insertFile(ctx, t, db, complete, fileOptions{name: "b.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(false)}), ptrBool(true),
 		},
 		"a file never computed": {
-			insertFile(ctx, t, db, complete, fileOptions{name: "c.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain}), ptrTo(true),
+			insertFile(ctx, t, db, complete, fileOptions{name: "c.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain}), ptrBool(true),
 		},
 		"an audio file of a complete book without its audio field": {
-			insertFile(ctx, t, db, complete, fileOptions{name: "d.m4b", fileType: models.FileTypeM4B, role: models.FileRoleMain, reviewed: ptrTo(true)}), ptrTo(false),
+			insertFile(ctx, t, db, complete, fileOptions{name: "d.m4b", fileType: models.FileTypeM4B, role: models.FileRoleMain, reviewed: ptrBool(true)}), ptrBool(false),
 		},
 		"an override to reviewed on an incomplete book": {
-			insertFile(ctx, t, db, incomplete, fileOptions{name: "e.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(false), override: ptrTo(models.ReviewOverrideReviewed)}), ptrTo(true),
+			insertFile(ctx, t, db, incomplete, fileOptions{name: "e.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(false), override: ptrStr(models.ReviewOverrideReviewed)}), ptrBool(true),
 		},
 		"an override to unreviewed on a complete book": {
-			insertFile(ctx, t, db, complete, fileOptions{name: "f.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(true), override: ptrTo(models.ReviewOverrideUnreviewed)}), ptrTo(false),
+			insertFile(ctx, t, db, complete, fileOptions{name: "f.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(true), override: ptrStr(models.ReviewOverrideUnreviewed)}), ptrBool(false),
 		},
 		"a supplement": {
-			insertFile(ctx, t, db, complete, fileOptions{name: "g.pdf", fileType: models.FileTypePDF, role: models.FileRoleSupplement, reviewed: ptrTo(true)}), nil,
+			insertFile(ctx, t, db, complete, fileOptions{name: "g.pdf", fileType: models.FileTypePDF, role: models.FileRoleSupplement, reviewed: ptrBool(true)}), nil,
 		},
 		"a book that was not listed": {
-			insertFile(ctx, t, db, unlisted, fileOptions{name: "h.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(true)}), ptrTo(true),
+			insertFile(ctx, t, db, unlisted, fileOptions{name: "h.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(true)}), ptrBool(true),
 		},
 	}
 
@@ -153,7 +151,7 @@ func TestRecomputeForBooks_QueryCountFollowsBatchesNotBooks(t *testing.T) {
 		ids := make([]int, 0, bookCount)
 		for i := range bookCount {
 			book := insertBook(ctx, t, db, library, fmt.Sprintf("book-%d", i))
-			insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(true)})
+			insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(true)})
 			ids = append(ids, book.ID)
 		}
 		counter := &queryCounter{}
@@ -174,7 +172,7 @@ func TestRecomputeForBooks_WritesOnlyChangedFiles(t *testing.T) {
 	ids := make([]int, 0, 10)
 	for i := range 10 {
 		book := insertBook(ctx, t, db, library, fmt.Sprintf("book-%d", i))
-		insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(true)})
+		insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(true)})
 		ids = append(ids, book.ID)
 	}
 	counter := &queryCounter{}
@@ -200,7 +198,7 @@ func TestRecomputeForBooks_CoversBooksAcrossBatches(t *testing.T) {
 	fileIDs := make([]int, 0, count)
 	for i := range count {
 		book := insertBook(ctx, t, db, library, fmt.Sprintf("book-%d", i))
-		fileIDs = append(fileIDs, insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrTo(true)}).ID)
+		fileIDs = append(fileIDs, insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(true)}).ID)
 		ids = append(ids, book.ID)
 	}
 
@@ -220,4 +218,94 @@ func TestRecomputeForBooks_NoBooksIsANoOp(t *testing.T) {
 
 	require.NoError(t, RecomputeForBooks(ctx, db, nil, Default()))
 	assert.Zero(t, counter.total.Load())
+}
+
+// A file meets the identifier and chapter criteria from its own rows, so a
+// batch has to load both relations and hand them to the right files.
+func TestRecomputeForBooks_ReadsFileRelations(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := testdb.New(t)
+	library := insertLibrary(ctx, t, db)
+	book := insertBook(ctx, t, db, library, "book")
+	criteria := Criteria{BookFields: []string{FieldIdentifiers, FieldChapters}}
+
+	insertIdentifier := func(file *models.File) {
+		_, err := db.NewInsert().Model(&models.FileIdentifier{FileID: file.ID, Type: "isbn_13", Value: fmt.Sprintf("97800000%d", file.ID), Source: models.DataSourceManual}).Exec(ctx)
+		require.NoError(t, err)
+	}
+	insertChapter := func(file *models.File) {
+		_, err := db.NewInsert().Model(&models.Chapter{FileID: file.ID, SortOrder: 0, Title: "One"}).Exec(ctx)
+		require.NoError(t, err)
+	}
+	epub := func(name string, reviewed bool) *models.File {
+		return insertFile(ctx, t, db, book, fileOptions{name: name, fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(reviewed)})
+	}
+	both := epub("both.epub", false)
+	insertIdentifier(both)
+	insertChapter(both)
+	identifierOnly := epub("identifier.epub", true)
+	insertIdentifier(identifierOnly)
+	chapterOnly := epub("chapter.epub", true)
+	insertChapter(chapterOnly)
+
+	require.NoError(t, RecomputeForBooks(ctx, db, []int{book.ID}, criteria))
+
+	assert.Equal(t, ptrBool(true), storedReviewed(ctx, t, db, both.ID))
+	assert.Equal(t, ptrBool(false), storedReviewed(ctx, t, db, identifierOnly.ID))
+	assert.Equal(t, ptrBool(false), storedReviewed(ctx, t, db, chapterOnly.ID))
+}
+
+// One unreadable row costs only its own book: the rest of its batch and the
+// later batches are still written, and the error names the book.
+func TestRecomputeForBooks_IsolatesAFailingBook(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := testdb.New(t)
+	library := insertLibrary(ctx, t, db)
+	count := RecomputeBatchSize + 2
+	ids := make([]int, 0, count)
+	fileIDs := make([]int, 0, count)
+	for i := range count {
+		book := insertBook(ctx, t, db, library, fmt.Sprintf("book-%d", i))
+		fileIDs = append(fileIDs, insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain, reviewed: ptrBool(true)}).ID)
+		ids = append(ids, book.ID)
+	}
+	_, err := db.NewUpdate().Model((*models.File)(nil)).Set("created_at = 'not a time'").Where("id = ?", fileIDs[1]).Exec(ctx)
+	require.NoError(t, err)
+
+	err = RecomputeForBooks(ctx, db, ids, Default())
+
+	require.ErrorContains(t, err, fmt.Sprintf("book %d", ids[1]))
+	stale, err := db.NewSelect().Model((*models.File)(nil)).Where("reviewed = ?", true).Where("id != ?", fileIDs[1]).Count(ctx)
+	require.NoError(t, err)
+	assert.Zero(t, stale, "every other file is recomputed")
+}
+
+// A cancellation fails every book the same way, so it returns at once rather
+// than retrying each book of the batch.
+func TestRecomputeForBooks_StopsWhenCanceled(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	db := testdb.New(t)
+
+	require.ErrorIs(t, RecomputeForBooks(ctx, db, []int{1, 2, 3}, Default()), context.Canceled)
+}
+
+// A file whose book is gone violates a foreign key, so it takes already bad
+// data, but it must surface as an error rather than a panic.
+func TestRecomputeForBooks_FileWithoutBookIsAnError(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := testdb.New(t)
+	library := insertLibrary(ctx, t, db)
+	book := insertBook(ctx, t, db, library, "book")
+	insertFile(ctx, t, db, book, fileOptions{name: "a.epub", fileType: models.FileTypeEPUB, role: models.FileRoleMain})
+	_, err := db.Exec("PRAGMA foreign_keys = OFF")
+	require.NoError(t, err)
+	_, err = db.NewDelete().Model((*models.Book)(nil)).Where("id = ?", book.ID).Exec(ctx)
+	require.NoError(t, err)
+
+	require.Error(t, RecomputeForBooks(ctx, db, []int{book.ID}, Default()))
 }

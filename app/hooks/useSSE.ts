@@ -7,9 +7,11 @@ import {
 } from "@/contexts/BulkDownload";
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { invalidateCoverPreviewLists } from "@/hooks/queries/coverPreviews";
+import { QueryKey as GenresQueryKey } from "@/hooks/queries/genres";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
 import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
 import { QueryKey as LogsQueryKey } from "@/hooks/queries/logs";
+import { QueryKey as TagsQueryKey } from "@/hooks/queries/tags";
 import { useAuth } from "@/hooks/useAuth";
 
 export function useSSE() {
@@ -68,6 +70,14 @@ export function useSSE() {
         if (data.status === "completed" && data.type === "scan") {
           queryClient.invalidateQueries({
             queryKey: [BooksQueryKey.ListBooks],
+          });
+          // A scan can add books to a genre or tag, and the delete dialog on
+          // its page states the count.
+          queryClient.invalidateQueries({
+            queryKey: [GenresQueryKey.RetrieveGenre],
+          });
+          queryClient.invalidateQueries({
+            queryKey: [TagsQueryKey.RetrieveTag],
           });
           // A scan can add books and change covers on list entries too.
           invalidateCoverPreviewLists(queryClient);

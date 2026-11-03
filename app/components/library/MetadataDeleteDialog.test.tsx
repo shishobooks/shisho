@@ -47,6 +47,12 @@ describe("MetadataDeleteDialog", () => {
     );
   });
 
+  it("wraps the name at word boundaries", () => {
+    renderDialog(vi.fn());
+
+    expect(screen.getByText('"Fantasy"')).toHaveClass("break-words");
+  });
+
   it("states no impact when nothing is affected", () => {
     renderDialog(vi.fn());
 

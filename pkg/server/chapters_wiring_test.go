@@ -26,7 +26,7 @@ func TestReplaceChapters_RecomputesReviewedForFile(t *testing.T) {
 	criteria := review.Default()
 	criteria.AudioFields = append(criteria.AudioFields, review.FieldChapters)
 	require.NoError(t, review.Save(f.ctx, appsettings.NewService(f.db), criteria))
-	require.NoError(t, review.RecomputeForBook(f.ctx, f.db, seeded.bookID, criteria))
+	require.NoError(t, review.RecomputeForBooks(f.ctx, f.db, []int{seeded.bookID}, criteria))
 	require.False(t, f.reviewed(seeded.fileID), "precondition: the File is not reviewed without chapters")
 
 	token, err := f.authSvc.GenerateToken(f.admin)

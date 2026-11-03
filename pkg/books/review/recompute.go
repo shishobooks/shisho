@@ -20,6 +20,16 @@ type BookReviewRecomputer interface {
 	RecomputeReviewedForBooks(ctx context.Context, bookIDs []int)
 }
 
+// withFileRelations and withBookRelations load what completeness reads. A
+// relation left out reads as an empty field, which marks files not reviewed.
+func withFileRelations(q *bun.SelectQuery) *bun.SelectQuery {
+	return q.Relation("Narrators").Relation("Identifiers").Relation("Chapters")
+}
+
+func withBookRelations(q *bun.SelectQuery) *bun.SelectQuery {
+	return q.Relation("Authors").Relation("BookSeries").Relation("BookGenres").Relation("BookTags")
+}
+
 // RecomputeForFile reloads the file (with relations needed by completeness),
 // computes its `reviewed` value, and persists. Override-set rows short-circuit.
 // Supplements get reviewed=NULL.
@@ -28,9 +38,7 @@ func RecomputeForFile(ctx context.Context, db bun.IDB, fileID int, criteria Crit
 	err := db.NewSelect().
 		Model(file).
 		Where("f.id = ?", fileID).
-		Relation("Narrators").
-		Relation("Identifiers").
-		Relation("Chapters").
+		Apply(withFileRelations).
 		Scan(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -49,10 +57,7 @@ func RecomputeForFile(ctx context.Context, db bun.IDB, fileID int, criteria Crit
 	err = db.NewSelect().
 		Model(book).
 		Where("b.id = ?", file.BookID).
-		Relation("Authors").
-		Relation("BookSeries").
-		Relation("BookGenres").
-		Relation("BookTags").
+		Apply(withBookRelations).
 		Scan(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -67,11 +72,6 @@ func RecomputeForFile(ctx context.Context, db bun.IDB, fileID int, criteria Crit
 	return errors.WithStack(err)
 }
 
-// RecomputeForBook recomputes reviewed for every file belonging to the book.
-func RecomputeForBook(ctx context.Context, db bun.IDB, bookID int, criteria Criteria) error {
-	return RecomputeForBooks(ctx, db, []int{bookID}, criteria)
-}
-
 // RecomputeBatchSize bounds how long a batch holds the database's only
 // connection, so other requests get a turn between batches during a large
 // recompute.
@@ -81,18 +81,33 @@ const RecomputeBatchSize = 500
 // only the values that changed. It works in batches, each in its own
 // transaction so a concurrent edit can't land between a batch's read and write.
 // Don't wrap a large call in a transaction: that holds the connection for the
-// whole run. A failed batch doesn't stop the rest; the first error is returned.
+// whole run. When a batch fails, its books are retried one at a time, so a bad
+// row costs only its own book; the first such error is returned and names it.
 func RecomputeForBooks(ctx context.Context, db bun.IDB, bookIDs []int, criteria Criteria) error {
 	var firstErr error
 	for batch := range slices.Chunk(bookIDs, RecomputeBatchSize) {
-		err := db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-			return recomputeBatch(ctx, tx, batch, criteria)
-		})
-		if err != nil && firstErr == nil {
-			firstErr = err
+		err := recomputeInTx(ctx, db, batch, criteria)
+		if err == nil {
+			continue
+		}
+		// A canceled context fails every book the same way.
+		if ctx.Err() != nil {
+			return err
+		}
+		for _, bookID := range batch {
+			err := recomputeInTx(ctx, db, []int{bookID}, criteria)
+			if err != nil && firstErr == nil {
+				firstErr = errors.Wrapf(err, "book %d", bookID)
+			}
 		}
 	}
 	return firstErr
+}
+
+func recomputeInTx(ctx context.Context, db bun.IDB, bookIDs []int, criteria Criteria) error {
+	return db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		return recomputeBatch(ctx, tx, bookIDs, criteria)
+	})
 }
 
 func recomputeBatch(ctx context.Context, tx bun.Tx, bookIDs []int, criteria Criteria) error {
@@ -100,9 +115,7 @@ func recomputeBatch(ctx context.Context, tx bun.Tx, bookIDs []int, criteria Crit
 	err := tx.NewSelect().
 		Model(&files).
 		Where("f.book_id IN (?)", bun.List(bookIDs)).
-		Relation("Narrators").
-		Relation("Identifiers").
-		Relation("Chapters").
+		Apply(withFileRelations).
 		Scan(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -115,10 +128,7 @@ func recomputeBatch(ctx context.Context, tx bun.Tx, bookIDs []int, criteria Crit
 	err = tx.NewSelect().
 		Model(&books).
 		Where("b.id IN (?)", bun.List(bookIDs)).
-		Relation("Authors").
-		Relation("BookSeries").
-		Relation("BookGenres").
-		Relation("BookTags").
+		Apply(withBookRelations).
 		Scan(ctx)
 	if err != nil {
 		return errors.WithStack(err)
@@ -132,7 +142,11 @@ func recomputeBatch(ctx context.Context, tx bun.Tx, bookIDs []int, criteria Crit
 	for _, file := range files {
 		var reviewed *bool
 		if file.FileRole != models.FileRoleSupplement {
-			reviewed = computeReviewedValue(booksByID[file.BookID], file, criteria)
+			book, ok := booksByID[file.BookID]
+			if !ok {
+				return errors.Errorf("file %d points at missing book %d", file.ID, file.BookID)
+			}
+			reviewed = computeReviewedValue(book, file, criteria)
 		}
 		switch {
 		case reviewed == nil && file.Reviewed == nil:
