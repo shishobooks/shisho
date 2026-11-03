@@ -137,7 +137,7 @@ func TestCreateBookWithFileOnDiskWritesAMOBI(t *testing.T) {
 func TestWriteFixedLayoutEPUB(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "fixed.epub")
-	require.NoError(t, writeFixedLayoutEPUB(path, "Fixed Book", true))
+	require.NoError(t, writeFixedLayoutEPUB(path, "Fixed Book", defaultFixedLayoutPages, true))
 
 	parsed, err := epub.Parse(path)
 	require.NoError(t, err)

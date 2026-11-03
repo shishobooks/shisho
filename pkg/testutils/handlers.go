@@ -209,6 +209,8 @@ type createBookRequest struct {
 	// left if fixedLayoutRTL is set.
 	FixedLayout    bool `json:"fixedLayout"`
 	FixedLayoutRTL bool `json:"fixedLayoutRTL"`
+	// The pages in a fixed-layout EPUB, 8 by default.
+	FixedLayoutPages int `json:"fixedLayoutPages"`
 }
 
 // createBookResponse is the response body for creating a test book.
@@ -257,6 +259,7 @@ func (h *handler) createBook(c echo.Context) error {
 			paragraphs:  req.EPUBParagraphs,
 			fixedLayout: req.FixedLayout,
 			rtl:         req.FixedLayoutRTL,
+			fixedPages:  req.FixedLayoutPages,
 		})
 		if err != nil {
 			return err

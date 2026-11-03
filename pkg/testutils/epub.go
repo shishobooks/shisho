@@ -63,8 +63,10 @@ func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 	return writeEPUBArchive(path, entries)
 }
 
-// fixedLayoutPageCount is the number of pages in a fixed-layout EPUB.
-const fixedLayoutPageCount = 8
+// defaultFixedLayoutPages is the number of pages in a fixed-layout EPUB unless
+// a test asks for another. It's even, so the last page has no partner; an odd
+// count ends on a two-page spread.
+const defaultFixedLayoutPages = 8
 
 var fixedLayoutColors = []string{"#fde68a", "#bfdbfe", "#bbf7d0", "#fbcfe8"}
 
@@ -73,11 +75,11 @@ var fixedLayoutColors = []string{"#fde68a", "#bfdbfe", "#bbf7d0", "#fbcfe8"}
 // and is scaled to fit. Every page shows its number on its own color, with
 // text to select, and the first links to page 6. rtl makes pages run right to
 // left, as manga do.
-func writeFixedLayoutEPUB(path, title string, rtl bool) error {
+func writeFixedLayoutEPUB(path, title string, pageCount int, rtl bool) error {
 	escaped := html.EscapeString(title)
 	var manifest, spine, nav strings.Builder
 	entries := []epubEntry{{"META-INF/container.xml", epubContainerXML}}
-	for i := 1; i <= fixedLayoutPageCount; i++ {
+	for i := 1; i <= pageCount; i++ {
 		name := fmt.Sprintf("page%d.xhtml", i)
 		fmt.Fprintf(&manifest, `    <item id="page%d" href="%s" media-type="application/xhtml+xml"/>`+"\n", i, name)
 		fmt.Fprintf(&spine, `    <itemref idref="page%d"/>`+"\n", i)

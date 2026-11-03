@@ -24,6 +24,7 @@ type pageSpec struct {
 type epubSpec struct {
 	paragraphs       int
 	fixedLayout, rtl bool
+	fixedPages       int
 }
 
 // writeFileOnDisk writes a small valid file of fileType for withFileOnDisk
@@ -35,7 +36,11 @@ func writeFileOnDisk(root, fileType, title string, pages pageSpec, epub epubSpec
 	case models.FileTypeEPUB:
 		write = func(path, title string) error {
 			if epub.fixedLayout {
-				return writeFixedLayoutEPUB(path, title, epub.rtl)
+				pageCount := epub.fixedPages
+				if pageCount == 0 {
+					pageCount = defaultFixedLayoutPages
+				}
+				return writeFixedLayoutEPUB(path, title, pageCount, epub.rtl)
 			}
 			return writeMinimalEPUB(path, title, epub.paragraphs)
 		}

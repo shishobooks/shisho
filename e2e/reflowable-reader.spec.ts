@@ -594,6 +594,128 @@ test.describe("Reflowable reader", () => {
       });
     });
 
+    test.describe("reading a fixed-layout book to its end", () => {
+      const footerPage = (page: Page, pageNumber: number) =>
+        page.locator("footer").getByText(`Page ${pageNumber}`, { exact: true });
+
+      // The footer's buttons go by side, not by reading order, so in a book
+      // running right to left the left one is what moves forward.
+      const turnToPage = async (
+        page: Page,
+        pageNumber: number,
+        forward = "Next page",
+      ) => {
+        const next = page.getByRole("button", { name: forward });
+        await expect(async () => {
+          await next.click();
+          await expect(footerPage(page, pageNumber)).toBeVisible({
+            timeout: 1_000,
+          });
+        }).toPass();
+      };
+
+      const open = async (page: Page, seed: Record<string, unknown>) => {
+        await login(page);
+        await setReaderSettings(page, false);
+        await openNewBook(
+          page,
+          { fixedLayout: true, ...seed },
+          "Fixed page 1.",
+        );
+      };
+
+      // A finish saves at once, so a wrong one shows within a moment.
+      const expectNotFinished = async (page: Page) => {
+        await page.waitForTimeout(500);
+        await expect(page.getByText("Marked as read")).toHaveCount(0);
+      };
+
+      test("the last page marks it read, and not the page before", async ({
+        page,
+      }) => {
+        await open(page, {});
+        for (const pageNumber of [2, 3, 4, 5, 6, 7]) {
+          await turnToPage(page, pageNumber);
+        }
+        await expectNotFinished(page);
+
+        await turnToPage(page, 8);
+        await expect(page.getByText("Marked as read")).toBeVisible();
+
+        const bookPage = page.url().replace(/\/files\/\d+\/read$/, "");
+        await page.goto(bookPage, { waitUntil: "domcontentloaded" });
+        await expect(
+          page.getByRole("button", { name: "Reading status: Read" }),
+        ).toBeVisible();
+      });
+
+      // Seven pages end on a two-page spread, showing one page at a time.
+      for (const [direction, seed, forward] of [
+        ["left to right", { fixedLayoutPages: 7 }, "Next page"],
+        [
+          "right to left",
+          { fixedLayoutPages: 7, fixedLayoutRTL: true },
+          "Previous page",
+        ],
+      ] as const) {
+        test(`the last spread's later page marks it read, ${direction}`, async ({
+          page,
+        }) => {
+          await open(page, seed);
+          for (const pageNumber of [2, 3, 4, 5, 6]) {
+            await turnToPage(page, pageNumber, forward);
+          }
+          await expectNotFinished(page);
+
+          await turnToPage(page, 7, forward);
+          await expect(page.getByText("Marked as read")).toBeVisible();
+        });
+      }
+
+      test.describe("with two pages side by side", () => {
+        test.use({ viewport: { width: 1280, height: 720 } });
+
+        test("reaching the last spread marks it read", async ({ page }) => {
+          await open(page, { fixedLayoutPages: 7 });
+          const next = page.getByRole("button", { name: "Next page" });
+          // The spreads are 1, 2-3, 4-5, and 6-7.
+          for (const before of [1, 2]) {
+            await next.click();
+            await expect(footerPage(page, before * 2)).toBeVisible();
+          }
+          await expectNotFinished(page);
+
+          await next.click();
+          await expect(page.getByText("Marked as read")).toBeVisible();
+        });
+      });
+
+      test("reopening resumes on the page you left", async ({ page }) => {
+        await open(page, {});
+        for (const pageNumber of [2, 3, 4]) {
+          await turnToPage(page, pageNumber);
+        }
+        const fileId = page.url().match(/\/files\/(\d+)\/read$/)![1];
+        await expect
+          .poll(
+            async () => {
+              const resp = await page.request.get(
+                `/api/reading/files/${fileId}/position`,
+              );
+              const body = (await resp.json()) as {
+                position: { cfi: string } | null;
+              };
+              return body.position !== null;
+            },
+            { timeout: 10_000 },
+          )
+          .toBe(true);
+
+        await page.reload({ waitUntil: "domcontentloaded" });
+        await expect(footerPage(page, 4)).toBeVisible({ timeout: 20_000 });
+      });
+    });
+
     test("tapping a link in a fixed-layout book follows it", async ({
       page,
     }) => {
