@@ -866,8 +866,13 @@ export class Paginator extends HTMLElement {
         this.scrollBy(dx, dy)
     }
     #onTouchEnd() {
+        // Shisho patch: a tap didn't drag the page, so there's nothing to snap.
+        // The reader turns pages on tap, and a snap on the frame after that turn
+        // starts a second load of the next section at a chapter's end, which
+        // leaves #turnPage locked for good.
+        const dragged = this.#touchScrolled
         this.#touchScrolled = false
-        if (this.scrolled) return
+        if (this.scrolled || !dragged) return
 
         // XXX: Firefox seems to report scale as 1... sometimes...?
         // at this point I'm basically throwing `requestAnimationFrame` at

@@ -9,6 +9,14 @@ const keyOn = (key: string, target: Element) => {
 };
 
 describe("pageTurnForKey", () => {
+  it("leaves Shift+Arrow to extend a selection", () => {
+    const event = new KeyboardEvent("keydown", {
+      key: "ArrowRight",
+      shiftKey: true,
+    });
+    expect(pageTurnForKey(event)).toBeNull();
+  });
+
   it("turns pages with the arrow keys and A and D", () => {
     const body = document.body;
     expect(pageTurnForKey(keyOn("ArrowRight", body))).toBe("next");

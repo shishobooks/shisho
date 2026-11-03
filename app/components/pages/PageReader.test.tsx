@@ -344,17 +344,54 @@ describe("PageReader page in the URL", () => {
 });
 
 describe("PageReader preloading", () => {
-  it("prefetches nearby pages one at a time, but not in the scrolled flow", () => {
-    settings.mutate = vi.fn();
-    const { unmount } = renderReader(5);
-    expect(document.querySelectorAll('link[rel="prefetch"]').length).toBe(3);
-    unmount();
+  // Stands in for Image, reporting a load only when a test says so.
+  const stubImages = () => {
+    const created: Array<{ src: string; onload: (() => void) | null }> = [];
+    vi.stubGlobal(
+      "Image",
+      class {
+        src = "";
+        onload: (() => void) | null = null;
+        onerror: (() => void) | null = null;
+        constructor() {
+          created.push(this);
+        }
+      },
+    );
+    return created;
+  };
+  afterEach(() => vi.unstubAllGlobals());
 
-    // Lazy loading already fetches the pages near the view; prefetching
-    // around every page scrolled past would queue PDF renders on the server.
+  // Safari ignores rel="prefetch", and a prefetch is only a low-priority hint
+  // anywhere else. Queuing them all at once would also queue PDF renders on the
+  // server, which do one page at a time.
+  it("loads the pages past the neighbors one at a time, nearest first", () => {
+    settings.mutate = vi.fn();
+    const created = stubImages();
+    renderReader(10, undefined, "/?page=5");
+
+    // The neighbors load as the reader's own images, so preload_count 3 leaves
+    // two pages on each side.
+    expect(created.map((image) => image.src)).toEqual(["/page-7"]);
+    act(() => created[0].onload?.());
+    expect(created.map((image) => image.src)).toEqual(["/page-7", "/page-3"]);
+    act(() => created[1].onload?.());
+    act(() => created[2].onload?.());
+    act(() => created[3].onload?.());
+    expect(created.map((image) => image.src)).toEqual([
+      "/page-7",
+      "/page-3",
+      "/page-8",
+      "/page-2",
+    ]);
+  });
+
+  it("preloads nothing in the scrolled flow", () => {
+    settings.mutate = vi.fn();
     flow.saved = "scrolled";
+    const created = stubImages();
     renderReader(5);
-    expect(document.querySelectorAll('link[rel="prefetch"]')).toHaveLength(0);
+    expect(created).toHaveLength(0);
   });
 });
 
@@ -411,5 +448,260 @@ describe("PageReader keyboard", () => {
       { key: "ArrowRight" },
     );
     expect(screen.getByText("Page 2 of 10")).toBeInTheDocument();
+  });
+});
+
+describe("PageReader swiping", () => {
+  const touch = (screenX: number, screenY: number) => ({ screenX, screenY });
+  const swipe = (
+    target: Element,
+    from: [number, number],
+    to: [number, number],
+  ) => {
+    fireEvent.touchStart(target, {
+      touches: [touch(...from)],
+      changedTouches: [touch(...from)],
+    });
+    fireEvent.touchEnd(target, {
+      touches: [],
+      changedTouches: [touch(...to)],
+    });
+    // A turn finishes once the page has slid into place.
+    act(() => vi.advanceTimersByTime(500));
+  };
+  const openOnPage = (page: number) => {
+    settings.mutate = vi.fn();
+    renderReader(10, undefined, `/?page=${page}`);
+    return screen.getByRole("main");
+  };
+
+  it("turns to the next page on a swipe to the left", () => {
+    swipe(openOnPage(3), [300, 400], [100, 410]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=4");
+  });
+
+  it("turns to the previous page on a swipe to the right", () => {
+    swipe(openOnPage(3), [100, 400], [300, 410]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=2");
+  });
+
+  it("turns the page when the swipe starts on a tap zone", () => {
+    const main = openOnPage(3);
+    const zone = main.querySelector('button[aria-hidden="true"]')!;
+    swipe(zone, [100, 400], [300, 400]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=2");
+  });
+
+  it("ignores a short drag and a mostly vertical one", () => {
+    const main = openOnPage(3);
+    swipe(main, [300, 400], [270, 400]);
+    swipe(main, [300, 400], [200, 700]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+  });
+
+  it("ignores a gesture with a second finger, such as a pinch", () => {
+    const main = openOnPage(3);
+    fireEvent.touchStart(main, {
+      touches: [touch(300, 400)],
+      changedTouches: [touch(300, 400)],
+    });
+    fireEvent.touchStart(main, {
+      touches: [touch(300, 400), touch(100, 400)],
+      changedTouches: [touch(100, 400)],
+    });
+    fireEvent.touchEnd(main, {
+      touches: [touch(100, 400)],
+      changedTouches: [touch(100, 400)],
+    });
+    fireEvent.touchEnd(main, { touches: [], changedTouches: [touch(90, 400)] });
+    expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+  });
+
+  describe("sliding", () => {
+    const drag = (target: Element, from: number, to: number, y = 400) => {
+      fireEvent.touchStart(target, {
+        touches: [touch(from, y)],
+        changedTouches: [touch(from, y)],
+      });
+      fireEvent.touchMove(target, {
+        touches: [touch(to, y)],
+        changedTouches: [touch(to, y)],
+      });
+    };
+    const release = (target: Element, x: number, y = 400) =>
+      fireEvent.touchEnd(target, {
+        touches: [],
+        changedTouches: [touch(x, y)],
+      });
+    const track = () => screen.getByTestId("page-track");
+    const pageImage = (page: number) =>
+      document.querySelector(`main img[src="/page-${page}"]`);
+
+    it("has both neighbors on the page, hidden from assistive tech", () => {
+      openOnPage(3);
+      expect(pageImage(2)).not.toBeNull();
+      expect(pageImage(4)).not.toBeNull();
+      // Only the current page is announced.
+      expect(screen.getAllByRole("img")).toHaveLength(1);
+      expect(screen.getByRole("img")).toHaveAttribute("src", "/page-3");
+    });
+
+    it("follows the finger", () => {
+      const main = openOnPage(3);
+      drag(main, 300, 220);
+      expect(track().style.transform).toBe("translateX(-80px)");
+    });
+
+    it("doesn't follow a drag that starts out vertical", () => {
+      const main = openOnPage(3);
+      fireEvent.touchStart(main, {
+        touches: [touch(300, 400)],
+        changedTouches: [touch(300, 400)],
+      });
+      fireEvent.touchMove(main, {
+        touches: [touch(298, 450)],
+        changedTouches: [touch(298, 450)],
+      });
+      fireEvent.touchMove(main, {
+        touches: [touch(200, 460)],
+        changedTouches: [touch(200, 460)],
+      });
+      expect(track().style.transform).toBe("");
+    });
+
+    it("resists at the first page, where there's nothing to show", () => {
+      const main = openOnPage(0);
+      drag(main, 100, 200);
+      expect(track().style.transform).toBe("translateX(25px)");
+    });
+
+    it("springs back from a drag too short to turn", () => {
+      const main = openOnPage(3);
+      drag(main, 300, 270);
+      release(main, 270);
+      act(() => vi.advanceTimersByTime(500));
+      expect(track().style.transform).toBe("translateX(0px)");
+      expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+    });
+
+    it("waits for the slide, then keeps the neighbor's own image", () => {
+      const main = openOnPage(3);
+      const next = pageImage(4);
+      drag(main, 300, 150);
+      release(main, 150);
+      expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+
+      act(() => vi.advanceTimersByTime(500));
+      expect(screen.getByTestId("location")).toHaveTextContent("page=4");
+      expect(track().style.transform).toBe("");
+      // The same element, so the browser has nothing to load again.
+      expect(pageImage(4)).toBe(next);
+      expect(screen.getByRole("img")).toBe(next);
+    });
+
+    it("takes a new swipe that starts while the last one is landing", () => {
+      const main = openOnPage(3);
+      drag(main, 300, 150);
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(50));
+
+      drag(main, 300, 150);
+      expect(track().style.transform).toBe("translateX(-150px)");
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(500));
+      expect(screen.getByTestId("location")).toHaveTextContent("page=5");
+    });
+
+    it("clears the offsets it used, so they can't add blank scroll", () => {
+      const main = openOnPage(3);
+      Object.defineProperty(main, "scrollTop", {
+        value: 1000,
+        configurable: true,
+      });
+      drag(main, 300, 150);
+      expect(track().style.getPropertyValue("--panel-top")).toBe("1000px");
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(500));
+      expect(track().style.getPropertyValue("--panel-top")).toBe("");
+      expect(track().style.getPropertyValue("--panel-height")).toBe("");
+    });
+
+    it("asks for the current page first, ahead of its neighbors", () => {
+      openOnPage(3);
+      const sources = Array.from(document.querySelectorAll("main img")).map(
+        (image) => image.getAttribute("src"),
+      );
+      expect(sources[0]).toBe("/page-3");
+    });
+
+    // A neighbor that failed off-screen fires no more events by itself.
+    it("retries a neighbor that failed, rather than spinning forever", () => {
+      const main = openOnPage(3);
+      const next = pageImage(4) as HTMLImageElement;
+      Object.defineProperty(next, "complete", { value: true });
+      Object.defineProperty(next, "naturalWidth", { value: 0 });
+      const assigned = vi.spyOn(next, "src", "set");
+
+      drag(main, 300, 150);
+      release(main, 150);
+      act(() => vi.advanceTimersByTime(500));
+      expect(assigned).toHaveBeenCalledWith("/page-4");
+      expect(document.querySelector('main [role="status"]')).not.toBeNull();
+
+      fireEvent.error(next);
+      expect(document.querySelector('main [role="status"]')).toBeNull();
+    });
+
+    // touch-action pan-y would stop a zoomed page panning sideways.
+    it("gives sideways drags back to the browser while zoomed in", () => {
+      const viewport = Object.assign(new EventTarget(), { scale: 1 });
+      vi.stubGlobal("visualViewport", viewport);
+      try {
+        const main = openOnPage(3);
+        expect(main).toHaveClass("touch-pan-y");
+        act(() => {
+          viewport.scale = 2;
+          viewport.dispatchEvent(new Event("resize"));
+        });
+        expect(main).not.toHaveClass("touch-pan-y");
+        act(() => {
+          viewport.scale = 1;
+          viewport.dispatchEvent(new Event("resize"));
+        });
+        expect(main).toHaveClass("touch-pan-y");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("lets a key press replace a turn that's still sliding", () => {
+      const main = openOnPage(3);
+      drag(main, 300, 150);
+      release(main, 150);
+      fireEvent.keyDown(window, { key: "ArrowLeft" });
+      act(() => vi.advanceTimersByTime(500));
+      expect(screen.getByTestId("location")).toHaveTextContent("page=2");
+      expect(track().style.transform).toBe("");
+    });
+  });
+
+  // A drag on a zoomed page pans around it.
+  it("ignores a swipe while the page is zoomed in", () => {
+    vi.stubGlobal(
+      "visualViewport",
+      Object.assign(new EventTarget(), { scale: 2 }),
+    );
+    try {
+      swipe(openOnPage(3), [300, 400], [100, 400]);
+      expect(screen.getByTestId("location")).toHaveTextContent("page=3");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("leaves swipes alone in the scrolled flow", () => {
+    flow.saved = "scrolled";
+    swipe(openOnPage(3), [300, 400], [100, 400]);
+    expect(screen.getByTestId("location")).toHaveTextContent("page=3");
   });
 });

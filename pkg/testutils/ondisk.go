@@ -20,14 +20,30 @@ type pageSpec struct {
 	count, width, height int
 }
 
+// epubSpec is the kind of EPUB written for withFileOnDisk.
+type epubSpec struct {
+	paragraphs       int
+	fixedLayout, rtl bool
+	fixedPages       int
+}
+
 // writeFileOnDisk writes a small valid file of fileType for withFileOnDisk
 // and returns its path without the extension, as books store it. Only the
 // types the E2E tests open have a writer.
-func writeFileOnDisk(root, fileType, title string, pages pageSpec) (string, error) {
+func writeFileOnDisk(root, fileType, title string, pages pageSpec, epub epubSpec) (string, error) {
 	var write func(path, title string) error
 	switch fileType {
 	case models.FileTypeEPUB:
-		write = writeMinimalEPUB
+		write = func(path, title string) error {
+			if epub.fixedLayout {
+				pageCount := epub.fixedPages
+				if pageCount == 0 {
+					pageCount = defaultFixedLayoutPages
+				}
+				return writeFixedLayoutEPUB(path, title, pageCount, epub.rtl)
+			}
+			return writeMinimalEPUB(path, title, epub.paragraphs)
+		}
 	case models.FileTypeMOBI:
 		write = writeMinimalMOBI
 	case models.FileTypeCBZ:

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"image"
 	_ "image/png"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/cbz"
+	"github.com/shishobooks/shisho/pkg/epub"
 	"github.com/shishobooks/shisho/pkg/mobi"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -128,6 +130,29 @@ func TestCreateBookWithFileOnDiskWritesAMOBI(t *testing.T) {
 	parsed, err := mobi.Parse(file.Filepath)
 	require.NoError(t, err)
 	assert.Equal(t, "Kindle Book", parsed.Title)
+}
+
+// The reader e2e tests need an EPUB that declares itself fixed-layout, and the
+// scanner has to accept it too.
+func TestWriteFixedLayoutEPUB(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "fixed.epub")
+	require.NoError(t, writeFixedLayoutEPUB(path, "Fixed Book", defaultFixedLayoutPages, true))
+
+	parsed, err := epub.Parse(path)
+	require.NoError(t, err)
+	assert.Equal(t, "Fixed Book", parsed.Title)
+
+	archive, err := zip.OpenReader(path)
+	require.NoError(t, err)
+	defer archive.Close()
+	opf, err := archive.Open("OEBPS/content.opf")
+	require.NoError(t, err)
+	defer opf.Close()
+	body, err := io.ReadAll(opf)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `<meta property="rendition:layout">pre-paginated</meta>`)
+	assert.Contains(t, string(body), `page-progression-direction="rtl"`)
 }
 
 // The page reader e2e tests need a real CBZ, with pages as tall as a

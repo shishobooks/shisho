@@ -31,6 +31,8 @@ import {
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { pagesToProbe, useDetectedPageFlow } from "@/hooks/useDetectedPageFlow";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { usePreloadImages } from "@/hooks/usePreloadImages";
+import { usePinchZoomed, useSwipeTurn } from "@/hooks/useSwipeTurn";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import {
@@ -40,7 +42,7 @@ import {
   type ThumbnailSize,
   type UserSettingsPayload,
 } from "@/types";
-import { pageTurnForKey } from "@/utils/readerKeys";
+import { pageTurnForKey, type PageTurn } from "@/utils/readerKeys";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
 const flattenChapters = (chapters: Chapter[]): Chapter[] => {
@@ -63,6 +65,11 @@ const PROBE_THUMBNAIL_SIZE = ThumbnailSize256;
 // to the URL. Browsers cap how often a page may rewrite its URL, and
 // scrolling can change the page every frame.
 const URL_SETTLE_MS = 300;
+
+// How long a swiped page takes to land.
+const SLIDE_MS = 180;
+// How much of a drag moves the page when there's no page beyond it.
+const EDGE_RESISTANCE = 0.25;
 
 const FLOW_LABELS: Record<PageFlow, string> = {
   paginated: "Paginated",
@@ -213,6 +220,7 @@ export default function PageReader({
   const currentPageUrl = getPageUrl(currentPage);
   const imgRef = useRef<HTMLImageElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLElement | null)[]>([]);
 
   // The flow: the one chosen while open, else the one saved for the Book,
@@ -269,11 +277,15 @@ export default function PageReader({
   // Reset loading state when the page URL changes
   useEffect(() => {
     // If the image is already cached by the browser, it may be complete immediately
-    if (imgRef.current?.complete && imgRef.current.naturalWidth > 0) {
+    const image = imgRef.current;
+    if (image?.complete && image.naturalWidth > 0) {
       setImageLoading(false);
-    } else {
-      setImageLoading(true);
+      return;
     }
+    setImageLoading(true);
+    // A neighbor that failed off-screen keeps its element and fires nothing
+    // more when it becomes the current page, so ask for it again.
+    if (image?.complete) image.src = currentPageUrl;
   }, [currentPageUrl]);
 
   usePageTitle(title ? `Reading: ${title}` : "Reader");
@@ -287,6 +299,7 @@ export default function PageReader({
   const updateSettings = useUpdateUserSettings();
   const preloadCount = settings?.preload_count ?? 3;
   const fitMode = settings?.fit_mode ?? "fit-height";
+  const fitWidth = fitMode === "fit-width";
   const hideChrome = settings?.viewer_hide_chrome ?? false;
   const settingsReady = !settingsLoading && settings != null;
   const saveSetting = (payload: UserSettingsPayload, onFailure?: () => void) =>
@@ -375,18 +388,102 @@ export default function PageReader({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentPage, goToPage]);
 
-  // Preload pages
-  const preloadedPages = useMemo(() => {
-    const pages: number[] = [];
-    for (
-      let i = Math.max(0, currentPage - preloadCount);
-      i <= Math.min(totalPages - 1, currentPage + preloadCount);
-      i++
-    ) {
-      pages.push(i);
+  // The slide in progress: its timer, and how to finish it right away.
+  const slideRef = useRef<{ timer: number; finish: () => void } | null>(null);
+  const moveTrack = useCallback((x: number, animate: boolean) => {
+    const track = trackRef.current;
+    if (!track) return;
+    track.style.transition = animate
+      ? `transform ${SLIDE_MS}ms ease-out`
+      : "none";
+    track.style.transform = `translateX(${x}px)`;
+  }, []);
+
+  // Whatever turned the page, its neighbors are in place now. Cleaning up on
+  // each change also stops a slide that a key press or a jump replaced.
+  useLayoutEffect(() => {
+    const track = trackRef.current;
+    if (track) {
+      track.style.transition = "none";
+      track.style.transform = "";
+      track.style.removeProperty("--panel-top");
+      track.style.removeProperty("--panel-height");
     }
-    return pages;
-  }, [currentPage, preloadCount, totalPages]);
+    return () => {
+      if (slideRef.current) window.clearTimeout(slideRef.current.timer);
+      slideRef.current = null;
+    };
+  }, [currentPage]);
+
+  const handleSwipe = useCallback(
+    (turn: PageTurn) => {
+      const target = currentPage + (turn === "next" ? 1 : -1);
+      const reduceMotion = window.matchMedia?.(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      const main = mainRef.current;
+      // Past either end there's no page to slide in.
+      if (target < 0 || target >= totalPages || reduceMotion || !main) {
+        moveTrack(0, false);
+        goToPage(target);
+        return;
+      }
+      moveTrack(turn === "next" ? -main.clientWidth : main.clientWidth, true);
+      const finish = () => goToPage(target);
+      slideRef.current = { timer: window.setTimeout(finish, SLIDE_MS), finish };
+    },
+    [currentPage, goToPage, moveTrack, totalPages],
+  );
+  const swipeDrag = useMemo(
+    () => ({
+      onDrag: (dx: number) => {
+        const main = mainRef.current;
+        const track = trackRef.current;
+        if (!main || !track) return;
+        // A neighbor waits level with what's on screen, not with the top of a
+        // tall page scrolled partway down.
+        track.style.setProperty("--panel-top", `${main.scrollTop}px`);
+        track.style.setProperty("--panel-height", `${main.clientHeight}px`);
+        const hasPage = dx < 0 ? currentPage < totalPages - 1 : currentPage > 0;
+        moveTrack(hasPage ? dx : dx * EDGE_RESISTANCE, false);
+      },
+      onDragEnd: () => moveTrack(0, true),
+    }),
+    [currentPage, moveTrack, totalPages],
+  );
+  const { onTouchStart: startSwipe, ...swipeRest } = useSwipeTurn(
+    handleSwipe,
+    swipeDrag,
+  );
+  const zoomed = usePinchZoomed();
+  const swipeHandlers = {
+    ...swipeRest,
+    onTouchStart: (e: React.TouchEvent) => {
+      // A new swipe doesn't wait for the last one to land.
+      slideRef.current?.finish();
+      startSwipe(e);
+    },
+  };
+
+  // The current page and its neighbors are the reader's own images, so a
+  // swipe can show the next page as it comes in.
+  // The current page comes first, so it's first in line for a PDF render.
+  const panelPages = [currentPage, currentPage + 1, currentPage - 1].filter(
+    (page) => page >= 0 && page < totalPages,
+  );
+  // The pages past those, nearest first.
+  const preloadUrls: string[] = [];
+  if (flow === "paginated") {
+    for (let distance = 2; distance <= preloadCount; distance++) {
+      if (currentPage + distance < totalPages) {
+        preloadUrls.push(getPageUrl(currentPage + distance));
+      }
+      if (currentPage - distance >= 0) {
+        preloadUrls.push(getPageUrl(currentPage - distance));
+      }
+    }
+  }
+  usePreloadImages(preloadUrls);
 
   // Find current chapter
   const currentChapter = useMemo(() => {
@@ -563,13 +660,16 @@ export default function PageReader({
             : "flex-1",
           scrolled
             ? "flex-col items-center overflow-y-auto outline-none [overflow-anchor:none]"
-            : fitMode === "fit-width"
-              ? "items-start justify-start overflow-auto"
+            : fitWidth
+              ? "items-stretch justify-start overflow-y-auto overflow-x-hidden"
               : "items-center justify-center overflow-hidden",
+          // Keeps a sideways drag for the swipe handlers below.
+          flow === "paginated" && !zoomed && "touch-pan-y touch-pinch-zoom",
         )}
         onScroll={scrolled ? handleScroll : undefined}
         ref={mainRef}
         tabIndex={scrolled ? -1 : undefined}
+        {...(flow === "paginated" ? swipeHandlers : {})}
       >
         {!flow && (
           <div className="m-auto">
@@ -646,29 +746,59 @@ export default function PageReader({
               </div>
             )}
 
-            <img
-              alt={`Page ${(currentPage + 1).toLocaleString()}`}
-              className={
-                fitMode === "fit-height"
-                  ? "max-h-full w-auto object-contain"
-                  : "w-full h-auto"
-              }
-              onError={() => setImageLoading(false)}
-              onLoad={() => setImageLoading(false)}
-              ref={imgRef}
-              src={currentPageUrl}
-            />
+            {/* Moves with a swipe. Each page keeps its element as it changes
+                places, so the next page is already there when it lands. */}
+            <div
+              className={cn(
+                "will-change-transform",
+                fitWidth ? "relative flex w-full" : "absolute inset-0",
+              )}
+              data-testid="page-track"
+              ref={trackRef}
+            >
+              {panelPages.map((page) => {
+                const offset = page - currentPage;
+                return (
+                  <div
+                    aria-hidden={offset !== 0 || undefined}
+                    className={cn(
+                      "flex w-full",
+                      !fitWidth && "items-center justify-center",
+                      offset === 0
+                        ? !fitWidth && "absolute inset-0"
+                        : "absolute left-0 top-[var(--panel-top,0px)] h-[var(--panel-height,100%)] overflow-hidden",
+                      offset < 0 && "-translate-x-full",
+                      offset > 0 && "translate-x-full",
+                    )}
+                    key={page}
+                  >
+                    <img
+                      alt={
+                        offset === 0
+                          ? `Page ${(page + 1).toLocaleString()}`
+                          : ""
+                      }
+                      className={
+                        fitWidth
+                          ? "my-auto h-auto w-full"
+                          : "max-h-full max-w-full object-contain"
+                      }
+                      draggable={false}
+                      onError={
+                        offset === 0 ? () => setImageLoading(false) : undefined
+                      }
+                      onLoad={
+                        offset === 0 ? () => setImageLoading(false) : undefined
+                      }
+                      ref={offset === 0 ? imgRef : undefined}
+                      src={getPageUrl(page)}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
-
-        {/* Preloaded images (hidden). The scrolled flow's lazy images
-            already load the pages near the view. */}
-        {!scrolled &&
-          preloadedPages
-            .filter((p) => p !== currentPage)
-            .map((p) => (
-              <link as="image" href={getPageUrl(p)} key={p} rel="prefetch" />
-            ))}
       </main>
 
       {/* Controls */}

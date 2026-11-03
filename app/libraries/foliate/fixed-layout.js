@@ -243,6 +243,16 @@ export class FixedLayout extends HTMLElement {
             return arr
         }, [{}])
     }
+    // Shisho patch: upstream has no atEnd here, unlike the paginator, so the
+    // reader could never tell that a fixed-layout book reached its last page.
+    // A portrait screen shows one page of a spread at a time, so the last spread
+    // is only the end once its later page is showing.
+    get atEnd() {
+        if (this.#index !== this.#spreads.length - 1) return false
+        if (this.#center || !this.#portrait) return true
+        const later = this.rtl ? this.#left : this.#right
+        return Boolean(later?.blank) || later?.element?.style?.display !== 'none'
+    }
     get index() {
         const spread = this.#spreads[this.#index]
         const section = spread?.center ?? (this.#side === 'left'
@@ -265,7 +275,13 @@ export class FixedLayout extends HTMLElement {
     async goToSpread(index, side, reason) {
         if (index < 0 || index > this.#spreads.length - 1) return
         if (index === this.#index) {
+            // Shisho patch: upstream shows the other page of the spread here
+            // without noting it or saying so, so a jump to the last page from
+            // the one before it never reached the reader.
+            const moved = side && side !== this.#side
+            if (side) this.#side = side
             this.#render(side)
+            if (moved) this.#reportLocation(reason)
             return
         }
         this.#index = index
