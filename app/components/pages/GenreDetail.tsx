@@ -101,9 +101,10 @@ const GenreDetail = () => {
         { label: genre?.name ?? "" },
       ]}
       deleteConfig={{
+        affectedBookCount: bookCount,
         isPending: deleteGenreMutation.isPending,
         onDelete: handleDelete,
-        disabled: bookCount > 0,
+        disabled: false,
       }}
       editConfig={{
         isPending: updateGenreMutation.isPending,

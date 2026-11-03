@@ -66,6 +66,8 @@ interface DeleteConfig {
   onDelete: () => Promise<unknown>;
   /** When true, the Delete button is hidden (e.g. entity still has books) */
   disabled: boolean;
+  /** Books that lose this resource, stated in the confirmation dialog. */
+  affectedBookCount?: number;
 }
 
 interface ResourceDetailProps {
@@ -290,6 +292,7 @@ export function ResourceDetail({
 
       {canMutate && (
         <MetadataDeleteDialog
+          affectedBookCount={deleteConfig.affectedBookCount}
           entityName={name}
           entityType={entityType}
           isPending={deleteConfig.isPending}

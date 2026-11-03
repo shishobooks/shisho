@@ -116,9 +116,10 @@ const TagDetail = () => {
         { label: split.name },
       ]}
       deleteConfig={{
+        affectedBookCount: bookCount,
         isPending: deleteTagMutation.isPending,
         onDelete: handleDelete,
-        disabled: bookCount > 0,
+        disabled: false,
       }}
       displayName={split.name}
       editConfig={{

@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentType, ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { setAuth } from "@/testing/auth";
 
@@ -20,7 +20,7 @@ vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 setAuth({ permissions: ["books:read", "books:write", "people:write"] });
 
-const { idle, succeeding, loaded, emptyList } = vi.hoisted(() => {
+const { entity, idle, succeeding, loaded, emptyList } = vi.hoisted(() => {
   const entity = {
     id: 5,
     library_id: 1,
@@ -35,6 +35,7 @@ const { idle, succeeding, loaded, emptyList } = vi.hoisted(() => {
     descendant_ids: [],
   };
   return {
+    entity,
     emptyList: () => ({ data: { items: [], total: 0 }, isSuccess: true }),
     idle: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     // A mutation that succeeds the way TanStack Query reports it: the call's
@@ -122,6 +123,24 @@ vi.mock("@/components/library/PublisherEditDialog", () => ({
   PublisherEditDialog: () => null,
 }));
 
+const renderPage = (Page: ComponentType, segment: string) =>
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter initialEntries={[`/libraries/1/${segment}/5`]}>
+        <Routes>
+          <Route
+            element={<Page />}
+            path={`/libraries/:libraryId/${segment}/:id`}
+          />
+          <Route
+            element={<h1>List page</h1>}
+            path={`/libraries/:libraryId/${segment}`}
+          />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
 describe.each<[string, ComponentType, string]>([
   ["genre", GenreDetail, "genres"],
   ["tag", TagDetail, "tags"],
@@ -130,22 +149,7 @@ describe.each<[string, ComponentType, string]>([
 ])("%s detail delete", (_, Page, segment) => {
   it("returns to the list after a successful delete", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <MemoryRouter initialEntries={[`/libraries/1/${segment}/5`]}>
-          <Routes>
-            <Route
-              element={<Page />}
-              path={`/libraries/:libraryId/${segment}/:id`}
-            />
-            <Route
-              element={<h1>List page</h1>}
-              path={`/libraries/:libraryId/${segment}`}
-            />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    );
+    renderPage(Page, segment);
 
     await user.click(screen.getByRole("button", { name: /Delete/ }));
     const dialog = screen.getByRole("dialog");
@@ -154,5 +158,46 @@ describe.each<[string, ComponentType, string]>([
     expect(
       await screen.findByRole("heading", { name: "List page" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("deleting a resource that is still in use", () => {
+  afterEach(() => {
+    entity.book_count = 0;
+    entity.file_count = 0;
+    entity.authored_book_count = 0;
+    entity.narrated_file_count = 0;
+  });
+
+  it.each<[string, ComponentType, string]>([
+    ["genre", GenreDetail, "genres"],
+    ["tag", TagDetail, "tags"],
+  ])(
+    "offers Delete on a %s and states its book count",
+    async (_, Page, segment) => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      entity.book_count = 1234;
+      renderPage(Page, segment);
+
+      await user.click(screen.getByRole("button", { name: /Delete/ }));
+
+      expect(screen.getByRole("dialog")).toHaveTextContent(
+        "It will be removed from 1,234 books.",
+      );
+    },
+  );
+
+  it.each<[string, ComponentType, string]>([
+    ["person", PersonDetail, "people"],
+    ["publisher", PublisherDetail, "publishers"],
+  ])("still hides Delete on a %s", (_, Page, segment) => {
+    entity.authored_book_count = 3;
+    entity.narrated_file_count = 3;
+    entity.file_count = 3;
+    renderPage(Page, segment);
+
+    expect(
+      screen.queryByRole("button", { name: /Delete/ }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"slices"
 
 	"github.com/pkg/errors"
 	"github.com/segmentio/encoding/json"
@@ -33,8 +34,8 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 		return err
 	}
 
-	// Reset reviewed for supplements in a single statement; supplements never
-	// participate in the per-file iteration below.
+	// Reset reviewed for supplements in a single statement, which also covers
+	// books with no main file that the batches below never reach.
 	if _, err := w.db.NewUpdate().
 		Model((*models.File)(nil)).
 		Set("reviewed = NULL").
@@ -51,37 +52,37 @@ func (w *Worker) ProcessRecomputeReviewJob(ctx context.Context, job *models.Job,
 		return errors.WithStack(err)
 	}
 
-	// Iterate only main files. Order by id for stable progress %.
-	var fileIDs []int
+	// Recompute the books that have main files, in batches. Order by id for
+	// stable progress %.
+	var bookIDs []int
 	if err := w.db.NewSelect().
 		Model((*models.File)(nil)).
-		Column("id").
-		Where("file_role = ?", models.FileRoleMain).
-		Order("id ASC").
-		Scan(ctx, &fileIDs); err != nil {
+		ColumnExpr("DISTINCT f.book_id").
+		Where("f.file_role = ?", models.FileRoleMain).
+		Order("f.book_id ASC").
+		Scan(ctx, &bookIDs); err != nil {
 		return errors.WithStack(err)
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 
-	total := len(fileIDs)
-	for i, id := range fileIDs {
+	done := 0
+	for batch := range slices.Chunk(bookIDs, review.RecomputeBatchSize) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := review.RecomputeForFile(ctx, w.db, id, criteria); err != nil {
+		if err := review.RecomputeForBooks(ctx, w.db, batch, criteria); err != nil {
 			return errors.WithStack(err)
 		}
-		if total > 0 {
-			pct := int(float64(i+1) / float64(total) * 100)
-			if _, err := w.db.NewUpdate().
-				Model((*models.Job)(nil)).
-				Set("progress = ?", pct).
-				Where("id = ?", job.ID).
-				Exec(ctx); err != nil {
-				return errors.WithStack(err)
-			}
+		done += len(batch)
+		pct := int(float64(done) / float64(len(bookIDs)) * 100)
+		if _, err := w.db.NewUpdate().
+			Model((*models.Job)(nil)).
+			Set("progress = ?", pct).
+			Where("id = ?", job.ID).
+			Exec(ctx); err != nil {
+			return errors.WithStack(err)
 		}
 	}
 	return nil

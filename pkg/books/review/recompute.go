@@ -2,9 +2,12 @@ package review
 
 import (
 	"context"
+	"database/sql"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -66,18 +69,97 @@ func RecomputeForFile(ctx context.Context, db bun.IDB, fileID int, criteria Crit
 
 // RecomputeForBook recomputes reviewed for every file belonging to the book.
 func RecomputeForBook(ctx context.Context, db bun.IDB, bookID int, criteria Criteria) error {
-	var fileIDs []int
-	err := db.NewSelect().
-		Model((*models.File)(nil)).
-		Column("id").
-		Where("book_id = ?", bookID).
-		Scan(ctx, &fileIDs)
+	return RecomputeForBooks(ctx, db, []int{bookID}, criteria)
+}
+
+// RecomputeBatchSize bounds how long a batch holds the database's only
+// connection, so other requests get a turn between batches during a large
+// recompute.
+const RecomputeBatchSize = 500
+
+// RecomputeForBooks recomputes reviewed for every file of each book and writes
+// only the values that changed. It works in batches, each in its own
+// transaction so a concurrent edit can't land between a batch's read and write.
+// Don't wrap a large call in a transaction: that holds the connection for the
+// whole run. A failed batch doesn't stop the rest; the first error is returned.
+func RecomputeForBooks(ctx context.Context, db bun.IDB, bookIDs []int, criteria Criteria) error {
+	var firstErr error
+	for batch := range slices.Chunk(bookIDs, RecomputeBatchSize) {
+		err := db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+			return recomputeBatch(ctx, tx, batch, criteria)
+		})
+		if err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func recomputeBatch(ctx context.Context, tx bun.Tx, bookIDs []int, criteria Criteria) error {
+	var files []*models.File
+	err := tx.NewSelect().
+		Model(&files).
+		Where("f.book_id IN (?)", bun.List(bookIDs)).
+		Relation("Narrators").
+		Relation("Identifiers").
+		Relation("Chapters").
+		Scan(ctx)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	for _, id := range fileIDs {
-		if err := RecomputeForFile(ctx, db, id, criteria); err != nil {
-			return err
+	if len(files) == 0 {
+		return nil
+	}
+
+	var books []*models.Book
+	err = tx.NewSelect().
+		Model(&books).
+		Where("b.id IN (?)", bun.List(bookIDs)).
+		Relation("Authors").
+		Relation("BookSeries").
+		Relation("BookGenres").
+		Relation("BookTags").
+		Scan(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	booksByID := make(map[int]*models.Book, len(books))
+	for _, book := range books {
+		booksByID[book.ID] = book
+	}
+
+	var setTrue, setFalse, setNull []int
+	for _, file := range files {
+		var reviewed *bool
+		if file.FileRole != models.FileRoleSupplement {
+			reviewed = computeReviewedValue(booksByID[file.BookID], file, criteria)
+		}
+		switch {
+		case reviewed == nil && file.Reviewed == nil:
+		case reviewed != nil && file.Reviewed != nil && *reviewed == *file.Reviewed:
+		case reviewed == nil:
+			setNull = append(setNull, file.ID)
+		case *reviewed:
+			setTrue = append(setTrue, file.ID)
+		default:
+			setFalse = append(setFalse, file.ID)
+		}
+	}
+
+	for _, write := range []struct {
+		value   *bool
+		fileIDs []int
+	}{{pointerutil.Bool(true), setTrue}, {pointerutil.Bool(false), setFalse}, {nil, setNull}} {
+		if len(write.fileIDs) == 0 {
+			continue
+		}
+		_, err := tx.NewUpdate().
+			Model((*models.File)(nil)).
+			Set("reviewed = ?", write.value).
+			Where("id IN (?)", bun.List(write.fileIDs)).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
 		}
 	}
 	return nil

@@ -159,22 +159,23 @@ func (svc *Service) RecomputeReviewedForBook(ctx context.Context, bookID int) {
 
 // RecomputeReviewedForBooks refreshes files.reviewed for every file of each
 // book, loading the review criteria once. Use it when one change affects many
-// books, such as deleting a shared resource. Errors are logged, and a failure
-// on one book does not stop the rest.
+// books, such as deleting a shared resource. Errors are logged, and a failed
+// batch does not stop the rest. It detaches from cancellation because the
+// change it follows has already committed, so a client that disconnects must
+// not leave the remaining books with stale review state.
 func (svc *Service) RecomputeReviewedForBooks(ctx context.Context, bookIDs []int) {
 	if len(bookIDs) == 0 {
 		return
 	}
+	ctx = context.WithoutCancel(ctx)
 	log := logger.FromContext(ctx)
 	criteria, err := review.Load(ctx, svc.appSettingsService)
 	if err != nil {
 		log.Warn("review: load criteria failed", logger.Data{"err": err.Error()})
 		return
 	}
-	for _, bookID := range bookIDs {
-		if err := review.RecomputeForBook(ctx, svc.db, bookID, criteria); err != nil {
-			log.Warn("review: recompute for book failed", logger.Data{"err": err.Error(), "book_id": bookID})
-		}
+	if err := review.RecomputeForBooks(ctx, svc.db, bookIDs, criteria); err != nil {
+		log.Warn("review: recompute for books failed", logger.Data{"err": err.Error(), "book_count": len(bookIDs)})
 	}
 }
 

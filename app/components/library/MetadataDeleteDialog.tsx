@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toastRequestError } from "@/libraries/api";
+import { formatCount } from "@/utils/format";
 
 import type { EntityType } from "./MetadataEditDialog";
 
@@ -22,6 +23,8 @@ interface MetadataDeleteDialogProps {
   /** A rejection is toasted here and keeps the dialog open. */
   onDelete: () => Promise<unknown>;
   isPending: boolean;
+  /** Books that lose this resource, for resources deletable while in use. */
+  affectedBookCount?: number;
 }
 
 const ENTITY_LABELS: Record<EntityType, string> = {
@@ -39,6 +42,7 @@ export function MetadataDeleteDialog({
   entityName,
   onDelete,
   isPending,
+  affectedBookCount = 0,
 }: MetadataDeleteDialogProps) {
   const handleDelete = async () => {
     try {
@@ -60,10 +64,18 @@ export function MetadataDeleteDialog({
         <DialogBody>
           <DialogDescription>
             Are you sure you want to delete{" "}
-            <span className="font-medium break-all" title={entityName}>
+            <span className="font-medium break-words" title={entityName}>
               "{entityName}"
             </span>
-            ? This action cannot be undone.
+            ?{" "}
+            {affectedBookCount > 0 && (
+              <>
+                It will be removed from {formatCount(affectedBookCount, "book")}
+                . A metadata refresh or reset can add it back if a book's files
+                or plugins still name it.{" "}
+              </>
+            )}
+            This action cannot be undone.
           </DialogDescription>
         </DialogBody>
 

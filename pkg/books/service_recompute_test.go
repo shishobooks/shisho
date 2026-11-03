@@ -78,3 +78,24 @@ func TestRecomputeReviewedForBooks_RecomputesOnlyListedBooks(t *testing.T) {
 	assert.False(t, fileReviewed(ctx, t, db, second))
 	assert.True(t, fileReviewed(ctx, t, db, unlisted), "a Book that was not listed is not recomputed")
 }
+
+// A caller that disconnects after the change committed must not leave the
+// affected Books with stale review state.
+func TestRecomputeReviewedForBooks_FinishesAfterContextCanceled(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	lib := &models.Library{Name: "Library", CoverAspectRatio: "book"}
+	_, err := db.NewInsert().Model(lib).Exec(ctx)
+	require.NoError(t, err)
+
+	fileID := insertBookMarkedReviewed(ctx, t, db, lib, "First")
+	var file models.File
+	require.NoError(t, db.NewSelect().Model(&file).Where("f.id = ?", fileID).Scan(ctx))
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	NewService(db, appsettings.NewService(db)).RecomputeReviewedForBooks(canceled, []int{file.BookID})
+
+	assert.False(t, fileReviewed(ctx, t, db, fileID))
+}
