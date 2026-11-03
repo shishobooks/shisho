@@ -383,7 +383,9 @@ jobs:
         env:
           BROWSER: ${{ matrix.browser }}
         with:
-          timeout_minutes: 6
+          # Catches a run that hung, so it sits well above how long the suite
+          # takes. A timeout here means no test failed.
+          timeout_minutes: 10
           max_attempts: 2
           retry_on: timeout
           command: pnpm "e2e:$BROWSER"

@@ -366,33 +366,29 @@ test.describe("Reflowable reader", () => {
         await send("touchEnd");
       };
 
-      for (const [zone, x] of [
-        ["left", WIDTH * 0.3],
-        ["center", WIDTH * 0.5],
-        ["right", WIDTH * 0.9],
-      ] as const) {
-        test(`a next-page swipe from the ${zone} third turns the page`, async ({
-          page,
-        }) => {
-          const start = await openMidBook(page, false);
-          await swipe(page, x, 2);
-          await expect.poll(() => progress(page)).toBeGreaterThan(start);
-        });
-      }
+      test("a next-page swipe from any third turns the page", async ({
+        page,
+      }) => {
+        let last = await openMidBook(page, false);
+        for (const x of [0.3, 0.5, 0.9]) {
+          await swipe(page, WIDTH * x, 2);
+          await expect.poll(() => progress(page)).toBeGreaterThan(last);
+          last = await progress(page);
+          await page.waitForTimeout(150);
+        }
+      });
 
-      for (const [zone, x] of [
-        ["left", WIDTH * 0.1],
-        ["center", WIDTH * 0.5],
-        ["right", WIDTH * 0.7],
-      ] as const) {
-        test(`a previous-page swipe from the ${zone} third turns the page`, async ({
-          page,
-        }) => {
-          const start = await openMidBook(page, false);
-          await swipe(page, x, WIDTH - 2);
-          await expect.poll(() => progress(page)).toBeLessThan(start);
-        });
-      }
+      test("a previous-page swipe from any third turns the page", async ({
+        page,
+      }) => {
+        let last = await openMidBook(page, false);
+        for (const x of [0.1, 0.5, 0.7]) {
+          await swipe(page, WIDTH * x, WIDTH - 2);
+          await expect.poll(() => progress(page)).toBeLessThan(last);
+          last = await progress(page);
+          await page.waitForTimeout(150);
+        }
+      });
 
       test("a swipe saves the position, as a button turn does", async ({
         page,
@@ -414,37 +410,33 @@ test.describe("Reflowable reader", () => {
           openMidBook(
             page,
             false,
-            { fixedLayout: true, ...seed },
+            { fixedLayout: true, fixedLayoutPages: 14, ...seed },
             "Fixed page 1.",
           );
 
-        for (const [zone, x] of [
-          ["left", WIDTH * 0.3],
-          ["center", WIDTH * 0.5],
-          ["right", WIDTH * 0.9],
-        ] as const) {
-          test(`a next-page swipe from the ${zone} third turns the page`, async ({
-            page,
-          }) => {
-            const start = await openFixed(page);
-            await swipe(page, x, 2);
-            await expect.poll(() => progress(page)).toBeGreaterThan(start);
-          });
-        }
+        test("a next-page swipe from any third turns the page", async ({
+          page,
+        }) => {
+          let last = await openFixed(page);
+          for (const x of [0.3, 0.5, 0.9]) {
+            await swipe(page, WIDTH * x, 2);
+            await expect.poll(() => progress(page)).toBeGreaterThan(last);
+            last = await progress(page);
+            await page.waitForTimeout(150);
+          }
+        });
 
-        for (const [zone, x] of [
-          ["left", WIDTH * 0.1],
-          ["center", WIDTH * 0.5],
-          ["right", WIDTH * 0.7],
-        ] as const) {
-          test(`a previous-page swipe from the ${zone} third turns the page`, async ({
-            page,
-          }) => {
-            const start = await openFixed(page);
-            await swipe(page, x, WIDTH - 2);
-            await expect.poll(() => progress(page)).toBeLessThan(start);
-          });
-        }
+        test("a previous-page swipe from any third turns the page", async ({
+          page,
+        }) => {
+          let last = await openFixed(page);
+          for (const x of [0.1, 0.5, 0.7]) {
+            await swipe(page, WIDTH * x, WIDTH - 2);
+            await expect.poll(() => progress(page)).toBeLessThan(last);
+            last = await progress(page);
+            await page.waitForTimeout(150);
+          }
+        });
 
         test("a swipe on the blank space around the page turns it", async ({
           page,

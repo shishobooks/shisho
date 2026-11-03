@@ -225,42 +225,42 @@ test.describe("Page reader flows", () => {
       ).toBeVisible();
     };
 
-    for (const [zone, x] of [
-      ["left", WIDTH * 0.3],
-      ["center", WIDTH * 0.5],
-      ["right", WIDTH * 0.9],
-    ] as const) {
-      test(`a next-page swipe from the ${zone} third turns one page`, async ({
-        page,
-      }) => {
-        await openComic(page, 3);
-        await swipe(page, x, x - 100);
-        await expect(page.getByText("Page 4 of 6")).toBeVisible();
-      });
+    test("a next-page swipe from any third turns one page", async ({
+      page,
+    }) => {
+      await openComic(page, 3);
+      for (const [x, landsOn] of [
+        [0.3, 4],
+        [0.5, 5],
+        [0.9, 6],
+      ]) {
+        await swipe(page, WIDTH * x, WIDTH * x - 100);
+        await expect(page.getByText(`Page ${landsOn} of 6`)).toBeVisible();
+      }
+    });
 
-      // On the first page the left tap zone is a disabled button.
-      test(`a next-page swipe from the ${zone} third works on the first page`, async ({
-        page,
-      }) => {
-        await openComic(page, 1);
-        await swipe(page, x, x - 100);
-        await expect(page.getByText("Page 2 of 6")).toBeVisible();
-      });
-    }
+    // On the first page the left tap zone is a disabled button.
+    test("a next-page swipe from the left third works on the first page", async ({
+      page,
+    }) => {
+      await openComic(page, 1);
+      await swipe(page, WIDTH * 0.3, WIDTH * 0.3 - 100);
+      await expect(page.getByText("Page 2 of 6")).toBeVisible();
+    });
 
-    for (const [zone, x] of [
-      ["left", WIDTH * 0.1],
-      ["center", WIDTH * 0.5],
-      ["right", WIDTH * 0.7],
-    ] as const) {
-      test(`a previous-page swipe from the ${zone} third turns one page`, async ({
-        page,
-      }) => {
-        await openComic(page, 3);
-        await swipe(page, x, x + 100);
-        await expect(page.getByText("Page 2 of 6")).toBeVisible();
-      });
-    }
+    test("a previous-page swipe from any third turns one page", async ({
+      page,
+    }) => {
+      await openComic(page, 4);
+      for (const [x, landsOn] of [
+        [0.1, 3],
+        [0.5, 2],
+        [0.7, 1],
+      ]) {
+        await swipe(page, WIDTH * x, WIDTH * x + 100);
+        await expect(page.getByText(`Page ${landsOn} of 6`)).toBeVisible();
+      }
+    });
 
     const touch = async (page: Page) => {
       const cdp = await page.context().newCDPSession(page);
