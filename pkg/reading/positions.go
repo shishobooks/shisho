@@ -151,7 +151,12 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			}
 		}
 
-		progress := moved && reading && (atEnd || isRealProgress(u, underway))
+		// Staying at the end, as a reader closed there after Undo reports,
+		// isn't reaching it, and neither is playing on through the last minute.
+		// Playback ending still is.
+		stayedAtEnd := stored != nil && !u.AtEnd && locatorAtEnd(file, stored.ReadingLocator)
+		reachedEnd := atEnd && !stayedAtEnd
+		progress := moved && reading && (reachedEnd || isRealProgress(u, underway))
 
 		starting := false
 		if underway == nil && progress {
@@ -160,11 +165,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 				return err
 			}
 		}
-		// Staying at the end, as a reader closed there after Undo reports,
-		// doesn't finish again, and neither does playing on through the last
-		// minute. Playback ending still does.
-		stayedAtEnd := stored != nil && !u.AtEnd && locatorAtEnd(file, stored.ReadingLocator)
-		finishing := atEnd && progress && !stayedAtEnd
+		finishing := reachedEnd && progress
 		var day string
 		if starting || finishing && underway != nil {
 			day, err = userDay(ctx, tx, u.UserID, occurredAt)
@@ -193,7 +194,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 				return err
 			}
 			result.Started = true
-		case underway != nil && underway.Paused && progress && !atEnd:
+		case underway != nil && underway.Paused && progress && !finishing:
 			underway.Paused = false
 			underway.UpdatedAt = now
 			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {

@@ -1072,6 +1072,16 @@ describe("BookDetailBody file progress", () => {
     expect(within(row("Audio")).getByText("62% through")).toBeInTheDocument();
   });
 
+  it("shows no progress that rounds to nothing", () => {
+    readingPositions.current = [
+      { file_id: 1, percentage: 0 },
+      { file_id: 2, percentage: 0.004 },
+    ];
+    renderBody({ book: twoFiles });
+
+    expect(screen.queryByText(/% through$/)).not.toBeInTheDocument();
+  });
+
   it("shows no progress on a file with no position", () => {
     readingPositions.current = [{ file_id: 2, percentage: 0.62 }];
     renderBody({ book: twoFiles });

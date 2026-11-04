@@ -502,6 +502,46 @@ func TestUpdatePosition_PlayingOnAfterUndoDoesNotFinishAgainUntilPlaybackEnds(t 
 	assert.Equal(t, models.ReadingStatusRead, f.status())
 }
 
+// Being in the last minute already isn't reaching it, so only listening counts.
+func TestUpdatePosition_AFewSecondsPlayedInTheLastMinuteAfterDeletingAReadStartsNothing(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	f.listenFor(audio, 300, 60)
+	f.listen(audio, 3570, 3570.0/3600, false)
+	rts := f.readThroughs()
+	require.Len(t, rts, 1)
+	require.NoError(t, f.svc.DeleteReadThrough(f.ctx, rts[0]))
+	f.listen(audio, 3570, 3570.0/3600, false)
+	require.Empty(t, f.readThroughs())
+
+	result := f.listenFor(audio, 3571, 1)
+
+	assert.False(t, result.Started)
+	assert.Empty(t, f.status())
+}
+
+func TestUpdatePosition_ListeningResumesAPausedReadInTheLastMinute(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	f.listenFor(audio, 300, 60)
+	f.listen(audio, 3545, 3545.0/3600, false)
+	rts := f.readThroughs()
+	require.Len(t, rts, 1)
+	require.NoError(t, f.svc.UndoAutoFinish(f.ctx, rts[0]))
+	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
+
+	assert.False(t, f.listenFor(audio, 3550, 5).Resumed)
+	assert.Equal(t, models.ReadingStatusPaused, f.status())
+
+	result := f.listenFor(audio, 3590, 60)
+
+	assert.True(t, result.Resumed)
+	assert.Nil(t, result.FinishedReadThroughID)
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+}
+
 func TestUpdatePosition_SeekingBackFromTheLastMinuteUndoesTheFinish(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)

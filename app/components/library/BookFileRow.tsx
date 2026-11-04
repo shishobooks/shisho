@@ -269,7 +269,7 @@ const BookFileRow = ({
             {isSupplement ? "Supplement" : fileTypeLabel(file.file_type)}
           </Badge>
           <span>{rowFacts(file).join(" · ")}</span>
-          {progress != null && (
+          {progress != null && Math.round(progress * 100) > 0 && (
             <span className="font-medium text-foreground">
               {formatProgress(progress)} through
             </span>

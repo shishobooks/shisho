@@ -21,7 +21,6 @@ import ReadingStatusBookmark from "@/components/library/ReadingStatusBookmark";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
@@ -47,8 +47,8 @@ import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { fileTypeLabel, formatCount, formatRating } from "@/utils/format";
-import { formatProgress } from "@/utils/readingStatus";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
+import { formatProgress } from "@/utils/readingStatus";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
