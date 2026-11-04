@@ -423,4 +423,33 @@ describe("BookItem rating badge", () => {
     );
     expect(screen.getByLabelText("Rated 4 stars")).toBeInTheDocument();
   });
+
+  describe("reading progress", () => {
+    it("shows how far through the book the reader is along the cover", () => {
+      render(
+        wrap(
+          <BookItem
+            book={makeBook({ reading_progress: 0.62 })}
+            libraryId="1"
+          />,
+        ),
+      );
+
+      const bar = screen.getByRole("progressbar", { name: "62% through" });
+      expect(bar).toHaveAttribute("aria-valuenow", "62");
+    });
+
+    it.each([undefined, 0])("shows no bar for progress of %s", (progress) => {
+      render(
+        wrap(
+          <BookItem
+            book={makeBook({ reading_progress: progress })}
+            libraryId="1"
+          />,
+        ),
+      );
+
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    });
+  });
 });

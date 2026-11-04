@@ -152,6 +152,10 @@ vi.mock("@/hooks/queries/delivery", () => ({
         : { follows_built_in: false, rules: delivery.rules, options: [] },
   }),
 }));
+const readingPositions = vi.hoisted(() => ({
+  current: [] as Array<{ file_id: number; percentage: number }>,
+}));
+
 // BookReadingControls.test.tsx drives the reading controls through the API.
 vi.mock("@/hooks/queries/reading", () => ({
   useBookReading: () => ({
@@ -160,7 +164,7 @@ vi.mock("@/hooks/queries/reading", () => ({
       status: "read",
       rating: 4,
       on_to_read: false,
-      positions: [],
+      positions: readingPositions.current,
       read_throughs: [
         {
           id: 1,
@@ -1039,6 +1043,40 @@ describe("BookDetailBody Share button", () => {
       sharingEnabled: true,
       canManageSharing: false,
     });
+  });
+});
+
+describe("BookDetailBody file progress", () => {
+  afterEach(() => {
+    readingPositions.current = [];
+  });
+
+  const twoFiles = {
+    ...book,
+    files: [
+      { ...epub, id: 1, display_name: "Ebook" } as File,
+      { ...m4b, id: 2, display_name: "Audio" } as File,
+    ],
+  };
+
+  it("shows each file's progress on its own row", () => {
+    readingPositions.current = [
+      { file_id: 1, percentage: 0.25 },
+      { file_id: 2, percentage: 0.62 },
+    ];
+    renderBody({ book: twoFiles });
+
+    const row = (name: string) =>
+      screen.getByRole("link", { name }).closest(".border") as HTMLElement;
+    expect(within(row("Ebook")).getByText("25% through")).toBeInTheDocument();
+    expect(within(row("Audio")).getByText("62% through")).toBeInTheDocument();
+  });
+
+  it("shows no progress on a file with no position", () => {
+    readingPositions.current = [{ file_id: 2, percentage: 0.62 }];
+    renderBody({ book: twoFiles });
+
+    expect(screen.getAllByText(/% through$/)).toHaveLength(1);
   });
 });
 

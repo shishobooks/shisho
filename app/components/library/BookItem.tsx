@@ -21,6 +21,7 @@ import ReadingStatusBookmark from "@/components/library/ReadingStatusBookmark";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -46,6 +47,7 @@ import { isCoverLoaded, markCoverLoaded } from "@/utils/coverCache";
 import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { fileTypeLabel, formatCount, formatRating } from "@/utils/format";
+import { formatProgress } from "@/utils/readingStatus";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
@@ -311,6 +313,13 @@ const BookItem = ({
                 </Badge>
               )}
             </div>
+          )}
+          {book.reading_progress != null && book.reading_progress > 0 && (
+            <Progress
+              aria-label={`${formatProgress(book.reading_progress)} through`}
+              className="absolute inset-x-0 bottom-0 h-1 rounded-t-none rounded-b-sm bg-black/50"
+              value={book.reading_progress * 100}
+            />
           )}
         </div>
         <TruncatedText

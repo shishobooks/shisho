@@ -65,6 +65,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
+import { formatProgress } from "@/utils/readingStatus";
 
 /**
  * Everything the File details dialog lists. A Share Link recipient sees the
@@ -163,6 +164,8 @@ export interface BookFileRowProps {
   onRescan: () => void;
   isResyncing: boolean;
   isSupplement?: boolean;
+  // How far through this File the reader is, from 0 to 1.
+  progress?: number;
   onMoveFile?: () => void;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
@@ -192,6 +195,7 @@ const BookFileRow = ({
   onRescan,
   isResyncing,
   isSupplement = false,
+  progress,
   onMoveFile,
   onDeleteFile,
   isDeletingFile,
@@ -265,6 +269,11 @@ const BookFileRow = ({
             {isSupplement ? "Supplement" : fileTypeLabel(file.file_type)}
           </Badge>
           <span>{rowFacts(file).join(" · ")}</span>
+          {progress != null && (
+            <span className="font-medium text-foreground">
+              {formatProgress(progress)} through
+            </span>
+          )}
         </div>
         {file.narrators && file.narrators.length > 0 && (
           <p className="mt-0.5 text-xs text-muted-foreground">

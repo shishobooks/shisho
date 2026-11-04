@@ -101,7 +101,7 @@ func TestPositionRoutes_ListenedSecondsCountTowardStarting(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.False(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
 
-	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": 60})
+	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": 60, "listening_since": "2026-10-15T11:59:00Z"})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.True(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
 

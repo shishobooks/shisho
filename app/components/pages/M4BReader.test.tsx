@@ -31,7 +31,7 @@ const position = vi.hoisted(() => ({
 vi.mock("@/hooks/queries/reading", () => ({
   QueryKey: { FilePosition: "FilePosition" },
   invalidateAfterPositionUpdate: () => {},
-  markBookReadingStale: () => {},
+  markProgressStale: () => {},
   useUndoAutoFinish: () => ({ mutate: () => {} }),
   useFilePosition: () => ({
     data: position.loading
@@ -889,6 +889,7 @@ describe("M4BReader position", () => {
     act(() => vi.advanceTimersByTime(SAVE_EVERY_MS));
 
     expect(position.saves[0]).toMatchObject({ listened_seconds: 15 });
+    expect(position.saves[0].listening_since).toEqual(expect.any(String));
   });
 
   it("saves on pause, with the session", () => {

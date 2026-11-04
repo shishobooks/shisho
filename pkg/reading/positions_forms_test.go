@@ -58,13 +58,15 @@ func (f *positionsFixture) listen(file *models.File, seconds, percentage float64
 	return result
 }
 
-// listenFor reports a place with seconds of listening so far in a session
-// still open.
+// listenFor reports a place with seconds played so far in this sitting of the
+// player, which began that long ago on the clock.
 func (f *positionsFixture) listenFor(file *models.File, seconds, listened float64) *UpdatePositionResponse {
 	f.t.Helper()
+	since := f.clock.now.Add(-time.Duration(listened * float64(time.Second)))
 	result, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
 		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
-		Locator: models.ReadingLocator{Seconds: &seconds}, Percentage: seconds / 3600, ListenedSeconds: listened,
+		Locator: models.ReadingLocator{Seconds: &seconds}, Percentage: seconds / 3600,
+		ListenedSeconds: listened, ListeningSince: &since,
 	})
 	require.NoError(f.t, err)
 	return result
@@ -75,15 +77,28 @@ func (f *positionsFixture) listenFor(file *models.File, seconds, listened float6
 func (f *positionsFixture) listenWithSession(file *models.File, seconds, listened float64) *UpdatePositionResponse {
 	f.t.Helper()
 	ended := f.clock.now
+	since := ended.Add(-time.Duration(listened * float64(time.Second)))
 	result, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
 		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
 		Locator: models.ReadingLocator{Seconds: &seconds}, Percentage: seconds / 3600,
-		Session: &SessionInput{
-			StartedAt: ended.Add(-time.Duration(listened * float64(time.Second))), EndedAt: ended, Measured: true,
-		},
+		ListenedSeconds: listened, ListeningSince: &since,
+		Session: &SessionInput{StartedAt: since, EndedAt: ended, Measured: true},
 	})
 	require.NoError(f.t, err)
 	return result
+}
+
+// addSupplement adds a supplement PDF to the fixture's Book.
+func (f *positionsFixture) addSupplement() *models.File {
+	f.t.Helper()
+	pages := 10
+	file := &models.File{
+		LibraryID: f.book.LibraryID, BookID: f.book.ID, FileType: models.FileTypePDF, FileRole: models.FileRoleSupplement,
+		Filepath: "/test/guide.pdf", FilesizeBytes: 1, PageCount: &pages,
+	}
+	_, err := f.db.NewInsert().Model(file).Exec(f.ctx)
+	require.NoError(f.t, err)
+	return file
 }
 
 func TestUpdatePosition_StoresAPage(t *testing.T) {
@@ -186,17 +201,199 @@ func TestUpdatePosition_SeekingPastAMinuteIsNotListening(t *testing.T) {
 	assert.InDelta(t, 1200, *f.position(audio).Seconds, 1e-9)
 }
 
-func TestUpdatePosition_ListeningAddsUpAcrossSessions(t *testing.T) {
+func TestUpdatePosition_ListeningDoesNotAddUpAcrossSittings(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
 	audio := f.addAudiobook(3600)
 
-	first := f.listenWithSession(audio, 40, 40)
-	assert.False(t, first.Started)
+	assert.False(t, f.listenWithSession(audio, 40, 40).Started)
 
 	f.clock.advance(24 * time.Hour)
-	assert.False(t, f.listenFor(audio, 50, 10).Started)
-	assert.True(t, f.listenFor(audio, 60, 20).Started)
+	assert.False(t, f.listenFor(audio, 80, 40).Started)
+	assert.Empty(t, f.status())
+
+	assert.True(t, f.listenFor(audio, 100, 60).Started)
+}
+
+// The minute that decides a sitting starts a read is part of that read.
+func TestUpdatePosition_TheMinuteThatStartsAReadCountsTowardIt(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+
+	// Yesterday's short sitting stays out of it.
+	f.listenWithSession(audio, 20, 20)
+	f.clock.advance(24 * time.Hour)
+
+	f.listenFor(audio, 35, 15)
+	f.clock.advance(15 * time.Second)
+	f.listenWithSession(audio, 50, 30) // paused, with a session
+	f.clock.advance(15 * time.Second)
+	f.listenFor(audio, 65, 45)
+	f.clock.advance(15 * time.Second)
+	result := f.listenFor(audio, 80, 60)
+	require.True(t, result.Started)
+
+	rts := f.readThroughs()
+	require.Len(t, rts, 1)
+	var updates []*models.ReadingPositionUpdate
+	require.NoError(t, f.db.NewSelect().Model(&updates).OrderExpr("rpu.id").Scan(f.ctx))
+	require.Len(t, updates, 5)
+	assert.Nil(t, updates[0].ReadThroughID, "yesterday's sitting started nothing")
+	for _, update := range updates[1:] {
+		require.NotNil(t, update.ReadThroughID)
+		assert.Equal(t, rts[0].ID, *update.ReadThroughID)
+	}
+	var sessions []*models.ReadingSession
+	require.NoError(t, f.db.NewSelect().Model(&sessions).OrderExpr("rs.id").Scan(f.ctx))
+	require.Len(t, sessions, 2)
+	assert.Nil(t, sessions[0].ReadThroughID)
+	require.NotNil(t, sessions[1].ReadThroughID)
+	assert.Equal(t, rts[0].ID, *sessions[1].ReadThroughID)
+}
+
+func TestUpdatePosition_AReadStartedByListeningBeginsTheDayTheListeningDid(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	f.clock.set("2026-10-16T00:00:30Z")
+
+	require.True(t, f.listenFor(audio, 60, 60).Started)
+
+	rts := f.readThroughs()
+	require.Len(t, rts, 1)
+	assert.Equal(t, "2026-10-15", *rts[0].BeginDay)
+}
+
+// A minute decides nothing once a read is going.
+func TestUpdatePosition_ListeningOnAReadUnderwayNeedsNoMinute(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	f.listenFor(audio, 60, 60)
+
+	result := f.listenFor(audio, 70, 5)
+
+	assert.True(t, result.Accepted)
+	assert.False(t, result.Started)
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+}
+
+func TestUpdatePosition_ASupplementChangesNoStatus(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	guide := f.addSupplement()
+
+	result := f.readPage(guide, 4, 4.0/9)
+	assert.True(t, result.Accepted)
+	assert.False(t, result.Started)
+	assert.Empty(t, f.status())
+	require.NotNil(t, f.position(guide))
+	assert.Equal(t, 4, *f.position(guide).Page)
+
+	result = f.readPage(guide, 9, 1)
+	assert.Nil(t, result.FinishedReadThroughID)
+	assert.Empty(t, f.readThroughs())
+}
+
+func TestUpdatePosition_ASupplementLeavesAReadAlone(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	guide := f.addSupplement()
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
+
+	assert.False(t, f.readPage(guide, 4, 4.0/9).Resumed)
+	assert.Nil(t, f.readPage(guide, 9, 1).FinishedReadThroughID)
+	assert.Equal(t, models.ReadingStatusPaused, f.status())
+
+	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, false))
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	require.Equal(t, models.ReadingStatusRead, f.status())
+
+	assert.False(t, f.readPage(guide, 2, 2.0/9).Reverted)
+	assert.Equal(t, models.ReadingStatusRead, f.status())
+}
+
+func TestUpdatePosition_StartingAReadKeepsASupplementsPlace(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	guide := f.addSupplement()
+	f.readPage(guide, 4, 4.0/9)
+
+	require.True(t, f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false).Started)
+	require.NotNil(t, f.position(guide))
+
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	require.NoError(t, f.svc.Start(f.ctx, f.user.ID, f.book.ID, "2026-10-20"))
+	assert.Nil(t, f.position(f.file))
+	require.NotNil(t, f.position(guide))
+	assert.Equal(t, 4, *f.position(guide).Page)
+}
+
+func TestRetrieveBookReading_ListsASupplementsPositionWithNothingUnderway(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	guide := f.addSupplement()
+	f.readPage(guide, 4, 4.0/9)
+
+	reading, err := f.svc.RetrieveBookReading(f.ctx, f.user.ID, f.book.ID)
+	require.NoError(t, err)
+
+	require.Len(t, reading.Positions, 1)
+	assert.Equal(t, guide.ID, reading.Positions[0].FileID)
+}
+
+func TestAttachReading_ProgressIsTheFurthestMainFileWhileUnderway(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	guide := f.addSupplement()
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+	f.listenFor(audio, 2232, 60) // 62%
+	f.readPage(guide, 9, 1)      // a supplement at its end isn't the book
+
+	books := []*models.Book{{ID: f.book.ID}}
+	require.NoError(t, AttachReading(f.ctx, f.db, f.user.ID, books))
+
+	require.NotNil(t, books[0].ReadingProgress)
+	assert.InDelta(t, 0.62, *books[0].ReadingProgress, 1e-9)
+}
+
+func TestAttachReading_NoProgressWithNothingUnderway(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+
+	books := []*models.Book{{ID: f.book.ID}}
+	require.NoError(t, AttachReading(f.ctx, f.db, f.user.ID, books))
+
+	assert.Nil(t, books[0].ReadingProgress)
+}
+
+func TestAttachReading_APausedReadKeepsItsProgress(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
+
+	books := []*models.Book{{ID: f.book.ID}}
+	require.NoError(t, AttachReading(f.ctx, f.db, f.user.ID, books))
+
+	require.NotNil(t, books[0].ReadingProgress)
+	assert.InDelta(t, 0.4, *books[0].ReadingProgress, 1e-9)
+}
+
+func TestAttachReading_ASupplementAloneIsNoProgress(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.readPage(f.addSupplement(), 4, 4.0/9)
+
+	books := []*models.Book{{ID: f.book.ID}}
+	require.NoError(t, AttachReading(f.ctx, f.db, f.user.ID, books))
+
+	assert.Nil(t, books[0].ReadingProgress)
 }
 
 func TestUpdatePosition_AFinishedSessionCountsInItsOwnUpdate(t *testing.T) {
@@ -207,7 +404,7 @@ func TestUpdatePosition_AFinishedSessionCountsInItsOwnUpdate(t *testing.T) {
 	assert.True(t, f.listenWithSession(audio, 60, 60).Started)
 }
 
-func TestUpdatePosition_ResumingAudioTakesAMinuteOfListeningSincePausing(t *testing.T) {
+func TestUpdatePosition_ResumingAudioTakesAMinuteOfListening(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
 	audio := f.addAudiobook(3600)

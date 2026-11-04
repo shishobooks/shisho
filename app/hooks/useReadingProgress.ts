@@ -7,7 +7,7 @@ import {
 } from "@/components/library/ReadingFinishedToast";
 import {
   invalidateAfterPositionUpdate,
-  markBookReadingStale,
+  markProgressStale,
   QueryKey,
   saveFilePosition,
   useUndoAutoFinish,
@@ -128,6 +128,7 @@ export const useReadingProgress = (
         );
       }
 
+      const listening = trackerRef.current?.listening();
       saveFilePosition(
         fileId,
         moved
@@ -138,11 +139,8 @@ export const useReadingProgress = (
               percentage: current.percentage,
               at_end: current.atEnd || undefined,
               opened: current.linked || undefined,
-              // A session ending goes with this save and counts itself.
-              listened_seconds:
-                timing === "playback"
-                  ? trackerRef.current?.openSessionSeconds()
-                  : undefined,
+              listened_seconds: listening?.seconds,
+              listening_since: listening?.since,
               occurred_at: current.occurredAt,
               session,
             }
@@ -158,11 +156,7 @@ export const useReadingProgress = (
           ) {
             invalidateAfterPositionUpdate(queryClient, result.book_id, fileId);
           } else if (result.accepted) {
-            markBookReadingStale(
-              queryClient,
-              result.book_id,
-              closedRef.current,
-            );
+            markProgressStale(queryClient, result.book_id, closedRef.current);
           }
           if (result.reverted) dismissReadingFinishedToast(result.book_id);
           const finishedId = result.finished_read_through_id;
@@ -186,7 +180,7 @@ export const useReadingProgress = (
           });
         });
     },
-    [fileId, queryClient, timing],
+    [fileId, queryClient],
   );
 
   useEffect(() => {

@@ -18,8 +18,8 @@ type BookReadingResponse struct {
 	ToReadPlace  *int                  `json:"to_read_place" tstype:"number | null"` // 1-based place on To Read as the To Read page shows it, among Books in libraries the user can reach
 	ReadThroughs []*models.ReadThrough `json:"read_throughs" tstype:"ReadThrough[]"`
 	PageFlow     *string               `json:"page_flow" tstype:"PageFlow | null"` // The flow chosen for the Page-based reader; null lets the reader pick
-	// Positions is each File's Reading Position while a Read-through is
-	// underway, and empty otherwise.
+	// Positions is each main File's Reading Position while a Read-through is
+	// underway, and each supplement's always.
 	Positions []*models.ReadingPosition `json:"positions" tstype:"ReadingPosition[]"`
 }
 
@@ -71,10 +71,13 @@ type UpdatePositionPayload struct {
 	// AtEnd is the reader at the end of the File, or playback ending, which
 	// finishes the Read-through underway.
 	AtEnd bool `json:"at_end,omitempty"`
-	// ListenedSeconds is how long the player has played in the session still
-	// open, which counts toward the minute of listening that starts a
-	// Read-through. A session sent with the update counts on its own.
+	// ListenedSeconds is how long the player has played in this sitting,
+	// including any session sent with the update. A minute of it starts or
+	// resumes a Read-through.
 	ListenedSeconds *float64 `json:"listened_seconds,omitempty" validate:"omitempty,min=0"`
+	// ListeningSince is when this sitting began: a Read-through it starts
+	// begins that day and takes what it already recorded.
+	ListeningSince *time.Time `json:"listening_since,omitempty"`
 	// Opened is the reader opened at this place by a link, which saves it as
 	// the place without counting as reading.
 	Opened bool `json:"opened,omitempty"`

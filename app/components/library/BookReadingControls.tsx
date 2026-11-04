@@ -22,10 +22,9 @@ import {
 } from "@/hooks/queries/reading";
 import { useAuth } from "@/hooks/useAuth";
 import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
-import type { File, ReadingStatus } from "@/types";
+import type { ReadingStatus } from "@/types";
 import {
   canQueueToRead,
-  fileProgressLabel,
   readingStatusLabel,
   readingTransitions,
   type ReadingTransition,
@@ -61,15 +60,13 @@ const transitionFailure: Record<ReadingTransition, string> = {
 
 interface BookReadingControlsProps {
   bookId: number;
-  // The Book's Files, to say what kind of reading each one's progress is.
-  files: Array<Pick<File, "id" | "file_type">>;
 }
 
 // The signed-in user's Reading Status and Rating for a Book. The status
 // menu offers only the transitions valid from the current status, plus
 // adding to or removing from To Read while the Book isn't being read. In
 // Demo Mode both render disabled with the demo's explanation.
-const BookReadingControls = ({ bookId, files }: BookReadingControlsProps) => {
+const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const { demoMode } = useAuth();
   const readingQuery = useBookReading(bookId);
   const transitionMutation = useReadingTransition();
@@ -120,18 +117,6 @@ const BookReadingControls = ({ bookId, files }: BookReadingControlsProps) => {
       toastRequestError(error, "Failed to mark as not started");
     }
   };
-
-  const progress = reading.positions.flatMap((position) => {
-    const file = files.find((f) => f.id === position.file_id);
-    return file
-      ? [
-          {
-            fileId: file.id,
-            label: fileProgressLabel(position.percentage, file.file_type),
-          },
-        ]
-      : [];
-  });
 
   const handleRating = async (stars: number | null) => {
     try {
@@ -226,19 +211,12 @@ const BookReadingControls = ({ bookId, files }: BookReadingControlsProps) => {
           )}
         </div>
       </div>
-      {progress.length > 0 && (
-        <ul className="flex flex-wrap gap-x-4 text-xs text-muted-foreground">
-          {progress.map(({ fileId, label }) => (
-            <li key={fileId}>{label}</li>
-          ))}
-        </ul>
-      )}
       {demoMode && (
         <p className="text-xs text-muted-foreground">{DEMO_MODE_MESSAGE}</p>
       )}
       <ConfirmDialog
         confirmLabel="Mark as not started"
-        description="This read is deleted along with the reading time and places recorded during it, and every file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
+        description="This read is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
         isPending={deleteMutation.isPending}
         onConfirm={handleNotStarted}
         onOpenChange={setConfirmingNotStarted}

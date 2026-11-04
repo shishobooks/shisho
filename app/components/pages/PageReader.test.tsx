@@ -65,7 +65,7 @@ const position = vi.hoisted(() => ({
 vi.mock("@/hooks/queries/reading", () => ({
   QueryKey: { FilePosition: "FilePosition" },
   invalidateAfterPositionUpdate: () => {},
-  markBookReadingStale: () => {},
+  markProgressStale: () => {},
   useUndoAutoFinish: () => ({ mutate: () => {} }),
   useFilePosition: () => ({
     data:

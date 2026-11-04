@@ -7,6 +7,7 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { QueryKey } from "@/hooks/queries/reading";
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
@@ -68,6 +69,7 @@ describe("useReadingProgress", () => {
       queryFn: reading,
     });
     const unsubscribe = observer.subscribe(() => {});
+    client.setQueryData([BooksQueryKey.ListBooks, {}], { books: [] });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -79,6 +81,10 @@ describe("useReadingProgress", () => {
     await flushSave();
     expect(posts).toHaveLength(1);
     expect(reading).toHaveBeenCalledTimes(1);
+    // Book cards show the same progress.
+    expect(
+      client.getQueryState([BooksQueryKey.ListBooks, {}])?.isInvalidated,
+    ).toBe(true);
 
     act(() =>
       hook.result.current.moved({ page: 2, percentage: 0.2, atEnd: false }),

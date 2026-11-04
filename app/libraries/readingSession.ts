@@ -25,6 +25,12 @@ interface OpenSession {
   lastActivityAt: number;
 }
 
+interface Sitting {
+  startedAt: number;
+  playedMs: number;
+  pausedAt: number;
+}
+
 // Input on the page. The readers forward input inside their own frames
 // (foliate's book iframe) through recordActivity.
 export const ACTIVITY_EVENTS = [
@@ -43,6 +49,10 @@ export const ACTIVITY_EVENTS = [
 export class ReadingSessionTracker {
   private readonly options: ReadingSessionTrackerOptions;
   private session: OpenSession | null = null;
+  // Playing since the player opened, across pauses shorter than the idle limit.
+  // Each pause ends a session, but one sitting's play is what decides that this
+  // listening is reading.
+  private sitting: Sitting | null = null;
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private started = false;
 
@@ -81,6 +91,10 @@ export class ReadingSessionTracker {
     if (!playing) {
       this.end("paused", Date.now());
     } else if (!this.session) {
+      const now = Date.now();
+      if (!this.sitting || now - this.sitting.pausedAt > READING_IDLE_MS) {
+        this.sitting = { startedAt: now, playedMs: 0, pausedAt: now };
+      }
       this.session = {
         startedAt: Date.now(),
         startPercentage: this.options.getPercentage(),
@@ -89,9 +103,14 @@ export class ReadingSessionTracker {
     }
   }
 
-  // How long the open session has run, for a save sent before it ends.
-  openSessionSeconds() {
-    return this.session ? (Date.now() - this.session.startedAt) / 1000 : 0;
+  // This sitting of listening so far, or null before anything has played.
+  listening(): { since: string; seconds: number } | null {
+    if (!this.sitting) return null;
+    const running = this.session ? Date.now() - this.session.startedAt : 0;
+    return {
+      since: new Date(this.sitting.startedAt).toISOString(),
+      seconds: (this.sitting.playedMs + running) / 1000,
+    };
   }
 
   recordActivity = () => {
@@ -134,6 +153,10 @@ export class ReadingSessionTracker {
     }
     const session = this.session;
     this.session = null;
+    if (session && this.sitting) {
+      this.sitting.playedMs += endedAt - session.startedAt;
+      this.sitting.pausedAt = endedAt;
+    }
     if (!session || endedAt <= session.startedAt) return;
     const endPercentage =
       this.options.getPercentage() ?? session.startPercentage ?? 0;

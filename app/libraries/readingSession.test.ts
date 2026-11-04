@@ -250,15 +250,35 @@ describe("ReadingSessionTracker", () => {
       expect(ended[0].session.ended_at).toBe(at(minutes(2)));
     });
 
-    it("says how long the open session has played", () => {
-      expect(tracker.openSessionSeconds()).toBe(0);
+    it("adds up one sitting across a short pause", () => {
+      expect(tracker.listening()).toBeNull();
 
       tracker.setPlaying(true);
       vi.advanceTimersByTime(minutes(1));
-      expect(tracker.openSessionSeconds()).toBe(60);
+      expect(tracker.listening()).toEqual({ since: at(0), seconds: 60 });
 
       tracker.setPlaying(false);
-      expect(tracker.openSessionSeconds()).toBe(0);
+      expect(tracker.listening()).toEqual({ since: at(0), seconds: 60 });
+
+      vi.advanceTimersByTime(minutes(4));
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      expect(tracker.listening()).toEqual({ since: at(0), seconds: 120 });
+    });
+
+    it("starts a new sitting after a pause longer than the idle limit", () => {
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      tracker.setPlaying(false);
+
+      vi.advanceTimersByTime(READING_IDLE_MS + 1);
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+
+      expect(tracker.listening()).toEqual({
+        since: at(minutes(1) + READING_IDLE_MS + 1),
+        seconds: 60,
+      });
     });
 
     it("starts a new session each time playback starts", () => {

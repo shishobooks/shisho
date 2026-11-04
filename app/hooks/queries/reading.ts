@@ -339,17 +339,22 @@ export const invalidateAfterPositionUpdate = (
   invalidateOtherBookReadings(queryClient, bookId);
 };
 
-// A save changed the progress the book page shows. An open reader has no use
-// for that, so the record just refetches the next time something shows it,
-// or now if the reader has closed and something may already be showing it.
-export const markBookReadingStale = (
+// A save changed the progress the book page and book cards show. An open reader
+// has no use for that, so they just refetch the next time something shows them,
+// or now if the reader has closed and something may already be showing them.
+export const markProgressStale = (
   queryClient: QueryClient,
   bookId: number,
   readerClosed: boolean,
 ) => {
+  const refetchType = readerClosed ? "active" : "none";
   queryClient.invalidateQueries({
     queryKey: [QueryKey.BookReading, bookId],
-    refetchType: readerClosed ? "active" : "none",
+    refetchType,
+  });
+  queryClient.invalidateQueries({
+    queryKey: [BooksQueryKey.ListBooks],
+    refetchType,
   });
 };
 
