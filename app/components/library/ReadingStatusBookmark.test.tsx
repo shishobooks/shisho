@@ -15,7 +15,15 @@ describe("ReadingStatusBookmark", () => {
     expect(container.querySelector("svg")).toBeNull();
   });
 
-  it.each([undefined, null, 0, 0.004])(
+  it("shows 0% for a book just started", () => {
+    render(<ReadingStatusBookmark progress={0} status="currently_reading" />);
+
+    expect(
+      screen.getByRole("img", { name: "Currently Reading, 0% through" }),
+    ).toHaveTextContent("0%");
+  });
+
+  it.each([undefined, null])(
     "keeps the icon for progress of %s",
     (progress) => {
       const { container } = render(
@@ -31,6 +39,15 @@ describe("ReadingStatusBookmark", () => {
       expect(container.querySelector("svg")).not.toBeNull();
     },
   );
+
+  it("keeps a read book's check mark, not a percentage", () => {
+    const { container } = render(
+      <ReadingStatusBookmark progress={1} status="read" />,
+    );
+
+    expect(screen.getByRole("img", { name: "Read" })).toHaveTextContent("");
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
 
   it("keeps a paused book's icon, whatever its progress", () => {
     const { container } = render(

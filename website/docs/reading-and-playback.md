@@ -52,7 +52,7 @@ The audiobook player provides:
 - Chapter navigation when chapters are available
 - Playback speeds from 0.5x to 3x
 
-The selected playback speed is saved to your account. Reopening an audiobook returns to where you stopped. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
+The selected playback speed is saved to your account. Opening an audiobook returns to where you stopped and starts playing. If your browser blocks that, as it can when you open the player's address directly, press play. An audiobook you reached the very end of stays paused. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
 
 Browser audio support depends on the file's codec, and some audiobooks play only in certain browsers. See [Audiobook Browser Compatibility](./supported-formats.md#audiobook-browser-compatibility).
 

@@ -13,7 +13,11 @@ import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, File } from "@/types";
-import { RESTORE_SEEK_TIMEOUT_MS, SEEK_TIMEOUT_MS } from "@/utils/audioCodec";
+import {
+  AUTOPLAY_TIMEOUT_MS,
+  RESTORE_SEEK_TIMEOUT_MS,
+  SEEK_TIMEOUT_MS,
+} from "@/utils/audioCodec";
 
 import M4BReader from "./M4BReader";
 
@@ -772,6 +776,135 @@ describe("M4BReader", () => {
       expect(pauseSpy).not.toHaveBeenCalled();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("M4BReader autoplay", () => {
+  // The element has loaded enough to play, as canplay reports.
+  const canPlay = (audio: HTMLAudioElement) => {
+    Object.defineProperty(audio, "readyState", {
+      configurable: true,
+      value: 3,
+    });
+    fireEvent.canPlay(audio);
+  };
+
+  it("starts playing once it can, with no press", () => {
+    renderReader();
+    const audio = getAudio();
+    expect(playSpy).not.toHaveBeenCalled();
+
+    fireEvent.loadedMetadata(audio);
+    expect(playSpy).not.toHaveBeenCalled();
+
+    canPlay(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    canPlay(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the seek to the saved place, so it doesn't play from the start", () => {
+    position.savedSeconds = 125;
+    renderReader();
+    const audio = getAudio();
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: true,
+    });
+    fireEvent.loadedMetadata(audio);
+    expect(audio.currentTime).toBe(125);
+
+    canPlay(audio);
+    expect(playSpy).not.toHaveBeenCalled();
+
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: false,
+    });
+    fireEvent.seeked(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the saved position to load", () => {
+    position.loading = true;
+    position.savedSeconds = 125;
+    const client = new QueryClient();
+    const tree = () => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <M4BReader book={book} file={file} libraryId="1" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree());
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+    expect(playSpy).not.toHaveBeenCalled();
+
+    position.loading = false;
+    rerender(tree());
+    expect(audio.currentTime).toBe(125);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not play a stream the browser can't", () => {
+    setUserAgent(CHROME_UA);
+    renderReader({ file: { ...file, audiobook_codec: "xHE-AAC" } as File });
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("leaves a press before it can play alone", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    canPlay(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Playing from the very end restarts the book, which reads as going back and
+  // would undo a finish.
+  it("does not play from the very end of the file", () => {
+    position.savedSeconds = 3600;
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not start out of nowhere if it takes too long to load", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    act(() => vi.advanceTimersByTime(AUTOPLAY_TIMEOUT_MS));
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays paused when the browser blocks it", async () => {
+    playSpy.mockRejectedValue(new DOMException("blocked", "NotAllowedError"));
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+    await act(async () => {});
+
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 

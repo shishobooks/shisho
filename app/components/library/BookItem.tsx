@@ -315,7 +315,7 @@ const BookItem = ({
               )}
             </div>
           )}
-          {book.reading_progress != null && book.reading_progress > 0 && (
+          {book.reading_progress != null && (
             <Progress
               aria-label={`${formatProgress(book.reading_progress)} through`}
               className="absolute inset-x-0 bottom-0 h-1 rounded-t-none rounded-b-sm bg-black/50"

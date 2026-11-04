@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"math"
-	"slices"
 	"strconv"
 	"time"
 
@@ -231,9 +230,7 @@ type BookReading struct {
 	OnToRead     bool
 	PageFlow     *string
 	ReadThroughs []*models.ReadThrough
-	// Positions holds each main File's Reading Position while a Read-through
-	// is underway, since with none a place left behind isn't progress, and
-	// each supplement's always, since a supplement's has nothing to do with it.
+	// Positions holds the Reading Position of each of the Book's Files that has one.
 	Positions []*models.ReadingPosition
 	// Progress is the Book's: see progressExpr.
 	Progress *float64
@@ -289,18 +286,13 @@ func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int)
 		result.PageFlow = userBook.PageFlow
 	}
 
-	underway := slices.ContainsFunc(result.ReadThroughs, func(rt *models.ReadThrough) bool {
-		return rt.Outcome == models.ReadThroughOutcomeUnderway
-	})
-	q := svc.db.NewSelect().
+	err = svc.db.NewSelect().
 		Model(&result.Positions).
-		Join("JOIN files AS f ON f.id = rp.file_id").
-		Where("rp.user_id = ? AND f.book_id = ?", userID, bookID).
-		OrderExpr("rp.file_id")
-	if !underway {
-		q = q.Where("f.file_role = ?", models.FileRoleSupplement)
-	}
-	if err := q.Scan(ctx); err != nil {
+		Where("rp.user_id = ?", userID).
+		Where("rp.file_id IN (SELECT id FROM files WHERE book_id = ?)", bookID).
+		OrderExpr("rp.file_id").
+		Scan(ctx)
+	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 

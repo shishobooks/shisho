@@ -21,8 +21,8 @@ type BookReadingResponse struct {
 	// Progress is how far through the Book the user is, from 0 to 1: the
 	// furthest of its main Files' positions, while a Read-through is underway.
 	Progress *float64 `json:"progress" tstype:"number | null"`
-	// Positions is each main File's Reading Position while a Read-through is
-	// underway, and each supplement's always.
+	// Positions is the Reading Position of each of the Book's Files that has
+	// one, whatever its status. Progress is what says the Book is in progress.
 	Positions []*models.ReadingPosition `json:"positions" tstype:"ReadingPosition[]"`
 }
 

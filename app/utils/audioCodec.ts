@@ -39,6 +39,12 @@ export const SEEK_TIMEOUT_MS = 5000;
  */
 export const RESTORE_SEEK_TIMEOUT_MS = 15000;
 
+/**
+ * How long the player waits to autoplay after opening. Later than this, the
+ * listener has moved on, and sound starting out of nowhere would startle them.
+ */
+export const AUTOPLAY_TIMEOUT_MS = 20000;
+
 /** The outcome of checking the File's stored codec against the browser. */
 export interface CodecSupport {
   /** Whether a plain progressive stream of this codec is expected to play. */

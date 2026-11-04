@@ -37,9 +37,7 @@ const ReadingStatusBookmark = ({
 }: ReadingStatusBookmarkProps) => {
   const { icon: Icon, color } = LOOKS[status];
   const percent =
-    status === "currently_reading" &&
-    progress != null &&
-    Math.round(progress * 100) > 0
+    status === "currently_reading" && progress != null
       ? formatProgress(progress)
       : null;
   const label = percent

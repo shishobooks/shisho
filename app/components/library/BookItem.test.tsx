@@ -439,15 +439,20 @@ describe("BookItem rating badge", () => {
       expect(bar).toHaveAttribute("aria-valuenow", "62");
     });
 
-    it.each([undefined, 0])("shows no bar for progress of %s", (progress) => {
+    it("shows an empty bar for a book just started", () => {
       render(
         wrap(
-          <BookItem
-            book={makeBook({ reading_progress: progress })}
-            libraryId="1"
-          />,
+          <BookItem book={makeBook({ reading_progress: 0 })} libraryId="1" />,
         ),
       );
+
+      expect(
+        screen.getByRole("progressbar", { name: "0% through" }),
+      ).toHaveAttribute("aria-valuenow", "0");
+    });
+
+    it("shows no bar without progress", () => {
+      render(wrap(<BookItem book={makeBook()} libraryId="1" />));
 
       expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
     });

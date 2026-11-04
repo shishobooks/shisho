@@ -22,6 +22,7 @@ import DetailsDialog, {
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import FileDownloadControl from "@/components/library/FileDownloadControl";
 import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
+import ProgressRing from "@/components/library/ProgressRing";
 import TextLink from "@/components/library/TextLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,6 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
-import { formatProgress } from "@/utils/readingStatus";
 
 /**
  * Everything the File details dialog lists. A Share Link recipient sees the
@@ -269,11 +269,6 @@ const BookFileRow = ({
             {isSupplement ? "Supplement" : fileTypeLabel(file.file_type)}
           </Badge>
           <span>{rowFacts(file).join(" · ")}</span>
-          {progress != null && Math.round(progress * 100) > 0 && (
-            <span className="font-medium text-foreground">
-              {formatProgress(progress)} through
-            </span>
-          )}
         </div>
         {file.narrators && file.narrators.length > 0 && (
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -301,6 +296,9 @@ const BookFileRow = ({
           name keeps the row's width. They sit at the right there too, so the
           icons after the variable-width download button line up row to row. */}
       <div className="flex shrink-0 items-center gap-1.5 max-sm:basis-full max-sm:justify-end">
+        {progress != null && (
+          <ProgressRing className="mr-1.5" progress={progress} />
+        )}
         <FileDownloadControl
           bookTitle={bookTitle}
           deliveredFileType={deliveredFileType}

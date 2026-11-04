@@ -591,9 +591,8 @@ func TestRetrieveBookReading_ListsEachFilesPositionWhileUnderway(t *testing.T) {
 	assert.Equal(t, map[int]float64{f.file.ID: 0.4, audio.ID: 0.5}, percentages)
 }
 
-// A place left in a finished book, from opening it to look something up,
-// doesn't make it look in progress.
-func TestRetrieveBookReading_ListsNoPositionsWithNothingUnderway(t *testing.T) {
+// Every saved place shows on its file's row, whatever the book's status.
+func TestRetrieveBookReading_ListsPositionsWithNothingUnderway(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
 	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
@@ -605,68 +604,7 @@ func TestRetrieveBookReading_ListsNoPositionsWithNothingUnderway(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, models.ReadingStatusRead, *reading.Status)
-	assert.Empty(t, reading.Positions)
-	require.NotNil(t, f.position(f.file), "the place itself is kept")
-}
-
-// openAt is a reader opened at a page by a link: a thumbnail, a chapter, or a
-// shared URL.
-func (f *positionsFixture) openAt(file *models.File, page int, percentage float64) *UpdatePositionResponse {
-	f.t.Helper()
-	result, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
-		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
-		Locator: models.ReadingLocator{Page: &page}, Percentage: percentage, Opened: true,
-	})
-	require.NoError(f.t, err)
-	return result
-}
-
-func TestUpdatePosition_OpeningAtALinkedPageSavesItWithoutStartingOrFinishing(t *testing.T) {
-	t.Parallel()
-	f := newPositionsFixture(t)
-	comic := f.addComic()
-
-	result := f.openAt(comic, 19, 1)
-
-	assert.True(t, result.Accepted)
-	assert.False(t, result.Started)
-	assert.Nil(t, result.FinishedReadThroughID)
-	assert.Empty(t, f.status())
-	require.NotNil(t, f.position(comic))
-	assert.Equal(t, 19, *f.position(comic).Page)
-
-	// Reading from there counts as usual.
-	assert.True(t, f.readPage(comic, 18, 18.0/19).Started)
-}
-
-func TestUpdatePosition_OpeningAtALinkedPageFinishesNothingUnderway(t *testing.T) {
-	t.Parallel()
-	f := newPositionsFixture(t)
-	comic := f.addComic()
-	f.readPage(comic, 5, 5.0/19)
-
-	assert.Nil(t, f.openAt(comic, 19, 1).FinishedReadThroughID)
-	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
-
-	// Turning back and returning does reach the end.
-	f.readPage(comic, 18, 18.0/19)
-	assert.NotNil(t, f.readPage(comic, 19, 1).FinishedReadThroughID)
-}
-
-func TestUpdatePosition_OpeningAtALinkedPageDoesNotResumeOrUndoAFinish(t *testing.T) {
-	t.Parallel()
-	f := newPositionsFixture(t)
-	comic := f.addComic()
-	f.readPage(comic, 5, 5.0/19)
-	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
-
-	assert.False(t, f.openAt(comic, 8, 8.0/19).Resumed)
-	assert.Equal(t, models.ReadingStatusPaused, f.status())
-
-	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, false))
-	f.readPage(comic, 19, 1)
-	require.Equal(t, models.ReadingStatusRead, f.status())
-
-	assert.False(t, f.openAt(comic, 2, 2.0/19).Reverted)
-	assert.Equal(t, models.ReadingStatusRead, f.status())
+	require.Len(t, reading.Positions, 1)
+	assert.InDelta(t, 0.2, reading.Positions[0].Percentage, 1e-9)
+	assert.Nil(t, reading.Progress, "the book itself isn't in progress")
 }

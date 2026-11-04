@@ -1059,6 +1059,11 @@ describe("BookDetailBody file progress", () => {
     ],
   };
 
+  const ring = (name: string) =>
+    within(
+      screen.getByRole("link", { name }).closest(".border") as HTMLElement,
+    ).queryByRole("progressbar");
+
   it("shows each file's progress on its own row", () => {
     readingPositions.current = [
       { file_id: 1, percentage: 0.25 },
@@ -1066,27 +1071,28 @@ describe("BookDetailBody file progress", () => {
     ];
     renderBody({ book: twoFiles });
 
-    const row = (name: string) =>
-      screen.getByRole("link", { name }).closest(".border") as HTMLElement;
-    expect(within(row("Ebook")).getByText("25% through")).toBeInTheDocument();
-    expect(within(row("Audio")).getByText("62% through")).toBeInTheDocument();
+    expect(ring("Ebook")).toHaveAccessibleName("25% through");
+    expect(ring("Ebook")).toHaveAttribute("aria-valuenow", "25");
+    expect(ring("Audio")).toHaveAccessibleName("62% through");
   });
 
-  it("shows no progress that rounds to nothing", () => {
-    readingPositions.current = [
-      { file_id: 1, percentage: 0 },
-      { file_id: 2, percentage: 0.004 },
-    ];
+  it.each([
+    [0, "0% through"],
+    [0.004, "0% through"],
+    [1, "100% through"],
+  ])("shows a position at %d as %s", (percentage, label) => {
+    readingPositions.current = [{ file_id: 1, percentage }];
     renderBody({ book: twoFiles });
 
-    expect(screen.queryByText(/% through$/)).not.toBeInTheDocument();
+    expect(ring("Ebook")).toHaveAccessibleName(label);
   });
 
   it("shows no progress on a file with no position", () => {
     readingPositions.current = [{ file_id: 2, percentage: 0.62 }];
     renderBody({ book: twoFiles });
 
-    expect(screen.getAllByText(/% through$/)).toHaveLength(1);
+    expect(ring("Ebook")).toBeNull();
+    expect(ring("Audio")).not.toBeNull();
   });
 });
 

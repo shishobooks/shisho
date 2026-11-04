@@ -38,6 +38,7 @@ import {
   type PlaybackSpeed,
 } from "@/types";
 import {
+  AUTOPLAY_TIMEOUT_MS,
   resolveCodecSupport,
   resolveRuntimeFailureMessage,
   RESTORE_SEEK_TIMEOUT_MS,
@@ -270,6 +271,33 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     [moveElementTo, moved, positionAt],
   );
 
+  // The player starts by itself when it opens, once it's at the saved place and
+  // can play: a stream that hasn't reached canplay may never play, so play()
+  // waits for it (audioCodec.ts). A browser that blocks it leaves the Play
+  // button, as before. A press, or taking too long, calls it off.
+  const autoplayPendingRef = useRef(true);
+  const tryAutoplay = useCallback(() => {
+    const el = audioRef.current;
+    if (
+      !el ||
+      !autoplayPendingRef.current ||
+      !restoredRef.current ||
+      !codecSupport.playable ||
+      el.seeking ||
+      el.readyState < el.HAVE_FUTURE_DATA
+    ) {
+      return;
+    }
+    autoplayPendingRef.current = false;
+    void el.play().catch(() => {});
+  }, [codecSupport.playable]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      autoplayPendingRef.current = false;
+    }, AUTOPLAY_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   // Once the element can seek and the saved position is known, go there. Where
   // it opened isn't listening, so nothing saves. A stream the browser can't
   // decode hangs on any seek, so it stays put.
@@ -279,10 +307,15 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     restoredRef.current = true;
     const seconds = codecSupport.playable ? (saved?.seconds ?? 0) : 0;
     if (seconds > 0) moveElementTo(seconds, RESTORE_SEEK_TIMEOUT_MS);
+    // Playing from the very end restarts the book, which would read as going
+    // back and undo a finish.
+    const total = durationRef.current;
+    if (total > 0 && seconds >= total - 1) autoplayPendingRef.current = false;
     opened({
       ...positionAt(seconds),
       percentage: seconds > 0 && saved ? saved.percentage : 0,
     });
+    tryAutoplay();
   }, [
     codecSupport.playable,
     metadataLoaded,
@@ -291,11 +324,13 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     positionAt,
     positionSettled,
     saved,
+    tryAutoplay,
   ]);
 
   const togglePlay = useCallback(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    autoplayPendingRef.current = false;
     // Drive the decision off our own playing state (kept in sync by the
     // play/pause events) rather than audio.paused, which is more robust and
     // testable. play() returns a promise that can reject (e.g. if interrupted);
@@ -603,6 +638,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           // wrong warning up for the rest of the session. A genuinely
           // undecodable stream never fires canplay, so real failures stick.
           setRuntimeFailed(false);
+          tryAutoplay();
         }}
         onEnded={(e) => {
           setIsPlaying(false);
@@ -641,7 +677,10 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           setIsPlaying(true);
           setPlaying(true);
         }}
-        onSeeked={cancelSeekGuard}
+        onSeeked={() => {
+          cancelSeekGuard();
+          tryAutoplay();
+        }}
         onStalled={(e) => {
           // Runtime backstop for undecodable streams: the xHE-AAC stuck
           // signature is a stall while only metadata has loaded (readyState
@@ -662,7 +701,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
             moved(positionAt(time), { saveAfterMs: SAVE_WHILE_PLAYING_MS });
           }
         }}
-        preload="metadata"
+        preload="auto"
         ref={audioRef}
         src={streamUrl}
       />
