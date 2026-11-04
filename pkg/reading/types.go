@@ -79,7 +79,8 @@ type UpdatePositionPayload struct {
 	// resumes a Read-through.
 	ListenedSeconds *float64 `json:"listened_seconds,omitempty" validate:"omitempty,min=0"`
 	// ListeningSince is when this sitting began: a Read-through it starts
-	// begins that day and takes what it already recorded.
+	// begins that day and takes what it already recorded. Out of range, more
+	// than a day ago or in the future, it's ignored.
 	ListeningSince *time.Time `json:"listening_since,omitempty"`
 	// Opened is the reader opened at this place by a link, which saves it as
 	// the place without counting as reading.

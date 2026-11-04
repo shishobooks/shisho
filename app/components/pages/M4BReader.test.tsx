@@ -29,6 +29,7 @@ vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 const position = vi.hoisted(() => ({
   savedSeconds: null as number | null,
   loading: false,
+  loadFails: false,
   saves: [] as Array<Record<string, unknown>>,
 }));
 
@@ -38,15 +39,16 @@ vi.mock("@/hooks/queries/reading", () => ({
   markProgressStale: () => {},
   useUndoAutoFinish: () => ({ mutate: () => {} }),
   useFilePosition: () => ({
-    data: position.loading
-      ? undefined
-      : {
-          position:
-            position.savedSeconds === null
-              ? null
-              : { seconds: position.savedSeconds, percentage: 0.5 },
-        },
-    error: null,
+    data:
+      position.loading || position.loadFails
+        ? undefined
+        : {
+            position:
+              position.savedSeconds === null
+                ? null
+                : { seconds: position.savedSeconds, percentage: 0.5 },
+          },
+    error: position.loadFails ? new Error("offline") : null,
     isEnabled: true,
     isFetching: position.loading,
     isFetchedAfterMount: !position.loading,
@@ -84,6 +86,7 @@ beforeEach(() => {
   setAuth({ permissions: ["books:read"] });
   position.savedSeconds = null;
   position.loading = false;
+  position.loadFails = false;
   position.saves = [];
   playSpy = vi
     .spyOn(window.HTMLMediaElement.prototype, "play")
@@ -875,6 +878,63 @@ describe("M4BReader autoplay", () => {
   // would undo a finish.
   it("does not play from the very end of the file", () => {
     position.savedSeconds = 3600;
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not play from the end when the element's own length is shorter", () => {
+    position.savedSeconds = 3590;
+    renderReader();
+    const audio = getAudio();
+    Object.defineProperty(audio, "duration", {
+      configurable: true,
+      value: 3590,
+    });
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not restart a file the listener already took to its end", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    Object.defineProperty(audio, "ended", { configurable: true, value: true });
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("calls it off when the seek to the saved place gives up", () => {
+    position.savedSeconds = 125;
+    renderReader();
+    const audio = getAudio();
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: true,
+    });
+    fireEvent.loadedMetadata(audio);
+    act(() => vi.advanceTimersByTime(RESTORE_SEEK_TIMEOUT_MS));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: false,
+    });
+    fireEvent.seeked(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not play from the start when the saved position fails to load", () => {
+    position.loadFails = true;
+    position.savedSeconds = 125;
     renderReader();
     const audio = getAudio();
     fireEvent.loadedMetadata(audio);

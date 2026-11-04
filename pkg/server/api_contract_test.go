@@ -169,12 +169,6 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A reading session must be in the past and last at most a day.",
 		},
 		{
-			name:   "listening that began too long ago",
-			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
-			body:   `{"seconds":75,"percentage":0.02,"listened_seconds":30,"listening_since":"2020-01-01T00:00:00Z"}`,
-			status: http.StatusUnprocessableEntity, code: "validation_error", message: "Listening must have begun in the past, at most a day ago.",
-		},
-		{
 			name:   "position update in two forms",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
 			body:   `{"cfi":"epubcfi(/6/4!/4/2)","page":3,"percentage":0.5}`,

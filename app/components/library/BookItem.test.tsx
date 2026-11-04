@@ -439,6 +439,24 @@ describe("BookItem rating badge", () => {
       expect(bar).toHaveAttribute("aria-valuenow", "62");
     });
 
+    it("puts the percentage on the bookmark of a book being read", () => {
+      render(
+        wrap(
+          <BookItem
+            book={makeBook({
+              reading_status: "currently_reading",
+              reading_progress: 0.62,
+            })}
+            libraryId="1"
+          />,
+        ),
+      );
+
+      expect(
+        screen.getByRole("img", { name: "Currently Reading, 62% through" }),
+      ).toHaveTextContent("62%");
+    });
+
     it("shows an empty bar for a book just started", () => {
       render(
         wrap(

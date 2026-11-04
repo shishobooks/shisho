@@ -110,25 +110,32 @@ func TestPositionRoutes_ListenedSecondsCountTowardStarting(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
 }
 
-func TestPositionRoutes_ListeningSinceIsRangeChecked(t *testing.T) {
+// An out of range instant would backdate a read or claim old rows, so it's left
+// out, but the place still saves: a device's clock shouldn't cost the listener it.
+func TestPositionRoutes_ListeningSinceOutOfRangeIsIgnored(t *testing.T) {
 	t.Parallel()
-	f := newPositionsFixture(t)
-	audio := f.addAudiobook(3600)
-	api := newReadingAPI(t, f.db, f.user)
-	path := fmt.Sprintf("/files/%d/position", audio.ID)
-	now := time.Now().UTC()
-
-	for name, since := range map[string]time.Time{
-		"over a day ago": now.Add(-25 * time.Hour),
-		"in the future":  now.Add(time.Hour),
+	for name, offset := range map[string]time.Duration{
+		"over a day ago": -25 * time.Hour,
+		"in the future":  time.Hour,
 	} {
-		rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 30, "listening_since": since})
-		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, "%s: %s", name, rec.Body.String())
-	}
-	assert.Nil(t, f.position(audio))
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newPositionsFixture(t)
+			audio := f.addAudiobook(3600)
+			api := newReadingAPI(t, f.db, f.user)
+			since := time.Now().UTC().Add(offset)
 
-	rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 30, "listening_since": now.Add(-time.Hour)})
-	assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", audio.ID), map[string]any{
+				"seconds": 75, "percentage": 0.02, "listened_seconds": 60, "listening_since": since,
+			})
+
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			require.NotNil(t, f.position(audio))
+			rts := f.readThroughs()
+			require.Len(t, rts, 1)
+			assert.Equal(t, time.Now().In(time.UTC).Format(time.DateOnly), *rts[0].BeginDay)
+		})
+	}
 }
 
 func TestPositionRoutes_BookReadingIncludesTheBooksProgress(t *testing.T) {

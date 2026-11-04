@@ -444,8 +444,10 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         onRescan={() => setRescanFileId(file.id)}
         pluginIdentifierTypes={pluginIdentifierTypes}
         progress={
-          readingPositions?.find((position) => position.file_id === file.id)
-            ?.percentage
+          isShareLink
+            ? undefined
+            : readingPositions?.find((position) => position.file_id === file.id)
+                ?.percentage
         }
       />
     );

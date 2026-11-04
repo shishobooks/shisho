@@ -456,14 +456,15 @@ func (h *handler) updatePosition(c echo.Context) error {
 	if params.ListenedSeconds != nil {
 		update.ListenedSeconds = *params.ListenedSeconds
 	}
+	// It backdates a Read-through and claims what was recorded since, so a
+	// value out of range is left out. A sitting older than a day has nothing
+	// left to decide, and a device's fast clock shouldn't cost the listener the
+	// place this update saves.
 	if since := params.ListeningSince; since != nil {
-		// It backdates a Read-through and claims what was recorded since, and
-		// a sitting older than a day has nothing left to decide.
 		now := time.Now()
-		if since.Before(now.Add(-maxSessionLength)) || since.After(now.Add(sessionClockSlack)) {
-			return errcodes.ValidationError("Listening must have begun in the past, at most a day ago.")
+		if !since.Before(now.Add(-maxSessionLength)) && !since.After(now.Add(sessionClockSlack)) {
+			update.ListeningSince = since
 		}
-		update.ListeningSince = since
 	}
 	if s := params.Session; s != nil {
 		if s.EndedAt.Before(s.StartedAt) {

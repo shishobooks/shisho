@@ -203,6 +203,8 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   // hanging. The guard is cancelled by the seeked event (or superseded by the
   // next seek).
   const seekGuardRef = useRef<number | null>(null);
+  // Whether the player will still start by itself: see tryAutoplay.
+  const autoplayPendingRef = useRef(true);
   const cancelSeekGuard = useCallback(() => {
     if (seekGuardRef.current != null) {
       window.clearTimeout(seekGuardRef.current);
@@ -247,6 +249,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           seekGuardRef.current = null;
           const el = audioRef.current;
           if (el && el.seeking) {
+            autoplayPendingRef.current = false;
             el.pause();
             setRuntimeFailed(true);
           }
@@ -275,7 +278,6 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   // can play: a stream that hasn't reached canplay may never play, so play()
   // waits for it (audioCodec.ts). A browser that blocks it leaves the Play
   // button, as before. A press, or taking too long, calls it off.
-  const autoplayPendingRef = useRef(true);
   const tryAutoplay = useCallback(() => {
     const el = audioRef.current;
     if (
@@ -283,6 +285,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       !autoplayPendingRef.current ||
       !restoredRef.current ||
       !codecSupport.playable ||
+      el.ended ||
       el.seeking ||
       el.readyState < el.HAVE_FUTURE_DATA
     ) {
@@ -309,8 +312,14 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     if (seconds > 0) moveElementTo(seconds, RESTORE_SEEK_TIMEOUT_MS);
     // Playing from the very end restarts the book, which would read as going
     // back and undo a finish.
-    const total = durationRef.current;
-    if (total > 0 && seconds >= total - 1) autoplayPendingRef.current = false;
+    // The stored length and the element's can disagree, so the shorter decides.
+    const lengths = [durationRef.current, audioRef.current?.duration ?? 0];
+    const known = lengths.filter((length) => length > 0);
+    if (known.length > 0 && seconds >= Math.min(...known) - 1) {
+      autoplayPendingRef.current = false;
+    }
+    // A failed load doesn't know the saved place, so it waits to be told.
+    if (positionFailed) autoplayPendingRef.current = false;
     opened({
       ...positionAt(seconds),
       percentage: seconds > 0 && saved ? saved.percentage : 0,
@@ -322,6 +331,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     moveElementTo,
     opened,
     positionAt,
+    positionFailed,
     positionSettled,
     saved,
     tryAutoplay,

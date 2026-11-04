@@ -1087,6 +1087,13 @@ describe("BookDetailBody file progress", () => {
     expect(ring("Ebook")).toHaveAccessibleName(label);
   });
 
+  it("shows none on a Share Link page", () => {
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({ book: twoFiles, shareLink });
+
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
   it("shows no progress on a file with no position", () => {
     readingPositions.current = [{ file_id: 2, percentage: 0.62 }];
     renderBody({ book: twoFiles });
