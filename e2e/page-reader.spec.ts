@@ -583,6 +583,8 @@ test.describe("Page reader flows", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(page.getByText("Page 4 of 6")).toBeVisible();
+      // The counter shows before the flow is known, and the pages after.
+      await expect(pageImages(page)).toHaveCount(6);
       await expect.poll(() => pageTop(page, 4)).toBe(0);
     });
   });
