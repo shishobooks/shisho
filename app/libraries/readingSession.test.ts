@@ -266,6 +266,15 @@ describe("ReadingSessionTracker", () => {
       expect(tracker.listening()).toEqual({ since: at(0), seconds: 120 });
     });
 
+    it("stops reporting a sitting over a day old, which has nothing left to decide", () => {
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(24 * 60));
+      expect(tracker.listening()).not.toBeNull();
+
+      vi.advanceTimersByTime(1);
+      expect(tracker.listening()).toBeNull();
+    });
+
     it("starts a new sitting after a pause longer than the idle limit", () => {
       tracker.setPlaying(true);
       vi.advanceTimersByTime(minutes(1));

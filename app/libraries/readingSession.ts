@@ -4,6 +4,10 @@ import type { SessionPayload } from "@/types";
 // overnight isn't eight hours of reading.
 export const READING_IDLE_MS = 5 * 60 * 1000;
 
+// A sitting's minute of listening has long been decided by this age, and the
+// server refuses one older (maxSessionLength in pkg/reading/handlers.go).
+const MAX_SITTING_MS = 24 * 60 * 60 * 1000;
+
 // Why a session ended. "close" is the page unloading, so whoever delivers
 // it needs a request that survives unload.
 export type SessionEndReason = "idle" | "hidden" | "close" | "stop" | "paused";
@@ -106,6 +110,7 @@ export class ReadingSessionTracker {
   // This sitting of listening so far, or null before anything has played.
   listening(): { since: string; seconds: number } | null {
     if (!this.sitting) return null;
+    if (Date.now() - this.sitting.startedAt > MAX_SITTING_MS) return null;
     const running = this.session ? Date.now() - this.session.startedAt : 0;
     return {
       since: new Date(this.sitting.startedAt).toISOString(),

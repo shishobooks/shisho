@@ -171,6 +171,17 @@ func (f Filter) Apply(q *bun.SelectQuery, readerID int, bookIDColumn string) *bu
 	return q
 }
 
+// progressExpr is the SQL expression for how far through the Book in
+// bookIDColumn userID is: the furthest of its main Files' positions, while a
+// Read-through is underway. bookIDColumn is interpolated as in StatusExpr.
+func progressExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`(SELECT MAX(rp.percentage) FROM reading_positions AS rp
+		JOIN files AS f ON f.id = rp.file_id
+		WHERE rp.user_id = %[1]d AND f.book_id = %[2]s AND f.file_role = '%[3]s'
+		AND EXISTS (SELECT 1 FROM read_throughs AS rt WHERE rt.user_id = %[1]d AND rt.book_id = %[2]s AND rt.outcome = '%[4]s'))`,
+		userID, bookIDColumn, models.FileRoleMain, models.ReadThroughOutcomeUnderway)
+}
+
 // AttachReading sets ReadingStatus, Rating, and ReadingProgress on each Book to
 // userID's. Only a listing served to userID may call it, since all are private.
 func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.Book) error {
@@ -193,11 +204,7 @@ func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.
 		Column("b.id").
 		ColumnExpr(StatusExpr(userID, "b.id")+" AS status").
 		ColumnExpr("ub.rating").
-		ColumnExpr(`(SELECT MAX(rp.percentage) FROM reading_positions AS rp
-			JOIN files AS f ON f.id = rp.file_id
-			WHERE rp.user_id = ? AND f.book_id = b.id AND f.file_role = ?
-			AND EXISTS (SELECT 1 FROM read_throughs AS rt WHERE rt.user_id = ? AND rt.book_id = b.id AND rt.outcome = ?)
-		) AS progress`, userID, models.FileRoleMain, userID, models.ReadThroughOutcomeUnderway).
+		ColumnExpr(progressExpr(userID, "b.id")+" AS progress").
 		Join("LEFT JOIN user_books AS ub ON ub.book_id = b.id AND ub.user_id = ?", userID).
 		Where("b.id IN (?)", bun.List(ids)).
 		Scan(ctx, &rows)
@@ -228,6 +235,8 @@ type BookReading struct {
 	// is underway, since with none a place left behind isn't progress, and
 	// each supplement's always, since a supplement's has nothing to do with it.
 	Positions []*models.ReadingPosition
+	// Progress is the Book's: see progressExpr.
+	Progress *float64
 }
 
 // BookLibraryID returns the library of bookID, or sql.ErrNoRows when there
@@ -251,7 +260,8 @@ func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int)
 
 	err := svc.db.NewSelect().
 		ColumnExpr(StatusExpr(userID, strconv.Itoa(bookID))+" AS status").
-		Scan(ctx, &result.Status)
+		ColumnExpr(progressExpr(userID, strconv.Itoa(bookID))+" AS progress").
+		Scan(ctx, &result.Status, &result.Progress)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}

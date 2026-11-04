@@ -37,7 +37,7 @@ Every reader keeps your place and your reading history current as you read or li
 
 ### Resuming Where You Left Off
 
-A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own, so listening to a book's audiobook doesn't move your page in its ebook. While you're reading a book, each file on its page shows how far through it you are, such as **62% through**, and the book's cover wherever books are listed has a bar showing your progress through the book: the furthest you've reached in any of its main files.
+A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own, so listening to a book's audiobook doesn't move your page in its ebook. While you're reading a book, each file on its page shows how far through it you are, such as **62% through**, and the book's bookmark shows your progress through the book in place of its icon: the furthest you've reached in any of its main files. Wherever books are listed, its cover also has a bar showing the same progress.
 
 - The ebook reader saves your place a few seconds after you turn pages, and right away when you switch to another tab or close the reader.
 - The comic and PDF reader saves each page you turn to. In the **Scrolled** flow, it saves every few seconds as you scroll, and right away when you switch to another tab or close the reader. A link to a page, such as a shared `?page=` link, a page thumbnail, or a chapter, opens that page and saves it as your place, but doesn't start or finish the book until you turn a page.

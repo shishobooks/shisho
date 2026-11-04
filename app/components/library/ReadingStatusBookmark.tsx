@@ -9,7 +9,7 @@ import {
 
 import { cn } from "@/libraries/utils";
 import type { ReadingStatus } from "@/types";
-import { readingStatusLabel } from "@/utils/readingStatus";
+import { formatProgress, readingStatusLabel } from "@/utils/readingStatus";
 
 const LOOKS: Record<ReadingStatus, { icon: LucideIcon; color: string }> = {
   currently_reading: { icon: BookOpen, color: "bg-violet-600" },
@@ -21,18 +21,30 @@ const LOOKS: Record<ReadingStatus, { icon: LucideIcon; color: string }> = {
 
 interface ReadingStatusBookmarkProps {
   status: ReadingStatus;
+  // How far through the Book the user is, from 0 to 1, which a book being read
+  // shows in place of its icon.
+  progress?: number | null;
   className?: string;
 }
 
 // A ribbon bookmark hanging from a cover's top edge, colored and marked by
-// Reading Status. It's a shape rather than a text badge so it can't be
+// Reading Status, or by progress for a book being read. It's a shape rather than a text badge so it can't be
 // mistaken for the Needs review badge. The title names it on hover.
 const ReadingStatusBookmark = ({
   status,
+  progress,
   className,
 }: ReadingStatusBookmarkProps) => {
   const { icon: Icon, color } = LOOKS[status];
-  const label = readingStatusLabel(status);
+  const percent =
+    status === "currently_reading" &&
+    progress != null &&
+    Math.round(progress * 100) > 0
+      ? formatProgress(progress)
+      : null;
+  const label = percent
+    ? `${readingStatusLabel(status)}, ${percent} through`
+    : readingStatusLabel(status);
   return (
     <div
       aria-label={label}
@@ -43,11 +55,22 @@ const ReadingStatusBookmark = ({
     >
       <div
         className={cn(
-          "flex h-8 w-6 justify-center pt-1.5 [clip-path:polygon(0_0,100%_0,100%_100%,50%_78%,0_100%)]",
+          "flex h-8 justify-center pt-1.5 [clip-path:polygon(0_0,100%_0,100%_100%,50%_78%,0_100%)]",
+          percent ? "w-7" : "w-6",
           color,
         )}
       >
-        <Icon aria-hidden className="h-3.5 w-3.5 text-white" strokeWidth={3} />
+        {percent ? (
+          <span className="text-[9px] leading-[14px] font-bold tabular-nums text-white">
+            {percent}
+          </span>
+        ) : (
+          <Icon
+            aria-hidden
+            className="h-3.5 w-3.5 text-white"
+            strokeWidth={3}
+          />
+        )}
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -101,12 +102,47 @@ func TestPositionRoutes_ListenedSecondsCountTowardStarting(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.False(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
 
-	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": 60, "listening_since": "2026-10-15T11:59:00Z"})
+	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": 60, "listening_since": time.Now().Add(-time.Minute)})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.True(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
 
 	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": -1})
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+}
+
+func TestPositionRoutes_ListeningSinceIsRangeChecked(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	api := newReadingAPI(t, f.db, f.user)
+	path := fmt.Sprintf("/files/%d/position", audio.ID)
+	now := time.Now().UTC()
+
+	for name, since := range map[string]time.Time{
+		"over a day ago": now.Add(-25 * time.Hour),
+		"in the future":  now.Add(time.Hour),
+	} {
+		rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 30, "listening_since": since})
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, "%s: %s", name, rec.Body.String())
+	}
+	assert.Nil(t, f.position(audio))
+
+	rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 30, "listening_since": now.Add(-time.Hour)})
+	assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+}
+
+func TestPositionRoutes_BookReadingIncludesTheBooksProgress(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	api := newReadingAPI(t, f.db, f.user)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+	f.listenFor(f.addAudiobook(3600), 2232, 60)
+	f.readPage(f.addSupplement(), 9, 1)
+
+	resp := decode[BookReadingResponse](t, api.do(http.MethodGet, fmt.Sprintf("/books/%d", f.book.ID), nil).Body.Bytes())
+
+	require.NotNil(t, resp.Progress)
+	assert.InDelta(t, 0.62, *resp.Progress, 1e-9)
 }
 
 func TestPositionRoutes_OpenedSavesWithoutStarting(t *testing.T) {

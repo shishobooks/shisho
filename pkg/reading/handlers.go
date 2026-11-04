@@ -92,6 +92,7 @@ func (h *handler) buildBookReadingResponse(c echo.Context, user *models.User, bo
 		ReadThroughs: reading.ReadThroughs,
 		PageFlow:     reading.PageFlow,
 		Positions:    reading.Positions,
+		Progress:     reading.Progress,
 	}
 	resp.Rating = RatingStars(reading.RatingUnits)
 	return resp, nil
@@ -455,7 +456,15 @@ func (h *handler) updatePosition(c echo.Context) error {
 	if params.ListenedSeconds != nil {
 		update.ListenedSeconds = *params.ListenedSeconds
 	}
-	update.ListeningSince = params.ListeningSince
+	if since := params.ListeningSince; since != nil {
+		// It backdates a Read-through and claims what was recorded since, and
+		// a sitting older than a day has nothing left to decide.
+		now := time.Now()
+		if since.Before(now.Add(-maxSessionLength)) || since.After(now.Add(sessionClockSlack)) {
+			return errcodes.ValidationError("Listening must have begun in the past, at most a day ago.")
+		}
+		update.ListeningSince = since
+	}
 	if s := params.Session; s != nil {
 		if s.EndedAt.Before(s.StartedAt) {
 			return errcodes.ValidationError("A reading session can't end before it starts.")

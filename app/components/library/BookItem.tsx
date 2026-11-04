@@ -286,6 +286,7 @@ const BookItem = ({
           {!isSelectionMode && book.reading_status && (
             <ReadingStatusBookmark
               className="absolute top-0 left-2"
+              progress={book.reading_progress}
               status={book.reading_status}
             />
           )}
