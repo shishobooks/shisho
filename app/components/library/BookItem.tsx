@@ -29,6 +29,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import { useDeleteBook, useResyncBook } from "@/hooks/queries/books";
 import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
@@ -47,6 +48,7 @@ import { getCoverFileType, selectCoverFile } from "@/utils/coverSelection";
 import { bookCoverUrl } from "@/utils/coverUrl";
 import { fileTypeLabel, formatCount, formatRating } from "@/utils/format";
 import { hasAnyCBZFile } from "@/utils/hasAnyCBZFile";
+import { formatProgress } from "@/utils/readingStatus";
 import { formatSeriesNumber } from "@/utils/seriesNumber";
 
 interface BookItemProps {
@@ -284,6 +286,7 @@ const BookItem = ({
           {!isSelectionMode && book.reading_status && (
             <ReadingStatusBookmark
               className="absolute top-0 left-2"
+              progress={book.reading_progress}
               status={book.reading_status}
             />
           )}
@@ -311,6 +314,13 @@ const BookItem = ({
                 </Badge>
               )}
             </div>
+          )}
+          {book.reading_progress != null && (
+            <Progress
+              aria-label={`${formatProgress(book.reading_progress)} through`}
+              className="absolute inset-x-0 bottom-0 h-1 rounded-t-none rounded-b-sm bg-black/50"
+              value={book.reading_progress * 100}
+            />
           )}
         </div>
         <TruncatedText

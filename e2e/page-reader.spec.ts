@@ -469,4 +469,123 @@ test.describe("Page reader flows", () => {
       await expect(page.getByText("Page 4 of 6")).toBeVisible();
     });
   });
+
+  test.describe("resuming", () => {
+    // A book of its own per test: the first page turn starts a Read-through.
+    const seedBook = async (
+      browserName: string,
+      title: string,
+      width: number,
+      height: number,
+    ) => {
+      const apiContext = await request.newContext({
+        baseURL: getApiBaseURL(browserName),
+      });
+      const resp = await apiContext.post("/api/test/books", {
+        data: {
+          libraryId,
+          title,
+          fileType: "cbz",
+          withFileOnDisk: true,
+          pageCount: 6,
+          pageWidth: width,
+          pageHeight: height,
+        },
+      });
+      expect(resp.ok()).toBe(true);
+      const book = (await resp.json()) as { id: number; fileId: number };
+      await apiContext.dispose();
+      return book;
+    };
+
+    test("a comic reopens on the page turned to, and the end marks it read", async ({
+      page,
+      browser,
+    }) => {
+      const book = await seedBook(
+        browser.browserType().name(),
+        "Resumed Comic",
+        600,
+        900,
+      );
+      const savedPage = async () => {
+        const resp = await page.request.get(
+          `${getApiBaseURL(browser.browserType().name())}/api/reading/files/${book.fileId}/position`,
+        );
+        return ((await resp.json()) as { position?: { page?: number } })
+          .position?.page;
+      };
+      await login(page);
+      await page.goto(readerUrl(book.id, book.fileId), {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+
+      const nextPage = page.getByRole("button", { name: "Next page" });
+      await nextPage.click();
+      await nextPage.click();
+      await expect(page.getByText("Page 3 of 6")).toBeVisible();
+
+      // Opened without the page in the URL, so only the saved position can
+      // bring it back.
+      await expect.poll(savedPage).toBe(2);
+      await page.goto(readerUrl(book.id, book.fileId), {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByText("Page 3 of 6")).toBeVisible();
+      await expect(page.getByRole("img", { name: "Page 3" })).toBeVisible();
+
+      // A page in the URL wins, and is saved.
+      await page.goto(readerUrl(book.id, book.fileId, 1), {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByText("Page 2 of 6")).toBeVisible();
+      await expect.poll(savedPage).toBe(1);
+      await page.goto(readerUrl(book.id, book.fileId), {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByText("Page 2 of 6")).toBeVisible();
+
+      await page.getByRole("slider", { name: "Reading progress" }).focus();
+      await page.keyboard.press("End");
+      await expect(page.getByText("Page 6 of 6")).toBeVisible();
+      await expect(page.getByText("Marked as read")).toBeVisible();
+    });
+
+    test("a webtoon reopens on the page scrolled to", async ({
+      page,
+      browser,
+    }) => {
+      const book = await seedBook(
+        browser.browserType().name(),
+        "Resumed Webtoon",
+        200,
+        1000,
+      );
+      await login(page);
+      await page.goto(readerUrl(book.id, book.fileId), {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(pageImages(page)).toHaveCount(6);
+
+      // A real wheel, since a scroll with no input isn't reading.
+      await page.locator("main").hover();
+      await page.mouse.wheel(0, 200);
+      await page.evaluate(() => {
+        const main = document.querySelector("main")!;
+        const fourth = main.querySelector('img[alt="Page 4"]')!.parentElement!;
+        main.scrollTop = fourth.offsetTop + 100;
+      });
+      await expect(page.getByText("Page 4 of 6")).toBeVisible();
+
+      // Leaving saves at once, without waiting for the scroll to settle.
+      await page.goto(readerUrl(book.id, book.fileId), {
+        waitUntil: "domcontentloaded",
+      });
+      await expect(page.getByText("Page 4 of 6")).toBeVisible();
+      // The counter shows before the flow is known, and the pages after.
+      await expect(pageImages(page)).toHaveCount(6);
+      await expect.poll(() => pageTop(page, 4)).toBe(0);
+    });
+  });
 });

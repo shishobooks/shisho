@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,120 @@ func TestPositionRoutes_SaveReadAndFinish(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, again.Code, again.Body.String())
 }
 
+func TestPositionRoutes_SaveAPageAndSeconds(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	comic := f.addComic()
+	audio := f.addAudiobook(3600)
+	api := newReadingAPI(t, f.db, f.user)
+
+	rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", comic.ID), map[string]any{"page": 12, "percentage": 0.6})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got := decode[FilePositionResponse](t, api.do(http.MethodGet, fmt.Sprintf("/files/%d/position", comic.ID), nil).Body.Bytes())
+	require.NotNil(t, got.Position)
+	assert.Equal(t, 12, *got.Position.Page)
+
+	rec = api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", audio.ID), map[string]any{"seconds": 90.5, "percentage": 0.025})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got = decode[FilePositionResponse](t, api.do(http.MethodGet, fmt.Sprintf("/files/%d/position", audio.ID), nil).Body.Bytes())
+	require.NotNil(t, got.Position)
+	assert.InDelta(t, 90.5, *got.Position.Seconds, 1e-9)
+
+	// The first page is a position too, though zero.
+	rec = api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", comic.ID), map[string]any{"page": 0, "percentage": 0})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got = decode[FilePositionResponse](t, api.do(http.MethodGet, fmt.Sprintf("/files/%d/position", comic.ID), nil).Body.Bytes())
+	assert.Equal(t, 0, *got.Position.Page)
+}
+
+func TestPositionRoutes_ListenedSecondsCountTowardStarting(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	api := newReadingAPI(t, f.db, f.user)
+	path := fmt.Sprintf("/files/%d/position", audio.ID)
+
+	rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 30})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.False(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
+
+	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": 60, "listening_since": time.Now().Add(-time.Minute)})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.True(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
+
+	rec = api.do(http.MethodPost, path, map[string]any{"seconds": 105, "percentage": 0.03, "listened_seconds": -1})
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+}
+
+// An out of range instant would backdate a read or claim old rows, so it's left
+// out, but the place still saves: a device's clock shouldn't cost the listener it.
+func TestPositionRoutes_ListeningSinceOutOfRangeIsIgnored(t *testing.T) {
+	t.Parallel()
+	for name, offset := range map[string]time.Duration{
+		"over a day ago": -25 * time.Hour,
+		"in the future":  time.Hour,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			f := newPositionsFixture(t)
+			audio := f.addAudiobook(3600)
+			api := newReadingAPI(t, f.db, f.user)
+			since := time.Now().UTC().Add(offset)
+
+			rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", audio.ID), map[string]any{
+				"seconds": 75, "percentage": 0.02, "listened_seconds": 60, "listening_since": since,
+			})
+
+			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+			require.NotNil(t, f.position(audio))
+			rts := f.readThroughs()
+			require.Len(t, rts, 1)
+			assert.Equal(t, time.Now().In(time.UTC).Format(time.DateOnly), *rts[0].BeginDay)
+		})
+	}
+}
+
+func TestPositionRoutes_BookReadingIncludesTheBooksProgress(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	api := newReadingAPI(t, f.db, f.user)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+	f.listenFor(f.addAudiobook(3600), 2232, 60)
+	f.readPage(f.addSupplement(), 9, 1)
+
+	resp := decode[BookReadingResponse](t, api.do(http.MethodGet, fmt.Sprintf("/books/%d", f.book.ID), nil).Body.Bytes())
+
+	require.NotNil(t, resp.Progress)
+	assert.InDelta(t, 0.62, *resp.Progress, 1e-9)
+}
+
+func TestPositionRoutes_OpenedSavesWithoutStarting(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	comic := f.addComic()
+	api := newReadingAPI(t, f.db, f.user)
+
+	rec := api.do(http.MethodPost, fmt.Sprintf("/files/%d/position", comic.ID), map[string]any{"page": 19, "percentage": 1, "opened": true})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	resp := decode[UpdatePositionResponse](t, rec.Body.Bytes())
+	assert.False(t, resp.Started)
+	assert.Nil(t, resp.FinishedReadThroughID)
+	assert.Empty(t, f.status())
+}
+
+func TestPositionRoutes_BookReadingIncludesPositions(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	api := newReadingAPI(t, f.db, f.user)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+
+	rec := api.do(http.MethodGet, fmt.Sprintf("/books/%d", f.book.ID), nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	resp := decode[BookReadingResponse](t, rec.Body.Bytes())
+	require.Len(t, resp.Positions, 1)
+	assert.Equal(t, f.file.ID, resp.Positions[0].FileID)
+}
+
 func TestPositionRoutes_RejectInvalidUpdates(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
@@ -72,6 +187,10 @@ func TestPositionRoutes_RejectInvalidUpdates(t *testing.T) {
 
 	for name, body := range map[string]map[string]any{
 		"no position":         {"percentage": 0.5},
+		"two forms":           {"cfi": "epubcfi(/6/4!/4/2)", "page": 3, "percentage": 0.5},
+		"negative page":       {"page": -1, "percentage": 0.5},
+		"negative seconds":    {"seconds": -1, "percentage": 0.5},
+		"page, no percentage": {"page": 3},
 		"percentage above 1":  {"cfi": "epubcfi(/6/4!/4/2)", "percentage": 1.5},
 		"negative percentage": {"cfi": "epubcfi(/6/4!/4/2)", "percentage": -0.1},
 		"session ends before it starts": {"cfi": "epubcfi(/6/4!/4/2)", "percentage": 0.5, "session": map[string]any{

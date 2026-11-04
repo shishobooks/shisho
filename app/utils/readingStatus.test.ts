@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ReadThrough } from "@/types";
 
 import {
+  formatProgress,
   readingStatusLabel,
   readingSummary,
   readingTransitions,
@@ -122,5 +123,17 @@ describe("readingStatusLabel", () => {
     expect(readingStatusLabel("to_read")).toBe("To Read");
     expect(readingStatusLabel("read")).toBe("Read");
     expect(readingStatusLabel("did_not_finish")).toBe("Did Not Finish");
+  });
+});
+
+describe("formatProgress", () => {
+  it.each([
+    [0.62, "62%"],
+    [0.125, "13%"],
+    [1, "100%"],
+    [0, "0%"],
+    [0.004, "0%"],
+  ])("shows %d as %s", (progress, label) => {
+    expect(formatProgress(progress)).toBe(label);
   });
 });

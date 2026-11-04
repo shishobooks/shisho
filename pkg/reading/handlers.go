@@ -91,6 +91,8 @@ func (h *handler) buildBookReadingResponse(c echo.Context, user *models.User, bo
 		ToReadPlace:  place,
 		ReadThroughs: reading.ReadThroughs,
 		PageFlow:     reading.PageFlow,
+		Positions:    reading.Positions,
+		Progress:     reading.Progress,
 	}
 	resp.Rating = RatingStars(reading.RatingUnits)
 	return resp, nil
@@ -424,22 +426,45 @@ func (h *handler) updatePosition(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}
-	if params.CFI == nil && params.Session == nil {
+	forms := 0
+	for _, given := range []bool{params.CFI != nil, params.Page != nil, params.Seconds != nil} {
+		if given {
+			forms++
+		}
+	}
+	if forms == 0 && params.Session == nil {
 		return errcodes.ValidationError("A position is required.")
 	}
-	if params.CFI != nil && params.Percentage == nil {
+	if forms > 1 {
+		return errcodes.ValidationError("A position has one form.")
+	}
+	if forms == 1 && params.Percentage == nil {
 		return errcodes.ValidationError("A position needs its percentage.")
 	}
 	update := PositionUpdate{
 		UserID:     user.ID,
 		FileID:     fileID,
 		Source:     models.ReadingSourceWebReader,
-		Locator:    models.ReadingLocator{CFI: params.CFI},
+		Locator:    models.ReadingLocator{CFI: params.CFI, Page: params.Page, Seconds: params.Seconds},
 		AtEnd:      params.AtEnd,
+		Opened:     params.Opened,
 		OccurredAt: params.OccurredAt,
 	}
 	if params.Percentage != nil {
 		update.Percentage = *params.Percentage
+	}
+	if params.ListenedSeconds != nil {
+		update.ListenedSeconds = *params.ListenedSeconds
+	}
+	// It backdates a Read-through and claims what was recorded since, so a
+	// value out of range is left out. A sitting older than a day has nothing
+	// left to decide, and a device's fast clock shouldn't cost the listener the
+	// place this update saves.
+	if since := params.ListeningSince; since != nil {
+		now := time.Now()
+		if !since.Before(now.Add(-maxSessionLength)) && !since.After(now.Add(sessionClockSlack)) {
+			update.ListeningSince = since
+		}
 	}
 	if s := params.Session; s != nil {
 		if s.EndedAt.Before(s.StartedAt) {
@@ -461,7 +486,7 @@ func (h *handler) updatePosition(c echo.Context) error {
 	}
 	// A session with no position is a reader closed where it opened: it
 	// records only the time.
-	if params.CFI == nil {
+	if forms == 0 {
 		bookID, err := h.readingService.RecordSession(c.Request().Context(), user.ID, fileID, update.Source, *update.Session)
 		if errors.Is(err, ErrFileNotFound) {
 			return errcodes.NotFound("File")

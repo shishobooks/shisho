@@ -152,6 +152,10 @@ vi.mock("@/hooks/queries/delivery", () => ({
         : { follows_built_in: false, rules: delivery.rules, options: [] },
   }),
 }));
+const readingPositions = vi.hoisted(() => ({
+  current: [] as Array<{ file_id: number; percentage: number }>,
+}));
+
 // BookReadingControls.test.tsx drives the reading controls through the API.
 vi.mock("@/hooks/queries/reading", () => ({
   useBookReading: () => ({
@@ -160,6 +164,7 @@ vi.mock("@/hooks/queries/reading", () => ({
       status: "read",
       rating: 4,
       on_to_read: false,
+      positions: readingPositions.current,
       read_throughs: [
         {
           id: 1,
@@ -1038,6 +1043,63 @@ describe("BookDetailBody Share button", () => {
       sharingEnabled: true,
       canManageSharing: false,
     });
+  });
+});
+
+describe("BookDetailBody file progress", () => {
+  afterEach(() => {
+    readingPositions.current = [];
+  });
+
+  const twoFiles = {
+    ...book,
+    files: [
+      { ...epub, id: 1, display_name: "Ebook" } as File,
+      { ...m4b, id: 2, display_name: "Audio" } as File,
+    ],
+  };
+
+  const ring = (name: string) =>
+    within(
+      screen.getByRole("link", { name }).closest(".border") as HTMLElement,
+    ).queryByRole("progressbar");
+
+  it("shows each file's progress on its own row", () => {
+    readingPositions.current = [
+      { file_id: 1, percentage: 0.25 },
+      { file_id: 2, percentage: 0.62 },
+    ];
+    renderBody({ book: twoFiles });
+
+    expect(ring("Ebook")).toHaveAccessibleName("25% through");
+    expect(ring("Ebook")).toHaveAttribute("aria-valuenow", "25");
+    expect(ring("Audio")).toHaveAccessibleName("62% through");
+  });
+
+  it.each([
+    [0, "0% through"],
+    [0.004, "0% through"],
+    [1, "100% through"],
+  ])("shows a position at %d as %s", (percentage, label) => {
+    readingPositions.current = [{ file_id: 1, percentage }];
+    renderBody({ book: twoFiles });
+
+    expect(ring("Ebook")).toHaveAccessibleName(label);
+  });
+
+  it("shows none on a Share Link page", () => {
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({ book: twoFiles, shareLink });
+
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("shows no progress on a file with no position", () => {
+    readingPositions.current = [{ file_id: 2, percentage: 0.62 }];
+    renderBody({ book: twoFiles });
+
+    expect(ring("Ebook")).toBeNull();
+    expect(ring("Audio")).not.toBeNull();
   });
 });
 

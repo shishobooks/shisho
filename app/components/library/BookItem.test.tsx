@@ -423,4 +423,56 @@ describe("BookItem rating badge", () => {
     );
     expect(screen.getByLabelText("Rated 4 stars")).toBeInTheDocument();
   });
+
+  describe("reading progress", () => {
+    it("shows how far through the book the reader is along the cover", () => {
+      render(
+        wrap(
+          <BookItem
+            book={makeBook({ reading_progress: 0.62 })}
+            libraryId="1"
+          />,
+        ),
+      );
+
+      const bar = screen.getByRole("progressbar", { name: "62% through" });
+      expect(bar).toHaveAttribute("aria-valuenow", "62");
+    });
+
+    it("puts the percentage on the bookmark of a book being read", () => {
+      render(
+        wrap(
+          <BookItem
+            book={makeBook({
+              reading_status: "currently_reading",
+              reading_progress: 0.62,
+            })}
+            libraryId="1"
+          />,
+        ),
+      );
+
+      expect(
+        screen.getByRole("img", { name: "Currently Reading, 62% through" }),
+      ).toHaveTextContent("62%");
+    });
+
+    it("shows an empty bar for a book just started", () => {
+      render(
+        wrap(
+          <BookItem book={makeBook({ reading_progress: 0 })} libraryId="1" />,
+        ),
+      );
+
+      expect(
+        screen.getByRole("progressbar", { name: "0% through" }),
+      ).toHaveAttribute("aria-valuenow", "0");
+    });
+
+    it("shows no bar without progress", () => {
+      render(wrap(<BookItem book={makeBook()} libraryId="1" />));
+
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+    });
+  });
 });

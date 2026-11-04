@@ -18,6 +18,12 @@ type BookReadingResponse struct {
 	ToReadPlace  *int                  `json:"to_read_place" tstype:"number | null"` // 1-based place on To Read as the To Read page shows it, among Books in libraries the user can reach
 	ReadThroughs []*models.ReadThrough `json:"read_throughs" tstype:"ReadThrough[]"`
 	PageFlow     *string               `json:"page_flow" tstype:"PageFlow | null"` // The flow chosen for the Page-based reader; null lets the reader pick
+	// Progress is how far through the Book the user is, from 0 to 1: the
+	// furthest of its main Files' positions, while a Read-through is underway.
+	Progress *float64 `json:"progress" tstype:"number | null"`
+	// Positions is the Reading Position of each of the Book's Files that has
+	// one, whatever its status. Progress is what says the Book is in progress.
+	Positions []*models.ReadingPosition `json:"positions" tstype:"ReadingPosition[]"`
 }
 
 // DayPayload carries the user's "today" for a transition that dates
@@ -54,17 +60,31 @@ type SetPageFlowPayload struct {
 }
 
 // UpdatePositionPayload is a web reader reporting where the user is in a
-// File. It carries the position in the form the reader keeps (a CFI for
-// the ebook reader), and optionally a Reading Session the reader just
-// finished. A reader that hasn't moved since opening sends only the
-// session, which changes no position or status.
+// File. It carries the position in the one form the reader keeps (a CFI for
+// the ebook reader, a 0-based page for comics and PDFs, seconds for
+// audiobooks), and optionally a Reading Session the reader just finished. A
+// reader that hasn't moved since opening sends only the session, which
+// changes no position or status.
 type UpdatePositionPayload struct {
-	CFI *string `json:"cfi,omitempty" validate:"omitempty,min=1,max=4096"`
+	CFI     *string  `json:"cfi,omitempty" validate:"omitempty,min=1,max=4096"`
+	Page    *int     `json:"page,omitempty" validate:"omitempty,min=0"`
+	Seconds *float64 `json:"seconds,omitempty" validate:"omitempty,min=0"`
 	// Percentage is required with a position.
 	Percentage *float64 `json:"percentage,omitempty" validate:"omitempty,min=0,max=1"`
-	// AtEnd is the reader at the end of the File, which finishes the
-	// Read-through underway.
+	// AtEnd is the reader at the end of the File, or playback ending, which
+	// finishes the Read-through underway.
 	AtEnd bool `json:"at_end,omitempty"`
+	// ListenedSeconds is how long the player has played in this sitting,
+	// including any session sent with the update. A minute of it starts or
+	// resumes a Read-through.
+	ListenedSeconds *float64 `json:"listened_seconds,omitempty" validate:"omitempty,min=0"`
+	// ListeningSince is when this sitting began: a Read-through it starts
+	// begins that day and takes what it already recorded. Out of range, more
+	// than a day ago or in the future, it's ignored.
+	ListeningSince *time.Time `json:"listening_since,omitempty"`
+	// Opened is the reader opened at this place by a link, which saves it as
+	// the place without counting as reading.
+	Opened bool `json:"opened,omitempty"`
 	// OccurredAt is when the reader was at the position, so an update that
 	// arrives late can't replace a newer one. Omitted is now.
 	OccurredAt *time.Time      `json:"occurred_at,omitempty"`

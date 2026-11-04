@@ -47,6 +47,7 @@ import {
 } from "@/hooks/queries/books";
 import { useDeliveryRules } from "@/hooks/queries/delivery";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
+import { useBookReading } from "@/hooks/queries/reading";
 import { useSharingSettings } from "@/hooks/queries/sharing";
 import { useBookRelatedTabs } from "@/hooks/useBookRelatedTabs";
 import { useCan } from "@/hooks/useCan";
@@ -407,6 +408,11 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
     </div>
   );
 
+  const { data: readingRecord } = useBookReading(book.id, {
+    enabled: !isShareLink,
+  });
+  const readingPositions = readingRecord?.positions;
+
   const renderFileRow = (file: File, isSupplement: boolean) => {
     // The main button waits for the rules that decide its File Type.
     const deliveredFileType = deliveryRulesLoading
@@ -437,6 +443,12 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         onMoveFile={isSupplement ? undefined : () => setMoveFileId(file.id)}
         onRescan={() => setRescanFileId(file.id)}
         pluginIdentifierTypes={pluginIdentifierTypes}
+        progress={
+          isShareLink
+            ? undefined
+            : readingPositions?.find((position) => position.file_id === file.id)
+                ?.percentage
+        }
       />
     );
   };

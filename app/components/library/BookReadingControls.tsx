@@ -216,7 +216,7 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       )}
       <ConfirmDialog
         confirmLabel="Mark as not started"
-        description="This read is deleted along with the reading time and places recorded during it, and every file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
+        description="This read is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
         isPending={deleteMutation.isPending}
         onConfirm={handleNotStarted}
         onOpenChange={setConfirmingNotStarted}

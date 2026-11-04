@@ -33,6 +33,8 @@ export const showReadingFinishedToast = ({
       />
     ),
     duration: FINISHED_TOAST_MS,
+    // It stays a while over the reader's controls, so it can be cleared.
+    closeButton: true,
   });
 
 // Takes the toast away once going back has undone the finish it announced.

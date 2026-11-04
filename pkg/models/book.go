@@ -42,4 +42,8 @@ type Book struct {
 	// that serves another user may set them.
 	ReadingStatus *string  `bun:"-" json:"reading_status,omitempty" tstype:"ReadingStatus"`
 	Rating        *float64 `bun:"-" json:"rating,omitempty"`
+	// ReadingProgress is how far through the Book the user is, from 0 to 1:
+	// the furthest of its main Files' positions, while a Read-through is
+	// underway.
+	ReadingProgress *float64 `bun:"-" json:"reading_progress,omitempty"`
 }

@@ -19,6 +19,7 @@ const reading = (
   rating: null,
   on_to_read: false,
   read_throughs: [],
+  positions: [],
   ...overrides,
 });
 

@@ -22,6 +22,7 @@ import DetailsDialog, {
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import FileDownloadControl from "@/components/library/FileDownloadControl";
 import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
+import ProgressRing from "@/components/library/ProgressRing";
 import TextLink from "@/components/library/TextLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -163,6 +164,8 @@ export interface BookFileRowProps {
   onRescan: () => void;
   isResyncing: boolean;
   isSupplement?: boolean;
+  // How far through this File the reader is, from 0 to 1.
+  progress?: number;
   onMoveFile?: () => void;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
@@ -192,6 +195,7 @@ const BookFileRow = ({
   onRescan,
   isResyncing,
   isSupplement = false,
+  progress,
   onMoveFile,
   onDeleteFile,
   isDeletingFile,
@@ -292,6 +296,9 @@ const BookFileRow = ({
           name keeps the row's width. They sit at the right there too, so the
           icons after the variable-width download button line up row to row. */}
       <div className="flex shrink-0 items-center gap-1.5 max-sm:basis-full max-sm:justify-end">
+        {progress != null && (
+          <ProgressRing className="mr-1.5" progress={progress} />
+        )}
         <FileDownloadControl
           bookTitle={bookTitle}
           deliveredFileType={deliveredFileType}

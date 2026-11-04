@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -8,14 +9,62 @@ import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
 import type { Book, File } from "@/types";
-import { SEEK_TIMEOUT_MS } from "@/utils/audioCodec";
+import {
+  AUTOPLAY_TIMEOUT_MS,
+  RESTORE_SEEK_TIMEOUT_MS,
+  SEEK_TIMEOUT_MS,
+} from "@/utils/audioCodec";
 
 import M4BReader from "./M4BReader";
 
 mockCoverDimensions();
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+
+// The saved position, and what saves were sent.
+const position = vi.hoisted(() => ({
+  savedSeconds: null as number | null,
+  loading: false,
+  loadFails: false,
+  saves: [] as Array<Record<string, unknown>>,
+}));
+
+vi.mock("@/hooks/queries/reading", () => ({
+  QueryKey: { FilePosition: "FilePosition" },
+  invalidateAfterPositionUpdate: () => {},
+  markProgressStale: () => {},
+  useUndoAutoFinish: () => ({ mutate: () => {} }),
+  useFilePosition: () => ({
+    data:
+      position.loading || position.loadFails
+        ? undefined
+        : {
+            position:
+              position.savedSeconds === null
+                ? null
+                : { seconds: position.savedSeconds, percentage: 0.5 },
+          },
+    error: position.loadFails ? new Error("offline") : null,
+    isEnabled: true,
+    isFetching: position.loading,
+    isFetchedAfterMount: !position.loading,
+  }),
+  saveFilePosition: (_fileId: number, payload: Record<string, unknown>) => {
+    position.saves.push(payload);
+    return Promise.resolve({
+      book_id: 7,
+      accepted: true,
+      started: false,
+      resumed: false,
+      reverted: false,
+      finished_read_through_id: null,
+    });
+  },
+}));
 
 // The player reads/writes the persisted playback speed through the
 // user-settings hooks; mock them so tests control the stored speed and can
@@ -34,6 +83,11 @@ let pauseSpy: ReturnType<typeof vi.spyOn>;
 let updateSettingsMutate: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
+  setAuth({ permissions: ["books:read"] });
+  position.savedSeconds = null;
+  position.loading = false;
+  position.loadFails = false;
+  position.saves = [];
   playSpy = vi
     .spyOn(window.HTMLMediaElement.prototype, "play")
     .mockResolvedValue(undefined);
@@ -121,13 +175,15 @@ const SAFARI_UA =
 
 const renderReader = (props?: { book?: Book; file?: File }) =>
   render(
-    <MemoryRouter>
-      <M4BReader
-        book={props?.book ?? book}
-        file={props?.file ?? file}
-        libraryId="1"
-      />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <M4BReader
+          book={props?.book ?? book}
+          file={props?.file ?? file}
+          libraryId="1"
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 const getAudio = () =>
@@ -723,5 +779,448 @@ describe("M4BReader", () => {
       expect(pauseSpy).not.toHaveBeenCalled();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("M4BReader autoplay", () => {
+  // The element has loaded enough to play, as canplay reports.
+  const canPlay = (audio: HTMLAudioElement) => {
+    Object.defineProperty(audio, "readyState", {
+      configurable: true,
+      value: 3,
+    });
+    fireEvent.canPlay(audio);
+  };
+
+  it("starts playing once it can, with no press", () => {
+    renderReader();
+    const audio = getAudio();
+    expect(playSpy).not.toHaveBeenCalled();
+
+    fireEvent.loadedMetadata(audio);
+    expect(playSpy).not.toHaveBeenCalled();
+
+    canPlay(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    canPlay(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the seek to the saved place, so it doesn't play from the start", () => {
+    position.savedSeconds = 125;
+    renderReader();
+    const audio = getAudio();
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: true,
+    });
+    fireEvent.loadedMetadata(audio);
+    expect(audio.currentTime).toBe(125);
+
+    canPlay(audio);
+    expect(playSpy).not.toHaveBeenCalled();
+
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: false,
+    });
+    fireEvent.seeked(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for the saved position to load", () => {
+    position.loading = true;
+    position.savedSeconds = 125;
+    const client = new QueryClient();
+    const tree = () => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <M4BReader book={book} file={file} libraryId="1" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree());
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+    expect(playSpy).not.toHaveBeenCalled();
+
+    position.loading = false;
+    rerender(tree());
+    expect(audio.currentTime).toBe(125);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not play a stream the browser can't", () => {
+    setUserAgent(CHROME_UA);
+    renderReader({ file: { ...file, audiobook_codec: "xHE-AAC" } as File });
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("leaves a press before it can play alone", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    canPlay(audio);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+  });
+
+  // Playing from the very end restarts the book, which reads as going back and
+  // would undo a finish.
+  it("does not play from the very end of the file", () => {
+    position.savedSeconds = 3600;
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not play from the end when the element's own length is shorter", () => {
+    position.savedSeconds = 3590;
+    renderReader();
+    const audio = getAudio();
+    Object.defineProperty(audio, "duration", {
+      configurable: true,
+      value: 3590,
+    });
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not restart a file the listener already took to its end", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    Object.defineProperty(audio, "ended", { configurable: true, value: true });
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("calls it off when the seek to the saved place gives up", () => {
+    position.savedSeconds = 125;
+    renderReader();
+    const audio = getAudio();
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: true,
+    });
+    fireEvent.loadedMetadata(audio);
+    act(() => vi.advanceTimersByTime(RESTORE_SEEK_TIMEOUT_MS));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: false,
+    });
+    fireEvent.seeked(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not play from the start when the saved position fails to load", () => {
+    position.loadFails = true;
+    position.savedSeconds = 125;
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not start out of nowhere if it takes too long to load", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    act(() => vi.advanceTimersByTime(AUTOPLAY_TIMEOUT_MS));
+    canPlay(audio);
+
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("stays paused when the browser blocks it", async () => {
+    playSpy.mockRejectedValue(new DOMException("blocked", "NotAllowedError"));
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    canPlay(audio);
+    await act(async () => {});
+
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("M4BReader position", () => {
+  const SAVE_EVERY_MS = 15_000;
+
+  // Plays on to the given second, as the element reports it.
+  const playTo = (seconds: number) => {
+    const audio = getAudio();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      value: false,
+    });
+    audio.currentTime = seconds;
+    fireEvent.timeUpdate(audio);
+  };
+  const startPlaying = () => {
+    const audio = getAudio();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      value: false,
+    });
+    fireEvent.play(audio);
+  };
+  const pausePlaying = () => {
+    const audio = getAudio();
+    Object.defineProperty(audio, "paused", {
+      configurable: true,
+      value: true,
+    });
+    fireEvent.pause(audio);
+  };
+
+  it("seeks to the saved second once metadata loads, saving nothing", () => {
+    position.savedSeconds = 125;
+    renderReader();
+    const audio = getAudio();
+
+    expect(audio.currentTime).toBe(0);
+    fireEvent.loadedMetadata(audio);
+
+    expect(audio.currentTime).toBe(125);
+    expect(screen.getByText("2:05")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(SAVE_EVERY_MS));
+    expect(position.saves).toEqual([]);
+  });
+
+  it("waits for the saved position when metadata loads first", () => {
+    position.savedSeconds = 125;
+    position.loading = true;
+    const client = new QueryClient();
+    const tree = () => (
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <M4BReader book={book} file={file} libraryId="1" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree());
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    expect(audio.currentTime).toBe(0);
+
+    position.loading = false;
+    rerender(tree());
+    expect(audio.currentTime).toBe(125);
+  });
+
+  it("stays at the start with nothing saved", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    expect(audio.currentTime).toBe(0);
+    expect(position.saves).toEqual([]);
+  });
+
+  it("saves every 15 seconds while playing", () => {
+    renderReader();
+    fireEvent.loadedMetadata(getAudio());
+    startPlaying();
+
+    playTo(10);
+    act(() => vi.advanceTimersByTime(SAVE_EVERY_MS - 1));
+    playTo(14);
+    expect(position.saves).toEqual([]);
+
+    act(() => vi.advanceTimersByTime(1));
+    expect(position.saves).toHaveLength(1);
+    expect(position.saves[0]).toMatchObject({
+      seconds: 14,
+      percentage: 14 / 3600,
+    });
+  });
+
+  it("does not take a timeupdate from restoring for a move", () => {
+    position.savedSeconds = 125;
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    audio.currentTime = 124.998;
+    fireEvent.timeUpdate(audio);
+    act(() => vi.advanceTimersByTime(SAVE_EVERY_MS));
+
+    expect(position.saves).toEqual([]);
+  });
+
+  it("reports how long the open session has played with each save", () => {
+    renderReader();
+    fireEvent.loadedMetadata(getAudio());
+    startPlaying();
+
+    playTo(10);
+    act(() => vi.advanceTimersByTime(SAVE_EVERY_MS));
+
+    expect(position.saves[0]).toMatchObject({ listened_seconds: 15 });
+    expect(position.saves[0].listening_since).toEqual(expect.any(String));
+  });
+
+  it("saves on pause, with the session", () => {
+    renderReader();
+    fireEvent.loadedMetadata(getAudio());
+    startPlaying();
+    act(() => vi.advanceTimersByTime(5000));
+    playTo(5);
+    pausePlaying();
+
+    expect(position.saves).toHaveLength(1);
+    expect(position.saves[0]).toMatchObject({
+      seconds: 5,
+      session: { end_percentage: 5 / 3600 },
+    });
+  });
+
+  it("saves at once on a seek", () => {
+    renderReader();
+    fireEvent.loadedMetadata(getAudio());
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Skip forward 30 seconds" }),
+    );
+
+    expect(position.saves).toHaveLength(1);
+    expect(position.saves[0]).toMatchObject({
+      seconds: 30,
+      percentage: 30 / 3600,
+    });
+  });
+
+  it("reports the end when playback ends", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    startPlaying();
+    playTo(3600);
+    Object.defineProperty(audio, "ended", { configurable: true, value: true });
+    pausePlaying();
+    fireEvent.ended(audio);
+
+    expect(position.saves[0]).toMatchObject({
+      seconds: 3600,
+      percentage: 1,
+      at_end: true,
+    });
+  });
+
+  it("counts a session that plays in a hidden tab", () => {
+    let visibility: DocumentVisibilityState = "visible";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility,
+    });
+    try {
+      renderReader();
+      fireEvent.loadedMetadata(getAudio());
+      startPlaying();
+
+      visibility = "hidden";
+      act(() => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      act(() => vi.advanceTimersByTime(10 * 60_000));
+      playTo(600);
+      pausePlaying();
+
+      const session = position.saves.flatMap((save) =>
+        save.session ? [save.session as Record<string, string>] : [],
+      );
+      expect(session).toHaveLength(1);
+      expect(
+        Date.parse(session[0].ended_at) - Date.parse(session[0].started_at),
+      ).toBe(10 * 60_000);
+    } finally {
+      delete (document as { visibilityState?: string }).visibilityState;
+    }
+  });
+
+  it("gives a seek to the saved place longer than a seek by the listener", () => {
+    position.savedSeconds = 30000;
+    renderReader();
+    const audio = getAudio();
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: true,
+    });
+    fireEvent.loadedMetadata(audio);
+
+    act(() => vi.advanceTimersByTime(SEEK_TIMEOUT_MS));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(RESTORE_SEEK_TIMEOUT_MS));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("saves nothing while the audio can't play", () => {
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+    Object.defineProperty(audio, "seeking", {
+      configurable: true,
+      value: true,
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Skip forward 30 seconds" }),
+    );
+    expect(position.saves).toHaveLength(1);
+
+    act(() => vi.advanceTimersByTime(SEEK_TIMEOUT_MS));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Skip forward 30 seconds" }),
+    );
+    expect(position.saves).toHaveLength(1);
+  });
+
+  it("does not save a skip in a stream the browser can't play", () => {
+    setUserAgent(CHROME_UA);
+    renderReader({ file: { ...file, audiobook_codec: "xHE-AAC" } as File });
+    fireEvent.loadedMetadata(getAudio());
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Skip forward 30 seconds" }),
+    );
+
+    expect(position.saves).toEqual([]);
+  });
+
+  it("does not seek a stream the browser can't play", () => {
+    setUserAgent(CHROME_UA);
+    position.savedSeconds = 125;
+    renderReader({ file: { ...file, audiobook_codec: "xHE-AAC" } as File });
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    expect(audio.currentTime).toBe(0);
   });
 });

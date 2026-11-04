@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { useFilePosition } from "@/hooks/queries/reading";
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
@@ -21,6 +20,7 @@ import {
 import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
+import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
@@ -115,38 +115,13 @@ export default function ReflowableReader({
   const { chromeVisible, revealChrome, toggleChrome } =
     useAutoHideChrome(hideChrome);
 
-  // The reader opens at the saved location once it has loaded, fetched anew
-  // so a place saved in another browser since wins over a cached one. A
-  // failed load opens at the start, and saves nothing, so a page turn there
-  // can't replace the place saved on the server.
-  const positionQuery = useFilePosition(file.id, {
-    refetchOnMount: "always",
-    retry: 1,
-  });
-  const positionFailed =
-    Boolean(positionQuery.error) && !positionQuery.isFetching;
-  // Once settled it stays settled, so a refetch from an invalidation can't
-  // cancel the book while it opens.
-  const [positionSettled, setPositionSettled] = useState(false);
-  if (
-    !positionSettled &&
-    ((positionQuery.isFetchedAfterMount && !positionQuery.isFetching) ||
-      positionFailed ||
-      !positionQuery.isEnabled)
-  ) {
-    setPositionSettled(true);
-  }
-  useEffect(() => {
-    if (positionFailed) {
-      toastRequestError(
-        positionQuery.error,
-        "Failed to load your reading position",
-      );
-    }
-  }, [positionFailed, positionQuery.error]);
+  const {
+    saved,
+    settled: positionSettled,
+    failed: positionFailed,
+  } = useSavedPosition(file.id);
   // Read when the book opens, so a later refetch doesn't move the reader.
   const savedRef = useRef<ReadingPosition | null>(null);
-  const saved = positionQuery.data?.position ?? null;
   useEffect(() => {
     savedRef.current = saved;
   }, [saved]);

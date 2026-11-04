@@ -141,6 +141,7 @@ describe("Demo Mode settings", () => {
       on_to_read: false,
       to_read_place: null,
       read_throughs: [],
+      positions: [],
       page_flow: null,
     };
     const request = vi.spyOn(API, "request").mockResolvedValue(serverReading);
@@ -191,6 +192,7 @@ describe("Demo Mode settings", () => {
       on_to_read: false,
       to_read_place: null,
       read_throughs: [],
+      positions: [],
       page_flow: null,
     });
     vi.spyOn(API, "request").mockImplementation(async (_method, path) =>

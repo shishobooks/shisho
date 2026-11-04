@@ -15,6 +15,16 @@ import (
 // the end to check the back matter and went back hasn't finished.
 const RevertWindow = 15 * time.Minute
 
+const (
+	// AudioStartSeconds is how much of one sitting of listening counts as real
+	// progress: a minute of it, not a few seconds of checking what it sounds
+	// like or a seek to somewhere later.
+	AudioStartSeconds = 60.0
+	// AudioEndSeconds is how close to an audiobook's end counts as reaching
+	// it, so end credits don't stop it being marked read.
+	AudioEndSeconds = 60.0
+)
+
 // ErrFileNotFound is returned for a position update on a File that doesn't
 // exist.
 var ErrFileNotFound = errors.New("file not found")
@@ -35,9 +45,22 @@ type PositionUpdate struct {
 	Locator models.ReadingLocator
 	// Percentage is how far through the File the position is, from 0 to 1.
 	Percentage float64
-	// AtEnd is the source reporting the end of the File, which finishes
-	// the Read-through underway.
+	// AtEnd is the source reporting the end of the File, such as a
+	// reflowable reader's final location or playback ending, which finishes
+	// the Read-through underway. The last page and an audiobook's last
+	// minute count as the end whether or not the source says so.
 	AtEnd bool
+	// ListenedSeconds is how long a source timing audio has played in this
+	// sitting, including any session sent with the update. It's only for
+	// deciding that this sitting starts or resumes a Read-through.
+	ListenedSeconds float64
+	// ListeningSince is when this sitting began. A sitting that starts a
+	// Read-through belongs to it from here, first minute included.
+	ListeningSince *time.Time
+	// Opened is a reader opened at this place by a link, such as a page
+	// thumbnail or a shared URL, which saves it as the place but isn't
+	// reading: it starts, resumes, finishes, and undoes nothing.
+	Opened bool
 	// OccurredAt is when the source was at the position, for an update
 	// sent later. Nil is now, and an instant after now counts as now.
 	OccurredAt *time.Time
@@ -79,14 +102,19 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			occurredAt = *u.OccurredAt
 		}
 
-		var bookID int
-		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", u.FileID).Scan(ctx, &bookID)
+		file := &models.File{}
+		err := tx.NewSelect().
+			Model(file).
+			Column("f.book_id", "f.file_role", "f.page_count", "f.audiobook_duration_seconds").
+			Where("f.id = ?", u.FileID).
+			Scan(ctx)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrFileNotFound
 		}
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		bookID := file.BookID
 		result.BookID = bookID
 
 		stored, err := retrievePosition(ctx, tx, u.UserID, u.FileID)
@@ -107,9 +135,12 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		// reader already was is not. Going back all the way to the start is
 		// still going back, so it can undo a finish.
 		moved := stored == nil || !stored.Equal(u.Locator)
-		progress := u.Percentage > 0 && moved
+		// A supplement keeps its own place but isn't the Book, and a place a
+		// link opened isn't reading: neither changes any Read-through.
+		reading := !u.Opened && file.FileRole != models.FileRoleSupplement
+		atEnd := reading && (u.AtEnd || locatorAtEnd(file, u.Locator))
 
-		if underway == nil && !u.AtEnd && moved {
+		if underway == nil && !atEnd && moved && reading {
 			reverted, err := revertAutoFinish(ctx, tx, u.UserID, u.FileID, occurredAt, now)
 			if err != nil {
 				return err
@@ -120,6 +151,13 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			}
 		}
 
+		// Staying at the end, as a reader closed there after Undo reports,
+		// isn't reaching it, and neither is playing on through the last minute.
+		// Playback ending still is.
+		stayedAtEnd := stored != nil && !u.AtEnd && locatorAtEnd(file, stored.ReadingLocator)
+		reachedEnd := atEnd && !stayedAtEnd
+		progress := moved && reading && (reachedEnd || isRealProgress(u, underway))
+
 		starting := false
 		if underway == nil && progress {
 			starting, err = startsOnProgress(ctx, tx, u.UserID, bookID)
@@ -127,9 +165,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 				return err
 			}
 		}
-		// Staying at the end, as a reader closed there after Undo reports,
-		// doesn't finish again.
-		finishing := u.AtEnd && progress
+		finishing := reachedEnd && progress
 		var day string
 		if starting || finishing && underway != nil {
 			day, err = userDay(ctx, tx, u.UserID, occurredAt)
@@ -137,15 +173,28 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 				return err
 			}
 		}
-
-		switch {
-		case starting:
-			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, day, now, u.FileID)
+		// A read that a sitting of listening started began when the sitting did.
+		beginDay := day
+		listeningSince := occurredAt
+		if starting && u.ListeningSince != nil && u.ListeningSince.Before(occurredAt) {
+			listeningSince = *u.ListeningSince
+			beginDay, err = userDay(ctx, tx, u.UserID, listeningSince)
 			if err != nil {
 				return err
 			}
+		}
+
+		switch {
+		case starting:
+			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, now, u.FileID)
+			if err != nil {
+				return err
+			}
+			if err := claimSitting(ctx, tx, u, underway.ID, listeningSince); err != nil {
+				return err
+			}
 			result.Started = true
-		case underway != nil && underway.Paused && progress && !u.AtEnd:
+		case underway != nil && underway.Paused && progress && !finishing:
 			underway.Paused = false
 			underway.UpdatedAt = now
 			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {
@@ -208,7 +257,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			Percentage:     u.Percentage,
 			Source:         u.Source,
 			OccurredAt:     occurredAt,
-			AtEnd:          u.AtEnd,
+			AtEnd:          atEnd,
 			AutoFinished:   autoFinished,
 		}).Exec(ctx)
 		if err != nil {
@@ -221,6 +270,61 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		return nil, err
 	}
 	return result, nil
+}
+
+// isRealProgress reports whether u's position is past where merely opening
+// the File leaves a reader: past the first page or screen, or a minute of
+// listening in one sitting. A Read-through already going needs no such minute.
+func isRealProgress(u PositionUpdate, underway *models.ReadThrough) bool {
+	switch {
+	case u.Locator.Seconds != nil:
+		if underway != nil && !underway.Paused {
+			return true
+		}
+		return u.ListenedSeconds >= AudioStartSeconds
+	case u.Locator.Page != nil:
+		return *u.Locator.Page > 0
+	default:
+		return u.Percentage > 0
+	}
+}
+
+// claimSitting puts what u's sitting already recorded, before it knew it would
+// start a Read-through, on rtID, so its first minute counts toward the read.
+func claimSitting(ctx context.Context, tx bun.Tx, u PositionUpdate, rtID int, since time.Time) error {
+	if u.ListeningSince == nil {
+		return nil
+	}
+	_, err := tx.NewUpdate().
+		Model((*models.ReadingPositionUpdate)(nil)).
+		Set("read_through_id = ?", rtID).
+		Where("user_id = ? AND file_id = ? AND read_through_id IS NULL AND occurred_at >= ?", u.UserID, u.FileID, since).
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	_, err = tx.NewUpdate().
+		Model((*models.ReadingSession)(nil)).
+		Set("read_through_id = ?", rtID).
+		Where("user_id = ? AND file_id = ? AND read_through_id IS NULL AND started_at >= ?", u.UserID, u.FileID, since).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// locatorAtEnd reports whether the position is at the end of file, for the
+// forms where the File's own length says so: its last page, or its last
+// minute of audio. A length the scan didn't record leaves it to the source, as
+// does audio no longer than that minute, which would be at its end throughout.
+func locatorAtEnd(file *models.File, locator models.ReadingLocator) bool {
+	switch {
+	case locator.Page != nil:
+		return file.PageCount != nil && *file.PageCount > 0 && *locator.Page >= *file.PageCount-1
+	case locator.Seconds != nil:
+		return file.AudiobookDurationSeconds != nil && *file.AudiobookDurationSeconds > AudioEndSeconds &&
+			*locator.Seconds >= *file.AudiobookDurationSeconds-AudioEndSeconds
+	default:
+		return false
+	}
 }
 
 func readThroughID(rt *models.ReadThrough) *int {
@@ -403,14 +507,15 @@ func retrievePosition(ctx context.Context, db bun.IDB, userID, fileID int) (*mod
 	return position, nil
 }
 
-// resetPositions deletes userID's Reading Positions in bookID's Files
-// except keepFileID (0 keeps none), so their readers open at the start.
-// The update log keeps its history.
+// resetPositions deletes userID's Reading Positions in bookID's main Files
+// except keepFileID (0 keeps none), so their readers open at the start. A
+// supplement's place has nothing to do with the Read-through, so it stays. The
+// update log keeps its history.
 func resetPositions(ctx context.Context, db bun.IDB, userID, bookID, keepFileID int) error {
 	_, err := db.NewDelete().
 		Model((*models.ReadingPosition)(nil)).
 		Where("user_id = ? AND file_id != ?", userID, keepFileID).
-		Where("file_id IN (SELECT id FROM files WHERE book_id = ?)", bookID).
+		Where("file_id IN (SELECT id FROM files WHERE book_id = ? AND file_role = ?)", bookID, models.FileRoleMain).
 		Exec(ctx)
 	return errors.WithStack(err)
 }

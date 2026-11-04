@@ -184,4 +184,125 @@ describe("ReadingSessionTracker", () => {
     window.dispatchEvent(new Event("pagehide"));
     expect(ended).toEqual([]);
   });
+
+  describe("timing playback", () => {
+    beforeEach(() => {
+      tracker = new ReadingSessionTracker({
+        timing: "playback",
+        getPercentage: () => percentage,
+        onSessionEnd: (session, reason) => ended.push({ session, reason }),
+      });
+      tracker.start();
+    });
+
+    it("has no session until playback starts", () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+      vi.advanceTimersByTime(minutes(1));
+      tracker.setPlaying(false);
+      tracker.stop();
+
+      expect(ended).toEqual([]);
+    });
+
+    it("ends the session when playback pauses", () => {
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(3));
+      percentage = 0.2;
+      tracker.setPlaying(false);
+
+      expect(ended).toEqual([
+        {
+          reason: "paused",
+          session: {
+            started_at: at(0),
+            ended_at: at(minutes(3)),
+            start_percentage: 0.1,
+            end_percentage: 0.2,
+          },
+        },
+      ]);
+    });
+
+    it("keeps counting in a hidden tab and past five minutes with no input", () => {
+      tracker.setPlaying(true);
+      setVisibility("hidden");
+      vi.advanceTimersByTime(READING_IDLE_MS * 4);
+      expect(ended).toEqual([]);
+
+      setVisibility("visible");
+      vi.advanceTimersByTime(minutes(1));
+      tracker.setPlaying(false);
+
+      expect(ended).toHaveLength(1);
+      expect(ended[0].session.started_at).toBe(at(0));
+      expect(ended[0].session.ended_at).toBe(
+        at(READING_IDLE_MS * 4 + minutes(1)),
+      );
+    });
+
+    it("delivers the session when the page closes while playing", () => {
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(2));
+      window.dispatchEvent(new Event("pagehide"));
+
+      expect(ended).toHaveLength(1);
+      expect(ended[0].reason).toBe("close");
+      expect(ended[0].session.ended_at).toBe(at(minutes(2)));
+    });
+
+    it("adds up one sitting across a short pause", () => {
+      expect(tracker.listening()).toBeNull();
+
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      expect(tracker.listening()).toEqual({ since: at(0), seconds: 60 });
+
+      tracker.setPlaying(false);
+      expect(tracker.listening()).toEqual({ since: at(0), seconds: 60 });
+
+      vi.advanceTimersByTime(minutes(4));
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      expect(tracker.listening()).toEqual({ since: at(0), seconds: 120 });
+    });
+
+    it("stops reporting a sitting over a day old, which has nothing left to decide", () => {
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(24 * 60));
+      expect(tracker.listening()).not.toBeNull();
+
+      vi.advanceTimersByTime(1);
+      expect(tracker.listening()).toBeNull();
+    });
+
+    it("starts a new sitting after a pause longer than the idle limit", () => {
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      tracker.setPlaying(false);
+
+      vi.advanceTimersByTime(READING_IDLE_MS + 1);
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+
+      expect(tracker.listening()).toEqual({
+        since: at(minutes(1) + READING_IDLE_MS + 1),
+        seconds: 60,
+      });
+    });
+
+    it("starts a new session each time playback starts", () => {
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      tracker.setPlaying(false);
+      vi.advanceTimersByTime(minutes(10));
+      tracker.setPlaying(true);
+      vi.advanceTimersByTime(minutes(1));
+      tracker.stop();
+
+      expect(ended.map((end) => end.session.started_at)).toEqual([
+        at(0),
+        at(minutes(11)),
+      ]);
+    });
+  });
 });

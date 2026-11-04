@@ -169,6 +169,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A reading session must be in the past and last at most a day.",
 		},
 		{
+			name:   "position update in two forms",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
+			body:   `{"cfi":"epubcfi(/6/4!/4/2)","page":3,"percentage":0.5}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A position has one form.",
+		},
+		{
 			name:   "position update with no percentage",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
 			body:   `{"cfi":"epubcfi(/6/4!/4/2)"}`,

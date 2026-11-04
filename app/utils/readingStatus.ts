@@ -84,3 +84,7 @@ export const readingSummary = (readThroughs: ReadThrough[]): string | null => {
   }
   return parts.length > 0 ? parts.join(" · ") : null;
 };
+
+// How far through a File or Book the user is, from a fraction from 0 to 1.
+export const formatProgress = (progress: number): string =>
+  `${Math.round(progress * 100)}%`;
