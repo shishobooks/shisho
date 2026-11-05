@@ -224,19 +224,20 @@ func (h *handler) buildProgress(ctx context.Context, user *models.User, device *
 	}
 
 	timestamp := position.OccurredAt.Unix()
-	response.Timestamp = &timestamp
 
 	// A Device gets back exactly what it pushed, under the name and id it
 	// sent, as KOReader's own server does. KOReader ignores a position
 	// carrying its own, so syncing never moves the device that pushed it.
 	if position.SourceDeviceID != nil && *position.SourceDeviceID == device.ID {
+		if position.ReportedDevice != nil && position.ReportedDeviceID != nil {
+			response.Device, response.DeviceID = *position.ReportedDevice, *position.ReportedDeviceID
+			response.Timestamp = &timestamp
+			return response, nil
+		}
+		// Without its own name and id, KOReader would take the position for
+		// another device's. With no time it judges by percentage, so a clock
+		// that has drifted can't make it offer to move back.
 		response.Device, response.DeviceID = device.Name, device.ID
-		if position.ReportedDevice != nil {
-			response.Device = *position.ReportedDevice
-		}
-		if position.ReportedDeviceID != nil {
-			response.DeviceID = *position.ReportedDeviceID
-		}
 		return response, nil
 	}
 
@@ -245,6 +246,7 @@ func (h *handler) buildProgress(ctx context.Context, user *models.User, device *
 	if !pageBased {
 		return ProgressResponse{}, nil
 	}
+	response.Timestamp = &timestamp
 	switch {
 	case position.SourceDeviceID != nil:
 		source, err := h.deviceService.Retrieve(ctx, user.ID, *position.SourceDeviceID)

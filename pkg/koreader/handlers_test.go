@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/md5" //nolint:gosec // KOReader's protocol.
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -330,13 +331,29 @@ func TestProgress_SameDeviceRoundTrip(t *testing.T) {
 	// What KOReader sent, as its own server echoes it: KOReader ignores a
 	// position carrying its own name and id, so syncing never moves the
 	// device that pushed it.
-	body := rec.Body.String()
-	assert.Contains(t, body, fmt.Sprintf(`"document":%q`, epubHash))
-	assert.Contains(t, body, fmt.Sprintf(`"progress":%q`, xpointer))
-	assert.Contains(t, body, `"percentage":0.3058`)
-	assert.Contains(t, body, fmt.Sprintf(`"device":%q`, koreaderDevice))
-	assert.Contains(t, body, fmt.Sprintf(`"device_id":%q`, koreaderDeviceID))
-	assert.Contains(t, body, `"timestamp":`)
+	var pulled map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &pulled))
+	assert.Contains(t, pulled, "timestamp")
+	delete(pulled, "timestamp")
+	assert.Equal(t, map[string]any{
+		"document": epubHash, "progress": xpointer, "percentage": 0.3058,
+		"device": koreaderDevice, "device_id": koreaderDeviceID,
+	}, pulled)
+}
+
+// A push that leaves out how KOReader names itself gets back the Device's
+// identity in Shisho, and no time, so a drifting clock can't make KOReader
+// offer to move back.
+func TestProgress_SameDeviceWithoutItsNameGetsNoTimestamp(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.addFile(f.lib, models.FileTypeEPUB, epubHash)
+	body := fmt.Sprintf(`{"progress":%q,"document":%q,"percentage":0.4}`, xpointer, epubHash)
+	require.Equal(t, http.StatusOK, f.serve(http.MethodPut, "/koreader/syncs/progress", "reader", f.device.Credential, body).Code)
+
+	assert.JSONEq(t, fmt.Sprintf(`{
+		"document": %q, "progress": %q, "percentage": 0.4, "device": "Libra KOReader", "device_id": %q
+	}`, epubHash, xpointer, f.device.ID), f.pull(epubHash).Body.String())
 }
 
 // A KOReader install that renames itself is still the Device, so its own

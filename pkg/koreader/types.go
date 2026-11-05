@@ -11,9 +11,10 @@ type UpdateProgressPayload struct {
 	Progress   string   `json:"progress" validate:"required,max=4096"`
 	Percentage *float64 `json:"percentage" validate:"required,min=0,max=1" tstype:",required"`
 	// Device and DeviceID are how KOReader names itself. Shisho knows the
-	// Device from its credential, so they're only accepted.
-	Device   string `json:"device,omitempty"`
-	DeviceID string `json:"device_id,omitempty"`
+	// Device from its credential; it stores these with the position and sends
+	// them back to the same Device, which then knows the position as its own.
+	Device   string `json:"device,omitempty" validate:"max=256"`
+	DeviceID string `json:"device_id,omitempty" validate:"max=256"`
 	// Metadata is what KOReader knows about the book, when its "send
 	// metadata" option is on. It's only logged, to name a book Shisho doesn't
 	// recognize.
