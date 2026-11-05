@@ -24,6 +24,9 @@ type BookReadingResponse struct {
 	// Positions is the Reading Position of each of the Book's Files that has
 	// one, whatever its status. Progress is what says the Book is in progress.
 	Positions []*models.ReadingPosition `json:"positions" tstype:"ReadingPosition[]"`
+	// LastReadAt is the latest reading in the Read-through underway, on any of
+	// the Book's main Files. Null with nothing underway or no reading yet.
+	LastReadAt *time.Time `json:"last_read_at" tstype:"string | null"`
 }
 
 // DayPayload carries the user's "today" for a transition that dates

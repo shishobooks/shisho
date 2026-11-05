@@ -16,7 +16,8 @@ export type SortField =
   | "duration"
   | "reading_status"
   | "rating"
-  | "date_finished";
+  | "date_finished"
+  | "last_read";
 
 /**
  * One field and direction. The field defaults to the book gallery's fields;
@@ -39,6 +40,7 @@ export const SORT_FIELDS: readonly SortField[] = [
   "reading_status",
   "rating",
   "date_finished",
+  "last_read",
 ] as const;
 
 /** Human-readable labels for each field. */
@@ -53,15 +55,17 @@ export const SORT_FIELD_LABELS: Record<SortField, string> = {
   reading_status: "Reading status",
   rating: "Rating",
   date_finished: "Date finished",
+  last_read: "Last read",
 };
 
 /**
  * Fields a newly added sort level orders descending: the reader's best
- * rated and most recently finished books come first.
+ * rated and most recently finished or read books come first.
  */
 const DESCENDING_FIRST: ReadonlySet<string> = new Set([
   "rating",
   "date_finished",
+  "last_read",
 ]);
 
 /** The direction a newly added level of field starts in. */
@@ -97,6 +101,12 @@ export const MAX_SORT_LEVELS = 10;
  * different orders for users who have not saved a default.
  */
 export const BUILTIN_DEFAULT_SORT: readonly SortLevel[] = [
+  { field: "date_added", direction: "desc" },
+];
+
+/** The Currently Reading page's sort: books started but not yet read go last. */
+export const CURRENTLY_READING_DEFAULT_SORT: readonly SortLevel[] = [
+  { field: "last_read", direction: "desc" },
   { field: "date_added", direction: "desc" },
 ];
 

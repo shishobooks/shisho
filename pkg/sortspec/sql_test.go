@@ -131,12 +131,14 @@ func TestOrderClauses_ReadingFieldsNeedAReader(t *testing.T) {
 	levels := []SortLevel{
 		{Field: FieldRating, Direction: DirDesc},
 		{Field: FieldDateFinished, Direction: DirAsc},
+		{Field: "last_read", Direction: DirDesc},
 	}
 	assert.Empty(t, OrderClauses(levels, nil))
 
 	reader := 7
 	got := OrderClauses(levels, &reader)
-	assert.Len(t, got, 2)
+	assert.Len(t, got, 3)
+	assert.Contains(t, got[2].Expression, "rt.user_id = 7")
 	assert.Contains(t, got[0].Expression, "ubr.user_id = 7")
 	assert.Contains(t, got[1].Expression, "rtf.user_id = 7")
 }

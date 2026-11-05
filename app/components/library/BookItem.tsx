@@ -17,6 +17,7 @@ import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import { IdentifyBookDialog } from "@/components/library/IdentifyBookDialog";
+import LastRead from "@/components/library/LastRead";
 import ReadingStatusBookmark from "@/components/library/ReadingStatusBookmark";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import TruncatedText from "@/components/library/TruncatedText";
@@ -61,6 +62,8 @@ interface BookItemProps {
   isSelected?: boolean;
   onSelect?: () => void;
   onShiftSelect?: () => void;
+  /** Shows when the book was last read, where that's what the page is about. */
+  showLastRead?: boolean;
 }
 
 const getAspectRatioClass = (
@@ -93,6 +96,7 @@ const BookItem = ({
   isSelected = false,
   onSelect,
   onShiftSelect,
+  showLastRead = false,
 }: BookItemProps) => {
   // Author pages need People Read; without it the names are plain text.
   const linkPeople = useCan("people:read");
@@ -318,14 +322,14 @@ const BookItem = ({
           {book.reading_progress != null && (
             <Progress
               aria-label={`${formatProgress(book.reading_progress)} through`}
-              className="absolute inset-x-0 bottom-0 h-1 rounded-t-none rounded-b-sm bg-black/50"
+              className="absolute inset-x-0 top-full mt-1.5 h-1"
               value={book.reading_progress * 100}
             />
           )}
         </div>
         <TruncatedText
           className={cn(
-            "mt-2 group-hover:underline text-sm font-bold line-clamp-2",
+            "mt-3 group-hover:underline text-sm font-bold line-clamp-2",
             seriesNumber != null && "leading-[1.6]",
           )}
           tooltip={book.title}
@@ -403,6 +407,11 @@ const BookItem = ({
             </div>
           );
         })()}
+      {showLastRead && book.last_read_at && (
+        <div className="mt-1 text-xs text-muted-foreground">
+          <LastRead lastReadAt={book.last_read_at} />
+        </div>
+      )}
       {book.files && (
         <div className="mt-2 flex flex-wrap gap-2 text-xs">
           {uniqBy(book.files, "file_type").map((f) => (

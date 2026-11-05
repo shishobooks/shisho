@@ -46,4 +46,7 @@ type Book struct {
 	// the furthest of its main Files' positions, while a Read-through is
 	// underway.
 	ReadingProgress *float64 `bun:"-" json:"reading_progress,omitempty"`
+	// LastReadAt is the latest reading in the Read-through underway, set by the
+	// same listings and just as private. See reading.LastReadExpr.
+	LastReadAt *time.Time `bun:"-" json:"last_read_at,omitempty"`
 }

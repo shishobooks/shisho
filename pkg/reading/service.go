@@ -171,18 +171,39 @@ func (f Filter) Apply(q *bun.SelectQuery, readerID int, bookIDColumn string) *bu
 }
 
 // progressExpr is the SQL expression for how far through the Book in
-// bookIDColumn userID is: the furthest of its main Files' positions, while a
-// Read-through is underway. bookIDColumn is interpolated as in StatusExpr.
+// bookIDColumn userID is: the furthest of its main Files' positions in the
+// Read-through underway. A File merged or moved in keeps its place from
+// elsewhere, and a link can open a place in a File, neither of which is progress
+// in this read until the File is read here.
+// bookIDColumn is interpolated as in StatusExpr.
 func progressExpr(userID int, bookIDColumn string) string {
 	return fmt.Sprintf(`(SELECT MAX(rp.percentage) FROM reading_positions AS rp
 		JOIN files AS f ON f.id = rp.file_id
 		WHERE rp.user_id = %[1]d AND f.book_id = %[2]s AND f.file_role = '%[3]s'
-		AND EXISTS (SELECT 1 FROM read_throughs AS rt WHERE rt.user_id = %[1]d AND rt.book_id = %[2]s AND rt.outcome = '%[4]s'))`,
+		AND EXISTS (SELECT 1 FROM reading_position_updates AS rpu
+			JOIN read_throughs AS rt ON rt.id = rpu.read_through_id
+			WHERE rpu.file_id = rp.file_id AND NOT rpu.opened AND rt.user_id = %[1]d AND rt.book_id = %[2]s AND rt.outcome = '%[4]s'))`,
 		userID, bookIDColumn, models.FileRoleMain, models.ReadThroughOutcomeUnderway)
 }
 
-// AttachReading sets ReadingStatus, Rating, and ReadingProgress on each Book to
-// userID's. Only a listing served to userID may call it, since all are private.
+// LastReadExpr is the SQL expression for when userID last read the Book in
+// bookIDColumn: the latest update logged on the Read-through underway, or NULL
+// with none, so activity from an earlier read or a look back at a finished Book
+// doesn't count. Neither does a place a link opened, or reading a supplement,
+// which isn't reading the Book. A File since deleted leaves its update's File
+// empty, and that reading still happened. bookIDColumn is interpolated as in
+// StatusExpr.
+func LastReadExpr(userID int, bookIDColumn string) string {
+	return fmt.Sprintf(`(SELECT MAX(rpu.occurred_at) FROM reading_position_updates AS rpu
+		JOIN read_throughs AS rt ON rt.id = rpu.read_through_id
+		WHERE rt.user_id = %[1]d AND rt.book_id = %[2]s AND rt.outcome = '%[3]s' AND NOT rpu.opened
+		AND NOT EXISTS (SELECT 1 FROM files AS f WHERE f.id = rpu.file_id AND f.file_role = '%[4]s'))`,
+		userID, bookIDColumn, models.ReadThroughOutcomeUnderway, models.FileRoleSupplement)
+}
+
+// AttachReading sets ReadingStatus, Rating, ReadingProgress, and LastReadAt on
+// each Book to userID's. Only a listing served to userID may call it, since all
+// are private.
 func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.Book) error {
 	if len(books) == 0 {
 		return nil
@@ -192,10 +213,11 @@ func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.
 		ids = append(ids, b.ID)
 	}
 	type row struct {
-		ID          int      `bun:"id"`
-		Status      *string  `bun:"status"`
-		RatingUnits *int     `bun:"rating"`
-		Progress    *float64 `bun:"progress"`
+		ID          int        `bun:"id"`
+		Status      *string    `bun:"status"`
+		RatingUnits *int       `bun:"rating"`
+		Progress    *float64   `bun:"progress"`
+		LastReadAt  *time.Time `bun:"last_read_at"`
 	}
 	var rows []row
 	err := db.NewSelect().
@@ -204,6 +226,7 @@ func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.
 		ColumnExpr(StatusExpr(userID, "b.id")+" AS status").
 		ColumnExpr("ub.rating").
 		ColumnExpr(progressExpr(userID, "b.id")+" AS progress").
+		ColumnExpr(LastReadExpr(userID, "b.id")+" AS last_read_at").
 		Join("LEFT JOIN user_books AS ub ON ub.book_id = b.id AND ub.user_id = ?", userID).
 		Where("b.id IN (?)", bun.List(ids)).
 		Scan(ctx, &rows)
@@ -219,6 +242,7 @@ func AttachReading(ctx context.Context, db bun.IDB, userID int, books []*models.
 		b.ReadingStatus = r.Status
 		b.Rating = RatingStars(r.RatingUnits)
 		b.ReadingProgress = r.Progress
+		b.LastReadAt = r.LastReadAt
 	}
 	return nil
 }
@@ -234,6 +258,8 @@ type BookReading struct {
 	Positions []*models.ReadingPosition
 	// Progress is the Book's: see progressExpr.
 	Progress *float64
+	// LastReadAt is the Book's: see LastReadExpr.
+	LastReadAt *time.Time
 }
 
 // BookLibraryID returns the library of bookID, or sql.ErrNoRows when there
@@ -258,7 +284,8 @@ func (svc *Service) RetrieveBookReading(ctx context.Context, userID, bookID int)
 	err := svc.db.NewSelect().
 		ColumnExpr(StatusExpr(userID, strconv.Itoa(bookID))+" AS status").
 		ColumnExpr(progressExpr(userID, strconv.Itoa(bookID))+" AS progress").
-		Scan(ctx, &result.Status, &result.Progress)
+		ColumnExpr(LastReadExpr(userID, strconv.Itoa(bookID))+" AS last_read_at").
+		Scan(ctx, &result.Status, &result.Progress, &result.LastReadAt)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -398,11 +425,13 @@ func (svc *Service) SetPaused(ctx context.Context, userID, bookID int, paused bo
 	})
 }
 
-// End ends the Read-through underway on today with outcome. Finishing with
-// nothing underway records a finished Read-through with no begin day, for a
-// Book read before the user tracked it; abandoning needs one underway.
-// Either way the Book leaves To Read, so a queued Book marked read shows
-// Read; adding it again afterwards plans a reread.
+// End ends the Read-through underway with outcome, dated the day the user
+// last read it, in their time zone, or today when it has no activity.
+// Finishing with nothing underway records a finished Read-through with no
+// begin day ending today, for a Book read before the user tracked it;
+// abandoning needs one underway. Either way the Book leaves To Read, so a
+// queued Book marked read shows Read; adding it again afterwards plans a
+// reread.
 func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today string) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		now := time.Now()
@@ -430,9 +459,13 @@ func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today 
 			return leaveToRead(ctx, tx, userID, bookID, now)
 		}
 
+		endDay, err := manualEndDay(ctx, tx, underway, today)
+		if err != nil {
+			return err
+		}
 		underway.Outcome = outcome
 		underway.Paused = false
-		underway.EndDay = &today
+		underway.EndDay = &endDay
 		underway.UpdatedAt = now
 		_, err = tx.NewUpdate().
 			Model(underway).
@@ -444,6 +477,33 @@ func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today 
 		}
 		return leaveToRead(ctx, tx, userID, bookID, now)
 	})
+}
+
+// manualEndDay is the day ending rt by hand dates it: the day it was last
+// read, or today with no activity. An edited begin day, or a change of time
+// zone since, can put that before the begin day, which an end day can't be. With
+// no time zone set yet, it can also be after the user's today.
+func manualEndDay(ctx context.Context, db bun.IDB, rt *models.ReadThrough, today string) (string, error) {
+	var lastReadAt *time.Time
+	err := db.NewSelect().ColumnExpr(LastReadExpr(rt.UserID, strconv.Itoa(rt.BookID))).Scan(ctx, &lastReadAt)
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	if lastReadAt == nil {
+		return today, nil
+	}
+	day, err := userDay(ctx, db, rt.UserID, *lastReadAt)
+	if err != nil {
+		return "", err
+	}
+	// Days are YYYY-MM-DD, so they compare as strings.
+	if day > today {
+		day = today
+	}
+	if rt.BeginDay != nil && day < *rt.BeginDay {
+		return *rt.BeginDay, nil
+	}
+	return day, nil
 }
 
 func retrieveUnderway(ctx context.Context, db bun.IDB, userID, bookID int) (*models.ReadThrough, error) {

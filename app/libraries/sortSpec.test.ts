@@ -96,6 +96,7 @@ describe("SORT_FIELDS", () => {
       "reading_status",
       "rating",
       "date_finished",
+      "last_read",
     ]);
   });
 });

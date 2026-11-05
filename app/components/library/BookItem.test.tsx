@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import { FileRoleMain, FileRoleSupplement, type Book } from "@/types";
+import { formatDateTime } from "@/utils/format";
 import type { Permission } from "@/utils/permissions";
 
 import BookItem from "./BookItem";
@@ -400,6 +401,54 @@ describe("BookItem reading status bookmark", () => {
   });
 });
 
+describe("BookItem last read", () => {
+  const instant = new Date(2026, 10, 15, 12).toISOString();
+  const book = {
+    id: 7,
+    library_id: 3,
+    title: "Dune",
+    reading_status: "currently_reading",
+    last_read_at: instant,
+    reading_progress: 0.94,
+  } as Book;
+
+  beforeEach(() => vi.setSystemTime(new Date(2026, 10, 20, 12)));
+
+  it("shows the day, with the full time on hover, when asked to", async () => {
+    render(wrap(<BookItem book={book} libraryId="3" showLastRead />));
+
+    await userEvent
+      .setup({ advanceTimers: vi.advanceTimersByTime })
+      .hover(screen.getByText("Last read 5 days ago"));
+    act(() => vi.advanceTimersByTime(800));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      formatDateTime(instant),
+    );
+  });
+
+  it("leaves it out everywhere else", () => {
+    render(wrap(<BookItem book={book} libraryId="3" />));
+
+    expect(screen.queryByText(/Last read/)).not.toBeInTheDocument();
+  });
+
+  it("opens the book's page from the cover and title alike", () => {
+    render(wrap(<BookItem book={book} libraryId="3" showLastRead />));
+
+    const links = screen
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("href")?.includes("/books/7"));
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/libraries/3/books/7");
+  });
+
+  it("keeps the progress bar off the cover", () => {
+    render(wrap(<BookItem book={book} libraryId="3" />));
+
+    expect(screen.getByRole("progressbar").className).toContain("top-full");
+  });
+});
+
 describe("BookItem rating badge", () => {
   it("shows the signed-in user's Rating", () => {
     render(wrap(<BookItem book={makeBook({ rating: 4.25 })} libraryId="1" />));
@@ -425,7 +474,7 @@ describe("BookItem rating badge", () => {
   });
 
   describe("reading progress", () => {
-    it("shows how far through the book the reader is along the cover", () => {
+    it("shows how far through the book the reader is below the cover", () => {
       render(
         wrap(
           <BookItem

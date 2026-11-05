@@ -1,6 +1,7 @@
 import {
   Book,
   Bookmark,
+  BookOpen,
   Building2,
   Layers,
   Settings,
@@ -50,6 +51,13 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
       label: "Books",
       isActive: isBooksActive,
       show: canReadBooks,
+    },
+    {
+      to: `${basePath}/currently-reading`,
+      Icon: BookOpen,
+      label: "Currently Reading",
+      isActive: location.pathname.startsWith(`${basePath}/currently-reading`),
+      show: can(ROUTE_PERMISSIONS.libraryCurrentlyReading),
     },
     {
       to: `${basePath}/series`,

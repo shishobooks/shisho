@@ -260,6 +260,163 @@ describe("Home background refetch", () => {
   });
 });
 
+describe("Currently Reading page", () => {
+  const book = {
+    id: 7,
+    library_id: 1,
+    title: "Dune",
+    reading_status: "currently_reading",
+    last_read_at: new Date().toISOString(),
+    files: [],
+  };
+
+  const renderPage = (entry = "/libraries/1/currently-reading") => {
+    setAuth({ permissions: ["books:read"] });
+    const request = vi
+      .spyOn(API, "request")
+      .mockImplementation(async (_method, path) => {
+        if (path === "/settings/libraries/1") {
+          return { sort_spec: "title:asc" };
+        }
+        if (path === "/user/libraries" || path.endsWith("/languages")) {
+          return [];
+        }
+        if (path === "/books") return { items: [book], total: 1 };
+        return { items: [], total: 0 };
+      });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MemoryRouter initialEntries={[entry]}>
+          <Routes>
+            <Route
+              element={<Home currentlyReading />}
+              path="/libraries/:libraryId/currently-reading"
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    return request;
+  };
+
+  const booksQuery = (request: ReturnType<typeof renderPage>) =>
+    request.mock.calls.find((call) => call[1] === "/books")?.[3];
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("lists the books being read, most recently read first", async () => {
+    const request = renderPage();
+    await flush();
+
+    expect(booksQuery(request)).toMatchObject({
+      reading_status: ["currently_reading"],
+      sort: "last_read:desc,date_added:desc",
+    });
+  });
+
+  it("shows when each book was last read", async () => {
+    renderPage();
+    await flush();
+
+    expect(screen.getByText("Last read just now")).toBeInTheDocument();
+  });
+
+  it("leaves last read off the Books page", async () => {
+    setAuth({ permissions: ["books:read"] });
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+      if (path === "/user/libraries" || path.endsWith("/languages")) {
+        return [];
+      }
+      if (path === "/books") return { items: [book], total: 1 };
+      return { items: [], total: 0 };
+    });
+    renderHome();
+    await flush();
+
+    expect(screen.getByText("Dune")).toBeInTheDocument();
+    expect(screen.queryByText(/Last read/)).not.toBeInTheDocument();
+  });
+
+  it("keeps its set of books whatever status the URL names", async () => {
+    const request = renderPage(
+      "/libraries/1/currently-reading?reading_status=read",
+    );
+    await flush();
+
+    expect(booksQuery(request)).toMatchObject({
+      reading_status: ["currently_reading"],
+    });
+  });
+
+  it("applies the URL's sort and filters on top", async () => {
+    const request = renderPage(
+      "/libraries/1/currently-reading?sort=title:asc&file_types=epub",
+    );
+    await flush();
+
+    expect(booksQuery(request)).toMatchObject({
+      reading_status: ["currently_reading"],
+      sort: "title:asc",
+      file_types: ["epub"],
+    });
+  });
+
+  it("offers no status filter", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage();
+    await flush();
+
+    await user.click(screen.getByRole("button", { name: /^filter/i }));
+    expect(await screen.findByText("Rating")).toBeInTheDocument();
+    expect(screen.queryByText("Reading status")).not.toBeInTheDocument();
+  });
+
+  it("doesn't offer to save its sort as the library's", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage("/libraries/1/currently-reading?sort=title:asc");
+    await flush();
+
+    await user.click(screen.getByRole("button", { name: /^sort/i }));
+    expect(
+      screen.queryByRole("button", {
+        name: /save as my default for this library/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("says when nothing is being read", async () => {
+    setAuth({ permissions: ["books:read"] });
+    vi.spyOn(API, "request").mockImplementation(async (_method, path) =>
+      path === "/user/libraries" || path.endsWith("/languages")
+        ? []
+        : { items: [], total: 0 },
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={["/libraries/1/currently-reading"]}>
+          <Routes>
+            <Route
+              element={<Home currentlyReading />}
+              path="/libraries/:libraryId/currently-reading"
+            />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await flush();
+
+    expect(
+      screen.getByText("You aren't reading any books in this library."),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("Home active filter chips", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

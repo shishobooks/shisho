@@ -259,6 +259,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			OccurredAt:     occurredAt,
 			AtEnd:          atEnd,
 			AutoFinished:   autoFinished,
+			Opened:         u.Opened,
 		}).Exec(ctx)
 		if err != nil {
 			return errors.WithStack(err)

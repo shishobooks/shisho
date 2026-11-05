@@ -93,6 +93,7 @@ func (h *handler) buildBookReadingResponse(c echo.Context, user *models.User, bo
 		PageFlow:     reading.PageFlow,
 		Positions:    reading.Positions,
 		Progress:     reading.Progress,
+		LastReadAt:   reading.LastReadAt,
 	}
 	resp.Rating = RatingStars(reading.RatingUnits)
 	return resp, nil

@@ -65,6 +65,26 @@ describe("BookReadingControls", () => {
   beforeEach(() => setAuth({ permissions: ["books:read"] }));
   afterEach(() => vi.restoreAllMocks());
 
+  it("shows when a book underway was last read", async () => {
+    vi.setSystemTime(new Date(2026, 10, 20, 12));
+    renderControls(
+      reading({
+        status: "currently_reading",
+        last_read_at: new Date(2026, 10, 15, 12).toISOString(),
+        progress: 0.94,
+      }),
+    );
+
+    expect(await screen.findByText("Last read 5 days ago")).toBeInTheDocument();
+  });
+
+  it("shows no last read without any", async () => {
+    renderControls(reading({ status: "read" }));
+
+    await screen.findByRole("button", { name: "Reading status: Read" });
+    expect(screen.queryByText(/Last read/)).not.toBeInTheDocument();
+  });
+
   it.each<[ReadingStatus | null, string, string[]]>([
     [
       null,

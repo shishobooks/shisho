@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import LastRead from "@/components/library/LastRead";
 import StarRating from "@/components/library/StarRating";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -211,6 +212,11 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
           )}
         </div>
       </div>
+      {reading.last_read_at && (
+        <p className="text-xs text-muted-foreground">
+          <LastRead lastReadAt={reading.last_read_at} />
+        </p>
+      )}
       {demoMode && (
         <p className="text-xs text-muted-foreground">{DEMO_MODE_MESSAGE}</p>
       )}

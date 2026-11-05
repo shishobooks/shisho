@@ -236,6 +236,43 @@ func TestListHandler_SortsByFinishDate(t *testing.T) {
 	assert.Equal(t, []int{january.ID, march.ID, reread.ID, abandoned.ID, never.ID}, ids)
 }
 
+// Last read sorts on the reader's own latest reading, with books they haven't
+// read yet last in both directions.
+func TestListHandler_SortsByLastRead(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	lib := seedLibrary(t, db, "A")
+	reader := seedUserWithLibAccess(t, db, "reader", lib)
+	now := time.Now()
+	seedRead := func(title string, age time.Duration) *models.Book {
+		b := seedBook(t, db, lib, title, title, now)
+		file := &models.File{
+			LibraryID: lib.ID, BookID: b.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain,
+			Filepath: "/test/" + title + ".epub", FilesizeBytes: 1,
+		}
+		_, err := db.NewInsert().Model(file).Exec(context.Background())
+		require.NoError(t, err)
+		cfi := "epubcfi(/6/4)"
+		at := now.Add(-age)
+		_, err = reading.NewService(db).UpdatePosition(context.Background(), reading.PositionUpdate{
+			UserID: reader.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
+			Locator: models.ReadingLocator{CFI: &cfi}, Percentage: 0.5, OccurredAt: &at,
+		})
+		require.NoError(t, err)
+		return b
+	}
+	older := seedRead("Older", 48*time.Hour)
+	newer := seedRead("Newer", time.Hour)
+	unread := seedBook(t, db, lib, "Unread", "Unread", now)
+
+	ids, _ := listBookIDs(t, db, reader, "library_id="+itoa(lib.ID)+"&sort=last_read:desc")
+	assert.Equal(t, []int{newer.ID, older.ID, unread.ID}, ids)
+
+	ids, _ = listBookIDs(t, db, reader, "library_id="+itoa(lib.ID)+"&sort=last_read:asc")
+	assert.Equal(t, []int{older.ID, newer.ID, unread.ID}, ids)
+}
+
 // Filters apply before paging, so the total counts every match and each
 // page holds the next matches, across the libraries the caller can reach
 // and never one they can't.
