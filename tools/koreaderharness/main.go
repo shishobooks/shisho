@@ -23,7 +23,8 @@ const usage = `Drives a real, headless KOReader against a running Shisho. Every 
 
   login      --server URL --username U --password P --file BOOK   sign in to progress sync
   register   --server URL --username U --password P --file BOOK   tap Register
-  download   --server URL --username U --password P (--title T | --url URL)   download over OPDS
+  download   --server URL --username U --password P (--title T | --url URL) [--as NAME]
+             download over OPDS, named after its URL unless --as names it
   open       --file BOOK                                  report hash, pages, position, percentage
   goto       --file BOOK (--page N | --percent N | --xpointer X)
   push       --file BOOK                                  push through KOReader's sync plugin
@@ -36,7 +37,8 @@ const usage = `Drives a real, headless KOReader against a running Shisho. Every 
   screenshot --file BOOK --out PNG
   digest     --file PATH                                  KOReader's document hash of any file
 
-  Any command that opens a book takes --out PNG to screenshot the result.
+  Any command that opens a book takes --out PNG to screenshot the result, and
+  --view page|scroll for KOReader's page or continuous view of a reflowable book.
   --file is a book in the harness's books directory, or a path to copy there.
   --server is what this machine reaches Shisho at, such as the API URL mise start prints.
   KOReader's home, sign-in, and positions live in tmp/koreader; delete it to start over.
@@ -76,6 +78,8 @@ func run(argv []string) (printed bool, err error) {
 	percent := flags.String("percent", "", "percentage through the book")
 	xpointer := flags.String("xpointer", "", "XPointer")
 	mode := flags.String("mode", "", "silent, prompt, or interactive")
+	view := flags.String("view", "", "page or scroll, KOReader's page and continuous views")
+	as := flags.String("as", "", "name to save a download under")
 	confirm := flags.Bool("confirm", false, "accept KOReader's jump dialog")
 	out := flags.String("out", "", "PNG to screenshot to")
 	dir := flags.String("dir", filepath.Join("tmp", "koreader"), "harness state directory")
@@ -96,7 +100,7 @@ func run(argv []string) (printed bool, err error) {
 	ctx := context.Background()
 	args := Args{
 		Command: command, File: *file, Server: *server, Username: *username, Password: *password,
-		Page: *page, Percent: percentValue, XPointer: *xpointer, Mode: *mode, Confirm: *confirm, Screenshot: *out,
+		Page: *page, Percent: percentValue, XPointer: *xpointer, Mode: *mode, View: *view, Confirm: *confirm, Screenshot: *out,
 	}
 	if command == "download" {
 		target := *downloadURL
@@ -108,6 +112,9 @@ func run(argv []string) (printed bool, err error) {
 		}
 		args.URL = target
 		args.Output = downloadName(target)
+		if *as != "" {
+			args.Output = *as
+		}
 		args.Server = ""
 	}
 	result, err := h.Run(ctx, args)

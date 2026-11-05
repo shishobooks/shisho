@@ -93,6 +93,14 @@ local function withReader(fn)
     local ui = ReaderUI:new{ dimen = Screen:getSize(), document = document }
     UIManager:show(ui)
     stepUI()
+    -- "page" or "scroll", KOReader's page and continuous views. Each run
+    -- starts in the default, so a command that reads the position names the
+    -- view it was read in.
+    if args.view and ui.rolling then
+        local Event = require("ui/event")
+        ui:handleEvent(Event:new("SetViewMode", args.view))
+        stepUI()
+    end
     local out = fn(ui, ui.kosync) or {}
     return ui, out
 end
@@ -136,6 +144,9 @@ local function gotoCommand(ui)
         ui:handleEvent(Event:new("GotoXPointer", args.xpointer))
     elseif args.page then
         ui:handleEvent(Event:new("GotoPage", args.page))
+    elseif args.percent and args.view == "scroll" and ui.rolling then
+        -- Continuous view has no pages to count; this is its own go-to-percent.
+        ui:handleEvent(Event:new("GotoPercent", args.percent))
     elseif args.percent then
         -- Page 1 is 0%, and the last page is 100%, as KOReader's skim dialog
         -- and its reported percentage have it.

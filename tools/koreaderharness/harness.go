@@ -92,6 +92,7 @@ type Args struct {
 	Percent    *float64
 	XPointer   string
 	Mode       string
+	View       string
 	Confirm    bool
 	Screenshot string
 }
@@ -147,6 +148,9 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.Mode != "" {
 		payload["mode"] = a.Mode
+	}
+	if a.View != "" {
+		payload["view"] = a.View
 	}
 	if a.Confirm {
 		payload["confirm"] = true

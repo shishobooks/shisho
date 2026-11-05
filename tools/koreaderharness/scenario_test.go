@@ -351,11 +351,17 @@ func TestRoundTrips(t *testing.T) {
 	assert.Equal(t, 27, *comicPosition.Page)
 	assert.Equal(t, "28", twentyEight.Progress)
 
-	// Reaching the last pages marks the book Read.
+	// Page view reports exactly 100% on the last page. Continuous view never
+	// does: it reports the top of the last screen, one screen short of the end,
+	// which is why the last 1% finishes the book. Going to its end and pushing
+	// marks the book Read.
 	hundred := 100.0
-	end := s.run(Args{Command: "goto", File: "fresh.epub", Percent: &hundred})
-	require.GreaterOrEqual(t, end.Percentage, 0.99)
-	s.run(Args{Command: "push", File: "fresh.epub"})
+	pageEnd := s.run(Args{Command: "goto", File: "fresh.epub", Percent: &hundred})
+	require.InDelta(t, 1, pageEnd.Percentage, 1e-9)
+	scrollEnd := s.run(Args{Command: "goto", File: "fresh.epub", Percent: &hundred, View: "scroll"})
+	require.Less(t, scrollEnd.Percentage, 1.0, "continuous view reached 100%%, so the 99%% rule may no longer be needed")
+	require.GreaterOrEqual(t, scrollEnd.Percentage, 0.99)
+	s.run(Args{Command: "push", File: "fresh.epub", View: "scroll"})
 	assert.Equal(t, models.ReadThroughOutcomeFinished, s.outcome(epub))
 
 	// Screenshots show the rendered page.
@@ -428,7 +434,8 @@ func (s *scenario) requireBulkDownloadMapped(files ...*models.File) {
 	}
 }
 
-// writeLongEPUB writes an EPUB long enough that percentages mean something.
+// writeLongEPUB writes an EPUB of about 200 screens in KOReader, a short real
+// book: long enough that the last screen of continuous view is past 99%.
 func writeLongEPUB(t *testing.T, path, title string) {
 	t.Helper()
 	f, err := os.Create(path)
@@ -443,15 +450,16 @@ func writeLongEPUB(t *testing.T, path, title string) {
 	}
 	write("mimetype", "application/epub+zip", zip.Store)
 	write("META-INF/container.xml", `<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`, zip.Deflate)
+	const chapters = 12
 	// The package document comes first so a metadata edit lands in the bytes
 	// KOReader samples and changes the hash, as it does in most real EPUBs.
 	var manifest, spine strings.Builder
-	for i := range 5 {
+	for i := range chapters {
 		fmt.Fprintf(&manifest, `<item id="c%d" href="c%d.xhtml" media-type="application/xhtml+xml"/>`, i, i)
 		fmt.Fprintf(&spine, `<itemref idref="c%d"/>`, i)
 	}
 	write("OEBPS/content.opf", fmt.Sprintf(`<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="id"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>%s</dc:title><dc:identifier id="id">urn:harness:1</dc:identifier><dc:language>en</dc:language></metadata><manifest>%s</manifest><spine>%s</spine></package>`, title, manifest.String(), spine.String()), zip.Deflate)
-	for i := range 5 {
+	for i := range chapters {
 		var body strings.Builder
 		for p := range 40 {
 			fmt.Fprintf(&body, "<p>Chapter %d paragraph %d. %s</p>", i, p, strings.Repeat("Lorem ipsum dolor sit amet consectetur. ", 12))
