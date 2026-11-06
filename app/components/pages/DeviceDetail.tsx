@@ -487,9 +487,9 @@ const KOReaderSyncSetup = ({ device }: { device: DeviceResponse }) => {
         <li>
           Turn on Automatically keep documents in sync, so your position syncs
           when a book opens or closes and when the device sleeps or wakes.
-          KOReader turns on Wi-Fi for each sync, which uses some battery. On an
-          e-reader, first set Action when Wi-Fi is off to turn on, under
-          KOReader's network settings.
+          KOReader turns on Wi-Fi to sync, which uses some battery. On an
+          e-reader, first open Settings, then Network, then Action when Wi-Fi is
+          off, and choose Turn on.
         </li>
         <li>Keep Document matching method on Binary, the default.</li>
       </ol>
