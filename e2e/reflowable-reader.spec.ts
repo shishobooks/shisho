@@ -590,14 +590,10 @@ test.describe("Reflowable reader", () => {
       const footerPage = (page: Page, pageNumber: number) =>
         page.locator("footer").getByText(`Page ${pageNumber}`, { exact: true });
 
-      // The footer's buttons go by side, not by reading order, so in a book
-      // running right to left the left one is what moves forward.
-      const turnToPage = async (
-        page: Page,
-        pageNumber: number,
-        forward = "Next page",
-      ) => {
-        await page.getByRole("button", { name: forward }).click();
+      // The footer's buttons turn by side, so in a book running right to left
+      // the left one moves forward and is labelled "Next page".
+      const turnToPage = async (page: Page, pageNumber: number) => {
+        await page.getByRole("button", { name: "Next page" }).click();
         await expect(footerPage(page, pageNumber)).toBeVisible();
       };
 
@@ -653,13 +649,9 @@ test.describe("Reflowable reader", () => {
       });
 
       // Seven pages end on a two-page spread, showing one page at a time.
-      for (const [direction, seed, forward] of [
-        ["left to right", { fixedLayoutPages: 7 }, "Next page"],
-        [
-          "right to left",
-          { fixedLayoutPages: 7, fixedLayoutRTL: true },
-          "Previous page",
-        ],
+      for (const [direction, seed] of [
+        ["left to right", { fixedLayoutPages: 7 }],
+        ["right to left", { fixedLayoutPages: 7, fixedLayoutRTL: true }],
       ] as const) {
         test(`the last spread's later page marks it read, ${direction}`, async ({
           page,
@@ -667,11 +659,11 @@ test.describe("Reflowable reader", () => {
           const finishes = watchFinishes(page);
           await open(page, seed);
           for (const pageNumber of [2, 3, 4, 5, 6]) {
-            await turnToPage(page, pageNumber, forward);
+            await turnToPage(page, pageNumber);
           }
           await expectNotFinished(page, finishes);
 
-          await turnToPage(page, 7, forward);
+          await turnToPage(page, 7);
           await expect(page.getByText("Marked as read")).toBeVisible();
         });
       }

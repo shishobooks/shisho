@@ -38,6 +38,8 @@ vi.mock("@/hooks/queries/reflowable", () => ({
 
 // The table of contents the mocked foliate view reports once a book opens.
 let mockToc: unknown[] = [];
+// The page progression direction the mocked foliate view reports.
+let mockDir: string | undefined;
 // Whether the mocked renderer is at the end of the book.
 let mockAtEnd = false;
 // The saved position GET /reading/files/:id/position returns.
@@ -67,7 +69,7 @@ beforeAll(() => {
         };
         lastLocation = { cfi: "epubcfi(/6/2!/4/2)", fraction: 0 };
         get book() {
-          return { toc: mockToc };
+          return { toc: mockToc, dir: mockDir };
         }
       },
     );
@@ -82,6 +84,7 @@ vi.mock("@/hooks/queries/settings", () => ({
 beforeEach(() => {
   setAuth({ permissions: ["books:read"] });
   mockAtEnd = false;
+  mockDir = undefined;
   savedCfi = null;
   saveResult = {};
   positionLoadFails = false;
@@ -323,6 +326,56 @@ describe("ReflowableReader", () => {
       screen.getByRole("button", { name: "Previous page" }),
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+  });
+
+  describe("page buttons once the book opens", () => {
+    const openBook = async () => {
+      vi.mocked(useReflowableBlob).mockReturnValue({
+        data: new Blob(["x"], { type: "application/epub+zip" }),
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      } as never);
+      const { container } = renderReader();
+      const view = container.querySelector(
+        "foliate-view",
+      ) as unknown as HTMLElement & {
+        goLeft: ReturnType<typeof vi.fn>;
+        goRight: ReturnType<typeof vi.fn>;
+      };
+      await vi.waitFor(() =>
+        expect(screen.getByRole("button", { name: "Next page" })).toBeEnabled(),
+      );
+      // In document order, which is left to right in the footer.
+      const [left, right] = screen.getAllByRole("button", {
+        name: /^(Previous|Next) page$/,
+      });
+      return { view, left, right };
+    };
+
+    it("label the left button Previous and the right one Next in a left-to-right book", async () => {
+      const { view, left, right } = await openBook();
+      expect(left).toHaveAccessibleName("Previous page");
+      expect(right).toHaveAccessibleName("Next page");
+
+      await userEvent.click(left);
+      expect(view.goLeft).toHaveBeenCalledTimes(1);
+      await userEvent.click(right);
+      expect(view.goRight).toHaveBeenCalledTimes(1);
+    });
+
+    // foliate turns goLeft() into next() for a right-to-left book.
+    it("label the left button Next and the right one Previous in a right-to-left book", async () => {
+      mockDir = "rtl";
+      const { view, left, right } = await openBook();
+      expect(left).toHaveAccessibleName("Next page");
+      expect(right).toHaveAccessibleName("Previous page");
+
+      await userEvent.click(left);
+      expect(view.goLeft).toHaveBeenCalledTimes(1);
+      expect(view.goRight).not.toHaveBeenCalled();
+    });
   });
 
   it("shows the extended-wait hint after 10 seconds of loading", () => {
