@@ -157,8 +157,9 @@ func (b *Book) XPointer(p Place) string {
 		return prefix
 	}
 
-	// The text node crengine has at offset: the one holding it, or past
-	// dropped whitespace, the next, or at the end, the last.
+	// The text node crengine has at offset: the one holding it, or the end of
+	// the one before dropped whitespace, or past it the next, or at the end,
+	// the last.
 	var target, last *node
 	var visit func(n *node)
 	visit = func(n *node) {
@@ -170,10 +171,16 @@ func (b *Book) XPointer(p Place) string {
 				visit(c)
 				continue
 			}
-			last = c
 			if offset < c.end {
 				target = c
+				// A place at the end of the text before, with only dropped
+				// whitespace between, such as a paragraph's end, stays there.
+				if c.start > offset && last != nil && last.end == offset {
+					target = last
+				}
+				return
 			}
+			last = c
 		}
 	}
 	visit(it.body)

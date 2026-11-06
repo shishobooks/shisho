@@ -290,3 +290,23 @@ func TestFallbackOnMismatchedDocument(t *testing.T) {
 		assert.True(t, strings.HasPrefix(plain.textAt(place, 10), "Beta"))
 	})
 }
+
+// A place at the end of a paragraph's text, as the web reader saves when its
+// screen starts right after it, stays in that paragraph rather than moving to
+// the next, whose start is past the whitespace between them.
+func TestXPointerAtTheEndOfAParagraph(t *testing.T) {
+	t.Parallel()
+	books := variants(t)
+	plain, kobo := books["epub"]["EPUB as itself"], books["kepub"]["EPUB as a KePub"]
+	end, err := plain.FromXPointer("/body/DocFragment[2]/body/section/p[1]/text().103")
+	require.NoError(t, err)
+	require.True(t, end.Exact)
+	assert.Equal(t, "/body/DocFragment[2]/body/section/p[1]/text().103", plain.XPointer(end))
+	assert.Equal(t, "/body/DocFragment[2]/body/div/div/section/p[1]/span[4]/text().14", kobo.XPointer(end))
+
+	// Where the next text starts right there, as across inline markup, the
+	// place is the start of that text.
+	emphasis, err := plain.FromXPointer("/body/DocFragment[2]/body/section/p[2]/em/text().0")
+	require.NoError(t, err)
+	assert.Equal(t, "/body/DocFragment[2]/body/section/p[2]/em/text().0", plain.XPointer(emphasis))
+}
