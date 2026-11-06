@@ -477,19 +477,34 @@ const KOReaderSyncSetup = ({ device }: { device: DeviceResponse }) => {
         className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
       >
         <li>
-          With a book open in KOReader, open Tools, then Progress sync, then
+          Open any book in KOReader, then open Tools, then Progress sync, then
           Custom sync server, and enter the server above.
         </li>
         <li>
           Choose Register / Login, enter the username and password above, and
           tap Login. Register doesn't work here: this Device is your account.
         </li>
-        <li>Keep Document matching method on Binary, the default.</li>
         <li>
           Turn on Automatically keep documents in sync, so your position syncs
-          when a book opens and closes.
+          when a book opens or closes and when the device sleeps or wakes.
+          KOReader turns on Wi-Fi for each sync, which uses some battery. On an
+          e-reader, first set Action when Wi-Fi is off to turn on, under
+          KOReader's network settings.
         </li>
+        <li>Keep Document matching method on Binary, the default.</li>
       </ol>
+      <p className="text-sm text-muted-foreground">
+        This is a one-time setup: it applies to every book in KOReader. See the{" "}
+        <a
+          className="underline underline-offset-2 hover:text-foreground"
+          href="https://www.shishobooks.com/docs/koreader"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          KOReader setup guide
+        </a>{" "}
+        for which books sync and how positions move between readers.
+      </p>
     </div>
   );
 };

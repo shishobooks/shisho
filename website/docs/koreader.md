@@ -17,12 +17,21 @@ In KOReader, open **OPDS catalog** from the top menu's search tab, add a catalog
 
 ## Turn On Progress Sync
 
-With a book open in KOReader, open the tools menu and select **Progress sync**.
+KOReader shows its **Progress sync** menu only with a book open, so open any book, then open the tools menu and select **Progress sync**. You set this up once: the settings apply to every book in KOReader.
 
 1. Choose **Custom sync server** and enter the **Custom sync server** URL from the Device's page.
 2. Choose **Register / Login**, enter your Shisho username and the Device's password, and tap **Login**. **Register** does not work here: it shows a message pointing you to the Devices page, because the Device is your account.
-3. Keep **Document matching method** on **Binary**, KOReader's default. Shisho does not support **Filename** matching.
-4. Turn on **Automatically keep documents in sync**. KOReader's setting is off by default, and without it, positions move only when you choose **Push progress from this device now** or **Pull progress from other devices now**.
+3. Turn on **Automatically keep documents in sync**. KOReader's setting is off by default, and without it, positions move only when you choose **Push progress from this device now** or **Pull progress from other devices now**.
+4. Keep **Document matching method** on **Binary**, KOReader's default. Shisho does not support **Filename** matching.
+
+### Automatic Sync and Battery
+
+With automatic sync on, KOReader pulls your position when a book opens and when the device wakes, and pushes it when a book closes and when the device sleeps. **Periodically sync every # pages**, below it in the menu, also pushes while you read. Each sync needs a network connection:
+
+- On an e-reader where KOReader manages Wi-Fi, such as a Kobo, KOReader turns Wi-Fi on for each sync and off again when the device sleeps. Turning Wi-Fi on that often uses more battery than leaving sync off. KOReader enables automatic sync only when **Action when Wi-Fi is off**, in its network settings, is set to **turn on**.
+- A push KOReader can't send, because Wi-Fi is off or out of range, waits in a queue and goes out the next time KOReader connects.
+
+To save battery, leave automatic sync off and push or pull from the **Progress sync** menu when you switch devices.
 
 Regenerating the Device's credential stops the old one working for sync as well as OPDS. Log in again in KOReader with the new one.
 

@@ -281,11 +281,24 @@ describe("DeviceDetail", () => {
     expect(screen.getByLabelText("Sync password")).toHaveTextContent(
       "abcdefghjkmnpqrs",
     );
-    expect(screen.getByText(/Binary/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Automatically keep documents in sync/),
-    ).toBeInTheDocument();
     expect(screen.getByText(/Register doesn't work here/)).toBeInTheDocument();
+
+    // The steps follow KOReader's Progress sync menu, top to bottom.
+    const steps = within(
+      screen.getByRole("list", { name: "KOReader progress sync setup" }),
+    ).getAllByRole("listitem");
+    expect(steps.map((step) => step.textContent)).toEqual([
+      expect.stringContaining("Custom sync server"),
+      expect.stringContaining("Register / Login"),
+      expect.stringContaining("Automatically keep documents in sync"),
+      expect.stringContaining("Document matching method"),
+    ]);
+    expect(steps[2]).toHaveTextContent(/Wi-Fi/);
+    expect(steps[2]).toHaveTextContent(/battery/);
+
+    expect(
+      screen.getByRole("link", { name: "KOReader setup guide" }),
+    ).toHaveAttribute("href", "https://www.shishobooks.com/docs/koreader");
   });
 
   it("toasts an error when copying fails", async () => {
