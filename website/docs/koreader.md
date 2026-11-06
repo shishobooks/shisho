@@ -31,7 +31,9 @@ With automatic sync on, KOReader pulls your position when a book opens and when 
 - On an e-reader where KOReader manages Wi-Fi, such as a Kobo, KOReader turns Wi-Fi on for each sync and off again when the device sleeps. Turning Wi-Fi on that often uses more battery than leaving sync off. KOReader enables automatic sync only when **Action when Wi-Fi is off**, in its network settings, is set to **turn on**.
 - A push KOReader can't send, because Wi-Fi is off or out of range, waits in a queue and goes out the next time KOReader connects.
 
-To save battery, leave automatic sync off and push or pull from the **Progress sync** menu when you switch devices.
+KOReader doesn't tell Shisho when you read, so Shisho dates each position when the push arrives. The longer a push waits, the less accurate your reading dates are. A book you start or finish offline is dated the day KOReader next pushes it, and its [last read](./reading-tracking.md#last-read) is the time of that push. Until then, the Shisho reader and your other devices still have your old place.
+
+You can leave automatic sync off to save battery. KOReader then pushes only when you choose **Push progress from this device now** in the **Progress sync** menu, and it sends only the open book's position. Every book you read in the meantime keeps its place in KOReader and syncs the next time you open it and push. You give up accurate dates for the battery you save, so a Read-through can start or end on the day you pushed rather than the day you read. To correct those dates, use **Edit dates** in [Reading History](./reading-tracking.md#reading-history).
 
 Regenerating the Device's credential stops the old one working for sync as well as OPDS. Log in again in KOReader with the new one.
 
