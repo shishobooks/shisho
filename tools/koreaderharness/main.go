@@ -36,6 +36,8 @@ const usage = `Drives a real, headless KOReader against a running Shisho. Every 
   drain      --file BOOK                                  send what's queued
   screenshot --file BOOK --out PNG
   digest     --file PATH                                  KOReader's document hash of any file
+  xpointers  --file BOOK                                  every word start of a reflowable book, as
+             KOReader writes its XPointer, with its text: the expected values for translation tests
 
   Any command that opens a book takes --out PNG to screenshot the result, and
   --view page|scroll for KOReader's page or continuous view of a reflowable book.

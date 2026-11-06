@@ -19,6 +19,9 @@ type UpdateProgressPayload struct {
 	// metadata" option is on. It's only logged, to name a book Shisho doesn't
 	// recognize.
 	Metadata json.RawMessage `json:"metadata,omitempty" tstype:"unknown"`
+	// Timestamp is when KOReader was at the position, in Unix seconds. No
+	// KOReader release sends it yet; one that does dates its offline pushes.
+	Timestamp *int64 `json:"timestamp,omitempty" validate:"omitempty,min=1"`
 }
 
 // UpdateProgressResponse answers a push. Timestamp is in Unix seconds.

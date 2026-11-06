@@ -17,11 +17,13 @@ import (
 // KOReader's custom sync server.
 func RegisterRoutes(e *echo.Echo, db *bun.DB, bookService *books.Service) {
 	deviceService := devices.NewService(db)
+	readingService := reading.NewService(db)
 	h := &handler{
 		deviceService:      deviceService,
 		fingerprintService: fingerprints.NewService(db),
-		readingService:     reading.NewService(db),
+		readingService:     readingService,
 		reachService:       reach.NewService(db, bookService),
+		pulls:              &pullStore{db: db, readingService: readingService},
 	}
 
 	g := e.Group("/koreader")

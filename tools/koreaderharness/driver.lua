@@ -204,6 +204,31 @@ end
 
 commands.screenshot = commands.open
 
+-- Every word start in a reflowable book, as crengine writes its XPointer, with
+-- the text from there to the next one: what tests of XPointer translation
+-- expect, taken from KOReader rather than written by hand.
+commands.xpointers = function()
+    runWithReader(function(ui)
+        local document = ui.document
+        if document.info.has_pages then fail("xpointers needs a reflowable book") end
+        local words = {}
+        local xp = document:getNextVisibleWordStart("/body/DocFragment[1]")
+        -- The first word may be where the document starts.
+        local first = document:getPrevVisibleWordStart(xp)
+        if first and document:compareXPointers(first, xp) == 1 then xp = first end
+        while xp and #words < 5000 do
+            local next_xp = document:getNextVisibleWordStart(xp)
+            if not next_xp or document:compareXPointers(xp, next_xp) ~= 1 then
+                table.insert(words, { xpointer = xp })
+                break
+            end
+            table.insert(words, { xpointer = xp, text = document:getTextFromXPointers(xp, next_xp) })
+            xp = next_xp
+        end
+        return { words = words }
+    end)
+end
+
 local function accountCommand(call)
     if not args.file then fail("--file is required") end
     runWithReader(function(_, kosync)

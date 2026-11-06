@@ -258,6 +258,28 @@ func TestUpdatePosition_GoingBackSoonAfterAFinishUndoesIt(t *testing.T) {
 	assert.Equal(t, "2026-10-15", *rts[0].BeginDay)
 }
 
+// Going back undoes a finish only in the reader that made it. Another
+// reader's update before the end is one it sent from where it was, such as a
+// device's queued while offline, not a reader who went back.
+func TestUpdatePosition_AnotherReaderGoingBackKeepsTheFinish(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.clock.advance(time.Minute)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	require.Equal(t, models.ReadingStatusRead, f.status())
+
+	f.clock.advance(time.Minute)
+	xp := "/body/DocFragment[10]/body/p[3]/text().0"
+	result, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
+		UserID: f.user.ID, FileID: f.file.ID, Source: models.ReadingSourceKOReader,
+		Locator: models.ReadingLocator{XPointer: &xp}, Percentage: 0.5,
+	})
+	require.NoError(t, err)
+	assert.False(t, result.Reverted)
+	assert.Equal(t, models.ReadingStatusRead, f.status())
+}
+
 func TestUpdatePosition_AnotherUpdateAtTheEndKeepsTheRevertWindowOpen(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)

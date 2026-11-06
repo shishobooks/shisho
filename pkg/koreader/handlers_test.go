@@ -393,7 +393,9 @@ func TestProgress_ReadingStartsAndFinishesTheBook(t *testing.T) {
 	require.Equal(t, http.StatusOK, f.push(epubHash, "/body/DocFragment[5]/body/p[38]/text().0", 0.99).Code)
 	assert.Equal(t, models.ReadThroughOutcomeFinished, f.status(file))
 
-	// Going back within the window is the revert rule.
+	// Going back within the window is the revert rule, for a push that isn't
+	// part of a replay.
+	f.agePushes()
 	require.Equal(t, http.StatusOK, f.push(epubHash, xpointer, 0.3).Code)
 	assert.Equal(t, models.ReadThroughOutcomeUnderway, f.status(file))
 }
@@ -516,25 +518,6 @@ func TestProgress_UnknownDocumentIsLoggedWithWhatKOReaderSent(t *testing.T) {
 	logged.Reset()
 	require.Equal(t, http.StatusOK, f.pull(unknown).Code)
 	assert.Contains(t, logged.String(), unknown)
-}
-
-// Translating a reflowable position between readers comes with #811.
-func TestProgress_ReflowablePositionWrittenElsewhereHasNoProgress(t *testing.T) {
-	t.Parallel()
-	f := newSyncFixture(t)
-	file := f.addFile(f.lib, models.FileTypeEPUB, epubHash)
-	cfi := "epubcfi(/6/4!/4/2)"
-	_, err := f.reading.UpdatePosition(f.ctx, reading.PositionUpdate{
-		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
-		Locator: models.ReadingLocator{CFI: &cfi}, Percentage: 0.5,
-	})
-	require.NoError(t, err)
-	assert.JSONEq(t, `{}`, f.pull(epubHash).Body.String())
-
-	phone, err := f.devices.Create(f.ctx, f.user.ID, "Phone KOReader", devices.DeviceTypeKOReader)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, f.pushAs(phone, epubHash, xpointer, 0.6).Code)
-	assert.JSONEq(t, `{}`, f.pull(epubHash).Body.String())
 }
 
 func TestProgress_NoPositionYetHasNoProgress(t *testing.T) {
@@ -680,8 +663,7 @@ func TestProgress_BadPushesAreRejected(t *testing.T) {
 	}
 }
 
-// A field a later KOReader adds, like the proposed timestamp, mustn't refuse
-// the push.
+// A field a later KOReader adds mustn't refuse the push.
 func TestProgress_UnknownFieldsAreAccepted(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)

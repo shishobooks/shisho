@@ -28,10 +28,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/fingerprint"
 	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/joblogs"
+	"github.com/shishobooks/shisho/pkg/kepub"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/reading"
+	"github.com/shishobooks/shisho/pkg/reflowable"
 	"github.com/shishobooks/shisho/pkg/server"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
@@ -322,7 +324,7 @@ func TestRoundTrips(t *testing.T) {
 	// Prompt mode, KOReader's pull on opening and waking, offers the jump
 	// under the web reader's name, and waits for an answer.
 	prompted := s.run(Args{Command: "pull", File: "comic.cbz", Mode: "prompt"})
-	assert.Contains(t, prompted.Prompted, "Shisho web reader")
+	assert.Contains(t, prompted.Prompted, "Shisho web reader", "shown: %v", prompted.Shown)
 	assert.Equal(t, "20", prompted.Progress, "the jump waits for an answer")
 	confirmed := s.run(Args{Command: "pull", File: "comic.cbz", Mode: "prompt", Confirm: true})
 	assert.Equal(t, "25", confirmed.Progress)
@@ -467,4 +469,128 @@ func writeLongEPUB(t *testing.T, path, title string) {
 		write(fmt.Sprintf("OEBPS/c%d.xhtml", i), fmt.Sprintf(`<html xmlns="http://www.w3.org/1999/xhtml"><head><title>Chapter %d</title></head><body><h1>Chapter %d</h1>%s</body></html>`, i, i, body.String()), zip.Deflate)
 	}
 	require.NoError(t, zw.Close())
+}
+
+// paragraph is the path of the paragraph an XPointer in Long Book points
+// into, such as /body/DocFragment[4]/body/p[20].
+func paragraph(t *testing.T, xp string) string {
+	t.Helper()
+	i := strings.Index(xp, "/p[")
+	require.Positive(t, i, xp)
+	end := strings.Index(xp[i+1:], "/")
+	if end < 0 {
+		return xp
+	}
+	return xp[:i+1+end]
+}
+
+// Switching between the web reader and KOReader keeps the place, whether
+// KOReader holds the EPUB or its KePub. Continuous view reports the top of
+// the screen, which after a jump is the line the place is on.
+func TestHandoffs(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	cbz := s.file(models.FileTypeCBZ)
+	book, err := reflowable.Open(s.ctx, epub.Filepath, false)
+	require.NoError(t, err)
+	kobo, err := reflowable.Open(s.ctx, epub.Filepath, true)
+	require.NoError(t, err)
+
+	s.downloadOPDS("Long Book", "long.epub")
+	s.login("long.epub")
+
+	// KOReader holds the KePub too, as a Device whose Delivery Rules ask for
+	// one would get it.
+	kepubPath := filepath.Join(t.TempDir(), "long.kepub.epub")
+	require.NoError(t, kepub.NewConverter().ConvertEPUB(s.ctx, epub.Filepath, kepubPath))
+	kepubCopy := s.run(Args{Command: "digest", File: kepubPath})
+	require.NoError(t, s.fingerprints.RecordDocumentHash(s.ctx, epub.ID, models.FileTypeKePub, kepubCopy.Hash))
+	s.run(Args{Command: "open", File: kepubPath})
+
+	webReaderAt := func(xp string, percentage float64) {
+		t.Helper()
+		place, err := book.FromXPointer(xp)
+		require.NoError(t, err)
+		require.True(t, place.Exact, xp)
+		cfi := book.CFI(place)
+		_, err = s.reading.UpdatePosition(s.ctx, reading.PositionUpdate{
+			UserID: s.user.ID, FileID: epub.ID, Source: models.ReadingSourceWebReader,
+			Locator: models.ReadingLocator{CFI: &cfi}, Percentage: percentage,
+		})
+		require.NoError(t, err)
+	}
+	webReaderPlace := func() string {
+		t.Helper()
+		position, err := s.reading.RetrieveWebReaderPosition(s.ctx, s.user.ID, epub.ID)
+		require.NoError(t, err)
+		require.NotNil(t, position.CFI)
+		place, err := book.FromCFI(*position.CFI)
+		require.NoError(t, err)
+		require.True(t, place.Exact, *position.CFI)
+		return book.XPointer(place)
+	}
+
+	for _, copy := range []struct {
+		file, wrappers string
+		book           *reflowable.Book
+	}{{"long.epub", "", book}, {filepath.Base(kepubPath), "/div/div", kobo}} {
+		// The web reader to KOReader: mid-paragraph in chapter three.
+		webReaderAt("/body/DocFragment[4]/body/p[20]/text().250", 0.3)
+		pulled := s.run(Args{Command: "pull", File: copy.file, Mode: "silent", View: "scroll"})
+		assert.Equal(t, "/body/DocFragment[4]/body"+copy.wrappers+"/p[20]", paragraph(t, pulled.Progress), "%s: shown %v", copy.file, pulled.Shown)
+
+		// KOReader to the web reader: a place mid-page in chapter five comes
+		// back exactly.
+		midPage, err := book.FromXPointer("/body/DocFragment[6]/body/p[12]/text().300")
+		require.NoError(t, err)
+		moved := s.run(Args{Command: "goto", File: copy.file, XPointer: copy.book.XPointer(midPage), View: "scroll"})
+		require.Equal(t, "/body/DocFragment[6]/body"+copy.wrappers+"/p[12]", paragraph(t, moved.Progress))
+		s.run(Args{Command: "push", File: copy.file, View: "scroll"})
+		inEPUB := webReaderPlace()
+		assert.Equal(t, "/body/DocFragment[6]/body/p[12]", paragraph(t, inEPUB), copy.file)
+		if copy.wrappers == "" {
+			assert.Equal(t, moved.Progress, inEPUB, "the EPUB's own XPointer comes back exactly")
+		}
+	}
+
+	// Pushes queued offline drain in order when KOReader reconnects, and make
+	// no session, even with a pull before them.
+	s.downloadOPDS("Comic", "comic.cbz")
+	s.run(Args{Command: "pull", File: "long.epub", Mode: "silent"})
+	before := s.count("reading_sessions")
+	sixty := 60.0
+	atSixty := s.run(Args{Command: "goto", File: "long.epub", Percent: &sixty})
+	assert.Equal(t, 1, s.run(Args{Command: "queue-push", File: "long.epub"}).Queued)
+	s.run(Args{Command: "goto", File: "comic.cbz", Page: 7})
+	assert.Equal(t, 2, s.run(Args{Command: "queue-push", File: "comic.cbz"}).Queued)
+	drained := s.run(Args{Command: "drain", File: "comic.cbz"})
+	assert.Equal(t, 2, drained.Drained)
+	position, err := s.reading.RetrievePosition(s.ctx, s.user.ID, epub.ID)
+	require.NoError(t, err)
+	require.NotNil(t, position.XPointer)
+	assert.Equal(t, atSixty.Progress, *position.XPointer)
+	comic, err := s.reading.RetrievePosition(s.ctx, s.user.ID, cbz.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 6, *comic.Page)
+	assert.Equal(t, before, s.count("reading_sessions"), "a replay is no sitting")
+
+	// A pull when opening and a push when closing, a while later, is a sitting.
+	s.run(Args{Command: "pull", File: "long.epub", Mode: "silent"})
+	_, err = s.db.NewUpdate().Model((*models.KOReaderPull)(nil)).Set("pulled_at = ?", time.Now().Add(-10*time.Minute)).
+		Where("device_id = ?", s.device.ID).Exec(s.ctx)
+	require.NoError(t, err)
+	_, err = s.db.NewUpdate().Model((*models.ReadingPositionUpdate)(nil)).Set("created_at = ?", time.Now().Add(-10*time.Minute)).
+		Where("user_id = ?", s.user.ID).Exec(s.ctx)
+	require.NoError(t, err)
+	seventy := 70.0
+	s.run(Args{Command: "goto", File: "long.epub", Percent: &seventy})
+	s.run(Args{Command: "push", File: "long.epub"})
+	assert.Equal(t, before+1, s.count("reading_sessions"))
+}
+
+func (s *scenario) count(table string) int {
+	s.t.Helper()
+	n, err := s.db.NewSelect().Table(table).Where("user_id = ?", s.user.ID).Count(s.ctx)
+	require.NoError(s.t, err)
+	return int(n)
 }

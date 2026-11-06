@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reflowable"
 	"github.com/uptrace/bun"
 )
 
@@ -49,6 +51,9 @@ type PositionUpdate struct {
 	ReportedDeviceID *string
 	// Locator holds the position in the one form the source reads.
 	Locator models.ReadingLocator
+	// LocatorFileType is the File Type of the copy Locator points into, when
+	// it isn't the File's own.
+	LocatorFileType *string
 	// Percentage is how far through the File the position is, from 0 to 1.
 	Percentage float64
 	// AtEnd is the source reporting the end of the File, such as a
@@ -70,6 +75,7 @@ type PositionUpdate struct {
 	// OccurredAt is when the source was at the position, for an update
 	// sent later. Nil is now, and an instant after now counts as now.
 	OccurredAt *time.Time
+
 	// Session is a Reading Session the source finished, recorded with the
 	// update.
 	Session *SessionInput
@@ -90,7 +96,7 @@ type SessionInput struct {
 //  1. ignores an update older than the stored position, recording only its
 //     session
 //  2. undoes the File's automatic finish when this is the next update back
-//     before the end, within RevertWindow
+//     before the end, within RevertWindow, from the reader that finished it
 //  3. starts a Read-through when none is underway, the update is real
 //     progress, and the Book is unread or on To Read, taking it off To Read
 //     and resetting its other positions
@@ -147,7 +153,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		atEnd := reading && (u.AtEnd || locatorAtEnd(file, u.Locator))
 
 		if underway == nil && !atEnd && moved && reading {
-			reverted, err := revertAutoFinish(ctx, tx, u.UserID, u.FileID, occurredAt, now)
+			reverted, err := revertAutoFinish(ctx, tx, u, occurredAt, now)
 			if err != nil {
 				return err
 			}
@@ -232,6 +238,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			CreatedAt:        now,
 			UpdatedAt:        now,
 			ReadingLocator:   u.Locator,
+			LocatorFileType:  u.LocatorFileType,
 			Percentage:       u.Percentage,
 			Source:           u.Source,
 			SourceDeviceID:   u.DeviceID,
@@ -248,6 +255,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			Set("page = EXCLUDED.page").
 			Set("seconds = EXCLUDED.seconds").
 			Set("kobo_span = EXCLUDED.kobo_span").
+			Set("locator_file_type = EXCLUDED.locator_file_type").
 			Set("percentage = EXCLUDED.percentage").
 			Set("source = EXCLUDED.source").
 			Set("source_device_id = EXCLUDED.source_device_id").
@@ -378,6 +386,12 @@ func recordSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 	if session == nil {
 		return nil
 	}
+	_, err := insertSession(ctx, tx, userID, fileID, source, *session, rt, now)
+	return err
+}
+
+// insertSession records session as recordSession does, returning its id.
+func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source string, session SessionInput, rt *models.ReadThrough, now time.Time) (int, error) {
 	sessionReadThrough := readThroughID(rt)
 	if sessionReadThrough == nil {
 		var ranDuring int
@@ -390,13 +404,13 @@ func recordSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 			Limit(1).
 			Scan(ctx, &ranDuring)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return errors.WithStack(err)
+			return 0, errors.WithStack(err)
 		}
 		if err == nil {
 			sessionReadThrough = &ranDuring
 		}
 	}
-	_, err := tx.NewInsert().Model(&models.ReadingSession{
+	inserted := &models.ReadingSession{
 		CreatedAt:       now,
 		UserID:          userID,
 		FileID:          &fileID,
@@ -407,17 +421,22 @@ func recordSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 		StartPercentage: session.StartPercentage,
 		EndPercentage:   session.EndPercentage,
 		Measured:        session.Measured,
-	}).Exec(ctx)
-	return errors.WithStack(err)
+	}
+	_, err := tx.NewInsert().Model(inserted).Exec(ctx)
+	return inserted.ID, errors.WithStack(err)
 }
 
-// revertAutoFinish undoes the automatic finish on fileID for an update
+// revertAutoFinish undoes the automatic finish on u's File for u, an update
 // back before the end at occurredAt, returning the Read-through it made
 // underway again, or nil when there's nothing to undo. Only the update
-// after the finish undoes it, and only within RevertWindow; updates still
-// at the end in between keep the window open. The caller checks that
-// nothing is underway, since a Book has only one Read-through underway.
-func revertAutoFinish(ctx context.Context, tx bun.Tx, userID, fileID int, occurredAt, now time.Time) (*models.ReadThrough, error) {
+// after the finish undoes it, only within RevertWindow, and only from the
+// reader that finished it: another reader's update going back is one sent
+// from where it was before, such as a device's queued while offline.
+// Updates still at the end in between keep the window open. The caller
+// checks that nothing is underway, since a Book has only one Read-through
+// underway.
+func revertAutoFinish(ctx context.Context, tx bun.Tx, u PositionUpdate, occurredAt, now time.Time) (*models.ReadThrough, error) {
+	userID, fileID := u.UserID, u.FileID
 	finish := &models.ReadingPositionUpdate{}
 	err := tx.NewSelect().
 		Model(finish).
@@ -433,6 +452,12 @@ func revertAutoFinish(ctx context.Context, tx bun.Tx, userID, fileID int, occurr
 	}
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+	sameReader := finish.Source == u.Source &&
+		(finish.SourceDeviceID == nil) == (u.DeviceID == nil) &&
+		(finish.SourceDeviceID == nil || *finish.SourceDeviceID == *u.DeviceID)
+	if !sameReader {
+		return nil, nil
 	}
 	if finish.ReadThroughID == nil || occurredAt.Sub(finish.OccurredAt) > RevertWindow {
 		return nil, nil
@@ -498,6 +523,94 @@ func (svc *Service) UndoAutoFinish(ctx context.Context, rt *models.ReadThrough) 
 		_, err = reopenAutoFinished(ctx, tx, rt.ID, svc.now())
 		return err
 	})
+}
+
+// RetrieveWebReaderPosition loads userID's Reading Position in fileID as the
+// web reader reads it, or nil when there is none. A reflowable position
+// another reader wrote, such as KOReader's XPointer, comes as a CFI in the
+// File's own copy, which is the one the web reader opens. One that can't be
+// translated, as when the File can't be read, comes as it was stored.
+func (svc *Service) RetrieveWebReaderPosition(ctx context.Context, userID, fileID int) (*models.ReadingPosition, error) {
+	position, err := retrievePosition(ctx, svc.db, userID, fileID)
+	if err != nil || position == nil || position.CFI != nil {
+		return position, err
+	}
+	file := &models.File{}
+	err = svc.db.NewSelect().Model(file).Column("f.file_type", "f.filepath").Where("f.id = ?", fileID).Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	locator, err := reflowable.Translate(ctx, file.Filepath, file.FileType, position, file.FileType, reflowable.FormCFI)
+	if errors.Is(err, reflowable.ErrNotTranslatable) {
+		return position, nil
+	}
+	if err != nil {
+		logger.FromContext(ctx).Warn("reading position not translated for the web reader", logger.Data{
+			"file_id": fileID, "error": err.Error(),
+		})
+		return position, nil
+	}
+	position.ReadingLocator = locator
+	position.LocatorFileType = nil
+	return position, nil
+}
+
+// DeviceUpdatedSince reports whether deviceID sent an update that arrived at
+// or after since.
+func (svc *Service) DeviceUpdatedSince(ctx context.Context, deviceID string, since time.Time) (bool, error) {
+	exists, err := svc.db.NewSelect().
+		Model((*models.ReadingPositionUpdate)(nil)).
+		Where("rpu.source_device_id = ? AND rpu.created_at >= ?", deviceID, since).
+		Exists(ctx)
+	return exists, errors.WithStack(err)
+}
+
+// RecordEstimatedSession records session, which source estimated, for
+// userID in fileID, returning its id. With extend, the id of a session
+// recorded this way before, it moves that session's end to session's
+// instead, when that session is still there.
+func (svc *Service) RecordEstimatedSession(ctx context.Context, userID, fileID int, source string, extend *int, session SessionInput) (int, error) {
+	var id int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if extend != nil {
+			res, err := tx.NewUpdate().
+				Model((*models.ReadingSession)(nil)).
+				Set("ended_at = ?", session.EndedAt).
+				Set("end_percentage = ?", session.EndPercentage).
+				Where("id = ? AND user_id = ? AND NOT measured AND ended_at <= ?", *extend, userID, session.EndedAt).
+				Exec(ctx)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if n, err := res.RowsAffected(); err != nil || n == 1 {
+				id = *extend
+				return errors.WithStack(err)
+			}
+		}
+		var bookID int
+		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrFileNotFound
+		}
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		underway, err := retrieveUnderway(ctx, tx, userID, bookID)
+		if err != nil {
+			return err
+		}
+		session.Measured = false
+		id, err = insertSession(ctx, tx, userID, fileID, source, session, underway, svc.now())
+		return err
+	})
+	return id, err
+}
+
+// DeleteSession deletes userID's Reading Session id, one that turned out not
+// to be reading.
+func (svc *Service) DeleteSession(ctx context.Context, userID, id int) error {
+	_, err := svc.db.NewDelete().Model((*models.ReadingSession)(nil)).Where("id = ? AND user_id = ?", id, userID).Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // RetrievePosition loads userID's Reading Position in fileID, or nil when

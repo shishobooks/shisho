@@ -122,8 +122,12 @@ type ReadingPosition struct {
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 	ReadingLocator `tstype:",extends"`
-	Percentage     float64 `bun:",notnull" json:"percentage"`
-	Source         string  `bun:",nullzero" json:"source" tstype:"ReadingSource"`
+	// LocatorFileType is the File Type of the copy the locator points into,
+	// when it isn't the File's own, such as the KePub a KOReader holds of an
+	// EPUB: span markup gives a KePub's XPointers different paths.
+	LocatorFileType *string `json:"-"`
+	Percentage      float64 `bun:",notnull" json:"percentage"`
+	Source          string  `bun:",nullzero" json:"source" tstype:"ReadingSource"`
 	// SourceDeviceID is the Device that reported the position, when a Device
 	// did and still exists.
 	SourceDeviceID *string `json:"-"`
