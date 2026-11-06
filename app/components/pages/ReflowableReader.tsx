@@ -179,6 +179,9 @@ export default function ReflowableReader({
   const [currentTocHref, setCurrentTocHref] = useState<string | null>(null);
   const [currentTocLabel, setCurrentTocLabel] = useState<string | null>(null);
   const [bookReady, setBookReady] = useState(false);
+  // In a right-to-left book foliate's goLeft() moves forward, so the footer
+  // buttons, which turn by side, swap labels.
+  const [rtl, setRtl] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
 
   // Load the blob into foliate once both it and the saved location are
@@ -190,6 +193,7 @@ export default function ReflowableReader({
           open?: (book: Blob | File) => Promise<void>;
           book?: {
             toc?: Array<{ label: string; href: string; subitems?: unknown[] }>;
+            dir?: string;
           };
         })
       | null;
@@ -215,6 +219,7 @@ export default function ReflowableReader({
 
     let cancelled = false;
     setBookReady(false);
+    setRtl(false);
     setLoadError(null);
 
     // Hardcoded name. foliate doesn't surface the synthetic File's name
@@ -230,6 +235,7 @@ export default function ReflowableReader({
       await view.open!(bookFile);
       if (cancelled) return;
       setToc(flattenToc(view.book?.toc));
+      setRtl(view.book?.dir === "rtl");
       // foliate's open() only parses; init() is what actually navigates to
       // the first page and triggers rendering. Without it the view stays at
       // 0% with an empty content area.
@@ -883,7 +889,7 @@ export default function ReflowableReader({
 
         <div className="flex items-center justify-between px-4 py-2">
           <Button
-            aria-label="Previous page"
+            aria-label={rtl ? "Next page" : "Previous page"}
             disabled={!bookReady}
             onClick={goPrev}
             size="icon"
@@ -895,7 +901,7 @@ export default function ReflowableReader({
             {progressPercent}%
           </span>
           <Button
-            aria-label="Next page"
+            aria-label={rtl ? "Previous page" : "Next page"}
             disabled={!bookReady}
             onClick={goNext}
             size="icon"
