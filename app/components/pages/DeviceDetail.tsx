@@ -477,8 +477,8 @@ const KOReaderSyncSetup = ({ device }: { device: DeviceResponse }) => {
         className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
       >
         <li>
-          Open any book in KOReader, then open Tools, then Progress sync, then
-          Custom sync server, and enter the server above.
+          Open any book in KOReader, go to Tools &gt; Progress sync &gt; Custom
+          sync server, and enter the server above.
         </li>
         <li>
           Choose Register / Login, enter the username and password above, and
@@ -488,8 +488,8 @@ const KOReaderSyncSetup = ({ device }: { device: DeviceResponse }) => {
           Turn on Automatically keep documents in sync, so your position syncs
           when a book opens or closes and when the device sleeps or wakes.
           KOReader turns on Wi-Fi to sync, which uses some battery. On an
-          e-reader, first open Settings, then Network, then Action when Wi-Fi is
-          off, and choose Turn on.
+          e-reader, first set Settings &gt; Network &gt; Action when Wi-Fi is
+          off to Turn on.
         </li>
         <li>Keep Document matching method on Binary, the default.</li>
       </ol>
