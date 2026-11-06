@@ -59,6 +59,7 @@ import { cn } from "@/libraries/utils";
 import {
   ConnectionEReaderBrowser,
   ConnectionKoboSync,
+  ConnectionKOReaderSync,
   ConnectionOPDS,
   ScopeAll,
   ScopeLibrary,
@@ -75,6 +76,7 @@ import {
   DEVICE_TYPE_LABELS,
   eReaderBrowserURL,
   koboSyncURL,
+  koreaderSyncURL,
   opdsCatalogURL,
   shortURL,
 } from "@/utils/devices";
@@ -463,6 +465,50 @@ const OPDSSetup = ({ device }: { device: DeviceResponse }) => {
   );
 };
 
+const KOReaderSyncSetup = ({ device }: { device: DeviceResponse }) => {
+  const { user } = useAuth();
+  return (
+    <div className="space-y-4">
+      <CopyField label="Custom sync server" value={koreaderSyncURL()} />
+      {user && <CopyField label="Sync username" value={user.username} />}
+      <CopyField label="Sync password" value={device.credential} />
+      <ol
+        aria-label="KOReader progress sync setup"
+        className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
+      >
+        <li>
+          Open any book in KOReader, go to Tools &gt; Progress sync &gt; Custom
+          sync server, and enter the server above.
+        </li>
+        <li>
+          Choose Register / Login, enter the username and password above, and
+          tap Login. Register doesn't work here: this Device is your account.
+        </li>
+        <li>
+          Turn on Automatically keep documents in sync, so your position syncs
+          when a book opens or closes and when the device sleeps or wakes.
+          KOReader turns on Wi-Fi to sync, which uses some battery. On an
+          e-reader, first set Settings &gt; Network &gt; Action when Wi-Fi is
+          off to Turn on.
+        </li>
+        <li>Keep Document matching method on Binary, the default.</li>
+      </ol>
+      <p className="text-sm text-muted-foreground">
+        This is a one-time setup: it applies to every book in KOReader. See the{" "}
+        <a
+          className="underline underline-offset-2 hover:text-foreground"
+          href="https://www.shishobooks.com/docs/koreader"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          KOReader setup guide
+        </a>{" "}
+        for which books sync and how positions move between readers.
+      </p>
+    </div>
+  );
+};
+
 const CONNECTION_SETUP: Record<
   Connection,
   (props: { device: DeviceResponse }) => React.ReactNode
@@ -470,6 +516,7 @@ const CONNECTION_SETUP: Record<
   [ConnectionKoboSync]: KoboSyncSetup,
   [ConnectionEReaderBrowser]: EReaderBrowserSetup,
   [ConnectionOPDS]: OPDSSetup,
+  [ConnectionKOReaderSync]: KOReaderSyncSetup,
 };
 
 // ConnectionsSection shows setup instructions for each connection the

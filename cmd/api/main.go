@@ -23,6 +23,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/database"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/events"
+	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/logs"
 	"github.com/shishobooks/shisho/pkg/migrations"
 	"github.com/shishobooks/shisho/pkg/pdfpages"
@@ -111,7 +112,9 @@ func main() {
 
 	// Unlimited until server.New applies the limit saved under Settings >
 	// Cache, so nothing is evicted against a limit the admin did not choose.
-	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), math.MaxInt64)
+	fingerprintService := fingerprints.NewService(db)
+	dlCache := downloadcache.NewCache(filepath.Join(cfg.CacheDir, "downloads"), math.MaxInt64,
+		downloadcache.WithDocumentHashRecorder(fingerprintService.RecordDocumentHash))
 	if err := dlCache.RemoveLeftovers(); err != nil {
 		log.Warn("failed to remove partial downloads left in the cache", logger.Data{"error": err.Error()})
 	}

@@ -130,9 +130,9 @@ A download cache that is full or not writable does not stop downloads. Each down
 
 **Symptom:** An OPDS client rejects the catalog or opens the root catalog but receives `401 Unauthorized` on a sub-feed or download.
 
-**Likely cause:** The client has incorrect Shisho credentials, such as a Device credential paired with another user's username or taken from a Device that isn't an OPDS app, or an HTTP-to-HTTPS redirect caused the client to drop its Basic Authentication header. A `403 Forbidden` instead means the credentials worked, but the user's role lacks Books Read or the user cannot access that library.
+**Likely cause:** The client has incorrect Shisho credentials, such as a Device credential paired with another user's username or taken from a Device that doesn't use OPDS, or an HTTP-to-HTTPS redirect caused the client to drop its Basic Authentication header. A `403 Forbidden` instead means the credentials worked, but the user's role lacks Books Read or the user cannot access that library.
 
-**Verify:** Use the exact catalog URL and your Shisho username, with your account password or the credential shown on an OPDS app Device's page. For a `403`, check the user's role and library access. Check generated sub-feed links for the wrong scheme and inspect the proxy's `X-Forwarded-Proto` handling.
+**Verify:** Use the exact catalog URL and your Shisho username, with your account password or the credential shown on an OPDS app or KOReader Device's page. For a `403`, check the user's role and library access. Check generated sub-feed links for the wrong scheme and inspect the proxy's `X-Forwarded-Proto` handling.
 
 **Fix:** Correct the credentials, or for a `403`, the role or library access. Behind an HTTPS-terminating proxy, forward `X-Forwarded-Proto: https` over a connection Shisho trusts so generated feed links stay on HTTPS. See [OPDS Catalog](./opds.md#repeated-login-prompts-or-401-responses), [Deployment and Maintenance](./deployment-and-maintenance.md#https-and-reverse-proxies), and [Users and Permissions](./users-and-permissions.md).
 

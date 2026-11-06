@@ -33,8 +33,9 @@ type hashGenResult struct {
 }
 
 // ProcessHashGenerationJob computes and stores sha256 fingerprints for all
-// files in a library that don't yet have one. Per-file errors are logged and
-// skipped so a single unreadable file cannot fail the whole job.
+// files in a library that don't yet have one, then KOReader's document hash
+// of each main file. Per-file errors are logged and skipped so a single
+// unreadable file cannot fail the whole job.
 //
 // The job loops until ListFilesMissingAlgorithm returns only IDs we've
 // already attempted. Files added to the library while the job is running
@@ -99,6 +100,10 @@ func (w *Worker) ProcessHashGenerationJob(ctx context.Context, job *models.Job, 
 			return err
 		}
 		totalHashed += passHashed
+	}
+
+	if err := w.recordKOReaderHashes(ctx, libraryID, jobLog); err != nil {
+		return err
 	}
 
 	jobLog.Info("hash generation complete", logger.Data{
@@ -253,6 +258,37 @@ func (w *Worker) hashOneFile(ctx context.Context, fileID int, jobLog *joblogs.Jo
 	}
 
 	return true, true, nil
+}
+
+// recordKOReaderHashes maps KOReader's document hash of every main File whose
+// current bytes aren't in the map yet, so a copy of an Original File on a
+// device syncs (ADR 0014). It reads a few KiB per File, so it needs no worker
+// pool. Like the sha256 pass, a File it can't read is logged and skipped, and
+// the next scan's job tries it again.
+func (w *Worker) recordKOReaderHashes(ctx context.Context, libraryID int, jobLog *joblogs.JobLogger) error {
+	fileIDs, err := w.fingerprintService.ListMainFilesMissingAlgorithm(ctx, libraryID, models.FingerprintAlgorithmKOReaderPartialMD5)
+	if err != nil {
+		return errors.Wrap(err, "list files missing koreader hash")
+	}
+	for _, fileID := range fileIDs {
+		if err := ctx.Err(); err != nil {
+			return errors.WithStack(err)
+		}
+		file, err := w.bookService.RetrieveFile(ctx, books.RetrieveFileOptions{ID: &fileID})
+		if err != nil {
+			jobLog.Warn("could not load file for koreader hash, skipping", logger.Data{"file_id": fileID, "error": err.Error()})
+			continue
+		}
+		hash, err := fingerprint.ComputeKOReaderPartialMD5(file.Filepath)
+		if err != nil {
+			jobLog.Warn("could not compute koreader hash, skipping", logger.Data{"file_id": fileID, "filepath": file.Filepath, "error": err.Error()})
+			continue
+		}
+		if err := w.fingerprintService.RecordOriginalDocumentHash(ctx, fileID, file.FileType, hash); err != nil {
+			jobLog.Warn("could not record koreader hash, skipping", logger.Data{"file_id": fileID, "error": err.Error()})
+		}
+	}
+	return nil
 }
 
 // EnsureHashGenerationJob checks whether a pending or in-progress hash

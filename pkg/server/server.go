@@ -37,6 +37,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/kobo"
+	"github.com/shishobooks/shisho/pkg/koreader"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/logs"
@@ -181,6 +182,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		// Register Kobo sync routes (Device credential auth for Kobo sync)
 		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
 
+		// Register KOReader's progress sync (Device credential auth)
+		koreader.RegisterRoutes(e, db, svcs.books)
+
 		// Register the anonymous Share Link recipient routes
 		sharelinks.RegisterPublicRoutes(api, svcs.shareLinks, svcs.books, svcs.dlCache, svcs.coverCache)
 	}
@@ -228,7 +232,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	spa := echo.WrapHandler(frontend.Handler())
 	e.RouteNotFound("/*", func(c echo.Context) error {
 		path := c.Request().URL.Path
-		for _, prefix := range []string{"/api", "/opds", "/kobo", "/ereader", "/e"} {
+		for _, prefix := range []string{"/api", "/opds", "/kobo", "/koreader", "/ereader", "/e"} {
 			if path == prefix || strings.HasPrefix(path, prefix+"/") {
 				return notFoundHandler(c)
 			}

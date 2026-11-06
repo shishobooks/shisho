@@ -31,6 +31,10 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 "Today" is the date in [your time zone](#your-time-zone) when you choose the action. To correct a date afterwards, use **Edit dates** in [Reading History](#reading-history).
 
+## Reading in KOReader
+
+[KOReader](./koreader.md) can sync its reading position with Shisho. Reading a book there starts and finishes Read-throughs the way reading in Shisho does.
+
 ## Reading in Shisho
 
 Every reader keeps your place and your reading history current as you read or listen, with nothing to click: EPUB, KePub, MOBI, and AZW3 books, CBZ comics, PDFs, and M4B audiobooks. [Reading and Playback](./reading-and-playback.md) covers the reader itself.

@@ -81,7 +81,7 @@ func (m *Middleware) DeviceAuth(connection string) echo.MiddlewareFunc {
 }
 
 // OPDSAuth signs an OPDS request in with Basic Auth. A username with the
-// credential of one of that user's OPDS app Devices signs in as the Device,
+// credential of one of that user's Devices that uses OPDS signs in as the Device,
 // so feeds and downloads follow its Delivery Rules and scope. Anything else
 // goes to passwordAuth, so the account password still signs in without a
 // Device. A Device is looked up before the password is checked, so signing
@@ -151,8 +151,8 @@ func isCredentialShaped(s string) bool {
 }
 
 // SetDevice stores device for RequireDevice. Only DeviceAuth, OPDSAuth,
-// middleware that updates the Device, and tests standing in for them call
-// it.
+// KOReader's sync auth, middleware that updates the Device, and tests standing
+// in for them call it.
 func SetDevice(c echo.Context, device *Device) {
 	c.Set(deviceContextKey, device)
 }

@@ -400,6 +400,42 @@ jobs:
             ${{ steps.go-env.outputs.gomodcache }}
           key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
+  # Real KOReader, in Docker, against a test server. Separate from the Go test
+  # job because it needs Docker and downloads a release, which is cached. The
+  # key names the file that pins the version.
+  koreader-harness:
+    name: KOReader Harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: go
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - name: Restore Go build cache
+        # The Chromium E2E job saves it on master only.
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
+      - name: Cache the KOReader release
+        uses: actions/cache@v6
+        with:
+          path: tmp/koreader/release
+          key: koreader-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/koreaderharness/harness.go') }}
+      - run: mise test:koreader
+
   # The one check branch protection requires, so the shard count and job
   # names can change without editing protection. A job added above that
   # should block merges goes in needs.
@@ -414,6 +450,7 @@ jobs:
       - docs-build
       - test-js
       - e2e
+      - koreader-harness
     if: always()
     runs-on: ubuntu-latest
     steps:

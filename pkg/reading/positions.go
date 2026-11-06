@@ -41,6 +41,12 @@ type PositionUpdate struct {
 	UserID int
 	FileID int
 	Source string
+	// DeviceID is the Device that reported the update, when a Device did.
+	DeviceID *string
+	// ReportedDevice and ReportedDeviceID are how the source named itself,
+	// kept with the position.
+	ReportedDevice   *string
+	ReportedDeviceID *string
 	// Locator holds the position in the one form the source reads.
 	Locator models.ReadingLocator
 	// Percentage is how far through the File the position is, from 0 to 1.
@@ -221,14 +227,17 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		}
 
 		position := &models.ReadingPosition{
-			UserID:         u.UserID,
-			FileID:         u.FileID,
-			CreatedAt:      now,
-			UpdatedAt:      now,
-			ReadingLocator: u.Locator,
-			Percentage:     u.Percentage,
-			Source:         u.Source,
-			OccurredAt:     occurredAt,
+			UserID:           u.UserID,
+			FileID:           u.FileID,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+			ReadingLocator:   u.Locator,
+			Percentage:       u.Percentage,
+			Source:           u.Source,
+			SourceDeviceID:   u.DeviceID,
+			ReportedDevice:   u.ReportedDevice,
+			ReportedDeviceID: u.ReportedDeviceID,
+			OccurredAt:       occurredAt,
 		}
 		_, err = tx.NewInsert().
 			Model(position).
@@ -241,6 +250,9 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			Set("kobo_span = EXCLUDED.kobo_span").
 			Set("percentage = EXCLUDED.percentage").
 			Set("source = EXCLUDED.source").
+			Set("source_device_id = EXCLUDED.source_device_id").
+			Set("reported_device = EXCLUDED.reported_device").
+			Set("reported_device_id = EXCLUDED.reported_device_id").
 			Set("occurred_at = EXCLUDED.occurred_at").
 			Exec(ctx)
 		if err != nil {
@@ -256,6 +268,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			ReadingLocator: u.Locator,
 			Percentage:     u.Percentage,
 			Source:         u.Source,
+			SourceDeviceID: u.DeviceID,
 			OccurredAt:     occurredAt,
 			AtEnd:          atEnd,
 			AutoFinished:   autoFinished,

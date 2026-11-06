@@ -9,7 +9,7 @@ import (
 // Device gets every connection its type can use.
 type CreateDevicePayload struct {
 	Name       string `json:"name" mod:"trim" validate:"required,max=100"`
-	DeviceType string `json:"device_type" validate:"required,oneof=kobo kindle opds browser" tstype:"DeviceType"`
+	DeviceType string `json:"device_type" validate:"required,oneof=kobo kindle koreader opds browser" tstype:"DeviceType"`
 }
 
 // UpdateDevicePayload is the request body for PATCH /user/devices/:id. An
@@ -18,7 +18,7 @@ type UpdateDevicePayload struct {
 	Name *string `json:"name,omitempty" mod:"trim" validate:"omitempty,min=1,max=100" tstype:"string"`
 	// DeviceType changes the Device's type, which puts it back on the rules
 	// the new type starts with.
-	DeviceType *string `json:"device_type,omitempty" validate:"omitempty,oneof=kobo kindle opds browser" tstype:"DeviceType"`
+	DeviceType *string `json:"device_type,omitempty" validate:"omitempty,oneof=kobo kindle koreader opds browser" tstype:"DeviceType"`
 	// DeliveryRules sets which Delivery Rules the Device follows. It applies
 	// after DeviceType.
 	DeliveryRules *DeviceDeliveryRulesPayload `json:"delivery_rules,omitempty" tstype:"DeviceDeliveryRulesPayload"`

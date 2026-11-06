@@ -169,6 +169,18 @@ describe("Devices", () => {
     expect(link).toHaveTextContent("All books · Kobo sync · eReader browser");
   });
 
+  it("offers KOReader as a Device type", async () => {
+    stubAPI(kobo());
+    const user = setupUser();
+    renderAt("/user/devices");
+
+    await user.click(await screen.findByRole("button", { name: "Add Device" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByRole("radio", { name: /KOReader/ }),
+    ).toBeInTheDocument();
+  });
+
   it("creates a Device with a name and type, then opens it", async () => {
     const request = stubAPI(kobo());
     const user = setupUser();
@@ -242,6 +254,51 @@ describe("DeviceDetail", () => {
       "https://www.shishobooks.com/docs/kobo-sync#troubleshooting",
     );
     expect(help).toHaveAttribute("target", "_blank");
+  });
+
+  it("gives a KOReader Device what to enter for OPDS and progress sync", async () => {
+    setAuth({ user: { username: "robin" } });
+    stubAPI(
+      kobo({
+        id: "koreader-1",
+        name: "Libra KOReader",
+        device_type: "koreader",
+        delivery_rules_mode: "default",
+        has_preset: false,
+        connections: ["opds", "koreader_sync"],
+      }),
+    );
+    renderAt("/user/devices/koreader-1");
+
+    expect(
+      await screen.findByRole("heading", { name: "KOReader progress sync" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OPDS" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Custom sync server")).toHaveTextContent(
+      `${window.location.origin}/koreader`,
+    );
+    expect(screen.getByLabelText("Sync username")).toHaveTextContent("robin");
+    expect(screen.getByLabelText("Sync password")).toHaveTextContent(
+      "abcdefghjkmnpqrs",
+    );
+    expect(screen.getByText(/Register doesn't work here/)).toBeInTheDocument();
+
+    // The steps follow KOReader's Progress sync menu, top to bottom.
+    const steps = within(
+      screen.getByRole("list", { name: "KOReader progress sync setup" }),
+    ).getAllByRole("listitem");
+    expect(steps.map((step) => step.textContent)).toEqual([
+      expect.stringContaining("Custom sync server"),
+      expect.stringContaining("Register / Login"),
+      expect.stringContaining("Automatically keep documents in sync"),
+      expect.stringContaining("Document matching method"),
+    ]);
+    expect(steps[2]).toHaveTextContent(/Wi-Fi/);
+    expect(steps[2]).toHaveTextContent(/battery/);
+
+    expect(
+      screen.getByRole("link", { name: "KOReader setup guide" }),
+    ).toHaveAttribute("href", "https://www.shishobooks.com/docs/koreader");
   });
 
   it("toasts an error when copying fails", async () => {

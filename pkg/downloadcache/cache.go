@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/fingerprint"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/version"
 )
@@ -33,6 +34,9 @@ type Cache struct {
 
 	// generators overrides the built-in generator lookup (WithGenerators).
 	generators GeneratorLookup
+	// recordDocumentHash maps a published file's KOReader document hash to
+	// its File (WithDocumentHashRecorder). Nil records nothing.
+	recordDocumentHash DocumentHashRecorder
 	// createPartial creates the file a job writes into. Tests replace it to
 	// make cache writes fail.
 	createPartial func(dir string) (partialFile, error)
@@ -72,6 +76,18 @@ type Option func(*Cache)
 // generator they control.
 func WithGenerators(lookup GeneratorLookup) Option {
 	return func(c *Cache) { c.generators = lookup }
+}
+
+// DocumentHashRecorder maps a KOReader document hash to fileID delivered as
+// deliveredType.
+type DocumentHashRecorder func(ctx context.Context, fileID int, deliveredType, hash string) error
+
+// WithDocumentHashRecorder records the KOReader document hash of every file
+// the cache publishes (ADR 0014). Cache hits and bulk downloads serve published
+// files, so this covers every delivery that goes through the cache. A file the
+// cache can't take streams straight to the download and isn't recorded.
+func WithDocumentHashRecorder(record DocumentHashRecorder) Option {
+	return func(c *Cache) { c.recordDocumentHash = record }
 }
 
 // NewCache creates a new Cache with the given directory and max size.
@@ -239,6 +255,7 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 		return nil, err
 	}
 	if hit != "" {
+		c.servedHit(ctx, e, hit)
 		return &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Path: hit}, nil
 	}
 	if err := c.rememberedFailure(e); err != nil {
@@ -266,6 +283,7 @@ func (c *Cache) open(ctx context.Context, e *entry, head bool) (*Generated, erro
 		return nil, err
 	}
 	if hit != "" {
+		c.servedHit(ctx, e, hit)
 		return &Generated{Filename: e.filename, ASCIIFilename: e.asciiFilename, Path: hit}, nil
 	}
 	select {
@@ -312,8 +330,12 @@ func (c *Cache) served(ctx context.Context, e *entry, j *job) (*Generated, error
 // for the job already running.
 func (c *Cache) complete(ctx context.Context, e *entry) (string, error) {
 	hit, err := c.lookup(e)
-	if err != nil || hit != "" {
-		return hit, err
+	if err != nil {
+		return "", err
+	}
+	if hit != "" {
+		c.servedHit(ctx, e, hit)
+		return hit, nil
 	}
 	if err := c.rememberedFailure(e); err != nil {
 		return "", err
@@ -323,8 +345,12 @@ func (c *Cache) complete(ctx context.Context, e *entry) (string, error) {
 		return "", err
 	}
 	j, hit, err := c.join(ctx, e, gen)
-	if err != nil || hit != "" {
-		return hit, err
+	if err != nil {
+		return "", err
+	}
+	if hit != "" {
+		c.servedHit(ctx, e, hit)
+		return hit, nil
 	}
 	select {
 	case <-j.finished:
@@ -354,6 +380,51 @@ func (c *Cache) lookup(e *entry) (string, error) {
 		e.touch()
 	}
 	return hit, nil
+}
+
+// servedHit records the document hash of a file served from the cache that
+// doesn't have one yet: one published before Shisho recorded them, or whose
+// recording failed. It's called with no lock held,
+// since it reads the file and writes to the database.
+func (c *Cache) servedHit(ctx context.Context, e *entry, path string) {
+	if c.recordDocumentHash == nil {
+		return
+	}
+	meta, err := e.readMeta()
+	if err != nil || meta == nil || meta.DocumentHash != "" {
+		return
+	}
+	c.recordHash(ctx, e, path)
+}
+
+// recordHash hashes the complete file at path and records it against e's
+// File, then notes that in e's metadata, so a later cache hit needn't. The
+// download doesn't depend on it, so a failure is only logged, and the next
+// cache hit tries again. It's called with no lock held.
+func (c *Cache) recordHash(ctx context.Context, e *entry, path string) {
+	if c.recordDocumentHash == nil {
+		return
+	}
+	hash, err := fingerprint.ComputeKOReaderPartialMD5(path)
+	if err == nil {
+		err = c.recordDocumentHash(ctx, e.file.ID, e.deliveredType, hash)
+	}
+	if err != nil {
+		logger.FromContext(ctx).Warn("failed to record a generated file's document hash", c.logData(e, err))
+		return
+	}
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	// A build may have published another version since, which records its
+	// own hash.
+	meta, err := e.readMeta()
+	if err != nil || meta == nil || meta.FingerprintHash != e.hash {
+		return
+	}
+	meta.DocumentHash = hash
+	if err := e.writeMeta(meta); err != nil {
+		logger.FromContext(ctx).Warn("failed to save a recorded document hash", c.logData(e, err))
+	}
 }
 
 // prepareOnly runs only the preparation step, for Head.
@@ -432,6 +503,8 @@ func (c *Cache) run(ctx context.Context, e *entry, j *job, gen filegen.StreamGen
 		if perr := c.publish(e, j); perr != nil {
 			j.cacheErr = perr
 			logger.FromContext(ctx).Warn("download cache write failed, generated file not cached", c.logData(e, perr))
+		} else {
+			c.recordHash(ctx, e, e.destPath)
 		}
 	}
 	if err != nil || j.cacheErr != nil {
