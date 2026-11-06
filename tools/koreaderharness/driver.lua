@@ -101,6 +101,15 @@ local function withReader(fn)
         ui:handleEvent(Event:new("SetViewMode", args.view))
         stepUI()
     end
+    -- KOReader skips a pull or a queued push within 25 seconds of its last,
+    -- timed from when the machine booted and starting from 0. So for the
+    -- first 25 seconds after a boot it skips them all, silently, and Docker
+    -- Desktop boots its VM afresh after it idles. Each command is a new
+    -- KOReader that has never synced, so nothing is recent.
+    if ui.kosync then
+        ui.kosync.pull_timestamp = -math.huge
+        ui.kosync.push_timestamp = -math.huge
+    end
     local out = fn(ui, ui.kosync) or {}
     return ui, out
 end
@@ -263,7 +272,20 @@ end
 
 commands.pull = function()
     local mode = args.mode or "silent"
+    -- What the server answered, if KOReader asked, so a pull that does
+    -- nothing says why: no request at all, a failed one, or an answer
+    -- KOReader chose to ignore.
+    local received
     runWithReader(function(ui, kosync)
+        -- The plugin's modules load with the reader.
+        local KOSyncClient = require("KOSyncClient")
+        local get_progress = KOSyncClient.get_progress
+        KOSyncClient.get_progress = function(client, username, userkey, document, callback)
+            return get_progress(client, username, userkey, document, function(ok, body)
+                received = { ok = ok, body = body }
+                callback(ok, body)
+            end)
+        end
         -- 1 is prompt and 2 is silent, the plugin's SYNC_STRATEGY.
         kosync.settings.sync_forward = mode == "prompt" and 1 or 2
         kosync.settings.sync_backward = mode == "prompt" and 1 or 2
@@ -271,7 +293,7 @@ commands.pull = function()
         -- open or a wake does, which is the path that prompts.
         kosync:getProgress(false, mode == "interactive")
         stepUI()
-        local out = { prompted = confirm_box and confirm_box.text or nil }
+        local out = { prompted = confirm_box and confirm_box.text or nil, received = received or false }
         if confirm_box and args.confirm then
             confirm_box.ok_callback()
             stepUI()

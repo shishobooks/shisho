@@ -324,7 +324,7 @@ func TestRoundTrips(t *testing.T) {
 	// Prompt mode, KOReader's pull on opening and waking, offers the jump
 	// under the web reader's name, and waits for an answer.
 	prompted := s.run(Args{Command: "pull", File: "comic.cbz", Mode: "prompt"})
-	assert.Contains(t, prompted.Prompted, "Shisho web reader", "shown: %v", prompted.Shown)
+	assert.Contains(t, prompted.Prompted, "Shisho web reader", "shown: %v, result: %s", prompted.Shown, prompted.Raw)
 	assert.Equal(t, "20", prompted.Progress, "the jump waits for an answer")
 	confirmed := s.run(Args{Command: "pull", File: "comic.cbz", Mode: "prompt", Confirm: true})
 	assert.Equal(t, "25", confirmed.Progress)
