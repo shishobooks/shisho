@@ -268,8 +268,18 @@ func (b *Book) AtPercentage(percentage float64) Place {
 
 // Locate places a stored position in b: exactly when its form resolves here,
 // and otherwise by the estimate, falling back on how far through the book it
-// is. A Kobo span is placed by percentage until Kobo positions are stored.
+// is.
 func (b *Book) Locate(locator models.ReadingLocator, percentage float64) Place {
+	return b.locate(locator, nil, percentage)
+}
+
+// locatePosition places position in b as Locate does, using how far through
+// its chapter it is, when its source said, to place a Kobo span.
+func (b *Book) locatePosition(position *models.ReadingPosition) Place {
+	return b.locate(position.ReadingLocator, position.ChapterPercentage, position.Percentage)
+}
+
+func (b *Book) locate(locator models.ReadingLocator, chapterFraction *float64, percentage float64) Place {
 	var p Place
 	var err error
 	switch {
@@ -277,6 +287,12 @@ func (b *Book) Locate(locator models.ReadingLocator, percentage float64) Place {
 		p, err = b.FromCFI(*locator.CFI)
 	case locator.XPointer != nil:
 		p, err = b.FromXPointer(*locator.XPointer)
+	case locator.KoboSpan != nil:
+		span, ok := ParseKoboSpan(*locator.KoboSpan)
+		if !ok {
+			return b.AtPercentage(percentage)
+		}
+		return b.LocateKoboSpan(span, chapterFraction, percentage)
 	default:
 		err = ErrNotFound
 	}

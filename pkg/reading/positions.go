@@ -36,6 +36,22 @@ var ErrFileNotFound = errors.New("file not found")
 // is never undone this way.
 var ErrNotAutoFinished = errors.New("the read-through was not finished automatically")
 
+// ReportedStatus is a status a source reports outright, as a Kobo does, rather
+// than one Shisho infers from the position.
+type ReportedStatus int
+
+const (
+	// ReportedNothing leaves the status to the position.
+	ReportedNothing ReportedStatus = iota
+	// ReportedReading is reading, wherever the position is: it starts or
+	// resumes the Read-through as real progress would.
+	ReportedReading
+	// ReportedFinished is the Book finished. It ends the Read-through
+	// underway, or records a finished one for a Book reading would start,
+	// and unlike reaching the end, it's never undone.
+	ReportedFinished
+)
+
 // PositionUpdate is one source reporting where a user is in a File. It is
 // the single input of the position update service for every source: the
 // web readers now, devices later.
@@ -56,6 +72,11 @@ type PositionUpdate struct {
 	LocatorFileType *string
 	// Percentage is how far through the File the position is, from 0 to 1.
 	Percentage float64
+	// ChapterPercentage is how far through its chapter the position is, from
+	// 0 to 1, when the source says.
+	ChapterPercentage *float64
+	// ReportedStatus is a status the source reports outright.
+	ReportedStatus ReportedStatus
 	// AtEnd is the source reporting the end of the File, such as a
 	// reflowable reader's final location or playback ending, which finishes
 	// the Read-through underway. The last page and an audiobook's last
@@ -101,10 +122,13 @@ type SessionInput struct {
 //     progress, and the Book is unread or on To Read, taking it off To Read
 //     and resetting its other positions
 //  4. resumes a paused Read-through on real progress
-//  5. finishes the Read-through underway on reaching the end, dated in the
-//     user's time zone
+//  5. finishes the Read-through underway on reaching the end, or on a
+//     reported finish, dated in the user's time zone
 //  6. stores the position, logs the update, and records the session, both
 //     on the Read-through underway or just finished
+//
+// An update with no locator, a status reported on its own, changes the
+// Read-through and stores nothing else.
 func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*UpdatePositionResponse, error) {
 	result := &UpdatePositionResponse{}
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
@@ -143,16 +167,19 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		}
 		result.Accepted = true
 
+		hasLocator := !u.Locator.IsZero()
 		// Turning past the first screen is reading; reopening where the
 		// reader already was is not. Going back all the way to the start is
 		// still going back, so it can undo a finish.
-		moved := stored == nil || !stored.Equal(u.Locator)
+		moved := hasLocator && (stored == nil || !stored.Equal(u.Locator))
 		// A supplement keeps its own place but isn't the Book, and a place a
 		// link opened isn't reading: neither changes any Read-through.
 		reading := !u.Opened && file.FileRole != models.FileRoleSupplement
-		atEnd := reading && (u.AtEnd || locatorAtEnd(file, u.Locator))
+		atEnd := reading && hasLocator && (u.AtEnd || locatorAtEnd(file, u.Locator))
+		reportedFinish := reading && u.ReportedStatus == ReportedFinished
+		reported := reading && u.ReportedStatus != ReportedNothing
 
-		if underway == nil && !atEnd && moved && reading {
+		if underway == nil && !atEnd && moved && reading && !reportedFinish {
 			reverted, err := revertAutoFinish(ctx, tx, u, occurredAt, now)
 			if err != nil {
 				return err
@@ -168,7 +195,8 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		// Playback ending still is.
 		stayedAtEnd := stored != nil && !u.AtEnd && locatorAtEnd(file, stored.ReadingLocator)
 		reachedEnd := atEnd && !stayedAtEnd
-		progress := moved && reading && (reachedEnd || isRealProgress(u, underway))
+		// A source that reports its status says outright that this is reading.
+		progress := reported || moved && reading && (reachedEnd || isRealProgress(u, underway))
 
 		starting := false
 		if underway == nil && progress {
@@ -177,7 +205,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 				return err
 			}
 		}
-		finishing := reachedEnd && progress
+		finishing := (reachedEnd || reportedFinish) && progress
 		var day string
 		if starting || finishing && underway != nil {
 			day, err = userDay(ctx, tx, u.UserID, occurredAt)
@@ -197,6 +225,26 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		}
 
 		switch {
+		case starting && reportedFinish:
+			// Reported finished before Shisho saw it begin, as a book read on
+			// the device first: a finished read with no begin day, like Mark as
+			// read with nothing underway, which leaves the other Files' places.
+			finished := &models.ReadThrough{
+				CreatedAt: now,
+				UpdatedAt: now,
+				UserID:    u.UserID,
+				BookID:    bookID,
+				EndDay:    &day,
+				Outcome:   models.ReadThroughOutcomeFinished,
+			}
+			if _, err := tx.NewInsert().Model(finished).Exec(ctx); err != nil {
+				return errors.WithStack(err)
+			}
+			if err := leaveToRead(ctx, tx, u.UserID, bookID, now); err != nil {
+				return err
+			}
+			result.FinishedReadThroughID = &finished.ID
+			finishing = false
 		case starting:
 			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, now, u.FileID)
 			if err != nil {
@@ -228,23 +276,29 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			if err := leaveToRead(ctx, tx, u.UserID, bookID, now); err != nil {
 				return err
 			}
-			autoFinished = true
+			// A reported finish is the reader's own, so it's never undone.
+			autoFinished = !reportedFinish
 			result.FinishedReadThroughID = &underway.ID
 		}
 
+		if !hasLocator {
+			return recordSession(ctx, tx, u.UserID, u.FileID, u.Source, u.Session, underway, now)
+		}
+
 		position := &models.ReadingPosition{
-			UserID:           u.UserID,
-			FileID:           u.FileID,
-			CreatedAt:        now,
-			UpdatedAt:        now,
-			ReadingLocator:   u.Locator,
-			LocatorFileType:  u.LocatorFileType,
-			Percentage:       u.Percentage,
-			Source:           u.Source,
-			SourceDeviceID:   u.DeviceID,
-			ReportedDevice:   u.ReportedDevice,
-			ReportedDeviceID: u.ReportedDeviceID,
-			OccurredAt:       occurredAt,
+			UserID:            u.UserID,
+			FileID:            u.FileID,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+			ReadingLocator:    u.Locator,
+			LocatorFileType:   u.LocatorFileType,
+			Percentage:        u.Percentage,
+			ChapterPercentage: u.ChapterPercentage,
+			Source:            u.Source,
+			SourceDeviceID:    u.DeviceID,
+			ReportedDevice:    u.ReportedDevice,
+			ReportedDeviceID:  u.ReportedDeviceID,
+			OccurredAt:        occurredAt,
 		}
 		_, err = tx.NewInsert().
 			Model(position).
@@ -257,6 +311,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			Set("kobo_span = EXCLUDED.kobo_span").
 			Set("locator_file_type = EXCLUDED.locator_file_type").
 			Set("percentage = EXCLUDED.percentage").
+			Set("chapter_percentage = EXCLUDED.chapter_percentage").
 			Set("source = EXCLUDED.source").
 			Set("source_device_id = EXCLUDED.source_device_id").
 			Set("reported_device = EXCLUDED.reported_device").

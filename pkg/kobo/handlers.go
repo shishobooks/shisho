@@ -33,13 +33,15 @@ type handler struct {
 	service       *Service
 	bookService   *books.Service
 	downloadCache *downloadcache.Cache
+	states        *readingStates
 }
 
-func newHandler(service *Service, bookService *books.Service, downloadCache *downloadcache.Cache) *handler {
+func newHandler(service *Service, bookService *books.Service, downloadCache *downloadcache.Cache, states *readingStates) *handler {
 	return &handler{
 		service:       service,
 		bookService:   bookService,
 		downloadCache: downloadCache,
+		states:        states,
 	}
 }
 
@@ -90,6 +92,10 @@ func (h *handler) handleAuth(c echo.Context) error {
 // When the final page is emitted, the sync point is marked complete and stale
 // snapshots are cleaned up. While more pages remain, X-Kobo-Sync: continue is
 // set to tell the device to immediately fetch the next page.
+//
+// Books new to the Kobo go with their reading state. Once every entitlement
+// has gone out, the reading states other readers changed since the Kobo last
+// heard follow, paged the same way.
 func (h *handler) handleSync(c echo.Context) error {
 	ctx := c.Request().Context()
 	log := logger.FromContext(ctx)
@@ -131,8 +137,30 @@ func (h *handler) handleSync(c echo.Context) error {
 	}
 	page := allEntries[start:end]
 
+	var addedIDs []string
+	for _, e := range page {
+		if e.Kind == changeAdded && e.File.RevisionID != "" {
+			addedIDs = append(addedIDs, e.File.EntryID)
+		}
+	}
+	states, err := h.states.forNewEntries(ctx, user.ID, device.ID, addedIDs)
+	if err != nil {
+		return err
+	}
 	baseURL := getBaseURL(c)
-	response := buildSyncResponseFromEntries(ctx, page, baseURL, h.bookService)
+	response := buildSyncResponseFromEntries(ctx, page, baseURL, h.bookService, states)
+	changedStates := 0
+	if !hasMore {
+		changed, more, err := h.states.changed(ctx, user.ID, device.ID, entryIDsOf(ongoing.Books), max(0, syncItemLimit-len(response)))
+		if err != nil {
+			return err
+		}
+		for _, state := range changed {
+			response = append(response, &ChangedReadingState{ChangedReadingState: &ReadingStateWrapper{ReadingState: state}})
+		}
+		changedStates = len(changed)
+		hasMore = more
+	}
 
 	// Token + completion bookkeeping.
 	var outToken SyncToken
@@ -174,6 +202,7 @@ func (h *handler) handleSync(c echo.Context) error {
 		"page_start":     start,
 		"page_end":       end,
 		"total_entries":  len(allEntries),
+		"reading_states": changedStates,
 		"has_more":       hasMore,
 		"sync_point_id":  ongoing.ID,
 		"prev_sync_id":   prevID,
@@ -500,11 +529,12 @@ func combineChanges(c *SyncChanges) []changeEntry {
 }
 
 // buildSyncResponseFromEntries materializes a slice of changeEntry into the
-// JSON array Kobo expects, each under its entry's id and RevisionId. nil
+// JSON array Kobo expects, each under its entry's id and RevisionId, an added
+// one with its reading state in states, by entry id, when it has one. nil
 // result for missing books (e.g. deleted between snapshot and emit) is
 // silently dropped, as is an entry with no recorded RevisionId, which only a
 // snapshot stored before entries had ids can hold.
-func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, baseURL string, bookService *books.Service) []interface{} {
+func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, baseURL string, bookService *books.Service, states map[string]*ReadingState) []interface{} {
 	response := make([]interface{}, 0, len(entries))
 	for _, e := range entries {
 		if e.Kind != changeRemoved && e.File.RevisionID == "" {
@@ -514,6 +544,7 @@ func buildSyncResponseFromEntries(ctx context.Context, entries []changeEntry, ba
 		case changeAdded:
 			entry := buildEntitlement(ctx, e.File, baseURL, bookService)
 			if entry != nil {
+				entry.ReadingState = states[e.File.EntryID]
 				response = append(response, &NewEntitlement{NewEntitlement: entry})
 			}
 		case changeChanged:

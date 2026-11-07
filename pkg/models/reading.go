@@ -80,21 +80,28 @@ type UserBook struct {
 // Reading sources: what reported a Reading Position update or a Reading
 // Session.
 const (
-	//tygo:emit export type ReadingSource = typeof ReadingSourceWebReader | typeof ReadingSourceKOReader;
+	//tygo:emit export type ReadingSource = typeof ReadingSourceWebReader | typeof ReadingSourceKOReader | typeof ReadingSourceKobo;
 	ReadingSourceWebReader = "web_reader"
 	ReadingSourceKOReader  = "koreader"
+	ReadingSourceKobo      = "kobo"
 )
 
 // ReadingLocator is where in a File a reader is, in exactly one form: an
 // EPUB CFI from the web ebook reader, a KOReader XPointer, a 0-based page
-// for comics and PDFs, seconds into an audiobook, or a Kobo span. Each
-// source writes the form it reads.
+// for comics and PDFs, seconds into an audiobook, or a Kobo span, stored as
+// the chapter's path in the KePub and the span's id ("OEBPS/ch1.xhtml#kobo.4.1",
+// reflowable.KoboSpan). Each source writes the form it reads.
 type ReadingLocator struct {
 	CFI      *string  `bun:"cfi" json:"cfi"`
 	XPointer *string  `bun:"xpointer" json:"xpointer"`
 	Page     *int     `json:"page"`
 	Seconds  *float64 `json:"seconds"`
 	KoboSpan *string  `json:"kobo_span"`
+}
+
+// IsZero reports whether l holds no position at all.
+func (l ReadingLocator) IsZero() bool {
+	return l.CFI == nil && l.XPointer == nil && l.Page == nil && l.Seconds == nil && l.KoboSpan == nil
 }
 
 // Equal reports whether l and o are the same position in the same form.
@@ -127,7 +134,11 @@ type ReadingPosition struct {
 	// EPUB: span markup gives a KePub's XPointers different paths.
 	LocatorFileType *string `json:"-"`
 	Percentage      float64 `bun:",notnull" json:"percentage"`
-	Source          string  `bun:",nullzero" json:"source" tstype:"ReadingSource"`
+	// ChapterPercentage is how far through its chapter the position is, from
+	// 0 to 1, when the source said: a Kobo does, which places its span when
+	// the span itself can't be found.
+	ChapterPercentage *float64 `json:"-"`
+	Source            string   `bun:",nullzero" json:"source" tstype:"ReadingSource"`
 	// SourceDeviceID is the Device that reported the position, when a Device
 	// did and still exists.
 	SourceDeviceID *string `json:"-"`

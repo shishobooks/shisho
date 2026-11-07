@@ -255,6 +255,8 @@ func (svc *Service) assignEntries(ctx context.Context, deviceID string, delivere
 					// A random UUID, so nothing about the File feeds into it.
 					RevisionID: uuid.New().String(),
 					CreatedAt:  now,
+					// A Kobo counts a new book's reading time from zero.
+					ReadingMinutes: new(int),
 				}
 				held[d.FileID] = added[i]
 			}

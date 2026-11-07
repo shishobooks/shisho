@@ -29,7 +29,7 @@ KOReader shows its **Progress sync** menu only with a book open, so open any boo
 With automatic sync on, KOReader pulls your position when a book opens and when the device wakes, and pushes it when a book closes and when the device sleeps. **Periodically sync every # pages**, below it in the menu, also pushes while you read. Each sync needs a network connection:
 
 - On an e-reader where KOReader manages Wi-Fi, such as a Kobo, KOReader turns Wi-Fi on to pull when a book opens or the device wakes, and to push before the device sleeps, then turns it off again. Turning Wi-Fi on that often uses more battery than leaving sync off. KOReader enables automatic sync only when **Settings > Network > Action when Wi-Fi is off** is set to **Turn on**.
-- A push KOReader can't send, because Wi-Fi is off or out of range, waits in a queue and goes out the next time KOReader connects with a book open. Several queued pushes sent together update your place in the order KOReader sends them, and add no [reading time](./reading-tracking.md#moving-between-readers).
+- A push KOReader can't send, because Wi-Fi is off or out of range, waits in a queue and goes out the next time KOReader connects with a book open. Several queued pushes sent together update your place in the order KOReader sends them, and add no [reading time](./reading-tracking.md#reading-time-from-devices).
 
 KOReader doesn't tell Shisho when you read, so Shisho dates each position when the push arrives. The longer a push waits, the less accurate your reading dates are. A book you start or finish offline is dated the day KOReader next pushes it, and its [last read](./reading-tracking.md#last-read) is the time of that push. Until then, the Shisho reader and your other devices still have your old place.
 
@@ -54,7 +54,7 @@ A copy downloaded from an older version of Shisho that didn't record these hashe
 
 A KOReader Device never moves itself. KOReader ignores a position it pushed, so pulling on the same device leaves you where you are, and KOReader says the latest progress is coming from this device.
 
-KOReader offers to jump to a position saved anywhere else, and names where it came from: **Shisho web reader** for the Shisho reader, or another KOReader Device's name. Under **Sync behavior** in the **Progress sync** menu, **Sync to a newer state** and **Sync to an older state** set whether it asks first: on **Prompt** KOReader asks before jumping, and on **Auto** it jumps. [Moving Between Readers](./reading-tracking.md#moving-between-readers) covers what carries for each format.
+KOReader offers to jump to a position saved anywhere else, and names where it came from: **Shisho web reader** for the Shisho reader, or the name of the other KOReader or Kobo Device. Under **Sync behavior** in the **Progress sync** menu, **Sync to a newer state** and **Sync to an older state** set whether it asks first: on **Prompt** KOReader asks before jumping, and on **Auto** it jumps. [Moving Between Readers](./reading-tracking.md#moving-between-readers) covers what carries for each format.
 
 ## Finishing a Book
 

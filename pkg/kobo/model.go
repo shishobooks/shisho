@@ -66,4 +66,13 @@ type SyncEntry struct {
 	DeliveredFileType string    `bun:"delivered_file_type,notnull"`
 	RevisionID        string    `bun:"revision_id,notnull"`
 	CreatedAt         time.Time `bun:"created_at,nullzero,notnull,default:current_timestamp"`
+	// ReadingMinutes is the reading time the Kobo last reported for the book,
+	// which it counts from when the book reached it, and ReadingMinutesAt when
+	// it did. An entry from before Kobo reading state synced starts without
+	// one: its first report is only where counting starts.
+	ReadingMinutes   *int       `bun:"reading_minutes"`
+	ReadingMinutesAt *time.Time `bun:"reading_minutes_at"`
+	// ReadingStateVersion is what the Kobo last heard of the reading state
+	// (stateInputs.version), so a sync sends it again only once it changes.
+	ReadingStateVersion *string `bun:"reading_state_version"`
 }

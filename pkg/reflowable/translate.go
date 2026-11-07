@@ -40,24 +40,33 @@ func translatable(fileType string) bool {
 // position's locator is in the File's own copy unless its LocatorFileType
 // names another.
 func Translate(ctx context.Context, path, fileType string, position *models.ReadingPosition, toType string, form Form) (models.ReadingLocator, error) {
-	fromType := WrittenIn(position, fileType)
-	reflowablePosition := position.CFI != nil || position.XPointer != nil || position.KoboSpan != nil
-	if !reflowablePosition || !translatable(fileType) || !translatable(fromType) || !translatable(toType) {
-		return models.ReadingLocator{}, ErrNotTranslatable
-	}
-	from, err := Open(ctx, path, fromType == models.FileTypeKePub)
+	to, place, err := translate(ctx, path, fileType, position, toType)
 	if err != nil {
 		return models.ReadingLocator{}, err
 	}
-	to, err := Open(ctx, path, toType == models.FileTypeKePub)
-	if err != nil {
-		return models.ReadingLocator{}, err
-	}
-	place := from.Locate(position.ReadingLocator, position.Percentage)
 	if form == FormCFI {
 		cfi := to.CFI(place)
 		return models.ReadingLocator{CFI: &cfi}, nil
 	}
 	xp := to.XPointer(place)
 	return models.ReadingLocator{XPointer: &xp}, nil
+}
+
+// translate places position, stored for the File at path of fileType, in
+// the copy of it delivered as toType, returning that copy and the place.
+func translate(ctx context.Context, path, fileType string, position *models.ReadingPosition, toType string) (*Book, Place, error) {
+	fromType := WrittenIn(position, fileType)
+	reflowablePosition := position.CFI != nil || position.XPointer != nil || position.KoboSpan != nil
+	if !reflowablePosition || !translatable(fileType) || !translatable(fromType) || !translatable(toType) {
+		return nil, Place{}, ErrNotTranslatable
+	}
+	from, err := Open(ctx, path, fromType == models.FileTypeKePub)
+	if err != nil {
+		return nil, Place{}, err
+	}
+	to, err := Open(ctx, path, toType == models.FileTypeKePub)
+	if err != nil {
+		return nil, Place{}, err
+	}
+	return to, from.locatePosition(position), nil
 }

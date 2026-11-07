@@ -1,6 +1,9 @@
 package kobo
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // All types use PascalCase JSON to match Kobo's API expectations.
 
@@ -23,10 +26,12 @@ type RemovedEntitlement struct {
 	ChangedEntitlement *EntitlementChangeWrapper `json:"ChangedEntitlement"`
 }
 
-// EntitlementWrapper wraps the book entitlement and metadata.
+// EntitlementWrapper wraps the book entitlement and metadata, and for a book
+// new to the Kobo that someone has read or tracked, its reading state.
 type EntitlementWrapper struct {
 	BookEntitlement *BookEntitlement `json:"BookEntitlement"`
 	BookMetadata    *BookMetadata    `json:"BookMetadata"`
+	ReadingState    *ReadingState    `json:"ReadingState,omitempty"`
 }
 
 // EntitlementChangeWrapper wraps a change (e.g., removal) to an entitlement.
@@ -159,4 +164,146 @@ type DeviceAuthResponse struct {
 	TokenType    string `json:"TokenType"`
 	TrackingID   string `json:"TrackingId"`
 	UserKey      string `json:"UserKey"`
+}
+
+// Timestamp is a time as a Kobo writes it: in UTC, with up to seven
+// fractional digits, and from some firmware without a zone, which is UTC.
+type Timestamp struct {
+	time.Time
+}
+
+// timestampLayout is how Shisho writes times to a Kobo.
+const timestampLayout = "2006-01-02T15:04:05Z"
+
+// NewTimestamp returns t as a Timestamp.
+func NewTimestamp(t time.Time) *Timestamp {
+	return &Timestamp{Time: t.UTC()}
+}
+
+// MarshalJSON writes t in UTC to the second.
+func (t Timestamp) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + t.UTC().Format(timestampLayout) + `"`), nil
+}
+
+// UnmarshalJSON reads a Kobo's time. An empty or unreadable one is the
+// zero time, which callers treat as absent, so a firmware writing times
+// another way never fails the request.
+func (t *Timestamp) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil || s == "" {
+		t.Time = time.Time{}
+		return nil
+	}
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05.9999999", "2006-01-02T15:04:05"} {
+		if parsed, err := time.Parse(layout, s); err == nil {
+			t.Time = parsed.UTC()
+			return nil
+		}
+	}
+	t.Time = time.Time{}
+	return nil
+}
+
+// at returns t's time, or nil when t is absent.
+func (t *Timestamp) at() *time.Time {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+	at := t.Time
+	return &at
+}
+
+// Statuses a Kobo reports for a book in StatusInfo.
+const (
+	koboStatusReadyToRead = "ReadyToRead"
+	koboStatusReading     = "Reading"
+	koboStatusFinished    = "Finished"
+)
+
+// ReadingState is a Kobo's reading state for one book: its status, the time
+// spent reading it, and its bookmark. Each part has its own LastModified,
+// and a Kobo keeps whichever of its own and the server's is later.
+type ReadingState struct {
+	EntitlementID     string           `json:"EntitlementId"`
+	Created           *Timestamp       `json:"Created,omitempty"`
+	LastModified      *Timestamp       `json:"LastModified,omitempty"`
+	PriorityTimestamp *Timestamp       `json:"PriorityTimestamp,omitempty"`
+	StatusInfo        *StatusInfo      `json:"StatusInfo,omitempty"`
+	Statistics        *Statistics      `json:"Statistics,omitempty"`
+	CurrentBookmark   *CurrentBookmark `json:"CurrentBookmark,omitempty"`
+}
+
+// StatusInfo is whether a book is unread, being read, or finished.
+type StatusInfo struct {
+	LastModified           *Timestamp `json:"LastModified,omitempty"`
+	Status                 string     `json:"Status"`
+	TimesStartedReading    *int       `json:"TimesStartedReading,omitempty"`
+	LastTimeStartedReading *Timestamp `json:"LastTimeStartedReading,omitempty"`
+}
+
+// Statistics is the time a Kobo has spent on a book, in minutes since it
+// was put on the Kobo, and the time it estimates is left.
+type Statistics struct {
+	LastModified         *Timestamp `json:"LastModified,omitempty"`
+	SpentReadingMinutes  *int       `json:"SpentReadingMinutes,omitempty"`
+	RemainingTimeMinutes *int       `json:"RemainingTimeMinutes,omitempty"`
+}
+
+// CurrentBookmark is where a Kobo is in a book: how far through the book and
+// the chapter, from 0 to 100, and in a KePub, the span it's at.
+type CurrentBookmark struct {
+	LastModified                 *Timestamp        `json:"LastModified,omitempty"`
+	ProgressPercent              *float64          `json:"ProgressPercent,omitempty"`
+	ContentSourceProgressPercent *float64          `json:"ContentSourceProgressPercent,omitempty"`
+	Location                     *BookmarkLocation `json:"Location,omitempty"`
+}
+
+// BookmarkLocation is a span in a KePub: Value is its id, and Source the
+// chapter's path in the KePub.
+type BookmarkLocation struct {
+	Value  string `json:"Value"`
+	Type   string `json:"Type"`
+	Source string `json:"Source"`
+}
+
+// koboSpanLocation is the Type of a KePub span location.
+const koboSpanLocation = "KoboSpan"
+
+// UpdateReadingStatesPayload is a Kobo's PUT of a book's reading state.
+type UpdateReadingStatesPayload struct {
+	ReadingStates []*ReadingState `json:"ReadingStates"`
+}
+
+// UpdateReadingStatesResponse answers a reading state PUT, with a result for
+// each part the Kobo sent.
+type UpdateReadingStatesResponse struct {
+	RequestResult string                      `json:"RequestResult"`
+	UpdateResults []*ReadingStateUpdateResult `json:"UpdateResults"`
+}
+
+// ReadingStateUpdateResult is the result of one book's PUT.
+type ReadingStateUpdateResult struct {
+	EntitlementID         string        `json:"EntitlementId"`
+	CurrentBookmarkResult *UpdateResult `json:"CurrentBookmarkResult,omitempty"`
+	StatisticsResult      *UpdateResult `json:"StatisticsResult,omitempty"`
+	StatusInfoResult      *UpdateResult `json:"StatusInfoResult,omitempty"`
+}
+
+// UpdateResult is the result of one part of a PUT.
+type UpdateResult struct {
+	Result string `json:"Result"`
+}
+
+// updateSucceeded is the result of everything Shisho accepts.
+const updateSucceeded = "Success"
+
+// ChangedReadingState is a sync item carrying a book's reading state, sent
+// when another reader changed it since the Kobo last heard.
+type ChangedReadingState struct {
+	ChangedReadingState *ReadingStateWrapper `json:"ChangedReadingState"`
+}
+
+// ReadingStateWrapper wraps a reading state in a sync item.
+type ReadingStateWrapper struct {
+	ReadingState *ReadingState `json:"ReadingState"`
 }

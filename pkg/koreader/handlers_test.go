@@ -481,6 +481,24 @@ func TestProgress_DeletedDeviceIsNotTakenForTheWebReader(t *testing.T) {
 	assert.Contains(t, body, `"device_id":"koreader"`)
 }
 
+// A Kobo since deleted is named as a Kobo, not as the web reader.
+func TestProgress_DeletedKoboIsNotTakenForTheWebReader(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	file := f.addFile(f.lib, models.FileTypeCBZ, cbzHash)
+	page := 11
+	_, err := f.reading.UpdatePosition(f.ctx, reading.PositionUpdate{
+		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceKobo,
+		Locator: models.ReadingLocator{Page: &page}, Percentage: 0.4,
+	})
+	require.NoError(t, err)
+
+	body := f.pull(cbzHash).Body.String()
+	assert.Contains(t, body, `"progress":"12"`)
+	assert.Contains(t, body, `"device":"Kobo"`)
+	assert.Contains(t, body, `"device_id":"kobo"`)
+}
+
 // A Device can hold a CBZ and its conversion to EPUB. KOReader would fail
 // going to a page in the one or an XPointer in the other.
 func TestProgress_SameDevicePositionInAnotherCopysFormHasNoProgress(t *testing.T) {
