@@ -75,7 +75,9 @@ type PositionUpdate struct {
 	// ChapterPercentage is how far through its chapter the position is, from
 	// 0 to 1, when the source says.
 	ChapterPercentage *float64
-	// ReportedStatus is a status the source reports outright.
+	// ReportedStatus is a status the source reports outright. A source that
+	// keeps reporting a status it reported before leaves it out, so a status
+	// changed in Shisho since, such as a pause, stands.
 	ReportedStatus ReportedStatus
 	// AtEnd is the source reporting the end of the File, such as a
 	// reflowable reader's final location or playback ending, which finishes
@@ -86,8 +88,9 @@ type PositionUpdate struct {
 	// sitting, including any session sent with the update. It's only for
 	// deciding that this sitting starts or resumes a Read-through.
 	ListenedSeconds float64
-	// ListeningSince is when this sitting began. A sitting that starts a
-	// Read-through belongs to it from here, first minute included.
+	// ListeningSince is when this sitting of listening or reading began, for
+	// a source that knows. A sitting that starts a Read-through belongs to it
+	// from here, first minute included, and dates its begin day.
 	ListeningSince *time.Time
 	// Opened is a reader opened at this place by a link, such as a page
 	// thumbnail or a shared URL, which saves it as the place but isn't
@@ -229,21 +232,13 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			// Reported finished before Shisho saw it begin, as a book read on
 			// the device first: a finished read with no begin day, like Mark as
 			// read with nothing underway, which leaves the other Files' places.
-			finished := &models.ReadThrough{
-				CreatedAt: now,
-				UpdatedAt: now,
-				UserID:    u.UserID,
-				BookID:    bookID,
-				EndDay:    &day,
-				Outcome:   models.ReadThroughOutcomeFinished,
-			}
-			if _, err := tx.NewInsert().Model(finished).Exec(ctx); err != nil {
-				return errors.WithStack(err)
-			}
-			if err := leaveToRead(ctx, tx, u.UserID, bookID, now); err != nil {
+			finished, err := insertFinishedReadThrough(ctx, tx, u.UserID, bookID, day, now)
+			if err != nil {
 				return err
 			}
 			result.FinishedReadThroughID = &finished.ID
+			// The update and its session belong to the read they finished.
+			underway = finished
 			finishing = false
 		case starting:
 			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, now, u.FileID)

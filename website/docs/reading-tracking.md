@@ -33,7 +33,10 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 ## Reading on Devices
 
-[KOReader](./koreader.md) and a [Kobo](./kobo-sync.md#reading-progress) can sync your reading with Shisho. Reading a book on either starts and finishes Read-throughs the way reading in Shisho does. A Kobo also says outright when you finish a book, so its finish is never undone the way an [automatic finish](#starting-and-finishing-automatically) can be.
+[KOReader](./koreader.md) and a [Kobo](./kobo-sync.md#reading-progress) can sync your reading with Shisho, which starts, resumes, and finishes Read-throughs, with the same [rereading](#starting-and-finishing-automatically) rule as reading in Shisho.
+
+- **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does.
+- **A Kobo** says outright when you are reading a book and when you finish it, so opening a book on the Kobo starts it even on its first page, and a finish from the Kobo is never undone the way an automatic finish can be.
 
 ### Moving Between Readers
 

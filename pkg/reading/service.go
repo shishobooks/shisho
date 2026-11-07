@@ -443,20 +443,8 @@ func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today 
 			if outcome != models.ReadThroughOutcomeFinished {
 				return ErrNothingUnderway
 			}
-			_, err = tx.NewInsert().
-				Model(&models.ReadThrough{
-					CreatedAt: now,
-					UpdatedAt: now,
-					UserID:    userID,
-					BookID:    bookID,
-					EndDay:    &today,
-					Outcome:   outcome,
-				}).
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-			return leaveToRead(ctx, tx, userID, bookID, now)
+			_, err := insertFinishedReadThrough(ctx, tx, userID, bookID, today, now)
+			return err
 		}
 
 		endDay, err := manualEndDay(ctx, tx, underway, today)
@@ -477,6 +465,24 @@ func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today 
 		}
 		return leaveToRead(ctx, tx, userID, bookID, now)
 	})
+}
+
+// insertFinishedReadThrough records a finished Read-through of bookID ending
+// on day, with no begin day, for a Book read before Shisho saw it begin, and
+// takes the Book off To Read.
+func insertFinishedReadThrough(ctx context.Context, tx bun.Tx, userID, bookID int, day string, now time.Time) (*models.ReadThrough, error) {
+	rt := &models.ReadThrough{
+		CreatedAt: now,
+		UpdatedAt: now,
+		UserID:    userID,
+		BookID:    bookID,
+		EndDay:    &day,
+		Outcome:   models.ReadThroughOutcomeFinished,
+	}
+	if _, err := tx.NewInsert().Model(rt).Exec(ctx); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return rt, leaveToRead(ctx, tx, userID, bookID, now)
 }
 
 // manualEndDay is the day ending rt by hand dates it: the day it was last

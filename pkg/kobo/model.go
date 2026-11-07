@@ -72,7 +72,17 @@ type SyncEntry struct {
 	// one: its first report is only where counting starts.
 	ReadingMinutes   *int       `bun:"reading_minutes"`
 	ReadingMinutesAt *time.Time `bun:"reading_minutes_at"`
+	// ReadingStatusAt is when the Kobo last changed the status it reports. A
+	// report whose status changed no later is the Kobo repeating itself.
+	ReadingStatusAt *time.Time `bun:"reading_status_at"`
 	// ReadingStateVersion is what the Kobo last heard of the reading state
 	// (stateInputs.version), so a sync sends it again only once it changes.
-	ReadingStateVersion *string `bun:"reading_state_version"`
+	// ReadingStateSentVersion is what a sync sent it since, in the sync point
+	// ReadingStateSentIn, on the page starting at ReadingStateSentCursor: the
+	// Kobo has heard it once it asks for a later page or syncs from that
+	// point, and until then a retry sends it again.
+	ReadingStateVersion     *string `bun:"reading_state_version"`
+	ReadingStateSentVersion *string `bun:"reading_state_sent_version"`
+	ReadingStateSentIn      *string `bun:"reading_state_sent_in"`
+	ReadingStateSentCursor  *int    `bun:"reading_state_sent_cursor"`
 }

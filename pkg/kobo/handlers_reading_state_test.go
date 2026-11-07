@@ -27,10 +27,12 @@ const koboTimeLayout = "2006-01-02T15:04:05.0000000Z"
 // koboState is one book's reading state as a Kobo PUTs it to
 // /v1/library/{id}/state: its fields, nesting, and time format are the ones
 // Kobo firmware sends, as other Kobo sync servers record them. Empty fields
-// leave their part out.
+// leave their part out. statusAt is when the status last changed, which is
+// at unless set.
 type koboState struct {
 	status   string
 	at       time.Time
+	statusAt time.Time
 	minutes  *int
 	source   string
 	span     string
@@ -47,7 +49,11 @@ func (s koboState) body(entryID string) string {
 		fmt.Sprintf(`"PriorityTimestamp":%q`, at),
 	}
 	if s.status != "" {
-		parts = append(parts, fmt.Sprintf(`"StatusInfo":{"LastModified":%q,"Status":%q,"TimesStartedReading":1,"LastTimeStartedReading":%q}`, at, s.status, at))
+		statusAt := at
+		if !s.statusAt.IsZero() {
+			statusAt = s.statusAt.UTC().Format(koboTimeLayout)
+		}
+		parts = append(parts, fmt.Sprintf(`"StatusInfo":{"LastModified":%q,"Status":%q,"TimesStartedReading":1,"LastTimeStartedReading":%q}`, statusAt, s.status, statusAt))
 	}
 	if s.minutes != nil {
 		parts = append(parts, fmt.Sprintf(`"Statistics":{"LastModified":%q,"SpentReadingMinutes":%d,"RemainingTimeMinutes":143}`, at, *s.minutes))
@@ -70,6 +76,8 @@ type readingStateFixture struct {
 	reading *reading.Service
 	entry   string
 	token   string
+	// lastToken is the token the latest sync was sent with.
+	lastToken string
 }
 
 func newReadingStateFixture(t *testing.T) *readingStateFixture {
@@ -147,7 +155,7 @@ func (f *koboScopeFixture) syncRaw(t *testing.T, token string) ([]map[string]jso
 func (f *readingStateFixture) changedStates() []ReadingState {
 	f.t.Helper()
 	items, token := f.syncRaw(f.t, f.token)
-	f.token = token
+	f.lastToken, f.token = f.token, token
 	var states []ReadingState
 	for _, item := range items {
 		raw, ok := item["ChangedReadingState"]
@@ -327,17 +335,32 @@ func TestKoboReadingState_GetReturnsTheState(t *testing.T) {
 	assert.Equal(t, 4, *state.Statistics.SpentReadingMinutes)
 }
 
+// storeCall is a request that reached the fake Kobo store.
+type storeCall struct{ method, path, body string }
+
+// receive returns the next request the fake store got, failing rather than
+// hanging when the request never reached it.
+func receive(t *testing.T, calls <-chan storeCall) storeCall {
+	t.Helper()
+	select {
+	case got := <-calls:
+		return got
+	case <-time.After(5 * time.Second):
+		t.Fatal("the request never reached the store")
+		return storeCall{}
+	}
+}
+
 // Reading state for a book from Kobo's store still goes to the store, both
 // ways. It swaps the store's address, so it can't run alongside other tests
 // that proxy.
 //
 //nolint:paralleltest // Replaces koboStoreBaseURL.
 func TestKoboReadingState_StoreBooksGoToTheStore(t *testing.T) {
-	type call struct{ method, path, body string }
-	calls := make(chan call, 2)
+	calls := make(chan storeCall, 2)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		calls <- call{r.Method, r.URL.Path, string(body)}
+		calls <- storeCall{r.Method, r.URL.Path, string(body)}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"RequestResult":"Success"}`))
 	}))
@@ -355,14 +378,14 @@ func TestKoboReadingState_StoreBooksGoToTheStore(t *testing.T) {
 	rec := httptest.NewRecorder()
 	f.e.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
-	got := <-calls
+	got := receive(t, calls)
 	assert.Equal(t, http.MethodPut, got.method)
 	assert.Equal(t, "/v1/library/"+storeBook+"/state", got.path)
 	assert.Equal(t, body, got.body)
 
 	rec = f.serve(http.MethodGet, f.statePath(storeBook))
 	assert.Equal(t, http.StatusOK, rec.Code)
-	got = <-calls
+	got = receive(t, calls)
 	assert.Equal(t, http.MethodGet, got.method)
 	assert.Equal(t, "/v1/library/"+storeBook+"/state", got.path)
 

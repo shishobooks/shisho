@@ -115,6 +115,10 @@ func (h *handler) handleSync(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	// Syncing from a point means the Kobo got every page of it.
+	if err := h.states.confirmSync(ctx, device.ID, inToken.LastSyncPointID); err != nil {
+		return err
+	}
 
 	// Diff the (possibly snapshotted) current state against the previous
 	// completed sync point. For continuations, we re-derive ScopedFiles from
@@ -126,16 +130,18 @@ func (h *handler) handleSync(c echo.Context) error {
 	}
 
 	allEntries := combineChanges(changes)
-	start := inToken.Cursor
-	if start < 0 || start > len(allEntries) {
-		start = 0
+	// The cursor counts entitlements, then one more for each page of reading
+	// states after them.
+	start := 0
+	if isContinuation {
+		start = max(0, inToken.Cursor)
 	}
-	end := start + syncItemLimit
+	entitlementStart := min(start, len(allEntries))
+	end := min(entitlementStart+syncItemLimit, len(allEntries))
 	hasMore := end < len(allEntries)
-	if !hasMore {
-		end = len(allEntries)
-	}
-	page := allEntries[start:end]
+	nextCursor := end
+	page := allEntries[entitlementStart:end]
+	statePage := syncPage{pointID: ongoing.ID, cursor: start}
 
 	var addedIDs []string
 	for _, e := range page {
@@ -143,7 +149,7 @@ func (h *handler) handleSync(c echo.Context) error {
 			addedIDs = append(addedIDs, e.File.EntryID)
 		}
 	}
-	states, err := h.states.forNewEntries(ctx, user.ID, device.ID, addedIDs)
+	states, err := h.states.forNewEntries(ctx, user.ID, device.ID, addedIDs, statePage)
 	if err != nil {
 		return err
 	}
@@ -151,7 +157,7 @@ func (h *handler) handleSync(c echo.Context) error {
 	response := buildSyncResponseFromEntries(ctx, page, baseURL, h.bookService, states)
 	changedStates := 0
 	if !hasMore {
-		changed, more, err := h.states.changed(ctx, user.ID, device.ID, entryIDsOf(ongoing.Books), max(0, syncItemLimit-len(response)))
+		changed, more, err := h.states.changed(ctx, user.ID, device.ID, entryIDsOf(ongoing.Books), states, statePage, max(0, syncItemLimit-len(response)))
 		if err != nil {
 			return err
 		}
@@ -160,6 +166,7 @@ func (h *handler) handleSync(c echo.Context) error {
 		}
 		changedStates = len(changed)
 		hasMore = more
+		nextCursor = max(end, start) + 1
 	}
 
 	// Token + completion bookkeeping.
@@ -170,7 +177,7 @@ func (h *handler) handleSync(c echo.Context) error {
 			LastSyncPointID:    inToken.LastSyncPointID,
 			OngoingSyncPointID: ongoing.ID,
 			PrevSyncPointID:    prevID,
-			Cursor:             end,
+			Cursor:             nextCursor,
 		}
 	} else {
 		if err := h.service.MarkSyncPointCompleted(ctx, device.ID, ongoing.ID); err != nil {

@@ -30,45 +30,35 @@ type stateInputs struct {
 	entry    *SyncEntry
 	file     *models.File
 	position *models.ReadingPosition
-	book     *bookReadingRow
-}
-
-// bookReadingRow is a user's reading of a Book, as far as a Kobo can show it.
-type bookReadingRow struct {
-	BookID int     `bun:"book_id"`
-	Status *string `bun:"status"`
-	// ReadThroughAt and UserBookAt are the latest changes to the Book's
-	// Read-throughs and its To Read place, which date the status.
-	ReadThroughAt *time.Time `bun:"read_through_at"`
-	UserBookAt    *time.Time `bun:"user_book_at"`
-	ReadThroughs  int        `bun:"read_throughs"`
-	// LastBeginDay is when the latest Read-through began, when it says.
-	LastBeginDay *string `bun:"last_begin_day"`
+	book     *reading.StatusSummary
 }
 
 // tracked reports whether the user has read or tracked the entry's book at
-// all, so there's a state worth sending with a book new to the Kobo.
+// all, so there's a state worth sending.
 func (in *stateInputs) tracked() bool {
 	return in.position != nil || in.book != nil && in.book.Status != nil
 }
+
+// untracked is the version of every book nobody read or tracked, whichever
+// File its entry holds: there's nothing to send.
+const untracked = "untracked"
 
 // version is what the Kobo would have to have heard for its state to be
 // current: the File the entry holds, the status and when it changed, and the
 // position and when it was stored. It changes whenever the state Shisho
 // would send does, and building the state, which can mean translating the
-// position, waits until it has. A book nobody read or tracked has nothing to
-// send, whichever File the entry holds.
+// position, waits until it has.
 func (in *stateInputs) version() string {
 	if !in.tracked() {
-		return "untracked"
+		return untracked
 	}
 	status, statusAt := "", int64(0)
 	if in.book != nil {
 		if in.book.Status != nil {
 			status = *in.book.Status
 		}
-		if at := in.statusAt(); at != nil {
-			statusAt = at.UnixNano()
+		if in.book.ChangedAt != nil {
+			statusAt = in.book.ChangedAt.UnixNano()
 		}
 	}
 	position := "none"
@@ -76,18 +66,6 @@ func (in *stateInputs) version() string {
 		position = fmt.Sprintf("%s@%d", in.position.Source, in.position.UpdatedAt.UnixNano())
 	}
 	return fmt.Sprintf("%d|%s|%d|%s", in.file.ID, status, statusAt, position)
-}
-
-// statusAt is when the status last changed, as far as Shisho recorded.
-func (in *stateInputs) statusAt() *time.Time {
-	if in.book == nil {
-		return nil
-	}
-	latest := in.book.ReadThroughAt
-	if in.book.UserBookAt != nil && (latest == nil || in.book.UserBookAt.After(*latest)) {
-		latest = in.book.UserBookAt
-	}
-	return latest
 }
 
 // load returns the inputs of each of entries that holds a File, by entry id.
@@ -106,51 +84,25 @@ func (r *readingStates) load(ctx context.Context, userID int, entries []*SyncEnt
 	var files []*models.File
 	err := r.db.NewSelect().
 		Model(&files).
-		Column("f.id", "f.book_id", "f.file_type", "f.filepath", "f.page_count").
+		Column("f.id", "f.book_id", "f.file_type", "f.filepath").
 		Where("f.id IN (?)", bun.List(fileIDs)).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	filesByID := make(map[int]*models.File, len(files))
-	var bookIDs []int
+	bookIDs := make([]int, 0, len(files))
 	for _, f := range files {
 		filesByID[f.ID] = f
 		bookIDs = append(bookIDs, f.BookID)
 	}
-
-	var positions []*models.ReadingPosition
-	err = r.db.NewSelect().
-		Model(&positions).
-		Where("rp.user_id = ? AND rp.file_id IN (?)", userID, bun.List(fileIDs)).
-		Scan(ctx)
+	positions, err := r.reading.RetrievePositions(ctx, userID, fileIDs)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, err
 	}
-	positionsByFile := make(map[int]*models.ReadingPosition, len(positions))
-	for _, p := range positions {
-		positionsByFile[p.FileID] = p
-	}
-
-	var rows []*bookReadingRow
-	if len(bookIDs) > 0 {
-		err = r.db.NewSelect().
-			TableExpr("books AS b").
-			ColumnExpr("b.id AS book_id").
-			ColumnExpr(reading.StatusExpr(userID, "b.id")+" AS status").
-			ColumnExpr("(SELECT MAX(krt.updated_at) FROM read_throughs krt WHERE krt.user_id = ? AND krt.book_id = b.id) AS read_through_at", userID).
-			ColumnExpr("(SELECT kub.updated_at FROM user_books kub WHERE kub.user_id = ? AND kub.book_id = b.id) AS user_book_at", userID).
-			ColumnExpr("(SELECT COUNT(*) FROM read_throughs krt WHERE krt.user_id = ? AND krt.book_id = b.id) AS read_throughs", userID).
-			ColumnExpr("(SELECT krt.begin_day FROM read_throughs krt WHERE krt.user_id = ? AND krt.book_id = b.id ORDER BY krt.id DESC LIMIT 1) AS last_begin_day", userID).
-			Where("b.id IN (?)", bun.List(bookIDs)).
-			Scan(ctx, &rows)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-	}
-	booksByID := make(map[int]*bookReadingRow, len(rows))
-	for _, row := range rows {
-		booksByID[row.BookID] = row
+	summaries, err := r.reading.RetrieveStatusSummaries(ctx, userID, bookIDs)
+	if err != nil {
+		return nil, err
 	}
 
 	for _, e := range entries {
@@ -161,12 +113,7 @@ func (r *readingStates) load(ctx context.Context, userID int, entries []*SyncEnt
 		if file == nil {
 			continue
 		}
-		inputs[e.EntryID] = &stateInputs{
-			entry:    e,
-			file:     file,
-			position: positionsByFile[file.ID],
-			book:     booksByID[file.BookID],
-		}
+		inputs[e.EntryID] = &stateInputs{entry: e, file: file, position: positions[file.ID], book: summaries[file.BookID]}
 	}
 	return inputs, nil
 }
@@ -185,8 +132,8 @@ func (r *readingStates) build(ctx context.Context, in *stateInputs) *ReadingStat
 	}
 
 	statusAt := created
-	if at := in.statusAt(); at != nil {
-		statusAt = *at
+	if in.book != nil && in.book.ChangedAt != nil {
+		statusAt = *in.book.ChangedAt
 	} else if in.position != nil {
 		statusAt = in.position.OccurredAt
 	}
@@ -239,8 +186,8 @@ func koboStatus(status *string) string {
 // bookmark is in's position as a Kobo bookmark: a span in the KePub the Kobo
 // holds, exactly as stored when this or another Kobo wrote it in that copy,
 // and otherwise the nearest span to where another reader is. A position no
-// span can stand for, as in an EPUB delivered as itself, goes with its
-// percentage only.
+// span can stand for, as in an EPUB delivered as itself or a comic, goes with
+// its percentage only.
 func (r *readingStates) bookmark(ctx context.Context, in *stateInputs) *CurrentBookmark {
 	position := in.position
 	percent := position.Percentage * 100
@@ -288,11 +235,73 @@ func (r *readingStates) retrieve(ctx context.Context, userID int, entry *SyncEnt
 	return r.build(ctx, in), nil
 }
 
-// forNewEntries returns the reading state each of entryIDs, about to reach
-// the Kobo, goes with: one for every book the user has read or tracked, by
-// entry id. Each entry is then current, so a later sync sends its state
-// again only once it changes.
-func (r *readingStates) forNewEntries(ctx context.Context, userID int, deviceID string, entryIDs []string) (map[string]*ReadingState, error) {
+// syncPage is the page of a sync a reading state goes out on: its sync point,
+// and where the page starts. The Kobo has heard the page once it asks for a
+// later one, or syncs again from the point.
+type syncPage struct {
+	pointID string
+	cursor  int
+}
+
+// heard reports whether the Kobo has heard version of e's state: the version
+// it last confirmed, or the one an earlier page of this sync sent it.
+func heard(e *SyncEntry, version string, page syncPage) bool {
+	if e.ReadingStateVersion != nil && *e.ReadingStateVersion == version {
+		return true
+	}
+	return e.ReadingStateSentVersion != nil && *e.ReadingStateSentVersion == version &&
+		e.ReadingStateSentIn != nil && *e.ReadingStateSentIn == page.pointID &&
+		e.ReadingStateSentCursor != nil && *e.ReadingStateSentCursor < page.cursor
+}
+
+// confirmSync records that the Kobo has heard every reading state sent in
+// the sync point pointID, which it's syncing from.
+func (r *readingStates) confirmSync(ctx context.Context, deviceID, pointID string) error {
+	if pointID == "" {
+		return nil
+	}
+	_, err := r.db.NewUpdate().
+		Model((*SyncEntry)(nil)).
+		Set("reading_state_version = reading_state_sent_version").
+		Set("reading_state_sent_version = NULL").
+		Set("reading_state_sent_in = NULL").
+		Set("reading_state_sent_cursor = NULL").
+		Where("device_id = ? AND reading_state_sent_in = ?", deviceID, pointID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// markSent records that page sends version of entryID's state.
+func (r *readingStates) markSent(ctx context.Context, deviceID, entryID, version string, page syncPage) error {
+	_, err := r.db.NewUpdate().
+		Model((*SyncEntry)(nil)).
+		Set("reading_state_sent_version = ?", version).
+		Set("reading_state_sent_in = ?", page.pointID).
+		Set("reading_state_sent_cursor = ?", page.cursor).
+		Where("device_id = ? AND entry_id = ?", deviceID, entryID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// setHeard records version as what the Kobo has heard of entryID's state,
+// or that it's heard nothing current when version is nil, so the next sync
+// sends it.
+func (r *readingStates) setHeard(ctx context.Context, deviceID, entryID string, version *string) error {
+	_, err := r.db.NewUpdate().
+		Model((*SyncEntry)(nil)).
+		Set("reading_state_version = ?", version).
+		Set("reading_state_sent_version = NULL").
+		Set("reading_state_sent_in = NULL").
+		Set("reading_state_sent_cursor = NULL").
+		Where("device_id = ? AND entry_id = ?", deviceID, entryID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// forNewEntries returns the reading state each of entryIDs, reaching the
+// Kobo on page, goes with: one for every book the user has read or tracked,
+// by entry id.
+func (r *readingStates) forNewEntries(ctx context.Context, userID int, deviceID string, entryIDs []string, page syncPage) (map[string]*ReadingState, error) {
 	states := map[string]*ReadingState{}
 	entries, err := r.entries(ctx, deviceID, entryIDs)
 	if err != nil {
@@ -307,21 +316,27 @@ func (r *readingStates) forNewEntries(ctx context.Context, userID int, deviceID 
 		if in == nil {
 			continue
 		}
-		if in.tracked() {
-			states[e.EntryID] = r.build(ctx, in)
+		version := in.version()
+		if !in.tracked() {
+			// Nothing to send, and nothing to lose if the page is.
+			if err := r.setHeard(ctx, deviceID, e.EntryID, &version); err != nil {
+				return nil, err
+			}
+			continue
 		}
-		if err := r.remember(ctx, deviceID, e.EntryID, in.version()); err != nil {
+		states[e.EntryID] = r.build(ctx, in)
+		if err := r.markSent(ctx, deviceID, e.EntryID, version, page); err != nil {
 			return nil, err
 		}
 	}
 	return states, nil
 }
 
-// changed returns the reading states of entryIDs that changed since the Kobo
-// last heard, at most limit of them, in entry id order, and whether more
-// remain. Each one returned is then current. A book never read or tracked,
-// that the Kobo hasn't heard of either, has nothing to send.
-func (r *readingStates) changed(ctx context.Context, userID int, deviceID string, entryIDs []string, limit int) ([]*ReadingState, bool, error) {
+// changed returns the reading states of entryIDs the Kobo hasn't heard,
+// leaving out those in sent, which this page already carries: at most limit
+// of them, in entry id order, and whether more remain. A book nobody read
+// or tracked, that the Kobo hasn't heard of either, has nothing to send.
+func (r *readingStates) changed(ctx context.Context, userID int, deviceID string, entryIDs []string, sent map[string]*ReadingState, page syncPage, limit int) ([]*ReadingState, bool, error) {
 	entries, err := r.entries(ctx, deviceID, entryIDs)
 	if err != nil {
 		return nil, false, err
@@ -334,15 +349,15 @@ func (r *readingStates) changed(ctx context.Context, userID int, deviceID string
 	var states []*ReadingState
 	for _, e := range entries {
 		in := inputs[e.EntryID]
-		if in == nil {
+		if in == nil || sent[e.EntryID] != nil {
 			continue
 		}
 		version := in.version()
-		if e.ReadingStateVersion != nil && *e.ReadingStateVersion == version {
+		if heard(e, version, page) {
 			continue
 		}
-		if e.ReadingStateVersion == nil && !in.tracked() {
-			if err := r.remember(ctx, deviceID, e.EntryID, version); err != nil {
+		if e.ReadingStateVersion == nil && version == untracked {
+			if err := r.setHeard(ctx, deviceID, e.EntryID, &version); err != nil {
 				return nil, false, err
 			}
 			continue
@@ -351,7 +366,7 @@ func (r *readingStates) changed(ctx context.Context, userID int, deviceID string
 			return states, true, nil
 		}
 		states = append(states, r.build(ctx, in))
-		if err := r.remember(ctx, deviceID, e.EntryID, version); err != nil {
+		if err := r.markSent(ctx, deviceID, e.EntryID, version, page); err != nil {
 			return nil, false, err
 		}
 	}
@@ -372,21 +387,6 @@ func (r *readingStates) entries(ctx context.Context, deviceID string, entryIDs [
 	return entries, errors.WithStack(err)
 }
 
-// remember records that the Kobo has heard version of entryID's state. An
-// empty version means it's heard nothing current, so the next sync sends it.
-func (r *readingStates) remember(ctx context.Context, deviceID, entryID, version string) error {
-	var stored *string
-	if version != "" {
-		stored = &version
-	}
-	_, err := r.db.NewUpdate().
-		Model((*SyncEntry)(nil)).
-		Set("reading_state_version = ?", stored).
-		Where("device_id = ? AND entry_id = ?", deviceID, entryID).
-		Exec(ctx)
-	return errors.WithStack(err)
-}
-
 // apply takes in a Kobo's reading state for entry. Kobo's own times date
 // everything, so reading done offline lands on the day it happened:
 //
@@ -396,20 +396,32 @@ func (r *readingStates) remember(ctx context.Context, deviceID, entryID, version
 //     is, is stored as the position.
 //   - The increase in the Kobo's reading minutes since its last report is an
 //     estimated Reading Session ending when the Kobo reported it.
+//
+// A Kobo that had heard Shisho's state before the update has it still,
+// with its own update on top. One that hadn't is sent the merged state with
+// the next sync, as is one whose update was older than Shisho's.
 func (r *readingStates) apply(ctx context.Context, user *models.User, device *devices.Device, entry *SyncEntry, state *ReadingState) error {
 	now := time.Now()
 	file := &models.File{}
 	err := r.db.NewSelect().
 		Model(file).
-		Column("f.id", "f.file_type", "f.page_count").
+		Column("f.id", "f.file_type").
 		Where("f.id = ?", *entry.FileID).
 		Scan(ctx)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	stored, err := r.reading.RetrievePosition(ctx, user.ID, file.ID)
+	before, err := r.load(ctx, user.ID, []*SyncEntry{entry})
 	if err != nil {
 		return err
+	}
+	wasCurrent := false
+	var stored *models.ReadingPosition
+	if in := before[entry.EntryID]; in != nil {
+		version := in.version()
+		wasCurrent = entry.ReadingStateVersion != nil && *entry.ReadingStateVersion == version ||
+			entry.ReadingStateSentVersion != nil && *entry.ReadingStateSentVersion == version
+		stored = in.position
 	}
 
 	update := reading.PositionUpdate{
@@ -419,11 +431,18 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 		DeviceID:   &device.ID,
 		OccurredAt: state.occurredAt(),
 	}
-	if state.StatusInfo != nil {
-		switch state.StatusInfo.Status {
-		case koboStatusReading:
+	// A status the Kobo reported before and hasn't changed since isn't news:
+	// one changed in Shisho since, such as a pause or Mark as read, stands,
+	// and only the bookmark says whether this is reading.
+	var statusAt *time.Time
+	if info := state.StatusInfo; info != nil {
+		statusAt = info.LastModified.at()
+		repeated := statusAt != nil && entry.ReadingStatusAt != nil && !statusAt.After(*entry.ReadingStatusAt)
+		switch {
+		case repeated:
+		case info.Status == koboStatusReading:
 			update.ReportedStatus = reading.ReportedReading
-		case koboStatusFinished:
+		case info.Status == koboStatusFinished:
 			update.ReportedStatus = reading.ReportedFinished
 		}
 	}
@@ -431,16 +450,19 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 		bookmarkLocator(&update, state.CurrentBookmark, file, entry.DeliveredFileType)
 	}
 
-	minutes, minutesAt := entry.ReadingMinutes, entry.ReadingMinutesAt
 	if stats := state.Statistics; stats != nil && stats.SpentReadingMinutes != nil {
 		reported := *stats.SpentReadingMinutes
 		at := now
-		if when := stats.LastModified.at(); when != nil && when.Before(now) {
+		if when := stats.LastModified.at(); when != nil {
 			at = *when
 		} else if update.OccurredAt != nil {
 			at = *update.OccurredAt
 		}
-		if minutes != nil && reported > *minutes {
+		// A Kobo whose clock runs fast can't have read in the future.
+		if at.After(now) {
+			at = now
+		}
+		if entry.ReadingMinutes != nil && reported > *entry.ReadingMinutes {
 			endPercentage := update.Percentage
 			startPercentage := endPercentage
 			if stored != nil {
@@ -449,17 +471,34 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 			if update.Locator.IsZero() {
 				endPercentage = startPercentage
 			}
-			started := at.Add(-time.Duration(reported-*minutes) * time.Minute)
+			started := at.Add(-time.Duration(reported-*entry.ReadingMinutes) * time.Minute)
 			update.Session = &reading.SessionInput{
 				StartedAt:       started,
 				EndedAt:         at,
 				StartPercentage: startPercentage,
 				EndPercentage:   endPercentage,
 			}
-			// A read this sitting starts began when the sitting did.
 			update.ListeningSince = &started
 		}
-		minutes, minutesAt = &reported, &at
+		// The new count is saved before the session it makes, so a failure
+		// between the two loses that session rather than recording it twice
+		// when the Kobo sends the same count again.
+		_, err := r.db.NewUpdate().
+			Model((*SyncEntry)(nil)).
+			Set("reading_minutes = ?", reported).
+			Set("reading_minutes_at = ?", at).
+			Where("device_id = ? AND entry_id = ?", entry.DeviceID, entry.EntryID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		entry.ReadingMinutes, entry.ReadingMinutesAt = &reported, &at
+	}
+	// A read the Kobo started began when its status turned to Reading, or
+	// when this sitting began, whichever was first.
+	if update.ReportedStatus == reading.ReportedReading && statusAt != nil &&
+		(update.ListeningSince == nil || statusAt.Before(*update.ListeningSince)) {
+		update.ListeningSince = statusAt
 	}
 
 	accepted := true
@@ -476,31 +515,30 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 		}
 	}
 
-	// The Kobo now has what Shisho has, unless its update was older than
-	// what Shisho has, which the next sync then sends it.
-	version := ""
-	if accepted {
-		entry.ReadingMinutes, entry.ReadingMinutesAt = minutes, minutesAt
-		inputs, err := r.load(ctx, user.ID, []*SyncEntry{entry})
+	if accepted && statusAt != nil && (entry.ReadingStatusAt == nil || statusAt.After(*entry.ReadingStatusAt)) {
+		_, err := r.db.NewUpdate().
+			Model((*SyncEntry)(nil)).
+			Set("reading_status_at = ?", *statusAt).
+			Where("device_id = ? AND entry_id = ?", entry.DeviceID, entry.EntryID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	switch {
+	case !accepted:
+		return r.setHeard(ctx, entry.DeviceID, entry.EntryID, nil)
+	case wasCurrent:
+		after, err := r.load(ctx, user.ID, []*SyncEntry{entry})
 		if err != nil {
 			return err
 		}
-		if in := inputs[entry.EntryID]; in != nil {
-			version = in.version()
+		if in := after[entry.EntryID]; in != nil {
+			version := in.version()
+			return r.setHeard(ctx, entry.DeviceID, entry.EntryID, &version)
 		}
 	}
-	var storedVersion *string
-	if version != "" {
-		storedVersion = &version
-	}
-	_, err = r.db.NewUpdate().
-		Model((*SyncEntry)(nil)).
-		Set("reading_minutes = ?", minutes).
-		Set("reading_minutes_at = ?", minutesAt).
-		Set("reading_state_version = ?", storedVersion).
-		Where("device_id = ? AND entry_id = ?", entry.DeviceID, entry.EntryID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return nil
 }
 
 // occurredAt is when the Kobo was in this state: its LastModified, or the
@@ -540,30 +578,19 @@ func (s *ReadingState) bookmarkModified() *Timestamp {
 }
 
 // bookmarkLocator sets update's position from a Kobo's bookmark in file,
-// delivered as deliveredType. A span is stored as it is, in the copy the Kobo
-// holds. A comic has no spans, so its page is the one the Kobo's percentage
-// reaches. A bookmark of any other kind leaves the position as it was.
+// delivered as deliveredType: its span, stored as it is, in the copy the Kobo
+// holds. A bookmark of any other kind, such as in a comic, which has no
+// spans, leaves the position as it was.
 func bookmarkLocator(update *reading.PositionUpdate, bookmark *CurrentBookmark, file *models.File, deliveredType string) {
-	percentage := 0.0
-	if bookmark.ProgressPercent != nil {
-		percentage = clampFraction(*bookmark.ProgressPercent / 100)
-	}
-	if models.IsPageBasedFileType(file.FileType) {
-		if bookmark.ProgressPercent == nil || file.PageCount == nil || *file.PageCount < 1 {
-			return
-		}
-		page := min(int(math.Floor(percentage*float64(*file.PageCount))), *file.PageCount-1)
-		update.Locator = models.ReadingLocator{Page: &page}
-		update.Percentage = percentage
-		return
-	}
 	location := bookmark.Location
-	if location == nil || location.Type != koboSpanLocation || location.Value == "" || location.Source == "" {
+	if models.IsPageBasedFileType(file.FileType) || location == nil || location.Type != koboSpanLocation || location.Value == "" || location.Source == "" {
 		return
 	}
 	span := reflowable.KoboSpan{Source: location.Source, ID: location.Value}.String()
 	update.Locator = models.ReadingLocator{KoboSpan: &span}
-	update.Percentage = percentage
+	if bookmark.ProgressPercent != nil {
+		update.Percentage = clampFraction(*bookmark.ProgressPercent / 100)
+	}
 	if deliveredType != file.FileType {
 		update.LocatorFileType = &deliveredType
 	}
