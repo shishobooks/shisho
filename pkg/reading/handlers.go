@@ -407,7 +407,7 @@ func (h *handler) retrievePosition(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	position, err := h.readingService.RetrievePosition(c.Request().Context(), user.ID, fileID)
+	position, err := h.readingService.RetrieveWebReaderPosition(c.Request().Context(), user.ID, fileID)
 	if err != nil {
 		return err
 	}

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Handoff</dc:title>
+    <dc:identifier id="id">urn:shisho:reflowable:handoff</dc:identifier>
+    <dc:language>en</dc:language>
+    <meta property="dcterms:modified">2026-11-06T00:00:00Z</meta>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>
+    <item id="one" href="text/one.xhtml" media-type="application/xhtml+xml"/>
+    <item id="notes" href="text/notes.xhtml" media-type="application/xhtml+xml"/>
+    <item id="two" href="text/two.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="cover"/>
+    <itemref idref="one"/>
+    <itemref idref="notes" linear="no"/>
+    <itemref idref="two"/>
+  </spine>
+</package>

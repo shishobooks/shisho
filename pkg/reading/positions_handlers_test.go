@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -280,4 +281,32 @@ func TestPositionRoutes_ASessionWithoutAPositionRecordsOnlyTheSession(t *testing
 	assert.Nil(t, f.position(f.file))
 	assert.Equal(t, 1, f.count("reading_sessions"))
 	assert.Empty(t, f.status())
+}
+
+// The web reader opens where KOReader left off: its XPointer, in the KePub
+// KOReader holds, comes back as a CFI in the File's own EPUB. The places are
+// the start of "Beta" in the handoff EPUB, as foliate and KOReader write it.
+func TestPositionRoutes_KOReadersPositionComesAsACFI(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	path := testgen.GenerateHandoffEPUB(t, t.TempDir(), "handoff.epub")
+	_, err := f.db.NewUpdate().Model(f.file).Set("filepath = ?", path).WherePK().Exec(f.ctx)
+	require.NoError(t, err)
+	xp := "/body/DocFragment[2]/body/div/div/section/p[1]/span[3]/text().0"
+	kepub := models.FileTypeKePub
+	_, err = f.svc.UpdatePosition(f.ctx, PositionUpdate{
+		UserID: f.user.ID, FileID: f.file.ID, Source: models.ReadingSourceKOReader,
+		Locator: models.ReadingLocator{XPointer: &xp}, LocatorFileType: &kepub, Percentage: 0.12,
+	})
+	require.NoError(t, err)
+
+	api := newReadingAPI(t, f.db, f.user)
+	rec := api.do(http.MethodGet, fmt.Sprintf("/files/%d/position", f.file.ID), nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	got := decode[FilePositionResponse](t, rec.Body.Bytes())
+	require.NotNil(t, got.Position)
+	require.NotNil(t, got.Position.CFI)
+	assert.Equal(t, "epubcfi(/6/4!/4/2/4/1:67)", *got.Position.CFI)
+	assert.Nil(t, got.Position.XPointer)
+	assert.Equal(t, models.ReadingSourceKOReader, got.Position.Source)
 }

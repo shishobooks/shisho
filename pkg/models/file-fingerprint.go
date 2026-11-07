@@ -47,3 +47,30 @@ type DocumentHash struct {
 
 	File *File `bun:"rel:belongs-to,join:file_id=id" json:"-"`
 }
+
+// KOReaderPull is a KOReader Device's latest pull of one document. KOReader
+// pulls when it opens or wakes with a book, and pushes when it closes or
+// sleeps, and as you read, so the pushes of the same document that follow
+// make an estimated Reading Session from the pull. PairedAt is when the
+// first did, and SessionID the session they make.
+type KOReaderPull struct {
+	bun.BaseModel `bun:"table:koreader_pulls,alias:kp" tstype:"-"`
+
+	DeviceID string    `bun:",pk" json:"device_id"`
+	Document string    `bun:",pk" json:"document"`
+	FileID   int       `bun:",nullzero" json:"file_id"`
+	PulledAt time.Time `bun:",notnull" json:"pulled_at"`
+	// Percentage is the position the pull found, which the session starts
+	// from, or nil when there was none.
+	Percentage *float64   `json:"percentage"`
+	PairedAt   *time.Time `json:"paired_at"`
+	SessionID  *int       `json:"session_id"`
+	// EndedAt and EndPercentage are the session's end as the pushes last set
+	// it. PreviousEndedAt and PreviousEndPercentage are its end before the
+	// push at ExtendedAt moved it, which a replay puts back.
+	EndedAt               *time.Time `json:"ended_at"`
+	EndPercentage         *float64   `json:"end_percentage"`
+	ExtendedAt            *time.Time `json:"extended_at"`
+	PreviousEndedAt       *time.Time `json:"previous_ended_at"`
+	PreviousEndPercentage *float64   `json:"previous_end_percentage"`
+}

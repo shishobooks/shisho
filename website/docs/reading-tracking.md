@@ -35,6 +35,18 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 [KOReader](./koreader.md) can sync its reading position with Shisho. Reading a book there starts and finishes Read-throughs the way reading in Shisho does.
 
+### Moving Between Readers
+
+Your place carries between the Shisho reader and KOReader in both directions:
+
+- **EPUB and KePub books** carry the exact spot, whether KOReader holds the book as an EPUB or as a KePub. A book you read in KOReader opens in the Shisho reader where KOReader left off, and KOReader offers to jump to where you stopped in the Shisho reader.
+- **Comics and PDFs** carry the page.
+- **MOBI and AZW3 books** don't carry between them: KOReader shows no progress for a place the Shisho reader saved.
+
+When the exact spot can't be found, such as a place saved before the file was replaced with another edition, the book opens nearby: in the same chapter when the chapter is still there, and at the same percentage of the book when it isn't.
+
+KOReader doesn't report how long you read, so the reading time Shisho records for it is an estimate, from when KOReader pulls your position on opening a book to its last push before you close it.
+
 ## Reading in Shisho
 
 Every reader keeps your place and your reading history current as you read or listen, with nothing to click: EPUB, KePub, MOBI, and AZW3 books, CBZ comics, PDFs, and M4B audiobooks. [Reading and Playback](./reading-and-playback.md) covers the reader itself.
@@ -55,7 +67,7 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 - **Rereading**: a book you have read or abandoned starts again only when you choose **Read again**, or when you've added it back to To Read to plan a reread. Otherwise you can open it to look something up, and only your place in it is saved.
 - **Resuming**: turning a page of a paused book, or listening to a minute of it in one sitting, makes it **Currently Reading** again.
 - **Finishing**: reaching the last page finishes the Read-through, dated today. An audiobook finishes when playback ends or you're within its last 60 seconds, so end credits don't stop it being marked read. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
-- **Peeking at the end**: going back before the end within 15 minutes of an automatic finish undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way. After 15 minutes, the book stays **Read**.
+- **Peeking at the end**: going back before the end within 15 minutes of an automatic finish, in the reader that finished it, undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way, and neither is one from another reader or device. After 15 minutes, the book stays **Read**.
 
 ### Supplements
 

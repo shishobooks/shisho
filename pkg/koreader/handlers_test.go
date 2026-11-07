@@ -518,22 +518,18 @@ func TestProgress_UnknownDocumentIsLoggedWithWhatKOReaderSent(t *testing.T) {
 	assert.Contains(t, logged.String(), unknown)
 }
 
-// Translating a reflowable position between readers comes with #811.
-func TestProgress_ReflowablePositionWrittenElsewhereHasNoProgress(t *testing.T) {
+// MOBI and AZW3 positions don't translate between readers, so another
+// reader's place in one is no progress for KOReader.
+func TestProgress_UntranslatablePositionWrittenElsewhereHasNoProgress(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
-	file := f.addFile(f.lib, models.FileTypeEPUB, epubHash)
+	file := f.addFile(f.lib, models.FileTypeMOBI, epubHash)
 	cfi := "epubcfi(/6/4!/4/2)"
 	_, err := f.reading.UpdatePosition(f.ctx, reading.PositionUpdate{
 		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
 		Locator: models.ReadingLocator{CFI: &cfi}, Percentage: 0.5,
 	})
 	require.NoError(t, err)
-	assert.JSONEq(t, `{}`, f.pull(epubHash).Body.String())
-
-	phone, err := f.devices.Create(f.ctx, f.user.ID, "Phone KOReader", devices.DeviceTypeKOReader)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, f.pushAs(phone, epubHash, xpointer, 0.6).Code)
 	assert.JSONEq(t, `{}`, f.pull(epubHash).Body.String())
 }
 
@@ -680,8 +676,7 @@ func TestProgress_BadPushesAreRejected(t *testing.T) {
 	}
 }
 
-// A field a later KOReader adds, like the proposed timestamp, mustn't refuse
-// the push.
+// A field a later KOReader adds mustn't refuse the push.
 func TestProgress_UnknownFieldsAreAccepted(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
