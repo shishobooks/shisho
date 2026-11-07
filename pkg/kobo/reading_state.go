@@ -271,15 +271,20 @@ func (r *readingStates) confirmSync(ctx context.Context, deviceID, pointID strin
 	return errors.WithStack(err)
 }
 
-// markSent records that page sends version of entryID's state.
-func (r *readingStates) markSent(ctx context.Context, deviceID, entryID, version string, page syncPage) error {
-	_, err := r.db.NewUpdate().
+// markSent records that page sends version of e's state, as state. The
+// status's time joins the ones the Kobo has seen: a Kobo keeps the time a
+// status it takes came with, so reporting that status at that time again is
+// the Kobo echoing Shisho, not changing it.
+func (r *readingStates) markSent(ctx context.Context, e *SyncEntry, version string, state *ReadingState, page syncPage) error {
+	q := r.db.NewUpdate().
 		Model((*SyncEntry)(nil)).
 		Set("reading_state_sent_version = ?", version).
 		Set("reading_state_sent_in = ?", page.pointID).
-		Set("reading_state_sent_cursor = ?", page.cursor).
-		Where("device_id = ? AND entry_id = ?", deviceID, entryID).
-		Exec(ctx)
+		Set("reading_state_sent_cursor = ?", page.cursor)
+	if sent := state.StatusInfo.LastModified.at(); sent != nil && (e.ReadingStatusAt == nil || sent.After(*e.ReadingStatusAt)) {
+		q = q.Set("reading_status_at = ?", *sent)
+	}
+	_, err := q.Where("device_id = ? AND entry_id = ?", e.DeviceID, e.EntryID).Exec(ctx)
 	return errors.WithStack(err)
 }
 
@@ -324,8 +329,9 @@ func (r *readingStates) forNewEntries(ctx context.Context, userID int, deviceID 
 			}
 			continue
 		}
-		states[e.EntryID] = r.build(ctx, in)
-		if err := r.markSent(ctx, deviceID, e.EntryID, version, page); err != nil {
+		state := r.build(ctx, in)
+		states[e.EntryID] = state
+		if err := r.markSent(ctx, e, version, state, page); err != nil {
 			return nil, err
 		}
 	}
@@ -365,8 +371,9 @@ func (r *readingStates) changed(ctx context.Context, userID int, deviceID string
 		if len(states) == limit {
 			return states, true, nil
 		}
-		states = append(states, r.build(ctx, in))
-		if err := r.markSent(ctx, deviceID, e.EntryID, version, page); err != nil {
+		state := r.build(ctx, in)
+		states = append(states, state)
+		if err := r.markSent(ctx, e, version, state, page); err != nil {
 			return nil, false, err
 		}
 	}
@@ -415,12 +422,14 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 	if err != nil {
 		return err
 	}
-	wasCurrent := false
+	// wasCurrent is the Kobo having confirmed the state before the update,
+	// and wasSent a sync having sent it, which the Kobo may not have got.
+	wasCurrent, wasSent := false, false
 	var stored *models.ReadingPosition
 	if in := before[entry.EntryID]; in != nil {
 		version := in.version()
-		wasCurrent = entry.ReadingStateVersion != nil && *entry.ReadingStateVersion == version ||
-			entry.ReadingStateSentVersion != nil && *entry.ReadingStateSentVersion == version
+		wasCurrent = entry.ReadingStateVersion != nil && *entry.ReadingStateVersion == version
+		wasSent = entry.ReadingStateSentVersion != nil && *entry.ReadingStateSentVersion == version
 		stored = in.position
 	}
 
@@ -525,20 +534,32 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 			return errors.WithStack(err)
 		}
 	}
-	switch {
-	case !accepted:
+	if !accepted {
 		return r.setHeard(ctx, entry.DeviceID, entry.EntryID, nil)
-	case wasCurrent:
-		after, err := r.load(ctx, user.ID, []*SyncEntry{entry})
-		if err != nil {
-			return err
-		}
-		if in := after[entry.EntryID]; in != nil {
-			version := in.version()
-			return r.setHeard(ctx, entry.DeviceID, entry.EntryID, &version)
-		}
 	}
-	return nil
+	if !wasCurrent && !wasSent {
+		return nil
+	}
+	after, err := r.load(ctx, user.ID, []*SyncEntry{entry})
+	if err != nil {
+		return err
+	}
+	in := after[entry.EntryID]
+	if in == nil {
+		return nil
+	}
+	version := in.version()
+	if wasCurrent {
+		return r.setHeard(ctx, entry.DeviceID, entry.EntryID, &version)
+	}
+	// The Kobo has what was sent once it confirms the sync that sent it, and
+	// its own update on top; until then a retry sends both.
+	_, err = r.db.NewUpdate().
+		Model((*SyncEntry)(nil)).
+		Set("reading_state_sent_version = ?", version).
+		Where("device_id = ? AND entry_id = ?", entry.DeviceID, entry.EntryID).
+		Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // occurredAt is when the Kobo was in this state: its LastModified, or the

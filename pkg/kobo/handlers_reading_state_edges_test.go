@@ -284,3 +284,51 @@ func TestKoboReadingState_StatesPageAndRetry(t *testing.T) {
 	assert.False(t, more)
 	assert.NotEqual(t, retried[0].EntitlementID, after[0].EntitlementID)
 }
+
+// A pause in Shisho goes to the Kobo as Reading, since a Kobo has no pause.
+// The Kobo echoing that back as it opens the book isn't reading on, so the
+// book stays paused.
+func TestKoboReadingState_TheKoboEchoingAPauseLeavesItPaused(t *testing.T) {
+	t.Parallel()
+	f := newReadingStateFixture(t)
+	f.put(koboState{status: "Reading", at: time.Now().Add(-time.Hour), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 8})
+	require.NoError(t, f.reading.SetPaused(f.ctx, f.user.ID, f.bookA.ID, true))
+	states := f.changedStates()
+	require.Len(t, states, 1)
+	sent := states[0].StatusInfo.LastModified.Time
+
+	f.put(koboState{status: "Reading", statusAt: sent, at: time.Now(), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 8})
+
+	assert.Equal(t, models.ReadingStatusPaused, f.status())
+}
+
+// A Mark as read whose sync never reached the Kobo is sent again, even after
+// the Kobo reports more reading in between.
+func TestKoboReadingState_ALostFinishIsSentAgainAfterAKoboUpdate(t *testing.T) {
+	t.Parallel()
+	f := newReadingStateFixture(t)
+	started := time.Now().Add(-3 * time.Hour)
+	f.put(koboState{status: "Reading", at: started, source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 8})
+	require.NoError(t, f.reading.End(f.ctx, f.user.ID, f.bookA.ID, models.ReadThroughOutcomeFinished, time.Now().Format(time.DateOnly)))
+	require.Len(t, f.changedStates(), 1)
+	lost := f.lastToken
+
+	f.put(koboState{status: "Reading", statusAt: started, at: time.Now(), source: "OEBPS/text/one.xhtml", span: "kobo.6.1", progress: 15})
+
+	items, _ := f.syncRaw(t, lost)
+	var finished bool
+	for _, item := range items {
+		for _, key := range []string{"ChangedReadingState", "NewEntitlement"} {
+			raw, ok := item[key]
+			if !ok {
+				continue
+			}
+			var wrapper struct{ ReadingState *ReadingState }
+			require.NoError(t, json.Unmarshal(raw, &wrapper))
+			if wrapper.ReadingState != nil && wrapper.ReadingState.EntitlementID == f.entry {
+				finished = wrapper.ReadingState.StatusInfo.Status == koboStatusFinished
+			}
+		}
+	}
+	assert.True(t, finished)
+}
