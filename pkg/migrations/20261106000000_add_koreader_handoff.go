@@ -26,6 +26,14 @@ func init() {
 				percentage REAL,
 				paired_at TIMESTAMP,
 				session_id INTEGER REFERENCES reading_sessions (id) ON DELETE SET NULL,
+				-- The session's end as the pushes last set it, and the end
+				-- before the latest of them moved it, at extended_at, which a
+				-- replay puts back.
+				ended_at TIMESTAMP,
+				end_percentage REAL,
+				extended_at TIMESTAMP,
+				previous_ended_at TIMESTAMP,
+				previous_end_percentage REAL,
 				PRIMARY KEY (device_id, document)
 			)`,
 			`CREATE INDEX ix_koreader_pulls_file_id ON koreader_pulls (file_id)`,

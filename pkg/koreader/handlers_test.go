@@ -393,9 +393,7 @@ func TestProgress_ReadingStartsAndFinishesTheBook(t *testing.T) {
 	require.Equal(t, http.StatusOK, f.push(epubHash, "/body/DocFragment[5]/body/p[38]/text().0", 0.99).Code)
 	assert.Equal(t, models.ReadThroughOutcomeFinished, f.status(file))
 
-	// Going back within the window is the revert rule, for a push that isn't
-	// part of a replay.
-	f.agePushes()
+	// Going back within the window is the revert rule.
 	require.Equal(t, http.StatusOK, f.push(epubHash, xpointer, 0.3).Code)
 	assert.Equal(t, models.ReadThroughOutcomeUnderway, f.status(file))
 }
@@ -518,6 +516,21 @@ func TestProgress_UnknownDocumentIsLoggedWithWhatKOReaderSent(t *testing.T) {
 	logged.Reset()
 	require.Equal(t, http.StatusOK, f.pull(unknown).Code)
 	assert.Contains(t, logged.String(), unknown)
+}
+
+// MOBI and AZW3 positions don't translate between readers, so another
+// reader's place in one is no progress for KOReader.
+func TestProgress_UntranslatablePositionWrittenElsewhereHasNoProgress(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	file := f.addFile(f.lib, models.FileTypeMOBI, epubHash)
+	cfi := "epubcfi(/6/4!/4/2)"
+	_, err := f.reading.UpdatePosition(f.ctx, reading.PositionUpdate{
+		UserID: f.user.ID, FileID: file.ID, Source: models.ReadingSourceWebReader,
+		Locator: models.ReadingLocator{CFI: &cfi}, Percentage: 0.5,
+	})
+	require.NoError(t, err)
+	assert.JSONEq(t, `{}`, f.pull(epubHash).Body.String())
 }
 
 func TestProgress_NoPositionYetHasNoProgress(t *testing.T) {

@@ -189,13 +189,15 @@ func (h *handler) updateProgress(c echo.Context) error {
 	if _, err := h.readingService.UpdatePosition(ctx, update); err != nil {
 		return err
 	}
+	// The position is saved, which is what KOReader would retry for, so
+	// failing to record the sitting only logs.
 	if replay {
-		err = h.pulls.replay(ctx, user.ID, device.ID, params.Document, now.Add(-replayWindow))
+		err = h.pulls.replay(ctx, user.ID, device.ID, params.Document, now.Add(-replayWindow), now)
 	} else {
-		err = h.pulls.sitting(ctx, user.ID, device.ID, params.Document, file.FileID, at, *params.Percentage)
+		err = h.pulls.sitting(ctx, user.ID, device.ID, params.Document, file.FileID, at, *params.Percentage, now)
 	}
 	if err != nil {
-		return err
+		logger.FromContext(ctx).Warn("koreader sitting not recorded", logger.Data{"device_id": device.ID, "error": err.Error()})
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
@@ -245,7 +247,7 @@ func (h *handler) retrieveProgress(c echo.Context) error {
 	}
 	// The pull only starts a session, which matters less than KOReader
 	// getting the position, so failing to note it doesn't fail the pull.
-	if err := h.pulls.record(ctx, device.ID, document, file.FileID, percentage); err != nil {
+	if err := h.pulls.record(ctx, device.ID, document, file.FileID, percentage, time.Now()); err != nil {
 		logger.FromContext(ctx).Warn("koreader pull not recorded", logger.Data{"device_id": device.ID, "error": err.Error()})
 	}
 	response, err := h.buildProgress(ctx, user, device, document, file, position)
@@ -324,14 +326,11 @@ func (h *handler) buildProgress(ctx context.Context, user *models.User, device *
 // sameCopy reports whether position's XPointer was written in the copy file
 // names, so it needs no translating.
 func sameCopy(position *models.ReadingPosition, file *models.DocumentHash) bool {
-	written := ""
+	fileType := ""
 	if file.File != nil {
-		written = file.File.FileType
+		fileType = file.File.FileType
 	}
-	if position.LocatorFileType != nil {
-		written = *position.LocatorFileType
-	}
-	return written == file.DeliveredFileType
+	return reflowable.WrittenIn(position, fileType) == file.DeliveredFileType
 }
 
 // translate returns position as an XPointer in the copy file names, or false

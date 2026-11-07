@@ -21,6 +21,15 @@ const (
 // to translate, or a File or copy that isn't an EPUB or KePub.
 var ErrNotTranslatable = errors.New("the position doesn't translate")
 
+// WrittenIn is the File Type of the copy position's locator points into, for
+// a File of fileType: the File's own, unless the position names another.
+func WrittenIn(position *models.ReadingPosition, fileType string) string {
+	if position.LocatorFileType != nil {
+		return *position.LocatorFileType
+	}
+	return fileType
+}
+
 func translatable(fileType string) bool {
 	return fileType == models.FileTypeEPUB || fileType == models.FileTypeKePub
 }
@@ -31,10 +40,7 @@ func translatable(fileType string) bool {
 // position's locator is in the File's own copy unless its LocatorFileType
 // names another.
 func Translate(ctx context.Context, path, fileType string, position *models.ReadingPosition, toType string, form Form) (models.ReadingLocator, error) {
-	fromType := fileType
-	if position.LocatorFileType != nil {
-		fromType = *position.LocatorFileType
-	}
+	fromType := WrittenIn(position, fileType)
 	reflowablePosition := position.CFI != nil || position.XPointer != nil || position.KoboSpan != nil
 	if !reflowablePosition || !translatable(fileType) || !translatable(fromType) || !translatable(toType) {
 		return models.ReadingLocator{}, ErrNotTranslatable

@@ -441,7 +441,9 @@ func revertAutoFinish(ctx context.Context, tx bun.Tx, u PositionUpdate, occurred
 	err := tx.NewSelect().
 		Model(finish).
 		Where("rpu.user_id = ? AND rpu.file_id = ? AND rpu.auto_finished", userID, fileID).
-		Where("NOT EXISTS (SELECT 1 FROM reading_position_updates AS later WHERE later.user_id = rpu.user_id AND later.file_id = rpu.file_id AND later.id > rpu.id AND NOT later.at_end)").
+		// Another reader's updates in between neither undo it nor use up the
+		// finishing reader's chance to.
+		Where("NOT EXISTS (SELECT 1 FROM reading_position_updates AS later WHERE later.user_id = rpu.user_id AND later.file_id = rpu.file_id AND later.id > rpu.id AND NOT later.at_end AND later.source = rpu.source AND later.source_device_id IS rpu.source_device_id)").
 		// A newer Read-through, such as a Mark as read since, stands.
 		Where("NOT EXISTS (SELECT 1 FROM read_throughs AS this JOIN read_throughs AS newer ON newer.user_id = this.user_id AND newer.book_id = this.book_id AND newer.id > this.id WHERE this.id = rpu.read_through_id)").
 		OrderExpr("rpu.id DESC").
@@ -532,7 +534,7 @@ func (svc *Service) UndoAutoFinish(ctx context.Context, rt *models.ReadThrough) 
 // translated, as when the File can't be read, comes as it was stored.
 func (svc *Service) RetrieveWebReaderPosition(ctx context.Context, userID, fileID int) (*models.ReadingPosition, error) {
 	position, err := retrievePosition(ctx, svc.db, userID, fileID)
-	if err != nil || position == nil || position.CFI != nil {
+	if err != nil || position == nil || position.XPointer == nil && position.KoboSpan == nil {
 		return position, err
 	}
 	file := &models.File{}
@@ -566,27 +568,10 @@ func (svc *Service) DeviceUpdatedSince(ctx context.Context, deviceID string, sin
 }
 
 // RecordEstimatedSession records session, which source estimated, for
-// userID in fileID, returning its id. With extend, the id of a session
-// recorded this way before, it moves that session's end to session's
-// instead, when that session is still there.
-func (svc *Service) RecordEstimatedSession(ctx context.Context, userID, fileID int, source string, extend *int, session SessionInput) (int, error) {
+// userID in fileID, returning its id.
+func (svc *Service) RecordEstimatedSession(ctx context.Context, userID, fileID int, source string, session SessionInput) (int, error) {
 	var id int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		if extend != nil {
-			res, err := tx.NewUpdate().
-				Model((*models.ReadingSession)(nil)).
-				Set("ended_at = ?", session.EndedAt).
-				Set("end_percentage = ?", session.EndPercentage).
-				Where("id = ? AND user_id = ? AND NOT measured AND ended_at <= ?", *extend, userID, session.EndedAt).
-				Exec(ctx)
-			if err != nil {
-				return errors.WithStack(err)
-			}
-			if n, err := res.RowsAffected(); err != nil || n == 1 {
-				id = *extend
-				return errors.WithStack(err)
-			}
-		}
 		var bookID int
 		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -606,6 +591,18 @@ func (svc *Service) RecordEstimatedSession(ctx context.Context, userID, fileID i
 	return id, err
 }
 
+// SetEstimatedSessionEnd moves the end of userID's estimated Reading Session
+// id, as its source learns more of it.
+func (svc *Service) SetEstimatedSessionEnd(ctx context.Context, userID, id int, endedAt time.Time, endPercentage float64) error {
+	_, err := svc.db.NewUpdate().
+		Model((*models.ReadingSession)(nil)).
+		Set("ended_at = ?", endedAt).
+		Set("end_percentage = ?", endPercentage).
+		Where("id = ? AND user_id = ? AND NOT measured", id, userID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // DeleteSession deletes userID's Reading Session id, one that turned out not
 // to be reading.
 func (svc *Service) DeleteSession(ctx context.Context, userID, id int) error {
@@ -614,7 +611,8 @@ func (svc *Service) DeleteSession(ctx context.Context, userID, id int) error {
 }
 
 // RetrievePosition loads userID's Reading Position in fileID, or nil when
-// there is none.
+// there is none, in the form and copy its source wrote: a reader given it
+// gets it through reflowable.Translate, as RetrieveWebReaderPosition does.
 func (svc *Service) RetrievePosition(ctx context.Context, userID, fileID int) (*models.ReadingPosition, error) {
 	return retrievePosition(ctx, svc.db, userID, fileID)
 }

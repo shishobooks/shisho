@@ -65,4 +65,12 @@ type KOReaderPull struct {
 	Percentage *float64   `json:"percentage"`
 	PairedAt   *time.Time `json:"paired_at"`
 	SessionID  *int       `json:"session_id"`
+	// EndedAt and EndPercentage are the session's end as the pushes last set
+	// it. PreviousEndedAt and PreviousEndPercentage are its end before the
+	// push at ExtendedAt moved it, which a replay puts back.
+	EndedAt               *time.Time `json:"ended_at"`
+	EndPercentage         *float64   `json:"end_percentage"`
+	ExtendedAt            *time.Time `json:"extended_at"`
+	PreviousEndedAt       *time.Time `json:"previous_ended_at"`
+	PreviousEndPercentage *float64   `json:"previous_end_percentage"`
 }

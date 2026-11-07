@@ -8,7 +8,9 @@ import (
 
 // cachedBooks is how many parsed Books Open keeps. Parsing a long KePub
 // variant takes tens of milliseconds and tens of megabytes, and a pull or a
-// reader opening reads the same few books again and again.
+// reader opening reads the same few books again and again. A Book holds its
+// text and markup, a few times its content documents' size, so the cache
+// holds at most that much for the 8 books read last.
 const cachedBooks = 8
 
 type cacheKey struct {

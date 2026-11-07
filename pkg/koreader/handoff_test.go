@@ -88,6 +88,14 @@ func (f *syncFixture) agePushes() {
 		Set("created_at = ?", time.Now().Add(-time.Hour)).
 		Where("user_id = ?", f.user.ID).Exec(f.ctx)
 	require.NoError(f.t, err)
+	_, err = f.db.NewUpdate().Model((*models.KOReaderPull)(nil)).
+		Set("paired_at = ?", time.Now().Add(-time.Hour)).
+		Where("paired_at IS NOT NULL").Exec(f.ctx)
+	require.NoError(f.t, err)
+	_, err = f.db.NewUpdate().Model((*models.KOReaderPull)(nil)).
+		Set("extended_at = ?", time.Now().Add(-time.Hour)).
+		Where("extended_at IS NOT NULL").Exec(f.ctx)
+	require.NoError(f.t, err)
 }
 
 // A pull after the web reader moved gets the web reader's place, translated
@@ -259,6 +267,64 @@ func TestHandoff_AnotherReaderCannotUndoAFinish(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, f.push(epubHash, betaXPointer, 0.5).Code)
 	assert.Equal(t, models.ReadThroughOutcomeFinished, f.status(file))
+}
+
+// A replay's first push, which moved the end of a session from before the
+// device went offline, can't stretch it over the time offline.
+func TestHandoff_ReplayPutsBackASessionsEnd(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	file := f.addHandoffEPUB()
+	f.addFile(f.lib, models.FileTypeCBZ, cbzHash)
+	f.pull(epubHash)
+	f.backdatePull(f.device, epubHash, 4*time.Hour)
+	body := fmt.Sprintf(`{"progress":%q,"document":%q,"percentage":0.3,"timestamp":%d}`, betaXPointer, epubHash, time.Now().Add(-230*time.Minute).Unix())
+	require.Equal(t, http.StatusOK, f.serve(http.MethodPut, "/koreader/syncs/progress", f.user.Username, f.device.Credential, body).Code)
+	sessions := f.sessions(file)
+	require.Len(t, sessions, 1)
+	before := sessions[0]
+
+	f.agePushes()
+	require.Equal(t, http.StatusOK, f.push(epubHash, betaXPointer, 0.4).Code)
+	require.Equal(t, http.StatusOK, f.push(cbzHash, "4", 0.4).Code)
+
+	sessions = f.sessions(file)
+	require.Len(t, sessions, 1)
+	assert.WithinDuration(t, before.EndedAt, sessions[0].EndedAt, time.Second)
+	assert.InDelta(t, 0.3, sessions[0].EndPercentage, 1e-9)
+}
+
+// A push dated before the end of its sitting's session so far, as a queued
+// one with a timestamp can be, leaves the session as it is.
+func TestHandoff_OlderPushDoesNotSplitTheSession(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	file := f.addHandoffEPUB()
+	f.pull(epubHash)
+	f.backdatePull(f.device, epubHash, time.Hour)
+	require.Equal(t, http.StatusOK, f.push(epubHash, betaXPointer, 0.4).Code)
+	f.agePushes()
+	body := fmt.Sprintf(`{"progress":%q,"document":%q,"percentage":0.3,"timestamp":%d}`, betaXPointer, epubHash, time.Now().Add(-30*time.Minute).Unix())
+	require.Equal(t, http.StatusOK, f.serve(http.MethodPut, "/koreader/syncs/progress", f.user.Username, f.device.Credential, body).Code)
+
+	sessions := f.sessions(file)
+	require.Len(t, sessions, 1)
+	assert.InDelta(t, 0.4, sessions[0].EndPercentage, 1e-9)
+}
+
+// Failing to record a sitting doesn't refuse a push whose position is saved,
+// which KOReader would send again and again.
+func TestHandoff_PushStandsWhenItsSittingCannotBeRecorded(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	file := f.addHandoffEPUB()
+	_, err := f.db.ExecContext(f.ctx, "DROP TABLE koreader_pulls")
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, f.pull(epubHash).Code)
+	require.Equal(t, http.StatusOK, f.push(epubHash, betaXPointer, 0.3).Code)
+	position, err := f.reading.RetrievePosition(f.ctx, f.user.ID, file.ID)
+	require.NoError(t, err)
+	assert.Equal(t, betaXPointer, *position.XPointer)
 }
 
 // A pull a replay used up makes no session with a push hours later, which
