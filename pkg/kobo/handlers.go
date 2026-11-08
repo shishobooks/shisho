@@ -209,7 +209,7 @@ func (h *handler) handleSync(c echo.Context) error {
 		"page_start":     start,
 		"page_end":       end,
 		"total_entries":  len(allEntries),
-		"reading_states": changedStates,
+		"reading_states": len(states) + changedStates,
 		"has_more":       hasMore,
 		"sync_point_id":  ongoing.ID,
 		"prev_sync_id":   prevID,

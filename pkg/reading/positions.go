@@ -698,6 +698,16 @@ func resetPositions(ctx context.Context, db bun.IDB, userID, bookID, keepFileID 
 // userDay is the day of instant in userID's time zone at the moment, or in
 // UTC when the user has none, as automatic Read-through days are dated.
 func userDay(ctx context.Context, db bun.IDB, userID int, instant time.Time) (string, error) {
+	location, err := userLocation(ctx, db, userID)
+	if err != nil {
+		return "", err
+	}
+	return instant.In(location).Format(time.DateOnly), nil
+}
+
+// userLocation is userID's time zone at the moment, or UTC when the user has
+// none.
+func userLocation(ctx context.Context, db bun.IDB, userID int) (*time.Location, error) {
 	var zone *string
 	err := db.NewSelect().
 		Model((*models.UserSettings)(nil)).
@@ -705,18 +715,17 @@ func userDay(ctx context.Context, db bun.IDB, userID int, instant time.Time) (st
 		Where("us.user_id = ?", userID).
 		Scan(ctx, &zone)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return "", errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
-	location := time.UTC
 	if zone != nil {
 		// The settings handler validates the zone, so one that fails to
 		// load here means the server's zone database lost it: fall back
 		// rather than refuse the reading.
 		if loaded, err := time.LoadLocation(*zone); err == nil {
-			location = loaded
+			return loaded, nil
 		}
 	}
-	return instant.In(location).Format(time.DateOnly), nil
+	return time.UTC, nil
 }
 
 // startsOnProgress reports whether reading userID's bookID, with nothing

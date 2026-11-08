@@ -22,8 +22,10 @@ type StatusSummary struct {
 	ChangedAt     *time.Time `bun:"-"`
 	ReadThroughs  int        `bun:"read_throughs"`
 	// LastBeginDay is when the Read-through the status comes from began, or
-	// the latest one when none does, if it says.
-	LastBeginDay *string `bun:"last_begin_day"`
+	// the latest one when none does, if it says, and LastBeganAt the start of
+	// that day in the user's time zone.
+	LastBeginDay *string    `bun:"last_begin_day"`
+	LastBeganAt  *time.Time `bun:"-"`
 }
 
 // RetrieveStatusSummaries returns userID's StatusSummary of each of bookIDs,
@@ -51,7 +53,16 @@ func (svc *Service) RetrieveStatusSummaries(ctx context.Context, userID int, boo
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	location, err := userLocation(ctx, svc.db, userID)
+	if err != nil {
+		return nil, err
+	}
 	for _, row := range rows {
+		if row.LastBeginDay != nil {
+			if began, err := time.ParseInLocation(time.DateOnly, *row.LastBeginDay, location); err == nil {
+				row.LastBeganAt = &began
+			}
+		}
 		row.ChangedAt = row.ReadThroughAt
 		if row.UserBookAt != nil && (row.ChangedAt == nil || row.UserBookAt.After(*row.ChangedAt)) {
 			row.ChangedAt = row.UserBookAt

@@ -332,3 +332,34 @@ func TestKoboReadingState_ALostFinishIsSentAgainAfterAKoboUpdate(t *testing.T) {
 	}
 	assert.True(t, finished)
 }
+
+// The day a read began goes to the Kobo as the start of that day where the
+// reader is, not in UTC, which west of UTC is still the day before.
+func TestKoboReadingState_StartDayIsInTheReadersTimeZone(t *testing.T) {
+	t.Parallel()
+	f := newReadingStateFixture(t)
+	zone := "America/Los_Angeles"
+	_, err := f.db.NewInsert().Model(&models.UserSettings{
+		UserID: f.user.ID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		ViewerFitMode: models.FitModeHeight, ReflowableTheme: models.ReflowableThemeLight,
+		ReflowableFlow: models.ReflowableFlowPaginated, GallerySize: models.GallerySizeMedium,
+		PlaybackSpeed: 1, ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
+	}).Exec(f.ctx)
+	require.NoError(t, err)
+	location, err := time.LoadLocation(zone)
+	require.NoError(t, err)
+	f.put(koboState{status: "Reading", at: time.Now().Add(-time.Minute), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 8})
+	rts := f.bookReading().ReadThroughs
+	require.Len(t, rts, 1)
+	day, err := time.ParseInLocation(time.DateOnly, *rts[0].BeginDay, location)
+	require.NoError(t, err)
+
+	rec := f.serve(http.MethodGet, f.statePath(f.entry))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var states []ReadingState
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &states))
+	require.Len(t, states, 1)
+	require.NotNil(t, states[0].StatusInfo.LastTimeStartedReading)
+	assert.True(t, day.Equal(states[0].StatusInfo.LastTimeStartedReading.Time),
+		"got %s, want %s", states[0].StatusInfo.LastTimeStartedReading.Time, day.UTC())
+}

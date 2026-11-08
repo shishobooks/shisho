@@ -143,10 +143,8 @@ func (r *readingStates) build(ctx context.Context, in *stateInputs) *ReadingStat
 		info.Status = koboStatus(in.book.Status)
 		times := in.book.ReadThroughs
 		info.TimesStartedReading = &times
-		if in.book.LastBeginDay != nil {
-			if day, err := time.Parse(time.DateOnly, *in.book.LastBeginDay); err == nil {
-				info.LastTimeStartedReading = NewTimestamp(day)
-			}
+		if in.book.LastBeganAt != nil {
+			info.LastTimeStartedReading = NewTimestamp(*in.book.LastBeganAt)
 		}
 	}
 	state.StatusInfo = info
