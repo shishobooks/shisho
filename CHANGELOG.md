@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-10
+
+### Features
+- Share pkg/kepub's tokenizer and KePub markup checks with pkg/reflowable (#849)
+- Kobo reading state syncs with Shisho (#848)
+- Switch between KOReader and the web reader without losing your place (#847)
+- KOReader syncs its own position, verified with a KOReader harness (#842)
+- Currently Reading page and last read (#841)
+- Comics, PDFs, and audiobooks resume where you left off (#840)
+- Delete tags and genres that are still in use (#839)
+- Ebook reader resumes where you left off and keeps Read-throughs current (#834)
+
+### Bug Fixes
+- Footer page buttons are announced backwards in right-to-left books (#844)
+- Swipe to turn pages anywhere in the ebook, comic, and PDF readers (#838)
+- Stop saying there are no lists right below To Read (#835)
+- Add every tag typed before its search answers (#836)
+- Keep the first combobox option highlighted so Enter picks it (#832)
+- Stop offering the Favorites list template once you have a Favorites list (#831)
+- Return to the previous page after deleting a book (#830)
+- Keep gallery and list results on screen during background refetches (#829)
+- Return a validation error instead of a 500 for a duplicate list name (#828)
+
+### CI/CD
+- Create the GitHub release after Docker images and npm package are published (#825)
+
+### Other
+- build(deps): bump the minor-and-patch group across 1 directory with 12 updates (#846)
+- build(deps): bump the minor-and-patch group across 1 directory with 7 updates (#845)
+- Stop other projects' golangci-lint runs failing ours (#837)
+
 ## [0.6.0] - 2026-10-30
 
 ### Features
