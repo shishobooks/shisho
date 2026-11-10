@@ -1,0 +1,27 @@
+{
+  "ReadingStates": [
+    {
+      "CurrentBookmark": {
+        "ContentSourceProgressPercent": 0,
+        "LastModified": "2026-11-10T21:14:28Z",
+        "Location": {
+          "Source": "cover.xhtml",
+          "Type": "KoboSpan",
+          "Value": "kobo.1.1"
+        },
+        "ProgressPercent": 100
+      },
+      "EntitlementId": "{{ENTRY_ID}}",
+      "LastModified": "2026-11-10T21:14:28Z",
+      "Statistics": {
+        "LastModified": "2026-11-10T21:14:28Z",
+        "RemainingTimeMinutes": 0,
+        "SpentReadingMinutes": 3
+      },
+      "StatusInfo": {
+        "LastModified": "2026-11-10T21:14:28Z",
+        "Status": "Finished"
+      }
+    }
+  ]
+}

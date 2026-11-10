@@ -349,7 +349,8 @@ func capturedBody(t *testing.T, name, entryID string) string {
 }
 
 // A Kobo's own updates: one it queued while offline weeks ago, arriving on
-// reconnecting, then one as it reads.
+// reconnecting, one as it reads, and the one finishing the book, which moves
+// its bookmark back to the start at 100%.
 func TestKoboReadingState_CapturedKoboUpdates(t *testing.T) {
 	t.Parallel()
 	f := newReadingStateFixture(t)
@@ -375,4 +376,15 @@ func TestKoboReadingState_CapturedKoboUpdates(t *testing.T) {
 	require.NotNil(t, position.ChapterPercentage)
 	assert.InDelta(t, 0.75, *position.ChapterPercentage, 0.0001)
 	assert.Len(t, f.sessions(), 1, "the minutes didn't go up")
+
+	f.putBody(capturedBody(t, "kobo-state-finished.json", f.entry))
+
+	assert.Equal(t, models.ReadingStatusRead, f.status())
+	rts = f.bookReading().ReadThroughs
+	require.Len(t, rts, 1)
+	assert.Equal(t, "2026-11-10", *rts[0].EndDay)
+	sessions = f.sessions()
+	require.Len(t, sessions, 2)
+	assert.Equal(t, 2*time.Minute, sessions[1].EndedAt.Sub(sessions[1].StartedAt))
+	assert.InDelta(t, 1, sessions[1].EndPercentage, 0.0001)
 }
