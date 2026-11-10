@@ -2,12 +2,10 @@ package reflowable
 
 import (
 	"bytes"
-	"io"
 	"slices"
-	"strings"
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/kepub"
 	"golang.org/x/net/html"
 )
 
@@ -36,15 +34,11 @@ func (n *node) isText() bool { return n.name == "" }
 func (n *node) id() string { return n.attrs["id"] }
 
 // isKoboSpan reports whether n is one of the spans a KePub wraps text in.
-func (n *node) isKoboSpan() bool {
-	return n.name == "span" && slices.Contains(strings.Fields(n.attrs["class"]), "koboSpan")
-}
+func (n *node) isKoboSpan() bool { return kepub.IsKoboSpan(n.name, n.attrs) }
 
 // isBookWrapper reports whether n is one of the divs a KePub wraps the
 // body's content in.
-func (n *node) isBookWrapper() bool {
-	return n.name == "div" && (n.id() == "book-columns" || n.id() == "book-inner")
-}
+func (n *node) isBookWrapper() bool { return kepub.IsBookWrapper(n.name, n.attrs) }
 
 // elements returns n's element children.
 func (n *node) elements() []*node {
@@ -78,49 +72,29 @@ func (n *node) walk(visit func(*node)) {
 	}
 }
 
-// voidElements are the HTML elements that never have an end tag, so a start
-// tag without the self-closing slash still holds nothing.
-var voidElements = map[string]bool{
-	"area": true, "base": true, "br": true, "col": true, "embed": true, "hr": true, "img": true,
-	"input": true, "link": true, "meta": true, "source": true, "track": true, "wbr": true,
-}
-
 // parse reads a content document, the OPF, or container.xml into a tree
 // under a nameless root.
 //
-// It reads html.Tokenizer tokens as pkg/kepub does, rather than Go's HTML
-// parser, which restructures XHTML that isn't valid HTML, as the browser and
-// crengine don't. CDATA is read as text, and a self-closed tag never starts
-// raw text, so a self-closed script or title can't swallow what follows.
+// It reads tokens through kepub.EachToken, rather than Go's HTML parser,
+// which restructures XHTML that isn't valid HTML, as the browser and
+// crengine don't. Sharing the KePub converter's tokenizer setup means a
+// document reads the same here as when it was converted: CDATA is read as
+// text, and a self-closed tag never starts raw text, so a self-closed
+// script or title can't swallow what follows.
 func parse(data []byte) (*node, error) {
 	root := &node{name: "#document"}
 	current := root
 	// boundary is set after a comment or CDATA, where crengine starts a new
 	// text node.
 	boundary := false
-	z := html.NewTokenizer(bytes.NewReader(data))
-	z.AllowCDATA(true)
-	for {
-		tt := z.Next()
+	err := kepub.EachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
 		switch tt {
-		case html.ErrorToken:
-			if errors.Is(z.Err(), io.EOF) {
-				return root, nil
-			}
-			return nil, errors.WithStack(z.Err())
 		case html.StartTagToken, html.SelfClosingTagToken:
 			boundary = false
-			name, hasAttr := z.TagName()
-			el := &node{name: string(name), parent: current, attrs: map[string]string{}}
-			for hasAttr {
-				var key, value []byte
-				key, value, hasAttr = z.TagAttr()
-				el.attrs[string(key)] = string(value)
-			}
+			name, attrs := kepub.TokenAttrs(z)
+			el := &node{name: name, parent: current, attrs: attrs}
 			current.children = append(current.children, el)
-			if tt == html.SelfClosingTagToken {
-				z.NextIsNotRawText()
-			} else if !voidElements[el.name] {
+			if tt == html.StartTagToken && !kepub.IsVoidElement(name) {
 				current = el
 			}
 		case html.EndTagToken:
@@ -141,9 +115,14 @@ func parse(data []byte) (*node, error) {
 			boundary = cdata
 		case html.CommentToken:
 			boundary = true
-		case html.DoctypeToken:
+		case html.DoctypeToken, html.ErrorToken:
+			// EachToken never passes an ErrorToken: it returns the error.
 		}
+	})
+	if err != nil {
+		return nil, err
 	}
+	return root, nil
 }
 
 // unwrapKobo removes a KePub's spans and wrapper divs under n, leaving their

@@ -311,13 +311,13 @@ func stripDocument(data []byte, targets map[string]bool, rewriteLink func(string
 	var out bytes.Buffer
 	out.Grow(len(data))
 
-	err = eachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
+	err = EachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
 		raw := z.Raw()
 		//nolint:exhaustive // Every other token is copied as it was.
 		switch tt {
 		case html.StartTagToken, html.SelfClosingTagToken:
-			name, attrs := tokenAttrs(z)
-			koboSpan := isKoboSpan(name, attrs)
+			name, attrs := TokenAttrs(z)
+			koboSpan := IsKoboSpan(name, attrs)
 			action := actionDrop
 			if dropping == 0 {
 				action, raw = kepubTagAction(name, attrs, raw)
@@ -353,7 +353,7 @@ func stripDocument(data []byte, targets map[string]bool, rewriteLink func(string
 					retarget[id] = to.id
 				}
 			}
-			if tt == html.SelfClosingTagToken || voidElements[name] {
+			if tt == html.SelfClosingTagToken || IsVoidElement(name) {
 				return
 			}
 			if action == actionDrop {
@@ -442,9 +442,9 @@ func kepubTagAction(name string, attrs map[string]string, raw []byte) (tagAction
 	switch {
 	case isKoboScript(name, attrs), isKoboStyleHacks(name, attrs):
 		return actionDrop, raw
-	case isBookWrapper(name, attrs):
+	case IsBookWrapper(name, attrs):
 		return actionUnwrap, raw
-	case isKoboSpan(name, attrs):
+	case IsKoboSpan(name, attrs):
 		tag, remaining := editTag(raw, func(attr, value string) (string, bool) {
 			switch attr {
 			case "id":
@@ -533,11 +533,11 @@ func insertAttr(raw []byte, attr string) []byte {
 // documentIDs returns every id in a document, so a new one can't clash.
 func documentIDs(data []byte) (map[string]bool, error) {
 	ids := map[string]bool{}
-	err := eachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
+	err := EachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
 		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
 			return
 		}
-		if _, attrs := tokenAttrs(z); attrs["id"] != "" {
+		if _, attrs := TokenAttrs(z); attrs["id"] != "" {
 			ids[attrs["id"]] = true
 		}
 	})
