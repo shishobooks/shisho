@@ -37,7 +37,9 @@ func koboScriptTag(scriptPath string) string {
 	return `<script type="text/javascript" src="` + html.EscapeString(scriptPath) + `"/>`
 }
 
-func isKoboSpan(name string, attrs map[string]string) bool {
+// IsKoboSpan reports whether a tag is one of the spans a KePub wraps text
+// in.
+func IsKoboSpan(name string, attrs map[string]string) bool {
 	return name == "span" && slices.Contains(strings.Fields(attrs["class"]), koboSpanClass)
 }
 
@@ -54,23 +56,37 @@ func isKoboStyleHacks(name string, attrs map[string]string) bool {
 	return name == "style" && attrs["id"] == koboStyleHacksID
 }
 
-// isBookWrapper reports whether a tag is either of the book-columns and
-// book-inner divs.
-func isBookWrapper(name string, attrs map[string]string) bool {
+// IsBookWrapper reports whether a tag is either of the book-columns and
+// book-inner divs a KePub wraps the body's content in.
+func IsBookWrapper(name string, attrs map[string]string) bool {
 	return name == "div" && (attrs["id"] == bookColumnsID || attrs["id"] == bookInnerID)
 }
 
-// eachToken calls visit with each token of a content document in turn,
+// voidElements are the HTML elements that never have an end tag.
+var voidElements = map[string]bool{
+	"area": true, "base": true, "br": true, "col": true, "embed": true, "hr": true, "img": true,
+	"input": true, "link": true, "meta": true, "param": true, "source": true, "track": true, "wbr": true,
+}
+
+// IsVoidElement reports whether name is an HTML element that never has an
+// end tag, so a start tag without the self-closing slash still holds
+// nothing.
+func IsVoidElement(name string) bool {
+	return voidElements[name]
+}
+
+// EachToken calls visit with each token of a content document in turn,
 // along with the tokenizer to read the token from, and returns the error
 // that stopped it before the end, if any. Every content rewrite reads its
-// document through it, as it sets up the tokenizer as XHTML needs:
+// document through it, as does anything that must read a document the way
+// the rewrites do. It sets up the tokenizer as XHTML needs:
 //
 //   - CDATA sections are read as text. XHTML allows them anywhere, and
 //     without AllowCDATA one holding a > ends as a comment at it, leaving
 //     the rest as markup.
 //   - A self-closed tag never starts raw text. Without NextIsNotRawText, a
 //     self-closed script or title swallows what follows as its text.
-func eachToken(data []byte, visit func(z *html.Tokenizer, tt html.TokenType)) error {
+func EachToken(data []byte, visit func(z *html.Tokenizer, tt html.TokenType)) error {
 	z := html.NewTokenizer(bytes.NewReader(data))
 	z.AllowCDATA(true)
 	for {
@@ -88,8 +104,8 @@ func eachToken(data []byte, visit func(z *html.Tokenizer, tt html.TokenType)) er
 	}
 }
 
-// tokenAttrs returns the current tag token's name and attributes.
-func tokenAttrs(z *html.Tokenizer) (string, map[string]string) {
+// TokenAttrs returns the current tag token's name and attributes.
+func TokenAttrs(z *html.Tokenizer) (string, map[string]string) {
 	name, more := z.TagName()
 	attrs := map[string]string{}
 	for more {

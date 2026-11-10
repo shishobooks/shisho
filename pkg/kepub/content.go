@@ -148,13 +148,13 @@ func transformDocument(data []byte, counter *SpanCounter, scriptPath string) ([]
 		}
 	}
 
-	err = eachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
+	err = EachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
 		raw := z.Raw()
 		isTag := tt == html.StartTagToken || tt == html.SelfClosingTagToken
 		var name string
 		var attrs map[string]string
 		if isTag {
-			name, attrs = tokenAttrs(z)
+			name, attrs = TokenAttrs(z)
 		}
 		if !bodyStarted && (len(stack) == 0 || stack[len(stack)-1].name == "html" || stack[len(stack)-1].name == "head") &&
 			(isTag && name != "html" && name != "head" && name != "body" && !headElements[name] ||
@@ -195,10 +195,10 @@ func transformDocument(data []byte, counter *SpanCounter, scriptPath string) ([]
 				}
 				out.Write(raw)
 			}
-			if tt == html.SelfClosingTagToken || voidElements[name] {
+			if tt == html.SelfClosingTagToken || IsVoidElement(name) {
 				return
 			}
-			o := open{name: name, body: startsBody, koboSpan: isKoboSpan(name, attrs), noSpans: spanlessElement(name, attrs)}
+			o := open{name: name, body: startsBody, koboSpan: IsKoboSpan(name, attrs), noSpans: spanlessElement(name, attrs)}
 			if o.body {
 				inBody++
 				if wrapBody {
@@ -268,13 +268,13 @@ type koboMarkup struct {
 // findKoboMarkup returns the Kobo markup data already has.
 func findKoboMarkup(data []byte) (koboMarkup, error) {
 	var has koboMarkup
-	err := eachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
+	err := EachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
 		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
 			return
 		}
-		name, attrs := tokenAttrs(z)
+		name, attrs := TokenAttrs(z)
 		switch {
-		case isBookWrapper(name, attrs):
+		case IsBookWrapper(name, attrs):
 			has.wrappers = true
 		case isKoboStyleHacks(name, attrs):
 			has.styleHacks = true
@@ -517,10 +517,4 @@ func isQuote(r rune) bool {
 		r == '\u201c' || r == '\u201d' || // " "
 		r == '\u2018' || r == '\u2019' || // ' '
 		r == '\u2026' // …
-}
-
-// voidElements are the HTML elements that never have an end tag.
-var voidElements = map[string]bool{
-	"area": true, "base": true, "br": true, "col": true, "embed": true, "hr": true, "img": true,
-	"input": true, "link": true, "meta": true, "param": true, "source": true, "track": true, "wbr": true,
 }
