@@ -20,10 +20,6 @@ func init() {
 			// the Kobo counted minutes Shisho never saw.
 			`ALTER TABLE kobo_sync_entries ADD COLUMN reading_minutes INTEGER`,
 			`ALTER TABLE kobo_sync_entries ADD COLUMN reading_minutes_at TIMESTAMP`,
-			// The latest status time the Kobo has seen, its own or one a sync
-			// sent it, so a status it keeps reporting unchanged, or echoes
-			// back, doesn't undo one changed in Shisho, such as a pause.
-			`ALTER TABLE kobo_sync_entries ADD COLUMN reading_status_at TIMESTAMP`,
 			// What the Kobo last heard of the entry's reading state, so a sync
 			// sends it again only once another reader changes it, and what a
 			// sync sent it, in which sync point and on which page, which the
@@ -47,7 +43,6 @@ func init() {
 			`ALTER TABLE kobo_sync_entries DROP COLUMN reading_state_sent_in`,
 			`ALTER TABLE kobo_sync_entries DROP COLUMN reading_state_sent_version`,
 			`ALTER TABLE kobo_sync_entries DROP COLUMN reading_state_version`,
-			`ALTER TABLE kobo_sync_entries DROP COLUMN reading_status_at`,
 			`ALTER TABLE kobo_sync_entries DROP COLUMN reading_minutes_at`,
 			`ALTER TABLE kobo_sync_entries DROP COLUMN reading_minutes`,
 			`ALTER TABLE reading_positions DROP COLUMN chapter_percentage`,

@@ -72,11 +72,6 @@ type SyncEntry struct {
 	// one: its first report is only where counting starts.
 	ReadingMinutes   *int       `bun:"reading_minutes"`
 	ReadingMinutesAt *time.Time `bun:"reading_minutes_at"`
-	// ReadingStatusAt is the latest status time the Kobo has seen: when it
-	// last changed the status it reports, or the time of a status a sync sent
-	// it. A report whose status changed no later is the Kobo repeating itself
-	// or echoing Shisho.
-	ReadingStatusAt *time.Time `bun:"reading_status_at"`
 	// ReadingStateVersion is what the Kobo last heard of the reading state
 	// (stateInputs.version), so a sync sends it again only once it changes.
 	// ReadingStateSentVersion is what a sync sent it since, in the sync point

@@ -21,46 +21,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// koboTimeLayout is how a Kobo writes times: seven fractional digits, in UTC.
-const koboTimeLayout = "2006-01-02T15:04:05.0000000Z"
+// koboTimeLayout is how a Kobo writes times: UTC, to the second.
+const koboTimeLayout = "2006-01-02T15:04:05Z"
 
 // koboState is one book's reading state as a Kobo PUTs it to
-// /v1/library/{id}/state: its fields, nesting, and time format are the ones
-// Kobo firmware sends, as other Kobo sync servers record them. Empty fields
-// leave their part out. statusAt is when the status last changed, which is
-// at unless set.
+// /v1/library/{id}/state, in the shape a Kobo Libra Colour (firmware 4.46)
+// sent during device testing (testdata/kobo-state-*.json): every part dated
+// with the update's own time, the status included even when unchanged, and
+// whole-number percentages. Empty fields leave their part out.
 type koboState struct {
 	status   string
 	at       time.Time
-	statusAt time.Time
 	minutes  *int
 	source   string
 	span     string
-	progress float64
-	chapter  float64
+	progress int
+	chapter  int
 }
 
 func (s koboState) body(entryID string) string {
 	at := s.at.UTC().Format(koboTimeLayout)
-	parts := []string{
-		fmt.Sprintf(`"EntitlementId":%q`, entryID),
-		fmt.Sprintf(`"Created":%q`, at),
-		fmt.Sprintf(`"LastModified":%q`, at),
-		fmt.Sprintf(`"PriorityTimestamp":%q`, at),
+	var parts []string
+	if s.span != "" {
+		parts = append(parts, fmt.Sprintf(`"CurrentBookmark":{"ContentSourceProgressPercent":%d,"LastModified":%q,"Location":{"Source":%q,"Type":"KoboSpan","Value":%q},"ProgressPercent":%d}`,
+			s.chapter, at, s.source, s.span, s.progress))
+	}
+	parts = append(parts, fmt.Sprintf(`"EntitlementId":%q`, entryID), fmt.Sprintf(`"LastModified":%q`, at))
+	if s.minutes != nil {
+		parts = append(parts, fmt.Sprintf(`"Statistics":{"LastModified":%q,"RemainingTimeMinutes":143,"SpentReadingMinutes":%d}`, at, *s.minutes))
 	}
 	if s.status != "" {
-		statusAt := at
-		if !s.statusAt.IsZero() {
-			statusAt = s.statusAt.UTC().Format(koboTimeLayout)
-		}
-		parts = append(parts, fmt.Sprintf(`"StatusInfo":{"LastModified":%q,"Status":%q,"TimesStartedReading":1,"LastTimeStartedReading":%q}`, statusAt, s.status, statusAt))
-	}
-	if s.minutes != nil {
-		parts = append(parts, fmt.Sprintf(`"Statistics":{"LastModified":%q,"SpentReadingMinutes":%d,"RemainingTimeMinutes":143}`, at, *s.minutes))
-	}
-	if s.span != "" {
-		parts = append(parts, fmt.Sprintf(`"CurrentBookmark":{"LastModified":%q,"ProgressPercent":%g,"ContentSourceProgressPercent":%g,"Location":{"Value":%q,"Type":"KoboSpan","Source":%q}}`,
-			at, s.progress, s.chapter, s.span, s.source))
+		parts = append(parts, fmt.Sprintf(`"StatusInfo":{"LastModified":%q,"Status":%q}`, at, s.status))
 	}
 	return `{"ReadingStates":[{` + strings.Join(parts, ",") + `}]}`
 }

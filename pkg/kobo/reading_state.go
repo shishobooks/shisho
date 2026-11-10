@@ -269,20 +269,15 @@ func (r *readingStates) confirmSync(ctx context.Context, deviceID, pointID strin
 	return errors.WithStack(err)
 }
 
-// markSent records that page sends version of e's state, as state. The
-// status's time joins the ones the Kobo has seen: a Kobo keeps the time a
-// status it takes came with, so reporting that status at that time again is
-// the Kobo echoing Shisho, not changing it.
-func (r *readingStates) markSent(ctx context.Context, e *SyncEntry, version string, state *ReadingState, page syncPage) error {
-	q := r.db.NewUpdate().
+// markSent records that page sends version of e's state.
+func (r *readingStates) markSent(ctx context.Context, e *SyncEntry, version string, page syncPage) error {
+	_, err := r.db.NewUpdate().
 		Model((*SyncEntry)(nil)).
 		Set("reading_state_sent_version = ?", version).
 		Set("reading_state_sent_in = ?", page.pointID).
-		Set("reading_state_sent_cursor = ?", page.cursor)
-	if sent := state.StatusInfo.LastModified.at(); sent != nil && (e.ReadingStatusAt == nil || sent.After(*e.ReadingStatusAt)) {
-		q = q.Set("reading_status_at = ?", *sent)
-	}
-	_, err := q.Where("device_id = ? AND entry_id = ?", e.DeviceID, e.EntryID).Exec(ctx)
+		Set("reading_state_sent_cursor = ?", page.cursor).
+		Where("device_id = ? AND entry_id = ?", e.DeviceID, e.EntryID).
+		Exec(ctx)
 	return errors.WithStack(err)
 }
 
@@ -327,9 +322,8 @@ func (r *readingStates) forNewEntries(ctx context.Context, userID int, deviceID 
 			}
 			continue
 		}
-		state := r.build(ctx, in)
-		states[e.EntryID] = state
-		if err := r.markSent(ctx, e, version, state, page); err != nil {
+		states[e.EntryID] = r.build(ctx, in)
+		if err := r.markSent(ctx, e, version, page); err != nil {
 			return nil, err
 		}
 	}
@@ -369,9 +363,8 @@ func (r *readingStates) changed(ctx context.Context, userID int, deviceID string
 		if len(states) == limit {
 			return states, true, nil
 		}
-		state := r.build(ctx, in)
-		states = append(states, state)
-		if err := r.markSent(ctx, e, version, state, page); err != nil {
+		states = append(states, r.build(ctx, in))
+		if err := r.markSent(ctx, e, version, page); err != nil {
 			return nil, false, err
 		}
 	}
@@ -438,18 +431,14 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 		DeviceID:   &device.ID,
 		OccurredAt: state.occurredAt(),
 	}
-	// A status the Kobo reported before and hasn't changed since isn't news:
-	// one changed in Shisho since, such as a pause or Mark as read, stands,
-	// and only the bookmark says whether this is reading.
-	var statusAt *time.Time
+	// A Kobo stamps its status with the time of every update, whether or
+	// not it changed, so every Reading it reports is reading: it resumes a
+	// Book paused in Shisho.
 	if info := state.StatusInfo; info != nil {
-		statusAt = info.LastModified.at()
-		repeated := statusAt != nil && entry.ReadingStatusAt != nil && !statusAt.After(*entry.ReadingStatusAt)
-		switch {
-		case repeated:
-		case info.Status == koboStatusReading:
+		switch info.Status {
+		case koboStatusReading:
 			update.ReportedStatus = reading.ReportedReading
-		case info.Status == koboStatusFinished:
+		case koboStatusFinished:
 			update.ReportedStatus = reading.ReportedFinished
 		}
 	}
@@ -501,13 +490,6 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 		}
 		entry.ReadingMinutes, entry.ReadingMinutesAt = &reported, &at
 	}
-	// A read the Kobo started began when its status turned to Reading, or
-	// when this sitting began, whichever was first.
-	if update.ReportedStatus == reading.ReportedReading && statusAt != nil &&
-		(update.ListeningSince == nil || statusAt.Before(*update.ListeningSince)) {
-		update.ListeningSince = statusAt
-	}
-
 	accepted := true
 	switch {
 	case !update.Locator.IsZero() || update.ReportedStatus != reading.ReportedNothing:
@@ -522,16 +504,6 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 		}
 	}
 
-	if accepted && statusAt != nil && (entry.ReadingStatusAt == nil || statusAt.After(*entry.ReadingStatusAt)) {
-		_, err := r.db.NewUpdate().
-			Model((*SyncEntry)(nil)).
-			Set("reading_status_at = ?", *statusAt).
-			Where("device_id = ? AND entry_id = ?", entry.DeviceID, entry.EntryID).
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-	}
 	if !accepted {
 		return r.setHeard(ctx, entry.DeviceID, entry.EntryID, nil)
 	}
