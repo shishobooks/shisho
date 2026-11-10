@@ -72,7 +72,11 @@ func newKoboScopeFixture(t *testing.T) *koboScopeFixture {
 
 	f.e = echo.New()
 	f.e.HTTPErrorHandler = errcodes.NewHandler().Handle
-	RegisterRoutes(f.e, db, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db, appsettings.NewService(db)))
+	cache := downloadcache.NewCache(t.TempDir(), 1<<30)
+	// A download's generation outlives its request; it must end before the
+	// cache directory is removed.
+	t.Cleanup(cache.Wait)
+	RegisterRoutes(f.e, db, cache, books.NewService(db, appsettings.NewService(db)))
 
 	return f
 }
