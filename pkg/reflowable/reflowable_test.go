@@ -185,12 +185,13 @@ func TestEstimateBetweenEveryForm(t *testing.T) {
 			if err != nil {
 				return models.ReadingLocator{}, err
 			}
-			encoded := span.Source + "#" + span.ID
+			encoded := span.String()
 			return models.ReadingLocator{KoboSpan: &encoded}, nil
 		},
 		func(l models.ReadingLocator) (Place, error) {
-			source, id, _ := strings.Cut(*l.KoboSpan, "#")
-			return kobo.FromKoboSpan(KoboSpan{Source: source, ID: id})
+			span, ok := ParseKoboSpan(*l.KoboSpan)
+			require.True(t, ok)
+			return kobo.FromKoboSpan(span)
 		},
 	}
 	forms := []form{cfiIn(plain), xpointerIn(plain), xpointerIn(kobo), koboSpan}

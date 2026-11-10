@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
 
@@ -14,7 +15,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache
 	syncService := NewService(db)
 
 	deviceAuth := devices.NewMiddleware(deviceService).DeviceAuth(devices.ConnectionKoboSync)
-	h := newHandler(syncService, bookService, downloadCache)
+	h := newHandler(syncService, bookService, downloadCache, &readingStates{db: db, reading: reading.NewService(db)})
 
 	// /kobo/:credential/v1/... syncs the Device's scope.
 	registerKoboEndpoints(e.Group("/kobo/:credential", deviceAuth), h)
@@ -31,6 +32,8 @@ func registerKoboEndpoints(g *echo.Group, h *handler) {
 	g.POST("/v1/auth/device", h.handleAuth)
 	g.GET("/v1/library/sync", h.handleSync)
 	g.GET("/v1/library/:bookId/metadata", h.handleMetadata)
+	g.GET("/v1/library/:bookId/state", h.handleRetrieveReadingState)
+	g.PUT("/v1/library/:bookId/state", h.handleUpdateReadingState)
 	// Download routes - support both Komga style and Calibre-web style
 	g.GET("/v1/books/:bookId/file/epub", h.handleDownload)
 	g.HEAD("/v1/books/:bookId/file/epub", h.handleDownload)

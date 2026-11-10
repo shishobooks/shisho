@@ -27,9 +27,12 @@ const (
 	webReaderDeviceName = "Shisho web reader"
 	webReaderDeviceID   = models.ReadingSourceWebReader
 	// removedDeviceName and removedDeviceID label a position from a KOReader
-	// Device that's since been deleted.
+	// Device that's since been deleted, and removedKoboName and removedKoboID
+	// one from a deleted Kobo.
 	removedDeviceName = "KOReader"
 	removedDeviceID   = models.ReadingSourceKOReader
+	removedKoboName   = "Kobo"
+	removedKoboID     = models.ReadingSourceKobo
 
 	// finishedAt is the percentage that counts as the end. KOReader's
 	// continuous view never reports 100%, and the last pages are back matter,
@@ -317,6 +320,8 @@ func (h *handler) buildProgress(ctx context.Context, user *models.User, device *
 		response.Device, response.DeviceID = source.Name, source.ID
 	case position.Source == models.ReadingSourceKOReader:
 		response.Device, response.DeviceID = removedDeviceName, removedDeviceID
+	case position.Source == models.ReadingSourceKobo:
+		response.Device, response.DeviceID = removedKoboName, removedKoboID
 	default:
 		response.Device, response.DeviceID = webReaderDeviceName, webReaderDeviceID
 	}

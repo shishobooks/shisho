@@ -1,6 +1,6 @@
 # Kobo Sync
 
-Kobo Sync sends books from Shisho to a Kobo eReader over Wi-Fi. Shisho handles personal-library sync requests and proxies other Kobo API requests to Kobo's store service.
+Kobo Sync sends books from Shisho to a Kobo eReader over Wi-Fi, and keeps your reading of them in step between the Kobo and Shisho. Shisho handles personal-library sync requests and proxies other Kobo API requests to Kobo's store service.
 
 ## What Syncs
 
@@ -38,6 +38,16 @@ Each book that switches between KePub and EPUB comes back as a new book on the K
 ### Books Synced Before Delivery Rules
 
 Books already on a Kobo when Shisho is upgraded keep syncing with no duplicates and no action needed. A book that synced as both an EPUB and a CBZ keeps only the entry its Device's rules select, so under the Kobo preset its CBZ copy is removed from the Kobo at the next sync.
+
+## Reading Progress
+
+For the books Shisho sends it, a Kobo and Shisho share your [reading status](./reading-tracking.md#reading-status), your place, and your reading time. Books from Kobo's store are not affected.
+
+- **Status:** opening a book on the Kobo makes it **Currently Reading** in Shisho. Opening a book on the Kobo that you paused in Shisho resumes it, but reading the Kobo did offline before the pause, synced later, doesn't. Finishing it on the Kobo marks it **Read**. A finish from the Kobo stays, even if you page back right after. Opening a book you have already read or abandoned saves your place but doesn't start a new read; choose **Read again** in Shisho for that.
+- **Status back to the Kobo:** marking a book read in Shisho shows it finished on the Kobo after the next sync. A book you are reading, have paused, or abandoned shows as being read on the Kobo, and one on To Read or never read shows as unread.
+- **Place:** the Kobo's place is saved in Shisho, and the next sync moves the Kobo to where you are when you read further in the Shisho reader or [KOReader](./koreader.md). See [Moving Between Readers](./reading-tracking.md#moving-between-readers) for how close it lands. This works for books the Kobo holds as KePub. A book sent as EPUB, and a comic, share their status and reading time, but not their place.
+- **Reading time:** the minutes the Kobo counts for a book become reading sessions in Shisho. A book already on the Kobo before you upgraded Shisho counts only the time read after its first report.
+- **Offline reading:** the Kobo sends its progress the next time it connects. Shisho dates it by the Kobo's own clock, so a book finished with Wi-Fi off is **Read** on the day you finished it, not the day it synced. Progress older than the place you last saved in another reader is ignored, a finish included, so it never moves you back.
 
 ## Setup
 

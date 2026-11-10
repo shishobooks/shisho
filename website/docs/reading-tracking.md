@@ -31,21 +31,30 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 "Today" is the date in [your time zone](#your-time-zone) when you choose the action. To correct a date afterwards, use **Edit dates** in [Reading History](#reading-history).
 
-## Reading in KOReader
+## Reading on Devices
 
-[KOReader](./koreader.md) can sync its reading position with Shisho. Reading a book there starts and finishes Read-throughs the way reading in Shisho does.
+[KOReader](./koreader.md) and a [Kobo](./kobo-sync.md#reading-progress) can sync your reading with Shisho, which starts, resumes, and finishes Read-throughs, with the same [rereading](#starting-and-finishing-automatically) rule as reading in Shisho.
+
+- **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does.
+- **A Kobo** says outright when you are reading a book and when you finish it, so opening a book on the Kobo starts it even on its first page, and a finish from the Kobo is never undone the way an automatic finish can be.
 
 ### Moving Between Readers
 
-Your place carries between the Shisho reader and KOReader in both directions:
+Your place carries between the Shisho reader, KOReader, and a Kobo in every direction:
 
-- **EPUB and KePub books** carry the exact spot, whether KOReader holds the book as an EPUB or as a KePub. A book you read in KOReader opens in the Shisho reader where KOReader left off, and KOReader offers to jump to where you stopped in the Shisho reader.
+- **EPUB and KePub books** carry the exact spot between the Shisho reader and KOReader, whether KOReader holds the book as an EPUB or as a KePub. A book you read in KOReader opens in the Shisho reader where KOReader left off, and KOReader offers to jump to where you stopped in the Shisho reader.
+- **On a Kobo**, places are estimates within the chapter. The Kobo opens at the sentence nearest where you were, usually within a page or two, and the Shisho reader and KOReader open at or near the sentence the Kobo was on. This needs the Kobo to hold the book as a KePub.
 - **Comics and PDFs** carry the page.
-- **MOBI and AZW3 books** don't carry between them: KOReader shows no progress for a place the Shisho reader saved.
+- **MOBI and AZW3 books** don't carry between the Shisho reader and KOReader: KOReader shows no progress for a place the Shisho reader saved.
 
 When the exact spot can't be found, such as a place saved before the file was replaced with another edition, the book opens nearby: in the same chapter when the chapter is still there, and at the same percentage of the book when it isn't.
 
-KOReader doesn't report how long you read, so the reading time Shisho records for it is an estimate, from when KOReader pulls your position on opening a book to its last push before you close it.
+### Reading Time From Devices
+
+Neither device times a sitting the way the Shisho reader does, so the reading time Shisho records for them is an estimate:
+
+- **KOReader** doesn't report how long you read. A session runs from when KOReader pulls your position on opening a book to its last push before you close it.
+- **A Kobo** counts the minutes it spends on each book. Each time it reports more, the extra minutes become one session that ends when the Kobo reported them, so reading over a few days with Wi-Fi off becomes one session.
 
 ## Reading in Shisho
 
