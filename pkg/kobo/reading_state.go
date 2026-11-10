@@ -269,14 +269,14 @@ func (r *readingStates) confirmSync(ctx context.Context, deviceID, pointID strin
 	return errors.WithStack(err)
 }
 
-// markSent records that page sends version of e's state.
-func (r *readingStates) markSent(ctx context.Context, e *SyncEntry, version string, page syncPage) error {
+// markSent records that page sends version of entryID's state.
+func (r *readingStates) markSent(ctx context.Context, deviceID, entryID, version string, page syncPage) error {
 	_, err := r.db.NewUpdate().
 		Model((*SyncEntry)(nil)).
 		Set("reading_state_sent_version = ?", version).
 		Set("reading_state_sent_in = ?", page.pointID).
 		Set("reading_state_sent_cursor = ?", page.cursor).
-		Where("device_id = ? AND entry_id = ?", e.DeviceID, e.EntryID).
+		Where("device_id = ? AND entry_id = ?", deviceID, entryID).
 		Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -323,7 +323,7 @@ func (r *readingStates) forNewEntries(ctx context.Context, userID int, deviceID 
 			continue
 		}
 		states[e.EntryID] = r.build(ctx, in)
-		if err := r.markSent(ctx, e, version, page); err != nil {
+		if err := r.markSent(ctx, deviceID, e.EntryID, version, page); err != nil {
 			return nil, err
 		}
 	}
@@ -364,7 +364,7 @@ func (r *readingStates) changed(ctx context.Context, userID int, deviceID string
 			return states, true, nil
 		}
 		states = append(states, r.build(ctx, in))
-		if err := r.markSent(ctx, e, version, page); err != nil {
+		if err := r.markSent(ctx, deviceID, e.EntryID, version, page); err != nil {
 			return nil, false, err
 		}
 	}

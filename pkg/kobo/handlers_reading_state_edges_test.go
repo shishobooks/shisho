@@ -29,6 +29,28 @@ func (f *readingStateFixture) webReaderAt(percentage float64) {
 	require.NoError(f.t, err)
 }
 
+// statesFor returns the reading states sync items send for the fixture's
+// entry: changed ones, and those with books sent as new, as a retried sync
+// whose sync point is gone sends every book.
+func (f *readingStateFixture) statesFor(items []map[string]json.RawMessage) []ReadingState {
+	f.t.Helper()
+	var states []ReadingState
+	for _, item := range items {
+		for _, key := range []string{"ChangedReadingState", "NewEntitlement"} {
+			raw, ok := item[key]
+			if !ok {
+				continue
+			}
+			var wrapper struct{ ReadingState *ReadingState }
+			require.NoError(f.t, json.Unmarshal(raw, &wrapper))
+			if wrapper.ReadingState != nil && wrapper.ReadingState.EntitlementID == f.entry {
+				states = append(states, *wrapper.ReadingState)
+			}
+		}
+	}
+	return states
+}
+
 func (f *readingStateFixture) putBody(body string) *httptest.ResponseRecorder {
 	f.t.Helper()
 	req := httptest.NewRequest(http.MethodPut, f.statePath(f.entry), strings.NewReader(body))
@@ -58,7 +80,7 @@ func TestKoboReadingState_PartialUpdateKeepsAnotherReadersPlaceUnsent(t *testing
 
 // A book marked read in Shisho while the Kobo read on is sent to the Kobo as
 // finished, even after the Kobo reports Reading again.
-func TestKoboReadingState_AMarkAsReadSurvivesTheKobosOlderReading(t *testing.T) {
+func TestKoboReadingState_AMarkAsReadSurvivesTheKobosReading(t *testing.T) {
 	t.Parallel()
 	f := newReadingStateFixture(t)
 	started := time.Now().Add(-3 * time.Hour)
@@ -84,23 +106,7 @@ func TestKoboReadingState_ALostSyncIsSentAgain(t *testing.T) {
 	require.Len(t, first, 1)
 	// The Kobo never got the response, so it syncs again with its old token.
 	items, _ := f.syncRaw(t, f.lastToken)
-	var resent []ReadingState
-	for _, item := range items {
-		if raw, ok := item["ChangedReadingState"]; ok {
-			var wrapper struct{ ReadingState ReadingState }
-			require.NoError(t, json.Unmarshal(raw, &wrapper))
-			resent = append(resent, wrapper.ReadingState)
-		}
-		// The sync it retries from may be gone, which sends the books again
-		// as new, each with its state.
-		if raw, ok := item["NewEntitlement"]; ok {
-			var wrapper struct{ ReadingState *ReadingState }
-			require.NoError(t, json.Unmarshal(raw, &wrapper))
-			if wrapper.ReadingState != nil && wrapper.ReadingState.EntitlementID == f.entry {
-				resent = append(resent, *wrapper.ReadingState)
-			}
-		}
-	}
+	resent := f.statesFor(items)
 	require.Len(t, resent, 1)
 	assert.InDelta(t, 35, *resent[0].CurrentBookmark.ProgressPercent, 0.001)
 }
@@ -172,23 +178,30 @@ func TestKoboReadingState_AnOfflineQueueIsDatedByTheKobo(t *testing.T) {
 	assert.Equal(t, 30*time.Minute, sessions[0].EndedAt.Sub(sessions[0].StartedAt))
 }
 
-// Some firmware writes times without a zone, and whole-number percentages.
-func TestKoboReadingState_ZonelessTimesAndWholePercents(t *testing.T) {
+// A Kobo Libra Colour on firmware 4.46 writes times in UTC to the second.
+// Other firmware is reported to add up to seven fractional digits, or to
+// leave out the zone, which is UTC; a time it can't read is absent rather
+// than a refused update.
+func TestTimestampReadsKoboTimes(t *testing.T) {
 	t.Parallel()
-	f := newReadingStateFixture(t)
-	at := time.Now().Add(-48 * time.Hour).UTC().Format("2006-01-02T15:04:05")
-	body := `{"ReadingStates":[{"EntitlementId":"` + f.entry + `","LastModified":"` + at + `",` +
-		`"StatusInfo":{"LastModified":"` + at + `","Status":"Reading"},` +
-		`"CurrentBookmark":{"LastModified":"` + at + `","ProgressPercent":23,"ContentSourceProgressPercent":50,` +
-		`"Location":{"Value":"kobo.3.1","Type":"KoboSpan","Source":"OEBPS/text/one.xhtml"}}}]}`
-
-	f.putBody(body)
-
-	position, err := f.reading.RetrievePosition(f.ctx, f.user.ID, f.fileA.ID)
-	require.NoError(t, err)
-	require.NotNil(t, position)
-	assert.InDelta(t, 0.23, position.Percentage, 0.0001)
-	assert.Equal(t, at[:10], position.OccurredAt.UTC().Format(time.DateOnly))
+	want := time.Date(2026, 11, 10, 18, 26, 37, 0, time.UTC)
+	for _, tt := range []struct {
+		in   string
+		want time.Time
+	}{
+		{`"2026-11-10T18:26:37Z"`, want},
+		{`"2026-11-10T18:26:37.0000000Z"`, want},
+		{`"2026-11-10T18:26:37.5000000Z"`, want.Add(500 * time.Millisecond)},
+		{`"2026-11-10T18:26:37"`, want},
+		{`"2026-11-10T18:26:37.1234567"`, want.Add(123456700 * time.Nanosecond)},
+		{`""`, time.Time{}},
+		{`"yesterday"`, time.Time{}},
+		{`null`, time.Time{}},
+	} {
+		var ts Timestamp
+		require.NoError(t, json.Unmarshal([]byte(tt.in), &ts), tt.in)
+		assert.True(t, tt.want.Equal(ts.Time), "%s read as %s", tt.in, ts.Time)
+	}
 }
 
 // A state for another book in the body isn't applied to this one.
@@ -290,21 +303,9 @@ func TestKoboReadingState_ALostFinishIsSentAgainAfterAKoboUpdate(t *testing.T) {
 	f.put(koboState{status: "Reading", at: time.Now(), source: "OEBPS/text/one.xhtml", span: "kobo.6.1", progress: 15})
 
 	items, _ := f.syncRaw(t, lost)
-	var finished bool
-	for _, item := range items {
-		for _, key := range []string{"ChangedReadingState", "NewEntitlement"} {
-			raw, ok := item[key]
-			if !ok {
-				continue
-			}
-			var wrapper struct{ ReadingState *ReadingState }
-			require.NoError(t, json.Unmarshal(raw, &wrapper))
-			if wrapper.ReadingState != nil && wrapper.ReadingState.EntitlementID == f.entry {
-				finished = wrapper.ReadingState.StatusInfo.Status == koboStatusFinished
-			}
-		}
-	}
-	assert.True(t, finished)
+	resent := f.statesFor(items)
+	require.Len(t, resent, 1)
+	assert.Equal(t, koboStatusFinished, resent[0].StatusInfo.Status)
 }
 
 // The day a read began goes to the Kobo as the start of that day where the
@@ -312,16 +313,7 @@ func TestKoboReadingState_ALostFinishIsSentAgainAfterAKoboUpdate(t *testing.T) {
 func TestKoboReadingState_StartDayIsInTheReadersTimeZone(t *testing.T) {
 	t.Parallel()
 	f := newReadingStateFixture(t)
-	zone := "America/Los_Angeles"
-	_, err := f.db.NewInsert().Model(&models.UserSettings{
-		UserID: f.user.ID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
-		ViewerFitMode: models.FitModeHeight, ReflowableTheme: models.ReflowableThemeLight,
-		ReflowableFlow: models.ReflowableFlowPaginated, GallerySize: models.GallerySizeMedium,
-		PlaybackSpeed: 1, ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
-	}).Exec(f.ctx)
-	require.NoError(t, err)
-	location, err := time.LoadLocation(zone)
-	require.NoError(t, err)
+	location := f.setTimeZone("America/Los_Angeles")
 	f.put(koboState{status: "Reading", at: time.Now().Add(-time.Minute), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 8})
 	rts := f.bookReading().ReadThroughs
 	require.Len(t, rts, 1)
@@ -350,7 +342,8 @@ func capturedBody(t *testing.T, name, entryID string) string {
 
 // A Kobo's own updates: one it queued while offline weeks ago, arriving on
 // reconnecting, one as it reads, and the one finishing the book, which moves
-// its bookmark back to the start at 100%.
+// its bookmark back to the start at 100%. The queued one was captured from
+// another book than the other two, so the reading minutes run 1, 1, 3.
 func TestKoboReadingState_CapturedKoboUpdates(t *testing.T) {
 	t.Parallel()
 	f := newReadingStateFixture(t)
@@ -387,4 +380,41 @@ func TestKoboReadingState_CapturedKoboUpdates(t *testing.T) {
 	require.Len(t, sessions, 2)
 	assert.Equal(t, 2*time.Minute, sessions[1].EndedAt.Sub(sessions[1].StartedAt))
 	assert.InDelta(t, 1, sessions[1].EndPercentage, 0.0001)
+	position, err = f.reading.RetrievePosition(f.ctx, f.user.ID, f.fileA.ID)
+	require.NoError(t, err)
+	require.NotNil(t, position.KoboSpan)
+	assert.Equal(t, "cover.xhtml#kobo.1.1", *position.KoboSpan, "the Kobo's place, back at the start")
+	assert.InDelta(t, 1, position.Percentage, 0.0001)
+}
+
+// A book paused in Shisho resumes when the Kobo reads it again, but not for
+// reading the Kobo did before the pause and sends late, from its offline
+// queue.
+func TestKoboReadingState_APauseResumesOnlyOnLaterReading(t *testing.T) {
+	t.Parallel()
+	f := newReadingStateFixture(t)
+	f.put(koboState{status: "Reading", at: time.Now().Add(-3 * time.Hour), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 8})
+	require.NoError(t, f.reading.SetPaused(f.ctx, f.user.ID, f.bookA.ID, true))
+
+	f.put(koboState{status: "Reading", at: time.Now().Add(-2 * time.Hour), source: "OEBPS/text/one.xhtml", span: "kobo.4.1", progress: 12})
+	assert.Equal(t, models.ReadingStatusPaused, f.status(), "read before the pause")
+
+	// A second on, since a Kobo writes whole seconds.
+	f.put(koboState{status: "Reading", at: time.Now().Add(time.Second), source: "OEBPS/text/one.xhtml", span: "kobo.4.1", progress: 12})
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status(), "opened on the Kobo after the pause")
+}
+
+// The Kobo updating a book after a sync sent its state, then syncing from
+// that sync, isn't sent its own update back.
+func TestKoboReadingState_AnUpdateAfterASendIsntEchoed(t *testing.T) {
+	t.Parallel()
+	f := newReadingStateFixture(t)
+	f.webReaderAt(0.35)
+	require.Len(t, f.changedStates(), 1)
+
+	// A Kobo writes whole seconds, so it's dated a second on, past the web
+	// reader's place saved within this one.
+	f.put(koboState{status: "Reading", at: time.Now().Add(time.Second), source: "OEBPS/text/two.xhtml", span: "kobo.6.2", progress: 40})
+
+	assert.Empty(t, f.changedStates())
 }

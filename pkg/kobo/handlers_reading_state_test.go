@@ -103,6 +103,21 @@ func (f *readingStateFixture) put(state koboState) {
 	assert.Equal(f.t, f.entry, response.UpdateResults[0].EntitlementID)
 }
 
+// setTimeZone sets the reader's time zone, returning it.
+func (f *readingStateFixture) setTimeZone(zone string) *time.Location {
+	f.t.Helper()
+	_, err := f.db.NewInsert().Model(&models.UserSettings{
+		UserID: f.user.ID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		ViewerFitMode: models.FitModeHeight, ReflowableTheme: models.ReflowableThemeLight,
+		ReflowableFlow: models.ReflowableFlowPaginated, GallerySize: models.GallerySizeMedium,
+		PlaybackSpeed: 1, ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
+	}).Exec(f.ctx)
+	require.NoError(f.t, err)
+	location, err := time.LoadLocation(zone)
+	require.NoError(f.t, err)
+	return location
+}
+
 func (f *readingStateFixture) bookReading() *reading.BookReading {
 	f.t.Helper()
 	r, err := f.reading.RetrieveBookReading(f.ctx, f.user.ID, f.bookA.ID)
@@ -280,16 +295,7 @@ func TestKoboReadingState_FirstMinutesOfAnOlderEntryAreTheBaseline(t *testing.T)
 func TestKoboReadingState_KoboTimesDateAFinish(t *testing.T) {
 	t.Parallel()
 	f := newReadingStateFixture(t)
-	zone := "America/Los_Angeles"
-	_, err := f.db.NewInsert().Model(&models.UserSettings{
-		UserID: f.user.ID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
-		ViewerFitMode: models.FitModeHeight, ReflowableTheme: models.ReflowableThemeLight,
-		ReflowableFlow: models.ReflowableFlowPaginated, GallerySize: models.GallerySizeMedium,
-		PlaybackSpeed: 1, ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
-	}).Exec(f.ctx)
-	require.NoError(t, err)
-	location, err := time.LoadLocation(zone)
-	require.NoError(t, err)
+	location := f.setTimeZone("America/Los_Angeles")
 	// Late in the evening in Los Angeles, which is already the next day in UTC.
 	day := time.Now().In(location).AddDate(0, 0, -3)
 	finishedAt := time.Date(day.Year(), day.Month(), day.Day(), 22, 30, 0, 0, location)

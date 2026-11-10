@@ -166,8 +166,9 @@ type DeviceAuthResponse struct {
 	UserKey      string `json:"UserKey"`
 }
 
-// Timestamp is a time as a Kobo writes it: in UTC, with up to seven
-// fractional digits, and from some firmware without a zone, which is UTC.
+// Timestamp is a time as a Kobo writes it: in UTC, to the second, or from
+// some firmware with up to seven fractional digits or without a zone, which
+// is UTC.
 type Timestamp struct {
 	time.Time
 }

@@ -22,8 +22,9 @@ func init() {
 			`ALTER TABLE kobo_sync_entries ADD COLUMN reading_minutes_at TIMESTAMP`,
 			// What the Kobo last heard of the entry's reading state, so a sync
 			// sends it again only once another reader changes it, and what a
-			// sync sent it, in which sync point and on which page, which the
-			// Kobo has heard once it syncs from that point.
+			// sync sent it since, with any update the Kobo made on top, in
+			// which sync point and on which page: the Kobo has heard it once it
+			// syncs from that point.
 			`ALTER TABLE kobo_sync_entries ADD COLUMN reading_state_version TEXT`,
 			`ALTER TABLE kobo_sync_entries ADD COLUMN reading_state_sent_version TEXT`,
 			`ALTER TABLE kobo_sync_entries ADD COLUMN reading_state_sent_in TEXT`,

@@ -75,9 +75,10 @@ type SyncEntry struct {
 	// ReadingStateVersion is what the Kobo last heard of the reading state
 	// (stateInputs.version), so a sync sends it again only once it changes.
 	// ReadingStateSentVersion is what a sync sent it since, in the sync point
-	// ReadingStateSentIn, on the page starting at ReadingStateSentCursor: the
-	// Kobo has heard it once it asks for a later page or syncs from that
-	// point, and until then a retry sends it again.
+	// ReadingStateSentIn, on the page starting at ReadingStateSentCursor, with
+	// any update the Kobo made on top before confirming it: the Kobo has
+	// heard it once it asks for a later page or syncs from that point, and
+	// until then a retry sends it again.
 	ReadingStateVersion     *string `bun:"reading_state_version"`
 	ReadingStateSentVersion *string `bun:"reading_state_sent_version"`
 	ReadingStateSentIn      *string `bun:"reading_state_sent_in"`

@@ -112,3 +112,28 @@ func TestUpdatePosition_AStatusWithoutAPosition(t *testing.T) {
 	assert.Equal(t, "epubcfi(/6/20!/4/2)", *position.CFI)
 	assert.InDelta(t, 0.5, position.Percentage, 0.0001)
 }
+
+// A paused read resumes only on reading after the pause: an update a device
+// queued offline from before it, arriving late, saves the place and leaves
+// the pause.
+func TestUpdatePosition_ReadingFromBeforeAPauseDoesNotResume(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.report(ReportedReading, "OEBPS/one.xhtml#kobo.1.1", 0.1)
+	f.clock.advance(time.Hour)
+	require.NoError(t, f.svc.SetPaused(f.ctx, f.user.ID, f.book.ID, true))
+	f.clock.advance(time.Hour)
+
+	before := f.clock.now.Add(-90 * time.Minute)
+	span := "OEBPS/one.xhtml#kobo.4.1"
+	result, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
+		UserID: f.user.ID, FileID: f.file.ID, Source: models.ReadingSourceKobo,
+		Locator: models.ReadingLocator{KoboSpan: &span}, Percentage: 0.2,
+		ReportedStatus: ReportedReading, OccurredAt: &before,
+	})
+	require.NoError(t, err)
+
+	assert.False(t, result.Resumed)
+	assert.Equal(t, models.ReadingStatusPaused, f.status())
+	assert.Equal(t, span, *f.position(f.file).KoboSpan)
+}

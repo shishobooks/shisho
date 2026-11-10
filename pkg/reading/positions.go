@@ -75,9 +75,7 @@ type PositionUpdate struct {
 	// ChapterPercentage is how far through its chapter the position is, from
 	// 0 to 1, when the source says.
 	ChapterPercentage *float64
-	// ReportedStatus is a status the source reports outright. A source that
-	// keeps reporting a status it reported before leaves it out, so a status
-	// changed in Shisho since, such as a pause, stands.
+	// ReportedStatus is a status the source reports outright.
 	ReportedStatus ReportedStatus
 	// AtEnd is the source reporting the end of the File, such as a
 	// reflowable reader's final location or playback ending, which finishes
@@ -124,7 +122,7 @@ type SessionInput struct {
 //  3. starts a Read-through when none is underway, the update is real
 //     progress, and the Book is unread or on To Read, taking it off To Read
 //     and resetting its other positions
-//  4. resumes a paused Read-through on real progress
+//  4. resumes a paused Read-through on real progress made since the pause
 //  5. finishes the Read-through underway on reaching the end, or on a
 //     reported finish, dated in the user's time zone
 //  6. stores the position, logs the update, and records the session, both
@@ -249,7 +247,9 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 				return err
 			}
 			result.Started = true
-		case underway != nil && underway.Paused && progress && !finishing:
+		// Reading from before the pause, sent late as a device's offline
+		// queue does, saves the place but doesn't undo the pause.
+		case underway != nil && underway.Paused && progress && !finishing && !occurredAt.Before(underway.UpdatedAt):
 			underway.Paused = false
 			underway.UpdatedAt = now
 			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {

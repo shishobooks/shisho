@@ -419,7 +419,7 @@ func (svc *Service) SetPaused(ctx context.Context, userID, bookID int, paused bo
 			return ErrNotPaused
 		}
 		underway.Paused = paused
-		underway.UpdatedAt = time.Now()
+		underway.UpdatedAt = svc.now()
 		_, err = tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx)
 		return errors.WithStack(err)
 	})
