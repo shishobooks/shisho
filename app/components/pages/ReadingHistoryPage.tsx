@@ -161,6 +161,11 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
               Removed from library
             </Badge>
           )}
+          {!entry.removed && !entry.book && (
+            <Badge className="text-[11px]" variant="outline">
+              No access to this library
+            </Badge>
+          )}
         </div>
       </div>
       <DropdownMenu>

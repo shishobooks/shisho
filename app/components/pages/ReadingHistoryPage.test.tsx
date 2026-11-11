@@ -160,6 +160,16 @@ describe("ReadingHistoryPage", () => {
     expect(
       within(row("Elsewhere")).queryByText("Removed from library"),
     ).toBeNull();
+    // A Book out of reach says why it has no link.
+    expect(
+      within(row("Elsewhere")).getByText("No access to this library"),
+    ).toBeVisible();
+    expect(
+      within(row("Gone")).queryByText("No access to this library"),
+    ).toBeNull();
+    expect(
+      within(row("Dune")).queryByText("No access to this library"),
+    ).toBeNull();
     expect(within(row("Dune")).getByText("Frank Herbert")).toBeVisible();
   });
 

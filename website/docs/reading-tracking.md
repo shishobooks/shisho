@@ -153,7 +153,7 @@ Each row's menu offers:
 - **Start a reread** for a book you can still open and aren't reading now.
 - **Mark as finished** and **Mark as Did Not Finish** for a read you're on, dated the way the status menu dates them.
 
-A book in a library you no longer have access to shows its title with no link or cover. Its reads still count, and you can still edit or delete them.
+A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its reads still count, and you can still edit or delete them.
 
 ## Ratings
 
