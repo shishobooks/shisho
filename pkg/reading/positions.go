@@ -135,7 +135,8 @@ type SessionInput struct {
 // Read-through and stores nothing else.
 func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*UpdatePositionResponse, error) {
 	result := &UpdatePositionResponse{}
-	if u.Session != nil && u.Session.DeviceID == nil {
+	// A session sent with an update comes from the update's Device.
+	if u.Session != nil {
 		session := *u.Session
 		session.DeviceID = u.DeviceID
 		u.Session = &session

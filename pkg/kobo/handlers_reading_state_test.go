@@ -500,8 +500,8 @@ func TestKoboReadingState_ATimeOnlySessionNamesTheKobo(t *testing.T) {
 	f.put(koboState{at: at.Add(30 * time.Minute), minutes: minutes(20)})
 
 	sessions := f.sessions()
-	require.NotEmpty(t, sessions)
-	last := sessions[len(sessions)-1]
+	require.Len(t, sessions, 2, "one session per report that added minutes")
+	last := sessions[1]
 	assert.Equal(t, 10*time.Minute, last.EndedAt.Sub(last.StartedAt))
 	assert.Equal(t, &f.device.ID, last.SourceDeviceID)
 }
