@@ -48,12 +48,12 @@ func PluginVersion(v string) string {
 	return pluginVersion(v, devRelease)
 }
 
-// pluginVersion is the plugin version a server of version v serves, built
-// from the release tag built. A release serves its own version, and a
-// tagged prerelease its own, such as 0.8.0-rc.1, which the plugin orders
-// before 0.8.0. Any other build carries the release it was built from with
-// a -dev suffix, which the plugin orders after that release: from its own
-// version, as git describe gives it, or from built for the dev server. A
+// pluginVersion is the plugin version a server of version v serves, where
+// built is the release tag a dev build was built from, when v names none. A
+// release serves its own version, and a tagged prerelease its own, such as
+// 0.8.0-rc.1, which the plugin orders before 0.8.0. Any other build carries
+// the release it was built from with a -dev suffix, which the plugin orders
+// after that release: from v, as git describe gives it, or from built. A
 // build that knows no release, such as one from plain go build, counts as
 // 0.0.0-dev.
 func pluginVersion(v, built string) string {

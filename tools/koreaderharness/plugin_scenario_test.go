@@ -340,3 +340,15 @@ func TestPluginMenuOffersReinstallOnlyWithSeveralServers(t *testing.T) {
 	assert.Contains(t, two.Plugin.Menu, "b.example > Reinstall plugin from this server")
 	assert.NotContains(t, two.Plugin.Menu, "Install plugin from")
 }
+
+// Check for plugin update turns Wi-Fi on, and Wi-Fi's own check follows a
+// moment later. The update is offered once, not again by that check.
+func TestPluginUpdateCheckOffersOnce(t *testing.T) {
+	s := newScenario(t)
+	s.installPlugin(s.olderBuild())
+
+	checked := s.run(Args{Command: "plugin-update", Online: true})
+
+	require.NotNil(t, checked.Plugin.Offer, "shown: %v", checked.Shown)
+	assert.Equal(t, 1, strings.Count(strings.Join(checked.Shown, " | "), "new build"), "shown: %v", checked.Shown)
+}

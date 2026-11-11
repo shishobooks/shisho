@@ -135,6 +135,23 @@ function Versions.offer(installed, servers)
     return nil, blocked
 end
 
+-- reinstallable is whether the server at url gets Reinstall plugin from this
+-- server. With several servers, choosing whose plugin to run matters, so
+-- each does. With one, only when it serves a build Check for plugin update
+-- would never install: an older version, or another build of this version
+-- when the plugin wasn't installed from it, as with a release zip.
+function Versions.reinstallable(installed, servers, url)
+    servers = servers or {}
+    if #servers > 1 then return true end
+    local server = Versions.choose(servers, url)
+    if not server or not server.version then return false end
+    if Versions.compare(server.version, installed.version) == 0 and server.hash == installed.hash then
+        return false
+    end
+    local offer = Versions.offer(installed, servers)
+    return not (offer and Urls.same(offer.server, url) and offer.hash == server.hash)
+end
+
 -- choose is what Reinstall plugin from this server installs: whatever plugin that
 -- server serves, older or newer, because the user picked it on purpose. It
 -- then becomes the server the plugin was installed from. Returns nil for a

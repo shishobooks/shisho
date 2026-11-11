@@ -124,6 +124,25 @@ return {
         assert_eq(blocked.upgrade, "http://a")
     end,
 
+    ["reinstalling is offered with several servers, or when nothing else would install a server's build"] = function()
+        local one = { server("http://a", "0.7.0", 1, "installed") }
+        assert_eq(Versions.reinstallable(installed, one, "http://a"), false, "the build installed")
+
+        assert_eq(Versions.reinstallable(installed, { server("http://a", "0.6.0") }, "http://a"), true, "an older version")
+
+        local by_hand = { version = "0.7.0", hash = "release" }
+        assert_eq(Versions.reinstallable(by_hand, { server("http://a", "0.7.0", 1, "a-build") }, "http://a"), true,
+            "another build of the version, with no server it was installed from")
+
+        assert_eq(Versions.reinstallable(installed, { server("http://a", "0.8.0") }, "http://a"), false,
+            "Check for plugin update offers it")
+        assert_eq(Versions.reinstallable(installed, { { url = "http://a" } }, "http://a"), false, "nothing known yet")
+
+        local two = { server("http://a", "0.7.0", 1, "installed"), server("http://b", "0.7.0", 1, "installed") }
+        assert_eq(Versions.reinstallable(installed, two, "http://a"), true)
+        assert_eq(Versions.reinstallable(installed, two, "http://b"), true)
+    end,
+
     ["offers nothing before any server has answered"] = function()
         assert_eq(Versions.offer(installed, {}), nil)
         assert_eq(Versions.offer(installed, { { url = "http://a" } }), nil)

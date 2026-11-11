@@ -352,7 +352,17 @@ function Shisho:checkForUpdate(interactive)
     elseif blocked and interactive then
         self:notify(T(_("Plugin %1 from %2 doesn't work with %3. Upgrade Shisho on %3 first."), blocked.version, Urls.label(blocked.server), Urls.label(blocked.upgrade)))
     elseif interactive then
-        self:notify(_("The Shisho KOReader plugin is up to date."), 3)
+        -- A server that needs a new sign-in offers nothing, so it can't be
+        -- called up to date.
+        local signed_out = {}
+        for __, server in ipairs(self.state:servers()) do
+            if server.needs_login then table.insert(signed_out, Urls.label(server.url)) end
+        end
+        if #signed_out > 0 then
+            self:notify(T(_("Sign in again to %1 to check it for plugin updates."), table.concat(signed_out, ", ")))
+        else
+            self:notify(_("The Shisho KOReader plugin is up to date."), 3)
+        end
     end
     return offer, blocked
 end
@@ -384,6 +394,9 @@ function Shisho:installFrom(url)
     end
     self.state:set("installed_from", server.url)
     self.state:flush()
+    -- Until KOReader restarts, the old plugin runs and would offer the
+    -- build just installed again.
+    self.awaiting_restart = true
     UIManager:askForRestart(_("The Shisho KOReader plugin is updated. Restart KOReader to use it."))
     return true
 end
@@ -401,8 +414,10 @@ function Shisho:onNetworkConnected()
         if self:pairingAction() == "sign_in" then
             self:pairFromZip()
         end
-        local recent = self.checked_at and os.time() - self.checked_at < RECHECK_AFTER
-        if #self.state:servers() > 0 and not recent then
+        -- A clock set back since the check doesn't count as recent.
+        local since = self.checked_at and os.time() - self.checked_at
+        local recent = since and since >= 0 and since < RECHECK_AFTER
+        if #self.state:servers() > 0 and not recent and not self.awaiting_restart then
             self:checkForUpdate(false)
         end
     end)
@@ -418,9 +433,7 @@ function Shisho:serverMenu(server)
             callback = function() self:showSignIn(server.url) end,
         },
     }
-    -- Choosing which server's plugin to run only matters with more than
-    -- one; with one, Check for plugin update covers it.
-    if #self.state:servers() > 1 then
+    if Versions.reinstallable(self:installed(), self.state:servers(), server.url) then
         table.insert(items, {
             text = _("Reinstall plugin from this server"),
             keep_menu_open = true,

@@ -46,8 +46,9 @@ const usage = `Drives a real, headless KOReader against a running Shisho. Every 
   plugin-menu    [--online]                               the Shisho menu under Tools, and what it reads
   plugin-update  [--from URL] [--confirm]                 check for an update, or install from a server
   lua-test                                                run the plugin's Lua unit tests
-  Each plugin command takes --out PNG to screenshot KOReader as it ends, and reports the plugin's servers, its version and hash, and
-  KOReader's OPDS catalog list. A plugin zip from a Device's page signs in to
+  Each plugin command takes --out PNG to screenshot KOReader as it ends, and
+  reports the plugin's servers, its version and hash, and KOReader's OPDS
+  catalog list. A plugin zip from a Device's page signs in to
   the URL its owner reached Shisho at; download it from the API URL mise start
   prints, which the container can reach.
 

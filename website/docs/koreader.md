@@ -54,7 +54,8 @@ Each time Wi-Fi comes on, the plugin asks every server it's signed in to which v
 
 - **Several servers:** it offers an update only from a server with a strictly newer version that every server it's signed in to accepts. When a newer plugin wouldn't work with one of your servers, **Check for plugin update** names the server to upgrade first.
 - **Builds of one version:** a different build of the version installed, such as one from a development server, is offered only by the server the plugin was last installed from.
-- **On purpose:** signed in to more than one server, **Reinstall plugin from this server** under a server installs the plugin that server serves, newer or older, and makes it the server the plugin was installed from.
+- **On purpose:** **Reinstall plugin from this server** under a server installs the plugin that server serves, newer or older, and makes it the server the plugin was installed from. It's there when you're signed in to more than one server, or when the server serves a plugin an update would never install, such as an older version.
+- **Signed out:** a server that shows **Needs login** offers no update until you sign in to it again.
 
 When a server no longer accepts the installed plugin, it shows **Update required** in the plugin's menu, and the plugin offers the update that server serves. If you'd rather not wait for Wi-Fi to come on again, choose **Check for plugin update**.
 
