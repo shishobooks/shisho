@@ -225,7 +225,7 @@ func TestStatusDerivation(t *testing.T) {
 			ctx := context.Background()
 			for _, rt := range tc.history {
 				_, err := db.NewInsert().Model(&models.ReadThrough{
-					UserID: user.ID, BookID: book.ID, BeginDay: rt.begin, EndDay: rt.end,
+					UserID: user.ID, BookID: &book.ID, BeginDay: rt.begin, EndDay: rt.end,
 					Outcome: rt.outcome, Paused: rt.paused,
 				}).Exec(ctx)
 				require.NoError(t, err)
@@ -369,7 +369,7 @@ func TestOneUnderwayPerUserAndBook_EnforcedByDatabase(t *testing.T) {
 	ctx := context.Background()
 
 	insert := func(outcome string) error {
-		_, err := db.NewInsert().Model(&models.ReadThrough{UserID: user.ID, BookID: book.ID, Outcome: outcome}).Exec(ctx)
+		_, err := db.NewInsert().Model(&models.ReadThrough{UserID: user.ID, BookID: &book.ID, Outcome: outcome}).Exec(ctx)
 		return err
 	}
 	require.NoError(t, insert(models.ReadThroughOutcomeUnderway))
@@ -400,9 +400,13 @@ func TestUpdateReadThrough_EditsAndClearsDays(t *testing.T) {
 
 	rec = api.patchReadThrough(id, nil, strp("2026-03-18"))
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var changed ReadThroughChangeResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &changed))
+	assert.Nil(t, changed.ReadThrough.BeginDay)
+	require.NotNil(t, changed.Reading, "the Book's reading record comes back with it")
+	assert.Equal(t, models.ReadingStatusRead, status(*changed.Reading))
 	resp = api.get(book.ID)
 	assert.Nil(t, resp.ReadThroughs[0].BeginDay)
-	assert.Equal(t, models.ReadingStatusRead, status(resp))
 }
 
 func TestUpdateReadThrough_EditingAnEndDayChangesStatus(t *testing.T) {
@@ -673,9 +677,11 @@ func TestRetrieve_BookLookupFailureIs500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodGet, fmt.Sprintf("/books/%d", book.ID), nil).Code)
 }
 
-// A Read-through in a library the user can no longer reach is hidden, not
-// deleted: it's back when access returns.
-func TestReadThrough_HiddenWithoutLibraryAccess(t *testing.T) {
+// A Read-through in a library the user can no longer reach is still theirs
+// to edit from Reading History, but the response is the Read-through alone:
+// the Book's reading record would describe a Book they can't see. Undoing a
+// finish acts on the Book, so it stays out of reach.
+func TestReadThrough_EditableWithoutLibraryAccess(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	user := createUser(t, db, "reader", 2)
@@ -684,11 +690,17 @@ func TestReadThrough_HiddenWithoutLibraryAccess(t *testing.T) {
 
 	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID, LibraryID: intp(book.LibraryID + 100)}}
 	api := newReadingAPI(t, db, user)
-	assert.Equal(t, http.StatusNotFound, api.patchReadThrough(rt.ID, nil, nil).Code)
-	assert.Equal(t, http.StatusNotFound, api.do(http.MethodDelete, fmt.Sprintf("/read-throughs/%d", rt.ID), nil).Code)
+	rec := api.patchReadThrough(rt.ID, strp("2026-02-20"), strp("2026-03-01"))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var edited ReadThroughChangeResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &edited))
+	assert.Equal(t, rt.ID, edited.ReadThrough.ID)
+	assert.Equal(t, "2026-02-20", *edited.ReadThrough.BeginDay)
+	assert.Nil(t, edited.Reading, "no reading record of a Book out of reach")
+	assert.Equal(t, http.StatusNotFound, api.do(http.MethodPost, fmt.Sprintf("/read-throughs/%d/undo-finish", rt.ID), nil).Code)
 
 	user.LibraryAccess = []*models.UserLibraryAccess{{UserID: user.ID}}
-	assert.Len(t, newReadingAPI(t, db, user).get(book.ID).ReadThroughs, 1)
+	assert.Equal(t, "2026-02-20", *newReadingAPI(t, db, user).get(book.ID).ReadThroughs[0].BeginDay)
 }
 
 // The server doesn't know the user's time zone, so a day is too late only

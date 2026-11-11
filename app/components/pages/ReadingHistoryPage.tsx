@@ -1,0 +1,435 @@
+import {
+  BookCheck,
+  BookX,
+  MoreHorizontal,
+  Pencil,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
+import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+
+import CoverImage from "@/components/library/CoverImage";
+import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import { EditReadThroughDialog } from "@/components/library/EditReadThroughDialog";
+import LoadingSpinner from "@/components/library/LoadingSpinner";
+import PaginationFooter, {
+  type PageChangeHandler,
+} from "@/components/library/PaginationFooter";
+import QueryError from "@/components/library/QueryError";
+import TopNav from "@/components/library/TopNav";
+import TruncatedText from "@/components/library/TruncatedText";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ContentWidth } from "@/contexts/ContentWidth";
+import {
+  useDeleteReadThrough,
+  useEndReadThrough,
+  useReadingHistory,
+  useReadingTransition,
+} from "@/hooks/queries/reading";
+import { useAuth } from "@/hooks/useAuth";
+import { usePageTitle } from "@/hooks/usePageTitle";
+import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
+import { parsePageParam, resetPaging } from "@/libraries/pagination";
+import { cn } from "@/libraries/utils";
+import type {
+  ReadingHistoryEntry,
+  ReadThrough,
+  ReadThroughOutcome,
+} from "@/types";
+import { bookCoverUrl } from "@/utils/coverUrl";
+import { formatCount, formatShowingRange } from "@/utils/format";
+import {
+  readThroughDatesLabel,
+  readThroughOutcomeLabel,
+} from "@/utils/readingStatus";
+
+const PER_PAGE = 50;
+
+const OUTCOME_FILTERS: { value: ReadThroughOutcome | null; label: string }[] = [
+  { value: null, label: "All" },
+  { value: "finished", label: "Finished" },
+  { value: "abandoned", label: "Did Not Finish" },
+  { value: "underway", label: "Underway" },
+];
+
+const isOutcome = (value: string | null): value is ReadThroughOutcome =>
+  value === "finished" || value === "abandoned" || value === "underway";
+
+const HistoryCover = ({ entry }: { entry: ReadingHistoryEntry }) => {
+  const [failed, setFailed] = useState(false);
+  const book = entry.book;
+  const showCover = !!book && !!book.cover_cache_key && !failed;
+  return (
+    <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded bg-muted">
+      {showCover ? (
+        <CoverImage
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+          src={bookCoverUrl(book)}
+        />
+      ) : (
+        <CoverPlaceholder className="absolute inset-0" variant="book" />
+      )}
+    </div>
+  );
+};
+
+interface HistoryRowProps {
+  entry: ReadingHistoryEntry;
+  demoMode: boolean;
+  onEdit: (rt: ReadThrough) => void;
+  onDelete: (entry: ReadingHistoryEntry) => void;
+}
+
+const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
+  const rt = entry.read_through;
+  const endMutation = useEndReadThrough();
+  const transitionMutation = useReadingTransition();
+  const underway = rt.outcome === "underway";
+
+  const handleEnd = async (outcome: "finish" | "abandon") => {
+    try {
+      await endMutation.mutateAsync({ id: rt.id, outcome });
+      toast.success(
+        outcome === "finish"
+          ? "Marked as finished"
+          : "Marked as Did Not Finish",
+      );
+    } catch (error) {
+      toastRequestError(error, "Failed to end Read-through");
+    }
+  };
+
+  const handleReread = async () => {
+    if (!entry.book) return;
+    try {
+      await transitionMutation.mutateAsync({
+        bookId: entry.book.id,
+        transition: "start",
+      });
+      toast.success("Reread started");
+    } catch (error) {
+      toastRequestError(error, "Failed to start a reread");
+    }
+  };
+
+  const title = (
+    <TruncatedText className="truncate">{entry.title}</TruncatedText>
+  );
+
+  return (
+    <li className="flex items-center gap-3 px-3 py-2">
+      <HistoryCover entry={entry} />
+      <div className="min-w-0 flex-1">
+        <p className="min-w-0 text-sm font-medium">
+          {entry.book ? (
+            <Link
+              className="block min-w-0 hover:underline"
+              to={`/libraries/${entry.book.library_id}/books/${entry.book.id}`}
+            >
+              {title}
+            </Link>
+          ) : (
+            title
+          )}
+        </p>
+        {entry.authors.length > 0 && (
+          <p className="truncate text-xs text-muted-foreground">
+            {entry.authors.join(", ")}
+          </p>
+        )}
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <span className="font-medium">{readThroughOutcomeLabel(rt)}</span>
+          <span className="text-muted-foreground">
+            {readThroughDatesLabel(rt)}
+          </span>
+          {entry.removed && (
+            <Badge className="text-[11px]" variant="outline">
+              Removed from library
+            </Badge>
+          )}
+        </div>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            aria-label={`Actions for ${entry.title}`}
+            disabled={demoMode}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          <DropdownMenuItem onSelect={() => onEdit(rt)}>
+            <Pencil className="h-4 w-4" />
+            Edit dates
+          </DropdownMenuItem>
+          {underway && (
+            <>
+              <DropdownMenuItem
+                disabled={endMutation.isPending}
+                onSelect={() => handleEnd("finish")}
+              >
+                <BookCheck className="h-4 w-4" />
+                Mark as finished
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={endMutation.isPending}
+                onSelect={() => handleEnd("abandon")}
+              >
+                <BookX className="h-4 w-4" />
+                Mark as Did Not Finish
+              </DropdownMenuItem>
+            </>
+          )}
+          {entry.can_reread && (
+            <DropdownMenuItem
+              disabled={transitionMutation.isPending}
+              onSelect={handleReread}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Start a reread
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={() => onDelete(entry)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </li>
+  );
+};
+
+const deleteDescription = (entry: ReadingHistoryEntry | null): string => {
+  if (!entry) return "";
+  if (entry.read_through.outcome === "underway" && !entry.removed) {
+    return "It won't count toward this book's history or its Reading Status. Every file opens at the start again, and if starting it took the book off To Read, it goes back to its place there.";
+  }
+  if (entry.removed) {
+    return "It won't count in your reading history anymore.";
+  }
+  return "It won't count toward this book's history or its Reading Status.";
+};
+
+// Every Read-through the signed-in user has, across every library and
+// including ones whose Book was deleted, newest first. Each can have its
+// dates edited or be deleted; one underway can be ended here.
+const ReadingHistoryPage = () => {
+  usePageTitle("Reading History");
+  const { demoMode } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentPage = parsePageParam(searchParams.get("page"));
+  const outcomeParam = searchParams.get("outcome");
+  const outcome = isOutcome(outcomeParam) ? outcomeParam : null;
+  const removed = searchParams.get("removed") === "true";
+  const offset = (currentPage - 1) * PER_PAGE;
+
+  const historyQuery = useReadingHistory({
+    limit: PER_PAGE,
+    offset,
+    ...(outcome ? { outcome } : {}),
+    ...(removed ? { removed: true } : {}),
+  });
+  const deleteMutation = useDeleteReadThrough();
+  const [editing, setEditing] = useState<ReadThrough | null>(null);
+  const [deleting, setDeleting] = useState<ReadingHistoryEntry | null>(null);
+
+  const total = historyQuery.data?.total ?? 0;
+  const items = historyQuery.data?.items ?? [];
+  const filtered = outcome !== null || removed;
+
+  const updateParams = (change: (params: URLSearchParams) => void) => {
+    const params = new URLSearchParams(searchParams);
+    change(params);
+    resetPaging(params);
+    setSearchParams(params, { preventScrollReset: true });
+  };
+
+  const setOutcome = (value: ReadThroughOutcome | null) =>
+    updateParams((params) => {
+      if (value) params.set("outcome", value);
+      else params.delete("outcome");
+    });
+
+  const toggleRemoved = () =>
+    updateParams((params) => {
+      if (removed) params.delete("removed");
+      else params.set("removed", "true");
+    });
+
+  const handlePageChange: PageChangeHandler = (page, options) => {
+    const params = new URLSearchParams(searchParams);
+    params.set("page", page.toString());
+    setSearchParams(params, options);
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    try {
+      await deleteMutation.mutateAsync(deleting.read_through.id);
+      toast.success("Read-through deleted");
+      setDeleting(null);
+    } catch (error) {
+      toastRequestError(error, "Failed to delete Read-through");
+    }
+  };
+
+  const renderList = () => {
+    if (historyQuery.error && !historyQuery.data) {
+      return (
+        <QueryError
+          fallback="Failed to load Reading History"
+          query={historyQuery}
+        />
+      );
+    }
+    if (!historyQuery.data) {
+      return <LoadingSpinner />;
+    }
+    if (total === 0) {
+      return (
+        <div className="rounded-md border border-border p-8 text-center text-muted-foreground">
+          {filtered
+            ? "No Read-throughs match these filters."
+            : "Nothing here yet. Books you start, finish, or stop reading show up here."}
+        </div>
+      );
+    }
+    const showing = formatShowingRange(
+      offset,
+      PER_PAGE,
+      total,
+      "Read-throughs",
+    );
+    return (
+      <>
+        {showing && (
+          <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
+        )}
+        <ul className="divide-y divide-border rounded-md border border-border">
+          {items.map((entry) => (
+            <HistoryRow
+              demoMode={demoMode}
+              entry={entry}
+              key={entry.read_through.id}
+              onDelete={setDeleting}
+              onEdit={setEditing}
+            />
+          ))}
+        </ul>
+        <PaginationFooter
+          className="mt-6"
+          currentPage={currentPage}
+          onPageChange={handlePageChange}
+          totalIsCurrent={!historyQuery.isPlaceholderData}
+          totalPages={Math.ceil(total / PER_PAGE)}
+        />
+      </>
+    );
+  };
+
+  return (
+    <div>
+      <TopNav />
+      <ContentWidth className="px-4 py-4 md:px-6 md:py-8">
+        <div className="mb-6">
+          <h1 className="mb-2 text-2xl font-semibold">Reading History</h1>
+          <p className="mb-2 text-sm text-muted-foreground md:text-base">
+            Every time you've read a book, including books since removed from
+            the library. Fix dates here, or delete a read that shouldn't count.
+          </p>
+          {historyQuery.data && (
+            <Badge variant="secondary">
+              {formatCount(total, "Read-through")}
+            </Badge>
+          )}
+          {demoMode && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {DEMO_MODE_MESSAGE}
+            </p>
+          )}
+        </div>
+
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <div
+            aria-labelledby="reading-history-outcome-label"
+            className="flex flex-wrap gap-1"
+            role="group"
+          >
+            <span className="sr-only" id="reading-history-outcome-label">
+              Outcome
+            </span>
+            {OUTCOME_FILTERS.map((filter) => {
+              const active = outcome === filter.value;
+              return (
+                <Button
+                  aria-pressed={active}
+                  className={cn(active && "border-primary text-primary")}
+                  key={filter.label}
+                  onClick={() => setOutcome(filter.value)}
+                  size="sm"
+                  variant="outline"
+                >
+                  {filter.label}
+                </Button>
+              );
+            })}
+          </div>
+          <Button
+            aria-pressed={removed}
+            className={cn(removed && "border-primary text-primary")}
+            onClick={toggleRemoved}
+            size="sm"
+            variant="outline"
+          >
+            Removed from library
+          </Button>
+        </div>
+
+        {renderList()}
+      </ContentWidth>
+
+      {editing && (
+        <EditReadThroughDialog
+          onOpenChange={(open) => !open && setEditing(null)}
+          open
+          readThrough={editing}
+        />
+      )}
+      <ConfirmDialog
+        confirmLabel="Delete"
+        description={deleteDescription(deleting)}
+        isPending={deleteMutation.isPending}
+        onConfirm={handleDelete}
+        onOpenChange={(open) => !open && setDeleting(null)}
+        open={!!deleting}
+        title="Delete this Read-through?"
+        variant="destructive"
+      />
+    </div>
+  );
+};
+
+export default ReadingHistoryPage;

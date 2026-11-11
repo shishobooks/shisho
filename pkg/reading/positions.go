@@ -460,6 +460,11 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 			sessionReadThrough = &ranDuring
 		}
 	}
+	var fileType string
+	err := tx.NewSelect().Model((*models.File)(nil)).Column("f.file_type").Where("f.id = ?", fileID).Scan(ctx, &fileType)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
 	inserted := &models.ReadingSession{
 		CreatedAt:       now,
 		UserID:          userID,
@@ -471,8 +476,10 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 		StartPercentage: session.StartPercentage,
 		EndPercentage:   session.EndPercentage,
 		Measured:        session.Measured,
+		Kind:            models.ReadingKindForFileType(fileType),
+		Duration:        int(session.EndedAt.Sub(session.StartedAt).Round(time.Second) / time.Second),
 	}
-	_, err := tx.NewInsert().Model(inserted).Exec(ctx)
+	_, err = tx.NewInsert().Model(inserted).Exec(ctx)
 	return inserted.ID, errors.WithStack(err)
 }
 
@@ -544,7 +551,10 @@ func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	return rt, leaveToRead(ctx, tx, rt.UserID, rt.BookID, now)
+	if rt.BookID == nil {
+		return rt, nil
+	}
+	return rt, leaveToRead(ctx, tx, rt.UserID, *rt.BookID, now)
 }
 
 // UndoAutoFinish undoes the automatic finish of rt, for Undo on the finish
@@ -552,7 +562,8 @@ func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time)
 // and with ErrAlreadyUnderway when another Read-through is underway.
 func (svc *Service) UndoAutoFinish(ctx context.Context, rt *models.ReadThrough) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		if rt.Outcome != models.ReadThroughOutcomeFinished {
+		// A detached Read-through's finish has no Book to read again.
+		if rt.Outcome != models.ReadThroughOutcomeFinished || rt.BookID == nil {
 			return ErrNotAutoFinished
 		}
 		exists, err := tx.NewSelect().
@@ -565,7 +576,7 @@ func (svc *Service) UndoAutoFinish(ctx context.Context, rt *models.ReadThrough) 
 		if !exists {
 			return ErrNotAutoFinished
 		}
-		underway, err := retrieveUnderway(ctx, tx, rt.UserID, rt.BookID)
+		underway, err := retrieveUnderway(ctx, tx, rt.UserID, *rt.BookID)
 		if err != nil {
 			return err
 		}
@@ -642,12 +653,13 @@ func (svc *Service) RecordEstimatedSession(ctx context.Context, userID, fileID i
 }
 
 // SetEstimatedSessionEnd moves the end of userID's estimated Reading Session
-// id, as its source learns more of it.
+// id, as its source learns more of it. Its duration stays its span.
 func (svc *Service) SetEstimatedSessionEnd(ctx context.Context, userID, id int, endedAt time.Time, endPercentage float64) error {
 	_, err := svc.db.NewUpdate().
 		Model((*models.ReadingSession)(nil)).
 		Set("ended_at = ?", endedAt).
 		Set("end_percentage = ?", endPercentage).
+		Set("duration = MAX(0, CAST(ROUND((julianday(?) - julianday(started_at)) * 86400) AS INTEGER))", endedAt).
 		Where("id = ? AND user_id = ? AND NOT measured", id, userID).
 		Exec(ctx)
 	return errors.WithStack(err)

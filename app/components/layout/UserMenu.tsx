@@ -1,5 +1,6 @@
 import {
   BookmarkCheck,
+  History,
   List,
   LogOut,
   Settings,
@@ -72,6 +73,14 @@ const UserMenu = () => {
             <Link to="/to-read">
               <BookmarkCheck className="h-4 w-4" />
               To Read
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {can(ROUTE_PERMISSIONS.readingHistory) && (
+          <DropdownMenuItem asChild>
+            <Link to="/reading-history">
+              <History className="h-4 w-4" />
+              Reading History
             </Link>
           </DropdownMenuItem>
         )}

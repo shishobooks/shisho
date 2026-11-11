@@ -211,6 +211,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"PUT /api/reading/books/:id/rating", "PUT /api/reading/books/:id/page-flow",
 				"PATCH /api/reading/read-throughs/:id",
 				"DELETE /api/reading/read-throughs/:id",
+				"POST /api/reading/read-throughs/:id/finish", "POST /api/reading/read-throughs/:id/abandon",
+				"GET /api/reading/history",
 				"POST /api/reading/books/:id/to-read", "DELETE /api/reading/books/:id/to-read",
 				"PUT /api/reading/to-read/order", "POST /api/lists/:id/copy-to-to-read",
 			} {

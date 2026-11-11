@@ -1,5 +1,5 @@
 import type { ReadingStatus, ReadThrough } from "@/types";
-import { formatMonthYear, localDay } from "@/utils/format";
+import { formatDate, formatMonthYear, localDay } from "@/utils/format";
 
 // A reading transition, named by its route (pkg/reading/routes.go).
 export type ReadingTransition =
@@ -88,3 +88,32 @@ export const readingSummary = (readThroughs: ReadThrough[]): string | null => {
 // How far through a File or Book the user is, from a fraction from 0 to 1.
 export const formatProgress = (progress: number): string =>
   `${Math.round(progress * 100)}%`;
+
+// A Read-through's outcome as a reader says it.
+export const readThroughOutcomeLabel = (
+  rt: Pick<ReadThrough, "outcome" | "paused">,
+): string => {
+  switch (rt.outcome) {
+    case "underway":
+      return rt.paused ? "Paused" : "Reading";
+    case "finished":
+      return "Finished";
+    case "abandoned":
+      return "Did Not Finish";
+  }
+};
+
+// A Read-through's days, such as "Mar 1, 2026 to Mar 9, 2026".
+export const readThroughDatesLabel = (
+  rt: Pick<ReadThrough, "outcome" | "begin_day" | "end_day">,
+): string => {
+  const begin = rt.begin_day ? formatDate(rt.begin_day) : null;
+  const end = rt.end_day ? formatDate(rt.end_day) : null;
+  if (rt.outcome === "underway") {
+    return begin ? `Started ${begin}` : "Start date unknown";
+  }
+  if (begin && end) return `${begin} to ${end}`;
+  if (end) return `Ended ${end}, start date unknown`;
+  if (begin) return `Started ${begin}, end date unknown`;
+  return "Dates unknown";
+};

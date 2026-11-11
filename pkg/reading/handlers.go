@@ -37,29 +37,74 @@ func (h *handler) requireBook(c echo.Context) (int, error) {
 	return id, nil
 }
 
-// requireReadThrough resolves the caller's own :id Read-through in a
-// library they can still reach. Anyone else's is not found.
-func (h *handler) requireReadThrough(c echo.Context, user *models.User) (*models.ReadThrough, error) {
+// requireOwnReadThrough resolves the caller's own :id Read-through, whether
+// or not its Book still exists or is in a library they can reach: it's their
+// record either way, which Reading History edits. Anyone else's is not found.
+func (h *handler) requireOwnReadThrough(c echo.Context, user *models.User) (*models.ReadThrough, error) {
 	id, err := httputil.ParamID(c, "id", "Read-through")
 	if err != nil {
 		return nil, err
 	}
-	ctx := c.Request().Context()
-	rt, err := h.readingService.RetrieveReadThrough(ctx, user.ID, id)
+	rt, err := h.readingService.RetrieveReadThrough(c.Request().Context(), user.ID, id)
 	if errors.Is(err, ErrReadThroughNotFound) {
 		return nil, errcodes.NotFound("Read-through")
 	}
 	if err != nil {
 		return nil, err
 	}
-	libraryID, err := h.readingService.BookLibraryID(ctx, rt.BookID)
+	return rt, nil
+}
+
+// readThroughBook returns rt's Book when user can reach it, or false when
+// it was deleted or is in a library they no longer have access to.
+func (h *handler) readThroughBook(c echo.Context, user *models.User, rt *models.ReadThrough) (int, bool, error) {
+	if rt.BookID == nil {
+		return 0, false, nil
+	}
+	libraryID, err := h.readingService.BookLibraryID(c.Request().Context(), *rt.BookID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	return *rt.BookID, user.HasLibraryAccess(libraryID), nil
+}
+
+// requireReadThrough resolves the caller's own :id Read-through of a Book
+// in a library they can still reach. Anyone else's, or a detached one, is
+// not found.
+func (h *handler) requireReadThrough(c echo.Context, user *models.User) (*models.ReadThrough, error) {
+	rt, err := h.requireOwnReadThrough(c, user)
 	if err != nil {
 		return nil, err
 	}
-	if !user.HasLibraryAccess(libraryID) {
+	_, reachable, err := h.readThroughBook(c, user, rt)
+	if err != nil {
+		return nil, err
+	}
+	if !reachable {
 		return nil, errcodes.NotFound("Read-through")
 	}
 	return rt, nil
+}
+
+// respondReadThrough answers a change to rt with rt and, when the user can
+// still reach its Book, the Book's reading record.
+func (h *handler) respondReadThrough(c echo.Context, user *models.User, rt *models.ReadThrough) error {
+	bookID, reachable, err := h.readThroughBook(c, user, rt)
+	if err != nil {
+		return err
+	}
+	resp := ReadThroughChangeResponse{ReadThrough: rt}
+	if reachable {
+		reading, err := h.buildBookReadingResponse(c, user, bookID)
+		if err != nil {
+			return err
+		}
+		resp.Reading = &reading
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
 func (h *handler) respond(c echo.Context, user *models.User, bookID int) error {
@@ -112,6 +157,7 @@ var refusedTransitions = []refusal{
 	{ErrAlreadyPaused, "This book is already paused."},
 	{ErrNotPaused, "This book isn't paused."},
 	{ErrNotAutoFinished, "This finish can't be undone."},
+	{ErrReadThroughEnded, "This Read-through has already ended."},
 }
 
 // rejectedDays are the date edits rendered as 422 validation_error.
@@ -289,7 +335,7 @@ func (h *handler) updateReadThrough(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	rt, err := h.requireReadThrough(c, user)
+	rt, err := h.requireOwnReadThrough(c, user)
 	if err != nil {
 		return err
 	}
@@ -307,7 +353,7 @@ func (h *handler) updateReadThrough(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	return h.respond(c, user, rt.BookID)
+	return h.respondReadThrough(c, user, rt)
 }
 
 func (h *handler) deleteReadThrough(c echo.Context) error {
@@ -315,14 +361,79 @@ func (h *handler) deleteReadThrough(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	rt, err := h.requireReadThrough(c, user)
+	rt, err := h.requireOwnReadThrough(c, user)
 	if err != nil {
 		return err
 	}
 	if err := h.readingService.DeleteReadThrough(c.Request().Context(), rt); err != nil {
 		return err
 	}
-	return h.respond(c, user, rt.BookID)
+	return h.respondReadThrough(c, user, rt)
+}
+
+// endReadThrough ends the caller's own :id Read-through underway with
+// outcome, for Reading History, where its Book may be gone.
+func (h *handler) endReadThrough(c echo.Context, outcome string) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	rt, err := h.requireOwnReadThrough(c, user)
+	if err != nil {
+		return err
+	}
+	params := DayPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := checkDays(&params.Today); err != nil {
+		return err
+	}
+	ctx := c.Request().Context()
+	if err := h.readingService.EndReadThrough(ctx, rt, outcome, params.Today); err != nil {
+		return transitionError(err)
+	}
+	rt, err = h.readingService.RetrieveReadThrough(ctx, user.ID, rt.ID)
+	if err != nil {
+		return err
+	}
+	return h.respondReadThrough(c, user, rt)
+}
+
+func (h *handler) finishReadThrough(c echo.Context) error {
+	return h.endReadThrough(c, models.ReadThroughOutcomeFinished)
+}
+
+func (h *handler) abandonReadThrough(c echo.Context) error {
+	return h.endReadThrough(c, models.ReadThroughOutcomeAbandoned)
+}
+
+// listHistory pages through the caller's Reading History. It takes no user,
+// so it only ever lists the caller's own.
+func (h *handler) listHistory(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ListReadingHistoryQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	ctx := c.Request().Context()
+	readThroughs, total, err := h.readingService.ListHistory(ctx, user.ID, HistoryOptions{
+		Outcome: params.Outcome,
+		Removed: params.Removed,
+		Limit:   params.Limit,
+		Offset:  params.Offset,
+	})
+	if err != nil {
+		return err
+	}
+	items, err := h.readingService.BuildHistoryEntries(ctx, user, readThroughs)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, ListReadingHistoryResponse{Items: items, Total: total}))
 }
 
 func (h *handler) addToRead(c echo.Context) error {
@@ -521,5 +632,5 @@ func (h *handler) undoFinish(c echo.Context) error {
 	if err := h.readingService.UndoAutoFinish(c.Request().Context(), rt); err != nil {
 		return transitionError(err)
 	}
-	return h.respond(c, user, rt.BookID)
+	return h.respond(c, user, *rt.BookID)
 }

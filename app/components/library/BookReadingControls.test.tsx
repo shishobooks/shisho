@@ -6,7 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
-import type { BookReadingResponse, ReadingStatus, ReadThrough } from "@/types";
+import type {
+  BookReadingResponse,
+  ReadingStatus,
+  ReadThrough,
+  ReadThroughChangeResponse,
+} from "@/types";
 
 import BookReadingControls from "./BookReadingControls";
 import ReadingHistory from "./ReadingHistory";
@@ -30,11 +35,19 @@ const readThrough = (overrides: Partial<ReadThrough>): ReadThrough => ({
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
   book_id: 7,
+  book_title: null,
+  book_authors: null,
   begin_day: undefined,
   end_day: undefined,
   outcome: "finished",
   paused: false,
   ...overrides,
+});
+
+// A change to a Read-through answers with it and the Book's reading record.
+const changed = (record: BookReadingResponse): ReadThroughChangeResponse => ({
+  read_through: readThrough({}),
+  reading: record,
 });
 
 const renderControls = (initial: BookReadingResponse) => {
@@ -161,7 +174,9 @@ describe("BookReadingControls", () => {
       null,
     );
 
-    request.mockResolvedValue(reading({ status: "to_read", on_to_read: true }));
+    request.mockResolvedValue(
+      changed(reading({ status: "to_read", on_to_read: true })),
+    );
     const dialog = await screen.findByRole("dialog", {
       name: "Mark as not started?",
     });
@@ -410,10 +425,12 @@ describe("ReadingHistory", () => {
     await user().click(await screen.findByRole("button", { name: "Clear" }));
     expect(screen.getByLabelText("Started")).toHaveTextContent("Unknown");
     request.mockResolvedValue(
-      reading({
-        status: "read",
-        read_throughs: [readThrough({ end_day: "2026-03-20" })],
-      }),
+      changed(
+        reading({
+          status: "read",
+          read_throughs: [readThrough({ end_day: "2026-03-20" })],
+        }),
+      ),
     );
     await user().click(screen.getByRole("button", { name: "Save" }));
 
@@ -437,7 +454,7 @@ describe("ReadingHistory", () => {
     await user().click(
       await screen.findByRole("button", { name: "Delete Read-through" }),
     );
-    request.mockResolvedValue(reading());
+    request.mockResolvedValue(changed(reading()));
     await user().click(screen.getByRole("button", { name: "Delete" }));
 
     expect(request).toHaveBeenCalledWith(
@@ -490,7 +507,7 @@ describe("ReadingHistory", () => {
     );
     expect(screen.getByLabelText("Finished")).toHaveTextContent("Mar 18, 2026");
 
-    request.mockResolvedValue(reading());
+    request.mockResolvedValue(changed(reading()));
     await user().click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(request).toHaveBeenCalledWith(

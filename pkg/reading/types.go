@@ -29,6 +29,15 @@ type BookReadingResponse struct {
 	LastReadAt *time.Time `json:"last_read_at" tstype:"string | null"`
 }
 
+// ReadThroughChangeResponse answers a change to one of the user's
+// Read-throughs: the Read-through as the change left it (as it was, for a
+// delete), and its Book's reading record, which is null when the Book was
+// deleted or is in a library the user can no longer reach.
+type ReadThroughChangeResponse struct {
+	ReadThrough *models.ReadThrough  `json:"read_through" tstype:"ReadThrough,required"`
+	Reading     *BookReadingResponse `json:"reading" tstype:"BookReadingResponse | null,required"`
+}
+
 // DayPayload carries the user's "today" for a transition that dates
 // a Read-through. It is the browser's local date, since a day is in the
 // user's time zone.
@@ -126,4 +135,49 @@ type UpdatePositionResponse struct {
 // the reader can open at the start from, rather than an error.
 type FilePositionResponse struct {
 	Position *models.ReadingPosition `json:"position" tstype:"ReadingPosition | null,required"`
+}
+
+// ListReadingHistoryQuery pages through the signed-in user's Read-throughs
+// for all time. Outcome keeps only Read-throughs with that outcome, and
+// Removed only those whose Book was deleted.
+type ListReadingHistoryQuery struct {
+	Limit   int     `query:"limit" json:"limit,omitempty" default:"50" validate:"min=1,max=100"`
+	Offset  int     `query:"offset" json:"offset,omitempty" validate:"min=0"`
+	Outcome *string `query:"outcome" json:"outcome,omitempty" validate:"omitempty,oneof=underway finished abandoned" tstype:"ReadThroughOutcome"`
+	Removed bool    `query:"removed" json:"removed,omitempty"`
+}
+
+// ListReadingHistoryResponse is a page of Reading History, newest first.
+type ListReadingHistoryResponse struct {
+	Items []*ReadingHistoryEntry `json:"items" tstype:"ReadingHistoryEntry[]"`
+	Total int                    `json:"total"`
+}
+
+// ReadingHistoryEntry is one Read-through on Reading History, with what it
+// takes to show it.
+//
+//nolint:revive // named for the Reading History page, as generated TS types are global
+type ReadingHistoryEntry struct {
+	ReadThrough *models.ReadThrough `json:"read_through" tstype:"ReadThrough,required"`
+	// Title and Authors are the Book's, or the copy kept when it was deleted.
+	Title   string   `json:"title"`
+	Authors []string `json:"authors"`
+	// Removed is true when the Book was deleted.
+	Removed bool `json:"removed"`
+	// Book is the Book when the user can still reach it: null when it was
+	// deleted or sits in a library they no longer have access to.
+	Book *ReadingHistoryBook `json:"book" tstype:"ReadingHistoryBook | null,required"`
+	// CanReread is whether "Start a reread" applies: the user can reach the
+	// Book and has no Read-through of it underway.
+	CanReread bool `json:"can_reread"`
+}
+
+// ReadingHistoryBook is what a Reading History row needs to link to its
+// Book and show its cover.
+//
+//nolint:revive // named for the Reading History page, as generated TS types are global
+type ReadingHistoryBook struct {
+	ID            int    `json:"id"`
+	LibraryID     int    `json:"library_id"`
+	CoverCacheKey string `json:"cover_cache_key"`
 }

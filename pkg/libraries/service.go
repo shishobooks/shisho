@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
 
@@ -258,7 +259,8 @@ func (svc *Service) UpdateLibrary(ctx context.Context, library *models.Library, 
 //  2. Purge FTS rows (books_fts, series_fts, persons_fts, genres_fts, tags_fts,
 //     publishers_fts) for this library. FTS purge must happen before the
 //     CASCADE so rows are still resolvable.
-//  3. Delete the library row; SQLite cascades the rest.
+//  3. Detach users' Read-throughs of its Books.
+//  4. Delete the library row; SQLite cascades the rest.
 //
 // Returns errcodes.NotFound if the library does not exist.
 func (svc *Service) DeleteLibrary(ctx context.Context, id int) error {
@@ -296,7 +298,13 @@ func (svc *Service) DeleteLibrary(ctx context.Context, id int) error {
 			}
 		}
 
-		// 3. Delete the library. ON DELETE CASCADE handles children.
+		// 3. Keep users' Read-throughs of its Books, which outlive them
+		//    with a copy of each Book's title and authors (ADR 0015).
+		if err := reading.DetachLibraryBooks(ctx, tx, id); err != nil {
+			return err
+		}
+
+		// 4. Delete the library. ON DELETE CASCADE handles children.
 		_, err = tx.NewDelete().Model((*models.Library)(nil)).Where("id = ?", id).Exec(ctx)
 		return errors.WithStack(err)
 	}))

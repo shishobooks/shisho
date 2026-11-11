@@ -10,31 +10,11 @@ import { useBookReading, useDeleteReadThrough } from "@/hooks/queries/reading";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
 import type { ReadThrough } from "@/types";
-import { formatDate } from "@/utils/format";
-import { readingSummary } from "@/utils/readingStatus";
-
-const outcomeLabel = (rt: ReadThrough): string => {
-  switch (rt.outcome) {
-    case "underway":
-      return rt.paused ? "Paused" : "Reading";
-    case "finished":
-      return "Finished";
-    case "abandoned":
-      return "Did Not Finish";
-  }
-};
-
-const datesLabel = (rt: ReadThrough): string => {
-  const begin = rt.begin_day ? formatDate(rt.begin_day) : null;
-  const end = rt.end_day ? formatDate(rt.end_day) : null;
-  if (rt.outcome === "underway") {
-    return begin ? `Started ${begin}` : "Start date unknown";
-  }
-  if (begin && end) return `${begin} to ${end}`;
-  if (end) return `Ended ${end}, start date unknown`;
-  if (begin) return `Started ${begin}, end date unknown`;
-  return "Dates unknown";
-};
+import {
+  readingSummary,
+  readThroughDatesLabel,
+  readThroughOutcomeLabel,
+} from "@/utils/readingStatus";
 
 interface ReadingHistoryProps {
   bookId: number;
@@ -91,8 +71,12 @@ const ReadingHistory = ({ bookId }: ReadingHistoryProps) => {
             key={rt.id}
           >
             <div className="min-w-0">
-              <p className="text-sm font-medium">{outcomeLabel(rt)}</p>
-              <p className="text-xs text-muted-foreground">{datesLabel(rt)}</p>
+              <p className="text-sm font-medium">
+                {readThroughOutcomeLabel(rt)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {readThroughDatesLabel(rt)}
+              </p>
             </div>
             <div className="flex shrink-0 gap-1">
               <Button

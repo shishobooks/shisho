@@ -10,6 +10,7 @@ import { invalidateCoverPreviewLists } from "@/hooks/queries/coverPreviews";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
 import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
 import { QueryKey as LogsQueryKey } from "@/hooks/queries/logs";
+import { QueryKey as ReadingQueryKey } from "@/hooks/queries/reading";
 import { useAuth } from "@/hooks/useAuth";
 
 export function useSSE() {
@@ -68,6 +69,11 @@ export function useSSE() {
         if (data.status === "completed" && data.type === "scan") {
           queryClient.invalidateQueries({
             queryKey: [BooksQueryKey.ListBooks],
+          });
+          // A scan can delete books, whose Read-throughs stay on Reading
+          // History without them.
+          queryClient.invalidateQueries({
+            queryKey: [ReadingQueryKey.ReadingHistory],
           });
           // A scan can add books and change covers on list entries too.
           invalidateCoverPreviewLists(queryClient);
