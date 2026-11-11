@@ -33,6 +33,11 @@ type Device struct {
 	CreatedAt         time.Time  `bun:"created_at,notnull" json:"created_at"`
 	UpdatedAt         time.Time  `bun:"updated_at,notnull" json:"updated_at"`
 	LastAccessedAt    *time.Time `bun:"last_accessed_at" json:"last_accessed_at"`
+	// PluginLastConnectedAt is when a KOReader Device last reached Shisho
+	// through the KOReader plugin, and PluginVersion the plugin version it
+	// reported then. Both are nil until it first does.
+	PluginLastConnectedAt *time.Time `bun:"plugin_last_connected_at" json:"plugin_last_connected_at"`
+	PluginVersion         *string    `bun:"plugin_version" json:"plugin_version"`
 
 	Owner        *models.UserRef `bun:"rel:belongs-to,join:user_id=id" json:"-"`
 	ScopeLibrary *models.Library `bun:"rel:belongs-to,join:scope_library_id=id" json:"-"`
@@ -74,11 +79,13 @@ const (
 )
 
 const (
-	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser | typeof ConnectionOPDS | typeof ConnectionKOReaderSync;
+	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser | typeof ConnectionOPDS | typeof ConnectionKOReaderSync | typeof ConnectionKOReaderPlugin;
 	ConnectionKoboSync       = "kobo_sync"
 	ConnectionEReaderBrowser = "ereader_browser"
 	ConnectionOPDS           = "opds"
 	ConnectionKOReaderSync   = "koreader_sync"
+	// ConnectionKOReaderPlugin is the KOReader plugin's own API (ADR 0016).
+	ConnectionKOReaderPlugin = "koreader_plugin"
 )
 
 const (

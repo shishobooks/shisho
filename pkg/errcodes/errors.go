@@ -240,3 +240,24 @@ func PasswordResetRequired() error {
 		"password_reset_required",
 	}
 }
+
+// TooManyRequests returns the 429 for a client that has made too many
+// attempts, such as guesses at a Device short code, and must wait.
+func TooManyRequests() error {
+	return &Error{
+		http.StatusTooManyRequests,
+		"Too many attempts. Wait a minute and try again.",
+		"too_many_requests",
+	}
+}
+
+// PluginUpdateRequired returns the 426 for a KOReader plugin that speaks a
+// protocol the server no longer accepts. The plugin shows it as "update
+// required" and keeps its data until it's updated.
+func PluginUpdateRequired() error {
+	return &Error{
+		http.StatusUpgradeRequired,
+		"This server needs a newer KOReader plugin. Update the plugin to keep syncing.",
+		"plugin_update_required",
+	}
+}

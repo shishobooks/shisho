@@ -138,6 +138,26 @@ export const useGenerateDeviceShortUrl = () => {
   });
 };
 
+/**
+ * Downloads the KOReader plugin for a KOReader Device. The zip carries this
+ * server's URL and a fresh pairing code, which replaces the Device's earlier
+ * one, so the plugin signs itself in if it's installed within 30 minutes.
+ */
+export const useDownloadKOReaderPlugin = () => {
+  return useMutation<Blob, ShishoAPIError, string>({
+    mutationFn: async (id) => {
+      const response = await fetch(`/api/user/devices/${id}/koreader-plugin`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        // Throws the server's error.
+        await API.checkStatus(response);
+      }
+      return response.blob();
+    },
+  });
+};
+
 export const useClearKoboSync = () => {
   return useMutation<void, ShishoAPIError, string>({
     mutationFn: (id) => API.request("DELETE", `/user/devices/${id}/kobo-sync`),

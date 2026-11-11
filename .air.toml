@@ -7,14 +7,14 @@ args_bin = []
 bin = "./build/api/api-air"
 cmd = "mise build:air"
 delay = 1000
-exclude_dir = ["app", "build", "coverage", "node_modules", "test-results", "website"]
+exclude_dir = ["app", "build", "coverage", "koreader-plugin/spec", "node_modules", "test-results", "tools/koreaderharness", "website"]
 exclude_file = []
 exclude_regex = ["_test.go"]
 exclude_unchanged = false
 follow_symlink = false
 full_bin = "CONFIG_FILE=./shisho.dev.yaml ./build/api/api-air"
 include_dir = []
-include_ext = ["go"]
+include_ext = ["go", "lua"]
 include_file = ["tygo.yaml"]
 kill_delay = "1s"
 log = "build-errors.log"

@@ -1,9 +1,17 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { toast } from "sonner";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
@@ -46,6 +54,17 @@ const kobo = (overrides: Partial<DeviceResponse> = {}): DeviceResponse => ({
   updated_at: "2026-01-01T00:00:00Z",
   ...overrides,
 });
+
+const koreader = (overrides: Partial<DeviceResponse> = {}): DeviceResponse =>
+  kobo({
+    id: "koreader-1",
+    name: "Libra KOReader",
+    device_type: "koreader",
+    delivery_rules_mode: "default",
+    has_preset: false,
+    connections: ["koreader_plugin", "opds", "koreader_sync"],
+    ...overrides,
+  });
 
 // stubAPI answers the Device routes from an in-memory Device, applying
 // each change the page sends, and records every request.
@@ -119,6 +138,18 @@ const stubAPI = (initial: DeviceResponse) => {
       if (method === "DELETE" && path === `/user/devices/${device.id}`) {
         devices = devices.filter((d) => d.id !== device.id);
         return undefined;
+      }
+      if (
+        method === "POST" &&
+        path === `/user/devices/${device.id}/short-url`
+      ) {
+        return {
+          id: "short-1",
+          device_id: device.id,
+          short_code: "abc123",
+          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          created_at: new Date().toISOString(),
+        };
       }
       if (path === "/user/libraries")
         return [
@@ -258,18 +289,13 @@ describe("DeviceDetail", () => {
 
   it("gives a KOReader Device what to enter for OPDS and progress sync", async () => {
     setAuth({ user: { username: "robin" } });
-    stubAPI(
-      kobo({
-        id: "koreader-1",
-        name: "Libra KOReader",
-        device_type: "koreader",
-        delivery_rules_mode: "default",
-        has_preset: false,
-        connections: ["opds", "koreader_sync"],
-      }),
-    );
+    stubAPI(koreader());
+    const user = setupUser();
     renderAt("/user/devices/koreader-1");
 
+    await user.click(
+      await screen.findByRole("button", { name: "Without the plugin" }),
+    );
     expect(
       await screen.findByRole("heading", { name: "KOReader progress sync" }),
     ).toBeInTheDocument();
@@ -299,6 +325,137 @@ describe("DeviceDetail", () => {
     expect(
       screen.getByRole("link", { name: "KOReader setup guide" }),
     ).toHaveAttribute("href", "https://www.shishobooks.com/docs/koreader");
+  });
+
+  it("leads a KOReader Device with the KOReader plugin", async () => {
+    stubAPI(koreader());
+    const user = setupUser();
+    renderAt("/user/devices/koreader-1");
+
+    expect(
+      await screen.findByRole("heading", { name: "KOReader plugin" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Download Plugin" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pair" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Not connected through the plugin yet."),
+    ).toBeInTheDocument();
+    const folders = screen.getByText("Kobo", { selector: "dt" });
+    expect(folders.nextElementSibling).toHaveTextContent(
+      ".adds/koreader/plugins",
+    );
+    expect(screen.getByText(/doesn't sync reading yet/)).toBeInTheDocument();
+
+    // Progress sync and OPDS sit in a collapsed section.
+    const toggle = screen.getByRole("button", { name: "Without the plugin" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("heading", { name: "KOReader progress sync" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "OPDS" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("heading", { name: "KOReader progress sync" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OPDS" })).toBeInTheDocument();
+  });
+
+  it("hides the KOReader plugin download in Demo Mode", async () => {
+    setAuth({ demoMode: true });
+    stubAPI(koreader());
+    renderAt("/user/devices/koreader-1");
+
+    expect(
+      await screen.findByRole("button", { name: "Pair" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download Plugin" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows when a KOReader Device last connected through the plugin", async () => {
+    stubAPI(
+      koreader({
+        plugin_last_connected_at: "2026-11-10T15:30:00Z",
+        plugin_version: "0.8.0",
+      }),
+    );
+    renderAt("/user/devices/koreader-1");
+
+    const connection = await screen.findByTestId("plugin-connection");
+    expect(connection).toHaveTextContent(
+      /^Last connected through the plugin .+, version 0\.8\.0\.$/,
+    );
+  });
+
+  it("pairs the KOReader plugin with a code that counts down", async () => {
+    const request = stubAPI(koreader());
+    const user = setupUser();
+    renderAt("/user/devices/koreader-1");
+
+    await user.click(await screen.findByRole("button", { name: "Pair" }));
+
+    expect(calls(request, "POST")).toContainEqual([
+      "POST",
+      "/user/devices/koreader-1/short-url",
+    ]);
+    expect(await screen.findByLabelText("Pairing code")).toHaveTextContent(
+      "abc123",
+    );
+    expect(screen.getByText(/expires in (30:00|29:5\d)/)).toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(30 * 60 * 1000 + 1000));
+    expect(
+      await screen.findByText(
+        "That code has expired. Press Pair for a new one.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText("Pairing code")).not.toBeInTheDocument();
+  });
+
+  it("downloads the KOReader plugin for the Device", async () => {
+    stubAPI(koreader());
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Blob(["zip"]), {
+        status: 200,
+        headers: { "content-type": "application/zip" },
+      }),
+    );
+    // jsdom has no object URLs.
+    const createObjectURL = vi.fn(() => "blob:plugin");
+    const saved = {
+      createObjectURL: URL.createObjectURL,
+      revokeObjectURL: URL.revokeObjectURL,
+    };
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = vi.fn();
+    onTestFinished(() => {
+      Object.assign(URL, saved);
+    });
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    const user = setupUser();
+    renderAt("/user/devices/koreader-1");
+
+    await user.click(
+      await screen.findByRole("button", { name: "Download Plugin" }),
+    );
+
+    await waitFor(() => expect(click).toHaveBeenCalled());
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/user/devices/koreader-1/koreader-plugin",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(createObjectURL).toHaveBeenCalled();
+    const link = click.mock.contexts[0] as HTMLAnchorElement;
+    expect(link.download).toBe("shisho.koplugin.zip");
   });
 
   it("toasts an error when copying fails", async () => {

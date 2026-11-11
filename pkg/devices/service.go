@@ -522,3 +522,15 @@ func (s *Service) libraryExists(ctx context.Context, id int) (bool, error) {
 	exists, err := s.db.NewSelect().Model((*models.Library)(nil)).Where("id = ?", id).Exists(ctx)
 	return exists, errors.WithStack(err)
 }
+
+// RecordPluginConnection notes that Device id reached Shisho through the
+// KOReader plugin now, reporting pluginVersion.
+func (s *Service) RecordPluginConnection(ctx context.Context, id, pluginVersion string) error {
+	_, err := s.db.NewUpdate().
+		Model((*Device)(nil)).
+		Set("plugin_last_connected_at = ?", time.Now()).
+		Set("plugin_version = ?", pluginVersion).
+		Where("id = ?", id).
+		Exec(ctx)
+	return errors.WithStack(err)
+}

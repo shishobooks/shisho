@@ -18,6 +18,7 @@ RUN go mod download
 # Copy source files and config needed for type generation
 COPY tygo.yaml ./
 COPY pkg/ ./pkg/
+COPY koreader-plugin/ ./koreader-plugin/
 
 # Generate TypeScript types
 RUN tygo generate
@@ -63,6 +64,7 @@ RUN go mod download
 # Copy source and build
 COPY cmd/ ./cmd/
 COPY pkg/ ./pkg/
+COPY koreader-plugin/ ./koreader-plugin/
 COPY internal/ ./internal/
 COPY --from=frontend-builder /app/build/app/ ./pkg/frontend/dist/
 

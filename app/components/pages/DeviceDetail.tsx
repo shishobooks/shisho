@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  ChevronRight,
   Copy,
   Pencil,
   RefreshCw,
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 
 import DeviceRulesSection from "@/components/devices/DeviceRulesSection";
 import DeviceTypeRadioGroup from "@/components/devices/DeviceTypeRadioGroup";
+import KOReaderPluginSetup from "@/components/devices/KOReaderPluginSetup";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
@@ -59,6 +61,7 @@ import { cn } from "@/libraries/utils";
 import {
   ConnectionEReaderBrowser,
   ConnectionKoboSync,
+  ConnectionKOReaderPlugin,
   ConnectionKOReaderSync,
   ConnectionOPDS,
   ScopeAll,
@@ -517,32 +520,86 @@ const CONNECTION_SETUP: Record<
   [ConnectionEReaderBrowser]: EReaderBrowserSetup,
   [ConnectionOPDS]: OPDSSetup,
   [ConnectionKOReaderSync]: KOReaderSyncSetup,
+  [ConnectionKOReaderPlugin]: KOReaderPluginSetup,
 };
 
+const ConnectionSetups = ({
+  device,
+  connections,
+}: {
+  device: DeviceResponse;
+  connections: Connection[];
+}) =>
+  connections.map((connection) => {
+    const Setup = CONNECTION_SETUP[connection];
+    return (
+      <div
+        className="space-y-4 border-t border-border pt-4 first:border-t-0 first:pt-0"
+        key={connection}
+      >
+        <h3 className="text-base font-medium">
+          {CONNECTION_LABELS[connection]}
+        </h3>
+        <Setup device={device} key={device.credential} />
+      </div>
+    );
+  });
+
 // ConnectionsSection shows setup instructions for each connection the
-// Device's type uses.
-const ConnectionsSection = ({ device }: { device: DeviceResponse }) => (
-  <Section
-    description="How this Device connects to Shisho."
-    id="connections-heading"
-    title="Connections"
-  >
-    {device.connections.map((connection) => {
-      const Setup = CONNECTION_SETUP[connection];
-      return (
-        <div
-          className="space-y-4 border-t border-border pt-4 first:border-t-0 first:pt-0"
-          key={connection}
-        >
-          <h3 className="text-base font-medium">
-            {CONNECTION_LABELS[connection]}
-          </h3>
-          <Setup device={device} key={device.credential} />
-        </div>
-      );
-    })}
-  </Section>
-);
+// Device's type uses. A KOReader Device leads with the KOReader plugin and
+// keeps the connections it replaces in a collapsed section, for anyone who
+// doesn't want the plugin.
+const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
+  const [othersOpen, setOthersOpen] = useState(false);
+  const hasPlugin = device.connections.includes(ConnectionKOReaderPlugin);
+  const others = device.connections.filter(
+    (connection) => connection !== ConnectionKOReaderPlugin,
+  );
+
+  return (
+    <Section
+      description="How this Device connects to Shisho."
+      id="connections-heading"
+      title="Connections"
+    >
+      {hasPlugin ? (
+        <>
+          <ConnectionSetups
+            connections={[ConnectionKOReaderPlugin]}
+            device={device}
+          />
+          <div className="border-t border-border pt-4">
+            <Button
+              aria-controls="connections-without-plugin"
+              aria-expanded={othersOpen}
+              className="flex w-full items-center gap-2 text-left text-base font-medium"
+              onClick={() => setOthersOpen((open) => !open)}
+              variant="unstyled"
+            >
+              <ChevronRight
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  othersOpen && "rotate-90",
+                )}
+              />
+              Without the plugin
+            </Button>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Set up OPDS and KOReader's progress sync by hand instead.
+            </p>
+            {othersOpen && (
+              <div className="mt-4 space-y-4" id="connections-without-plugin">
+                <ConnectionSetups connections={others} device={device} />
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <ConnectionSetups connections={device.connections} device={device} />
+      )}
+    </Section>
+  );
+};
 
 const RenameDeviceDialog = ({
   device,

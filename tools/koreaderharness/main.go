@@ -39,6 +39,17 @@ const usage = `Drives a real, headless KOReader against a running Shisho. Every 
   xpointers  --file BOOK                                  every word start of a reflowable book, as
              KOReader writes its XPointer, with its text: the expected values for translation tests
 
+  The KOReader plugin, which runs in KOReader's file manager:
+  plugin-install --zip ZIP                                unzip a plugin zip into KOReader's plugins folder
+  plugin-launch  [--online]                               start KOReader, as on first launch with or without Wi-Fi
+  plugin-signin  --server URL (--code C | --username U --password P)
+  plugin-update  [--from URL] [--confirm]                 check for an update, or install from a server
+  lua-test                                                run the plugin's Lua unit tests
+  Each plugin command reports the plugin's servers, its version and hash, and
+  KOReader's OPDS catalog list. A plugin zip from a Device's page signs in to
+  the URL its owner reached Shisho at; download it from the API URL mise start
+  prints, which the container can reach.
+
   Any command that opens a book takes --out PNG to screenshot the result, and
   --view page|scroll for KOReader's page or continuous view of a reflowable book.
   --file is a book in the harness's books directory, or a path to copy there.
@@ -82,7 +93,11 @@ func run(argv []string) (printed bool, err error) {
 	mode := flags.String("mode", "", "silent, prompt, or interactive")
 	view := flags.String("view", "", "page or scroll, KOReader's page and continuous views")
 	as := flags.String("as", "", "name to save a download under")
-	confirm := flags.Bool("confirm", false, "accept KOReader's jump dialog")
+	confirm := flags.Bool("confirm", false, "accept KOReader's dialog")
+	online := flags.Bool("online", false, "KOReader has Wi-Fi")
+	code := flags.String("code", "", "pairing code")
+	from := flags.String("from", "", "server to install the plugin from")
+	zipPath := flags.String("zip", "", "KOReader plugin zip")
 	out := flags.String("out", "", "PNG to screenshot to")
 	dir := flags.String("dir", filepath.Join("tmp", "koreader"), "harness state directory")
 	flags.SetOutput(io.Discard)
@@ -100,9 +115,16 @@ func run(argv []string) (printed bool, err error) {
 	}
 	h := &Harness{Dir: absDir, ReleaseDir: filepath.Join(absDir, "release")}
 	ctx := context.Background()
+	switch command {
+	case "plugin-install":
+		return false, installPlugin(h, *zipPath)
+	case "lua-test":
+		return runLuaTests(ctx, h)
+	}
 	args := Args{
 		Command: command, File: *file, Server: *server, Username: *username, Password: *password,
 		Page: *page, Percent: percentValue, XPointer: *xpointer, Mode: *mode, View: *view, Confirm: *confirm, Screenshot: *out,
+		Online: *online, Code: *code, From: *from,
 	}
 	if command == "download" {
 		target := *downloadURL
@@ -138,4 +160,31 @@ func downloadName(target string) string {
 		return "download"
 	}
 	return name
+}
+
+func installPlugin(h *Harness, zipPath string) error {
+	if zipPath == "" {
+		return errors.New("--zip is required")
+	}
+	data, err := os.ReadFile(zipPath)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if err := h.InstallPlugin(data); err != nil {
+		return err
+	}
+	fmt.Printf("{\"ok\": true, \"path\": %q}\n", h.pluginsDir())
+	return nil
+}
+
+func runLuaTests(ctx context.Context, h *Harness) (bool, error) {
+	result, err := h.RunLuaTests(ctx, "koreader-plugin")
+	if err != nil {
+		return false, err
+	}
+	fmt.Println(string(result.Raw))
+	if !result.OK {
+		return true, errors.Errorf("%d Lua tests failed", len(result.Failed))
+	}
+	return true, nil
 }
