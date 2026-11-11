@@ -34,7 +34,9 @@ The number of books on the server over time, by when each was added to Shisho, i
 
 ## Disk Space
 
-Free and used space on each volume that holds a library folder, the directory containing the database, or `CACHE_DIR`. When several of these share a volume, it's listed once with each path under it. **Free** is the space Shisho can still write to. On a filesystem that reserves space for the system, such as ext4, the reserved space is in neither figure, so used and free add up to less than the total.
+Free and used space on each volume that holds a library folder, the directory containing the database, or `CACHE_DIR`. When several of these share a volume, it's listed once with each path under it, along with how much Shisho keeps at that path. **Free** is the space Shisho can still write to. On a filesystem that reserves space for the system, such as ext4, the reserved space is in neither figure, so used and free add up to less than the total.
+
+Each volume's bar splits its used space into library files, the database, the caches, and **Other**, which is everything else on the volume. Library files are counted by the sizes Shisho recorded at the last scan. On a filesystem that compresses data, such as ZFS with compression on, those can add up to more than the volume actually uses; the bar then shrinks them to fit, and the legend still shows the recorded size.
 
 Library folders are listed only for libraries you can access, and only with Libraries Read, matching what the library pages show. A volume whose folders are all hidden from you still shows its space.
 

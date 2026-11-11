@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -42,13 +44,17 @@ func (h *handler) compute(ctx context.Context, user *models.User) (StatsResponse
 		}
 	}
 
-	if resp.Volumes, err = h.volumes(ctx, user, libraries); err != nil {
-		return resp, err
-	}
 	if resp.DatabaseBytes, err = h.databaseBytes(); err != nil {
 		return resp, err
 	}
 	resp.Caches = h.cacheSizes(ctx)
+	var cacheBytes int64
+	for _, c := range resp.Caches {
+		cacheBytes += c.SizeBytes
+	}
+	if resp.Volumes, err = h.volumes(ctx, user, libraries, resp.DatabaseBytes, cacheBytes); err != nil {
+		return resp, err
+	}
 	if err := h.db.NewSelect().Table("users").ColumnExpr("COUNT(*)").Scan(ctx, &resp.Users); err != nil {
 		return resp, errors.WithStack(err)
 	}
@@ -166,7 +172,7 @@ func sumCounts(libraries []LibraryStats) ContentCounts {
 // data directory, or the cache directory, each filesystem once. A path that
 // can't be read (an unmounted drive) is left out rather than failing the
 // page.
-func (h *handler) volumes(ctx context.Context, user *models.User, libraries []LibraryStats) ([]Volume, error) {
+func (h *handler) volumes(ctx context.Context, user *models.User, libraries []LibraryStats, databaseBytes, cacheBytes int64) ([]Volume, error) {
 	names := make(map[int]string, len(libraries))
 	for _, lib := range libraries {
 		names[lib.ID] = lib.Name
@@ -189,17 +195,21 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 	canReadLibraries := user.HasPermission(models.ResourceLibraries, models.OperationRead)
 	paths := make([]statPath, 0, len(libraryPaths)+2)
 	for _, lp := range libraryPaths {
+		size, err := h.libraryPathBytes(ctx, lp)
+		if err != nil {
+			return nil, err
+		}
 		paths = append(paths, statPath{
-			VolumePath: VolumePath{Kind: VolumePathKindLibrary, Name: names[lp.LibraryID], Path: lp.Filepath},
+			VolumePath: VolumePath{Kind: VolumePathKindLibrary, Name: names[lp.LibraryID], Path: lp.Filepath, SizeBytes: size},
 			shown:      canReadLibraries && user.HasLibraryAccess(lp.LibraryID),
 			mustExist:  true,
 		})
 	}
 	if h.databasePath != "" && h.databasePath != ":memory:" {
-		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindData, Name: "Data", Path: filepath.Dir(h.databasePath)}, true, true})
+		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindData, Name: "Data", Path: filepath.Dir(h.databasePath), SizeBytes: databaseBytes}, true, true})
 	}
 	if h.cacheDir != "" {
-		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindCache, Name: "Cache", Path: h.cacheDir}, true, false})
+		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindCache, Name: "Cache", Path: h.cacheDir, SizeBytes: cacheBytes}, true, false})
 	}
 
 	volumes := []Volume{}
@@ -216,11 +226,38 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 			index[stat.id] = i
 			volumes = append(volumes, Volume{Paths: []VolumePath{}, TotalBytes: stat.total, UsedBytes: stat.used, FreeBytes: stat.free})
 		}
+		switch p.Kind {
+		case VolumePathKindLibrary:
+			volumes[i].LibraryBytes += p.SizeBytes
+		case VolumePathKindData:
+			volumes[i].DatabaseBytes += p.SizeBytes
+		case VolumePathKindCache:
+			volumes[i].CacheBytes += p.SizeBytes
+		}
 		if p.shown {
 			volumes[i].Paths = append(volumes[i].Paths, p.VolumePath)
 		}
 	}
 	return volumes, nil
+}
+
+// libraryPathBytes is the stored size of the library's files under lp,
+// supplements included. A prefix compare rather than LIKE, so a "%" or "_"
+// in a folder name matches only itself.
+func (h *handler) libraryPathBytes(ctx context.Context, lp *models.LibraryPath) (int64, error) {
+	dir := strings.TrimRight(lp.Filepath, "/") + "/"
+	var size int64
+	err := h.db.NewSelect().
+		Table("files").
+		ColumnExpr("COALESCE(SUM(filesize_bytes), 0)").
+		Where("library_id = ?", lp.LibraryID).
+		// substr counts characters, not bytes.
+		Where("substr(filepath, 1, ?) = ?", utf8.RuneCountInString(dir), dir).
+		Scan(ctx, &size)
+	if err != nil {
+		return 0, errors.Wrapf(err, "size of %s", lp.Filepath)
+	}
+	return size, nil
 }
 
 // databaseBytes is the database file plus its write-ahead log.

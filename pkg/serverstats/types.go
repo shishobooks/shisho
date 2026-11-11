@@ -65,6 +65,12 @@ type Volume struct {
 	TotalBytes uint64       `json:"total_bytes"`
 	UsedBytes  uint64       `json:"used_bytes"`
 	FreeBytes  uint64       `json:"free_bytes"`
+	// LibraryBytes, DatabaseBytes, and CacheBytes are how much of UsedBytes
+	// is Shisho's: library files (including folders hidden from the viewer),
+	// the database, and the caches. The rest is other data on the volume.
+	LibraryBytes  int64 `json:"library_bytes"`
+	DatabaseBytes int64 `json:"database_bytes"`
+	CacheBytes    int64 `json:"cache_bytes"`
 }
 
 // VolumePath is one of Shisho's paths on a Volume. Name is the Library's
@@ -73,6 +79,10 @@ type VolumePath struct {
 	Kind string `json:"kind" tstype:"VolumePathKind"`
 	Name string `json:"name"`
 	Path string `json:"path"`
+	// SizeBytes is what Shisho keeps there: the stored size of the library
+	// files under a library path, the database in the data directory, or
+	// every cache in the cache directory.
+	SizeBytes int64 `json:"size_bytes"`
 }
 
 // CacheSize is one cache's size, as Administration > Cache shows it.

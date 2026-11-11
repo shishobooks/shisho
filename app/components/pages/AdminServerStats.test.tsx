@@ -70,19 +70,42 @@ const stats: StatsResponse = {
   volumes: [
     {
       paths: [
-        { kind: "library", name: "Comics", path: "/media/comics" },
-        { kind: "library", name: "Fiction", path: "/media/fiction" },
-        { kind: "data", name: "Data", path: "/config" },
+        {
+          kind: "library",
+          name: "Comics",
+          path: "/media/comics",
+          size_bytes: 3 * 1024 ** 3,
+        },
+        {
+          kind: "library",
+          name: "Fiction",
+          path: "/media/fiction",
+          size_bytes: 200 * 1024 ** 3,
+        },
+        { kind: "data", name: "Data", path: "/config", size_bytes: 1024 ** 3 },
       ],
       total_bytes: 1000 * 1024 ** 3,
       used_bytes: 750 * 1024 ** 3,
       free_bytes: 250 * 1024 ** 3,
+      library_bytes: 203 * 1024 ** 3,
+      database_bytes: 1024 ** 3,
+      cache_bytes: 0,
     },
     {
-      paths: [{ kind: "cache", name: "Cache", path: "/cache" }],
+      paths: [
+        {
+          kind: "cache",
+          name: "Cache",
+          path: "/cache",
+          size_bytes: 10 * 1024 ** 3,
+        },
+      ],
       total_bytes: 100 * 1024 ** 3,
       used_bytes: 10 * 1024 ** 3,
       free_bytes: 90 * 1024 ** 3,
+      library_bytes: 0,
+      database_bytes: 0,
+      cache_bytes: 10 * 1024 ** 3,
     },
   ],
   database_bytes: 48 * 1024 ** 2,
@@ -176,7 +199,7 @@ describe("AdminServerStats", () => {
     const fiction = within(libraries).getByRole("row", { name: /Fiction/ });
     expect(within(fiction).getByText("18,307")).toBeInTheDocument();
     expect(
-      within(fiction).getByText("EPUB 18,000 · M4B 400 · 7 supplements"),
+      within(fiction).getByText("18,000 EPUB · 400 M4B · 7 supplements"),
     ).toBeInTheDocument();
     expect(within(fiction).getByText("4,100")).toBeInTheDocument();
     expect(within(fiction).getByText("200 GB")).toBeInTheDocument();
@@ -196,10 +219,67 @@ describe("AdminServerStats", () => {
     expect(
       within(volumes[0]).getByText("750 GB used of 1000 GB"),
     ).toBeInTheDocument();
-    expect(
-      within(volumes[0]).getByRole("progressbar", { name: /used/i }),
-    ).toHaveAttribute("aria-valuenow", "75");
     expect(within(volumes[1]).getByText("/cache")).toBeInTheDocument();
+  });
+
+  it("breaks each volume's used space into what Shisho keeps there", () => {
+    renderPage();
+
+    const volumes = within(section("Disk Space")).getAllByRole("listitem", {
+      name: /volume/i,
+    });
+    const legend = within(volumes[0]).getByRole("list", {
+      name: "Volume 1 space",
+    });
+    const entry = (name: string) =>
+      within(legend).getByText(name).closest("li") as HTMLElement;
+    expect(entry("Libraries")).toHaveTextContent("203 GB");
+    expect(entry("Database")).toHaveTextContent("1 GB");
+    // The rest of the used space is other data on the volume.
+    expect(entry("Other")).toHaveTextContent("546 GB");
+    expect(entry("Free")).toHaveTextContent("250 GB");
+    // A kind with nothing on this volume is left out.
+    expect(within(legend).queryByText("Cache")).not.toBeInTheDocument();
+
+    // Each path says how much it holds.
+    const fiction = within(volumes[0])
+      .getByText("/media/fiction")
+      .closest("li") as HTMLElement;
+    expect(fiction).toHaveTextContent("200 GB");
+
+    const cacheLegend = within(volumes[1]).getByRole("list", {
+      name: "Volume 2 space",
+    });
+    expect(within(cacheLegend).queryByText("Other")).not.toBeInTheDocument();
+    expect(within(cacheLegend).getByText("Cache")).toBeInTheDocument();
+  });
+
+  it("caps Shisho's share at the used space when files are compressed", () => {
+    query = loaded({
+      ...stats,
+      volumes: [
+        {
+          paths: [],
+          total_bytes: 100 * 1024 ** 3,
+          used_bytes: 40 * 1024 ** 3,
+          free_bytes: 60 * 1024 ** 3,
+          // More than the volume uses, as on a compressed filesystem.
+          library_bytes: 50 * 1024 ** 3,
+          database_bytes: 0,
+          cache_bytes: 0,
+        },
+      ],
+    });
+    renderPage();
+
+    const legend = within(section("Disk Space")).getByRole("list", {
+      name: "Volume 1 space",
+    });
+    expect(within(legend).queryByText("Other")).not.toBeInTheDocument();
+    // The legend still states the stored size.
+    expect(
+      within(legend).getByText("Libraries").closest("li"),
+    ).toHaveTextContent("50 GB");
   });
 
   it("shows a volume's space even when none of its paths are listed", () => {
@@ -211,12 +291,18 @@ describe("AdminServerStats", () => {
           total_bytes: 100 * 1024 ** 3,
           used_bytes: 40 * 1024 ** 3,
           free_bytes: 60 * 1024 ** 3,
+          library_bytes: 10 * 1024 ** 3,
+          database_bytes: 0,
+          cache_bytes: 0,
         },
         {
           paths: [],
           total_bytes: 10 * 1024 ** 3,
           used_bytes: 1 * 1024 ** 3,
           free_bytes: 9 * 1024 ** 3,
+          library_bytes: 0,
+          database_bytes: 0,
+          cache_bytes: 0,
         },
       ],
     });
@@ -227,7 +313,9 @@ describe("AdminServerStats", () => {
     });
     expect(volumes).toHaveLength(2);
     expect(within(volumes[0]).getByText("60 GB free")).toBeInTheDocument();
-    expect(within(volumes[0]).queryByRole("list")).not.toBeInTheDocument();
+    expect(
+      within(volumes[0]).queryByRole("list", { name: "Volume 1 paths" }),
+    ).not.toBeInTheDocument();
     expect(
       within(volumes[0]).getByText("Holds only library folders you can't see."),
     ).toBeInTheDocument();
@@ -257,7 +345,7 @@ describe("AdminServerStats", () => {
     expect(within(allTime).getByText("130")).toBeInTheDocument();
     expect(within(reading).getByText("3")).toBeInTheDocument();
     expect(
-      within(reading).getByText(/never broken down by user or by book/i),
+      within(reading).getByText("Totals across every user."),
     ).toBeInTheDocument();
   });
 

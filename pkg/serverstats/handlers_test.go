@@ -436,6 +436,71 @@ func TestServerStats_VolumesReportEachMountOnce(t *testing.T) {
 	}, resp.Volumes)
 }
 
+func (f *statsFixture) fileAt(book *models.Book, path string, size int64) {
+	f.t.Helper()
+	f.insert(&models.File{
+		LibraryID:     book.LibraryID,
+		BookID:        book.ID,
+		Filepath:      path,
+		FileType:      models.FileTypeEPUB,
+		FileRole:      models.FileRoleMain,
+		FilesizeBytes: size,
+	})
+}
+
+// Each volume says how much of it is Shisho's: library files, the
+// database, and the caches. Each listed path says how much it holds.
+func TestServerStats_VolumesSayWhatShishoKeepsOnThem(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "shisho.db")
+	require.NoError(t, os.WriteFile(dbPath, make([]byte, 4000), 0o600))
+	f.h.databasePath = dbPath
+	f.h.cacheDir = "/fast/cache"
+	f.h.caches = fakeCaches{
+		{ID: "downloads", Name: "Downloads", SizeBytes: 300},
+		{ID: "cbz_pages", Name: "CBZ Pages", SizeBytes: 50},
+	}
+	f.h.statVolume = func(path string, _ bool) (volumeStat, error) {
+		if path == "/fast/cache" {
+			return volumeStat{id: 2, total: 5000, free: 4000, used: 1000}, nil
+		}
+		return volumeStat{id: 1, total: 100000, free: 25000, used: 75000}, nil
+	}
+	added := time.Date(2026, time.March, 3, 0, 0, 0, 0, time.UTC)
+	books := f.library("Books", "/media/books", "/media/más libros")
+	dune := f.book(books, "Dune", added)
+	f.fileAt(dune, "/media/books/Dune/Dune.epub", 1000)
+	f.fileAt(dune, "/media/books/Dune/cover.jpg", 200)
+	f.fileAt(dune, "/media/más libros/Emma.epub", 30)
+	// A sibling folder whose name starts the same isn't inside /media/books.
+	f.fileAt(dune, "/media/books-extra/Other.epub", 7)
+	hidden := f.library("Hidden", "/media/hidden")
+	secret := f.book(hidden, "Secret", added)
+	f.fileAt(secret, "/media/hidden/Secret.epub", 500)
+	f.user.LibraryAccess = []*models.UserLibraryAccess{{UserID: f.user.ID, LibraryID: &books.ID}}
+
+	resp := f.mustGet()
+	require.Len(t, resp.Volumes, 2)
+	assert.Equal(t, Volume{
+		Paths: []VolumePath{
+			{Kind: VolumePathKindLibrary, Name: "Books", Path: "/media/books", SizeBytes: 1200},
+			{Kind: VolumePathKindLibrary, Name: "Books", Path: "/media/más libros", SizeBytes: 30},
+			{Kind: VolumePathKindData, Name: "Data", Path: dir, SizeBytes: 4000},
+		},
+		TotalBytes: 100000, UsedBytes: 75000, FreeBytes: 25000,
+		// The hidden library's files count toward the volume, unnamed.
+		LibraryBytes:  1730,
+		DatabaseBytes: 4000,
+	}, resp.Volumes[0])
+	assert.Equal(t, Volume{
+		Paths:      []VolumePath{{Kind: VolumePathKindCache, Name: "Cache", Path: "/fast/cache", SizeBytes: 350}},
+		TotalBytes: 5000, UsedBytes: 1000, FreeBytes: 4000,
+		CacheBytes: 350,
+	}, resp.Volumes[1])
+}
+
 func TestServerStats_VolumeThatCannotBeReadIsLeftOut(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)

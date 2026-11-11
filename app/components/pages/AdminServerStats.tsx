@@ -4,9 +4,9 @@ import { Link } from "react-router-dom";
 import LibraryGrowthChart from "@/components/library/LibraryGrowthChart";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
-import { Progress } from "@/components/ui/progress";
 import { useServerStats } from "@/hooks/queries/serverStats";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { cn } from "@/libraries/utils";
 import type {
   ContentCounts,
   ReadingPeriod,
@@ -66,11 +66,15 @@ const Stat = ({ label, value }: StatProps) => (
 const totalFiles = (counts: ContentCounts) =>
   counts.files.reduce((sum, f) => sum + f.count, 0) + counts.supplement_files;
 
-// "EPUB 18,000 · M4B 400 · 7 supplements"
+// "18,000 EPUB · 400 M4B · 7 supplements": most common first.
 const filesSummary = (counts: ContentCounts): string => {
-  const parts = counts.files.map(
-    (f) => `${fileTypeLabel(f.file_type)} ${f.count.toLocaleString()}`,
-  );
+  const parts = [...counts.files]
+    .sort(
+      (a, b) =>
+        b.count - a.count ||
+        fileTypeLabel(a.file_type).localeCompare(fileTypeLabel(b.file_type)),
+    )
+    .map((f) => `${f.count.toLocaleString()} ${fileTypeLabel(f.file_type)}`);
   if (counts.supplement_files > 0) {
     parts.push(formatCount(counts.supplement_files, "supplement"));
   }
@@ -121,10 +125,7 @@ const ReadingGroup = ({
 };
 
 const Reading = ({ stats }: { stats: StatsResponse }) => (
-  <Section
-    description="Totals across every user. Reading is never broken down by user or by book here."
-    title="Reading"
-  >
+  <Section description="Totals across every user." title="Reading">
     <div className="grid gap-6">
       <ReadingGroup
         label={String(stats.reading.year)}
@@ -242,48 +243,132 @@ const pathKindLabel: Record<VolumePathKind, string> = {
   cache: "Cache",
 };
 
+interface DiskSegment {
+  label: string;
+  bytes: number;
+  /** Share of the volume's total the bar draws, 0 to 100. */
+  percent: number;
+  swatch: string;
+}
+
+// What a volume's used space is made of. Shisho's kinds come from stored
+// file sizes and cache sizes, which can add up to more than the volume uses
+// on a compressed filesystem; the bar then scales them to fit the used
+// space, and the legend still states their sizes.
+const diskSegments = (volume: Volume): DiskSegment[] => {
+  const kinds = [
+    {
+      label: "Libraries",
+      bytes: volume.library_bytes,
+      swatch: "bg-disk-library",
+    },
+    {
+      label: "Database",
+      bytes: volume.database_bytes,
+      swatch: "bg-disk-database",
+    },
+    { label: "Cache", bytes: volume.cache_bytes, swatch: "bg-disk-cache" },
+  ].filter((k) => k.bytes > 0);
+  const total = volume.total_bytes;
+  const shisho = kinds.reduce((sum, k) => sum + k.bytes, 0);
+  const scale = shisho > volume.used_bytes ? volume.used_bytes / shisho : 1;
+  const percent = (bytes: number) => (total > 0 ? (bytes / total) * 100 : 0);
+  const segments = kinds.map((k) => ({
+    ...k,
+    percent: percent(k.bytes * scale),
+  }));
+  const other = volume.used_bytes - Math.min(shisho, volume.used_bytes);
+  if (other > 0) {
+    segments.push({
+      label: "Other",
+      bytes: other,
+      percent: percent(other),
+      swatch: "bg-muted-foreground/40",
+    });
+  }
+  return segments;
+};
+
 const VolumeItem = ({ volume, index }: { volume: Volume; index: number }) => {
   const headingId = useId();
-  const percentUsed =
-    volume.total_bytes > 0
-      ? Math.round((volume.used_bytes / volume.total_bytes) * 100)
-      : 0;
+  const name = `Volume ${index + 1}`;
+  const segments = diskSegments(volume);
   return (
     <li aria-labelledby={headingId} className="py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="text-sm font-medium" id={headingId}>
-          Volume {index + 1}
+          {name}
         </h3>
         <span className="text-sm text-muted-foreground">
           {formatFileSize(volume.free_bytes)} free
         </span>
       </div>
-      <Progress
-        aria-label={`Volume ${index + 1} space used`}
-        className="mt-2"
-        value={percentUsed}
-      />
+      {/* The legend below carries every figure, so the bar is decoration
+          for screen readers. A 2px gap in the surface color separates the
+          segments; a tiny one still shows as a sliver. */}
+      <div
+        aria-hidden="true"
+        className="mt-2 flex h-3 gap-0.5 overflow-hidden rounded-full"
+      >
+        {segments.map((seg) => (
+          <div
+            className={cn("min-w-[3px] shrink-0", seg.swatch)}
+            key={seg.label}
+            style={{ width: `${seg.percent}%` }}
+            title={`${seg.label}: ${formatFileSize(seg.bytes)}`}
+          />
+        ))}
+        <div className="flex-1 bg-muted" />
+      </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {`${formatFileSize(volume.used_bytes)} used of ${formatFileSize(volume.total_bytes)}`}
       </p>
+      <ul
+        aria-label={`${name} space`}
+        className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs"
+      >
+        {[
+          ...segments,
+          {
+            label: "Free",
+            bytes: volume.free_bytes,
+            percent: 0,
+            swatch: "bg-muted border border-border",
+          },
+        ].map((seg) => (
+          <li className="flex items-center gap-1.5" key={seg.label}>
+            <span
+              aria-hidden="true"
+              className={cn("size-2.5 shrink-0 rounded-sm", seg.swatch)}
+            />
+            <span className="text-muted-foreground">{seg.label}</span>
+            <span className="tabular-nums">{formatFileSize(seg.bytes)}</span>
+          </li>
+        ))}
+      </ul>
       {volume.paths.length === 0 && (
         <p className="mt-2 text-xs text-muted-foreground">
           Holds only library folders you can't see.
         </p>
       )}
       {volume.paths.length > 0 && (
-        <ul className="mt-2 space-y-1">
+        <ul aria-label={`${name} paths`} className="mt-3 space-y-1">
           {volume.paths.map((p) => (
             <li
-              className="flex flex-wrap gap-x-2 text-xs min-w-0"
+              className="flex items-baseline justify-between gap-x-4 text-xs min-w-0"
               key={`${p.kind}:${p.path}`}
             >
-              <span className="text-muted-foreground">
-                {p.kind === "library"
-                  ? `${pathKindLabel[p.kind]}: ${p.name}`
-                  : pathKindLabel[p.kind]}
+              <span className="flex flex-wrap gap-x-2 min-w-0">
+                <span className="text-muted-foreground">
+                  {p.kind === "library"
+                    ? `${pathKindLabel[p.kind]}: ${p.name}`
+                    : pathKindLabel[p.kind]}
+                </span>
+                <span className="font-mono break-all min-w-0">{p.path}</span>
               </span>
-              <span className="font-mono break-all min-w-0">{p.path}</span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {formatFileSize(p.size_bytes)}
+              </span>
             </li>
           ))}
         </ul>
