@@ -133,7 +133,8 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
     <li className="flex items-center gap-3 px-3 py-2">
       <HistoryCover entry={entry} />
       <div className="min-w-0 flex-1">
-        <p className="min-w-0 text-sm font-medium">
+        {/* TruncatedText renders a div, which a <p> can't hold. */}
+        <div className="min-w-0 text-sm font-medium">
           {entry.book ? (
             <Link
               className="block min-w-0 hover:underline"
@@ -144,7 +145,7 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
           ) : (
             title
           )}
-        </p>
+        </div>
         {entry.authors.length > 0 && (
           <p className="truncate text-xs text-muted-foreground">
             {entry.authors.join(", ")}
