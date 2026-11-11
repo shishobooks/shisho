@@ -106,6 +106,24 @@ return {
         assert_eq(Versions.offer(installed, { refusing }), { server = "http://a", version = "0.9.0", hash = "new" })
     end,
 
+    ["never offers from a server that needs a new sign-in"] = function()
+        -- Its last answer may be stale, and its download needs a sign-in.
+        local signed_out = server("http://a", "0.9.0")
+        signed_out.needs_login = true
+        assert_eq(Versions.offer(installed, { signed_out }), nil)
+
+        local same_build = server("http://a", "0.7.0", 1, "a-build")
+        same_build.needs_login = true
+        assert_eq(Versions.offer(installed, { same_build }), nil)
+
+        -- What it last accepted still counts against another server's offer.
+        local strict = server("http://a", "0.7.0", 1, "installed", 1, 1)
+        strict.needs_login = true
+        local offer, blocked = Versions.offer(installed, { strict, server("http://b", "0.9.0", 2, nil, 1, 2) })
+        assert_eq(offer, nil)
+        assert_eq(blocked.upgrade, "http://a")
+    end,
+
     ["offers nothing before any server has answered"] = function()
         assert_eq(Versions.offer(installed, {}), nil)
         assert_eq(Versions.offer(installed, { { url = "http://a" } }), nil)

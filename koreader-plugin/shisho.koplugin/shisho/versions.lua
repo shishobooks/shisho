@@ -80,6 +80,9 @@ hasn't yet).
 - A build of the same version with a different hash is offered only by the
   server the plugin was last installed from, so two dev servers never swap
   it back and forth.
+- A server that needs a new sign-in offers nothing: its last answer may be
+  stale, and its download needs the sign-in. What it last accepted still
+  counts.
 
 Returns the offer { server, version, hash }, or nil and, when a newer plugin
 exists that some server would refuse, { server, version, upgrade }, naming
@@ -105,7 +108,7 @@ function Versions.offer(installed, servers)
     local best, blocked
     for __, server in ipairs(known) do
         local version = server.info.plugin_version
-        if Versions.compare(version, installed.version) > 0 then
+        if not server.needs_login and Versions.compare(version, installed.version) > 0 then
             local refused_by = refuser(server.info.plugin_protocol)
             if not refused_by then
                 local cmp = best and Versions.compare(version, best.info.plugin_version) or 1
@@ -122,7 +125,7 @@ function Versions.offer(installed, servers)
     end
 
     for __, server in ipairs(known) do
-        if Urls.same(server.url, installed.installed_from)
+        if not server.needs_login and Urls.same(server.url, installed.installed_from)
                 and Versions.compare(server.info.plugin_version, installed.version) == 0
                 and server.info.plugin_hash ~= installed.hash
                 and not refuser(server.info.plugin_protocol) then
