@@ -135,7 +135,7 @@ function Versions.offer(installed, servers)
     return nil, blocked
 end
 
--- choose is what Install plugin from a server installs: whatever plugin that
+-- choose is what Reinstall plugin from this server installs: whatever plugin that
 -- server serves, older or newer, because the user picked it on purpose. It
 -- then becomes the server the plugin was installed from. Returns nil for a
 -- server not signed in to.

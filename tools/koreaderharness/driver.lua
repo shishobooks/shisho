@@ -423,9 +423,14 @@ commands["plugin-menu"] = function()
         local entries = {}
         plugin:addToMainMenu(entries)
         local items = entries.shisho.sub_item_table_func()
+        -- A submenu's items read "Parent > Item".
         local texts = {}
         for __, item in ipairs(items) do
-            table.insert(texts, item.text_func and item.text_func() or item.text)
+            local text = item.text_func and item.text_func() or item.text
+            table.insert(texts, text)
+            for __, sub in ipairs(item.sub_item_table or {}) do
+                table.insert(texts, text .. " > " .. (sub.text_func and sub.text_func() or sub.text))
+            end
         end
         -- The file manager's own Tools tab, as KOReader sorts it.
         local tools = {}

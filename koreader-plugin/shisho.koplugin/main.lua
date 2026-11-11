@@ -411,19 +411,25 @@ end
 -- Menu -------------------------------------------------------------------------
 
 function Shisho:serverMenu(server)
-    return {
+    local items = {
         {
             text = _("Sign in again"),
             keep_menu_open = true,
             callback = function() self:showSignIn(server.url) end,
         },
-        {
-            text = _("Install plugin from this server"),
+    }
+    -- Choosing which server's plugin to run only matters with more than
+    -- one; with one, Check for plugin update covers it.
+    if #self.state:servers() > 1 then
+        table.insert(items, {
+            text = _("Reinstall plugin from this server"),
             keep_menu_open = true,
             callback = function()
                 NetworkMgr:runWhenOnline(function() self:installFrom(server.url) end)
             end,
-        },
+        })
+    end
+    table.insert(items,
         {
             text = _("Remove server"),
             keep_menu_open = true,
@@ -438,8 +444,8 @@ function Shisho:serverMenu(server)
                     end,
                 })
             end,
-        },
-    }
+        })
+    return items
 end
 
 function Shisho:addToMainMenu(menu_items)
@@ -469,22 +475,6 @@ function Shisho:addToMainMenu(menu_items)
                 keep_menu_open = true,
                 callback = function()
                     NetworkMgr:runWhenOnline(function() self:checkForUpdate(true) end)
-                end,
-            })
-            table.insert(items, {
-                text = _("Install plugin from"),
-                enabled_func = function() return #self.state:servers() > 0 end,
-                sub_item_table_func = function()
-                    local choices = {}
-                    for __, server in ipairs(self.state:servers()) do
-                        table.insert(choices, {
-                            text = Urls.label(server.url),
-                            callback = function()
-                                NetworkMgr:runWhenOnline(function() self:installFrom(server.url) end)
-                            end,
-                        })
-                    end
-                    return choices
                 end,
             })
             table.insert(items, {

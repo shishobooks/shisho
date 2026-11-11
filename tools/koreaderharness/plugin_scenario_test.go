@@ -279,7 +279,7 @@ func TestPluginUpdatesFromItsServer(t *testing.T) {
 	assert.Nil(t, upToDate.Plugin.Offer)
 	assert.Contains(t, strings.Join(upToDate.Shown, " "), "up to date")
 
-	// Install plugin from a server installs on purpose.
+	// Reinstall plugin from this server installs on purpose.
 	reinstalled := s.run(Args{Command: "plugin-update", Online: true, From: s.url})
 	assert.True(t, reinstalled.Plugin.Installed, reinstalled.Plugin.Message)
 	assert.True(t, reinstalled.Plugin.Restart)
@@ -315,4 +315,28 @@ func TestPluginMenuLeadsTools(t *testing.T) {
 
 	require.NotEmpty(t, menu.Plugin.Tools)
 	assert.Equal(t, "Shisho", menu.Plugin.Tools[0], "tools: %v", menu.Plugin.Tools)
+}
+
+// Reinstalling from a server only matters with more than one, so the menu
+// offers it only then.
+func TestPluginMenuOffersReinstallOnlyWithSeveralServers(t *testing.T) {
+	s := newScenario(t)
+	bundle, err := koreaderplugin.DefaultBundle()
+	require.NoError(t, err)
+	s.installPlugin(bundle.Zip())
+	state := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
+	require.NoError(t, os.MkdirAll(filepath.Dir(state), 0o755))
+
+	require.NoError(t, os.WriteFile(state, []byte(`return { servers = { { url = "http://a.example" } } }`), 0o644))
+	one := s.run(Args{Command: "plugin-menu"})
+	assert.Equal(t, []string{
+		"a.example", "a.example > Sign in again", "a.example > Remove server",
+		"Add a server", "Check for plugin update", "Plugin version " + one.Plugin.Version,
+	}, one.Plugin.Menu)
+
+	require.NoError(t, os.WriteFile(state, []byte(`return { servers = { { url = "http://a.example" }, { url = "http://b.example" } } }`), 0o644))
+	two := s.run(Args{Command: "plugin-menu"})
+	assert.Contains(t, two.Plugin.Menu, "a.example > Reinstall plugin from this server")
+	assert.Contains(t, two.Plugin.Menu, "b.example > Reinstall plugin from this server")
+	assert.NotContains(t, two.Plugin.Menu, "Install plugin from")
 }

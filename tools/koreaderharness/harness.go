@@ -96,8 +96,11 @@ type PluginReport struct {
 	Installed      bool           `json:"installed"`
 	Restart        bool           `json:"restart"`
 	PromptedUpdate string         `json:"prompted_update"`
-	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu.
+	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu,
+	// and Menu what the Shisho menu does, with a submenu's items as
+	// "Parent > Item".
 	Tools []string `json:"tools"`
+	Menu  []string `json:"menu"`
 	Offer *struct {
 		Server  string `json:"server"`
 		Version string `json:"version"`
