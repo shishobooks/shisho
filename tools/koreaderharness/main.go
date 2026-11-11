@@ -43,9 +43,10 @@ const usage = `Drives a real, headless KOReader against a running Shisho. Every 
   plugin-install --zip ZIP                                unzip a plugin zip into KOReader's plugins folder
   plugin-launch  [--online]                               start KOReader, as on first launch with or without Wi-Fi
   plugin-signin  --server URL (--code C | --username U --password P)
+  plugin-menu    [--online]                               the Shisho menu under Tools, and what it reads
   plugin-update  [--from URL] [--confirm]                 check for an update, or install from a server
   lua-test                                                run the plugin's Lua unit tests
-  Each plugin command reports the plugin's servers, its version and hash, and
+  Each plugin command takes --out PNG to screenshot KOReader as it ends, and reports the plugin's servers, its version and hash, and
   KOReader's OPDS catalog list. A plugin zip from a Device's page signs in to
   the URL its owner reached Shisho at; download it from the API URL mise start
   prints, which the container can reach.

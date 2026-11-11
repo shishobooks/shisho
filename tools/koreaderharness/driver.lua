@@ -382,6 +382,7 @@ local function withPlugin(fn)
     end
     local extra = fn and fn(plugin) or {}
     stepUI()
+    screenshot(args.screenshot)
     extra.restart = restart
     extra.prompted = confirm_box and confirm_box.text or nil
     local report, opds = pluginReport(plugin, extra)
@@ -403,6 +404,27 @@ commands["plugin-signin"] = function()
             ok, outcome, message = plugin:signInWithPassword(args.server, args.username, args.password)
         end
         return { signed_in = ok, outcome = outcome, message = message }
+    end)
+end
+
+-- The Shisho menu under Tools, as KOReader's touch menu shows it, with what
+-- each item reads.
+commands["plugin-menu"] = function()
+    withPlugin(function(plugin)
+        local entries = {}
+        plugin:addToMainMenu(entries)
+        local items = entries.shisho.sub_item_table_func()
+        local texts = {}
+        for __, item in ipairs(items) do
+            table.insert(texts, item.text_func and item.text_func() or item.text)
+        end
+        local TouchMenu = require("ui/widget/touchmenu")
+        UIManager:show(TouchMenu:new{
+            width = Screen:getWidth(),
+            tab_item_table = { { text = entries.shisho.text, icon = "appbar.tools", table.unpack(items) } },
+            show_parent = plugin.ui,
+        })
+        return { menu = texts }
     end)
 end
 
