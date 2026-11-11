@@ -188,6 +188,23 @@ func TestListLibraries_NoLibraryAccessListsNothing(t *testing.T) {
 	assert.JSONEq(t, `{"items":[],"total":0}`, f.expect(nowhere, http.MethodGet, "/api/libraries", "", http.StatusOK))
 }
 
+// The built-in viewer role holds no Libraries Read, so it can't list
+// libraries or read one with its folder paths; the editor role still can.
+func TestLibraryRoutes_BuiltInViewerForbiddenEditorAllowed(t *testing.T) {
+	t.Parallel()
+	f := newRoutePermissionsFixture(t)
+	viewer := f.user("viewer", models.RoleViewer)
+	editor := f.user("editor", models.RoleEditor)
+	libraryPath := fmt.Sprintf("/api/libraries/%d", f.libA.ID)
+
+	f.expect(viewer, http.MethodGet, "/api/libraries", "", http.StatusForbidden)
+	f.expect(viewer, http.MethodGet, libraryPath, "", http.StatusForbidden)
+	f.expect(viewer, http.MethodGet, "/api/user/libraries", "", http.StatusOK)
+
+	f.expect(editor, http.MethodGet, "/api/libraries", "", http.StatusOK)
+	assert.Contains(t, f.expect(editor, http.MethodGet, libraryPath, "", http.StatusOK), "/secret/alpha")
+}
+
 // Library languages are book data: Books Read and library access reach them
 // without Libraries Read.
 func TestLibraryLanguages_RequireBooksReadNotLibrariesRead(t *testing.T) {
