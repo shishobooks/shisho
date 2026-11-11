@@ -350,7 +350,11 @@ end
 
 -- withPlugin starts KOReader's file manager with the plugin loaded, online
 -- or not, runs fn, and reports. KOReader's restart is recorded, not done.
-local function withPlugin(fn)
+-- Wi-Fi's NetworkConnected reaches the plugin before fn, as at launch, or
+-- with network_after, KOReader starts offline and Wi-Fi comes on just before
+-- fn, which runs before the event arrives, as when a menu item turns Wi-Fi
+-- on and runs its action before KOReader's event loop delivers the event.
+local function withPlugin(fn, network_after)
     -- Loading NetworkMgr broadcasts NetworkConnected when the machine
     -- running the container is online. Drop that, so Wi-Fi is whatever the
     -- command says, and deliver the event below.
@@ -360,7 +364,7 @@ local function withPlugin(fn)
         return broadcast(ui, event)
     end
     local NetworkMgr = require("ui/network/manager")
-    local online = args.online and true or false
+    local online = args.online and not network_after and true or false
     NetworkMgr.isOnline = function() return online end
     NetworkMgr.isConnected = function() return online end
     NetworkMgr.isWifiOn = function() return online end
@@ -376,12 +380,17 @@ local function withPlugin(fn)
     local fm = FileManager.instance
     local plugin = fm and fm.shisho
     if not plugin then fail("the KOReader plugin didn't load") end
-    if online then
+    if online and not network_after then
         plugin:onNetworkConnected()
         stepUI()
     end
+    if args.online and network_after then online = true end
     local extra = fn and fn(plugin) or {}
     stepUI()
+    if online and network_after then
+        plugin:onNetworkConnected()
+        stepUI()
+    end
     screenshot(args.screenshot)
     extra.restart = restart
     extra.prompted = confirm_box and confirm_box.text or nil
@@ -418,13 +427,24 @@ commands["plugin-menu"] = function()
         for __, item in ipairs(items) do
             table.insert(texts, item.text_func and item.text_func() or item.text)
         end
+        -- The file manager's own Tools tab, as KOReader sorts it.
+        local tools = {}
+        local menu = plugin.ui.menu
+        menu:setUpdateItemTable()
+        for __, tab in ipairs(menu.tab_item_table) do
+            if tab.icon == "appbar.tools" then
+                for __, item in ipairs(tab) do
+                    table.insert(tools, item.text_func and item.text_func() or item.text or "----")
+                end
+            end
+        end
         local TouchMenu = require("ui/widget/touchmenu")
         UIManager:show(TouchMenu:new{
             width = Screen:getWidth(),
             tab_item_table = { { text = entries.shisho.text, icon = "appbar.tools", table.unpack(items) } },
             show_parent = plugin.ui,
         })
-        return { menu = texts }
+        return { menu = texts, tools = tools }
     end)
 end
 
@@ -444,7 +464,7 @@ commands["plugin-update"] = function()
             stepUI()
         end
         return out
-    end)
+    end, true)
 end
 
 local command = commands[args.command]

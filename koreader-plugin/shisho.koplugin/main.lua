@@ -26,6 +26,22 @@ local logger = require("logger")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
+-- KOReader lists a menu item it has no place for after More tools, which on
+-- an e-reader is usually the Tools tab's second page. So the plugin adds
+-- itself to the top of Tools in both menus' order before either is built.
+for __, module in ipairs({ "ui/elements/filemanager_menu_order", "ui/elements/reader_menu_order" }) do
+    local ok, order = pcall(require, module)
+    if ok and type(order) == "table" and type(order.tools) == "table" then
+        local listed = false
+        for __, id in ipairs(order.tools) do
+            if id == "shisho" then listed = true end
+        end
+        if not listed then
+            table.insert(order.tools, 1, "shisho")
+        end
+    end
+end
+
 local Shisho = WidgetContainer:extend{
     name = "shisho",
     is_doc_only = false,
@@ -296,10 +312,21 @@ end
 -- checkForUpdate offers an update when a server has one for every server
 -- signed in. Before any sign-in there's nothing to check.
 function Shisho:checkForUpdate(interactive)
+    -- Check for plugin update can turn Wi-Fi on and run before a paired
+    -- zip's own sign-in, which waits for Wi-Fi's event, so it signs in first.
+    local dialog_before = self.sign_in_dialog
+    if self:pairingAction() == "sign_in" then
+        self:pairFromZip()
+    end
     if #self.state:servers() == 0 then
-        if interactive then self:notify(_("Sign in to a Shisho server first.")) end
+        -- A failed sign-in from the zip already opened sign-in.
+        if interactive and self.sign_in_dialog == dialog_before then
+            self:showSignIn(self.stamps.pairing and self.stamps.pairing.server_url or "",
+                _("Sign in to a Shisho server to check for plugin updates."))
+        end
         return nil
     end
+    self.checked_at = os.time()
     self:checkIn(not interactive)
     local offer, blocked = Versions.offer(self:installed(), self.state:servers())
     self.offer = offer
@@ -365,12 +392,17 @@ end
 
 -- onNetworkConnected runs a moment after the event, so the rest of
 -- KOReader handles Wi-Fi coming on first.
+-- A check that ran within RECHECK_AFTER seconds, such as the one Check for
+-- plugin update just ran after turning Wi-Fi on, isn't repeated.
+local RECHECK_AFTER = 60
+
 function Shisho:onNetworkConnected()
     UIManager:scheduleIn(1, function()
         if self:pairingAction() == "sign_in" then
             self:pairFromZip()
         end
-        if #self.state:servers() > 0 then
+        local recent = self.checked_at and os.time() - self.checked_at < RECHECK_AFTER
+        if #self.state:servers() > 0 and not recent then
             self:checkForUpdate(false)
         end
     end)

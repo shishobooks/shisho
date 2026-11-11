@@ -219,7 +219,8 @@ func TestPluginBeforeAnySignInChecksForNoUpdate(t *testing.T) {
 	assert.Nil(t, launched.Plugin.Offer)
 	checked := s.run(Args{Command: "plugin-update", Online: true})
 	assert.Nil(t, checked.Plugin.Offer)
-	assert.Contains(t, strings.Join(checked.Shown, " "), "Sign in to a Shisho server first")
+	require.NotNil(t, checked.Plugin.SignInURL, "checking with no server opens sign-in")
+	assert.Empty(t, *checked.Plugin.SignInURL, "a release zip knows no server")
 }
 
 // olderBuild is the embedded plugin with one more file, zipped as another
@@ -284,4 +285,34 @@ func TestPluginUpdatesFromItsServer(t *testing.T) {
 	assert.True(t, reinstalled.Plugin.Restart)
 	assert.Equal(t, current.Hash, reinstalled.Plugin.Hash)
 	assert.Equal(t, s.containerServer(), reinstalled.Plugin.InstalledFrom)
+}
+
+// Check for plugin update turns Wi-Fi on and runs before the paired zip's own
+// sign-in, which waits for Wi-Fi's event. It signs in from the zip first,
+// rather than saying to sign in and then signing in.
+func TestPluginUpdateCheckSignsInFromTheZipFirst(t *testing.T) {
+	s := newScenario(t)
+	s.installPlugin(s.devicePageZip())
+
+	checked := s.run(Args{Command: "plugin-update", Online: true})
+
+	require.Len(t, checked.Plugin.Servers, 1, "shown: %v", checked.Shown)
+	shown := strings.Join(checked.Shown, " | ")
+	assert.Contains(t, shown, "Signed in to")
+	assert.NotContains(t, shown, "Sign in to a Shisho server first")
+	assert.Equal(t, 1, strings.Count(shown, "up to date"), "one check, not one per path: %s", shown)
+}
+
+// KOReader lists a plugin it doesn't know after More tools, often on the
+// Tools tab's second page. The plugin sits at the top of Tools instead.
+func TestPluginMenuLeadsTools(t *testing.T) {
+	s := newScenario(t)
+	bundle, err := koreaderplugin.DefaultBundle()
+	require.NoError(t, err)
+	s.installPlugin(bundle.Zip())
+
+	menu := s.run(Args{Command: "plugin-menu"})
+
+	require.NotEmpty(t, menu.Plugin.Tools)
+	assert.Equal(t, "Shisho", menu.Plugin.Tools[0], "tools: %v", menu.Plugin.Tools)
 }

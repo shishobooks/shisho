@@ -96,7 +96,9 @@ type PluginReport struct {
 	Installed      bool           `json:"installed"`
 	Restart        bool           `json:"restart"`
 	PromptedUpdate string         `json:"prompted_update"`
-	Offer          *struct {
+	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu.
+	Tools []string `json:"tools"`
+	Offer *struct {
 		Server  string `json:"server"`
 		Version string `json:"version"`
 		Hash    string `json:"hash"`
@@ -432,7 +434,7 @@ func parseResult(output []byte) (*Result, error) {
 	if plugin, ok := raw["plugin"]; ok {
 		var fields map[string]json.RawMessage
 		if err := json.Unmarshal(plugin, &fields); err == nil {
-			emptyTablesToArrays(fields, "servers")
+			emptyTablesToArrays(fields, "servers", "tools", "menu")
 			if raw["plugin"], err = json.Marshal(fields); err != nil {
 				return nil, errors.WithStack(err)
 			}
