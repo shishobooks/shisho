@@ -14,7 +14,7 @@ func TestDropViewerLibrariesRead(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := openMigrationTestDB(t)
-	migrator := migrateToBefore(ctx, t, db, "20261111000001")
+	migrator := migrateToBefore(ctx, t, db, "20261111000002")
 
 	permissions := func(role string) []string {
 		t.Helper()
@@ -63,7 +63,7 @@ func TestDropViewerLibrariesRead_AlreadyRemoved(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	db := openMigrationTestDB(t)
-	migrator := migrateToBefore(ctx, t, db, "20261111000001")
+	migrator := migrateToBefore(ctx, t, db, "20261111000002")
 
 	_, err := db.ExecContext(ctx, `
 		DELETE FROM permissions
