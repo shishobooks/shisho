@@ -16,6 +16,8 @@ import {
   type FilePositionResponse,
   type ListReadingHistoryQuery,
   type ListReadingHistoryResponse,
+  type ListReadingStatsFinishedQuery,
+  type ListReadingStatsFinishedResponse,
   type PageFlow,
   type ReadingStatsQuery,
   type ReadingStatsResponse,
@@ -152,6 +154,25 @@ export const useReadingStats = (
     queryKey: [QueryKey.ReadingStats, query],
     queryFn: ({ signal }) =>
       API.request("GET", "/reading/stats", null, query, signal),
+  });
+};
+
+// A page of the books the signed-in user finished in a year, or all time,
+// for Reading Stats. It sits under the Reading Stats key, so whatever
+// refetches Reading Stats refetches it too.
+export const useReadingStatsFinished = (
+  query: ListReadingStatsFinishedQuery,
+  options: Omit<
+    UseQueryOptions<ListReadingStatsFinishedResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ListReadingStatsFinishedResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingStats, "finished", query],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/stats/finished", null, query, signal),
   });
 };
 

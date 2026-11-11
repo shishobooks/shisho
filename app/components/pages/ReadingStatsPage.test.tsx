@@ -84,7 +84,6 @@ const emptyStats = (year: number | null): ReadingStatsResponse => ({
   kinds: [],
   ratings: [],
   places: [],
-  finished: [],
 });
 
 const busyStats = (year: number | null): ReadingStatsResponse => ({
@@ -124,23 +123,28 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
       listening_seconds: 0,
     },
   ],
-  finished: [
-    finishedRow(1, "Dune"),
-    finishedRow(2, "Gone", {
-      read_through: readThrough(2, { book_id: null, book_title: "Gone" }),
-      removed: true,
-      book: null,
-      seconds: null,
-    }),
-    finishedRow(3, "Elsewhere", { book: null }),
-  ],
 });
+
+const finishedRows = [
+  finishedRow(1, "Dune"),
+  finishedRow(2, "Gone", {
+    read_through: readThrough(2, { book_id: null, book_title: "Gone" }),
+    removed: true,
+    book: null,
+    seconds: null,
+  }),
+  finishedRow(3, "Elsewhere", { book: null }),
+];
 
 const renderPage = ({
   stats = busyStats,
+  finished = finishedRows,
+  finishedTotal = finished.length,
   initialEntry = "/reading-stats",
 }: {
   stats?: (year: number | null) => ReadingStatsResponse;
+  finished?: ReadingStatsFinishedBook[];
+  finishedTotal?: number;
   initialEntry?: string;
 } = {}) => {
   mockCoverDimensions();
@@ -169,6 +173,8 @@ const renderPage = ({
         });
       if (path === "/api/user/libraries") return Response.json([]);
       if (path === "/api/settings/user") return Response.json({});
+      if (path === "/api/reading/stats/finished")
+        return Response.json({ items: finished, total: finishedTotal });
       if (path === "/api/reading/stats") {
         const year = url.searchParams.get("year");
         return Response.json(stats(year ? Number(year) : null));
@@ -196,6 +202,14 @@ const renderPage = ({
     user: userEvent.setup({ advanceTimers: vi.advanceTimersByTime }),
   };
 };
+
+const finishedRequests = (
+  fetchMock: ReturnType<typeof renderPage>["fetchMock"],
+) =>
+  fetchMock.mock.calls
+    .map(([input]) => new URL(String(input), "http://localhost"))
+    .filter((url) => url.pathname === "/api/reading/stats/finished")
+    .map((url) => url.searchParams.toString());
 
 const statsRequests = (fetchMock: ReturnType<typeof renderPage>["fetchMock"]) =>
   fetchMock.mock.calls
@@ -300,5 +314,28 @@ describe("ReadingStatsPage", () => {
 
     // View-only: nothing on the list edits a Read-through.
     expect(within(list).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("pages through the finished books, and starts over on a new range", async () => {
+    const { fetchMock, user } = renderPage({ finishedTotal: 120 });
+
+    expect(
+      await screen.findByText("Showing 1-50 of 120 books"),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Go to next page" }));
+    await waitFor(() =>
+      expect(finishedRequests(fetchMock)).toEqual([
+        "year=2026&limit=50&offset=0",
+        "year=2026&limit=50&offset=50",
+      ]),
+    );
+
+    await user.click(screen.getByRole("combobox", { name: "Range" }));
+    await user.click(screen.getByRole("option", { name: "All time" }));
+    await waitFor(() =>
+      expect(finishedRequests(fetchMock).slice(-1)[0]).toBe(
+        "limit=50&offset=0",
+      ),
+    );
   });
 });

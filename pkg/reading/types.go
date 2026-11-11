@@ -232,9 +232,9 @@ type ReadingStatsResponse struct {
 	// first, each Book once.
 	Ratings []ReadingStatsRatingCount `json:"ratings"`
 	// Places is reading and listening time by where it happened, most first.
+	// The finished Read-throughs themselves page separately, through
+	// ListReadingStatsFinishedQuery.
 	Places []ReadingStatsPlace `json:"places"`
-	// Finished is every finished Read-through in the range, latest first.
-	Finished []ReadingStatsFinishedBook `json:"finished"`
 }
 
 // ReadingStatsTotals are the summary figures for the range.
@@ -323,6 +323,22 @@ type ReadingStatsPlace struct {
 	DeviceName       *string `json:"device_name" tstype:"string | null,required"`
 	ReadingSeconds   int     `json:"reading_seconds"`
 	ListeningSeconds int     `json:"listening_seconds"`
+}
+
+// ListReadingStatsFinishedQuery pages through the finished Read-throughs on
+// Reading Stats: those that ended in Year, or for all time when it's
+// omitted.
+type ListReadingStatsFinishedQuery struct {
+	Year   *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
+	Limit  int  `query:"limit" json:"limit,omitempty" default:"50" validate:"min=1,max=100"`
+	Offset int  `query:"offset" json:"offset,omitempty" validate:"min=0"`
+}
+
+// ListReadingStatsFinishedResponse is a page of the finished Read-throughs
+// on Reading Stats, latest first.
+type ListReadingStatsFinishedResponse struct {
+	Items []ReadingStatsFinishedBook `json:"items"`
+	Total int                        `json:"total"`
 }
 
 // ReadingStatsFinishedBook is one finished Read-through on Reading Stats.

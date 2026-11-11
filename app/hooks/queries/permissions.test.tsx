@@ -106,6 +106,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useFilePosition: requires("books:read", [1]),
   useReadingHistory: requires("books:read", [{ limit: 50, offset: 0 }]),
   useReadingStats: requires("books:read", [{ year: 2026 }]),
+  useReadingStatsFinished: requires("books:read", [{ year: 2026 }]),
   // entity-search
   usePeopleSearch: requires("people:read", [1, true, "a"]),
   useAuthorSearch: requires("people:read", [1, true, "a"]),

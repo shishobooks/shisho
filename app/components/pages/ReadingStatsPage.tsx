@@ -2,6 +2,9 @@ import { History } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import PaginationFooter, {
+  type PageChangeHandler,
+} from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
 import {
   BreakdownList,
@@ -24,11 +27,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ContentWidth } from "@/contexts/ContentWidth";
-import { useReadingStats } from "@/hooks/queries/reading";
+import {
+  useReadingStats,
+  useReadingStatsFinished,
+} from "@/hooks/queries/reading";
 import { useUserSettings } from "@/hooks/queries/settings";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import {
+  SCROLL_CLEAR_OF_NAV,
+  useSectionPaging,
+} from "@/hooks/useSectionPaging";
+import { parsePageParam, resetPaging } from "@/libraries/pagination";
 import type { ReadingStatsResponse } from "@/types";
-import { formatCount, formatDuration, formatRating } from "@/utils/format";
+import {
+  formatCount,
+  formatDuration,
+  formatRating,
+  formatShowingRange,
+} from "@/utils/format";
 import { todayDay } from "@/utils/readingStatus";
 
 const ALL_TIME = "all";
@@ -146,13 +162,80 @@ const StatsBody = ({ stats }: { stats: ReadingStatsResponse }) => {
         </StatsCard>
       </div>
 
-      <section aria-labelledby="reading-stats-finished">
-        <h2 className="mb-3 text-sm font-semibold" id="reading-stats-finished">
-          Finished
-        </h2>
-        <FinishedList rows={stats.finished} />
-      </section>
+      <FinishedSection year={stats.year} />
     </div>
+  );
+};
+
+const FINISHED_PER_PAGE = 50;
+
+// The books finished in the range, a page at a time, paged in the URL.
+const FinishedSection = ({ year }: { year: number | null }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const currentPage = parsePageParam(searchParams.get("page"));
+  const offset = (currentPage - 1) * FINISHED_PER_PAGE;
+  const finishedQuery = useReadingStatsFinished({
+    ...(year === null ? {} : { year }),
+    limit: FINISHED_PER_PAGE,
+    offset,
+  });
+  const total = finishedQuery.data?.total ?? 0;
+
+  const handlePageChange: PageChangeHandler = (page, options) => {
+    const params = new URLSearchParams(searchParams);
+    if (page === 1) params.delete("page");
+    else params.set("page", page.toString());
+    setSearchParams(params, options);
+  };
+  const { sectionRef, sectionPageChange } =
+    useSectionPaging<HTMLElement>(handlePageChange);
+
+  const renderList = () => {
+    if (finishedQuery.error && !finishedQuery.data) {
+      return (
+        <QueryError
+          fallback="Failed to load books finished"
+          query={finishedQuery}
+        />
+      );
+    }
+    if (!finishedQuery.data) {
+      return <LoadingSpinner />;
+    }
+    const showing = formatShowingRange(
+      offset,
+      FINISHED_PER_PAGE,
+      total,
+      "books",
+    );
+    return (
+      <>
+        {showing && (
+          <div className="mb-3 text-sm text-muted-foreground">{showing}</div>
+        )}
+        <FinishedList rows={finishedQuery.data.items} />
+        <PaginationFooter
+          className="mt-6"
+          currentPage={currentPage}
+          onPageChange={sectionPageChange}
+          totalIsCurrent={!finishedQuery.isPlaceholderData}
+          totalPages={Math.ceil(total / FINISHED_PER_PAGE)}
+        />
+      </>
+    );
+  };
+
+  return (
+    <section
+      aria-labelledby="reading-stats-finished"
+      className={SCROLL_CLEAR_OF_NAV}
+      ref={sectionRef}
+    >
+      <h2 className="mb-3 text-sm font-semibold" id="reading-stats-finished">
+        Finished
+      </h2>
+      {renderList()}
+    </section>
   );
 };
 
@@ -179,6 +262,7 @@ const ReadingStatsPage = () => {
     const params = new URLSearchParams(searchParams);
     if (value === String(currentYear)) params.delete("year");
     else params.set("year", value);
+    resetPaging(params);
     setSearchParams(params, { preventScrollReset: true });
   };
 

@@ -188,9 +188,23 @@ func month(resp ReadingStatsResponse, m int) ReadingStatsPeriod {
 	return ReadingStatsPeriod{}
 }
 
-func finishedTitles(resp ReadingStatsResponse) []string {
-	out := make([]string, 0, len(resp.Finished))
-	for _, row := range resp.Finished {
+func (f *statsFixture) finishedList(query string) ListReadingStatsFinishedResponse {
+	f.t.Helper()
+	return finishedListFor(f.t, f.api, query)
+}
+
+func finishedListFor(t *testing.T, api *readingAPI, query string) ListReadingStatsFinishedResponse {
+	t.Helper()
+	rec := api.do(http.MethodGet, "/stats/finished"+query, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp ListReadingStatsFinishedResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+func finishedTitles(resp ListReadingStatsFinishedResponse) []string {
+	out := make([]string, 0, len(resp.Items))
+	for _, row := range resp.Items {
 		out = append(out, row.Title)
 	}
 	return out
@@ -228,11 +242,15 @@ func TestStats_CountsRereadsAndDidNotFinishByTheDayTheyEnded(t *testing.T) {
 	assert.Equal(t, 1, month(year, 8).Finished)
 	assert.Equal(t, 0, month(year, 3).Finished, "Did Not Finish isn't a finish")
 
-	assert.Equal(t, []string{"Dune", "Emma", "Dune"}, finishedTitles(year), "latest first")
-	require.NotNil(t, year.Finished[1].DaysTaken)
-	assert.Equal(t, 1, *year.Finished[1].DaysTaken)
-	require.NotNil(t, year.Finished[0].Book)
-	assert.Equal(t, dune.ID, year.Finished[0].Book.ID)
+	list := f.finishedList("?year=2026")
+	assert.Equal(t, 3, list.Total)
+	assert.Equal(t, []string{"Dune", "Emma", "Dune"}, finishedTitles(list), "latest first")
+	require.NotNil(t, list.Items[1].DaysTaken)
+	assert.Equal(t, 1, *list.Items[1].DaysTaken)
+	require.NotNil(t, list.Items[0].Book)
+	assert.Equal(t, dune.ID, list.Items[0].Book.ID)
+	assert.Equal(t, []string{"Beloved"}, finishedTitles(f.finishedList("?year=2025")))
+	assert.Equal(t, 4, f.finishedList("").Total, "all time")
 
 	last := f.stats("?year=2025")
 	assert.Equal(t, 1, last.Totals.Finished)
@@ -262,15 +280,16 @@ func TestStats_ReadThroughsWithNoEndDayCountOnlyUnderAllTime(t *testing.T) {
 	year := f.stats("?year=2026")
 	assert.Equal(t, 0, year.Totals.Finished)
 	assert.Equal(t, 0, year.Totals.DidNotFinish)
-	assert.Empty(t, year.Finished)
+	assert.Empty(t, f.finishedList("?year=2026").Items)
 
 	all := f.stats("")
 	assert.Equal(t, 1, all.Totals.Finished)
 	assert.Equal(t, 1, all.Totals.DidNotFinish)
 	assert.Nil(t, all.Totals.MedianDaysToFinish, "no Read-through has both days")
-	require.Len(t, all.Finished, 1)
-	assert.Nil(t, all.Finished[0].DaysTaken)
-	assert.Nil(t, all.Finished[0].Seconds, "no Sessions")
+	finished := f.finishedList("").Items
+	require.Len(t, finished, 1)
+	assert.Nil(t, finished[0].DaysTaken)
+	assert.Nil(t, finished[0].Seconds, "no Sessions")
 }
 
 func TestStats_EmptyRangeHasZeroesAndEmptyLists(t *testing.T) {
@@ -282,7 +301,9 @@ func TestStats_EmptyRangeHasZeroesAndEmptyLists(t *testing.T) {
 	assert.Len(t, resp.Periods, 12)
 	assert.NotNil(t, resp.Years)
 	assert.Empty(t, resp.Years)
-	assert.NotNil(t, resp.Finished)
+	list := f.finishedList("?year=2026")
+	assert.NotNil(t, list.Items)
+	assert.Equal(t, 0, list.Total)
 	assert.NotNil(t, resp.Genres.Items)
 	assert.Nil(t, resp.Genres.Other)
 	assert.NotNil(t, resp.Kinds)
@@ -415,9 +436,10 @@ func TestStats_ReadingAndListeningAreKeptApart(t *testing.T) {
 	assert.Equal(t, 4500, resp.Totals.ListeningSeconds)
 	assert.Equal(t, 1800, month(resp, 3).ReadingSeconds)
 	assert.Equal(t, 4500, month(resp, 3).ListeningSeconds)
-	require.Len(t, resp.Finished, 1)
-	require.NotNil(t, resp.Finished[0].Seconds)
-	assert.Equal(t, 5400, *resp.Finished[0].Seconds, "only the Read-through's own Sessions")
+	finished := f.finishedList("?year=2026").Items
+	require.Len(t, finished, 1)
+	require.NotNil(t, finished[0].Seconds)
+	assert.Equal(t, 5400, *finished[0].Seconds, "only the Read-through's own Sessions")
 	assert.ElementsMatch(t, []ReadingStatsKindCount{
 		{Kind: ReadingStatsKindEbook, Books: 1},
 		{Kind: ReadingStatsKindAudiobook, Books: 1},
@@ -564,8 +586,9 @@ func TestStats_DetachedReadThroughsCountButAreLeftOutOfBreakdowns(t *testing.T) 
 	assert.Empty(t, resp.Authors.Items)
 	assert.Empty(t, resp.Kinds)
 	assert.Empty(t, resp.Ratings, "the Rating went with the Book")
-	require.Len(t, resp.Finished, 1)
-	row := resp.Finished[0]
+	finished := f.finishedList("?year=2026").Items
+	require.Len(t, finished, 1)
+	row := finished[0]
 	assert.Equal(t, "Dune", row.Title)
 	assert.Equal(t, []string{"Frank Herbert"}, row.Authors)
 	assert.True(t, row.Removed)
@@ -585,10 +608,11 @@ func TestStats_ABookInALibraryOutOfReachStillCountsWithNoLink(t *testing.T) {
 	resp := statsFor(t, newReadingAPI(t, f.db, f.user), "?year=2026")
 	assert.Equal(t, 1, resp.Totals.Finished)
 	assert.Equal(t, []ReadingStatsCount{{Name: "Science Fiction", Books: 1}}, resp.Genres.Items)
-	require.Len(t, resp.Finished, 1)
-	assert.Equal(t, "Dune", resp.Finished[0].Title)
-	assert.False(t, resp.Finished[0].Removed)
-	assert.Nil(t, resp.Finished[0].Book, "no link to a Book the user can't reach")
+	finished := finishedListFor(t, newReadingAPI(t, f.db, f.user), "?year=2026").Items
+	require.Len(t, finished, 1)
+	assert.Equal(t, "Dune", finished[0].Title)
+	assert.False(t, finished[0].Removed)
+	assert.Nil(t, finished[0].Book, "no link to a Book the user can't reach")
 }
 
 func TestStats_TimeIsSplitByWhereItWasRead(t *testing.T) {
@@ -649,16 +673,38 @@ func TestStats_NeverShowsAnotherUsersReading(t *testing.T) {
 	resp := f.stats("?year=2026")
 	assert.Equal(t, ReadingStatsTotals{}, resp.Totals)
 	assert.Empty(t, resp.Years)
-	assert.Empty(t, resp.Finished)
+	assert.Empty(t, f.finishedList("?year=2026").Items)
 	assert.Empty(t, resp.Genres.Items)
 	assert.Empty(t, resp.Ratings)
 	assert.Empty(t, resp.Places)
 
 	assert.Equal(t, 1, statsFor(t, newReadingAPI(t, f.db, other), "?year=2026").Totals.Finished)
+	assert.Equal(t, 1, finishedListFor(t, newReadingAPI(t, f.db, other), "?year=2026").Total)
 }
 
 func TestStats_RejectsAnInvalidYear(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats?year=0", nil).Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/finished?year=0", nil).Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/finished?limit=101", nil).Code)
+}
+
+func TestStats_FinishedPagesLatestFirst(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	for i, day := range []string{"2026-01-05", "2026-03-05", "2026-02-05", "2026-04-05", "2025-12-31"} {
+		book := createBook(t, f.db, fmt.Sprintf("Book %d", i))
+		f.finished(book, "", day)
+	}
+	abandoned := createBook(t, f.db, "Abandoned")
+	seedReadThrough(t, f.db, f.user, abandoned, "", "2026-05-01", models.ReadThroughOutcomeAbandoned)
+
+	first := f.finishedList("?year=2026&limit=2")
+	assert.Equal(t, 4, first.Total, "only finished reads in the year")
+	assert.Equal(t, []string{"Book 3", "Book 1"}, finishedTitles(first))
+	second := f.finishedList("?year=2026&limit=2&offset=2")
+	assert.Equal(t, 4, second.Total)
+	assert.Equal(t, []string{"Book 2", "Book 0"}, finishedTitles(second))
+	assert.Empty(t, f.finishedList("?year=2026&limit=2&offset=4").Items)
 }

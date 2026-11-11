@@ -454,6 +454,24 @@ func (h *handler) stats(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
+// listStatsFinished pages through the caller's finished Read-throughs for
+// Reading Stats. Like stats, it takes no user.
+func (h *handler) listStatsFinished(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ListReadingStatsFinishedQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.StatsFinished(c.Request().Context(), user, params.Year, params.Limit, params.Offset)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
 func (h *handler) addToRead(c echo.Context) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {

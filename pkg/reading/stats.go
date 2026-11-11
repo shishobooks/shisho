@@ -47,13 +47,12 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 	}
 
 	resp := &ReadingStatsResponse{
-		Year:     year,
-		Years:    years,
-		Periods:  []ReadingStatsPeriod{},
-		Kinds:    []ReadingStatsKindCount{},
-		Ratings:  []ReadingStatsRatingCount{},
-		Places:   []ReadingStatsPlace{},
-		Finished: []ReadingStatsFinishedBook{},
+		Year:    year,
+		Years:   years,
+		Periods: []ReadingStatsPeriod{},
+		Kinds:   []ReadingStatsKindCount{},
+		Ratings: []ReadingStatsRatingCount{},
+		Places:  []ReadingStatsPlace{},
 	}
 
 	periods := newPeriodTable(year, years)
@@ -94,16 +93,6 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 		resp.Totals.ListeningSeconds += p.ListeningSeconds
 	}
 
-	slices.SortStableFunc(finished, func(a, b *models.ReadThrough) int {
-		return cmp.Or(
-			compareDaysNewestFirst(a.EndDay, b.EndDay),
-			compareDaysNewestFirst(a.BeginDay, b.BeginDay),
-			cmp.Compare(b.ID, a.ID),
-		)
-	})
-	if err := svc.addFinishedList(ctx, resp, user, finished); err != nil {
-		return nil, err
-	}
 	if err := svc.addBreakdowns(ctx, resp, user.ID, finished); err != nil {
 		return nil, err
 	}
@@ -444,32 +433,42 @@ func median(values []int) *float64 {
 	return &m
 }
 
-// compareDaysNewestFirst orders days latest first, with an unset day last.
-func compareDaysNewestFirst(a, b *string) int {
-	switch {
-	case a == nil && b == nil:
-		return 0
-	case a == nil:
-		return 1
-	case b == nil:
-		return -1
-	}
-	return strings.Compare(*b, *a)
-}
-
 func roundSeconds(seconds float64) int {
 	return int(math.Round(seconds))
 }
 
-// addFinishedList describes each finished Read-through as Reading History
-// does, with the days it took and its Session time.
-func (svc *Service) addFinishedList(ctx context.Context, resp *ReadingStatsResponse, user *models.User, finished []*models.ReadThrough) error {
-	if len(finished) == 0 {
-		return nil
+// StatsFinished returns a page of user's finished Read-throughs that ended
+// in year, or for all time when year is nil, latest first, and how many
+// there are.
+func (svc *Service) StatsFinished(ctx context.Context, user *models.User, year *int, limit, offset int) (*ListReadingStatsFinishedResponse, error) {
+	resp := &ListReadingStatsFinishedResponse{Items: []ReadingStatsFinishedBook{}}
+	var finished []*models.ReadThrough
+	q := svc.db.NewSelect().
+		Model(&finished).
+		Where("rt.user_id = ? AND rt.outcome = ?", user.ID, models.ReadThroughOutcomeFinished)
+	if rng := yearRange(year); !rng.all() {
+		q = q.Where("rt.end_day >= ? AND rt.end_day <= ?", rng.From, rng.To)
 	}
+	total, err := q.Count(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	resp.Total = int(total)
+	err = q.
+		OrderExpr("rt.end_day IS NULL, rt.end_day DESC, rt.begin_day IS NULL, rt.begin_day DESC, rt.id DESC").
+		Limit(int64(limit)).
+		Offset(int64(offset)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	if len(finished) == 0 {
+		return resp, nil
+	}
+
 	entries, err := svc.BuildHistoryEntries(ctx, user, finished)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ids := make([]int, 0, len(finished))
 	for _, rt := range finished {
@@ -486,7 +485,7 @@ func (svc *Service) addFinishedList(ctx context.Context, resp *ReadingStatsRespo
 		GroupExpr("rs.read_through_id").
 		Scan(ctx, &totals)
 	if err != nil {
-		return errors.WithStack(err)
+		return nil, errors.WithStack(err)
 	}
 	seconds := make(map[int]int, len(totals))
 	for _, row := range totals {
@@ -500,9 +499,9 @@ func (svc *Service) addFinishedList(ctx context.Context, resp *ReadingStatsRespo
 		if s, ok := seconds[entry.ReadThrough.ID]; ok {
 			row.Seconds = &s
 		}
-		resp.Finished = append(resp.Finished, row)
+		resp.Items = append(resp.Items, row)
 	}
-	return nil
+	return resp, nil
 }
 
 // addBreakdowns counts the distinct Books behind the finished Read-throughs
