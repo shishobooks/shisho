@@ -82,6 +82,10 @@ _Avoid_: primary cover, default cover, canonical cover
 One reading app on one piece of hardware, however it connects to Shisho. A Kobo running both Kobo's own reader and KOReader is two Devices, while Kobo's reader syncing and also using the eReader browser is one Device with two connections. A Device belongs to one user, and its Device type (such as Kobo or Kindle) limits the File Types it can receive and supplies preset **Delivery Rules**.
 _Avoid_: client, connection, API key (the credential is part of the Device, not the Device itself)
 
+**KOReader plugin**:
+Shisho's add-on for KOReader. It signs into a Shisho server as a KOReader **Device**, and into several servers at once as a separate Device on each. It keeps that server's reading record: **Reading Positions**, **Reading Sessions** as KOReader timed them, Read-through outcomes, and **Ratings**. It holds them on the device while offline and sends them when it next connects. It replaces KOReader's built-in progress sync, which Shisho still accepts from a KOReader Device without the plugin.
+_Avoid_: Shisho plugin, sync plugin (a plugin in Shisho runs on the server)
+
 **Delivery Rules**:
 An ordered list of rules, at most one per source **File Type**, each naming the File Type to deliver it as (itself, or another reachable through **Conversion**). A source File Type with no rule is not delivered. Among a book's **Files** in one category (ebook or audiobook), the File matching the earliest rule is delivered, along with any File tied with it on that rule.
 _Avoid_: format preference, download preference, conversion settings
@@ -170,7 +174,7 @@ Where one user is within one **File**: a location in the text for a **Reflowable
 _Avoid_: progress (alone), bookmark, location
 
 **Reading Session**:
-One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. It belongs to the **Read-through** underway at the time.
+One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. Its time is how long the user actually spent, which can be less than the span when they paused within it. It belongs to the **Read-through** underway at the time, if there is one; time spent in a Book with none underway, such as looking something up in a finished one, still counts toward reading time.
 _Avoid_: reading time, sitting, activity
 
 ### Stats
