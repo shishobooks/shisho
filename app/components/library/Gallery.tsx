@@ -24,7 +24,10 @@ interface GalleryProps<T> {
   currentPage: number;
   onPageChange: PageChangeHandler;
   renderItem: (item: T) => ReactNode;
+  /** The plural noun for the items, as lists and messages name them. */
   itemLabel: string;
+  /** The noun for one item, for a total of one. */
+  itemLabelSingular: string;
   emptyMessage?: string;
 }
 
@@ -40,10 +43,17 @@ const Gallery = <T,>({
   onPageChange,
   renderItem,
   itemLabel,
+  itemLabelSingular,
   emptyMessage,
 }: GalleryProps<T>) => {
   const totalPages = Math.ceil(total / itemsPerPage);
-  const showing = formatShowingRange(offset, itemsPerPage, total, itemLabel);
+  const showing = formatShowingRange(
+    offset,
+    itemsPerPage,
+    total,
+    itemLabelSingular,
+    itemLabel,
+  );
 
   // Only shown items count, so the line says nothing while they load.
   const showsItems = !isLoading && Boolean(query.data);

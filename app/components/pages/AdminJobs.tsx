@@ -93,6 +93,7 @@ const AdminJobs = () => {
     (currentPage - 1) * JOBS_PER_PAGE,
     JOBS_PER_PAGE,
     total,
+    "job",
     "jobs",
   );
 

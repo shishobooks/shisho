@@ -8,6 +8,7 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
+  formatDuration,
   formatElapsed,
   formatFileSize,
   formatPageCount,
@@ -193,18 +194,27 @@ describe("formatElapsed", () => {
 
 describe("formatShowingRange", () => {
   it("groups thousands in the range and the total", () => {
-    expect(formatShowingRange(18300, 15, 18307, "books")).toBe(
+    expect(formatShowingRange(18300, 15, 18307, "book", "books")).toBe(
       "Showing 18,301-18,307 of 18,307 books",
     );
   });
 
   it("says nothing for a page past the end", () => {
-    expect(formatShowingRange(400, 50, 120, "genres")).toBeNull();
+    expect(formatShowingRange(400, 50, 120, "genre", "genres")).toBeNull();
   });
 
   it("caps the end of the range at the total", () => {
-    expect(formatShowingRange(0, 20, 2, "genres")).toBe(
+    expect(formatShowingRange(0, 20, 2, "genre", "genres")).toBe(
       "Showing 1-2 of 2 genres",
+    );
+  });
+
+  it("names a single item in the singular", () => {
+    expect(formatShowingRange(0, 50, 1, "book", "books")).toBe(
+      "Showing 1-1 of 1 book",
+    );
+    expect(formatShowingRange(0, 50, 1, "person", "people")).toBe(
+      "Showing 1-1 of 1 person",
     );
   });
 });
@@ -258,7 +268,17 @@ describe("formatShortDuration", () => {
   it("shows minutes under an hour and whole hours from an hour up", () => {
     expect(formatShortDuration(0)).toBe("0m");
     expect(formatShortDuration(1500)).toBe("25m");
-    expect(formatShortDuration(3590)).toBe("1h");
-    expect(formatShortDuration(5400)).toBe("2h");
+    expect(formatShortDuration(3600)).toBe("1h");
+  });
+
+  it("rounds down like formatDuration, so the two never disagree", () => {
+    expect(formatShortDuration(166)).toBe("2m");
+    expect(formatDuration(166)).toBe("2m");
+    expect(formatShortDuration(3599)).toBe("59m");
+    expect(formatShortDuration(5400)).toBe("1h");
+  });
+
+  it("marks time under a minute rather than calling it none", () => {
+    expect(formatShortDuration(20)).toBe("<1m");
   });
 });

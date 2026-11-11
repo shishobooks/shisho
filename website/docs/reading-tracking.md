@@ -139,7 +139,7 @@ Reading apps can download the books you're reading, or have paused, through the 
 Each time you read a book is a **Read-through**: when it started, when it ended, and whether you finished or abandoned it. Once a book has a Read-through, its page shows **Reading history** below its files, with a summary such as "Read twice, last finished Mar 2024" and every Read-through, newest first.
 
 - **Edit dates** changes a Read-through's start and end dates. Choose **Clear** in a date's calendar if you don't know it, and **Today** for today. Dates after today can't be picked. A Read-through you're still on has no end date.
-- **Delete** removes a Read-through you logged by mistake. It no longer counts toward the history or the status, and this can't be undone. Deleting the one you're on is the same as **Mark as not started**.
+- **Delete** removes a Read-through you logged by mistake. It no longer counts toward the history or the status, the reading time recorded during it is deleted with it, and this can't be undone. Deleting the one you're on is the same as **Mark as not started**.
 
 The status and summary update after each change.
 

@@ -96,21 +96,24 @@ export const formatPersonCredits = (
 };
 
 /**
- * Formats the "Showing" line above a paginated list, with thousands grouped.
- * Returns null for a page past the end, which shows nothing until the
- * pagination footer moves to the last page.
- * @example formatShowingRange(0, 15, 18307, "books") // "Showing 1-15 of 18,307 books"
+ * Formats the "Showing" line above a paginated list, with thousands grouped
+ * and the noun matching the total, as formatCount does. Returns null for a
+ * page past the end, which shows nothing until the pagination footer moves
+ * to the last page.
+ * @example formatShowingRange(0, 15, 18307, "book", "books") // "Showing 1-15 of 18,307 books"
+ * @example formatShowingRange(0, 15, 1, "book", "books") // "Showing 1-1 of 1 book"
  */
 export const formatShowingRange = (
   offset: number,
   limit: number,
   total: number,
-  itemLabel: string,
+  singular: string,
+  plural: string,
 ): string | null => {
   if (offset >= total) return null;
   const first = (offset + 1).toLocaleString();
   const last = Math.min(offset + limit, total).toLocaleString();
-  return `Showing ${first}-${last} of ${total.toLocaleString()} ${itemLabel}`;
+  return `Showing ${first}-${last} of ${formatCount(total, singular, plural)}`;
 };
 
 /**
@@ -128,14 +131,16 @@ export const formatDuration = (seconds: number): string => {
 
 /**
  * Formats seconds as a short duration for a chart label: whole hours from an
- * hour up, minutes below it.
- * @example formatShortDuration(5400) // "2h"
- * @example formatShortDuration(1500) // "25m"
+ * hour up, minutes below it, and "<1m" for any time under a minute. It
+ * rounds down as formatDuration does, so a label never reads more than the
+ * same time written out in full.
+ * @example formatShortDuration(5400) // "1h"
+ * @example formatShortDuration(166) // "2m"
  */
 export const formatShortDuration = (seconds: number): string => {
-  const minutes = Math.round(seconds / 60);
-  if (minutes >= 60) return `${Math.round(seconds / 3600)}h`;
-  return `${minutes}m`;
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds > 0 && seconds < 60) return "<1m";
+  return `${Math.floor(seconds / 60)}m`;
 };
 
 /**

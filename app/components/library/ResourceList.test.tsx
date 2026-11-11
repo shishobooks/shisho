@@ -78,6 +78,7 @@ const list = (
         previewBooks: item.preview_books,
       })}
       itemLabel="genres"
+      itemLabelSingular="genre"
       linkTo={(item) => `/libraries/1/genres/${item.id}`}
       query={query as UseQueryResult<ResourceListResponse<Item>>}
       searchLabel="Search genres"
@@ -182,7 +183,7 @@ describe("ResourceList", () => {
     });
 
     expect(screen.getByText("Fantasy")).toBeInTheDocument();
-    expect(screen.getByText("Showing 1-1 of 1 genres")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1-1 of 1 genre")).toBeInTheDocument();
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
 
@@ -215,6 +216,7 @@ describe("ResourceList", () => {
             previewBooks: item.preview_books,
           })}
           itemLabel="genres"
+          itemLabelSingular="genre"
           linkTo={(item) => `/libraries/1/genres/${item.id}`}
           query={pastTheEnd as UseQueryResult<ResourceListResponse<Item>>}
           searchLabel="Search genres"
@@ -254,6 +256,7 @@ describe("ResourceList", () => {
             ],
           })}
           itemLabel="genres"
+          itemLabelSingular="genre"
           linkTo={(item) => `/libraries/1/genres/${item.id}`}
           query={oneGenre as UseQueryResult<ResourceListResponse<Item>>}
           searchLabel="Search genres"
@@ -284,7 +287,7 @@ describe("ResourceList", () => {
       }),
     );
     expect(region).toBeInTheDocument();
-    expect(region).toHaveTextContent("Showing 1-1 of 1 genres");
+    expect(region).toHaveTextContent("Showing 1-1 of 1 genre");
 
     rerender(list({ ...settled, data: { items: [], total: 0 } }));
     expect(region).toBeInTheDocument();

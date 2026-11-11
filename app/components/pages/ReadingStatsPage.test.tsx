@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "@/components/contexts/Auth";
@@ -136,6 +136,11 @@ const finishedRows = [
   finishedRow(3, "Elsewhere", { book: null }),
 ];
 
+// The page's query string, for asserting what the URL says.
+const LocationProbe = () => (
+  <output data-testid="location">{useLocation().search}</output>
+);
+
 const renderPage = ({
   stats = busyStats,
   finished = finishedRows,
@@ -192,6 +197,7 @@ const renderPage = ({
             <Routes>
               <Route element={<ReadingStatsPage />} path="/reading-stats" />
             </Routes>
+            <LocationProbe />
           </MemoryRouter>
         </MobileNavProvider>
       </AuthProvider>
@@ -337,5 +343,46 @@ describe("ReadingStatsPage", () => {
         "limit=50&offset=0",
       ),
     );
+    expect(
+      await screen.findByText("Books finished by year"),
+    ).toBeInTheDocument();
+  });
+
+  it.each(["abc", "99999", "999", "0000", "20x6"])(
+    "drops year=%s from the URL and shows the current year",
+    async (value) => {
+      const { fetchMock } = renderPage({
+        initialEntry: `/reading-stats?year=${value}&page=2`,
+      });
+      await screen.findByText("Did Not Finish");
+      await waitFor(() =>
+        expect(screen.getByTestId("location")).toHaveTextContent(/^$/),
+      );
+      expect(new Set(statsRequests(fetchMock))).toEqual(new Set(["2026"]));
+      expect(screen.getByRole("combobox", { name: "Range" })).toHaveTextContent(
+        "2026",
+      );
+    },
+  );
+
+  it("shows a year with no reading in it as empty, and keeps it in the URL", async () => {
+    const { fetchMock } = renderPage({
+      stats: emptyStats,
+      initialEntry: "/reading-stats?year=1800",
+    });
+    expect(
+      await screen.findByText(/No reading in 1800 yet/),
+    ).toBeInTheDocument();
+    expect(statsRequests(fetchMock)).toEqual(["1800"]);
+    expect(screen.getByTestId("location")).toHaveTextContent("?year=1800");
+    expect(screen.getByRole("combobox", { name: "Range" })).toHaveTextContent(
+      "1800",
+    );
+  });
+
+  it.each(["2024", "2026"])("keeps year=%s in the URL", async (value) => {
+    renderPage({ initialEntry: `/reading-stats?year=${value}` });
+    await screen.findByText("Did Not Finish");
+    expect(screen.getByTestId("location")).toHaveTextContent(`?year=${value}`);
   });
 });

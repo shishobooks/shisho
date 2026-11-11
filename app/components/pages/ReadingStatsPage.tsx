@@ -1,4 +1,5 @@
 import { History } from "lucide-react";
+import { useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -49,14 +50,14 @@ import { todayDay } from "@/utils/readingStatus";
 
 const ALL_TIME = "all";
 
-// The range in the URL: a year, "all" for all time, or nothing (or a year
-// the server would refuse) for the current year.
-const parseRange = (value: string | null, currentYear: number) => {
+// The range in the URL: a four-digit year, or "all" (null) for all time.
+// Undefined when it's absent or anything else, which shows the current
+// year. A year with no reading in it is still a year, and shows as empty.
+const parseRange = (value: string | null): number | null | undefined => {
   if (value === ALL_TIME) return null;
+  if (!value || !/^\d{4}$/.test(value)) return undefined;
   const year = Number(value);
-  return value && Number.isInteger(year) && year >= 1 && year <= 9999
-    ? year
-    : currentYear;
+  return year >= 1000 ? year : undefined;
 };
 
 const hasActivity = (stats: ReadingStatsResponse) =>
@@ -206,6 +207,7 @@ const FinishedSection = ({ year }: { year: number | null }) => {
       offset,
       FINISHED_PER_PAGE,
       total,
+      "book",
       "books",
     );
     return (
@@ -248,9 +250,27 @@ const ReadingStatsPage = () => {
     todayDay(settingsQuery.data?.time_zone).slice(0, 4),
   );
   const [searchParams, setSearchParams] = useSearchParams();
-  const year = parseRange(searchParams.get("year"), currentYear);
+  const yearParam = searchParams.get("year");
+  const parsed = parseRange(yearParam);
+  const year = parsed === undefined ? currentYear : parsed;
   const statsQuery = useReadingStats(year === null ? {} : { year });
   const stats = statsQuery.data;
+
+  // A "year" in the URL that isn't one goes at once, so the URL always
+  // names what the page shows.
+  const strayYear = yearParam !== null && parsed === undefined;
+  useEffect(() => {
+    if (!strayYear) return;
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("year");
+        resetPaging(params);
+        return params;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [strayYear, setSearchParams]);
 
   // The current year is always offered, with or without reading in it, as
   // is the year in view.

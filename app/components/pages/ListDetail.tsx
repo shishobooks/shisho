@@ -543,6 +543,7 @@ const ListDetail = () => {
                 }
                 isLoading={listBooksQuery.isLoading}
                 itemLabel="books"
+                itemLabelSingular="book"
                 items={books}
                 itemsPerPage={itemsPerPage}
                 offset={offset}

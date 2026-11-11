@@ -85,7 +85,13 @@ export function BookGallerySection<F extends string>({
   }
 
   const total = query.data?.total ?? 0;
-  const showing = formatShowingRange(offset, itemsPerPage, total, "books");
+  const showing = formatShowingRange(
+    offset,
+    itemsPerPage,
+    total,
+    "book",
+    "books",
+  );
 
   if (total === 0) {
     return (

@@ -687,6 +687,7 @@ const HomeContent = ({ currentlyReading = false }: HomeProps) => {
             booksQuery.isLoading || booksQuery.isPlaceholderData || isStaleData
           }
           itemLabel="books"
+          itemLabelSingular="book"
           items={booksQuery.data?.items ?? []}
           itemsPerPage={itemsPerPage}
           offset={offset}

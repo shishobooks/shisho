@@ -7,6 +7,7 @@ import {
   readingStatusLabel,
   readingSummary,
   readingTransitions,
+  readThroughDeleteDescription,
   todayDay,
 } from "./readingStatus";
 
@@ -137,5 +138,32 @@ describe("formatProgress", () => {
     [0.004, "0%"],
   ])("shows %d as %s", (progress, label) => {
     expect(formatProgress(progress)).toBe(label);
+  });
+});
+
+describe("readThroughDeleteDescription", () => {
+  it("says the reading time recorded during it goes too", () => {
+    for (const removed of [false, true]) {
+      for (const underway of [false, true]) {
+        expect(readThroughDeleteDescription({ underway, removed })).toMatch(
+          /reading time recorded during it is deleted too/,
+        );
+      }
+    }
+  });
+
+  it("warns that deleting the read underway sends its book back to the start", () => {
+    expect(
+      readThroughDeleteDescription({ underway: true, removed: false }),
+    ).toMatch(/Every file opens at the start again/);
+    expect(
+      readThroughDeleteDescription({ underway: true, removed: true }),
+    ).not.toMatch(/Every file opens/);
+  });
+
+  it("speaks of the reading history, not the book, once the book is gone", () => {
+    expect(
+      readThroughDeleteDescription({ underway: false, removed: true }),
+    ).toMatch(/^It won't count in your reading history anymore/);
   });
 });

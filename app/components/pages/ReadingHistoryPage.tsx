@@ -49,6 +49,7 @@ import type {
 import { formatCount, formatShowingRange } from "@/utils/format";
 import {
   readThroughDatesLabel,
+  readThroughDeleteDescription,
   readThroughOutcomeLabel,
 } from "@/utils/readingStatus";
 
@@ -172,16 +173,13 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
   );
 };
 
-const deleteDescription = (entry: ReadingHistoryEntry | null): string => {
-  if (!entry) return "";
-  if (entry.read_through.outcome === "underway" && !entry.removed) {
-    return "It won't count toward this book's history or its Reading Status. Every file opens at the start again, and if starting it took the book off To Read, it goes back to its place there.";
-  }
-  if (entry.removed) {
-    return "It won't count in your reading history anymore.";
-  }
-  return "It won't count toward this book's history or its Reading Status.";
-};
+const deleteDescription = (entry: ReadingHistoryEntry | null): string =>
+  entry
+    ? readThroughDeleteDescription({
+        underway: entry.read_through.outcome === "underway",
+        removed: entry.removed,
+      })
+    : "";
 
 // Every Read-through the signed-in user has, across every library and
 // including ones whose Book was deleted, newest first. Each can have its
@@ -271,6 +269,7 @@ const ReadingHistoryPage = () => {
       offset,
       PER_PAGE,
       total,
+      "Read-through",
       "Read-throughs",
     );
     return (

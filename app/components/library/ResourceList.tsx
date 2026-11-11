@@ -47,7 +47,10 @@ interface ResourceListProps<T extends { id: number }, F extends string> {
   state: ResourceListState<F>;
   itemConfig: (item: T) => ItemConfig;
   linkTo: (item: T, libraryId: string) => string;
+  /** The plural noun for the items, as lists and messages name them. */
   itemLabel: string;
+  /** The noun for one item, for a total of one. */
+  itemLabelSingular: string;
   /** Tabs under the search row that split the list (tag namespaces). */
   tabs?: ReactNode;
 }
@@ -62,6 +65,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
   itemConfig,
   linkTo,
   itemLabel,
+  itemLabelSingular,
   tabs,
 }: ResourceListProps<T, F>) => {
   usePageTitle(title);
@@ -101,7 +105,13 @@ const ResourceList = <T extends { id: number }, F extends string>({
 
   const total = query.data?.total ?? 0;
   const totalPages = Math.ceil(total / limit);
-  const showing = formatShowingRange(offset, limit, total, itemLabel);
+  const showing = formatShowingRange(
+    offset,
+    limit,
+    total,
+    itemLabelSingular,
+    itemLabel,
+  );
   // A background refetch (an SSE event) keeps the loaded results on screen.
   // A new page or search shows the spinner, not the previous key's results
   // kept as placeholder data.
