@@ -224,6 +224,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/reading/history",
 				"POST /api/reading/books/:id/to-read", "DELETE /api/reading/books/:id/to-read",
 				"PUT /api/reading/to-read/order", "POST /api/lists/:id/copy-to-to-read",
+				// Server Stats is an admin read.
+				"GET /api/server-stats",
 			} {
 				assert.True(t, routes[route], route)
 			}
