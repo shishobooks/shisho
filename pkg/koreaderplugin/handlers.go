@@ -8,9 +8,12 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/koreader"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
 
@@ -44,13 +47,23 @@ const (
 )
 
 type handler struct {
-	devices *devices.Service
-	bundle  *Bundle
-	limiter *addressLimiter
+	db        *bun.DB
+	devices   *devices.Service
+	reading   *reading.Service
+	documents *koreader.Documents
+	bundle    *Bundle
+	limiter   *addressLimiter
 }
 
-func newHandler(db *bun.DB, bundle *Bundle) *handler {
-	return &handler{devices: devices.NewService(db), bundle: bundle, limiter: newAddressLimiter()}
+func newHandler(db *bun.DB, bundle *Bundle, bookService *books.Service) *handler {
+	return &handler{
+		db:        db,
+		devices:   devices.NewService(db),
+		reading:   reading.NewService(db),
+		documents: koreader.NewDocuments(db, bookService),
+		bundle:    bundle,
+		limiter:   newAddressLimiter(),
+	}
 }
 
 func (h *handler) serverInfo() ServerInfo {

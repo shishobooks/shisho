@@ -3,21 +3,28 @@ The KOReader plugin for Shisho (ADR 0016). This file is the thin layer:
 KOReader's events, menus, dialogs, Wi-Fi, and calls to the server. Decisions
 live in the shisho/ modules, which have no UI and are unit tested.
 
-This version signs in to Shisho servers, adds their catalogs to KOReader's
-OPDS catalog list, and keeps itself up to date from them.
+It signs in to Shisho servers, adds their catalogs to KOReader's OPDS
+catalog list, keeps itself up to date from them, and syncs reading time
+from KOReader's statistics and positions to each of them.
 ]]
 local Client = require("shisho/client")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DataStorage = require("datastorage")
+local Event = require("ui/event")
 local InfoMessage = require("ui/widget/infomessage")
 local Installer = require("shisho/installer")
+local Journal = require("shisho/journal")
 local LuaSettings = require("luasettings")
+local Math = require("optmath")
 local MultiInputDialog = require("ui/widget/multiinputdialog")
 local NetworkMgr = require("ui/network/manager")
 local Opds = require("shisho/opds")
+local Positions = require("shisho/positions")
 local Responses = require("shisho/responses")
 local Stamps = require("shisho/stamps")
 local State = require("shisho/state")
+local Statistics = require("shisho/statistics")
+local Sync = require("shisho/sync")
 local UIManager = require("ui/uimanager")
 local Urls = require("shisho/urls")
 local Versions = require("shisho/versions")
@@ -51,6 +58,7 @@ local Shisho = WidgetContainer:extend{
 function Shisho:init()
     self.stamps = Stamps.load(self.path)
     self.state = State.open(self.state_file)
+    self.journal = Journal.new(self.state)
     self.ui.menu:registerToMainMenu(self)
 
     -- A zip from a Device's page signs itself in on first launch. Once its
@@ -119,6 +127,8 @@ end
 -- list, and tells the user.
 function Shisho:signedIn(url, answer, username, credential)
     local server = self.state:signIn{
+        -- A server signed in to for the first time takes reading from now on.
+        stats_cursor = Statistics.currentCursor(self:statisticsPath()),
         url = url,
         username = username,
         credential = credential,
@@ -420,19 +430,278 @@ function Shisho:onNetworkConnected()
         if #self.state:servers() > 0 and not recent and not self.awaiting_restart then
             self:checkForUpdate(false)
         end
+        -- Whatever turned Wi-Fi on, what's waiting goes out. A sync that just
+        -- ran, such as Sync now's or sleep's, isn't repeated.
+        if #self.state:servers() > 0 and not self.awaiting_restart
+            and not Sync.ranRecently(self.synced_at, os.time()) then
+            self:syncAll(false)
+        end
     end)
+end
+
+-- The reader -------------------------------------------------------------------
+
+-- How long after the last page turn the place is written to the journal.
+local RECORD_AFTER = 10
+
+function Shisho:onReaderReady()
+    -- Opening a book lands on a page, which isn't moving: only page turns
+    -- from here on are.
+    self.reader_ready = true
+    self.last_page = self.ui.getCurrentPage and self.ui:getCurrentPage()
+    self.last_page_turn = nil
+    -- Opening a book never waits for Wi-Fi.
+    if #self.state:servers() > 0 and NetworkMgr:isOnline() then
+        UIManager:nextTick(function() self:pullOpenBook(false) end)
+    end
+end
+
+function Shisho:onPageUpdate(page)
+    if not self.reader_ready or page == nil or page == self.last_page then return end
+    self.last_page = page
+    self.last_page_turn = os.time()
+    if not self.record_task then
+        self.record_task = function() self:recordPosition(true) end
+    end
+    UIManager:unschedule(self.record_task)
+    UIManager:scheduleIn(RECORD_AFTER, self.record_task)
+end
+
+function Shisho:onCloseDocument()
+    if self.record_task then UIManager:unschedule(self.record_task) end
+    self:recordPosition(true)
+    self.reader_ready = nil
+end
+
+function Shisho:onSuspend()
+    if self.record_task then UIManager:unschedule(self.record_task) end
+    self:recordPosition(true)
+    if #self.state:servers() == 0 or not self:settings().sync_on_sleep then return end
+    -- Sync on sleep turns Wi-Fi on to do it, as KOReader's progress sync
+    -- does, following KOReader's own Wi-Fi setting. It pulls no position: a
+    -- question would wait on a sleeping screen.
+    if NetworkMgr:willRerunWhenOnline(function() self:syncAll(false, true) end) then return end
+    self:syncAll(false, true)
+end
+
+-- documentHash is the open book's document hash, as KOReader keeps it.
+function Shisho:documentHash()
+    local doc_settings = self.ui and self.ui.document and self.ui.doc_settings
+    return doc_settings and doc_settings:readSetting("partial_md5_checksum")
+end
+
+-- currentPlace is where the reader is in the open book, in the form
+-- KOReader's progress sync sends: an XPointer, or the 1-based page.
+function Shisho:currentPlace()
+    local ui = self.ui
+    if not (ui and ui.document) then return nil end
+    local view = ui.document.info.has_pages and ui.paging or ui.rolling
+    if not view then return nil end
+    return {
+        progress = tostring(view:getLastProgress()),
+        percentage = Math.roundPercent(view:getLastPercent()),
+    }
+end
+
+-- recordPosition journals the open book's place, timed by the last page
+-- turn, for every signed-in server.
+function Shisho:recordPosition(flush)
+    if #self.state:servers() == 0 or not self.last_page_turn then return end
+    local document, place = self:documentHash(), self:currentPlace()
+    if not document or not place then return end
+    if self.journal:recordPosition(document, place.progress, place.percentage, self.last_page_turn) and flush then
+        self.state:flush()
+    end
+end
+
+function Shisho:goToProgress(progress)
+    if self.ui.document.info.has_pages then
+        self.ui:handleEvent(Event:new("GotoPage", tonumber(progress)))
+    else
+        self.ui:handleEvent(Event:new("GotoXPointer", progress))
+    end
+end
+
+-- pullOpenBook asks every signed-in server for the open book's position,
+-- and goes to the newest, asks, or leaves it, by the settings.
+function Shisho:pullOpenBook(interactive)
+    local document = self:documentHash()
+    local here = self:currentPlace()
+    if not document or not here then return end
+    local candidates = {}
+    for __, server in ipairs(self.state:servers()) do
+        if not server.needs_login then
+            local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
+                not interactive and Client.BACKGROUND or nil)
+            local status, body = client:pull({ document })
+            if status == 200 and type(body) == "table" and type(body.positions) == "table" then
+                for __, position in ipairs(body.positions) do
+                    if position.document == document then table.insert(candidates, position) end
+                end
+            end
+        end
+    end
+    local remote = Positions.newest(candidates)
+    here.at = Positions.localInstant(self.journal:lastPositionAt(document), self.last_page_turn)
+    local action, direction = Positions.decide(remote, here, self.state:get("settings"))
+    if action == "ignore" then return action end
+    local percent = Math.round((tonumber(remote.percentage) or 0) * 100)
+    local source = remote.source or _("another reader")
+    if action == "jump" then
+        self:goToProgress(remote.progress)
+        self:notify(T(_("Went to %1% from %2."), percent, source), 3)
+        return action
+    end
+    local text = T(_("Go to %1% from %2? It's newer than your place on this device."), percent, source)
+    if direction == "older" then
+        text = T(_("Go back to %1% from %2? It's older than your place on this device."), percent, source)
+    end
+    UIManager:show(ConfirmBox:new{
+        text = text,
+        ok_text = _("Go"),
+        ok_callback = function() self:goToProgress(remote.progress) end,
+    })
+    return action
+end
+
+-- Syncing -----------------------------------------------------------------------
+
+local STATISTICS_OFF = _("Reading statistics are off in KOReader, so reading time won't sync. Positions still do.")
+
+function Shisho:settings()
+    return Positions.settings(self.state:get("settings"))
+end
+
+function Shisho:saveSetting(key, value)
+    local saved = self.state:get("settings")
+    if type(saved) ~= "table" then
+        saved = {}
+        self.state:set("settings", saved)
+    end
+    saved[key] = value
+    self.state:flush()
+end
+
+-- flushStatistics asks the statistics plugin to write the pages it still
+-- holds in memory, since the plugin's sleep handler can run before its own.
+function Shisho:flushStatistics()
+    local statistics = self.ui and self.ui.statistics
+    if statistics and statistics.insertDB then
+        local ok, err = pcall(statistics.insertDB, statistics)
+        if not ok then logger.warn("Shisho: flushing statistics failed:", err) end
+    end
+end
+
+function Shisho:statisticsPath()
+    return DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+end
+
+function Shisho:statisticsEnabled()
+    return Statistics.enabled(G_reader_settings:readSetting("statistics"), G_reader_settings:readSetting("plugins_disabled"))
+end
+
+--[[--
+syncAll sends every signed-in server what it hasn't acknowledged, then pulls
+the open book's position, except when going to sleep. One server failing
+doesn't stop the others. A server that needs a new sign-in keeps everything
+queued until it gets one. Interactive, from Sync now, it says how it went.
+]]
+function Shisho:syncAll(interactive, going_to_sleep)
+    if self.syncing then return end
+    if #self.state:servers() == 0 then
+        if interactive then
+            self:showSignIn(self.stamps.pairing and self.stamps.pairing.server_url or "",
+                _("Sign in to a Shisho server to sync."))
+        end
+        return
+    end
+    self.syncing = true
+    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive)
+    self.syncing = false
+    self.synced_at = os.time()
+    if not ok then
+        logger.warn("Shisho: syncing failed:", problems)
+        problems, statistics_on = { _("Couldn't sync. Try again later.") }, true
+    end
+    if not going_to_sleep then
+        local pulled, err = pcall(self.pullOpenBook, self, interactive)
+        if not pulled then logger.warn("Shisho: pulling the position failed:", err) end
+    end
+    if interactive then
+        local lines = {}
+        if #problems == 0 then
+            table.insert(lines, _("Synced with Shisho."))
+        else
+            for __, problem in ipairs(problems) do table.insert(lines, problem) end
+        end
+        if not statistics_on then
+            table.insert(lines, STATISTICS_OFF)
+        end
+        self:notify(table.concat(lines, "\n"), #problems == 0 and statistics_on and 3 or nil)
+    end
+    return problems
+end
+
+-- syncServers runs the sync for each signed-in server, returning what went
+-- wrong and whether statistics is on.
+function Shisho:syncServers(interactive)
+    self:recordPosition(false)
+    local statistics_on = self:statisticsEnabled()
+    local read_pages
+    if statistics_on then
+        self:flushStatistics()
+        local path = self:statisticsPath()
+        read_pages = function(cursor, limit) return Statistics.read(path, cursor, limit) end
+    end
+    local problems = {}
+    for __, server in ipairs(self.state:servers()) do
+        local label = Urls.label(server.url)
+        if server.needs_login then
+            table.insert(problems, T(_("%1 needs a new sign-in."), label))
+        else
+            local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
+                not interactive and Client.BACKGROUND or nil)
+            local ok, outcome = pcall(Sync.run, {
+                state = self.state,
+                journal = self.journal,
+                server = server,
+                read_pages = read_pages,
+                post = function(payload) return client:upload(payload) end,
+            })
+            if not ok then
+                logger.warn("Shisho: syncing failed:", outcome)
+                outcome = "error"
+            end
+            if outcome == "needs_login" then
+                table.insert(problems, T(_("%1 needs a new sign-in."), label))
+            elseif outcome ~= "ok" then
+                table.insert(problems, T(_("Couldn't sync with %1: %2"), label, Responses.message(outcome, nil, server.info)))
+            end
+        end
+    end
+    self.state:flush()
+    return problems, statistics_on
 end
 
 -- Menu -------------------------------------------------------------------------
 
 function Shisho:serverMenu(server)
-    local items = {
+    local items = {}
+    if server.last_synced then
+        table.insert(items, {
+            text = T(_("Last synced %1"), os.date("%Y-%m-%d %H:%M", server.last_synced)),
+            enabled = false,
+        })
+    end
+    for __, item in ipairs({
         {
             text = _("Sign in again"),
             keep_menu_open = true,
             callback = function() self:showSignIn(server.url) end,
         },
-    }
+    }) do
+        table.insert(items, item)
+    end
     if Versions.reinstallable(self:installed(), self.state:servers(), server.url) then
         table.insert(items, {
             text = _("Reinstall plugin from this server"),
@@ -461,12 +730,54 @@ function Shisho:serverMenu(server)
     return items
 end
 
+local POSITION_CHOICES = {
+    { "prompt", _("Ask") },
+    { "jump", _("Go there") },
+    { "ignore", _("Ignore") },
+}
+
+-- positionMenu chooses what to do with a newer or older position.
+function Shisho:positionMenu(key)
+    local items = {}
+    for __, choice in ipairs(POSITION_CHOICES) do
+        table.insert(items, {
+            text = choice[2],
+            radio = true,
+            checked_func = function() return self:settings()[key] == choice[1] end,
+            callback = function() self:saveSetting(key, choice[1]) end,
+        })
+    end
+    return items
+end
+
+function Shisho:settingsMenu()
+    return {
+        {
+            text = _("Sync on sleep"),
+            help_text = _("Turn Wi-Fi on to sync each time the device goes to sleep. This uses more battery."),
+            checked_func = function() return self:settings().sync_on_sleep end,
+            callback = function() self:saveSetting("sync_on_sleep", not self:settings().sync_on_sleep) end,
+        },
+        {
+            text = _("Newer position from another reader"),
+            sub_item_table = self:positionMenu("newer"),
+        },
+        {
+            text = _("Older position from another reader"),
+            sub_item_table = self:positionMenu("older"),
+        },
+    }
+end
+
 function Shisho:addToMainMenu(menu_items)
     menu_items.shisho = {
         text = _("Shisho"),
         sorting_hint = "tools",
         sub_item_table_func = function()
             local items = {}
+            if not self:statisticsEnabled() then
+                table.insert(items, { text = STATISTICS_OFF, enabled = false, separator = true })
+            end
             for __, server in ipairs(self.state:servers()) do
                 local label = Urls.label(server.url)
                 local status = Responses.serverStatus(server)
@@ -475,6 +786,21 @@ function Shisho:addToMainMenu(menu_items)
                     sub_item_table = self:serverMenu(server),
                 })
             end
+            table.insert(items, {
+                text = _("Sync now"),
+                keep_menu_open = true,
+                callback = function()
+                    if #self.state:servers() == 0 then
+                        self:syncAll(true)
+                        return
+                    end
+                    NetworkMgr:runWhenOnline(function() self:syncAll(true) end)
+                end,
+            })
+            table.insert(items, {
+                text = _("Settings"),
+                sub_item_table = self:settingsMenu(),
+            })
             table.insert(items, {
                 text = _("Add a server"),
                 keep_menu_open = true,

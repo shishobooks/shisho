@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -45,7 +47,7 @@ func newPluginFixture(t *testing.T) *pluginFixture {
 
 	bundle, err := NewBundle(pluginFS("return 1\n"), "v0.7.0")
 	require.NoError(t, err)
-	h := newHandler(db, bundle)
+	h := newHandler(db, bundle, books.NewService(db, appsettings.NewService(db)))
 	registerPluginRoutes(e, h, devices.NewMiddleware(h.devices))
 
 	f := &pluginFixture{t: t, ctx: context.Background(), db: db, e: e, h: h, devices: h.devices}

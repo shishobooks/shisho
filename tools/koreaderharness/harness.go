@@ -96,6 +96,10 @@ type PluginReport struct {
 	Installed      bool           `json:"installed"`
 	Restart        bool           `json:"restart"`
 	PromptedUpdate string         `json:"prompted_update"`
+	// Journal is how many positions wait for a server to acknowledge them,
+	// and Problems what Sync now reported.
+	Journal  int      `json:"journal"`
+	Problems []string `json:"problems"`
 	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu,
 	// and Menu what the Shisho menu does, with a submenu's items as
 	// "Parent > Item".
@@ -117,6 +121,23 @@ type PluginServer struct {
 	DeviceName     string `json:"device_name"`
 	NeedsLogin     bool   `json:"needs_login"`
 	UpdateRequired bool   `json:"update_required"`
+	// StatsCursor is the rowid of the last statistics row the server
+	// acknowledged, and
+	// LastSynced when it last took everything in, in Unix seconds.
+	StatsCursor *struct {
+		RowID int64 `json:"rowid"`
+	} `json:"stats_cursor"`
+	LastSynced int64 `json:"last_synced"`
+}
+
+// StatRow is one row of KOReader's page_stat_data, by its book's document
+// hash.
+type StatRow struct {
+	Document   string `json:"document"`
+	Page       int    `json:"page"`
+	TotalPages int    `json:"total_pages"`
+	StartTime  int64  `json:"start_time"`
+	Duration   int    `json:"duration"`
 }
 
 // OPDSServer is one catalog in KOReader's OPDS catalog list.
@@ -153,6 +174,11 @@ type Args struct {
 	Online bool
 	Code   string
 	From   string
+	// Stats seeds KOReader's statistics before a plugin-sync, StatisticsOff
+	// turns statistics off, and SyncNow taps Sync now.
+	Stats         []StatRow
+	StatisticsOff bool
+	SyncNow       bool
 }
 
 // Run runs one command in a fresh container, as KOReader's unit tests start
@@ -221,6 +247,15 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.From != "" {
 		payload["from"] = containerURL(a.From)
+	}
+	if len(a.Stats) > 0 {
+		payload["stats"] = a.Stats
+	}
+	if a.StatisticsOff {
+		payload["statistics_off"] = true
+	}
+	if a.SyncNow {
+		payload["sync_now"] = true
 	}
 	shot := ""
 	if a.Screenshot != "" {

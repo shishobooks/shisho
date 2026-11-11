@@ -207,6 +207,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				// the middleware refuses in Demo Mode.
 				"POST /api/user/devices/:id/koreader-plugin",
 				"POST /koreader/plugin/pair", "POST /koreader/plugin/status", "POST /koreader/plugin/download",
+				"POST /koreader/plugin/upload", "POST /koreader/plugin/pull",
 				// Delivery Rules can be viewed in Demo Mode; the middleware
 				// rejects every change to them.
 				"GET /api/user/delivery-rules", "PUT /api/user/delivery-rules", "DELETE /api/user/delivery-rules",
@@ -280,7 +281,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			// The KOReader plugin's routes check its protocol before its
 			// sign-in, and pairing needs none, so outside Demo Mode they
 			// answer something other than the demo refusal.
-			for _, path := range []string{"/koreader/plugin/pair", "/koreader/plugin/status", "/koreader/plugin/download"} {
+			for _, path := range []string{"/koreader/plugin/pair", "/koreader/plugin/status", "/koreader/plugin/download", "/koreader/plugin/upload", "/koreader/plugin/pull"} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
 				if demo {

@@ -1,0 +1,198 @@
+//go:build koreaderharness
+
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/shishobooks/shisho/pkg/devices"
+	"github.com/shishobooks/shisho/pkg/koreaderplugin"
+	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// signInPlugin installs the plugin signed in to the scenario's server before
+// any reading was recorded, and dates the Device from since: the server
+// refuses reading from before its Device existed.
+func (s *scenario) signInPlugin(since time.Time) {
+	s.t.Helper()
+	bundle, err := koreaderplugin.DefaultBundle()
+	require.NoError(s.t, err)
+	s.installPlugin(bundle.Zip())
+	state := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
+	require.NoError(s.t, os.MkdirAll(filepath.Dir(state), 0o755))
+	content := fmt.Sprintf(`return { servers = { { url = %q, username = %q, credential = %q, device_id = %q, device_name = %q,
+		stats_cursor = { rowid = 0 } } } }`,
+		s.containerServer(), s.user.Username, s.device.Credential, s.device.ID, s.device.Name)
+	require.NoError(s.t, os.WriteFile(state, []byte(content), 0o644))
+	_, err = s.db.NewUpdate().Model((*devices.Device)(nil)).Set("created_at = ?", since).Where("id = ?", s.device.ID).Exec(s.ctx)
+	require.NoError(s.t, err)
+}
+
+// documentHash is a hash the server maps to file.
+func (s *scenario) documentHash(file *models.File) string {
+	s.t.Helper()
+	var hash string
+	err := s.db.NewSelect().Model((*models.DocumentHash)(nil)).Column("kdh.hash").
+		Where("kdh.file_id = ?", file.ID).Limit(1).Scan(s.ctx, &hash)
+	require.NoError(s.t, err)
+	return hash
+}
+
+func (s *scenario) pluginSessions() []*models.ReadingSession {
+	s.t.Helper()
+	var sessions []*models.ReadingSession
+	err := s.db.NewSelect().Model(&sessions).
+		Where("rs.user_id = ? AND rs.source = ?", s.user.ID, models.ReadingSourceKOReader).
+		OrderExpr("rs.started_at").Scan(s.ctx)
+	require.NoError(s.t, err)
+	return sessions
+}
+
+// Reading offline across two days reaches Shisho in one sync, as measured
+// sessions on the days they happened, timed by actual reading.
+func TestPluginSyncsReadingTimeAfterOfflineDays(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	dayOne := time.Now().UTC().Truncate(24 * time.Hour).Add(-48*time.Hour + 10*time.Hour)
+	dayTwo := dayOne.Add(24 * time.Hour)
+	s.signInPlugin(dayOne.Add(-24 * time.Hour))
+
+	row := func(page int, at time.Time, seconds int) StatRow {
+		return StatRow{Document: document, Page: page, TotalPages: 100, StartTime: at.Unix(), Duration: seconds}
+	}
+	stats := []StatRow{
+		// Day one: a sitting, a break of half an hour, and another.
+		row(1, dayOne, 60), row(2, dayOne.Add(time.Minute), 60),
+		row(3, dayOne.Add(32*time.Minute), 60), row(4, dayOne.Add(33*time.Minute), 120),
+		// Day two.
+		row(5, dayTwo, 90), row(6, dayTwo.Add(90*time.Second), 90),
+	}
+
+	offline := s.run(Args{Command: "plugin-sync", Stats: stats})
+	assert.Empty(t, s.pluginSessions(), "nothing goes without Wi-Fi")
+	require.Len(t, offline.Plugin.Servers, 1)
+
+	// Wi-Fi coming on syncs, with nothing tapped.
+	synced := s.run(Args{Command: "plugin-sync", Online: true})
+	sessions := s.pluginSessions()
+	require.Len(t, sessions, 3, "shown: %v", synced.Shown)
+	for i, want := range []struct {
+		start    time.Time
+		duration int
+	}{{dayOne, 120}, {dayOne.Add(32 * time.Minute), 180}, {dayTwo, 180}} {
+		assert.True(t, sessions[i].Measured, "session %d is measured", i)
+		assert.Equal(t, want.start.Unix(), sessions[i].StartedAt.Unix(), "session %d starts when its first page did", i)
+		assert.Equal(t, want.duration, sessions[i].Duration, "session %d is timed by its pages", i)
+		require.NotNil(t, sessions[i].SourceDeviceID)
+		assert.Equal(t, s.device.ID, *sessions[i].SourceDeviceID)
+	}
+
+	readThrough := &models.ReadThrough{}
+	err := s.db.NewSelect().Model(readThrough).Where("rt.user_id = ? AND rt.book_id = ?", s.user.ID, epub.BookID).Scan(s.ctx)
+	require.NoError(t, err)
+	require.NotNil(t, readThrough.BeginDay)
+	assert.Equal(t, dayOne.Format(time.DateOnly), *readThrough.BeginDay, "the Read-through began on the first day")
+
+	server := synced.Plugin.Servers[0]
+	require.NotNil(t, server.StatsCursor)
+	assert.Equal(t, int64(len(stats)), server.StatsCursor.RowID, "the cursor is past every row")
+	assert.NotZero(t, server.LastSynced)
+
+	// Syncing again sends nothing new and changes nothing.
+	s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	assert.Len(t, s.pluginSessions(), 3)
+}
+
+// A sync refused for a regenerated credential keeps everything queued, and
+// signing in again delivers it with nothing lost.
+func TestPluginKeepsReadingQueuedUntilSignedInAgain(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	since := time.Now().Add(-3 * time.Hour).Truncate(time.Second)
+	s.signInPlugin(since)
+	read := since.Add(time.Hour)
+	stats := []StatRow{
+		{Document: document, Page: 1, TotalPages: 100, StartTime: read.Unix(), Duration: 60},
+		{Document: document, Page: 2, TotalPages: 100, StartTime: read.Add(time.Minute).Unix(), Duration: 60},
+	}
+	regenerated, err := s.devices.RegenerateCredential(s.ctx, s.user.ID, s.device.ID)
+	require.NoError(t, err)
+
+	refused := s.run(Args{Command: "plugin-sync", Stats: stats, Online: true})
+	require.Len(t, refused.Plugin.Servers, 1)
+	assert.True(t, refused.Plugin.Servers[0].NeedsLogin)
+	require.NotNil(t, refused.Plugin.Servers[0].StatsCursor)
+	assert.Zero(t, refused.Plugin.Servers[0].StatsCursor.RowID, "nothing is counted as sent")
+	assert.Empty(t, s.pluginSessions())
+
+	nowShown := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	assert.Contains(t, strings.Join(nowShown.Plugin.Problems, " "), "needs a new sign-in")
+
+	signedIn := s.run(Args{Command: "plugin-signin", Server: s.url, Username: "reader", Password: regenerated.Credential, Online: true})
+	require.True(t, signedIn.Plugin.SignedIn, signedIn.Plugin.Message)
+
+	delivered := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	assert.Empty(t, delivered.Plugin.Problems)
+	sessions := s.pluginSessions()
+	require.Len(t, sessions, 1, "shown: %v", delivered.Shown)
+	assert.Equal(t, 120, sessions[0].Duration)
+	assert.False(t, delivered.Plugin.Servers[0].NeedsLogin)
+	assert.Equal(t, int64(2), delivered.Plugin.Servers[0].StatsCursor.RowID)
+
+	// With statistics off, Sync now says reading time won't sync.
+	off := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, StatisticsOff: true})
+	assert.Contains(t, strings.Join(off.Shown, " "), "reading time won't sync")
+	menu := s.run(Args{Command: "plugin-menu"})
+	require.NotEmpty(t, menu.Plugin.Menu)
+	assert.Equal(t, "Reading statistics are off in KOReader, so reading time won't sync. Positions still do.", menu.Plugin.Menu[0])
+}
+
+// The plugin sends this Device's place, and opening a book online offers a
+// newer place from the web reader, naming it.
+func TestPluginPushesAndPullsPositions(t *testing.T) {
+	s := newScenario(t)
+	s.downloadOPDS("Comic", "comic.cbz")
+	cbz := s.file(models.FileTypeCBZ)
+	s.signInPlugin(time.Now().Add(-time.Hour))
+
+	pushed := s.run(Args{Command: "plugin-open", File: "comic.cbz", Page: 20, Online: true, SyncNow: true})
+	assert.Equal(t, 0, pushed.Plugin.Journal, "the server took the place: %v", pushed.Shown)
+	position, err := s.reading.RetrievePosition(s.ctx, s.user.ID, cbz.ID)
+	require.NoError(t, err)
+	require.NotNil(t, position)
+	require.NotNil(t, position.Page)
+	assert.Equal(t, 19, *position.Page, "a stored page counts from 0")
+	require.NotNil(t, position.SourceDeviceID)
+	assert.Equal(t, s.device.ID, *position.SourceDeviceID)
+
+	// Its own place isn't offered back.
+	reopened := s.run(Args{Command: "plugin-open", File: "comic.cbz", Online: true})
+	assert.Empty(t, reopened.Prompted)
+
+	time.Sleep(1100 * time.Millisecond)
+	webPage := 24
+	_, err = s.reading.UpdatePosition(s.ctx, reading.PositionUpdate{
+		UserID: s.user.ID, FileID: cbz.ID, Source: models.ReadingSourceWebReader,
+		Locator: models.ReadingLocator{Page: &webPage}, Percentage: 25.0 / 30,
+	})
+	require.NoError(t, err)
+
+	offline := s.run(Args{Command: "plugin-open", File: "comic.cbz"})
+	assert.Empty(t, offline.Prompted, "opening offline doesn't wait for Wi-Fi")
+
+	prompted := s.run(Args{Command: "plugin-open", File: "comic.cbz", Online: true})
+	assert.Contains(t, prompted.Prompted, "Shisho web reader", "shown: %v", prompted.Shown)
+	assert.Equal(t, "20", prompted.Progress, "the jump waits for an answer")
+	confirmed := s.run(Args{Command: "plugin-open", File: "comic.cbz", Online: true, Confirm: true})
+	assert.Equal(t, "25", confirmed.Progress)
+}

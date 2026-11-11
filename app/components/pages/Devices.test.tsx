@@ -346,7 +346,9 @@ describe("DeviceDetail", () => {
     expect(folders.nextElementSibling).toHaveTextContent(
       ".adds/koreader/plugins",
     );
-    expect(screen.getByText(/doesn't sync reading yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/reading time comes from KOReader's own statistics/),
+    ).toBeInTheDocument();
 
     // Progress sync and OPDS sit in a collapsed section.
     const toggle = screen.getByRole("button", { name: "Without the plugin" });
@@ -392,6 +394,34 @@ describe("DeviceDetail", () => {
     expect(connection).toHaveTextContent(
       /^Last connected through the plugin .+, version 0\.8\.0\.$/,
     );
+  });
+
+  it("tells a KOReader Device syncing through the plugin to turn off progress sync", async () => {
+    stubAPI(
+      koreader({
+        plugin_last_connected_at: "2026-11-10T15:30:00Z",
+        plugin_last_synced_at: "2026-11-10T15:30:00Z",
+        plugin_version: "0.8.0",
+      }),
+    );
+    renderAt("/user/devices/koreader-1");
+
+    const sync = await screen.findByTestId("plugin-sync");
+    expect(sync).toHaveTextContent(/^Last synced through the plugin .+\.$/);
+    expect(
+      screen.getByText(/Turn off progress sync in KOReader/),
+    ).toBeInTheDocument();
+  });
+
+  it("doesn't ask a KOReader Device that hasn't synced through the plugin to turn off progress sync", async () => {
+    stubAPI(koreader({ plugin_last_connected_at: "2026-11-10T15:30:00Z" }));
+    renderAt("/user/devices/koreader-1");
+
+    await screen.findByTestId("plugin-connection");
+    expect(screen.queryByTestId("plugin-sync")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Turn off progress sync in KOReader/),
+    ).not.toBeInTheDocument();
   });
 
   it("pairs the KOReader plugin with a code that counts down", async () => {

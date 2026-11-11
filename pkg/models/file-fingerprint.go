@@ -74,3 +74,44 @@ type KOReaderPull struct {
 	PreviousEndedAt       *time.Time `json:"previous_ended_at"`
 	PreviousEndPercentage *float64   `json:"previous_end_percentage"`
 }
+
+// KOReaderPageRow is one row of a KOReader Device's statistics, sent through
+// the KOReader plugin: one visit to one page (ADR 0016). Device, Document,
+// Page, and StartTime are KOReader's own key. FileID is nil for a document
+// Shisho didn't recognize. A Grouped row belongs to ReadingSessionID, or,
+// once that's nil, to a session the user deleted, and is never grouped
+// again.
+type KOReaderPageRow struct {
+	bun.BaseModel `bun:"table:koreader_page_rows,alias:kpr" tstype:"-"`
+
+	ID         int       `bun:",pk,autoincrement"`
+	CreatedAt  time.Time `bun:",notnull"`
+	UserID     int       `bun:",notnull"`
+	DeviceID   string    `bun:",notnull"`
+	Document   string    `bun:",notnull"`
+	Page       int       `bun:",notnull"`
+	TotalPages int       `bun:",notnull"`
+	// StartTime is the Unix time on the device's clock, as KOReader keys the
+	// row, and StartedAt the instant after correcting that clock.
+	StartTime        int64     `bun:",notnull"`
+	StartedAt        time.Time `bun:",notnull"`
+	Duration         int       `bun:",notnull"`
+	FileID           *int
+	Grouped          bool `bun:",notnull"`
+	ReadingSessionID *int
+}
+
+// EndedAt is when the visit ended.
+func (r *KOReaderPageRow) EndedAt() time.Time {
+	return r.StartedAt.Add(time.Duration(r.Duration) * time.Second)
+}
+
+// KOReaderPluginEvent records that a Device's journal event was taken in, so
+// a repeat is ignored.
+type KOReaderPluginEvent struct {
+	bun.BaseModel `bun:"table:koreader_plugin_events,alias:kpe" tstype:"-"`
+
+	DeviceID  string    `bun:",pk"`
+	EventID   string    `bun:",pk"`
+	CreatedAt time.Time `bun:",notnull"`
+}

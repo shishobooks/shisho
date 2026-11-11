@@ -79,6 +79,17 @@ function Client:status()
     return self:post("/koreader/plugin/status")
 end
 
+-- upload sends one batch of page rows and journal entries (shisho/sync).
+function Client:upload(payload)
+    return self:post("/koreader/plugin/upload", payload)
+end
+
+-- pull asks for the positions of the books documents names, timed on the
+-- device's clock.
+function Client:pull(documents, clock)
+    return self:post("/koreader/plugin/pull", { clock = clock or os.time(), documents = documents })
+end
+
 -- download saves the server's plugin zip to path. Returns the status, or
 -- nil and an error when path can't be written.
 function Client:download(path)

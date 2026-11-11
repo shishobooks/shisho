@@ -332,6 +332,8 @@ local function pluginReport(plugin, extra)
     local report = extra or {}
     local state = LuaSettings:open(DataStorage:getSettingsDir() .. "/shisho.lua").data
     report.servers = state.servers or {}
+    report.journal = type(state.journal) == "table" and type(state.journal.entries) == "table"
+        and #state.journal.entries or 0
     report.installed_from = state.installed_from
     report.pairing_handled = state.pairing_handled
     if plugin then
@@ -354,22 +356,30 @@ end
 -- with network_after, KOReader starts offline and Wi-Fi comes on just before
 -- fn, which runs before the event arrives, as when a menu item turns Wi-Fi
 -- on and runs its action before KOReader's event loop delivers the event.
-local function withPlugin(fn, network_after)
-    -- Loading NetworkMgr broadcasts NetworkConnected when the machine
-    -- running the container is online. Drop that, so Wi-Fi is whatever the
-    -- command says, and deliver the event below.
+-- stubNetwork makes Wi-Fi whatever net.online says, which the caller can
+-- change. Loading NetworkMgr broadcasts NetworkConnected when the machine
+-- running the container is online, so that's dropped, and commands deliver
+-- the event themselves.
+local function stubNetwork(online)
+    local net = { online = online and true or false }
     local broadcast = UIManager.broadcastEvent
     UIManager.broadcastEvent = function(ui, event)
         if event and event.handler == "onNetworkConnected" then return end
         return broadcast(ui, event)
     end
     local NetworkMgr = require("ui/network/manager")
-    local online = args.online and not network_after and true or false
-    NetworkMgr.isOnline = function() return online end
-    NetworkMgr.isConnected = function() return online end
-    NetworkMgr.isWifiOn = function() return online end
-    NetworkMgr.runWhenOnline = function(_, callback) if online then callback() end end
+    NetworkMgr.isOnline = function() return net.online end
+    NetworkMgr.isConnected = function() return net.online end
+    NetworkMgr.isWifiOn = function() return net.online end
+    NetworkMgr.runWhenOnline = function(_, callback) if net.online then callback() end end
     NetworkMgr.runWhenConnected = NetworkMgr.runWhenOnline
+    NetworkMgr.willRerunWhenOnline = function() return not net.online end
+    return net
+end
+
+local function withPlugin(fn, network_after)
+    local net = stubNetwork(args.online and not network_after)
+    local online = net.online
     local restart = false
     UIManager.askForRestart = function() restart = true end
     UIManager.restartKOReader = function() restart = true end
@@ -384,7 +394,10 @@ local function withPlugin(fn, network_after)
         plugin:onNetworkConnected()
         stepUI()
     end
-    if args.online and network_after then online = true end
+    if args.online and network_after then
+        online = true
+        net.online = true
+    end
     local extra = fn and fn(plugin) or {}
     stepUI()
     if online and network_after then
@@ -470,6 +483,81 @@ commands["plugin-update"] = function()
         end
         return out
     end, true)
+end
+
+-- seedStatistics adds rows to KOReader's statistics database, as reading
+-- does: args.stats is a list of { document, page, total_pages, start_time,
+-- duration }, each book's row found or made by its document hash. The
+-- statistics plugin made the database when KOReader started.
+local function seedStatistics()
+    if type(args.stats) ~= "table" then return end
+    local SQ3 = require("lua-ljsqlite3/init")
+    local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+    local books = {}
+    local find = conn:prepare("SELECT id FROM book WHERE md5 = ?;")
+    local add_book = conn:prepare("INSERT INTO book (title, authors, md5, pages, last_open) VALUES (?, 'Harness', ?, ?, ?);")
+    local add_row = conn:prepare("INSERT OR IGNORE INTO page_stat_data VALUES (?, ?, ?, ?, ?);")
+    for __, row in ipairs(args.stats) do
+        local id = books[row.document]
+        if not id then
+            local found = find:reset():bind(row.document):step()
+            if found then
+                id = tonumber(found[1])
+            else
+                add_book:reset():bind("Book " .. row.document, row.document, row.total_pages, row.start_time):step()
+                id = tonumber(conn:rowexec("SELECT last_insert_rowid();"))
+            end
+            books[row.document] = id
+        end
+        add_row:reset():bind(id, row.page, row.start_time, row.duration, row.total_pages):step()
+    end
+    conn:close()
+end
+
+-- plugin-sync seeds statistics, with Wi-Fi off, then turns Wi-Fi on, which
+-- syncs by itself. With sync_now, it taps Sync now first instead.
+commands["plugin-sync"] = function()
+    withPlugin(function(plugin)
+        if args.statistics_off then
+            G_reader_settings:saveSetting("statistics", { is_enabled = false })
+        end
+        seedStatistics()
+        if args.sync_now then
+            -- Sync now, as the menu runs it: only once Wi-Fi is on.
+            local problems
+            require("ui/network/manager"):runWhenOnline(function() problems = plugin:syncAll(true) end)
+            -- An empty table encodes as an object, not a list.
+            return { problems = problems and #problems > 0 and problems or nil }
+        end
+        return {}
+    end, not args.sync_now)
+end
+
+-- plugin-open opens a book in the reader with the plugin loaded, online or
+-- not: opening pulls its position. Then it can go to a place, and tap Sync
+-- now.
+commands["plugin-open"] = function()
+    stubNetwork(args.online)
+    runWithReader(function(ui)
+        local plugin = ui.shisho
+        if not plugin then fail("the KOReader plugin didn't load") end
+        stepUI()
+        local out = { prompted = confirm_box and confirm_box.text or nil }
+        if confirm_box and args.confirm then
+            confirm_box.ok_callback()
+            stepUI()
+        end
+        if args.page or args.xpointer or args.percent then
+            gotoCommand(ui)
+            stepUI()
+        end
+        if args.sync_now then
+            plugin:syncAll(true)
+            stepUI()
+        end
+        out.plugin = pluginReport(plugin)
+        return out
+    end)
 end
 
 local command = commands[args.command]

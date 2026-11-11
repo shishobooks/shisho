@@ -2,15 +2,18 @@
 The plugin's own state, in its own file in KOReader's settings directory:
 
 - servers: every server signed in to, each { url, username, credential,
-  device_id, device_name, needs_login, update_required, info }, where info
-  is what the server last answered about itself.
+  device_id, device_name, needs_login, update_required, info, stats_cursor,
+  last_synced }, where info is what the server last answered about itself
+  and stats_cursor is the last statistics row it acknowledged.
 - installed_from: the server the plugin was last installed from.
 - pairing_handled: the short code of a paired zip the plugin already acted
   on, so it acts on it once.
+- journal: positions not yet acknowledged by every server (shisho/journal).
+- settings: sync on sleep and what to do with pulled positions
+  (shisho/positions).
 
-Later syncing keeps its queue and cursors here too. Each write replaces the
-file atomically, so a crash or a dead battery leaves the old state or the new
-one, never half of either. No UI.
+Each write replaces the file atomically, so a crash or a dead battery leaves
+the old state or the new one, never half of either. No UI.
 ]]
 local LuaSettings = require("luasettings")
 local Urls = require("shisho/urls")
@@ -41,7 +44,10 @@ function State:find(url)
 end
 
 -- signIn records a sign-in to the server at fields.url, replacing an earlier
--- one, and clears what needed attention. Returns the server.
+-- one, and clears what needed attention. Returns the server. A server signed
+-- in to for the first time takes reading from fields.stats_cursor on, the
+-- statistics recorded by the time of sign-in; signing in again keeps its
+-- place, so nothing queued is lost.
 function State:signIn(fields)
     local server = self:find(fields.url)
     if not server then
@@ -55,6 +61,9 @@ function State:signIn(fields)
     server.info = fields.info or server.info
     server.needs_login = nil
     server.update_required = nil
+    if not server.stats_cursor then
+        server.stats_cursor = fields.stats_cursor or { rowid = 0 }
+    end
     return server
 end
 

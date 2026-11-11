@@ -331,6 +331,8 @@ func TestPluginMenuOffersReinstallOnlyWithSeveralServers(t *testing.T) {
 	one := s.run(Args{Command: "plugin-menu"})
 	assert.Equal(t, []string{
 		"a.example", "a.example > Sign in again", "a.example > Remove server",
+		"Sync now", "Settings", "Settings > Sync on sleep",
+		"Settings > Newer position from another reader", "Settings > Older position from another reader",
 		"Add a server", "Check for plugin update", "Plugin version " + one.Plugin.Version,
 	}, one.Plugin.Menu)
 

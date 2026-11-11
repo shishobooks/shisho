@@ -2,7 +2,6 @@ package koreader
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,11 +13,8 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/models"
-	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/reading"
-	"github.com/shishobooks/shisho/pkg/reflowable"
 )
 
 const (
@@ -34,11 +30,11 @@ const (
 	removedKoboName   = "Kobo"
 	removedKoboID     = models.ReadingSourceKobo
 
-	// finishedAt is the percentage that counts as the end. KOReader's
+	// FinishedAt is the percentage that counts as the end. KOReader's
 	// continuous view never reports 100%, and the last pages are back matter,
 	// so reaching them finishes the book, as a streaming service counts an
 	// episode watched once the credits start.
-	finishedAt = 0.99
+	FinishedAt = 0.99
 
 	// sessionWindow is how long after a pull a push of the same document
 	// from the same Device still makes a Reading Session with it. KOReader
@@ -56,11 +52,10 @@ const (
 )
 
 type handler struct {
-	deviceService      *devices.Service
-	fingerprintService *fingerprints.Service
-	readingService     *reading.Service
-	reachService       *reach.Service
-	pulls              *pullStore
+	deviceService  *devices.Service
+	readingService *reading.Service
+	docs           *Documents
+	pulls          *pullStore
 }
 
 // authenticate signs a request in from KOReader's x-auth-user and x-auth-key
@@ -141,16 +136,23 @@ func (h *handler) updateProgress(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}
-	locator, ok := parseProgress(params.Progress)
+	locator, ok := ParseProgress(params.Progress)
 	if !ok {
 		return errcodes.ValidationError("Progress must be an XPointer or a page number.")
 	}
 
-	file, err := h.resolve(ctx, user, device, params.Document)
+	response := UpdateProgressResponse{Document: params.Document, Timestamp: now.Unix()}
+	// A Device syncing through the KOReader plugin reports the same reading
+	// there, with its real time, so a push left on beside it would count it
+	// twice. It's acknowledged, so KOReader stops retrying it.
+	if device.PluginLastSyncedAt != nil {
+		return errors.WithStack(c.JSON(http.StatusOK, response))
+	}
+
+	file, err := h.docs.Resolve(ctx, user, device, params.Document)
 	if err != nil {
 		return err
 	}
-	response := UpdateProgressResponse{Document: params.Document, Timestamp: now.Unix()}
 	if file == nil {
 		logUnknownDocument(ctx, device, params.Document, string(params.Metadata))
 		return errors.WithStack(c.JSON(http.StatusOK, response))
@@ -163,7 +165,7 @@ func (h *handler) updateProgress(c echo.Context) error {
 		DeviceID:   &device.ID,
 		Locator:    locator,
 		Percentage: *params.Percentage,
-		AtEnd:      *params.Percentage >= finishedAt,
+		AtEnd:      *params.Percentage >= FinishedAt,
 	}
 	if file.File != nil && file.DeliveredFileType != file.File.FileType {
 		update.LocatorFileType = &file.DeliveredFileType
@@ -205,9 +207,9 @@ func (h *handler) updateProgress(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, response))
 }
 
-// parseProgress reads KOReader's progress: an XPointer, which is a path, or
+// ParseProgress reads KOReader's progress: an XPointer, which is a path, or
 // the 1-based page as a string.
-func parseProgress(progress string) (models.ReadingLocator, bool) {
+func ParseProgress(progress string) (models.ReadingLocator, bool) {
 	if strings.HasPrefix(progress, "/") {
 		return models.ReadingLocator{XPointer: &progress}, true
 	}
@@ -232,7 +234,7 @@ func (h *handler) retrieveProgress(c echo.Context) error {
 		return err
 	}
 	document := c.Param("document")
-	file, err := h.resolve(ctx, user, device, document)
+	file, err := h.docs.Resolve(ctx, user, device, document)
 	if err != nil {
 		return err
 	}
@@ -253,152 +255,11 @@ func (h *handler) retrieveProgress(c echo.Context) error {
 	if err := h.pulls.record(ctx, device.ID, document, file.FileID, percentage, time.Now()); err != nil {
 		logger.FromContext(ctx).Warn("koreader pull not recorded", logger.Data{"device_id": device.ID, "error": err.Error()})
 	}
-	response, err := h.buildProgress(ctx, user, device, document, file, position)
+	response, err := h.docs.Progress(ctx, user, device, document, file, position)
 	if err != nil {
 		return err
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, response))
-}
-
-// buildProgress is what device gets for position in the copy file names.
-//
-// A position another source wrote is labelled with that source's identity in
-// Shisho, so KOReader takes it for another device's and offers the jump. A
-// reflowable one is translated into this copy's XPointer: the web reader's
-// CFI, another KOReader's XPointer in a copy with or without a KePub's span
-// markup, or this Device's own from its other copy.
-func (h *handler) buildProgress(ctx context.Context, user *models.User, device *devices.Device, document string, file *models.DocumentHash, position *models.ReadingPosition) (ProgressResponse, error) {
-	if position == nil {
-		return ProgressResponse{}, nil
-	}
-	response := ProgressResponse{Document: document, Percentage: &position.Percentage}
-
-	// One Device can hold a File both as itself and converted, such as a CBZ
-	// and its EPUB. A position in the other's form means nothing to this copy,
-	// and KOReader can't go to it.
-	pageBased := models.IsPageBasedFileType(file.DeliveredFileType)
-	switch {
-	case pageBased && position.Page != nil:
-		response.Progress = strconv.Itoa(*position.Page + 1)
-	case pageBased:
-		return ProgressResponse{}, nil
-	case position.XPointer != nil && sameCopy(position, file):
-		response.Progress = *position.XPointer
-	default:
-		progress, ok := h.translate(ctx, position, file)
-		if !ok {
-			return ProgressResponse{}, nil
-		}
-		response.Progress = progress
-	}
-
-	timestamp := position.OccurredAt.Unix()
-
-	// A Device gets back exactly what it pushed, under the name and id it
-	// sent, as KOReader's own server does. KOReader ignores a position
-	// carrying its own, so syncing never moves the device that pushed it.
-	if position.SourceDeviceID != nil && *position.SourceDeviceID == device.ID {
-		if position.ReportedDevice != nil && position.ReportedDeviceID != nil {
-			response.Device, response.DeviceID = *position.ReportedDevice, *position.ReportedDeviceID
-			response.Timestamp = &timestamp
-			return response, nil
-		}
-		// Without its own name and id, KOReader would take the position for
-		// another device's. With no time it judges by percentage, so a clock
-		// that has drifted can't make it offer to move back.
-		response.Device, response.DeviceID = device.Name, device.ID
-		return response, nil
-	}
-
-	response.Timestamp = &timestamp
-	switch {
-	case position.SourceDeviceID != nil:
-		source, err := h.deviceService.Retrieve(ctx, user.ID, *position.SourceDeviceID)
-		if err != nil {
-			return ProgressResponse{}, err
-		}
-		response.Device, response.DeviceID = source.Name, source.ID
-	case position.Source == models.ReadingSourceKOReader:
-		response.Device, response.DeviceID = removedDeviceName, removedDeviceID
-	case position.Source == models.ReadingSourceKobo:
-		response.Device, response.DeviceID = removedKoboName, removedKoboID
-	default:
-		response.Device, response.DeviceID = webReaderDeviceName, webReaderDeviceID
-	}
-	return response, nil
-}
-
-// sameCopy reports whether position's XPointer was written in the copy file
-// names, so it needs no translating.
-func sameCopy(position *models.ReadingPosition, file *models.DocumentHash) bool {
-	fileType := ""
-	if file.File != nil {
-		fileType = file.File.FileType
-	}
-	return reflowable.WrittenIn(position, fileType) == file.DeliveredFileType
-}
-
-// translate returns position as an XPointer in the copy file names, or false
-// when it can't be: a File or copy that isn't an EPUB or KePub, or a File
-// that can't be read.
-func (h *handler) translate(ctx context.Context, position *models.ReadingPosition, file *models.DocumentHash) (string, bool) {
-	if file.File == nil {
-		return "", false
-	}
-	locator, err := reflowable.Translate(ctx, file.File.Filepath, file.File.FileType, position, file.DeliveredFileType, reflowable.FormXPointer)
-	if errors.Is(err, reflowable.ErrNotTranslatable) {
-		return "", false
-	}
-	if err != nil || locator.XPointer == nil || *locator.XPointer == "" {
-		logger.FromContext(ctx).Warn("reading position not translated for koreader", logger.Data{
-			"file_id": file.FileID, "delivered_file_type": file.DeliveredFileType, "error": fmt.Sprint(err),
-		})
-		return "", false
-	}
-	return *locator.XPointer, true
-}
-
-// resolve returns the File a document hash names for this request, or nil
-// when it names none the request reaches. Identical bytes can map to several
-// Files, so it's the ones the user's library access and the Device's scope
-// reach, preferring one the user already has a position in, so reading doesn't
-// split across them, and then the oldest.
-func (h *handler) resolve(ctx context.Context, user *models.User, device *devices.Device, document string) (*models.DocumentHash, error) {
-	candidates, err := h.fingerprintService.FindDocumentHash(ctx, document)
-	if err != nil {
-		return nil, err
-	}
-	if len(candidates) == 0 {
-		return nil, nil
-	}
-	r, err := h.reachService.Scope(ctx, user, device)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	var first *models.DocumentHash
-	for _, candidate := range candidates {
-		if candidate.File == nil || !user.HasLibraryAccess(candidate.File.LibraryID) {
-			continue
-		}
-		holds, err := h.reachService.HoldsBook(ctx, r, candidate.File.LibraryID, candidate.File.BookID)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-		if !holds {
-			continue
-		}
-		position, err := h.readingService.RetrievePosition(ctx, user.ID, candidate.FileID)
-		if err != nil {
-			return nil, err
-		}
-		if position != nil {
-			return candidate, nil
-		}
-		if first == nil {
-			first = candidate
-		}
-	}
-	return first, nil
 }
 
 // logUnknownDocument names a document Shisho can't place, for an operator

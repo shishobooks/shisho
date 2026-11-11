@@ -534,3 +534,14 @@ func (s *Service) RecordPluginConnection(ctx context.Context, id, pluginVersion 
 		Exec(ctx)
 	return errors.WithStack(err)
 }
+
+// RecordPluginSync notes that Device id uploaded its reading through the
+// KOReader plugin at at.
+func (s *Service) RecordPluginSync(ctx context.Context, id string, at time.Time) error {
+	_, err := s.db.NewUpdate().
+		Model((*Device)(nil)).
+		Set("plugin_last_synced_at = ?", at).
+		Where("id = ?", id).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
