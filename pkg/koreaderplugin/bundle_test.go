@@ -59,6 +59,15 @@ func TestPluginVersion(t *testing.T) {
 	}
 }
 
+func TestPluginVersion_DevServerCarriesTheReleaseItWasBuiltFrom(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "0.7.0-dev", pluginVersion("dev", "v0.7.0"))
+	assert.Equal(t, "0.7.0-dev", pluginVersion("dev", "v0.7.0-3-gabc1234"))
+	assert.Equal(t, "0.0.0-dev", pluginVersion("dev", ""), "plain go build knows no release")
+	assert.Equal(t, "0.0.0-dev", pluginVersion("dev", "abc1234"), "a clone with no tags")
+	assert.Equal(t, "0.8.0", pluginVersion("v0.8.0", "v0.7.0"), "a release's own version wins")
+}
+
 func TestBundle_ZipHoldsThePluginAndItsBuild(t *testing.T) {
 	t.Parallel()
 	bundle, err := NewBundle(pluginFS("return 1\n"), "v0.7.0")

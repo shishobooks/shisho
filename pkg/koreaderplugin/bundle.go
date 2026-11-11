@@ -36,16 +36,33 @@ var (
 	describe   = regexp.MustCompile(`(^|-)(\d+-g[0-9a-f]+|dirty)(-|$)`)
 )
 
-// PluginVersion is the plugin version a server of version v serves. A
-// release serves its own version, and a tagged prerelease its own, such as
-// 0.8.0-rc.1, which the plugin orders before 0.8.0. Any other build carries
-// the release it was built from with a -dev suffix, which the plugin orders
-// after that release, and a build with no release in its version, such as
-// the dev server's, counts as 0.0.0-dev.
+// devRelease is the latest release tag a build with no version of its own
+// was built from, which the dev server's build (mise build:air) sets with
+// -ldflags "-X github.com/shishobooks/shisho/pkg/koreaderplugin.devRelease=v0.7.0".
+// A server's own version stays "dev" there, because server plugins'
+// minimum version checks pass for "dev".
+var devRelease string
+
+// PluginVersion is the plugin version a server of version v serves.
 func PluginVersion(v string) string {
+	return pluginVersion(v, devRelease)
+}
+
+// pluginVersion is the plugin version a server of version v serves, built
+// from the release tag built. A release serves its own version, and a
+// tagged prerelease its own, such as 0.8.0-rc.1, which the plugin orders
+// before 0.8.0. Any other build carries the release it was built from with
+// a -dev suffix, which the plugin orders after that release: from its own
+// version, as git describe gives it, or from built for the dev server. A
+// build that knows no release, such as one from plain go build, counts as
+// 0.0.0-dev.
+func pluginVersion(v, built string) string {
 	match := releaseVersion.FindStringSubmatch(v)
 	switch {
 	case match == nil:
+		if base := releaseVersion.FindStringSubmatch(built); base != nil {
+			return base[1] + "-dev"
+		}
 		return "0.0.0-dev"
 	case match[2] == "":
 		return match[1]
