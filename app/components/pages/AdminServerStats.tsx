@@ -33,7 +33,9 @@ const Section = ({ title, description, children }: SectionProps) => {
   return (
     <section
       aria-labelledby={headingId}
-      className="border border-border rounded-md p-4 md:p-6"
+      // min-w-0 lets a grid item shrink below its content, so the Libraries
+      // table scrolls inside its card instead of widening the page.
+      className="min-w-0 border border-border rounded-md p-4 md:p-6"
     >
       <h2 className="text-base md:text-lg font-semibold mb-1" id={headingId}>
         {title}
@@ -265,6 +267,11 @@ const VolumeItem = ({ volume, index }: { volume: Volume; index: number }) => {
       <p className="mt-1 text-xs text-muted-foreground">
         {`${formatFileSize(volume.used_bytes)} used of ${formatFileSize(volume.total_bytes)}`}
       </p>
+      {volume.paths.length === 0 && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Holds only library folders you can't see.
+        </p>
+      )}
       {volume.paths.length > 0 && (
         <ul className="mt-2 space-y-1">
           {volume.paths.map((p) => (

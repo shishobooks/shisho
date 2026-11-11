@@ -228,6 +228,9 @@ describe("AdminServerStats", () => {
     expect(volumes).toHaveLength(2);
     expect(within(volumes[0]).getByText("60 GB free")).toBeInTheDocument();
     expect(within(volumes[0]).queryByRole("list")).not.toBeInTheDocument();
+    expect(
+      within(volumes[0]).getByText("Holds only library folders you can't see."),
+    ).toBeInTheDocument();
   });
 
   it("shows the database and each cache's size", () => {
