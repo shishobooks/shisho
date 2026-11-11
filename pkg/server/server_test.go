@@ -155,6 +155,11 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				routes[route.Method+" "+route.Path] = true
 				if demo {
 					for _, prefix := range []string{"/opds", "/ereader", "/e/", "/kobo", "/koreader", "/api/plugins", "/api/test", "/api/share/"} {
+						// The KOReader plugin's routes are all POSTs, which
+						// the middleware refuses.
+						if strings.HasPrefix(route.Path, "/koreader/plugin/") && route.Method == http.MethodPost {
+							continue
+						}
 						assert.False(t, strings.HasPrefix(route.Path, prefix), "unexpected route: %s %s", route.Method, route.Path)
 					}
 					assert.NotContains(t, route.Path, "/plugins/")
@@ -198,6 +203,10 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"PATCH /api/user/devices/:id", "DELETE /api/user/devices/:id",
 				"POST /api/user/devices/:id/credential", "POST /api/user/devices/:id/short-url",
 				"DELETE /api/user/devices/:id/kobo-sync", "GET /api/devices", "DELETE /api/devices/:id",
+				// The KOReader plugin's download and API are all POSTs, which
+				// the middleware refuses in Demo Mode.
+				"POST /api/user/devices/:id/koreader-plugin",
+				"POST /koreader/plugin/pair", "POST /koreader/plugin/status", "POST /koreader/plugin/download",
 				// Delivery Rules can be viewed in Demo Mode; the middleware
 				// rejects every change to them.
 				"GET /api/user/delivery-rules", "PUT /api/user/delivery-rules", "DELETE /api/user/delivery-rules",
@@ -250,6 +259,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodPost, "/api/user/devices/abc/credential"},
 				{http.MethodPost, "/api/user/devices/abc/short-url"},
 				{http.MethodDelete, "/api/user/devices/abc/kobo-sync"},
+				{http.MethodPost, "/api/user/devices/abc/koreader-plugin"},
 				{http.MethodDelete, "/api/devices/abc"},
 				{http.MethodPut, "/api/user/delivery-rules"},
 				{http.MethodDelete, "/api/user/delivery-rules"},
@@ -261,6 +271,21 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 					assert.Contains(t, rec.Body.String(), `"code":"demo_mode"`)
 				} else {
 					assert.Equal(t, http.StatusUnauthorized, rec.Code, "normal mode must still reach authentication")
+				}
+			}
+
+			// The KOReader plugin's routes check its protocol before its
+			// sign-in, and pairing needs none, so outside Demo Mode they
+			// answer something other than the demo refusal.
+			for _, path := range []string{"/koreader/plugin/pair", "/koreader/plugin/status", "/koreader/plugin/download"} {
+				rec := httptest.NewRecorder()
+				e.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
+				if demo {
+					assert.Equal(t, http.StatusForbidden, rec.Code, path)
+					assert.Contains(t, rec.Body.String(), `"code":"demo_mode"`, path)
+				} else {
+					assert.NotContains(t, rec.Body.String(), `"code":"demo_mode"`, path)
+					assert.NotEqual(t, http.StatusNotFound, rec.Code, path)
 				}
 			}
 		})

@@ -9,7 +9,7 @@ import "slices"
 var typeConnections = map[string][]string{
 	DeviceTypeKobo:     {ConnectionKoboSync, ConnectionEReaderBrowser},
 	DeviceTypeKindle:   {ConnectionEReaderBrowser},
-	DeviceTypeKOReader: {ConnectionOPDS, ConnectionKOReaderSync},
+	DeviceTypeKOReader: {ConnectionKOReaderPlugin, ConnectionOPDS, ConnectionKOReaderSync},
 	DeviceTypeOPDS:     {ConnectionOPDS},
 	DeviceTypeBrowser:  {ConnectionEReaderBrowser},
 }

@@ -26,6 +26,7 @@ Guidance for coding agents (Claude Code, Codex, Pi, etc.) working in this reposi
 | `e2e/AGENTS.md` | E2E testing: Playwright, per-browser isolation, fixtures |
 | `tools/gotestsplit/AGENTS.md` | Timing-aware Go test sharding |
 | `tools/koreaderharness/AGENTS.md` | Headless KOReader for QA of KOReader sync |
+| `koreader-plugin/AGENTS.md` | The KOReader plugin: Lua modules, Lua unit tests, protocol |
 
 Repo-wide topic docs:
 

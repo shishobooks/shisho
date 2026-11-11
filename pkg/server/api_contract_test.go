@@ -310,6 +310,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A Kindle Device can't receive EPUB.",
 		},
 		{
+			name:   "KOReader plugin download for a Device that isn't KOReader",
+			method: http.MethodPost, path: "/api/user/devices/" + kindle.ID + "/koreader-plugin",
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "Only a KOReader Device can use the KOReader plugin.",
+		},
+		{
+			name:   "KOReader plugin download for a device that does not exist",
+			method: http.MethodPost, path: "/api/user/devices/missing/koreader-plugin",
+			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
 			name:   "delivery preview of a device that does not exist",
 			method: http.MethodGet, path: "/api/user/devices/missing/delivery-preview",
 			status: http.StatusNotFound, code: "not_found", message: "Device not found.",

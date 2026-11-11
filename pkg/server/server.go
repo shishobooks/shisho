@@ -38,6 +38,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/kobo"
 	"github.com/shishobooks/shisho/pkg/koreader"
+	"github.com/shishobooks/shisho/pkg/koreaderplugin"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/logs"
@@ -162,6 +163,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 
 	// Device management routes
 	devices.RegisterRoutes(api, db, authMiddleware)
+
+	// The KOReader plugin: its download from a Device's page, and its own
+	// API. Both are registered in Demo Mode too, where every route is a POST
+	// the middleware refuses, so a plugin signed in to the demo hears why.
+	pluginBundle, err := koreaderplugin.DefaultBundle()
+	if err != nil {
+		return nil, errors.Wrap(err, "build the KOReader plugin")
+	}
+	koreaderplugin.RegisterUserRoutes(api, db, pluginBundle, authMiddleware)
+	koreaderplugin.RegisterRoutes(e, db, pluginBundle)
 	delivery.RegisterRoutes(api, db, authMiddleware)
 
 	// Register protected API routes

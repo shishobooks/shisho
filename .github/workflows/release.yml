@@ -29,6 +29,9 @@ jobs:
       - name: Generate release notes header
         # Install block plus this version's Breaking Changes from CHANGELOG.md.
         run: ./scripts/release-notes-header.sh "${GITHUB_REF_NAME#v}" > "${RUNNER_TEMP}/release-header.md"
+      - name: Build the KOReader plugin zip
+        # Unpaired, for installing by hand. GoReleaser attaches it.
+        run: go run ./tools/koreaderpluginzip -version "${GITHUB_REF_NAME}" -out build/koreader-plugin/shisho.koplugin.zip
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:

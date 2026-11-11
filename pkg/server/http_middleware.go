@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/httputil"
 )
 
 // requestLoggerMiddleware preserves the request context and fields used by
@@ -122,8 +123,7 @@ func acceptsGzip(header string) bool {
 func forwardedHeadersMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		peer, err := netip.ParseAddrPort(c.Request().RemoteAddr)
-		ip := peer.Addr().Unmap()
-		if err != nil || (!ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast()) {
+		if err != nil || !httputil.TrustedPeer(peer.Addr()) {
 			for _, name := range []string{"X-Forwarded-Proto", "X-Forwarded-Host", "X-Forwarded-Port", "X-Forwarded-Prefix", "X-Forwarded-For"} {
 				c.Request().Header.Del(name)
 			}

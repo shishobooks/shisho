@@ -2,6 +2,8 @@
 
 [KOReader](https://koreader.rocks/) can browse your library over OPDS and keep its reading position in Shisho through its own Progress sync. Reading in KOReader then shows up in [your reading history](./reading-tracking.md): a book you start becomes **Currently Reading**, a paused one resumes, and reaching its last pages marks it **Read**.
 
+The **KOReader plugin**, which every Shisho server serves, signs KOReader in to Shisho with a pairing code, adds your library to KOReader's OPDS catalogs, and keeps itself up to date from Shisho. It doesn't sync reading yet, so set up [progress sync](#turn-on-progress-sync) as well.
+
 ## Add a KOReader Device
 
 Add one Device for each copy of KOReader, even when it runs on a Kobo: Kobo's own reader and KOReader are separate Devices.
@@ -11,9 +13,55 @@ Add one Device for each copy of KOReader, even when it runs on a Kobo: Kobo's ow
 
 The Device's page shows everything to enter below. A new KOReader Device follows your default [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) until you change its rules on its page. Deliver EPUBs as EPUB: KOReader renders a KePub the same as an EPUB, so converting gains nothing and costs a wait on each first download.
 
+## Install the KOReader Plugin
+
+KOReader can't install a plugin by itself, so the first install is by hand. Every later update comes from Shisho.
+
+1. On the Device's page, click **Download Plugin**. The zip it downloads signs itself in to this server for the next 30 minutes.
+2. Connect the e-reader to your computer with USB, or on Android open a file manager.
+3. Unzip the download into KOReader's plugins folder, so a `shisho.koplugin` folder sits inside it. The folder is:
+
+   | Platform   | Plugins folder                                     |
+   | ---------- | -------------------------------------------------- |
+   | Kobo       | `.adds/koreader/plugins`                           |
+   | Kindle     | `koreader/plugins`                                 |
+   | PocketBook | `applications/koreader/plugins`                    |
+   | Android    | `koreader/plugins` in internal storage             |
+   | Linux      | `~/.config/koreader/plugins`                       |
+   | macOS      | `~/Library/Application Support/koreader/plugins`   |
+
+4. Eject the e-reader and restart KOReader.
+
+Each Shisho release also attaches the plugin as `shisho.koplugin.zip` on its [GitHub release](https://github.com/shishobooks/shisho/releases). That zip knows no server, so after installing it, sign in with **Add a server** in the [plugin's menu](#sign-in-with-the-plugin).
+
+## Sign In with the Plugin
+
+With Wi-Fi on, a plugin downloaded from the Device's page signs itself in on its first launch, as long as that's within 30 minutes of the download. If Wi-Fi is off, it signs in the next time Wi-Fi comes on.
+
+Later than that, KOReader opens **Sign in to Shisho** with the server's URL filled in. On the Device's page, click **Pair** and enter the code it shows as the **Pairing code**. A pairing code lasts 30 minutes, and clicking **Pair** or **Download Plugin** again replaces it. To sign in without the Device's page, choose **Use password** and enter your Shisho username and the Device's password. A server URL typed without `http://` or `https://` is tried with `https://` first.
+
+The plugin's menu is **Shisho** in the top menu's tools tab, in the file browser and in an open book. **Add a server** signs in to another Shisho server, each as a Device of its own on that server. Under each server, **Sign in again** signs in afresh and **Remove server** removes the plugin's sign-in for it, leaving KOReader's books and OPDS catalogs alone.
+
+Signing in adds the server's catalog to KOReader's OPDS catalogs as **Shisho** with the server's address, signed in with the Device's password, so you can browse and download without typing a password. If the catalog list already has an entry for the server's OPDS URL, such as one you added by hand, the plugin updates that entry instead of adding another, and keeps its name.
+
+The Device's page shows when the Device last connected through the plugin, and which version of the plugin it reported.
+
+Regenerating the Device's credential stops the plugin's sign-in working too. The server shows **Needs login** in the plugin's menu: choose **Sign in again** under it, and the OPDS catalog entry is updated with the new password.
+
+## Update the Plugin
+
+Each time Wi-Fi comes on, the plugin asks every server it's signed in to which version of the plugin it serves, and offers to install a newer one, then restarts KOReader into it. If you cancel, it doesn't offer that build again on its own; **Check for plugin update** offers it again. Before the plugin signs in to a server, it checks for nothing.
+
+- **Several servers:** it offers an update only from a server with a strictly newer version that every server it's signed in to accepts. When a newer plugin wouldn't work with one of your servers, **Check for plugin update** names the server to upgrade first.
+- **Builds of one version:** a different build of the version installed, such as one from a development server, is offered only by the server the plugin was last installed from.
+- **On purpose:** **Reinstall plugin from this server** under a server installs the plugin that server serves, newer or older, and makes it the server the plugin was installed from. It's there when you're signed in to more than one server, or when the server serves a plugin an update would never install, such as an older version.
+- **Signed out:** a server that shows **Needs login** offers no update until you sign in to it again.
+
+When a server no longer accepts the installed plugin, it shows **Update required** in the plugin's menu, and the plugin offers the update that server serves. If you'd rather not wait for Wi-Fi to come on again, choose **Check for plugin update**.
+
 ## Browse Over OPDS
 
-In KOReader, open **OPDS catalog** from the top menu's search tab, add a catalog with the plus button, and enter the **OPDS URL**, **Username**, and **Password** from the Device's page. The [OPDS Catalog](./opds.md) page covers what the catalog offers.
+The KOReader plugin adds the catalog for you when it signs in. To add it by hand instead, open **OPDS catalog** from the top menu's search tab, add a catalog with the plus button, and enter the **OPDS URL**, **Username**, and **Password** from the Device's page. The [OPDS Catalog](./opds.md) page covers what the catalog offers.
 
 ## Turn On Progress Sync
 
@@ -65,6 +113,10 @@ Pushing a position 99% or more through a book marks it **Read**, as a streaming 
 ### Login Fails
 
 KOReader shows the message from Shisho. Check that the username is your Shisho username and the password is the credential of a KOReader Device, not your account password or the credential of another type of Device. If you regenerated the credential, log in with the new one. A deactivated user, or a role without Books Read, cannot log in.
+
+### The Plugin Says the Pairing Code Is Wrong or Has Expired
+
+The code was mistyped, has expired, or was replaced. A code lasts 30 minutes, and clicking **Pair** or **Download Plugin** on the Device's page replaces the code before it. Check that the code you entered is the one the Device's page shows now, without the countdown having run out. If it isn't, click **Pair** and enter the new code. Only a KOReader Device's code signs the plugin in.
 
 ### KOReader Says "No Progress Found"
 

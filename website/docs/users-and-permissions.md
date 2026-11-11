@@ -147,7 +147,7 @@ Choose the type when adding a Device. It decides which connections the Device ca
 |------|-------------|-------------|-------------|
 | **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: KePub as KePub, then EPUB as KePub, then CBZ as KePub, then AZW3 as KePub, then MOBI as KePub |
 | **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI, then EPUB as AZW3, then KePub as AZW3, then CBZ as AZW3 |
-| **KOReader** | OPDS and KOReader's progress sync | Any file type | Your default Delivery Rules |
+| **KOReader** | The [KOReader plugin](./koreader.md#install-the-koreader-plugin), OPDS, and KOReader's progress sync | Any file type | Your default Delivery Rules |
 | **OPDS app** | OPDS, for other reading apps such as Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 
@@ -160,7 +160,7 @@ The type alone decides how a Device connects, and the Device's page shows setup 
 Each Device has one credential that all its connections use. It is 16 lowercase letters with no `l`, `i`, or `o`, so it can be typed on an e-ink keyboard. Shisho accepts it only exactly as shown: no spaces, hyphens, or capital letters. The Device's page always shows the credential, with a copy button.
 
 :::warning[Regenerating a Credential]
-**Regenerate** on a Device's page replaces its credential immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, KOReader's progress sync and OPDS stop signing in with it, and any unexpired setup URL stops redirecting. Set up each connection again with the new credential. Regenerate when a credential may have leaked; delete the Device when the hardware is lost for good.
+**Regenerate** on a Device's page replaces its credential immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, KOReader's progress sync, OPDS, and the KOReader plugin stop signing in with it, and any unexpired setup URL stops redirecting. Set up each connection again with the new credential. Regenerate when a credential may have leaked; delete the Device when the hardware is lost for good.
 :::
 
 Treat the credential, and every URL that contains it, like a password.

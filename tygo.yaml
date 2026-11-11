@@ -170,6 +170,10 @@ packages:
     output_path: "app/types/generated/koreader.ts"
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/koreaderplugin"
+    output_path: "app/types/generated/koreaderplugin.ts"
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/reading"
     output_path: "app/types/generated/reading.ts"
     frontmatter: |

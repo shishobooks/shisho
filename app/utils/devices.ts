@@ -1,6 +1,7 @@
 import {
   ConnectionEReaderBrowser,
   ConnectionKoboSync,
+  ConnectionKOReaderPlugin,
   ConnectionKOReaderSync,
   ConnectionOPDS,
   DeviceTypeBrowser,
@@ -39,7 +40,7 @@ export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
     {
       type: DeviceTypeKOReader,
       description:
-        "KOReader on any device. Browses over OPDS and syncs your reading position.",
+        "KOReader on any device. Signs in through the KOReader plugin, browses over OPDS, and syncs your reading position.",
     },
     {
       type: DeviceTypeOPDS,
@@ -58,7 +59,22 @@ export const CONNECTION_LABELS: Record<Connection, string> = {
   [ConnectionEReaderBrowser]: "eReader browser",
   [ConnectionOPDS]: "OPDS",
   [ConnectionKOReaderSync]: "KOReader progress sync",
+  [ConnectionKOReaderPlugin]: "KOReader plugin",
 };
+
+// Where to unzip the KOReader plugin on each platform KOReader runs on, as
+// the device shows its storage over USB or in a file manager.
+export const KOREADER_PLUGIN_FOLDERS: { platform: string; folder: string }[] = [
+  { platform: "Kobo", folder: ".adds/koreader/plugins" },
+  { platform: "Kindle", folder: "koreader/plugins" },
+  { platform: "PocketBook", folder: "applications/koreader/plugins" },
+  { platform: "Android", folder: "koreader/plugins" },
+  { platform: "Linux", folder: "~/.config/koreader/plugins" },
+  {
+    platform: "macOS",
+    folder: "~/Library/Application Support/koreader/plugins",
+  },
+];
 
 // The URL a Kobo's api_endpoint points at. It has no scope segment: the
 // Device's scope decides what syncs.

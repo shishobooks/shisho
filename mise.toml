@@ -24,7 +24,11 @@ CGO_ENABLED=0 go build -o ./build/api/api -installsuffix cgo \
 
 [tasks."build:air"]
 description = "Build development API binary (used by air)"
-run = "go build -o ./build/api/api-air ./cmd/api"
+# The KOReader plugin it serves carries the latest release tag, with -dev.
+run = """
+RELEASE=$(git describe --tags --abbrev=0 2>/dev/null || true)
+go build -ldflags "-X github.com/shishobooks/shisho/pkg/koreaderplugin.devRelease=$RELEASE" -o ./build/api/api-air ./cmd/api
+"""
 
 [tasks."build:sdk"]
 description = "Build the @shisho/plugin-sdk testing module"

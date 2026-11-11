@@ -129,6 +129,46 @@ func (m *Middleware) OPDSAuth(passwordAuth echo.MiddlewareFunc) echo.MiddlewareF
 	}
 }
 
+// BasicAuth signs a request in with Basic Auth: a username with the
+// credential of one of that user's Devices whose type uses connection, as
+// the KOReader plugin sends them. Any other username and password is a 401,
+// a Device whose type doesn't use connection a 403, and the owner is checked
+// with AuthenticateOwner. Like DeviceAuth, it touches the Device's last
+// accessed time and stores the Device and its owner.
+func (m *Middleware) BasicAuth(connection string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			ctx := c.Request().Context()
+			username, credential, ok := auth.BasicCredentials(c.Request())
+			if !ok {
+				return errcodes.Unauthorized("Sign in with your username and the Device's password.")
+			}
+			device, err := m.service.GetByOwnerCredential(ctx, username, credential)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if device == nil {
+				return errcodes.Unauthorized("Wrong username or Device password.")
+			}
+			if !device.HasConnection(connection) {
+				return errcodes.Forbidden("This Device cannot connect this way.")
+			}
+			user, err := m.service.AuthenticateOwner(ctx, device)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			go func() {
+				_ = m.service.TouchLastAccessed(context.Background(), device.ID)
+			}()
+
+			SetDevice(c, device)
+			auth.SetUser(c, user)
+			return next(c)
+		}
+	}
+}
+
 // legacyCredentialPrefix starts the API keys that Devices migrated from API
 // keys keep as their credentials until they're regenerated.
 const legacyCredentialPrefix = "ak_"
@@ -150,7 +190,7 @@ func isCredentialShaped(s string) bool {
 	return true
 }
 
-// SetDevice stores device for RequireDevice. Only DeviceAuth, OPDSAuth,
+// SetDevice stores device for RequireDevice. Only DeviceAuth, OPDSAuth, BasicAuth,
 // KOReader's sync auth, middleware that updates the Device, and tests standing
 // in for them call it.
 func SetDevice(c echo.Context, device *Device) {

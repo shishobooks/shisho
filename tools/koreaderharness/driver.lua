@@ -323,6 +323,155 @@ commands.drain = function()
     end)
 end
 
+-- The KOReader plugin ---------------------------------------------------------
+
+-- What the plugin and KOReader's OPDS catalog list hold, read back from
+-- their files as a person inspecting the device would.
+local function pluginReport(plugin, extra)
+    local LuaSettings = require("luasettings")
+    local report = extra or {}
+    local state = LuaSettings:open(DataStorage:getSettingsDir() .. "/shisho.lua").data
+    report.servers = state.servers or {}
+    report.installed_from = state.installed_from
+    report.pairing_handled = state.pairing_handled
+    if plugin then
+        -- Read from disk, so an install shows the plugin KOReader loads next.
+        local stamps = dofile(plugin.path .. "/shisho/stamps.lua").load(plugin.path)
+        report.version = stamps.version
+        report.hash = stamps.hash
+        report.offer = plugin.offer
+        if plugin.sign_in_dialog then
+            report.sign_in_url = plugin.sign_in_dialog.shisho_prefilled_url or ""
+        end
+    end
+    local opds = LuaSettings:open(DataStorage:getSettingsDir() .. "/opds.lua").data
+    return report, opds.servers or {}
+end
+
+-- withPlugin starts KOReader's file manager with the plugin loaded, online
+-- or not, runs fn, and reports. KOReader's restart is recorded, not done.
+-- Wi-Fi's NetworkConnected reaches the plugin before fn, as at launch, or
+-- with network_after, KOReader starts offline and Wi-Fi comes on just before
+-- fn, which runs before the event arrives, as when a menu item turns Wi-Fi
+-- on and runs its action before KOReader's event loop delivers the event.
+local function withPlugin(fn, network_after)
+    -- Loading NetworkMgr broadcasts NetworkConnected when the machine
+    -- running the container is online. Drop that, so Wi-Fi is whatever the
+    -- command says, and deliver the event below.
+    local broadcast = UIManager.broadcastEvent
+    UIManager.broadcastEvent = function(ui, event)
+        if event and event.handler == "onNetworkConnected" then return end
+        return broadcast(ui, event)
+    end
+    local NetworkMgr = require("ui/network/manager")
+    local online = args.online and not network_after and true or false
+    NetworkMgr.isOnline = function() return online end
+    NetworkMgr.isConnected = function() return online end
+    NetworkMgr.isWifiOn = function() return online end
+    NetworkMgr.runWhenOnline = function(_, callback) if online then callback() end end
+    NetworkMgr.runWhenConnected = NetworkMgr.runWhenOnline
+    local restart = false
+    UIManager.askForRestart = function() restart = true end
+    UIManager.restartKOReader = function() restart = true end
+
+    local FileManager = require("apps/filemanager/filemanager")
+    FileManager:showFiles("/books")
+    stepUI()
+    local fm = FileManager.instance
+    local plugin = fm and fm.shisho
+    if not plugin then fail("the KOReader plugin didn't load") end
+    if online and not network_after then
+        plugin:onNetworkConnected()
+        stepUI()
+    end
+    if args.online and network_after then online = true end
+    local extra = fn and fn(plugin) or {}
+    stepUI()
+    if online and network_after then
+        plugin:onNetworkConnected()
+        stepUI()
+    end
+    screenshot(args.screenshot)
+    extra.restart = restart
+    extra.prompted = confirm_box and confirm_box.text or nil
+    local report, opds = pluginReport(plugin, extra)
+    G_reader_settings:flush()
+    respond({ ok = true, plugin = report, opds = opds, shown = shown })
+    os.exit(0, true)
+end
+
+commands["plugin-launch"] = function()
+    withPlugin()
+end
+
+commands["plugin-signin"] = function()
+    withPlugin(function(plugin)
+        local ok, outcome, message
+        if args.code then
+            ok, outcome, message = plugin:signInWithCode(args.server, args.code)
+        else
+            ok, outcome, message = plugin:signInWithPassword(args.server, args.username, args.password)
+        end
+        return { signed_in = ok, outcome = outcome, message = message }
+    end)
+end
+
+-- The Shisho menu under Tools, as KOReader's touch menu shows it, with what
+-- each item reads.
+commands["plugin-menu"] = function()
+    withPlugin(function(plugin)
+        local entries = {}
+        plugin:addToMainMenu(entries)
+        local items = entries.shisho.sub_item_table_func()
+        -- A submenu's items read "Parent > Item".
+        local texts = {}
+        for __, item in ipairs(items) do
+            local text = item.text_func and item.text_func() or item.text
+            table.insert(texts, text)
+            for __, sub in ipairs(item.sub_item_table or {}) do
+                table.insert(texts, text .. " > " .. (sub.text_func and sub.text_func() or sub.text))
+            end
+        end
+        -- The file manager's own Tools tab, as KOReader sorts it.
+        local tools = {}
+        local menu = plugin.ui.menu
+        menu:setUpdateItemTable()
+        for __, tab in ipairs(menu.tab_item_table) do
+            if tab.icon == "appbar.tools" then
+                for __, item in ipairs(tab) do
+                    table.insert(tools, item.text_func and item.text_func() or item.text or "----")
+                end
+            end
+        end
+        local TouchMenu = require("ui/widget/touchmenu")
+        UIManager:show(TouchMenu:new{
+            width = Screen:getWidth(),
+            tab_item_table = { { text = entries.shisho.text, icon = "appbar.tools", table.unpack(items) } },
+            show_parent = plugin.ui,
+        })
+        return { menu = texts, tools = tools }
+    end)
+end
+
+commands["plugin-update"] = function()
+    withPlugin(function(plugin)
+        if args.from then
+            local ok, message = plugin:installFrom(args.from)
+            return { installed = ok, message = message }
+        end
+        -- Wi-Fi coming on already checked; this is the menu's check.
+        confirm_box = nil
+        plugin:checkForUpdate(true)
+        stepUI()
+        local out = { prompted_update = confirm_box and confirm_box.text or nil }
+        if confirm_box and args.confirm then
+            confirm_box.ok_callback()
+            stepUI()
+        end
+        return out
+    end, true)
+end
+
 local command = commands[args.command]
 if not command then fail("unknown command: " .. tostring(args.command)) end
 local ok, err = xpcall(command, debug.traceback)
