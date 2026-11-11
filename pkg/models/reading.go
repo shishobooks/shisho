@@ -36,6 +36,11 @@ const (
 // ReadThrough is one pass a user makes through a Book. See "Read-through" in
 // CONTEXT.md. BeginDay and EndDay are calendar days (YYYY-MM-DD), each
 // optional. Paused means something only while the outcome is underway.
+//
+// A Read-through outlives its Book (ADR 0015): deleting the Book clears
+// BookID and leaves BookTitle and BookAuthors, copied as the Book was then.
+// A detached Read-through belongs to no Book, so nothing that reads a Book's
+// Read-throughs sees it.
 type ReadThrough struct {
 	bun.BaseModel `bun:"table:read_throughs,alias:rt" tstype:"-"`
 
@@ -43,11 +48,15 @@ type ReadThrough struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	UserID    int       `bun:",nullzero" json:"-"`
-	BookID    int       `bun:",nullzero" json:"book_id"`
-	BeginDay  *string   `json:"begin_day"`
-	EndDay    *string   `json:"end_day"`
-	Outcome   string    `bun:",nullzero" json:"outcome" tstype:"ReadThroughOutcome"`
-	Paused    bool      `bun:",notnull" json:"paused"`
+	BookID    *int      `json:"book_id" tstype:"number | null,required"`
+	// BookTitle and BookAuthors are the deleted Book's title and author
+	// names, null while the Book exists.
+	BookTitle   *string  `json:"book_title" tstype:"string | null,required"`
+	BookAuthors []string `bun:",type:json,nullzero" json:"book_authors" tstype:"string[] | null,required"`
+	BeginDay    *string  `json:"begin_day"`
+	EndDay      *string  `json:"end_day"`
+	Outcome     string   `bun:",nullzero" json:"outcome" tstype:"ReadThroughOutcome"`
+	Paused      bool     `bun:",notnull" json:"paused"`
 	// LeftToReadPosition is the To Read position the Book left when this
 	// Read-through started, which deleting it while underway restores.
 	LeftToReadPosition *int `json:"-"`
@@ -172,6 +181,22 @@ type ReadingPositionUpdate struct {
 	Opened bool `bun:",notnull" json:"opened"`
 }
 
+// Reading kinds: whether a Reading Session was reading or listening, by the
+// File it was in. An audiobook is listening; everything else is reading.
+const (
+	//tygo:emit export type ReadingKind = typeof ReadingKindReading | typeof ReadingKindListening;
+	ReadingKindReading   = "reading"
+	ReadingKindListening = "listening"
+)
+
+// ReadingKindForFileType is the kind of reading done in a File of fileType.
+func ReadingKindForFileType(fileType string) string {
+	if IsAudiobookFileType(fileType) {
+		return ReadingKindListening
+	}
+	return ReadingKindReading
+}
+
 // ReadingSession is one stretch of reading or listening to a File. See
 // "Reading Session" in CONTEXT.md. Measured is false for a session a source
 // estimated rather than timed.
@@ -189,4 +214,13 @@ type ReadingSession struct {
 	StartPercentage float64   `bun:",notnull" json:"start_percentage"`
 	EndPercentage   float64   `bun:",notnull" json:"end_percentage"`
 	Measured        bool      `bun:",notnull" json:"measured"`
+	// Kind is whether this was reading or listening, recorded when the
+	// Session is written so it survives its File.
+	Kind string `bun:",nullzero" json:"kind" tstype:"ReadingKind"`
+	// Duration is the seconds spent, which is the span from StartedAt to
+	// EndedAt unless the source knows the reader paused partway.
+	Duration int `bun:",notnull" json:"duration"`
+	// SourceDeviceID is the Device that reported the Session, when a Device
+	// did and still exists. A browser isn't a Device.
+	SourceDeviceID *string `json:"-"`
 }

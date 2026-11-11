@@ -15,6 +15,8 @@ const rt = (overrides: Partial<ReadThrough>): ReadThrough => ({
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
   book_id: 1,
+  book_title: null,
+  book_authors: null,
   begin_day: undefined,
   end_day: undefined,
   outcome: "finished",

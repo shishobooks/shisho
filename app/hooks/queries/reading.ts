@@ -14,7 +14,10 @@ import {
   PageFlowScrolled,
   type BookReadingResponse,
   type FilePositionResponse,
+  type ListReadingHistoryQuery,
+  type ListReadingHistoryResponse,
   type PageFlow,
+  type ReadThroughChangeResponse,
   type ReorderToReadPayload,
   type SetPageFlowPayload,
   type SetRatingPayload,
@@ -32,6 +35,7 @@ import { QueryKey as SettingsQueryKey } from "./settings";
 export enum QueryKey {
   BookReading = "BookReading",
   FilePosition = "FilePosition",
+  ReadingHistory = "ReadingHistory",
 }
 
 // In Demo Mode, a Book's Page flow is a reader setting like the others: it
@@ -107,7 +111,67 @@ const onReadingChanged = (
   queryClient.setQueryData([QueryKey.BookReading, data.book_id], data);
   queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
   queryClient.invalidateQueries({ queryKey: [QueryKey.FilePosition] });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.ReadingHistory] });
   invalidateOtherBookReadings(queryClient, data.book_id);
+};
+
+// A change to a Read-through carries its Book's reading record, unless the
+// Book was deleted or is in a library the user can't reach.
+const onReadThroughChanged = (
+  queryClient: QueryClient,
+  data: ReadThroughChangeResponse,
+) => {
+  if (data.reading) {
+    onReadingChanged(queryClient, data.reading);
+    return;
+  }
+  queryClient.invalidateQueries({ queryKey: [QueryKey.ReadingHistory] });
+};
+
+// The signed-in user's Read-throughs for all time, a page at a time.
+export const useReadingHistory = (
+  query: ListReadingHistoryQuery,
+  options: Omit<
+    UseQueryOptions<ListReadingHistoryResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ListReadingHistoryResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingHistory, query],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/history", null, query, signal),
+  });
+};
+
+interface EndReadThroughVariables {
+  id: number;
+  outcome: "finish" | "abandon";
+}
+
+// Ends a Read-through underway from Reading History, where its Book may be
+// gone, dated like ending it from the Book.
+export const useEndReadThrough = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ReadThroughChangeResponse,
+    ShishoAPIError,
+    EndReadThroughVariables
+  >({
+    mutationFn: ({ id, outcome }) => {
+      const timeZone = queryClient.getQueryData<UserSettingsResponse>([
+        SettingsQueryKey.UserSettings,
+      ])?.time_zone;
+      return API.request(
+        "POST",
+        `/reading/read-throughs/${id}/${outcome}`,
+        { today: todayDay(timeZone) },
+        null,
+      );
+    },
+    onSuccess: (data) => onReadThroughChanged(queryClient, data),
+  });
 };
 
 const invalidateOtherBookReadings = (
@@ -219,7 +283,7 @@ interface UpdateReadThroughVariables {
 export const useUpdateReadThrough = () => {
   const queryClient = useQueryClient();
   return useMutation<
-    BookReadingResponse,
+    ReadThroughChangeResponse,
     ShishoAPIError,
     UpdateReadThroughVariables
   >({
@@ -231,17 +295,17 @@ export const useUpdateReadThrough = () => {
         null,
       );
     },
-    onSuccess: (data) => onReadingChanged(queryClient, data),
+    onSuccess: (data) => onReadThroughChanged(queryClient, data),
   });
 };
 
 export const useDeleteReadThrough = () => {
   const queryClient = useQueryClient();
-  return useMutation<BookReadingResponse, ShishoAPIError, number>({
+  return useMutation<ReadThroughChangeResponse, ShishoAPIError, number>({
     mutationFn: (id) => {
       return API.request("DELETE", `/reading/read-throughs/${id}`, null, null);
     },
-    onSuccess: (data) => onReadingChanged(queryClient, data),
+    onSuccess: (data) => onReadThroughChanged(queryClient, data),
   });
 };
 
@@ -332,6 +396,7 @@ export const invalidateAfterPositionUpdate = (
 ) => {
   queryClient.invalidateQueries({ queryKey: [QueryKey.BookReading, bookId] });
   queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.ReadingHistory] });
   queryClient.invalidateQueries({
     queryKey: [QueryKey.FilePosition],
     predicate: (query) => query.queryKey[1] !== fileId,

@@ -83,7 +83,7 @@ func (s *pullStore) sitting(ctx context.Context, userID int, deviceID, document 
 		start = *pull.Percentage
 	}
 	id, err := s.readingService.RecordEstimatedSession(ctx, userID, fileID, models.ReadingSourceKOReader, reading.SessionInput{
-		StartedAt: pull.PulledAt, EndedAt: at, StartPercentage: start, EndPercentage: percentage,
+		StartedAt: pull.PulledAt, EndedAt: at, StartPercentage: start, EndPercentage: percentage, DeviceID: &deviceID,
 	})
 	if err != nil {
 		return err

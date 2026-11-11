@@ -40,6 +40,7 @@ import Preferences from "@/components/pages/Preferences";
 import PreservingRedirect from "@/components/pages/PreservingRedirect";
 import PublisherDetail from "@/components/pages/PublisherDetail";
 import PublishersList from "@/components/pages/PublishersList";
+import ReadingHistoryPage from "@/components/pages/ReadingHistoryPage";
 import Root from "@/components/pages/Root";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
@@ -283,6 +284,14 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.toRead}>
             <ToRead />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "reading-history",
+        element: (
+          <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.readingHistory}>
+            <ReadingHistoryPage />
           </ProtectedRoute>
         ),
       },

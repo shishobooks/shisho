@@ -35,6 +35,10 @@ var (
 // or belongs to another user.
 var ErrReadThroughNotFound = errors.New("read-through not found")
 
+// ErrReadThroughEnded is returned for ending a Read-through that already
+// ended, which the handlers render as 422 invalid_state.
+var ErrReadThroughEnded = errors.New("the read-through has already ended")
+
 // maxRatingUnits is five stars in quarter-star units.
 const maxRatingUnits = 20
 
@@ -373,7 +377,7 @@ func startReadThrough(ctx context.Context, tx bun.Tx, userID, bookID int, day st
 		CreatedAt:          now,
 		UpdatedAt:          now,
 		UserID:             userID,
-		BookID:             bookID,
+		BookID:             &bookID,
 		BeginDay:           &day,
 		Outcome:            models.ReadThroughOutcomeUnderway,
 		LeftToReadPosition: leftPosition,
@@ -475,7 +479,7 @@ func insertFinishedReadThrough(ctx context.Context, tx bun.Tx, userID, bookID in
 		CreatedAt: now,
 		UpdatedAt: now,
 		UserID:    userID,
-		BookID:    bookID,
+		BookID:    &bookID,
 		EndDay:    &day,
 		Outcome:   models.ReadThroughOutcomeFinished,
 	}
@@ -490,8 +494,15 @@ func insertFinishedReadThrough(ctx context.Context, tx bun.Tx, userID, bookID in
 // zone since, can put that before the begin day, which an end day can't be. With
 // no time zone set yet, it can also be after the user's today.
 func manualEndDay(ctx context.Context, db bun.IDB, rt *models.ReadThrough, today string) (string, error) {
+	// A detached Read-through's Files are gone, so its own log says when it
+	// was last read.
+	lastRead := fmt.Sprintf(`(SELECT MAX(rpu.occurred_at) FROM reading_position_updates AS rpu
+		WHERE rpu.read_through_id = %d AND NOT rpu.opened)`, rt.ID)
+	if rt.BookID != nil {
+		lastRead = LastReadExpr(rt.UserID, strconv.Itoa(*rt.BookID))
+	}
 	var lastReadAt *time.Time
-	err := db.NewSelect().ColumnExpr(LastReadExpr(rt.UserID, strconv.Itoa(rt.BookID))).Scan(ctx, &lastReadAt)
+	err := db.NewSelect().ColumnExpr(lastRead).Scan(ctx, &lastReadAt)
 	if err != nil {
 		return "", errors.WithStack(err)
 	}
@@ -567,22 +578,62 @@ func (svc *Service) UpdateReadThroughDays(ctx context.Context, rt *models.ReadTh
 // DeleteReadThrough deletes rt: the Read-through no longer counts. Its
 // position updates and Reading Sessions go with it. Deleting the one
 // underway takes the Book back to before it started: its Reading Positions
-// reset, and a Book that left To Read to start it returns to its place.
+// reset, and a Book that left To Read to start it returns to its place. A
+// detached Read-through has no Book to take back.
 func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThrough) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		if _, err := tx.NewDelete().Model(rt).WherePK().Exec(ctx); err != nil {
 			return errors.WithStack(err)
 		}
-		if rt.Outcome != models.ReadThroughOutcomeUnderway {
+		if rt.Outcome != models.ReadThroughOutcomeUnderway || rt.BookID == nil {
 			return nil
 		}
-		if err := resetPositions(ctx, tx, rt.UserID, rt.BookID, 0); err != nil {
+		if err := resetPositions(ctx, tx, rt.UserID, *rt.BookID, 0); err != nil {
 			return err
 		}
 		if rt.LeftToReadPosition == nil {
 			return nil
 		}
-		return returnToRead(ctx, tx, rt.UserID, rt.BookID, *rt.LeftToReadPosition, svc.now())
+		return returnToRead(ctx, tx, rt.UserID, *rt.BookID, *rt.LeftToReadPosition, svc.now())
+	})
+}
+
+// EndReadThrough ends rt, which must be underway, with outcome, by the
+// rules End follows: dated the day it was last read, or today. A detached
+// Read-through has no Book to take off To Read. It refuses with
+// ErrReadThroughEnded a Read-through that already ended.
+func (svc *Service) EndReadThrough(ctx context.Context, rt *models.ReadThrough, outcome, today string) error {
+	if rt.Outcome != models.ReadThroughOutcomeUnderway {
+		return ErrReadThroughEnded
+	}
+	if rt.BookID != nil {
+		return svc.End(ctx, rt.UserID, *rt.BookID, outcome, today)
+	}
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		endDay, err := manualEndDay(ctx, tx, rt, today)
+		if err != nil {
+			return err
+		}
+		rt.Outcome = outcome
+		rt.Paused = false
+		rt.EndDay = &endDay
+		rt.UpdatedAt = svc.now()
+		res, err := tx.NewUpdate().
+			Model(rt).
+			Column("outcome", "paused", "end_day", "updated_at").
+			WherePK().
+			Where("outcome = ?", models.ReadThroughOutcomeUnderway).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		// Another request may have ended it since rt was loaded.
+		if n, err := res.RowsAffected(); err != nil {
+			return errors.WithStack(err)
+		} else if n == 0 {
+			return ErrReadThroughEnded
+		}
+		return nil
 	})
 }
 

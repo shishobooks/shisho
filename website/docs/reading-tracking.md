@@ -143,6 +143,18 @@ Each time you read a book is a **Read-through**: when it started, when it ended,
 
 The status and summary update after each change.
 
+### Reading History Page
+
+**Reading History**, in a library's sidebar and the user menu, lists every Read-through you have, across every library, newest first: the ones you're on, then by end date. Each row shows the book's cover, title, and authors, how the read ended, and its dates. Filter by **Finished**, **Did Not Finish**, or **Underway**, and with **Removed from library** to see only reads of books that were deleted.
+
+Each row's menu offers:
+
+- **Edit dates** and **Delete**, as on the book's page.
+- **Start a reread** for a book you can still open and aren't reading now.
+- **Mark as finished** and **Mark as Did Not Finish** for a read you're on, dated the way the status menu dates them.
+
+A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its reads still count, and you can still edit or delete them.
+
 ## Ratings
 
 Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. The rating's number shows beside the stars. Hovering over them previews, in paler stars and with its number, the rating a click would set, and the stars turn solid once it's saved. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.
@@ -158,4 +170,6 @@ When [merging books](./managing-books-and-files.md#merging-books) removes a book
 - The merged book keeps its own rating and its place on To Read. When it has none, it takes those of a removed book, the one added to Shisho first if several have one.
 - If both books were being read, the two reads become one, starting on the earlier start date.
 
-Moving only some of a book's files moves no reading data. Deleting a book deletes everyone's reading data for it. A user who loses access to a library keeps their reading data, and sees it again if their access returns.
+Moving only some of a book's files moves no reading data. A user who loses access to a library keeps their reading data, and sees it again if their access returns.
+
+Deleting a book, or the library it's in, keeps every user's Read-throughs of it, with the book's title and authors as they were. They stay on [Reading History](#reading-history-page) marked **Removed from library**, with no link, and keep counting until the user deletes them. A read that was underway stays underway until the user marks it finished or Did Not Finish, or deletes it. Ratings and places on To Read are deleted with the book. Adding the same book again starts it with no history.

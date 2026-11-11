@@ -175,6 +175,7 @@ func TestHandoff_PullThenPushIsASession(t *testing.T) {
 	s := sessions[0]
 	assert.False(t, s.Measured, "KOReader's sessions are estimates")
 	assert.Equal(t, models.ReadingSourceKOReader, s.Source)
+	assert.Equal(t, &f.device.ID, s.SourceDeviceID, "the session names the Device that read")
 	assert.WithinDuration(t, pulledAt, s.StartedAt, 5*time.Second)
 	assert.WithinDuration(t, time.Now(), s.EndedAt, 5*time.Second)
 	assert.InDelta(t, 0.12, s.StartPercentage, 1e-9)

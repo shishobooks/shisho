@@ -263,6 +263,7 @@ func TestKoboReadingState_MinutesBecomeSessions(t *testing.T) {
 	sessions := f.sessions()
 	require.Len(t, sessions, 2)
 	assert.Equal(t, models.ReadingSourceKobo, sessions[0].Source)
+	assert.Equal(t, &f.device.ID, sessions[0].SourceDeviceID, "the session names the Kobo")
 	assert.False(t, sessions[0].Measured)
 	assert.True(t, first.Equal(sessions[0].EndedAt), sessions[0].EndedAt)
 	assert.Equal(t, 10*time.Minute, sessions[0].EndedAt.Sub(sessions[0].StartedAt))
@@ -487,4 +488,20 @@ func TestKoboReadingState_NewBooksArriveWithTheirState(t *testing.T) {
 	assert.InDelta(t, 30, *found[entryA].CurrentBookmark.ProgressPercent, 0.001)
 	require.Contains(t, found, entryB)
 	assert.Nil(t, found[entryB], "a book never read goes out without a state")
+}
+
+// Minutes reported with neither a place nor a status still make a session,
+// and it names the Kobo too.
+func TestKoboReadingState_ATimeOnlySessionNamesTheKobo(t *testing.T) {
+	t.Parallel()
+	f := newReadingStateFixture(t)
+	at := time.Now().Add(-time.Hour).Truncate(time.Second)
+	f.put(koboState{status: "Reading", at: at, minutes: minutes(10), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 10})
+	f.put(koboState{at: at.Add(30 * time.Minute), minutes: minutes(20)})
+
+	sessions := f.sessions()
+	require.Len(t, sessions, 2, "one session per report that added minutes")
+	last := sessions[1]
+	assert.Equal(t, 10*time.Minute, last.EndedAt.Sub(last.StartedAt))
+	assert.Equal(t, &f.device.ID, last.SourceDeviceID)
 }

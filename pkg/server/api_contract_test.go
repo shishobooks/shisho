@@ -118,6 +118,13 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, fmt.Sprintf("/api/reading/books/%d/start", seeded.bookID), `{"today":"2026-03-01"}`, http.StatusOK)), &underway))
 	require.Len(t, underway.ReadThroughs, 1)
+	var finished struct {
+		ReadThroughs []struct {
+			ID int `json:"id"`
+		} `json:"read_throughs"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, fmt.Sprintf("/api/reading/books/%d/finish", fileBook.ID), `{"today":"2026-03-01"}`, http.StatusOK)), &finished))
+	require.Len(t, finished.ReadThroughs, 1)
 	f.request(http.MethodPost, "/api/lists", `{"name":"Favorites"}`, http.StatusCreated)
 	var classics struct {
 		ID int `json:"id"`
@@ -195,6 +202,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			name:   "undoing a finish no position update made",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/read-throughs/%d/undo-finish", underway.ReadThroughs[0].ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This finish can't be undone.",
+		},
+		{
+			name:   "ending a Read-through that already ended",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/read-throughs/%d/abandon", finished.ReadThroughs[0].ID),
+			body:   `{"today":"2026-03-02"}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This Read-through has already ended.",
 		},
 		{
 			name:   "list named like one the user already has",

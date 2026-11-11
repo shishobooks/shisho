@@ -1883,26 +1883,29 @@ func (svc *Service) ListAllFilesForLibrary(ctx context.Context, libraryID int) (
 // DeleteBook deletes a book and all its associated records.
 // All child records (files, authors, book_series, book_genres, book_tags) cascade via FK.
 // File children (narrators, identifiers, chapters) cascade from files via FK.
+// It keeps users' Read-throughs of the Book, as DeleteBooksByIDs does
+// (ADR 0015).
 func (svc *Service) DeleteBook(ctx context.Context, bookID int) error {
-	_, err := svc.db.NewDelete().
-		Model((*models.Book)(nil)).
-		Where("id = ?", bookID).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return svc.DeleteBooksByIDs(ctx, []int{bookID})
 }
 
 // DeleteBooksByIDs deletes multiple books and all their associated records.
-// All child records cascade via FK. Used during scan cleanup.
+// All child records cascade via FK, except users' Read-throughs, which
+// outlive their Book with a copy of its title and authors (ADR 0015).
 func (svc *Service) DeleteBooksByIDs(ctx context.Context, bookIDs []int) error {
 	if len(bookIDs) == 0 {
 		return nil
 	}
-
-	_, err := svc.db.NewDelete().
-		Model((*models.Book)(nil)).
-		Where("id IN (?)", bun.List(bookIDs)).
-		Exec(ctx)
-	return errors.WithStack(err)
+	return errors.WithStack(svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if err := reading.DetachBooks(ctx, tx, bookIDs); err != nil {
+			return err
+		}
+		_, err := tx.NewDelete().
+			Model((*models.Book)(nil)).
+			Where("id IN (?)", bun.List(bookIDs)).
+			Exec(ctx)
+		return errors.WithStack(err)
+	}))
 }
 
 // DeleteOrphanedBookChildren removes all child rows (files, authors, book_series,
