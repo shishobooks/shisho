@@ -12,7 +12,7 @@ Shisho creates three system roles with these default permissions:
 |------|---------------------|
 | **admin** | Read and Write for Libraries, Books, Series, People, Users, Jobs, Config, and Shares |
 | **editor** | Read and Write for Libraries, Books, Series, and People |
-| **viewer** | Read for Libraries, Books, Series, and People |
+| **viewer** | Read for Books, Series, and People |
 
 System roles cannot be renamed or deleted, but an administrator can edit their permission selections.
 
