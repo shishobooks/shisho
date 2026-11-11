@@ -17,7 +17,7 @@ func statFilesystem(path string) (volumeStat, error) {
 	if err := syscall.Statfs(path, &fs); err != nil {
 		return volumeStat{}, errors.Wrapf(err, "statfs %s", path)
 	}
-	blockSize := uint64(fs.Bsize) //nolint:gosec,unconvert // Bsize is int64 on Linux and uint32 on macOS, never negative
+	blockSize := blockUnit(&fs)
 	return volumeStat{
 		id:    uint64(st.Dev), //nolint:gosec,unconvert // Dev is uint64 on Linux and int32 on macOS
 		total: fs.Blocks * blockSize,
