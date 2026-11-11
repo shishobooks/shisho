@@ -97,4 +97,5 @@ tygo mechanics:
 ## Adding things
 
 - **Metadata fields:** invoke the `metadata-field` skill. The scanner, plugin bridge, generators, OPDS, Kobo, and frontend have parallel paths that a static list misses; the skill greps an existing similar field instead.
+- **Migrations:** create them with `mise db:migrate:create <name>`, which stamps the file with the current date and time. Never name one by hand with the time zeroed out (`YYYYMMDD000000`): bun tracks applied migrations by that timestamp, and two branches that pick the same day collide. `pkg/migrations/names_test.go` fails once both migrations are on one branch.
 - **Entity types** that books or files reference: model in `pkg/models/`; service patterned on `pkg/genres/service.go`; wire it into `worker.New`; use it in the scanner; add its orphan cleanup and FTS removal to `books.CleanupOrphanedEntities`.
