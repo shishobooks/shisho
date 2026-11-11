@@ -12,10 +12,14 @@ import { expect, getApiBaseURL, request, test } from "./fixtures";
 
 const USERNAME = "readingtest";
 const PASSWORD = "password123";
+// Reading Stats sums everything a user has read, so its test reads as a
+// user of its own.
+const STATS_USERNAME = "statstest";
 
 let libraryId: number;
 let bookId: number;
 let underwayBookId: number;
+let statsBookId: number;
 
 test.describe("Reading", () => {
   test.beforeAll(async ({ browser }) => {
@@ -45,6 +49,15 @@ test.describe("Reading", () => {
       })
     ).json()) as { id: number };
     underwayBookId = underway.id;
+    await apiContext.post("/api/test/users", {
+      data: { username: STATS_USERNAME, password: PASSWORD },
+    });
+    const statsBook = (await (
+      await apiContext.post("/api/test/books", {
+        data: { libraryId, title: "Counted Book", fileType: "epub" },
+      })
+    ).json()) as { id: number };
+    statsBookId = statsBook.id;
     await apiContext.dispose();
   });
 
@@ -55,6 +68,57 @@ test.describe("Reading", () => {
     await apiContext.delete("/api/test/ereader");
     await apiContext.delete("/api/test/users");
     await apiContext.dispose();
+  });
+
+  test("counts a finished book on Reading Stats until its Read-through is deleted", async ({
+    page,
+  }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Username").fill(STATS_USERNAME);
+    await page.getByLabel("Password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(/\/admin\/libraries|\/libraries\//);
+
+    await page.goto(`/libraries/${libraryId}/books/${statsBookId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page
+      .getByRole("button", { name: "Reading status: Track reading" })
+      .click();
+    await page.getByRole("menuitem", { name: "Mark as read" }).click();
+    await expect(
+      page.getByRole("button", { name: "Reading status: Read" }),
+    ).toBeVisible();
+
+    await page.goto("/reading-stats", { waitUntil: "domcontentloaded" });
+    await expect(
+      page
+        .getByRole("group", { name: "Books finished" })
+        .getByText("1", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("list", { name: "Books finished" })
+        .getByRole("link", { name: "Counted Book" }),
+    ).toBeVisible();
+
+    await page.getByRole("link", { name: "Manage reading history" }).click();
+    await page.waitForURL(/\/reading-history/);
+    await page
+      .getByRole("button", { name: "Actions for Counted Book" })
+      .click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Delete", exact: true })
+      .click();
+    await expect(page.getByText("Nothing here yet.")).toBeVisible();
+
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await expect(page.getByText(/^No reading in \d{4} yet\./)).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "Books finished" }),
+    ).not.toBeVisible();
   });
 
   test("marks a book read, rates it, and shows the status on its card, and sorts by it", async ({

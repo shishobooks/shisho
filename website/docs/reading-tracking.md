@@ -155,6 +155,8 @@ Each row's menu offers:
 
 A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its reads still count, and you can still edit or delete them.
 
+[Reading Stats](./reading-stats.md) sums up these reads, and the time you spent on them, by year.
+
 ## Ratings
 
 Rate a book with the stars next to its status, in quarter stars from a quarter star to five stars. The rating's number shows beside the stars. Hovering over them previews, in paler stars and with its number, the rating a click would set, and the stars turn solid once it's saved. Click or drag across the stars, or focus them and use the arrow keys. Choose the **×** beside the stars to clear a rating.

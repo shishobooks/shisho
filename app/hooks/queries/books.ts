@@ -33,7 +33,10 @@ import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { QueryKey as PeopleQueryKey } from "./people";
 import { useRequires } from "./permissions";
 import { QueryKey as PublishersQueryKey } from "./publishers";
-import { QueryKey as ReadingQueryKey } from "./reading";
+import {
+  invalidateReadingRecords,
+  QueryKey as ReadingQueryKey,
+} from "./reading";
 import { QueryKey as SearchQueryKey } from "./search";
 import { QueryKey as SeriesQueryKey } from "./series";
 import { QueryKey as TagsQueryKey } from "./tags";
@@ -114,6 +117,9 @@ export const useUpdateBook = () => {
       queryClient.invalidateQueries({ queryKey: [SeriesQueryKey.ListSeries] });
       queryClient.invalidateQueries({ queryKey: [GenresQueryKey.ListGenres] });
       queryClient.invalidateQueries({ queryKey: [TagsQueryKey.ListTags] });
+      // Reading Stats counts finished books by their genres, tags, and
+      // authors, and lists their titles.
+      invalidateReadingRecords(queryClient);
       // Title, subtitle, authors, and series_names all feed books_fts —
       // invalidate global search results.
       queryClient.invalidateQueries({
@@ -243,6 +249,7 @@ export const useMoveFiles = () => {
       queryClient.invalidateQueries({
         queryKey: [ReadingQueryKey.BookReading],
       });
+      invalidateReadingRecords(queryClient);
       // Filenames and narrators on both source and target books shift —
       // books_fts changes for both.
       queryClient.invalidateQueries({
@@ -274,6 +281,7 @@ export const useMergeBooks = () => {
       queryClient.invalidateQueries({
         queryKey: [ReadingQueryKey.BookReading],
       });
+      invalidateReadingRecords(queryClient);
       // Source book disappears, target book absorbs files — books_fts changes.
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],
@@ -298,9 +306,7 @@ export const useDeleteBook = () => {
       queryClient.invalidateQueries({
         queryKey: [ReadingQueryKey.BookReading],
       });
-      queryClient.invalidateQueries({
-        queryKey: [ReadingQueryKey.ReadingHistory],
-      });
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],
       });
@@ -342,9 +348,7 @@ export const useDeleteBooks = () => {
       queryClient.invalidateQueries({
         queryKey: [ReadingQueryKey.BookReading],
       });
-      queryClient.invalidateQueries({
-        queryKey: [ReadingQueryKey.ReadingHistory],
-      });
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],
       });

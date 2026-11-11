@@ -24,6 +24,7 @@ import type {
 } from "@/types/generated/devices";
 
 import { useRequires } from "./permissions";
+import { QueryKey as ReadingQueryKey } from "./reading";
 
 export enum QueryKey {
   ListDevices = "ListDevices",
@@ -78,6 +79,8 @@ const useInvalidateDevices = () => {
     queryClient.invalidateQueries({ queryKey: [QueryKey.ListAllDevices] });
     queryClient.invalidateQueries({ queryKey: [QueryKey.DeliveryPreview] });
     queryClient.invalidateQueries({ queryKey: [QueryKey.BookDevices] });
+    // Reading Stats names each Device the user read on.
+    queryClient.invalidateQueries({ queryKey: [ReadingQueryKey.ReadingStats] });
   };
 };
 

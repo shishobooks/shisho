@@ -13,6 +13,7 @@ import {
   formatPageCount,
   formatPersonCredits,
   formatPlayerTime,
+  formatShortDuration,
   formatShowingRange,
   formatYear,
 } from "./format";
@@ -250,5 +251,14 @@ describe("fileTypeLabel", () => {
   it("writes every other File Type in capitals", () => {
     expect(fileTypeLabel("epub")).toBe("EPUB");
     expect(fileTypeLabel("cbz")).toBe("CBZ");
+  });
+});
+
+describe("formatShortDuration", () => {
+  it("shows minutes under an hour and whole hours from an hour up", () => {
+    expect(formatShortDuration(0)).toBe("0m");
+    expect(formatShortDuration(1500)).toBe("25m");
+    expect(formatShortDuration(3590)).toBe("1h");
+    expect(formatShortDuration(5400)).toBe("2h");
   });
 });

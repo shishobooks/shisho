@@ -7,19 +7,18 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
-import CoverImage from "@/components/library/CoverImage";
-import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import { EditReadThroughDialog } from "@/components/library/EditReadThroughDialog";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter, {
   type PageChangeHandler,
 } from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
+import ReadThroughCover from "@/components/library/ReadThroughCover";
+import ReadThroughDetails from "@/components/library/ReadThroughDetails";
 import TopNav from "@/components/library/TopNav";
-import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -47,7 +46,6 @@ import type {
   ReadThrough,
   ReadThroughOutcome,
 } from "@/types";
-import { bookCoverUrl } from "@/utils/coverUrl";
 import { formatCount, formatShowingRange } from "@/utils/format";
 import {
   readThroughDatesLabel,
@@ -65,26 +63,6 @@ const OUTCOME_FILTERS: { value: ReadThroughOutcome | null; label: string }[] = [
 
 const isOutcome = (value: string | null): value is ReadThroughOutcome =>
   value === "finished" || value === "abandoned" || value === "underway";
-
-const HistoryCover = ({ entry }: { entry: ReadingHistoryEntry }) => {
-  const [failed, setFailed] = useState(false);
-  const book = entry.book;
-  const showCover = !!book && !!book.cover_cache_key && !failed;
-  return (
-    <div className="relative h-16 w-11 shrink-0 overflow-hidden rounded bg-muted">
-      {showCover ? (
-        <CoverImage
-          alt=""
-          className="h-full w-full object-cover"
-          onError={() => setFailed(true)}
-          src={bookCoverUrl(book)}
-        />
-      ) : (
-        <CoverPlaceholder className="absolute inset-0" variant="book" />
-      )}
-    </div>
-  );
-};
 
 interface HistoryRowProps {
   entry: ReadingHistoryEntry;
@@ -125,49 +103,15 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
     }
   };
 
-  const title = (
-    <TruncatedText className="truncate">{entry.title}</TruncatedText>
-  );
-
   return (
     <li className="flex items-center gap-3 px-3 py-2">
-      <HistoryCover entry={entry} />
-      <div className="min-w-0 flex-1">
-        {/* TruncatedText renders a div, which a <p> can't hold. */}
-        <div className="min-w-0 text-sm font-medium">
-          {entry.book ? (
-            <Link
-              className="block min-w-0 hover:underline"
-              to={`/libraries/${entry.book.library_id}/books/${entry.book.id}`}
-            >
-              {title}
-            </Link>
-          ) : (
-            title
-          )}
-        </div>
-        {entry.authors.length > 0 && (
-          <p className="truncate text-xs text-muted-foreground">
-            {entry.authors.join(", ")}
-          </p>
-        )}
-        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-          <span className="font-medium">{readThroughOutcomeLabel(rt)}</span>
-          <span className="text-muted-foreground">
-            {readThroughDatesLabel(rt)}
-          </span>
-          {entry.removed && (
-            <Badge className="text-[11px]" variant="outline">
-              Removed from library
-            </Badge>
-          )}
-          {!entry.removed && !entry.book && (
-            <Badge className="text-[11px]" variant="outline">
-              No access to this library
-            </Badge>
-          )}
-        </div>
-      </div>
+      <ReadThroughCover book={entry.book} />
+      <ReadThroughDetails entry={entry}>
+        <span className="font-medium">{readThroughOutcomeLabel(rt)}</span>
+        <span className="text-muted-foreground">
+          {readThroughDatesLabel(rt)}
+        </span>
+      </ReadThroughDetails>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

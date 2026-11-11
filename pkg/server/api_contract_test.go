@@ -182,6 +182,11 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A position has one form.",
 		},
 		{
+			name:   "Reading Stats for a year that can't exist",
+			method: http.MethodGet, path: "/api/reading/stats?year=0",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"year" must be greater than or equal to 1`,
+		},
+		{
 			name:   "position update with no percentage",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
 			body:   `{"cfi":"epubcfi(/6/4!/4/2)"}`,

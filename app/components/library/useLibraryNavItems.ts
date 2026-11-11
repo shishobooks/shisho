@@ -3,6 +3,7 @@ import {
   Bookmark,
   BookOpen,
   Building2,
+  ChartColumn,
   History,
   Layers,
   Settings,
@@ -60,7 +61,14 @@ export const useLibraryNavItems = (): LibraryNavItem[] | null => {
       isActive: location.pathname.startsWith(`${basePath}/currently-reading`),
       show: can(ROUTE_PERMISSIONS.libraryCurrentlyReading),
     },
-    // Reading History spans libraries, like To Read.
+    // Reading Stats and Reading History span libraries, like To Read.
+    {
+      to: "/reading-stats",
+      Icon: ChartColumn,
+      label: "Reading Stats",
+      isActive: location.pathname.startsWith("/reading-stats"),
+      show: can(ROUTE_PERMISSIONS.readingStats),
+    },
     {
       to: "/reading-history",
       Icon: History,

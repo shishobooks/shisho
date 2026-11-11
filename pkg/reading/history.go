@@ -95,7 +95,7 @@ func (svc *Service) BuildHistoryEntries(ctx context.Context, user *models.User, 
 	}
 
 	for _, rt := range readThroughs {
-		entry := &ReadingHistoryEntry{ReadThrough: rt, Authors: []string{}}
+		entry := &ReadingHistoryEntry{ReadThroughEntry: ReadThroughEntry{ReadThrough: rt, Authors: []string{}}}
 		book := (*models.Book)(nil)
 		if rt.BookID != nil {
 			book = books[*rt.BookID]

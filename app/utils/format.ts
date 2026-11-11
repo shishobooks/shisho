@@ -127,6 +127,18 @@ export const formatDuration = (seconds: number): string => {
 };
 
 /**
+ * Formats seconds as a short duration for a chart label: whole hours from an
+ * hour up, minutes below it.
+ * @example formatShortDuration(5400) // "2h"
+ * @example formatShortDuration(1500) // "25m"
+ */
+export const formatShortDuration = (seconds: number): string => {
+  const minutes = Math.round(seconds / 60);
+  if (minutes >= 60) return `${Math.round(seconds / 3600)}h`;
+  return `${minutes}m`;
+};
+
+/**
  * Formats the time between two ISO timestamps, or from `start` until now when
  * `end` is omitted, as milliseconds, seconds, or minutes and seconds.
  * @example formatElapsed("2024-01-01T00:00:00Z", "2024-01-01T00:03:05Z") // "3m 5s"

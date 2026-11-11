@@ -436,6 +436,24 @@ func (h *handler) listHistory(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, ListReadingHistoryResponse{Items: items, Total: total}))
 }
 
+// stats returns the caller's Reading Stats for one year, or all time. It
+// takes no user, so it only ever covers the caller's own reading.
+func (h *handler) stats(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReadingStatsQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.Stats(c.Request().Context(), user, params.Year)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
 func (h *handler) addToRead(c echo.Context) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {
