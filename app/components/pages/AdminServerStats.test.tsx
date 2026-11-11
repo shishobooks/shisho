@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -108,7 +109,6 @@ const stats: StatsResponse = {
       cache_bytes: 10 * 1024 ** 3,
     },
   ],
-  database_bytes: 48 * 1024 ** 2,
   caches: [
     {
       id: "cover_thumbnails",
@@ -198,9 +198,15 @@ describe("AdminServerStats", () => {
     const libraries = section("Libraries");
     const fiction = within(libraries).getByRole("row", { name: /Fiction/ });
     expect(within(fiction).getByText("18,307")).toBeInTheDocument();
+    // Each format is its own item, most common first, then supplements.
+    const files = within(fiction).getByRole("list", {
+      name: "Files in Fiction",
+    });
     expect(
-      within(fiction).getByText("18,000 EPUB · 400 M4B · 7 supplements"),
-    ).toBeInTheDocument();
+      within(files)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["EPUB18,000", "M4B400", "Supplements7"]);
     expect(within(fiction).getByText("4,100")).toBeInTheDocument();
     expect(within(fiction).getByText("200 GB")).toBeInTheDocument();
     const total = within(libraries).getByRole("row", { name: /All libraries/ });
@@ -213,8 +219,15 @@ describe("AdminServerStats", () => {
     const disk = section("Disk Space");
     const volumes = within(disk).getAllByRole("listitem", { name: /volume/i });
     expect(volumes).toHaveLength(2);
-    expect(within(volumes[0]).getByText("/media/fiction")).toBeInTheDocument();
-    expect(within(volumes[0]).getByText("/config")).toBeInTheDocument();
+    const paths = within(volumes[0]).getByRole("table", {
+      name: "Volume 1 paths",
+    });
+    const fiction = within(paths).getByRole("row", { name: /Fiction/ });
+    expect(fiction).toHaveTextContent("/media/fiction");
+    expect(fiction).toHaveTextContent("200 GB");
+    expect(
+      within(paths).getByRole("row", { name: /Database/ }),
+    ).toHaveTextContent("/config");
     expect(within(volumes[0]).getByText("250 GB free")).toBeInTheDocument();
     expect(
       within(volumes[0]).getByText("750 GB used of 1000 GB"),
@@ -240,12 +253,6 @@ describe("AdminServerStats", () => {
     expect(entry("Free")).toHaveTextContent("250 GB");
     // A kind with nothing on this volume is left out.
     expect(within(legend).queryByText("Cache")).not.toBeInTheDocument();
-
-    // Each path says how much it holds.
-    const fiction = within(volumes[0])
-      .getByText("/media/fiction")
-      .closest("li") as HTMLElement;
-    expect(fiction).toHaveTextContent("200 GB");
 
     const cacheLegend = within(volumes[1]).getByRole("list", {
       name: "Volume 2 space",
@@ -314,23 +321,49 @@ describe("AdminServerStats", () => {
     expect(volumes).toHaveLength(2);
     expect(within(volumes[0]).getByText("60 GB free")).toBeInTheDocument();
     expect(
-      within(volumes[0]).queryByRole("list", { name: "Volume 1 paths" }),
+      within(volumes[0]).queryByRole("table", { name: "Volume 1 paths" }),
     ).not.toBeInTheDocument();
     expect(
       within(volumes[0]).getByText("Holds only library folders you can't see."),
     ).toBeInTheDocument();
   });
 
-  it("shows the database and each cache's size", () => {
+  it("lists each cache under the cache path, with no separate section", () => {
     renderPage();
 
-    const data = section("Server Data");
-    expect(within(data).getByText("48 MB")).toBeInTheDocument();
-    expect(within(data).getByText("512 MB")).toBeInTheDocument();
-    expect(within(data).getByText("9,000 files")).toBeInTheDocument();
+    const volumes = within(section("Disk Space")).getAllByRole("listitem", {
+      name: /volume/i,
+    });
+    const paths = within(volumes[1]).getByRole("table", {
+      name: "Volume 2 paths",
+    });
     expect(
-      within(data).getByRole("link", { name: "Manage caches" }),
+      within(paths).getByRole("row", { name: /Cover Thumbnails/ }),
+    ).toHaveTextContent("512 MB");
+    expect(
+      within(paths).getByRole("row", { name: /Downloads/ }),
+    ).toHaveTextContent("0 B");
+    expect(
+      within(paths).getByRole("link", { name: "Manage caches" }),
     ).toHaveAttribute("href", "/admin/cache");
+    expect(
+      screen.queryByRole("region", { name: "Server Data" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("names a bar segment and its size on hover", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = renderPage();
+
+    const segment = container.querySelector(
+      '[data-segment="Libraries"]',
+    ) as HTMLElement;
+    await user.hover(segment);
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Libraries");
+    expect(tooltip).toHaveTextContent("203 GB");
+    expect(tooltip).toHaveTextContent("20% of the volume");
   });
 
   it("shows reading for this year and all time with no names", () => {

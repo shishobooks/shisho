@@ -18,11 +18,11 @@ type StatsResponse struct {
 	// Totals sums every Library, including any the viewer can't access.
 	Totals  ContentCounts `json:"totals"`
 	Volumes []Volume      `json:"volumes"`
-	// DatabaseBytes is the database file plus its write-ahead log.
-	DatabaseBytes int64       `json:"database_bytes"`
-	Caches        []CacheSize `json:"caches"`
-	Users         int         `json:"users"`
-	Devices       int         `json:"devices"`
+	// Caches is each cache's size. Its total is the cache path's size in
+	// Volumes.
+	Caches  []CacheSize `json:"caches"`
+	Users   int         `json:"users"`
+	Devices int         `json:"devices"`
 	// Growth is Books by the month they were added, from the first such
 	// month to the current one, with empty months included.
 	Growth  []GrowthMonth `json:"growth"`
@@ -67,7 +67,8 @@ type Volume struct {
 	FreeBytes  uint64       `json:"free_bytes"`
 	// LibraryBytes, DatabaseBytes, and CacheBytes are how much of UsedBytes
 	// is Shisho's: library files (including folders hidden from the viewer),
-	// the database, and the caches. The rest is other data on the volume.
+	// the database with its write-ahead log, and the caches. The rest is
+	// other data on the volume.
 	LibraryBytes  int64 `json:"library_bytes"`
 	DatabaseBytes int64 `json:"database_bytes"`
 	CacheBytes    int64 `json:"cache_bytes"`

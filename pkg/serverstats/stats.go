@@ -44,7 +44,8 @@ func (h *handler) compute(ctx context.Context, user *models.User) (StatsResponse
 		}
 	}
 
-	if resp.DatabaseBytes, err = h.databaseBytes(); err != nil {
+	databaseBytes, err := h.databaseBytes()
+	if err != nil {
 		return resp, err
 	}
 	resp.Caches = h.cacheSizes(ctx)
@@ -52,7 +53,7 @@ func (h *handler) compute(ctx context.Context, user *models.User) (StatsResponse
 	for _, c := range resp.Caches {
 		cacheBytes += c.SizeBytes
 	}
-	if resp.Volumes, err = h.volumes(ctx, user, libraries, resp.DatabaseBytes, cacheBytes); err != nil {
+	if resp.Volumes, err = h.volumes(ctx, user, libraries, databaseBytes, cacheBytes); err != nil {
 		return resp, err
 	}
 	if err := h.db.NewSelect().Table("users").ColumnExpr("COUNT(*)").Scan(ctx, &resp.Users); err != nil {

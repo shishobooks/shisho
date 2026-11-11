@@ -1,17 +1,25 @@
-import { useId, type ReactNode } from "react";
+import { Fragment, useId, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import LibraryGrowthChart from "@/components/library/LibraryGrowthChart";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
+import TruncatedText from "@/components/library/TruncatedText";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useServerStats } from "@/hooks/queries/serverStats";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import type {
+  CacheSize,
   ContentCounts,
   ReadingPeriod,
   StatsResponse,
   Volume,
+  VolumePath,
   VolumePathKind,
 } from "@/types/generated/serverstats";
 import {
@@ -66,19 +74,45 @@ const Stat = ({ label, value }: StatProps) => (
 const totalFiles = (counts: ContentCounts) =>
   counts.files.reduce((sum, f) => sum + f.count, 0) + counts.supplement_files;
 
-// "18,000 EPUB · 400 M4B · 7 supplements": most common first.
-const filesSummary = (counts: ContentCounts): string => {
-  const parts = [...counts.files]
-    .sort(
-      (a, b) =>
-        b.count - a.count ||
-        fileTypeLabel(a.file_type).localeCompare(fileTypeLabel(b.file_type)),
-    )
-    .map((f) => `${f.count.toLocaleString()} ${fileTypeLabel(f.file_type)}`);
-  if (counts.supplement_files > 0) {
-    parts.push(formatCount(counts.supplement_files, "supplement"));
+// Each format as its own chip, most common first, then supplements in a
+// dashed chip since they aren't a format.
+const FilesBreakdown = ({
+  name,
+  counts,
+}: {
+  name: string;
+  counts: ContentCounts;
+}) => {
+  const files = [...counts.files].sort(
+    (a, b) =>
+      b.count - a.count ||
+      fileTypeLabel(a.file_type).localeCompare(fileTypeLabel(b.file_type)),
+  );
+  if (files.length === 0 && counts.supplement_files === 0) {
+    return <span className="text-muted-foreground">None</span>;
   }
-  return parts.length > 0 ? parts.join(" · ") : "None";
+  const chip =
+    "inline-flex items-baseline gap-1 rounded-md px-1.5 py-0.5 text-xs";
+  return (
+    <ul aria-label={`Files in ${name}`} className="flex flex-wrap gap-1">
+      {files.map((f) => (
+        <li className={cn(chip, "bg-secondary")} key={f.file_type}>
+          <span className="text-muted-foreground">
+            {fileTypeLabel(f.file_type)}
+          </span>
+          <span className="tabular-nums">{f.count.toLocaleString()}</span>
+        </li>
+      ))}
+      {counts.supplement_files > 0 && (
+        <li className={cn(chip, "border border-dashed border-border")}>
+          <span className="text-muted-foreground">Supplements</span>
+          <span className="tabular-nums">
+            {counts.supplement_files.toLocaleString()}
+          </span>
+        </li>
+      )}
+    </ul>
+  );
 };
 
 const Overview = ({ stats }: { stats: StatsResponse }) => (
@@ -164,8 +198,8 @@ const LibraryRow = ({
         {name}
       </th>
       <td className={cell}>{counts.books.toLocaleString()}</td>
-      <td className="py-2 px-3 text-left text-muted-foreground min-w-48">
-        {filesSummary(counts)}
+      <td className="py-2 px-3 text-left min-w-48">
+        <FilesBreakdown counts={counts} name={name} />
       </td>
       <td className={cell}>{counts.series.toLocaleString()}</td>
       <td className={cell}>{counts.persons.toLocaleString()}</td>
@@ -239,7 +273,7 @@ const Libraries = ({ stats }: { stats: StatsResponse }) => (
 
 const pathKindLabel: Record<VolumePathKind, string> = {
   library: "Library",
-  data: "Data",
+  data: "Database",
   cache: "Cache",
 };
 
@@ -289,7 +323,112 @@ const diskSegments = (volume: Volume): DiskSegment[] => {
   return segments;
 };
 
-const VolumeItem = ({ volume, index }: { volume: Volume; index: number }) => {
+// "20%", or "<1%" for a sliver that would round to nothing.
+const shareOf = (bytes: number, volume: Volume) => {
+  if (volume.total_bytes <= 0) return "0%";
+  const percent = (bytes / volume.total_bytes) * 100;
+  return percent > 0 && percent < 1 ? "<1%" : `${Math.round(percent)}%`;
+};
+
+const VolumePaths = ({
+  name,
+  paths,
+  caches,
+}: {
+  name: string;
+  paths: VolumePath[];
+  caches: CacheSize[];
+}) => {
+  const cell = "py-1.5 align-top";
+  return (
+    <table
+      aria-label={`${name} paths`}
+      className="mt-3 w-full table-fixed text-xs"
+    >
+      <thead>
+        <tr className="text-muted-foreground">
+          <th
+            className={cn(cell, "w-1/3 pr-3 text-left font-medium sm:w-1/4")}
+            scope="col"
+          >
+            Location
+          </th>
+          <th className={cn(cell, "pr-3 text-left font-medium")} scope="col">
+            Path
+          </th>
+          <th className={cn(cell, "w-20 text-right font-medium")} scope="col">
+            Size
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {paths.map((p) => (
+          <Fragment key={`${p.kind}:${p.path}`}>
+            <tr className="border-t border-border">
+              <th
+                className={cn(cell, "pr-3 text-left font-normal break-words")}
+                scope="row"
+              >
+                {pathLocation(p)}
+                {p.kind === "cache" && (
+                  <Link
+                    className="block whitespace-nowrap text-primary hover:underline sm:ml-2 sm:inline"
+                    to="/admin/cache"
+                  >
+                    Manage caches
+                  </Link>
+                )}
+              </th>
+              <td className={cn(cell, "pr-3 min-w-0")}>
+                {/* Long paths keep their end, the folder's own name, and
+                    lose the start; the full path is on hover. */}
+                <TruncatedText
+                  className="truncate font-mono [direction:rtl] text-left"
+                  tooltip={p.path}
+                >
+                  <bdi>{p.path}</bdi>
+                </TruncatedText>
+              </td>
+              <td className={cn(cell, "text-right tabular-nums")}>
+                {formatFileSize(p.size_bytes)}
+              </td>
+            </tr>
+            {p.kind === "cache" &&
+              caches.map((c) => (
+                <tr className="text-muted-foreground" key={c.id}>
+                  <th
+                    className={cn(cell, "pl-3 pr-3 text-left font-normal")}
+                    scope="row"
+                  >
+                    {c.name}
+                  </th>
+                  <td className={cn(cell, "pr-3")}>
+                    {formatCount(c.file_count, "file")}
+                  </td>
+                  <td className={cn(cell, "text-right tabular-nums")}>
+                    {formatFileSize(c.size_bytes)}
+                  </td>
+                </tr>
+              ))}
+          </Fragment>
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+const pathLocation = (p: VolumePath) =>
+  p.kind === "library" ? p.name : pathKindLabel[p.kind];
+
+const VolumeItem = ({
+  volume,
+  index,
+  caches,
+}: {
+  volume: Volume;
+  index: number;
+  caches: CacheSize[];
+}) => {
   const headingId = useId();
   const name = `Volume ${index + 1}`;
   const segments = diskSegments(volume);
@@ -304,21 +443,43 @@ const VolumeItem = ({ volume, index }: { volume: Volume; index: number }) => {
         </span>
       </div>
       {/* The legend below carries every figure, so the bar is decoration
-          for screen readers. A 2px gap in the surface color separates the
-          segments; a tiny one still shows as a sliver. */}
+          for screen readers; hovering a segment names it. A 2px gap in the
+          surface color separates the segments; a tiny one still shows as a
+          sliver. */}
       <div
         aria-hidden="true"
         className="mt-2 flex h-3 gap-0.5 overflow-hidden rounded-full"
       >
-        {segments.map((seg) => (
-          <div
-            className={cn("min-w-[3px] shrink-0", seg.swatch)}
-            key={seg.label}
-            style={{ width: `${seg.percent}%` }}
-            title={`${seg.label}: ${formatFileSize(seg.bytes)}`}
-          />
+        {[
+          ...segments,
+          {
+            label: "Free",
+            bytes: volume.free_bytes,
+            percent: 0,
+            swatch: "flex-1 bg-muted",
+          },
+        ].map((seg) => (
+          <Tooltip key={seg.label}>
+            <TooltipTrigger asChild>
+              <div
+                className={cn("min-w-[3px] shrink-0", seg.swatch)}
+                data-segment={seg.label}
+                style={seg.percent > 0 ? { width: `${seg.percent}%` } : {}}
+              />
+            </TooltipTrigger>
+            <TooltipContent
+              arrowClassName="bg-popover fill-popover"
+              className="border border-border bg-popover text-popover-foreground shadow-md"
+              side="top"
+            >
+              <div className="font-semibold">{seg.label}</div>
+              <div className="tabular-nums text-muted-foreground">
+                {formatFileSize(seg.bytes)} · {shareOf(seg.bytes, volume)} of
+                the volume
+              </div>
+            </TooltipContent>
+          </Tooltip>
         ))}
-        <div className="flex-1 bg-muted" />
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
         {`${formatFileSize(volume.used_bytes)} used of ${formatFileSize(volume.total_bytes)}`}
@@ -352,26 +513,7 @@ const VolumeItem = ({ volume, index }: { volume: Volume; index: number }) => {
         </p>
       )}
       {volume.paths.length > 0 && (
-        <ul aria-label={`${name} paths`} className="mt-3 space-y-1">
-          {volume.paths.map((p) => (
-            <li
-              className="flex items-baseline justify-between gap-x-4 text-xs min-w-0"
-              key={`${p.kind}:${p.path}`}
-            >
-              <span className="flex flex-wrap gap-x-2 min-w-0">
-                <span className="text-muted-foreground">
-                  {p.kind === "library"
-                    ? `${pathKindLabel[p.kind]}: ${p.name}`
-                    : pathKindLabel[p.kind]}
-                </span>
-                <span className="font-mono break-all min-w-0">{p.path}</span>
-              </span>
-              <span className="shrink-0 tabular-nums text-muted-foreground">
-                {formatFileSize(p.size_bytes)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <VolumePaths caches={caches} name={name} paths={volume.paths} />
       )}
     </li>
   );
@@ -390,6 +532,7 @@ const DiskSpace = ({ stats }: { stats: StatsResponse }) => (
       <ul className="divide-y divide-border">
         {stats.volumes.map((volume, index) => (
           <VolumeItem
+            caches={stats.caches}
             index={index}
             // Volumes come in a fixed order and never reorder in place,
             // and one with only hidden library folders has no paths.
@@ -399,43 +542,6 @@ const DiskSpace = ({ stats }: { stats: StatsResponse }) => (
         ))}
       </ul>
     )}
-  </Section>
-);
-
-const DataRow = ({ label, value }: { label: string; value: ReactNode }) => (
-  <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 border-b border-border last:border-b-0">
-    <dt className="text-sm">{label}</dt>
-    <dd className="text-sm text-muted-foreground tabular-nums">{value}</dd>
-  </div>
-);
-
-const ServerData = ({ stats }: { stats: StatsResponse }) => (
-  <Section
-    description="The database counts its write-ahead log. Caches are regenerated as needed."
-    title="Server Data"
-  >
-    <dl>
-      <DataRow label="Database" value={formatFileSize(stats.database_bytes)} />
-      {stats.caches.map((cache) => (
-        <DataRow
-          key={cache.id}
-          label={cache.name}
-          value={
-            <>
-              <span>{formatFileSize(cache.size_bytes)}</span>
-              <span className="mx-2 text-muted-foreground/50">·</span>
-              <span>{formatCount(cache.file_count, "file")}</span>
-            </>
-          }
-        />
-      ))}
-    </dl>
-    <Link
-      className="mt-3 inline-block text-sm text-primary hover:underline"
-      to="/admin/cache"
-    >
-      Manage caches
-    </Link>
   </Section>
 );
 
@@ -495,7 +601,6 @@ const AdminServerStats = () => {
         <Libraries stats={stats} />
         <LibraryGrowth stats={stats} />
         <DiskSpace stats={stats} />
-        <ServerData stats={stats} />
       </div>
     </div>
   );

@@ -36,12 +36,10 @@ The number of books on the server over time, by when each was added to Shisho, i
 
 Free and used space on each volume that holds a library folder, the directory containing the database, or `CACHE_DIR`. When several of these share a volume, it's listed once with each path under it, along with how much Shisho keeps at that path. **Free** is the space Shisho can still write to. On a filesystem that reserves space for the system, such as ext4, the reserved space is in neither figure, so used and free add up to less than the total.
 
-Each volume's bar splits its used space into library files, the database, the caches, and **Other**, which is everything else on the volume. Library files are counted by the sizes Shisho recorded at the last scan. On a filesystem that compresses data, such as ZFS with compression on, those can add up to more than the volume actually uses; the bar then shrinks them to fit, and the legend still shows the recorded size.
+Each volume's bar splits its used space into library files, the database, the caches, and **Other**, which is everything else on the volume; hover over a segment to see its size and share of the volume. Library files are counted by the sizes Shisho recorded at the last scan. On a filesystem that compresses data, such as ZFS with compression on, those can add up to more than the volume actually uses; the bar then shrinks them to fit, and the legend still shows the recorded size.
+
+Under each bar, a table lists each path on the volume with how much Shisho keeps there. The database's size includes its write-ahead log (the `-wal` file next to it). The cache row breaks down into each cache, with the same figures **Administration > Cache** shows; see [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) to change limits or clear one.
 
 Library folders are listed only for libraries you can access, and only with Libraries Read, matching what the library pages show. A volume whose folders are all hidden from you still shows its space.
 
 A path that can't be read is left out, such as a library folder on a drive that isn't mounted, or a network share that doesn't answer within a few seconds. Each ZFS dataset or btrfs subvolume is listed as its own volume, so datasets sharing a pool show the same free space more than once.
-
-## Server Data
-
-The database size includes its write-ahead log (the `-wal` file next to it), so it matches the space the database takes on disk. Each cache's size is the same figure **Administration > Cache** shows; see [Maintain Server Caches](./deployment-and-maintenance.md#maintain-server-caches) to change limits or clear one.

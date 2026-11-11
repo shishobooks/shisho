@@ -611,7 +611,8 @@ func TestServerStats_DatabaseAndCacheSizes(t *testing.T) {
 	}
 
 	resp := f.mustGet()
-	assert.Equal(t, int64(5120), resp.DatabaseBytes)
+	require.Len(t, resp.Volumes, 1)
+	assert.Equal(t, int64(5120), resp.Volumes[0].DatabaseBytes, "the database counts its write-ahead log")
 	assert.Equal(t, []CacheSize{
 		{ID: "downloads", Name: "Downloads", SizeBytes: 300, FileCount: 2},
 		{ID: "cbz_pages", Name: "CBZ Pages", SizeBytes: 50, FileCount: 5},
@@ -624,7 +625,9 @@ func TestServerStats_DatabaseWithoutWriteAheadLog(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "shisho.db")
 	require.NoError(t, os.WriteFile(dbPath, make([]byte, 2048), 0o600))
 	f.h.databasePath = dbPath
-	assert.Equal(t, int64(2048), f.mustGet().DatabaseBytes)
+	resp := f.mustGet()
+	require.Len(t, resp.Volumes, 1)
+	assert.Equal(t, int64(2048), resp.Volumes[0].DatabaseBytes)
 }
 
 func TestServerStats_FailedQueryIs500(t *testing.T) {
