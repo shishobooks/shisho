@@ -150,7 +150,7 @@ Where one user stands with a **Book**: To Read, Currently Reading, Paused, Read,
 _Avoid_: shelf, reading state
 
 **Read-through**:
-One pass a user makes through a **Book**, with the day it began if known and, once it ends, the day it ended and whether it was finished or abandoned. Rereading starts a new one; earlier ones stay as history. A Read-through still underway may be paused.
+One pass a user makes through a **Book**, with the day it began if known and, once it ends, the day it ended and whether it was finished or abandoned. Rereading starts a new one; earlier ones stay as history. A Read-through still underway may be paused. It outlives its Book: when the Book is deleted, the Read-through keeps the title and authors it had and still counts in **Reading Stats**, until the user deletes it.
 _Avoid_: read (as a noun), session, reading (alone)
 
 **To Read**:
@@ -172,6 +172,16 @@ _Avoid_: progress (alone), bookmark, location
 **Reading Session**:
 One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. It belongs to the **Read-through** underway at the time.
 _Avoid_: reading time, sitting, activity
+
+### Stats
+
+**Reading Stats**:
+One user's summary of their own reading over a year or all time: **Read-throughs** finished and abandoned, time spent reading and listening, and how that time and those books break down. Private to the user; no one else, admins included, sees it.
+_Avoid_: stats (alone), insights, dashboard
+
+**Server Stats**:
+An admin's summary of the server: what the libraries hold, how much disk it takes, and reading totals across all users that can't be traced to any one of them.
+_Avoid_: stats (alone), admin dashboard, system info
 
 ### Deployment Modes
 
