@@ -18,6 +18,7 @@ import type {
   ReadingStatsResponse,
   ReadThrough,
 } from "@/types";
+import { formatCount } from "@/utils/format";
 
 import ReadingStatsPage from "./ReadingStatsPage";
 
@@ -60,10 +61,9 @@ const finishedRow = (
   book: { id, library_id: 7, cover_cache_key: "" },
   days_taken: 9,
   seconds: 5400,
+  rating: null,
   ...overrides,
 });
-
-const emptyBreakdown = { items: [], other: null };
 
 const emptyStats = (year: number | null): ReadingStatsResponse => ({
   year,
@@ -78,9 +78,9 @@ const emptyStats = (year: number | null): ReadingStatsResponse => ({
     average_rating: null,
   },
   periods: [],
-  genres: emptyBreakdown,
-  tags: emptyBreakdown,
-  authors: emptyBreakdown,
+  genres: [],
+  tags: [],
+  authors: [],
   kinds: [],
   ratings: [],
   places: [],
@@ -105,10 +105,16 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
     reading_seconds: i === 2 ? 7200 : 0,
     listening_seconds: i === 2 ? 1800 : 0,
   })),
-  genres: {
-    items: [{ name: "Classics", books: 2 }],
-    other: { names: 3, books: 2 },
-  },
+  genres: [
+    { name: "Classics", books: 2 },
+    { name: "Fantasy", books: 1 },
+  ],
+  tags: Array.from({ length: 150 }, (_, i) => ({
+    name: `Tag ${String(i).padStart(3, "0")}`,
+    books: 150 - i,
+  })),
+  kinds: [{ kind: "audiobook", books: 1 }],
+  ratings: [{ rating: 4.5, books: 1 }],
   places: [
     {
       source: "kobo",
@@ -126,7 +132,7 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
 });
 
 const finishedRows = [
-  finishedRow(1, "Dune"),
+  finishedRow(1, "Dune", { rating: 4.5 }),
   finishedRow(2, "Gone", {
     read_through: readThrough(2, { book_id: null, book_title: "Gone" }),
     removed: true,
@@ -235,10 +241,11 @@ describe("ReadingStatsPage", () => {
     expect(screen.getByText("1 reread")).toBeInTheDocument();
     expect(screen.getByText("2h 0m")).toBeInTheDocument();
     expect(screen.getByText("30m")).toBeInTheDocument();
-    expect(screen.getByText("4.5 ★")).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Average Rating" }),
+    ).toHaveTextContent("4.5 ★");
     expect(screen.getByText("Bedside Kobo")).toBeInTheDocument();
     expect(screen.getByText("KOReader")).toBeInTheDocument();
-    expect(screen.getByText("3 other genres")).toBeInTheDocument();
     expect(screen.getByText(/time from them is estimated/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Manage reading history" }),
@@ -304,8 +311,9 @@ describe("ReadingStatsPage", () => {
       "href",
       "/libraries/7/books/1",
     );
-    expect(within(rows[0]).getByText("9 days")).toBeInTheDocument();
-    expect(within(rows[0]).getByText("1h 30m")).toBeInTheDocument();
+    // Narrow and wide layouts both render here: jsdom loads no Tailwind.
+    expect(rows[0]).toHaveTextContent("9 days");
+    expect(rows[0]).toHaveTextContent("1h 30m");
 
     expect(within(rows[1]).queryByRole("link")).not.toBeInTheDocument();
     expect(within(rows[1]).getByText("Gone")).toBeInTheDocument();
@@ -384,5 +392,137 @@ describe("ReadingStatsPage", () => {
     renderPage({ initialEntry: `/reading-stats?year=${value}` });
     await screen.findByText("Did Not Finish");
     expect(screen.getByTestId("location")).toHaveTextContent(`?year=${value}`);
+  });
+
+  it("notes that device time is estimated only when there is some", async () => {
+    renderPage({
+      stats: (year) => ({
+        ...busyStats(year),
+        places: [
+          {
+            source: "web_reader",
+            device_name: null,
+            reading_seconds: 600,
+            listening_seconds: 0,
+          },
+        ],
+      }),
+    });
+    await screen.findByText("Did Not Finish");
+    expect(
+      screen.queryByText(/time from them is estimated/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the first few tags, then all of them with a search", async () => {
+    const { user } = renderPage();
+    const tags = await screen.findByRole("region", { name: "Tags" });
+    expect(
+      within(tags).getAllByRole("button", { pressed: false }),
+    ).toHaveLength(8);
+    expect(
+      within(tags).queryByRole("textbox", { name: "Search tags" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(
+      within(tags).getByRole("button", { name: "Show all 150 tags" }),
+    );
+    expect(
+      within(tags).getAllByRole("button", { pressed: false }),
+    ).toHaveLength(150);
+    await user.type(
+      within(tags).getByRole("textbox", { name: "Search tags" }),
+      "tag 14",
+    );
+    expect(
+      within(tags)
+        .getAllByRole("button", { pressed: false })
+        .map((button) => button.textContent),
+    ).toEqual(
+      Array.from(
+        { length: 10 },
+        (_, i) => `Tag 14${i}${formatCount(150 - 140 - i, "book")}`,
+      ),
+    );
+    await user.click(within(tags).getByRole("button", { name: "Show fewer" }));
+    expect(
+      within(tags).getAllByRole("button", { pressed: false }),
+    ).toHaveLength(8);
+  });
+
+  it("filters the finished books by a breakdown row, until its chip is removed", async () => {
+    const { fetchMock, user } = renderPage();
+    const genres = await screen.findByRole("region", { name: "Genres" });
+
+    await user.click(within(genres).getByRole("button", { name: /^Fantasy/ }));
+    await waitFor(() =>
+      expect(finishedRequests(fetchMock).slice(-1)[0]).toBe(
+        "year=2026&genre=Fantasy&limit=50&offset=0",
+      ),
+    );
+    expect(
+      within(genres).getByRole("button", { name: /^Fantasy/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("location")).toHaveTextContent("?genre=Fantasy");
+
+    const kinds = screen.getByRole("region", { name: "Kind" });
+    await user.click(
+      within(kinds).getByRole("button", { name: /^Audiobooks/ }),
+    );
+    await waitFor(() =>
+      expect(finishedRequests(fetchMock).slice(-1)[0]).toBe(
+        "year=2026&genre=Fantasy&kind=audiobook&limit=50&offset=0",
+      ),
+    );
+
+    const chips = screen.getByRole("group", { name: "Filters" });
+    await user.click(
+      within(chips).getByRole("button", { name: "Remove Fantasy" }),
+    );
+    await waitFor(() =>
+      expect(finishedRequests(fetchMock).slice(-1)[0]).toBe(
+        "year=2026&kind=audiobook&limit=50&offset=0",
+      ),
+    );
+
+    // Choosing the selected row again clears it.
+    await user.click(
+      within(kinds).getByRole("button", { name: /^Audiobooks/ }),
+    );
+    await waitFor(() =>
+      expect(finishedRequests(fetchMock).slice(-1)[0]).toBe(
+        "year=2026&limit=50&offset=0",
+      ),
+    );
+    expect(
+      screen.queryByRole("group", { name: "Filters" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("filters by rating from the URL and says when nothing matches", async () => {
+    const { fetchMock } = renderPage({
+      finished: [],
+      initialEntry: "/reading-stats?rating=4.5&kind=scroll",
+    });
+    expect(
+      await screen.findByText("No finished books match these filters."),
+    ).toBeInTheDocument();
+    expect(finishedRequests(fetchMock)).toEqual([
+      "year=2026&rating=4.5&limit=50&offset=0",
+    ]);
+    expect(
+      within(screen.getByRole("group", { name: "Filters" })).getByRole(
+        "button",
+        { name: "Remove 4.5 stars" },
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("puts a finished book's rating in its row", async () => {
+    renderPage();
+    const list = await screen.findByRole("list", { name: "Books finished" });
+    const [dune, gone] = within(list).getAllByRole("listitem");
+    expect(dune).toHaveTextContent("Rated 4.5");
+    expect(gone).not.toHaveTextContent("Rated");
   });
 });

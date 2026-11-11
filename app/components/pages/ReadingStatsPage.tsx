@@ -2,18 +2,20 @@ import { History } from "lucide-react";
 import { useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import {
+  FilterChip,
+  type FilterChipKind,
+} from "@/components/library/FilterChip";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter, {
   type PageChangeHandler,
 } from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
 import {
-  BreakdownList,
+  CountList,
   FinishedChart,
   FinishedList,
-  KindList,
   PlaceList,
-  RatingList,
   StatsCard,
   StatTile,
   TimeChart,
@@ -39,13 +41,20 @@ import {
   useSectionPaging,
 } from "@/hooks/useSectionPaging";
 import { parsePageParam, resetPaging } from "@/libraries/pagination";
-import type { ReadingStatsResponse } from "@/types";
+import type { ReadingStatsKind, ReadingStatsResponse } from "@/types";
 import {
   formatCount,
   formatDuration,
   formatRating,
   formatShowingRange,
 } from "@/utils/format";
+import {
+  countRows,
+  KIND_LABELS,
+  kindRows,
+  ratingLabel,
+  ratingRows,
+} from "@/utils/readingStats";
 import { todayDay } from "@/utils/readingStatus";
 
 const ALL_TIME = "all";
@@ -60,13 +69,67 @@ const parseRange = (value: string | null): number | null | undefined => {
   return year >= 1000 ? year : undefined;
 };
 
+// The breakdowns the finished books can be filtered by, each kept in its
+// own URL parameter, and how each shows as a chip.
+const FILTERS = [
+  { param: "genre", chip: "genre", label: (value: string) => value },
+  { param: "tag", chip: "tag", label: (value: string) => value },
+  { param: "author", chip: "author", label: (value: string) => value },
+  {
+    param: "kind",
+    chip: "fileType",
+    label: (value: string) => KIND_LABELS[value as ReadingStatsKind],
+  },
+  {
+    param: "rating",
+    chip: "rating",
+    label: (value: string) => ratingLabel(Number(value)),
+  },
+] as const satisfies readonly {
+  param: string;
+  chip: FilterChipKind;
+  label: (value: string) => string;
+}[];
+
+type FilterParam = (typeof FILTERS)[number]["param"];
+type FinishedFilters = Partial<Record<FilterParam, string>>;
+
+const isRating = (value: string) => {
+  const stars = Number(value);
+  return Number.isInteger(stars * 4) && stars >= 0.25 && stars <= 5;
+};
+
+// The filters in the URL, leaving out a kind or rating the server would
+// refuse.
+const readFilters = (params: URLSearchParams): FinishedFilters => {
+  const filters: FinishedFilters = {};
+  for (const { param } of FILTERS) {
+    const value = params.get(param);
+    if (!value) continue;
+    if (param === "kind" && !(value in KIND_LABELS)) continue;
+    if (param === "rating" && !isRating(value)) continue;
+    filters[param] = value;
+  }
+  return filters;
+};
+
 const hasActivity = (stats: ReadingStatsResponse) =>
   stats.totals.finished > 0 ||
   stats.totals.did_not_finish > 0 ||
   stats.totals.reading_seconds > 0 ||
   stats.totals.listening_seconds > 0;
 
-const StatsBody = ({ stats }: { stats: ReadingStatsResponse }) => {
+const StatsBody = ({
+  stats,
+  filters,
+  onToggleFilter,
+  onClearFilter,
+}: {
+  stats: ReadingStatsResponse;
+  filters: FinishedFilters;
+  onToggleFilter: (param: FilterParam, value: string) => void;
+  onClearFilter: (param: FilterParam) => void;
+}) => {
   const { totals } = stats;
   const byYear = stats.year === null;
   return (
@@ -134,52 +197,104 @@ const StatsBody = ({ stats }: { stats: ReadingStatsResponse }) => {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
-        <StatsCard title="Genres">
-          <BreakdownList
-            breakdown={stats.genres}
-            noun="genre"
-            pluralNoun="genres"
-          />
-        </StatsCard>
-        <StatsCard title="Tags">
-          <BreakdownList breakdown={stats.tags} noun="tag" pluralNoun="tags" />
-        </StatsCard>
-        <StatsCard title="Authors">
-          <BreakdownList
-            breakdown={stats.authors}
-            noun="author"
-            pluralNoun="authors"
-          />
-        </StatsCard>
-        <StatsCard title="Kind">
-          <KindList kinds={stats.kinds} />
-        </StatsCard>
-        <StatsCard title="Ratings">
-          <RatingList ratings={stats.ratings} />
-        </StatsCard>
-        <StatsCard title="Where you read">
-          <PlaceList places={stats.places} />
-        </StatsCard>
+      <div>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Select a genre, tag, author, kind, or rating to list those books under
+          Finished.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
+          <StatsCard title="Genres">
+            <CountList
+              emptyMessage="No finished books with genres."
+              onSelect={(value) => onToggleFilter("genre", value)}
+              pluralNoun="genres"
+              rows={countRows(stats.genres)}
+              selected={filters.genre ?? null}
+              singularNoun="genre"
+            />
+          </StatsCard>
+          <StatsCard title="Tags">
+            <CountList
+              emptyMessage="No finished books with tags."
+              onSelect={(value) => onToggleFilter("tag", value)}
+              pluralNoun="tags"
+              rows={countRows(stats.tags)}
+              selected={filters.tag ?? null}
+              singularNoun="tag"
+            />
+          </StatsCard>
+          <StatsCard title="Authors">
+            <CountList
+              emptyMessage="No finished books with authors."
+              onSelect={(value) => onToggleFilter("author", value)}
+              pluralNoun="authors"
+              rows={countRows(stats.authors)}
+              selected={filters.author ?? null}
+              singularNoun="author"
+            />
+          </StatsCard>
+          <StatsCard title="Kind">
+            <CountList
+              emptyMessage="No finished books."
+              onSelect={(value) => onToggleFilter("kind", value)}
+              pluralNoun="kinds"
+              rows={kindRows(stats.kinds)}
+              selected={filters.kind ?? null}
+              singularNoun="kind"
+            />
+          </StatsCard>
+          <StatsCard title="Ratings">
+            <CountList
+              emptyMessage="No finished books are rated."
+              onSelect={(value) => onToggleFilter("rating", value)}
+              pluralNoun="ratings"
+              rows={ratingRows(stats.ratings)}
+              selected={filters.rating ?? null}
+              singularNoun="rating"
+            />
+          </StatsCard>
+          <StatsCard title="Where you read">
+            <PlaceList places={stats.places} />
+          </StatsCard>
+        </div>
       </div>
 
-      <FinishedSection year={stats.year} />
+      <FinishedSection
+        filters={filters}
+        onClearFilter={onClearFilter}
+        year={stats.year}
+      />
     </div>
   );
 };
 
 const FINISHED_PER_PAGE = 50;
+const FINISHED_SECTION_ID = "finished";
 
 // The books finished in the range, a page at a time, paged in the URL.
-const FinishedSection = ({ year }: { year: number | null }) => {
+const FinishedSection = ({
+  year,
+  filters,
+  onClearFilter,
+}: {
+  year: number | null;
+  filters: FinishedFilters;
+  onClearFilter: (param: FilterParam) => void;
+}) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentPage = parsePageParam(searchParams.get("page"));
   const offset = (currentPage - 1) * FINISHED_PER_PAGE;
   const finishedQuery = useReadingStatsFinished({
     ...(year === null ? {} : { year }),
+    ...(filters.genre ? { genre: filters.genre } : {}),
+    ...(filters.tag ? { tag: filters.tag } : {}),
+    ...(filters.author ? { author: filters.author } : {}),
+    ...(filters.kind ? { kind: filters.kind as ReadingStatsKind } : {}),
+    ...(filters.rating ? { rating: Number(filters.rating) } : {}),
     limit: FINISHED_PER_PAGE,
     offset,
   });
+  const activeFilters = FILTERS.filter((filter) => filters[filter.param]);
   const total = finishedQuery.data?.total ?? 0;
 
   const handlePageChange: PageChangeHandler = (page, options) => {
@@ -215,7 +330,14 @@ const FinishedSection = ({ year }: { year: number | null }) => {
         {showing && (
           <div className="mb-3 text-sm text-muted-foreground">{showing}</div>
         )}
-        <FinishedList rows={finishedQuery.data.items} />
+        <FinishedList
+          emptyMessage={
+            activeFilters.length > 0
+              ? "No finished books match these filters."
+              : "No books finished."
+          }
+          rows={finishedQuery.data.items}
+        />
         <PaginationFooter
           className="mt-6"
           currentPage={currentPage}
@@ -231,11 +353,28 @@ const FinishedSection = ({ year }: { year: number | null }) => {
     <section
       aria-labelledby="reading-stats-finished"
       className={SCROLL_CLEAR_OF_NAV}
+      id={FINISHED_SECTION_ID}
       ref={sectionRef}
     >
       <h2 className="mb-3 text-sm font-semibold" id="reading-stats-finished">
         Finished
       </h2>
+      {activeFilters.length > 0 && (
+        <div
+          aria-label="Filters"
+          className="mb-3 flex flex-wrap gap-2"
+          role="group"
+        >
+          {activeFilters.map((filter) => (
+            <FilterChip
+              key={filter.param}
+              kind={filter.chip}
+              label={filter.label(filters[filter.param]!)}
+              onRemove={() => onClearFilter(filter.param)}
+            />
+          ))}
+        </div>
+      )}
       {renderList()}
     </section>
   );
@@ -286,6 +425,32 @@ const ReadingStatsPage = () => {
     setSearchParams(params, { preventScrollReset: true });
   };
 
+  const filters = readFilters(searchParams);
+
+  // Choosing a breakdown row lists its books under Finished, so bring that
+  // into view; choosing it again, or removing its chip, clears it.
+  const toggleFilter = (param: FilterParam, value: string) => {
+    const params = new URLSearchParams(searchParams);
+    const clearing = params.get(param) === value;
+    if (clearing) params.delete(param);
+    else params.set(param, value);
+    resetPaging(params);
+    setSearchParams(params, { preventScrollReset: true });
+    if (!clearing) {
+      requestAnimationFrame(() =>
+        document
+          .getElementById(FINISHED_SECTION_ID)
+          ?.scrollIntoView({ block: "start", behavior: "smooth" }),
+      );
+    }
+  };
+  const clearFilter = (param: FilterParam) => {
+    const params = new URLSearchParams(searchParams);
+    params.delete(param);
+    resetPaging(params);
+    setSearchParams(params, { preventScrollReset: true });
+  };
+
   const rangeLabel = year === null ? "all time" : String(year);
 
   const renderBody = () => {
@@ -309,7 +474,14 @@ const ReadingStatsPage = () => {
         </div>
       );
     }
-    return <StatsBody stats={stats} />;
+    return (
+      <StatsBody
+        filters={filters}
+        onClearFilter={clearFilter}
+        onToggleFilter={toggleFilter}
+        stats={stats}
+      />
+    );
   };
 
   return (
@@ -351,10 +523,12 @@ const ReadingStatsPage = () => {
 
         {renderBody()}
 
-        <p className="mt-6 text-xs text-muted-foreground">
-          Kobo and KOReader don't time your reading the way the Shisho reader
-          does, so time from them is estimated.
-        </p>
+        {stats?.places.some((place) => place.source !== "web_reader") && (
+          <p className="mt-6 text-xs text-muted-foreground">
+            Kobo and KOReader don't time your reading the way the Shisho reader
+            does, so time from them is estimated.
+          </p>
+        )}
       </ContentWidth>
     </div>
   );

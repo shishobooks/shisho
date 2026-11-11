@@ -465,7 +465,7 @@ func (h *handler) listStatsFinished(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}
-	resp, err := h.readingService.StatsFinished(c.Request().Context(), user, params.Year, params.Limit, params.Offset)
+	resp, err := h.readingService.StatsFinished(c.Request().Context(), user, StatsFinishedOptions(params))
 	if err != nil {
 		return err
 	}

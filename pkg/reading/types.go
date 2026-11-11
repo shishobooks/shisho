@@ -224,9 +224,10 @@ type ReadingStatsResponse struct {
 	// name. A Book whose Read-through was detached from it isn't counted; one
 	// in a library the user can no longer reach is, as Reading History still
 	// shows its title and authors.
-	Genres  ReadingStatsBreakdown   `json:"genres"`
-	Tags    ReadingStatsBreakdown   `json:"tags"`
-	Authors ReadingStatsBreakdown   `json:"authors"`
+	// Each lists every name, most Books first, then by name.
+	Genres  []ReadingStatsCount     `json:"genres"`
+	Tags    []ReadingStatsCount     `json:"tags"`
+	Authors []ReadingStatsCount     `json:"authors"`
 	Kinds   []ReadingStatsKindCount `json:"kinds"`
 	// Ratings counts the finished Books at each current Rating, lowest
 	// first, each Book once.
@@ -270,30 +271,12 @@ type ReadingStatsPeriod struct {
 	ListeningSeconds int  `json:"listening_seconds"`
 }
 
-// ReadingStatsBreakdown is the names with the most finished Books, most
-// first, and the rest folded into Other.
-//
-//nolint:revive // named for the Reading Stats page, as generated TS types are global
-type ReadingStatsBreakdown struct {
-	Items []ReadingStatsCount `json:"items"`
-	Other *ReadingStatsOther  `json:"other" tstype:"ReadingStatsOther | null,required"`
-}
-
 // ReadingStatsCount is how many finished Books fall under one name.
 //
 //nolint:revive // named for the Reading Stats page, as generated TS types are global
 type ReadingStatsCount struct {
 	Name  string `json:"name"`
 	Books int    `json:"books"`
-}
-
-// ReadingStatsOther is what a breakdown leaves out: how many names, and how
-// many distinct finished Books fall under any of them.
-//
-//nolint:revive // named for the Reading Stats page, as generated TS types are global
-type ReadingStatsOther struct {
-	Names int `json:"names"`
-	Books int `json:"books"`
 }
 
 // ReadingStatsKindCount is how many distinct finished Books were read as
@@ -327,11 +310,19 @@ type ReadingStatsPlace struct {
 
 // ListReadingStatsFinishedQuery pages through the finished Read-throughs on
 // Reading Stats: those that ended in Year, or for all time when it's
-// omitted.
+// omitted. The other filters narrow it to what one row of a breakdown
+// counts, and combine: a Genre, Tag, or author name (in any case), a kind,
+// or a current Rating in stars. A detached Read-through has no Book to
+// match any of them.
 type ListReadingStatsFinishedQuery struct {
-	Year   *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
-	Limit  int  `query:"limit" json:"limit,omitempty" default:"50" validate:"min=1,max=100"`
-	Offset int  `query:"offset" json:"offset,omitempty" validate:"min=0"`
+	Year   *int     `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
+	Genre  *string  `query:"genre" json:"genre,omitempty" validate:"omitempty,max=500"`
+	Tag    *string  `query:"tag" json:"tag,omitempty" validate:"omitempty,max=500"`
+	Author *string  `query:"author" json:"author,omitempty" validate:"omitempty,max=500"`
+	Kind   *string  `query:"kind" json:"kind,omitempty" validate:"omitempty,oneof=ebook comic audiobook unknown" tstype:"ReadingStatsKind"`
+	Rating *float64 `query:"rating" json:"rating,omitempty" validate:"omitempty,min=0.25,max=5"`
+	Limit  int      `query:"limit" json:"limit,omitempty" default:"50" validate:"min=1,max=100"`
+	Offset int      `query:"offset" json:"offset,omitempty" validate:"min=0"`
 }
 
 // ListReadingStatsFinishedResponse is a page of the finished Read-throughs
@@ -350,4 +341,7 @@ type ReadingStatsFinishedBook struct {
 	DaysTaken *int `json:"days_taken" tstype:"number | null,required"`
 	// Seconds is the Read-through's Session time; null with no Sessions.
 	Seconds *int `json:"seconds" tstype:"number | null,required"`
+	// Rating is the Book's current Rating in stars; null when unrated or
+	// the Book was deleted.
+	Rating *float64 `json:"rating" tstype:"number | null,required"`
 }

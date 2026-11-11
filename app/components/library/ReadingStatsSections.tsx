@@ -1,28 +1,32 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import ReadThroughCover from "@/components/library/ReadThroughCover";
 import ReadThroughDetails from "@/components/library/ReadThroughDetails";
 import TruncatedText from "@/components/library/TruncatedText";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/libraries/utils";
 import type {
-  ReadingStatsBreakdown,
   ReadingStatsFinishedBook,
-  ReadingStatsKind,
-  ReadingStatsKindCount,
   ReadingStatsPeriod,
   ReadingStatsPlace,
-  ReadingStatsRatingCount,
 } from "@/types";
 import {
   formatCount,
   formatDate,
   formatDuration,
+  formatRating,
   formatShortDuration,
 } from "@/utils/format";
+import type { CountRow } from "@/utils/readingStats";
 
 // Reading and listening keep the same colours on every chart.
-const READING_BAR = "bg-chart-1";
-const LISTENING_BAR = "bg-chart-2";
+const READING_BAR = "bg-reading";
+const LISTENING_BAR = "bg-listening";
+// A chart with one series uses the reading purple: the brand hue stepped
+// for marks on each theme's surface, where the brand token itself turns pale
+// in dark mode.
+const SERIES_BAR = READING_BAR;
 
 const MONTHS = [
   "Jan",
@@ -178,7 +182,7 @@ export const FinishedChart = ({
       periods={periods}
       renderBar={(p) => (
         <div
-          className="w-full rounded-t-sm bg-primary"
+          className={cn("w-full rounded-t-sm", SERIES_BAR)}
           style={{ height: share(p.finished, max) }}
         />
       )}
@@ -231,137 +235,120 @@ export const TimeChart = ({ periods }: { periods: ReadingStatsPeriod[] }) => {
   );
 };
 
-// A row with a name, a figure, and a bar sized against the largest row.
-const BarRow = ({
-  label,
-  value,
-  title,
-  children,
-}: {
-  label: ReactNode;
-  value: string;
-  title?: string;
-  children: ReactNode;
-}) => (
-  <li
-    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 text-sm"
-    title={title}
-  >
-    <div className="min-w-0">{label}</div>
-    <span className="text-xs tabular-nums text-muted-foreground">{value}</span>
-    <div className="col-span-2 flex h-1.5 overflow-hidden rounded-full bg-muted">
-      {children}
-    </div>
-  </li>
-);
-
 const EmptyNote = ({ children }: { children: ReactNode }) => (
   <p className="text-sm text-muted-foreground">{children}</p>
 );
 
-export const BreakdownList = ({
-  breakdown,
-  noun,
+// A track under a figure, filled to its share of the largest.
+const ShareBar = ({ children }: { children: ReactNode }) => (
+  <span className="col-span-2 flex h-1.5 overflow-hidden rounded-full bg-muted">
+    {children}
+  </span>
+);
+
+// Rows shown before "Show all", and how many it takes to offer a search.
+const VISIBLE_ROWS = 8;
+const SEARCH_FROM = 20;
+
+/**
+ * A breakdown of finished books, most first. It shows the first few and
+ * expands to all of them, with a search once there are many, so a library
+ * with hundreds of tags stays usable. Selecting a row filters the finished
+ * books to it; selecting it again clears that.
+ */
+export const CountList = ({
+  rows,
+  singularNoun,
   pluralNoun,
+  emptyMessage,
+  selected,
+  onSelect,
 }: {
-  breakdown: ReadingStatsBreakdown;
-  noun: string;
+  rows: CountRow[];
+  singularNoun: string;
   pluralNoun: string;
+  emptyMessage: string;
+  selected: string | null;
+  onSelect: (value: string) => void;
 }) => {
-  if (breakdown.items.length === 0) {
-    return <EmptyNote>No finished books with {pluralNoun}.</EmptyNote>;
+  const [expanded, setExpanded] = useState(false);
+  const [search, setSearch] = useState("");
+  if (rows.length === 0) {
+    return <EmptyNote>{emptyMessage}</EmptyNote>;
   }
-  const max = Math.max(...breakdown.items.map((item) => item.books));
+  const max = Math.max(...rows.map((row) => row.books));
+  const searchable = expanded && rows.length >= SEARCH_FROM;
+  const needle = search.trim().toLowerCase();
+  const shown = expanded
+    ? rows.filter((row) => !needle || row.label.toLowerCase().includes(needle))
+    : rows.slice(0, VISIBLE_ROWS);
   return (
-    <ul className="space-y-2">
-      {breakdown.items.map((item) => (
-        <BarRow
-          key={item.name}
-          label={
-            <TruncatedText className="truncate">{item.name}</TruncatedText>
-          }
-          value={formatCount(item.books, "book")}
-        >
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{ width: share(item.books, max) }}
-          />
-        </BarRow>
-      ))}
-      {breakdown.other && (
-        <li className="flex justify-between gap-2 text-xs text-muted-foreground">
-          <span>
-            {formatCount(
-              breakdown.other.names,
-              `other ${noun}`,
-              `other ${pluralNoun}`,
-            )}
-          </span>
-          <span className="tabular-nums">
-            {formatCount(breakdown.other.books, "book")}
-          </span>
-        </li>
+    <>
+      {searchable && (
+        <Input
+          aria-label={`Search ${pluralNoun}`}
+          className="mb-2 h-8"
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={`Search ${pluralNoun}`}
+          value={search}
+        />
       )}
-    </ul>
-  );
-};
-
-const KIND_LABELS: Record<ReadingStatsKind, string> = {
-  ebook: "Ebooks",
-  comic: "Comics",
-  audiobook: "Audiobooks",
-  unknown: "Unknown",
-};
-
-export const KindList = ({ kinds }: { kinds: ReadingStatsKindCount[] }) => {
-  if (kinds.length === 0) {
-    return <EmptyNote>No finished books.</EmptyNote>;
-  }
-  const max = Math.max(...kinds.map((k) => k.books));
-  return (
-    <ul className="space-y-2">
-      {kinds.map((kind) => (
-        <BarRow
-          key={kind.kind}
-          label={KIND_LABELS[kind.kind]}
-          value={formatCount(kind.books, "book")}
+      <ul
+        className={cn(
+          "-mx-2 space-y-0.5",
+          expanded && "max-h-80 overflow-y-auto",
+        )}
+      >
+        {shown.map((row) => {
+          const active = selected === row.value;
+          return (
+            <li key={row.value}>
+              <Button
+                aria-pressed={active}
+                className={cn(
+                  "grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/60",
+                  active && "bg-accent",
+                )}
+                onClick={() => onSelect(row.value)}
+                variant="unstyled"
+              >
+                <span className="min-w-0 truncate" title={row.label}>
+                  {row.label}
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {formatCount(row.books, "book")}
+                </span>
+                <ShareBar>
+                  <span
+                    className={cn("h-full rounded-full", SERIES_BAR)}
+                    style={{ width: share(row.books, max) }}
+                  />
+                </ShareBar>
+              </Button>
+            </li>
+          );
+        })}
+        {shown.length === 0 && (
+          <li className="px-2 text-sm text-muted-foreground">
+            No {pluralNoun} match.
+          </li>
+        )}
+      </ul>
+      {rows.length > VISIBLE_ROWS && (
+        <Button
+          className="mt-2 text-xs"
+          onClick={() => {
+            setExpanded(!expanded);
+            setSearch("");
+          }}
+          variant="link"
         >
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{ width: share(kind.books, max) }}
-          />
-        </BarRow>
-      ))}
-    </ul>
-  );
-};
-
-export const RatingList = ({
-  ratings,
-}: {
-  ratings: ReadingStatsRatingCount[];
-}) => {
-  if (ratings.length === 0) {
-    return <EmptyNote>No finished books are rated.</EmptyNote>;
-  }
-  const max = Math.max(...ratings.map((r) => r.books));
-  // Highest first, as a reader scans a rating breakdown.
-  const sorted = [...ratings].sort((a, b) => b.rating - a.rating);
-  return (
-    <ul className="space-y-2">
-      {sorted.map((rating) => (
-        <BarRow
-          key={rating.rating}
-          label={formatCount(rating.rating, "star")}
-          value={formatCount(rating.books, "book")}
-        >
-          <div
-            className="h-full rounded-full bg-primary"
-            style={{ width: share(rating.books, max) }}
-          />
-        </BarRow>
-      ))}
-    </ul>
+          {expanded
+            ? "Show fewer"
+            : `Show all ${formatCount(rows.length, singularNoun, pluralNoun)}`}
+        </Button>
+      )}
+    </>
   );
 };
 
@@ -396,75 +383,122 @@ export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {
       <ul className="space-y-2">
         {places.map((place, i) => (
           // Two Devices can share a name, so the place in the list keys it.
-          <BarRow
+          <li
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 text-sm"
             key={`${i}-${place.source}-${place.device_name ?? ""}`}
-            label={
-              <TruncatedText className="truncate">
-                {placeLabel(place)}
-              </TruncatedText>
-            }
             title={placeTime(place)}
-            value={formatDuration(
-              place.reading_seconds + place.listening_seconds,
-            )}
           >
-            <div
-              className={cn("h-full", READING_BAR)}
-              style={{ width: share(place.reading_seconds, max) }}
-            />
-            <div
-              className={cn("h-full", LISTENING_BAR)}
-              style={{ width: share(place.listening_seconds, max) }}
-            />
-            <span className="sr-only">{placeTime(place)}</span>
-          </BarRow>
+            <TruncatedText className="min-w-0 truncate">
+              {placeLabel(place)}
+            </TruncatedText>
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {formatDuration(place.reading_seconds + place.listening_seconds)}
+            </span>
+            <ShareBar>
+              <span
+                className={cn("h-full", READING_BAR)}
+                style={{ width: share(place.reading_seconds, max) }}
+              />
+              <span
+                className={cn("h-full", LISTENING_BAR)}
+                style={{ width: share(place.listening_seconds, max) }}
+              />
+              <span className="sr-only">{placeTime(place)}</span>
+            </ShareBar>
+          </li>
         ))}
       </ul>
     </>
   );
 };
 
+// Wide screens put a finished book's figures in columns at the end of its
+// row, under one header; narrow ones keep them on a line under its title.
+const FINISHED_COLUMNS =
+  "md:grid md:grid-cols-[7rem_4.5rem_5rem_4.5rem] md:gap-4 md:text-right";
+
 const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
   const rt = row.read_through;
-  const details: string[] = [
-    rt.end_day ? `Finished ${formatDate(rt.end_day)}` : "Finish date unknown",
-  ];
-  if (row.days_taken !== null) {
-    details.push(formatCount(row.days_taken, "day"));
-  }
-  if (row.seconds !== null) {
-    details.push(formatDuration(row.seconds));
-  }
+  const finished = rt.end_day ? formatDate(rt.end_day) : null;
+  const days =
+    row.days_taken !== null ? formatCount(row.days_taken, "day") : null;
+  const time = row.seconds !== null ? formatDuration(row.seconds) : null;
+  const rating = row.rating !== null ? `${formatRating(row.rating)} ★` : null;
+  const details = [
+    finished ? `Finished ${finished}` : "Finish date unknown",
+    days,
+    time,
+    rating,
+  ].filter((detail): detail is string => detail !== null);
   return (
     <li className="flex items-center gap-3 px-3 py-2">
       <ReadThroughCover book={row.book} />
       <ReadThroughDetails entry={row}>
         {details.map((detail) => (
-          <span className="text-muted-foreground" key={detail}>
+          <span className="text-muted-foreground md:hidden" key={detail}>
             {detail}
           </span>
         ))}
       </ReadThroughDetails>
+      <div
+        className={cn(
+          "hidden shrink-0 text-sm tabular-nums text-muted-foreground",
+          FINISHED_COLUMNS,
+        )}
+      >
+        <span>
+          <span className="sr-only">Finished </span>
+          {finished ?? "Unknown"}
+        </span>
+        <span>{days}</span>
+        <span>{time}</span>
+        <span>
+          {row.rating !== null && (
+            <>
+              <span className="sr-only">Rated </span>
+              {formatRating(row.rating)}{" "}
+              <span aria-hidden className="text-foreground">
+                ★
+              </span>
+            </>
+          )}
+        </span>
+      </div>
     </li>
   );
 };
 
 export const FinishedList = ({
   rows,
+  emptyMessage,
 }: {
   rows: ReadingStatsFinishedBook[];
+  emptyMessage: string;
 }) => {
   if (rows.length === 0) {
-    return <EmptyNote>No books finished.</EmptyNote>;
+    return <EmptyNote>{emptyMessage}</EmptyNote>;
   }
   return (
-    <ul
-      aria-label="Books finished"
-      className="divide-y divide-border rounded-md border border-border"
-    >
-      {rows.map((row) => (
-        <FinishedRow key={row.read_through.id} row={row} />
-      ))}
-    </ul>
+    <>
+      <div
+        aria-hidden
+        className="hidden justify-end px-3 pb-1 text-xs text-muted-foreground md:flex"
+      >
+        <div className={FINISHED_COLUMNS}>
+          <span>Finished</span>
+          <span>Days</span>
+          <span>Time</span>
+          <span>Rating</span>
+        </div>
+      </div>
+      <ul
+        aria-label="Books finished"
+        className="divide-y divide-border rounded-md border border-border"
+      >
+        {rows.map((row) => (
+          <FinishedRow key={row.read_through.id} row={row} />
+        ))}
+      </ul>
+    </>
   );
 };

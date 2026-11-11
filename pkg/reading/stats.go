@@ -14,10 +14,6 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// breakdownLimit is how many names a Reading Stats breakdown lists before
-// folding the rest into Other.
-const breakdownLimit = 10
-
 // Stats returns user's Reading Stats for year, or for all time when year is
 // nil. Read-throughs count by the day they ended, as stored; Session time is
 // grouped into days in the user's time zone.
@@ -437,17 +433,71 @@ func roundSeconds(seconds float64) int {
 	return int(math.Round(seconds))
 }
 
+// StatsFinishedOptions picks the page of finished Read-throughs
+// StatsFinished returns; see ListReadingStatsFinishedQuery for the filters.
+// It mirrors that query field for field, so a handler converts one to it.
+type StatsFinishedOptions struct {
+	Year   *int
+	Genre  *string
+	Tag    *string
+	Author *string
+	Kind   *string
+	Rating *float64
+	Limit  int
+	Offset int
+}
+
 // StatsFinished returns a page of user's finished Read-throughs that ended
-// in year, or for all time when year is nil, latest first, and how many
-// there are.
-func (svc *Service) StatsFinished(ctx context.Context, user *models.User, year *int, limit, offset int) (*ListReadingStatsFinishedResponse, error) {
+// in the year, or for all time, and match the filters, latest first, and
+// how many there are.
+func (svc *Service) StatsFinished(ctx context.Context, user *models.User, opts StatsFinishedOptions) (*ListReadingStatsFinishedResponse, error) {
 	resp := &ListReadingStatsFinishedResponse{Items: []ReadingStatsFinishedBook{}}
 	var finished []*models.ReadThrough
 	q := svc.db.NewSelect().
 		Model(&finished).
 		Where("rt.user_id = ? AND rt.outcome = ?", user.ID, models.ReadThroughOutcomeFinished)
-	if rng := yearRange(year); !rng.all() {
+	if rng := yearRange(opts.Year); !rng.all() {
 		q = q.Where("rt.end_day >= ? AND rt.end_day <= ?", rng.From, rng.To)
+	}
+	// Names match as the breakdowns group them, ignoring case.
+	if opts.Genre != nil {
+		q = q.Where(`EXISTS (SELECT 1 FROM book_genres AS fbg JOIN genres AS fg ON fg.id = fbg.genre_id
+			WHERE fbg.book_id = rt.book_id AND fg.name = ? COLLATE NOCASE)`, *opts.Genre)
+	}
+	if opts.Tag != nil {
+		q = q.Where(`EXISTS (SELECT 1 FROM book_tags AS fbt JOIN tags AS ft ON ft.id = fbt.tag_id
+			WHERE fbt.book_id = rt.book_id AND ft.name = ? COLLATE NOCASE)`, *opts.Tag)
+	}
+	if opts.Author != nil {
+		q = q.Where(`EXISTS (SELECT 1 FROM authors AS fa JOIN persons AS fp ON fp.id = fa.person_id
+			WHERE fa.book_id = rt.book_id AND fp.name = ? COLLATE NOCASE)`, *opts.Author)
+	}
+	if opts.Rating != nil {
+		q = q.Where(`EXISTS (SELECT 1 FROM user_books AS fub
+			WHERE fub.user_id = rt.user_id AND fub.book_id = rt.book_id AND fub.rating = ?)`,
+			int(math.Round(*opts.Rating*4)))
+	}
+	if opts.Kind != nil {
+		// A kind comes from Sessions and Files, not a column, so work out
+		// which of the matches so far were read as it, then page those.
+		var candidates []*models.ReadThrough
+		if err := q.Clone().Model(&candidates).Scan(ctx); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		kinds, err := svc.readThroughKinds(ctx, candidates)
+		if err != nil {
+			return nil, err
+		}
+		ids := []int{}
+		for _, rt := range candidates {
+			if kinds[rt.ID][*opts.Kind] {
+				ids = append(ids, rt.ID)
+			}
+		}
+		if len(ids) == 0 {
+			return resp, nil
+		}
+		q = q.Where("rt.id IN (?)", bun.List(ids))
 	}
 	total, err := q.Count(ctx)
 	if err != nil {
@@ -456,8 +506,8 @@ func (svc *Service) StatsFinished(ctx context.Context, user *models.User, year *
 	resp.Total = int(total)
 	err = q.
 		OrderExpr("rt.end_day IS NULL, rt.end_day DESC, rt.begin_day IS NULL, rt.begin_day DESC, rt.id DESC").
-		Limit(int64(limit)).
-		Offset(int64(offset)).
+		Limit(int64(opts.Limit)).
+		Offset(int64(opts.Offset)).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -491,6 +541,10 @@ func (svc *Service) StatsFinished(ctx context.Context, user *models.User, year *
 	for _, row := range totals {
 		seconds[row.ReadThroughID] = row.Seconds
 	}
+	ratings, err := svc.currentRatings(ctx, user.ID, finished)
+	if err != nil {
+		return nil, err
+	}
 	for _, entry := range entries {
 		row := ReadingStatsFinishedBook{
 			ReadThroughEntry: entry.ReadThroughEntry,
@@ -498,6 +552,11 @@ func (svc *Service) StatsFinished(ctx context.Context, user *models.User, year *
 		}
 		if s, ok := seconds[entry.ReadThrough.ID]; ok {
 			row.Seconds = &s
+		}
+		if bookID := entry.ReadThrough.BookID; bookID != nil {
+			if stars, ok := ratings[*bookID]; ok {
+				row.Rating = &stars
+			}
 		}
 		resp.Items = append(resp.Items, row)
 	}
@@ -570,14 +629,14 @@ func (svc *Service) bookNames(ctx context.Context, joinTable, nameTable, nameCol
 
 // newBreakdown counts the distinct Books under each name, treating names
 // that differ only in case as one, since each library keeps its own.
-func newBreakdown(rows []bookName) ReadingStatsBreakdown {
+func newBreakdown(rows []bookName) []ReadingStatsCount {
 	type group struct {
 		name  string
 		books map[int]bool
 	}
 	groups := map[string]*group{}
 	for _, row := range rows {
-		key := strings.ToLower(row.Name)
+		key := nocaseKey(row.Name)
 		g := groups[key]
 		if g == nil {
 			g = &group{name: row.Name, books: map[int]bool{}}
@@ -592,32 +651,28 @@ func newBreakdown(rows []bookName) ReadingStatsBreakdown {
 	slices.SortFunc(sorted, func(a, b *group) int {
 		return cmp.Or(
 			cmp.Compare(len(b.books), len(a.books)),
-			cmp.Compare(strings.ToLower(a.name), strings.ToLower(b.name)),
+			cmp.Compare(nocaseKey(a.name), nocaseKey(b.name)),
 			strings.Compare(a.name, b.name),
 		)
 	})
 
-	breakdown := ReadingStatsBreakdown{Items: []ReadingStatsCount{}}
-	for i, g := range sorted {
-		if i < breakdownLimit {
-			breakdown.Items = append(breakdown.Items, ReadingStatsCount{Name: g.name, Books: len(g.books)})
-			continue
-		}
-		if breakdown.Other == nil {
-			breakdown.Other = &ReadingStatsOther{}
-		}
-		breakdown.Other.Names++
+	counts := make([]ReadingStatsCount, 0, len(sorted))
+	for _, g := range sorted {
+		counts = append(counts, ReadingStatsCount{Name: g.name, Books: len(g.books)})
 	}
-	if breakdown.Other != nil {
-		books := map[int]bool{}
-		for _, g := range sorted[breakdownLimit:] {
-			for id := range g.books {
-				books[id] = true
-			}
+	return counts
+}
+
+// nocaseKey folds name as SQLite's NOCASE collation does, ASCII letters
+// only, so a breakdown groups names exactly as filtering the finished
+// Read-throughs by one matches them.
+func nocaseKey(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'A' && r <= 'Z' {
+			return r + ('a' - 'A')
 		}
-		breakdown.Other.Books = len(books)
-	}
-	return breakdown
+		return r
+	}, name)
 }
 
 // statsKindOrder is the order kinds with the same count are listed in.
@@ -635,23 +690,86 @@ func statsKind(fileType string) string {
 	}
 }
 
-// kindCounts counts the distinct Books read as each kind. A finished
-// Read-through's kinds come from the Files its Sessions were in; one with
-// no Session that says falls back to its Book's main Files.
+// kindCounts counts the distinct Books read as each kind. A Book read as
+// two kinds counts under each.
 func (svc *Service) kindCounts(ctx context.Context, finished []*models.ReadThrough) ([]ReadingStatsKindCount, error) {
+	kinds, err := svc.readThroughKinds(ctx, finished)
+	if err != nil {
+		return nil, err
+	}
+	books := map[string]map[int]bool{}
+	for _, rt := range finished {
+		if rt.BookID == nil {
+			continue
+		}
+		for kind := range kinds[rt.ID] {
+			if books[kind] == nil {
+				books[kind] = map[int]bool{}
+			}
+			books[kind][*rt.BookID] = true
+		}
+	}
+	counts := []ReadingStatsKindCount{}
+	for _, kind := range statsKindOrder {
+		if n := len(books[kind]); n > 0 {
+			counts = append(counts, ReadingStatsKindCount{Kind: kind, Books: n})
+		}
+	}
+	slices.SortStableFunc(counts, func(a, b ReadingStatsKindCount) int { return cmp.Compare(b.Books, a.Books) })
+	return counts, nil
+}
+
+// currentRatings are userID's Ratings, in stars, of the Books of
+// readThroughs, by Book id. Unrated Books are left out.
+func (svc *Service) currentRatings(ctx context.Context, userID int, readThroughs []*models.ReadThrough) (map[int]float64, error) {
+	ratings := map[int]float64{}
+	var bookIDs []int
+	for _, rt := range readThroughs {
+		if rt.BookID != nil {
+			bookIDs = append(bookIDs, *rt.BookID)
+		}
+	}
+	if len(bookIDs) == 0 {
+		return ratings, nil
+	}
+	var rows []struct {
+		BookID int `bun:"book_id"`
+		Rating int `bun:"rating"`
+	}
+	err := svc.db.NewSelect().
+		Model((*models.UserBook)(nil)).
+		Column("ub.book_id", "ub.rating").
+		Where("ub.user_id = ? AND ub.book_id IN (?) AND ub.rating IS NOT NULL", userID, bun.List(bookIDs)).
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range rows {
+		ratings[row.BookID] = float64(row.Rating) / 4
+	}
+	return ratings, nil
+}
+
+// readThroughKinds are the kinds each of the finished Read-throughs that
+// still has its Book was read as, by Read-through id. They come from the
+// Files its Sessions were in; one with no Session that says falls back to
+// its Book's main Files, and "unknown" when those don't say either.
+func (svc *Service) readThroughKinds(ctx context.Context, finished []*models.ReadThrough) (map[int]map[string]bool, error) {
 	var ids, bookIDs []int
+	seenBooks := map[int]bool{}
 	for _, rt := range finished {
 		if rt.BookID != nil {
 			ids = append(ids, rt.ID)
-			if !slices.Contains(bookIDs, *rt.BookID) {
+			if !seenBooks[*rt.BookID] {
+				seenBooks[*rt.BookID] = true
 				bookIDs = append(bookIDs, *rt.BookID)
 			}
 		}
 	}
+	result := map[int]map[string]bool{}
 	if len(ids) == 0 {
-		return []ReadingStatsKindCount{}, nil
+		return result, nil
 	}
-
 	var sessionRows []struct {
 		ReadThroughID int     `bun:"read_through_id"`
 		Kind          string  `bun:"kind"`
@@ -704,7 +822,6 @@ func (svc *Service) kindCounts(ctx context.Context, finished []*models.ReadThrou
 		bookKinds[row.BookID][statsKind(row.FileType)] = true
 	}
 
-	books := map[string]map[int]bool{}
 	for _, rt := range finished {
 		if rt.BookID == nil {
 			continue
@@ -716,21 +833,9 @@ func (svc *Service) kindCounts(ctx context.Context, finished []*models.ReadThrou
 		if len(kinds) == 0 {
 			kinds = map[string]bool{ReadingStatsKindUnknown: true}
 		}
-		for kind := range kinds {
-			if books[kind] == nil {
-				books[kind] = map[int]bool{}
-			}
-			books[kind][*rt.BookID] = true
-		}
+		result[rt.ID] = kinds
 	}
-	counts := []ReadingStatsKindCount{}
-	for _, kind := range statsKindOrder {
-		if n := len(books[kind]); n > 0 {
-			counts = append(counts, ReadingStatsKindCount{Kind: kind, Books: n})
-		}
-	}
-	slices.SortStableFunc(counts, func(a, b ReadingStatsKindCount) int { return cmp.Compare(b.Books, a.Books) })
-	return counts, nil
+	return result, nil
 }
 
 // ratingCounts counts userID's current Ratings of bookIDs, each Book once,

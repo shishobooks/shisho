@@ -304,8 +304,7 @@ func TestStats_EmptyRangeHasZeroesAndEmptyLists(t *testing.T) {
 	list := f.finishedList("?year=2026")
 	assert.NotNil(t, list.Items)
 	assert.Equal(t, 0, list.Total)
-	assert.NotNil(t, resp.Genres.Items)
-	assert.Nil(t, resp.Genres.Other)
+	assert.NotNil(t, resp.Genres)
 	assert.NotNil(t, resp.Kinds)
 	assert.NotNil(t, resp.Ratings)
 	assert.NotNil(t, resp.Places)
@@ -467,10 +466,10 @@ func TestStats_BreakdownsCountEachBookOnceUnderEachName(t *testing.T) {
 	f.finished(comic, "2026-03-01", "2026-03-01")
 
 	resp := f.stats("?year=2026")
-	assert.Equal(t, []ReadingStatsCount{{Name: "Classics", Books: 2}, {Name: "Science Fiction", Books: 1}}, resp.Genres.Items,
+	assert.Equal(t, []ReadingStatsCount{{Name: "Classics", Books: 2}, {Name: "Science Fiction", Books: 1}}, resp.Genres,
 		"a reread doesn't count its Book twice, and the same name in two libraries is one Genre")
-	assert.Equal(t, []ReadingStatsCount{{Name: "Desert", Books: 1}}, resp.Tags.Items)
-	assert.Equal(t, []ReadingStatsCount{{Name: "Frank Herbert", Books: 1}, {Name: "Jane Austen", Books: 1}}, resp.Authors.Items)
+	assert.Equal(t, []ReadingStatsCount{{Name: "Desert", Books: 1}}, resp.Tags)
+	assert.Equal(t, []ReadingStatsCount{{Name: "Frank Herbert", Books: 1}, {Name: "Jane Austen", Books: 1}}, resp.Authors)
 	assert.Equal(t, []ReadingStatsKindCount{
 		{Kind: ReadingStatsKindEbook, Books: 2},
 		{Kind: ReadingStatsKindComic, Books: 1},
@@ -524,23 +523,20 @@ func TestStats_KindComesFromTheFilesEachReadThroughWasReadIn(t *testing.T) {
 	}, f.stats("?year=2026").Kinds)
 }
 
-func TestStats_BreakdownsFoldTheRestIntoOther(t *testing.T) {
+func TestStats_BreakdownsListEveryName(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
-	for i := range breakdownLimit + 2 {
-		book := createBook(t, f.db, "Book "+string(rune('A'+i)))
-		f.addGenre(book, "Genre "+string(rune('A'+i)))
-		if i == 0 {
-			f.addGenre(book, "Genre Z")
-		}
+	for i := range 150 {
+		book := createBook(t, f.db, fmt.Sprintf("Book %03d", i))
+		f.addTag(book, fmt.Sprintf("Tag %03d", i))
+		f.addTag(book, "Everywhere")
 		f.finished(book, "2026-01-01", "2026-01-02")
 	}
 
-	resp := f.stats("?year=2026")
-	assert.Len(t, resp.Genres.Items, breakdownLimit)
-	require.NotNil(t, resp.Genres.Other)
-	assert.Equal(t, 3, resp.Genres.Other.Names)
-	assert.Equal(t, 3, resp.Genres.Other.Books, "distinct Books under any folded name")
+	tags := f.stats("?year=2026").Tags
+	require.Len(t, tags, 151, "every Tag, however many")
+	assert.Equal(t, ReadingStatsCount{Name: "Everywhere", Books: 150}, tags[0])
+	assert.Equal(t, ReadingStatsCount{Name: "Tag 000", Books: 1}, tags[1], "ties by name")
 }
 
 func TestStats_RatingsCountEachFinishedBookOnceAtItsCurrentRating(t *testing.T) {
@@ -582,8 +578,8 @@ func TestStats_DetachedReadThroughsCountButAreLeftOutOfBreakdowns(t *testing.T) 
 	resp := f.stats("?year=2026")
 	assert.Equal(t, 1, resp.Totals.Finished)
 	assert.Equal(t, 3600, resp.Totals.ReadingSeconds)
-	assert.Empty(t, resp.Genres.Items)
-	assert.Empty(t, resp.Authors.Items)
+	assert.Empty(t, resp.Genres)
+	assert.Empty(t, resp.Authors)
 	assert.Empty(t, resp.Kinds)
 	assert.Empty(t, resp.Ratings, "the Rating went with the Book")
 	finished := f.finishedList("?year=2026").Items
@@ -607,7 +603,7 @@ func TestStats_ABookInALibraryOutOfReachStillCountsWithNoLink(t *testing.T) {
 	f.user.LibraryAccess = []*models.UserLibraryAccess{{UserID: f.user.ID, LibraryID: intp(dune.LibraryID + 100)}}
 	resp := statsFor(t, newReadingAPI(t, f.db, f.user), "?year=2026")
 	assert.Equal(t, 1, resp.Totals.Finished)
-	assert.Equal(t, []ReadingStatsCount{{Name: "Science Fiction", Books: 1}}, resp.Genres.Items)
+	assert.Equal(t, []ReadingStatsCount{{Name: "Science Fiction", Books: 1}}, resp.Genres)
 	finished := finishedListFor(t, newReadingAPI(t, f.db, f.user), "?year=2026").Items
 	require.Len(t, finished, 1)
 	assert.Equal(t, "Dune", finished[0].Title)
@@ -674,7 +670,7 @@ func TestStats_NeverShowsAnotherUsersReading(t *testing.T) {
 	assert.Equal(t, ReadingStatsTotals{}, resp.Totals)
 	assert.Empty(t, resp.Years)
 	assert.Empty(t, f.finishedList("?year=2026").Items)
-	assert.Empty(t, resp.Genres.Items)
+	assert.Empty(t, resp.Genres)
 	assert.Empty(t, resp.Ratings)
 	assert.Empty(t, resp.Places)
 
@@ -707,4 +703,66 @@ func TestStats_FinishedPagesLatestFirst(t *testing.T) {
 	assert.Equal(t, 4, second.Total)
 	assert.Equal(t, []string{"Book 2", "Book 0"}, finishedTitles(second))
 	assert.Empty(t, f.finishedList("?year=2026&limit=2&offset=4").Items)
+}
+
+func TestStats_FinishedFiltersByWhatTheBreakdownsCount(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	f.addFile(dune, models.FileTypeEPUB)
+	f.addGenre(dune, "Science Fiction")
+	f.addTag(dune, "Desert")
+	addAuthor(t, f.db, dune, "Frank Herbert", 1)
+	f.rate(dune, 18)
+	emma := createBook(t, f.db, "Emma")
+	f.addFile(emma, models.FileTypeM4B)
+	f.addGenre(emma, "Classics")
+	addAuthor(t, f.db, emma, "Jane Austen", 1)
+	saga := createBook(t, f.db, "Saga")
+	f.addFile(saga, models.FileTypeCBZ)
+	f.addGenre(saga, "science fiction")
+	f.finished(dune, "2026-01-01", "2026-01-10")
+	f.finished(dune, "2026-06-01", "2026-06-10")
+	f.finished(emma, "2026-02-01", "2026-02-10")
+	f.finished(saga, "2026-03-01", "2026-03-01")
+	f.finished(saga, "2025-03-01", "2025-03-01")
+	gone := createBook(t, f.db, "Gone")
+	f.addGenre(gone, "Science Fiction")
+	f.finished(gone, "2026-04-01", "2026-04-01")
+	deleteBook(t, f.db, gone)
+
+	titlesFor := func(query string) []string {
+		t.Helper()
+		return finishedTitles(f.finishedList(query))
+	}
+	assert.Equal(t, []string{"Dune", "Saga", "Dune"}, titlesFor("?year=2026&genre=Science%20Fiction"),
+		"case doesn't matter, a reread lists each time, and a removed Book has no Genres")
+	assert.Equal(t, 3, f.finishedList("?year=2026&genre=science%20fiction").Total)
+	assert.Equal(t, []string{"Dune", "Dune"}, titlesFor("?year=2026&tag=desert"))
+	assert.Equal(t, []string{"Emma"}, titlesFor("?year=2026&author=Jane%20Austen"))
+	assert.Equal(t, []string{"Dune", "Dune"}, titlesFor("?year=2026&rating=4.5"))
+	assert.Equal(t, []string{"Saga"}, titlesFor("?year=2026&kind=comic"))
+	assert.Equal(t, []string{"Emma"}, titlesFor("?year=2026&kind=audiobook"))
+	assert.Equal(t, []string{"Dune"}, titlesFor("?year=2026&genre=Science%20Fiction&kind=ebook&limit=1"))
+	assert.Equal(t, 2, f.finishedList("?year=2026&genre=Science%20Fiction&kind=ebook").Total, "filters combine")
+	assert.Equal(t, []string{"Saga", "Saga"}, titlesFor("?kind=comic"), "all time")
+	assert.Empty(t, titlesFor("?year=2026&genre=Romance"))
+	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/finished?kind=scroll", nil).Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/finished?rating=6", nil).Code)
+}
+
+func TestStats_FinishedRowsCarryTheCurrentRating(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	emma := createBook(t, f.db, "Emma")
+	f.finished(dune, "2026-01-01", "2026-01-10")
+	f.finished(emma, "2026-02-01", "2026-02-10")
+	f.rate(dune, 18)
+
+	rows := f.finishedList("?year=2026").Items
+	require.Len(t, rows, 2)
+	assert.Nil(t, rows[0].Rating, "Emma is unrated")
+	require.NotNil(t, rows[1].Rating)
+	assert.InDelta(t, 4.5, *rows[1].Rating, 0.001)
 }
