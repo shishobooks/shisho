@@ -62,6 +62,14 @@ func init() {
 				`UPDATE reading_sessions SET kind = 'listening' WHERE file_id IN (SELECT id FROM files WHERE file_type = 'm4b')`,
 				`ALTER TABLE reading_sessions ADD COLUMN duration INTEGER NOT NULL DEFAULT 0 CHECK (duration >= 0)`,
 				`UPDATE reading_sessions SET duration = MAX(0, CAST(ROUND((julianday(ended_at) - julianday(started_at)) * 86400) AS INTEGER))`,
+				// The Device that reported a Session, as positions and the update
+				// log already keep, so one Device's Sessions can be told apart. A
+				// browser isn't a Device. Only a KOReader Session its pull still
+				// names is known for one written before now.
+				`ALTER TABLE reading_sessions ADD COLUMN source_device_id TEXT REFERENCES devices (id) ON DELETE SET NULL`,
+				`CREATE INDEX ix_reading_sessions_source_device_id ON reading_sessions (source_device_id)`,
+				`UPDATE reading_sessions SET source_device_id = (SELECT kp.device_id FROM koreader_pulls AS kp WHERE kp.session_id = reading_sessions.id)
+					WHERE id IN (SELECT session_id FROM koreader_pulls WHERE session_id IS NOT NULL)`,
 			}
 			for _, s := range statements {
 				if _, err := tx.ExecContext(ctx, s); err != nil {
@@ -75,6 +83,8 @@ func init() {
 	down := func(ctx context.Context, db *bun.DB) error {
 		return withForeignKeysOff(ctx, db, func(ctx context.Context, tx bun.Tx) error {
 			statements := []string{
+				`DROP INDEX ix_reading_sessions_source_device_id`,
+				`ALTER TABLE reading_sessions DROP COLUMN source_device_id`,
 				`ALTER TABLE reading_sessions DROP COLUMN duration`,
 				`ALTER TABLE reading_sessions DROP COLUMN kind`,
 				// The old table can't hold a Read-through without a Book. Foreign

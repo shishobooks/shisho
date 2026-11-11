@@ -220,4 +220,7 @@ type ReadingSession struct {
 	// Duration is the seconds spent, which is the span from StartedAt to
 	// EndedAt unless the source knows the reader paused partway.
 	Duration int `bun:",notnull" json:"duration"`
+	// SourceDeviceID is the Device that reported the Session, when a Device
+	// did and still exists. A browser isn't a Device.
+	SourceDeviceID *string `json:"-"`
 }

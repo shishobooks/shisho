@@ -129,4 +129,38 @@ func TestDetachReadThroughs_RollsBack(t *testing.T) {
 	require.NoError(t, db.NewRaw(`SELECT name FROM pragma_table_info('reading_sessions')`).Scan(ctx, &columns))
 	assert.NotContains(t, columns, "kind")
 	assert.NotContains(t, columns, "duration")
+	assert.NotContains(t, columns, "source_device_id")
+}
+
+// A KOReader Session still referenced by its pull is filled in with that
+// pull's Device. Nothing else says which Device wrote a Session, so the rest
+// stay unknown.
+func TestDetachReadThroughs_FillsSessionDevicesFromKOReaderPulls(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := openMigrationTestDB(t)
+	migrator := migrateToBefore(ctx, t, db, detachReadThroughsMigrationName)
+	seedDetachReadThroughRows(ctx, t, db)
+	for _, query := range []string{
+		`INSERT INTO devices (id, user_id, name, device_type, credential, created_at, updated_at)
+			VALUES ('ko-1', 1, 'KOReader', 'koreader', 'cred', '2026-01-01', '2026-01-01')`,
+		`INSERT INTO koreader_pulls (device_id, document, file_id, pulled_at, session_id)
+			VALUES ('ko-1', 'abc', 1, '2026-03-02 08:00:00+00:00', 3)`,
+	} {
+		_, err := db.ExecContext(ctx, query)
+		require.NoError(t, err, query)
+	}
+
+	_, err := migrator.Migrate(ctx)
+	require.NoError(t, err)
+
+	var devices []string
+	require.NoError(t, db.NewRaw(`SELECT COALESCE(source_device_id, 'none') FROM reading_sessions ORDER BY id`).Scan(ctx, &devices))
+	assert.Equal(t, []string{"none", "none", "ko-1"}, devices)
+
+	_, err = db.ExecContext(ctx, `DELETE FROM devices WHERE id = 'ko-1'`)
+	require.NoError(t, err)
+	var count int
+	require.NoError(t, db.NewRaw(`SELECT COUNT(*) FROM reading_sessions`).Scan(ctx, &count))
+	assert.Equal(t, 3, count, "deleting the Device keeps its Sessions")
 }

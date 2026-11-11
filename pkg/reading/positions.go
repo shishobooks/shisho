@@ -111,6 +111,9 @@ type SessionInput struct {
 	EndPercentage   float64
 	// Measured is false for a session the source estimated.
 	Measured bool
+	// DeviceID is the Device that reported the session, when a Device did.
+	// A session sent with a position update takes the update's.
+	DeviceID *string
 }
 
 // UpdatePosition is the position update service. In one transaction it:
@@ -132,6 +135,11 @@ type SessionInput struct {
 // Read-through and stores nothing else.
 func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*UpdatePositionResponse, error) {
 	result := &UpdatePositionResponse{}
+	if u.Session != nil && u.Session.DeviceID == nil {
+		session := *u.Session
+		session.DeviceID = u.DeviceID
+		u.Session = &session
+	}
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		now := svc.now()
 		occurredAt := now
@@ -477,6 +485,7 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 		EndPercentage:   session.EndPercentage,
 		Measured:        session.Measured,
 		Kind:            models.ReadingKindForFileType(fileType),
+		SourceDeviceID:  session.DeviceID,
 		Duration:        int(session.EndedAt.Sub(session.StartedAt).Round(time.Second) / time.Second),
 	}
 	_, err = tx.NewInsert().Model(inserted).Exec(ctx)

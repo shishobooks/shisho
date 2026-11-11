@@ -499,7 +499,9 @@ func (r *readingStates) apply(ctx context.Context, user *models.User, device *de
 		}
 		accepted = result.Accepted
 	case update.Session != nil:
-		if _, err := r.reading.RecordEstimatedSession(ctx, user.ID, file.ID, update.Source, *update.Session); err != nil {
+		session := *update.Session
+		session.DeviceID = update.DeviceID
+		if _, err := r.reading.RecordEstimatedSession(ctx, user.ID, file.ID, update.Source, session); err != nil {
 			return err
 		}
 	}
