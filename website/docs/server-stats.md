@@ -30,7 +30,7 @@ Only the libraries in your [library access](./users-and-permissions.md#library-a
 
 ## Library Growth
 
-Books by the month they were added to Shisho, in the server's time zone. A library's first scan adds every book it finds at once, so that month usually stands out.
+The number of books on the server over time, by when each was added to Shisho, in the server's time zone. Hover over the chart to see the total and how many were added in a month. The chart always spans at least a year, and groups by quarter past three years and by year past nine. A library's first scan adds every book it finds at once, so the line usually jumps at the start.
 
 ## Disk Space
 

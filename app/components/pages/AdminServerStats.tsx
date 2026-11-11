@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import LibraryGrowthChart from "@/components/library/LibraryGrowthChart";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Progress } from "@/components/ui/progress";
@@ -8,7 +9,6 @@ import { useServerStats } from "@/hooks/queries/serverStats";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type {
   ContentCounts,
-  GrowthMonth,
   ReadingPeriod,
   StatsResponse,
   Volume,
@@ -19,7 +19,6 @@ import {
   formatCount,
   formatDuration,
   formatFileSize,
-  formatMonthYear,
 } from "@/utils/format";
 
 interface SectionProps {
@@ -355,68 +354,15 @@ const ServerData = ({ stats }: { stats: StatsResponse }) => (
   </Section>
 );
 
-const GrowthChart = ({ growth }: { growth: GrowthMonth[] }) => {
-  const max = Math.max(1, ...growth.map((m) => m.books));
-  const total = growth.reduce((sum, m) => sum + m.books, 0);
-  return (
-    <>
-      {/* The bars are for sighted users; the table below carries the same
-          figures for screen readers. */}
-      <div aria-hidden="true">
-        <div className="flex items-end gap-px h-40 overflow-hidden">
-          {growth.map((m) => (
-            <div
-              className="flex-1 min-w-px bg-primary/80 rounded-t-sm"
-              key={m.month}
-              style={{
-                height:
-                  m.books > 0 ? `${Math.max(2, (m.books / max) * 100)}%` : 0,
-              }}
-              title={`${formatMonthYear(m.month)}: ${formatCount(m.books, "book")}`}
-            />
-          ))}
-        </div>
-        <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-          <span>{formatMonthYear(growth[0].month)}</span>
-          {growth.length > 1 && (
-            <span>{formatMonthYear(growth[growth.length - 1].month)}</span>
-          )}
-        </div>
-      </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {formatCount(total, "book")} added over{" "}
-        {formatCount(growth.length, "month")}.
-      </p>
-      <table className="sr-only">
-        <caption>Books added by month</caption>
-        <thead>
-          <tr>
-            <th scope="col">Month</th>
-            <th scope="col">Books added</th>
-          </tr>
-        </thead>
-        <tbody>
-          {growth.map((m) => (
-            <tr key={m.month}>
-              <th scope="row">{formatMonthYear(m.month)}</th>
-              <td>{m.books.toLocaleString()}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  );
-};
-
 const LibraryGrowth = ({ stats }: { stats: StatsResponse }) => (
   <Section
-    description="Books by the month they were added, in the server's time zone."
+    description="Books in the library over time, by when they were added, in the server's time zone."
     title="Library Growth"
   >
     {stats.growth.length === 0 ? (
       <p className="text-sm text-muted-foreground">No books yet.</p>
     ) : (
-      <GrowthChart growth={stats.growth} />
+      <LibraryGrowthChart growth={stats.growth} />
     )}
   </Section>
 );

@@ -261,18 +261,24 @@ describe("AdminServerStats", () => {
     ).toBeInTheDocument();
   });
 
-  it("charts books added by month", () => {
+  it("charts the running total, padded out to a year", () => {
     renderPage();
 
     const growth = section("Library Growth");
     const table = within(growth).getByRole("table", {
-      name: "Books added by month",
+      name: "Library growth by month",
     });
     const rows = within(table).getAllByRole("row");
-    // Header row plus one per month.
-    expect(rows).toHaveLength(4);
-    expect(within(rows[3]).getByText("Nov 2026")).toBeInTheDocument();
-    expect(within(rows[3]).getByText("319")).toBeInTheDocument();
+    // Header row plus twelve months: three with data and nine before them.
+    expect(rows).toHaveLength(13);
+    expect(within(rows[1]).getByText("Dec 2025")).toBeInTheDocument();
+    const latest = rows[12];
+    expect(within(latest).getByText("Nov 2026")).toBeInTheDocument();
+    expect(within(latest).getByText("319")).toBeInTheDocument();
+    expect(within(latest).getByText("18,319")).toBeInTheDocument();
+    expect(
+      within(growth).getByText("18,319 books now, with 319 added in Nov 2026."),
+    ).toBeInTheDocument();
   });
 
   it("says when no books have been added yet", () => {
