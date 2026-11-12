@@ -367,6 +367,8 @@ const ShareBar = ({ children }: { children: ReactNode }) => (
 
 // Rows shown before "Show all".
 const VISIBLE_ROWS = 5;
+// How much of the last row an expanded list shows: enough to cut its name.
+const PEEK = 0.45;
 
 /**
  * A breakdown of finished books, most first. It shows the first few and
@@ -404,8 +406,10 @@ export const CountList = ({
     ? rows.filter((row) => !needle || row.label.toLowerCase().includes(needle))
     : rows.slice(0, VISIBLE_ROWS);
 
-  // The scrolling list ends halfway through a row, so the cut-off row shows
-  // there is more to scroll to. Any room left over falls below the toggle.
+  // The scrolling list ends partway into a row, through its
+  // name, so the cut-off row shows there is more to scroll to. The toggle
+  // stays at the bottom, where "Show all" was, and any room left over sits
+  // between the two.
   useLayoutEffect(() => {
     const panel = panelRef.current;
     const list = listRef.current;
@@ -422,15 +426,15 @@ export const CountList = ({
         : 0;
     const above =
       list.getBoundingClientRect().top - panel.getBoundingClientRect().top;
-    const below =
-      toggle.offsetHeight + parseFloat(getComputedStyle(toggle).marginTop);
+    // Expanded, the toggle's spacing is padding, part of its own height.
+    const below = toggle.offsetHeight;
     const room = lockedHeight - above - below;
     if (stride <= 0 || list.scrollHeight <= room) {
       setListHeight(null);
       return;
     }
-    const whole = Math.max(1, Math.floor(room / stride - 0.5));
-    setListHeight((whole + 0.5) * stride);
+    const whole = Math.max(1, Math.floor(room / stride - PEEK));
+    setListHeight((whole + PEEK) * stride);
   }, [expanded, lockedHeight, shown.length]);
 
   if (rows.length === 0) {
@@ -498,7 +502,7 @@ export const CountList = ({
       </ul>
       {rows.length > VISIBLE_ROWS && (
         <Button
-          className="mt-2 self-start text-xs"
+          className={cn("mt-2 self-start text-xs", expanded && "mt-auto pt-2")}
           onClick={() => {
             if (!expanded) {
               setLockedHeight(panelRef.current?.offsetHeight || null);
