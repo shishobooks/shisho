@@ -8,13 +8,11 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
-  formatDuration,
   formatElapsed,
   formatFileSize,
   formatPageCount,
   formatPersonCredits,
   formatPlayerTime,
-  formatShortDuration,
   formatShowingRange,
   formatYear,
 } from "./format";
@@ -261,24 +259,5 @@ describe("fileTypeLabel", () => {
   it("writes every other File Type in capitals", () => {
     expect(fileTypeLabel("epub")).toBe("EPUB");
     expect(fileTypeLabel("cbz")).toBe("CBZ");
-  });
-});
-
-describe("formatShortDuration", () => {
-  it("shows minutes under an hour and whole hours from an hour up", () => {
-    expect(formatShortDuration(0)).toBe("0m");
-    expect(formatShortDuration(1500)).toBe("25m");
-    expect(formatShortDuration(3600)).toBe("1h");
-  });
-
-  it("rounds down like formatDuration, so the two never disagree", () => {
-    expect(formatShortDuration(166)).toBe("2m");
-    expect(formatDuration(166)).toBe("2m");
-    expect(formatShortDuration(3599)).toBe("59m");
-    expect(formatShortDuration(5400)).toBe("1h");
-  });
-
-  it("marks time under a minute rather than calling it none", () => {
-    expect(formatShortDuration(20)).toBe("<1m");
   });
 });

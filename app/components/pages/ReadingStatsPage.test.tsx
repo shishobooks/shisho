@@ -525,4 +525,31 @@ describe("ReadingStatsPage", () => {
     expect(dune).toHaveTextContent("Rated 4.5");
     expect(gone).not.toHaveTextContent("Rated");
   });
+
+  it("shows a month's figures on hover, with an axis in round steps", async () => {
+    const { user } = renderPage();
+    const chart = await screen.findByRole("region", {
+      name: "Reading and listening by month",
+    });
+    // The busiest month's two and a half hours round the axis up to 3h.
+    expect(chart).toHaveTextContent(/0\s*1h\s*2h\s*3h/);
+
+    await user.hover(
+      chart.querySelector('[data-period="2026-3"]') as HTMLElement,
+    );
+    const tooltip = within(chart).getByText("March 2026").parentElement!;
+    expect(tooltip).toHaveTextContent("2h 30m");
+    expect(tooltip).toHaveTextContent("Reading2h 0m");
+    expect(tooltip).toHaveTextContent("Listening30m");
+
+    const finished = screen.getByRole("region", {
+      name: "Books finished by month",
+    });
+    await user.hover(
+      finished.querySelector('[data-period="2026-3"]') as HTMLElement,
+    );
+    expect(
+      within(finished).getByText("March 2026").parentElement,
+    ).toHaveTextContent("3 books");
+  });
 });

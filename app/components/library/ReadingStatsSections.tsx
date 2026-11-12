@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 
+import { ChartFrame, ChartTooltip } from "@/components/library/ChartFrame";
 import ReadThroughCover from "@/components/library/ReadThroughCover";
 import ReadThroughDetails from "@/components/library/ReadThroughDetails";
 import TruncatedText from "@/components/library/TruncatedText";
@@ -11,12 +12,12 @@ import type {
   ReadingStatsPeriod,
   ReadingStatsPlace,
 } from "@/types";
+import { durationTicks, niceTicks, yPercent } from "@/utils/chartTicks";
 import {
   formatCount,
   formatDate,
   formatDuration,
   formatRating,
-  formatShortDuration,
 } from "@/utils/format";
 import type { CountRow } from "@/utils/readingStats";
 
@@ -63,6 +64,15 @@ const periodLabel = (period: ReadingStatsPeriod) =>
 
 const periodName = (period: ReadingStatsPeriod) =>
   period.month ? MONTH_NAMES[period.month - 1] : String(period.year);
+
+const periodKey = (period: ReadingStatsPeriod) =>
+  `${period.year}-${period.month ?? ""}`;
+
+// A period with its year, for a tooltip: "March 2026", or "2026".
+const periodTitle = (period: ReadingStatsPeriod) =>
+  period.month
+    ? `${MONTH_NAMES[period.month - 1]} ${period.year}`
+    : String(period.year);
 
 const share = (value: number, max: number) =>
   max > 0 ? `${(value / max) * 100}%` : "0%";
@@ -120,53 +130,94 @@ const Legend = () => (
   </div>
 );
 
-// Columns for each period. The chart is drawn for sighted readers; the
-// table beside it carries the same figures for screen readers.
-const PeriodColumns = ({
+// Bars for each period on the app's chart frame, with a tooltip for the
+// one under the pointer. The chart is drawn for sighted readers; the table
+// beside it carries the same figures for screen readers.
+const PeriodBars = ({
   periods,
   caption,
+  ticks,
+  formatTick,
   renderBar,
-  renderValue,
+  renderTooltip,
   describe,
 }: {
   periods: ReadingStatsPeriod[];
   caption: string;
+  ticks: number[];
+  formatTick: (value: number) => string;
   renderBar: (period: ReadingStatsPeriod) => ReactNode;
-  renderValue: (period: ReadingStatsPeriod) => string;
+  renderTooltip: (period: ReadingStatsPeriod) => ReactNode;
   describe: (period: ReadingStatsPeriod) => string;
-}) => (
-  <>
-    <div aria-hidden className="flex h-40 items-end gap-0.5 sm:gap-1">
-      {periods.map((period) => (
-        <div
-          className="flex h-full min-w-0 flex-1 flex-col items-center"
-          key={`${period.year}-${period.month ?? ""}`}
-          title={`${periodName(period)}: ${describe(period)}`}
-        >
-          <div className="w-full truncate text-center text-[10px] tabular-nums text-muted-foreground">
-            {renderValue(period)}
+}) => {
+  const [active, setActive] = useState<number | null>(null);
+  const count = periods.length;
+  // The tooltip sits against the hovered column's outer edge.
+  const tooltipX =
+    active === null
+      ? 0
+      : ((active + 0.5) / count) * 100 > 50
+        ? (active / count) * 100
+        : ((active + 1) / count) * 100;
+  return (
+    <>
+      <ChartFrame
+        formatTick={formatTick}
+        plotProps={{ onPointerLeave: () => setActive(null) }}
+        ticks={ticks}
+        xLabels={
+          <div className="mt-1 flex gap-0.5 sm:gap-1">
+            {periods.map((period) => (
+              <span
+                className="min-w-0 flex-1 truncate text-center text-[10px] text-muted-foreground"
+                key={periodKey(period)}
+              >
+                {periodLabel(period)}
+              </span>
+            ))}
           </div>
-          <div className="flex w-full flex-1 flex-col justify-end">
-            {renderBar(period)}
-          </div>
-          <div className="mt-1 w-full truncate text-center text-[10px] text-muted-foreground">
-            {periodLabel(period)}
-          </div>
+        }
+      >
+        <div className="absolute inset-0 flex items-end gap-0.5 sm:gap-1">
+          {periods.map((period, i) => (
+            <div
+              className={cn(
+                "flex h-full min-w-0 flex-1 flex-col justify-end rounded-t",
+                active === i && "bg-accent/50",
+              )}
+              data-period={periodKey(period)}
+              key={periodKey(period)}
+              onPointerEnter={() => setActive(i)}
+            >
+              {renderBar(period)}
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
-    <table className="sr-only">
-      <caption>{caption}</caption>
-      <tbody>
-        {periods.map((period) => (
-          <tr key={`${period.year}-${period.month ?? ""}`}>
-            <th scope="row">{periodName(period)}</th>
-            <td>{describe(period)}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </>
+        {active !== null && (
+          <ChartTooltip offset={4} xPercent={tooltipX}>
+            {renderTooltip(periods[active])}
+          </ChartTooltip>
+        )}
+      </ChartFrame>
+      <table className="sr-only">
+        <caption>{caption}</caption>
+        <tbody>
+          {periods.map((period) => (
+            <tr key={periodKey(period)}>
+              <th scope="row">{periodName(period)}</th>
+              <td>{describe(period)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  );
+};
+
+const TooltipHeading = ({ children }: { children: ReactNode }) => (
+  <div className="text-sm font-semibold tabular-nums text-foreground">
+    {children}
+  </div>
 );
 
 export const FinishedChart = ({
@@ -174,62 +225,105 @@ export const FinishedChart = ({
 }: {
   periods: ReadingStatsPeriod[];
 }) => {
-  const max = Math.max(0, ...periods.map((p) => p.finished));
+  const ticks = niceTicks(Math.max(0, ...periods.map((p) => p.finished)));
   return (
-    <PeriodColumns
+    <PeriodBars
       caption="Books finished"
       describe={(p) => formatCount(p.finished, "book")}
+      formatTick={(t) => t.toLocaleString()}
       periods={periods}
       renderBar={(p) => (
         <div
-          className={cn("w-full rounded-t-sm", SERIES_BAR)}
-          style={{ height: share(p.finished, max) }}
+          className={cn("w-full rounded-t", SERIES_BAR)}
+          style={{ height: `${yPercent(ticks, p.finished)}%` }}
         />
       )}
-      renderValue={(p) => (p.finished > 0 ? p.finished.toLocaleString() : "")}
+      renderTooltip={(p) => (
+        <>
+          <TooltipHeading>{formatCount(p.finished, "book")}</TooltipHeading>
+          <div className="text-muted-foreground">{periodTitle(p)}</div>
+        </>
+      )}
+      ticks={ticks}
     />
   );
 };
 
+const TooltipSeries = ({
+  className,
+  label,
+  seconds,
+}: {
+  className: string;
+  label: string;
+  seconds: number;
+}) => (
+  <div className="flex items-center gap-1.5 text-muted-foreground">
+    <span className={cn("h-2 w-2 rounded-sm", className)} />
+    {label}
+    <span className="ml-auto pl-3 tabular-nums">{formatDuration(seconds)}</span>
+  </div>
+);
+
 export const TimeChart = ({ periods }: { periods: ReadingStatsPeriod[] }) => {
-  const max = Math.max(
-    0,
-    ...periods.map((p) => p.reading_seconds + p.listening_seconds),
+  const axis = durationTicks(
+    Math.max(0, ...periods.map((p) => p.reading_seconds + p.listening_seconds)),
   );
   return (
     <>
       <Legend />
-      <PeriodColumns
+      <PeriodBars
         caption="Reading and listening time"
         describe={(p) =>
           `${formatDuration(p.reading_seconds)} reading, ${formatDuration(p.listening_seconds)} listening`
         }
+        formatTick={axis.format}
         periods={periods}
         renderBar={(p) => (
+          // Listening stacks on reading, with a gap of the surface between.
           <div
-            className="flex w-full flex-col overflow-hidden rounded-t-sm"
+            className="flex w-full flex-col gap-0.5"
             style={{
-              height: share(p.reading_seconds + p.listening_seconds, max),
+              height: `${yPercent(axis.ticks, p.reading_seconds + p.listening_seconds)}%`,
             }}
           >
-            <div
-              className={LISTENING_BAR}
-              style={{
-                flexGrow: p.listening_seconds,
-              }}
-            />
-            <div
-              className={READING_BAR}
-              style={{
-                flexGrow: p.reading_seconds,
-              }}
-            />
+            {p.listening_seconds > 0 && (
+              <div
+                className={cn("min-h-px rounded-t", LISTENING_BAR)}
+                style={{ flexGrow: p.listening_seconds }}
+              />
+            )}
+            {p.reading_seconds > 0 && (
+              <div
+                className={cn(
+                  "min-h-px",
+                  p.listening_seconds === 0 && "rounded-t",
+                  READING_BAR,
+                )}
+                style={{ flexGrow: p.reading_seconds }}
+              />
+            )}
           </div>
         )}
-        renderValue={(p) => {
-          const total = p.reading_seconds + p.listening_seconds;
-          return total > 0 ? formatShortDuration(total) : "";
-        }}
+        renderTooltip={(p) => (
+          <>
+            <TooltipHeading>
+              {formatDuration(p.reading_seconds + p.listening_seconds)}
+            </TooltipHeading>
+            <div className="mb-1 text-muted-foreground">{periodTitle(p)}</div>
+            <TooltipSeries
+              className={READING_BAR}
+              label="Reading"
+              seconds={p.reading_seconds}
+            />
+            <TooltipSeries
+              className={LISTENING_BAR}
+              label="Listening"
+              seconds={p.listening_seconds}
+            />
+          </>
+        )}
+        ticks={axis.ticks}
       />
     </>
   );
