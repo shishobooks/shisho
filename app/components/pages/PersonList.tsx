@@ -47,6 +47,7 @@ const PersonList = () => {
         };
       }}
       itemLabel="people"
+      itemLabelSingular="person"
       linkTo={(person, libraryId) =>
         `/libraries/${libraryId}/people/${person.id}`
       }

@@ -19,7 +19,7 @@ import { QueryKey as BooksQueryKey } from "./books";
 import { invalidateCoverPreviewLists } from "./coverPreviews";
 import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
 import { anyOf, useRequires } from "./permissions";
-import { QueryKey as ReadingQueryKey } from "./reading";
+import { invalidateReadingRecords } from "./reading";
 import { QueryKey as TagsQueryKey } from "./tags";
 
 export enum QueryKey {
@@ -141,9 +141,7 @@ export const useDeleteLibrary = () => {
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
       // Its Books' Read-throughs stay on Reading History without them.
-      queryClient.invalidateQueries({
-        queryKey: [ReadingQueryKey.ReadingHistory],
-      });
+      invalidateReadingRecords(queryClient);
     },
   });
 };

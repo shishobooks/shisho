@@ -221,7 +221,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"PATCH /api/reading/read-throughs/:id",
 				"DELETE /api/reading/read-throughs/:id",
 				"POST /api/reading/read-throughs/:id/finish", "POST /api/reading/read-throughs/:id/abandon",
-				"GET /api/reading/history",
+				"GET /api/reading/history", "GET /api/reading/stats", "GET /api/reading/stats/finished",
 				"POST /api/reading/books/:id/to-read", "DELETE /api/reading/books/:id/to-read",
 				"PUT /api/reading/to-read/order", "POST /api/lists/:id/copy-to-to-read",
 				// Server Stats is an admin read.

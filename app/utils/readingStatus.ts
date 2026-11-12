@@ -117,3 +117,23 @@ export const readThroughDatesLabel = (
   if (begin) return `Started ${begin}, end date unknown`;
   return "Dates unknown";
 };
+
+// What deleting a Read-through does, for its confirmation. Its Reading
+// Sessions go with it, so its time leaves Reading Stats. Deleting the one
+// underway on a Book that still exists also sends the Book back to the
+// start and, when starting it took the Book off To Read, puts it back.
+export const readThroughDeleteDescription = ({
+  underway,
+  removed,
+}: {
+  underway: boolean;
+  removed: boolean;
+}): string => {
+  const time = "The reading time recorded during it is deleted too.";
+  if (removed) {
+    return `It won't count in your reading history anymore. ${time}`;
+  }
+  const base = `It won't count toward this book's history or its Reading Status. ${time}`;
+  if (!underway) return base;
+  return `${base} Every file opens at the start again, and if starting it took the book off To Read, it goes back to its place there.`;
+};

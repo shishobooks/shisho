@@ -24,6 +24,7 @@ const sidebars: SidebarsConfig = {
         "browsing-search-bulk-actions",
         "reading-and-playback",
         "reading-tracking",
+        "reading-stats",
         "managing-books-and-files",
         "metadata",
         "lists",

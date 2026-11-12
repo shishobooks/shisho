@@ -1,5 +1,6 @@
 import {
   BookmarkCheck,
+  ChartColumn,
   History,
   List,
   LogOut,
@@ -73,6 +74,14 @@ const UserMenu = () => {
             <Link to="/to-read">
               <BookmarkCheck className="h-4 w-4" />
               To Read
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {can(ROUTE_PERMISSIONS.readingStats) && (
+          <DropdownMenuItem asChild>
+            <Link to="/reading-stats">
+              <ChartColumn className="h-4 w-4" />
+              Reading Stats
             </Link>
           </DropdownMenuItem>
         )}

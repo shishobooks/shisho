@@ -19,6 +19,7 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
+import { invalidateReadingRecords } from "./reading";
 import { QueryKey as SearchQueryKey } from "./search";
 
 export enum QueryKey {
@@ -116,6 +117,8 @@ export const useUpdatePerson = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPeople] });
       // Invalidate book queries since they display author/narrator info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
       // Person name shows up in search — invalidate global search results.
       queryClient.invalidateQueries({
@@ -151,6 +154,8 @@ export const useMergePerson = () => {
       });
       // Invalidate book queries since they display author/narrator info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
       // Person name shows up in search — invalidate global search results.
       queryClient.invalidateQueries({
@@ -171,6 +176,8 @@ export const useDeletePerson = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPeople] });
       // Invalidate book queries since they display author/narrator info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
       // Person name shows up in search — invalidate global search results.
       queryClient.invalidateQueries({

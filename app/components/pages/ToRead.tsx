@@ -117,6 +117,7 @@ const ToRead = () => {
         emptyMessage={EMPTY_MESSAGE}
         isLoading={pageQuery.isLoading}
         itemLabel="books"
+        itemLabelSingular="book"
         items={pageQuery.data?.items ?? []}
         itemsPerPage={itemsPerPage}
         offset={offset}

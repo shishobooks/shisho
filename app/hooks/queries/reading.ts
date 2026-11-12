@@ -16,7 +16,11 @@ import {
   type FilePositionResponse,
   type ListReadingHistoryQuery,
   type ListReadingHistoryResponse,
+  type ListReadingStatsFinishedQuery,
+  type ListReadingStatsFinishedResponse,
   type PageFlow,
+  type ReadingStatsQuery,
+  type ReadingStatsResponse,
   type ReadThroughChangeResponse,
   type ReorderToReadPayload,
   type SetPageFlowPayload,
@@ -36,6 +40,7 @@ export enum QueryKey {
   BookReading = "BookReading",
   FilePosition = "FilePosition",
   ReadingHistory = "ReadingHistory",
+  ReadingStats = "ReadingStats",
 }
 
 // In Demo Mode, a Book's Page flow is a reader setting like the others: it
@@ -111,7 +116,7 @@ const onReadingChanged = (
   queryClient.setQueryData([QueryKey.BookReading, data.book_id], data);
   queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
   queryClient.invalidateQueries({ queryKey: [QueryKey.FilePosition] });
-  queryClient.invalidateQueries({ queryKey: [QueryKey.ReadingHistory] });
+  invalidateReadingRecords(queryClient);
   invalidateOtherBookReadings(queryClient, data.book_id);
 };
 
@@ -125,7 +130,50 @@ const onReadThroughChanged = (
     onReadingChanged(queryClient, data.reading);
     return;
   }
+  invalidateReadingRecords(queryClient);
+};
+
+// Reading History and Reading Stats summarize every Read-through and Session
+// the user has, so any change to one refetches both.
+export const invalidateReadingRecords = (queryClient: QueryClient) => {
   queryClient.invalidateQueries({ queryKey: [QueryKey.ReadingHistory] });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.ReadingStats] });
+};
+
+// The signed-in user's Reading Stats for one year, or all time without one.
+export const useReadingStats = (
+  query: ReadingStatsQuery,
+  options: Omit<
+    UseQueryOptions<ReadingStatsResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ReadingStatsResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingStats, query],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/stats", null, query, signal),
+  });
+};
+
+// A page of the books the signed-in user finished in a year, or all time,
+// for Reading Stats. It sits under the Reading Stats key, so whatever
+// refetches Reading Stats refetches it too.
+export const useReadingStatsFinished = (
+  query: ListReadingStatsFinishedQuery,
+  options: Omit<
+    UseQueryOptions<ListReadingStatsFinishedResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ListReadingStatsFinishedResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingStats, "finished", query],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/stats/finished", null, query, signal),
+  });
 };
 
 // The signed-in user's Read-throughs for all time, a page at a time.
@@ -396,7 +444,7 @@ export const invalidateAfterPositionUpdate = (
 ) => {
   queryClient.invalidateQueries({ queryKey: [QueryKey.BookReading, bookId] });
   queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
-  queryClient.invalidateQueries({ queryKey: [QueryKey.ReadingHistory] });
+  invalidateReadingRecords(queryClient);
   queryClient.invalidateQueries({
     queryKey: [QueryKey.FilePosition],
     predicate: (query) => query.queryKey[1] !== fileId,

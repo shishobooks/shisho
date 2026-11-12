@@ -106,6 +106,7 @@ const TagsList = () => {
         };
       }}
       itemLabel="tags"
+      itemLabelSingular="tag"
       linkTo={(tag, libraryId) => `/libraries/${libraryId}/tags/${tag.id}`}
       query={query}
       searchLabel={namespace ? `Search ${namespace}` : "Search tags"}

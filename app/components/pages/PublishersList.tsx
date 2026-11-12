@@ -50,6 +50,7 @@ const PublishersList = () => {
         };
       }}
       itemLabel="publishers"
+      itemLabelSingular="publisher"
       linkTo={(publisher, libraryId) =>
         `/libraries/${libraryId}/publishers/${publisher.id}`
       }

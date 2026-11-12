@@ -17,6 +17,7 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
+import { invalidateReadingRecords } from "./reading";
 
 export enum QueryKey {
   ListTags = "ListTags",
@@ -112,6 +113,8 @@ export const useUpdateTag = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
       // Invalidate book queries since they display tag info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
@@ -128,6 +131,8 @@ export const useDeleteTag = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
       // Invalidate book queries since they display tag info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
@@ -155,6 +160,8 @@ export const useMergeTag = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListTags] });
       // Invalidate book queries since they display tag info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });

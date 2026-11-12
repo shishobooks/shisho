@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { growthSeries, niceTicks } from "./growthSeries";
+import { growthSeries } from "./growthSeries";
 
 const months = (from: string, counts: number[]) => {
   const [year, month] = from.split("-").map(Number);
@@ -83,18 +83,5 @@ describe("growthSeries", () => {
       added: 12,
       total: 204,
     });
-  });
-});
-
-describe("niceTicks", () => {
-  it("rounds the top up to a clean step", () => {
-    expect(niceTicks(6)).toEqual([0, 2, 4, 6]);
-    expect(niceTicks(7)).toEqual([0, 2, 4, 6, 8]);
-    expect(niceTicks(18319)).toEqual([0, 5000, 10000, 15000, 20000]);
-    expect(niceTicks(1)).toEqual([0, 1]);
-  });
-
-  it("still has an axis with nothing to show", () => {
-    expect(niceTicks(0)).toEqual([0, 1]);
   });
 });

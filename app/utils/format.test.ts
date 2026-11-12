@@ -8,8 +8,10 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
+  formatDuration,
   formatElapsed,
   formatFileSize,
+  formatMonthName,
   formatPageCount,
   formatPersonCredits,
   formatPlayerTime,
@@ -192,18 +194,27 @@ describe("formatElapsed", () => {
 
 describe("formatShowingRange", () => {
   it("groups thousands in the range and the total", () => {
-    expect(formatShowingRange(18300, 15, 18307, "books")).toBe(
+    expect(formatShowingRange(18300, 15, 18307, "book", "books")).toBe(
       "Showing 18,301-18,307 of 18,307 books",
     );
   });
 
   it("says nothing for a page past the end", () => {
-    expect(formatShowingRange(400, 50, 120, "genres")).toBeNull();
+    expect(formatShowingRange(400, 50, 120, "genre", "genres")).toBeNull();
   });
 
   it("caps the end of the range at the total", () => {
-    expect(formatShowingRange(0, 20, 2, "genres")).toBe(
+    expect(formatShowingRange(0, 20, 2, "genre", "genres")).toBe(
       "Showing 1-2 of 2 genres",
+    );
+  });
+
+  it("names a single item in the singular", () => {
+    expect(formatShowingRange(0, 50, 1, "book", "books")).toBe(
+      "Showing 1-1 of 1 book",
+    );
+    expect(formatShowingRange(0, 50, 1, "person", "people")).toBe(
+      "Showing 1-1 of 1 person",
     );
   });
 });
@@ -250,5 +261,24 @@ describe("fileTypeLabel", () => {
   it("writes every other File Type in capitals", () => {
     expect(fileTypeLabel("epub")).toBe("EPUB");
     expect(fileTypeLabel("cbz")).toBe("CBZ");
+  });
+});
+
+describe("formatDuration", () => {
+  it("shows hours and minutes, and marks under a minute rather than none", () => {
+    expect(formatDuration(3661)).toBe("1h 1m");
+    expect(formatDuration(600)).toBe("10m");
+    expect(formatDuration(30)).toBe("<1m");
+    expect(formatDuration(0)).toBe("0m");
+  });
+});
+
+describe("formatMonthName", () => {
+  it("names a month short, or in full with its year", () => {
+    expect(formatMonthName(2026, 3)).toBe("Mar");
+    expect(formatMonthName(2026, 12, { long: true })).toBe("December");
+    expect(formatMonthName(2026, 3, { long: true, withYear: true })).toBe(
+      "March 2026",
+    );
   });
 });

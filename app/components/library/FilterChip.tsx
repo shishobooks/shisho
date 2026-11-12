@@ -6,6 +6,7 @@ import {
   Languages,
   Star,
   Tags,
+  UserPen,
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -26,7 +27,8 @@ export type FilterChipKind =
   | "genre"
   | "tag"
   | "language"
-  | "reviewStatus";
+  | "reviewStatus"
+  | "author";
 
 const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
   {
@@ -57,6 +59,10 @@ const KIND_CONFIG: Record<FilterChipKind, { icon: ReactNode; color: string }> =
     reviewStatus: {
       icon: <Eye className="h-3 w-3 shrink-0" />,
       color: "text-chart-3",
+    },
+    author: {
+      icon: <UserPen className="h-3 w-3 shrink-0" />,
+      color: "text-chart-4",
     },
   };
 

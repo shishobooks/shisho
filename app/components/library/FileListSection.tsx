@@ -92,6 +92,7 @@ export function FileListSection({
     offset,
     FILE_LIST_ITEMS_PER_PAGE,
     total,
+    "file",
     "files",
   );
 

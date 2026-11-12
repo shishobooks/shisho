@@ -27,6 +27,7 @@ const GenresList = () => {
         };
       }}
       itemLabel="genres"
+      itemLabelSingular="genre"
       linkTo={(genre, libraryId) =>
         `/libraries/${libraryId}/genres/${genre.id}`
       }

@@ -84,6 +84,7 @@ export const ROUTE_PERMISSIONS = {
   libraryBooks: "books:read",
   libraryCurrentlyReading: "books:read",
   toRead: "books:read",
+  readingStats: "books:read",
   readingHistory: "books:read",
   librarySeries: ["books:read", "series:read"],
   libraryPeople: ["books:read", "people:read"],

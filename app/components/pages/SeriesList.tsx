@@ -236,6 +236,7 @@ const SeriesList = () => {
           seriesQuery.isLoading || seriesQuery.isPlaceholderData || isStaleData
         }
         itemLabel="series"
+        itemLabelSingular="series"
         items={seriesQuery.data?.items ?? []}
         itemsPerPage={itemsPerPage}
         offset={offset}

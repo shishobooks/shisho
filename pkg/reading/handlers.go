@@ -436,6 +436,47 @@ func (h *handler) listHistory(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, ListReadingHistoryResponse{Items: items, Total: total}))
 }
 
+// stats returns the caller's Reading Stats for one year, or all time. It
+// takes no user, so it only ever covers the caller's own reading.
+func (h *handler) stats(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReadingStatsQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.Stats(c.Request().Context(), user, params.Year)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// listStatsFinished pages through the caller's finished Read-throughs for
+// Reading Stats. Like stats, it takes no user.
+func (h *handler) listStatsFinished(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ListReadingStatsFinishedQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if params.Rating != nil {
+		if _, ok := RatingUnits(*params.Rating); !ok {
+			return errcodes.ValidationError("A rating is in quarter stars from 0.25 to 5.")
+		}
+	}
+	resp, err := h.readingService.StatsFinished(c.Request().Context(), user, StatsFinishedOptions(params))
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
 func (h *handler) addToRead(c echo.Context) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {

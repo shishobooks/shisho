@@ -83,26 +83,3 @@ export const growthSeries = (months: GrowthMonth[]): GrowthSeries => {
   }
   return { unit, points };
 };
-
-/**
- * Y-axis ticks from 0 to a clean value at or above `max`, at most five, on a
- * step of 1, 2, or 5 times a power of ten.
- * @example niceTicks(18319) // [0, 5000, 10000, 15000, 20000]
- */
-export const niceTicks = (max: number): number[] => {
-  if (max <= 0) return [0, 1];
-  let step = 1;
-  for (let magnitude = 1; ; magnitude *= 10) {
-    const fit = [1, 2, 5].find((f) => Math.ceil(max / (f * magnitude)) <= 4);
-    if (fit) {
-      step = fit * magnitude;
-      break;
-    }
-  }
-  const ticks: number[] = [];
-  for (let v = 0; v < max + step; v += step) {
-    ticks.push(v);
-    if (v >= max) break;
-  }
-  return ticks;
-};

@@ -15,6 +15,7 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
+import { invalidateReadingRecords } from "./reading";
 
 export enum QueryKey {
   ListGenres = "ListGenres",
@@ -90,6 +91,8 @@ export const useUpdateGenre = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
       // Invalidate book queries since they display genre info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
@@ -106,6 +109,8 @@ export const useDeleteGenre = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
       // Invalidate book queries since they display genre info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });
@@ -133,6 +138,8 @@ export const useMergeGenre = () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
       // Invalidate book queries since they display genre info
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      // Reading Stats counts finished books by these names and filters by them.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
     },
   });

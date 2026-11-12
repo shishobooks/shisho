@@ -96,28 +96,34 @@ export const formatPersonCredits = (
 };
 
 /**
- * Formats the "Showing" line above a paginated list, with thousands grouped.
- * Returns null for a page past the end, which shows nothing until the
- * pagination footer moves to the last page.
- * @example formatShowingRange(0, 15, 18307, "books") // "Showing 1-15 of 18,307 books"
+ * Formats the "Showing" line above a paginated list, with thousands grouped
+ * and the noun matching the total, as formatCount does. Returns null for a
+ * page past the end, which shows nothing until the pagination footer moves
+ * to the last page.
+ * @example formatShowingRange(0, 15, 18307, "book", "books") // "Showing 1-15 of 18,307 books"
+ * @example formatShowingRange(0, 15, 1, "book", "books") // "Showing 1-1 of 1 book"
  */
 export const formatShowingRange = (
   offset: number,
   limit: number,
   total: number,
-  itemLabel: string,
+  singular: string,
+  plural: string,
 ): string | null => {
   if (offset >= total) return null;
   const first = (offset + 1).toLocaleString();
   const last = Math.min(offset + limit, total).toLocaleString();
-  return `Showing ${first}-${last} of ${total.toLocaleString()} ${itemLabel}`;
+  return `Showing ${first}-${last} of ${formatCount(total, singular, plural)}`;
 };
 
 /**
  * Formats seconds into a human-readable duration string.
  * @example formatDuration(3661) // "1h 1m"
+ * @example formatDuration(30) // "<1m"
  */
 export const formatDuration = (seconds: number): string => {
+  // Some time, but under a minute, would otherwise read as none.
+  if (seconds > 0 && seconds < 60) return "<1m";
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   if (hours > 0) {
@@ -212,6 +218,25 @@ export const formatDaysAgo = (instant: string, now = new Date()): string => {
  */
 export const formatRating = (stars: number): string =>
   stars.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+/**
+ * A calendar month by name, short or in full, optionally with its year.
+ * @example formatMonthName(2026, 3) // "Mar"
+ * @example formatMonthName(2026, 3, { long: true, withYear: true }) // "March 2026"
+ */
+export const formatMonthName = (
+  year: number,
+  month: number,
+  {
+    long = false,
+    withYear = false,
+  }: { long?: boolean; withYear?: boolean } = {},
+): string =>
+  new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(undefined, {
+    month: long ? "long" : "short",
+    ...(withYear ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  });
 
 /**
  * The month and year of a date, as UTC like formatDate.

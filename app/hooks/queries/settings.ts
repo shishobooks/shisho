@@ -14,6 +14,8 @@ import {
 } from "@/libraries/demoSettings";
 import type { UserSettingsPayload, UserSettingsResponse } from "@/types";
 
+import { QueryKey as ReadingQueryKey } from "./reading";
+
 export enum QueryKey {
   UserSettings = "UserSettings",
 }
@@ -71,8 +73,14 @@ export const useUpdateUserSettings = () => {
         writeDemoSettings(DEMO_USER_SETTINGS_KEY, updated);
         return updated;
       },
-      onSuccess: (data) => {
+      onSuccess: (data, payload) => {
         queryClient.setQueryData([QueryKey.UserSettings], data);
+        // Reading Stats groups reading time into days in the time zone.
+        if (payload.time_zone !== undefined) {
+          queryClient.invalidateQueries({
+            queryKey: [ReadingQueryKey.ReadingStats],
+          });
+        }
       },
     },
   );
