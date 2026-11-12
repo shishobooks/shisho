@@ -68,13 +68,14 @@ func (h *Handler) entries() []cacheEntry {
 	}
 }
 
-func (h *Handler) list(c echo.Context) error {
+// Sizes reports every cache's size. Server Stats shows the same figures.
+func (h *Handler) Sizes() ([]Info, error) {
 	entries := h.entries()
 	resp := make([]Info, 0, len(entries))
 	for _, e := range entries {
 		bytes, count, err := e.provider.SizeBytes()
 		if err != nil {
-			return errors.Wrapf(err, "failed to compute size for %s", e.id)
+			return nil, errors.Wrapf(err, "failed to compute size for %s", e.id)
 		}
 		resp = append(resp, Info{
 			ID:          e.id,
@@ -83,6 +84,14 @@ func (h *Handler) list(c echo.Context) error {
 			SizeBytes:   bytes,
 			FileCount:   count,
 		})
+	}
+	return resp, nil
+}
+
+func (h *Handler) list(c echo.Context) error {
+	resp, err := h.Sizes()
+	if err != nil {
+		return err
 	}
 	return c.JSON(http.StatusOK, resp)
 }

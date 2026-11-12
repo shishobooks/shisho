@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
       collapsed: true,
       items: [
         "deployment-and-maintenance",
+        "server-stats",
         "configuration",
         "libraries",
         "users-and-permissions",

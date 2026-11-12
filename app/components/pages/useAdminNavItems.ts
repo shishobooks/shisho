@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   BookCheck,
   Briefcase,
   Cog,
@@ -39,6 +40,13 @@ export const useAdminNavItems = (): AdminNavItem[] => {
       Icon: Cog,
       label: "Server",
       isActive: location.pathname === "/admin/server",
+      show: canViewConfig,
+    },
+    {
+      to: "/admin/server-stats",
+      Icon: BarChart3,
+      label: "Server Stats",
+      isActive: location.pathname === "/admin/server-stats",
       show: canViewConfig,
     },
     {

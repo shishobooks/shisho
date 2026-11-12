@@ -196,6 +196,12 @@ packages:
     output_path: "app/types/generated/cache.ts"
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/serverstats"
+    output_path: "app/types/generated/serverstats.ts"
+    frontmatter: |
+      import { FileType } from "@/types";
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/mediafile"
     output_path: "app/types/generated/mediafile.ts"
     frontmatter: |

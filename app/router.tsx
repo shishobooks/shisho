@@ -14,6 +14,7 @@ import AdminLibraries from "@/components/pages/AdminLibraries";
 import AdminLogs from "@/components/pages/AdminLogs";
 import AdminPlugins from "@/components/pages/AdminPlugins";
 import AdminReviewCriteria from "@/components/pages/AdminReviewCriteria";
+import AdminServerStats from "@/components/pages/AdminServerStats";
 import AdminSettings from "@/components/pages/AdminSettings";
 import AdminSharing from "@/components/pages/AdminSharing";
 import AdminUsers from "@/components/pages/AdminUsers";
@@ -94,6 +95,16 @@ export const routes: RouteObject[] = [
                 requiredPermission={ROUTE_PERMISSIONS.adminConfig}
               >
                 <AdminSettings />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "server-stats",
+            element: (
+              <ProtectedRoute
+                requiredPermission={ROUTE_PERMISSIONS.adminConfig}
+              >
+                <AdminServerStats />
               </ProtectedRoute>
             ),
           },

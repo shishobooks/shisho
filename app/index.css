@@ -43,6 +43,11 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* Server Stats disk segments: one fixed hue per kind, the same identity in
+     both themes, each step validated against its theme's surface. */
+  --disk-library: oklch(0.55 0.2 280);
+  --disk-database: oklch(0.62 0.12 185);
+  --disk-cache: oklch(0.66 0.15 60);
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -77,6 +82,9 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  --disk-library: oklch(0.66 0.17 280);
+  --disk-database: oklch(0.64 0.12 185);
+  --disk-cache: oklch(0.66 0.15 62);
   --sidebar: oklch(0.13 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.8 0.15 280);
@@ -115,6 +123,9 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+  --color-disk-library: var(--disk-library);
+  --color-disk-database: var(--disk-database);
+  --color-disk-cache: var(--disk-cache);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);

@@ -53,6 +53,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/roles"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/serverstats"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sharelinks"
 	"github.com/shishobooks/shisho/pkg/tags"
@@ -231,6 +232,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		CBZPages:        svcs.cbzCache,
 		PDFPages:        svcs.pdfCache,
 	})
+
+	// Server Stats (admin only; requires config:read). Its cache sizes are
+	// the Cache page's.
+	serverstats.RegisterRoutes(api, db, cfg, cacheHandler, authMiddleware)
 
 	// Echo's Group.Use adds authenticated not-found handlers. Unknown paths
 	// must return JSON 404 without running a route family's authentication.
