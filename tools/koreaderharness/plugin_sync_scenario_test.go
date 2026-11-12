@@ -154,7 +154,8 @@ func TestPluginKeepsReadingQueuedUntilSignedInAgain(t *testing.T) {
 	assert.Contains(t, strings.Join(off.Shown, " "), "reading time won't sync")
 	menu := s.run(Args{Command: "plugin-menu"})
 	require.NotEmpty(t, menu.Plugin.Menu)
-	assert.Equal(t, "Reading statistics are off in KOReader, so reading time won't sync. Positions still do.", menu.Plugin.Menu[0])
+	// Short enough for one line of the menu; tapping it says the rest.
+	assert.Equal(t, "Reading time won't sync: statistics off", menu.Plugin.Menu[0])
 }
 
 // The plugin sends this Device's place, and opening a book online offers a

@@ -776,7 +776,13 @@ function Shisho:addToMainMenu(menu_items)
         sub_item_table_func = function()
             local items = {}
             if not self:statisticsEnabled() then
-                table.insert(items, { text = STATISTICS_OFF, enabled = false, separator = true })
+                -- One line of the menu holds only the gist; tapping it says the rest.
+                table.insert(items, {
+                    text = _("Reading time won't sync: statistics off"),
+                    keep_menu_open = true,
+                    separator = true,
+                    callback = function() self:notify(STATISTICS_OFF) end,
+                })
             end
             for __, server in ipairs(self.state:servers()) do
                 local label = Urls.label(server.url)
