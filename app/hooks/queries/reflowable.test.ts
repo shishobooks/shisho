@@ -1,9 +1,14 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook, waitFor } from "@testing-library/react";
+import {
+  focusManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
+import { queryClient } from "@/libraries/query-client";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 
 import { useReflowableBlob } from "./reflowable";
@@ -202,5 +207,69 @@ describe("useReflowableBlob", () => {
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(await result.current.data?.text()).toBe("original-bytes");
+  });
+
+  it("keeps the book it loaded when the window regains focus", async () => {
+    fetchSpy.mockImplementation(
+      async () => new Response("epub-bytes", { status: 200 }),
+    );
+    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const loaded = result.current.data;
+
+    // Long after the book opened, the reader switches away and back. A new
+    // Blob would make the reader close the book and open it again.
+    vi.setSystemTime(Date.now() + 60 * 60 * 1000);
+    try {
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(result.current.isFetching).toBe(false);
+      expect(result.current.data).toBe(loaded);
+    } finally {
+      focusManager.setFocused(undefined);
+    }
+  });
+
+  it("hands a reopened reader one book, not a cached one and then a fresh one", async () => {
+    fetchSpy.mockImplementation(
+      async () => new Response("epub-bytes", { status: 200 }),
+    );
+    // The app's defaults, which refetch every query a reader mounts.
+    const client = new QueryClient({
+      defaultOptions: queryClient.getDefaultOptions(),
+    });
+    const appWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client }, children);
+    try {
+      const first = renderHook(() => useReflowableBlob(42), {
+        wrapper: appWrapper,
+      });
+      await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+      first.unmount();
+      // Reopening comes later, by navigation, after the cache has collected.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      // Each Blob the reader is handed opens the book again.
+      const handed = new Set<Blob>();
+      const second = renderHook(
+        () => {
+          const query = useReflowableBlob(42);
+          if (query.data) handed.add(query.data);
+          return query;
+        },
+        { wrapper: appWrapper },
+      );
+      await waitFor(() => expect(second.result.current.isSuccess).toBe(true));
+      await waitFor(() => expect(second.result.current.isFetching).toBe(false));
+
+      expect(handed.size).toBe(1);
+    } finally {
+      client.clear();
+    }
   });
 });
