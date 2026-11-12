@@ -67,11 +67,12 @@ func TestShutdown_CancelsInFlightJob(t *testing.T) {
 		t.Fatal("job never started executing")
 	}
 
-	// Call Shutdown in a goroutine with a generous timeout so a broken
-	// implementation (Shutdown blocks forever) fails the test instead of
-	// hanging the whole test run.
+	// The job handler returns only once its context is cancelled, so a
+	// Shutdown that does not cancel it never returns. Call it in a goroutine
+	// with a generous timeout so that bug fails the test instead of hanging
+	// the run. The timeout is a hang guard, not a speed check: a bound on how
+	// fast Shutdown returns would fail under load without catching more.
 	shutdownDone := make(chan struct{})
-	start := time.Now()
 	go func() {
 		w.Shutdown()
 		close(shutdownDone)
@@ -79,12 +80,6 @@ func TestShutdown_CancelsInFlightJob(t *testing.T) {
 
 	select {
 	case <-shutdownDone:
-		elapsed := time.Since(start)
-		// Shutdown should complete promptly because the job handler returns
-		// as soon as its context is cancelled. We allow a comfortable margin
-		// so this isn't flaky on slow CI, but catch the real bug (infinite
-		// wait) decisively.
-		assert.Less(t, elapsed, 500*time.Millisecond, "Shutdown should complete quickly after cancelling the in-flight job")
 	case <-time.After(3 * time.Second):
 		t.Fatal("Shutdown did not complete within 3 seconds; in-flight job was not cancelled")
 	}

@@ -57,9 +57,6 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		require.NotNil(t, meta)
 		assert.Equal(t, file.ID, meta.FileID)
 		assert.NotEmpty(t, meta.FingerprintHash)
-
-		// Wait for background cleanup goroutine to finish
-		time.Sleep(50 * time.Millisecond)
 	})
 
 	t.Run("returns cached file when cache is valid", func(t *testing.T) {
@@ -105,9 +102,6 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		info2, err := os.Stat(cachedPath2)
 		require.NoError(t, err)
 		assert.Equal(t, modTime1, info2.ModTime())
-
-		// Wait for background cleanup goroutine to finish
-		time.Sleep(50 * time.Millisecond)
 	})
 
 	t.Run("regenerates file when metadata changes", func(t *testing.T) {
@@ -155,9 +149,6 @@ func TestCache_GetOrGenerate(t *testing.T) {
 		meta2, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 		require.NoError(t, err)
 		assert.NotEqual(t, hash1, meta2.FingerprintHash)
-
-		// Wait for background cleanup goroutine to finish
-		time.Sleep(50 * time.Millisecond)
 	})
 
 	t.Run("returns error for unsupported file type", func(t *testing.T) {
@@ -236,9 +227,6 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 
 		// Verify hash differs from original (cache should be invalidated)
 		assert.NotEqual(t, originalHash, newHash, "Fingerprint hash should differ when chapter title changes")
-
-		// Wait for background cleanup goroutine to finish
-		time.Sleep(50 * time.Millisecond)
 	})
 
 	t.Run("same chapters hit cache", func(t *testing.T) {
@@ -294,9 +282,6 @@ func TestCache_ChapterFingerprinting(t *testing.T) {
 		info2, err := os.Stat(cachedPath2)
 		require.NoError(t, err)
 		assert.Equal(t, modTime1, info2.ModTime(), "File should not have been regenerated")
-
-		// Wait for background cleanup goroutine to finish
-		time.Sleep(50 * time.Millisecond)
 	})
 }
 
@@ -340,9 +325,6 @@ func TestCache_Invalidate(t *testing.T) {
 		meta, err := ReadMetadata(cacheDir, file.ID, file.FileType)
 		require.NoError(t, err)
 		assert.Nil(t, meta)
-
-		// Wait for background cleanup goroutine to finish
-		time.Sleep(50 * time.Millisecond)
 	})
 }
 

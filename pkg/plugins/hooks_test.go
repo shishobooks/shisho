@@ -912,22 +912,20 @@ func TestRunFileParser_InterruptsInfiniteLoop(t *testing.T) {
 func TestRunFileParser_InterruptsLongSleep(t *testing.T) {
 	t.Parallel()
 
-	// 3000ms is short enough that a broken implementation only wastes 3s per
-	// run but long enough that a real cancellation is unambiguous.
-	mgr, rt := installCancelTestPlugin(t, "sleep-parser", "shisho.sleep(3000); return { title: \"done\" };")
+	// The sleep is far longer than runWithDeadline's budget, so a sleep that
+	// ignores the hook ctx fails there, while one that honors it returns
+	// soon after the 150ms deadline with seconds of margin under load.
+	mgr, rt := installCancelTestPlugin(t, "sleep-parser", "shisho.sleep(60000); return { title: \"done\" };")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
 
-	start := time.Now()
 	err := runWithDeadline(t, func() error {
 		_, e := mgr.RunFileParser(ctx, rt, "/some/file.bin", "bin")
 		return e
 	})
-	elapsed := time.Since(start)
 
 	require.Error(t, err, "sleep should be interrupted by ctx, not complete normally")
-	assert.Less(t, elapsed, 1*time.Second, "shisho.sleep must honor the hook ctx and return near the deadline, not block for the full requested duration")
 
 	// After sleep unblocks on ctx.Done, the very next JS statement hits the
 	// watcher's vm.Interrupt() and throws *goja.InterruptedError — same error

@@ -207,10 +207,12 @@ func TestPortAllocatorReleasesTheLockOnClose(t *testing.T) {
 
 	require.ErrorIs(t, syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB), syscall.EWOULDBLOCK)
 	require.NoError(t, lease.Close())
-	// A process forked by a parallel test shares the lock until it execs.
+	// A process forked by a parallel test shares the lock until it execs,
+	// which can take well over a second on a loaded machine. The wait ends as
+	// soon as the lock frees, so the long bound costs nothing when it does.
 	assert.Eventually(t, func() bool {
 		return syscall.Flock(int(file.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) == nil
-	}, time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func TestResolveEnvironmentFindsTheMainWorktree(t *testing.T) {

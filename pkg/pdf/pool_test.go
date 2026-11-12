@@ -145,12 +145,14 @@ func TestParse_OutwaitsHeldPdfiumInstance(t *testing.T) {
 	_, err := PdfiumInstance(shortWait)
 	require.Error(t, err, "a short wait should time out while the instance is held")
 
+	// start is read before the release is scheduled, so the hold always
+	// ends at least hold after it, however the goroutines are scheduled.
+	start := time.Now()
 	go func() {
 		time.Sleep(hold)
 		release()
 	}()
 
-	start := time.Now()
 	meta, err := Parse(path)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, time.Since(start), hold-shortWait,
