@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 import { ChartFrame, ChartTooltip } from "@/components/library/ChartFrame";
 import ReadThroughCover from "@/components/library/ReadThroughCover";
@@ -341,7 +341,7 @@ const ShareBar = ({ children }: { children: ReactNode }) => (
 );
 
 // Rows shown before "Show all", and how many it takes to offer a search.
-const VISIBLE_ROWS = 8;
+const VISIBLE_ROWS = 5;
 const SEARCH_FROM = 20;
 
 /**
@@ -367,6 +367,10 @@ export const CountList = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState("");
+  // Expanded, the list keeps the height it had collapsed and scrolls
+  // inside it, so "Show all" never resizes the card.
+  const listRef = useRef<HTMLDivElement>(null);
+  const [lockedHeight, setLockedHeight] = useState<number | null>(null);
   if (rows.length === 0) {
     return <EmptyNote>{emptyMessage}</EmptyNote>;
   }
@@ -378,60 +382,69 @@ export const CountList = ({
     : rows.slice(0, VISIBLE_ROWS);
   return (
     <>
-      {searchable && (
-        <Input
-          aria-label={`Search ${pluralNoun}`}
-          className="mb-2 h-8"
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={`Search ${pluralNoun}`}
-          value={search}
-        />
-      )}
-      <ul
-        className={cn(
-          "-mx-2 space-y-0.5",
-          expanded && "max-h-80 overflow-y-auto",
-        )}
+      <div
+        className={cn(expanded && "flex flex-col")}
+        ref={listRef}
+        style={expanded && lockedHeight ? { height: lockedHeight } : undefined}
       >
-        {shown.map((row) => {
-          const active = selected === row.value;
-          return (
-            <li key={row.value}>
-              <Button
-                aria-pressed={active}
-                className={cn(
-                  "grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/60",
-                  active && "bg-accent",
-                )}
-                onClick={() => onSelect(row.value)}
-                variant="unstyled"
-              >
-                <span className="min-w-0 truncate" title={row.label}>
-                  {row.label}
-                </span>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {formatCount(row.books, "book")}
-                </span>
-                <ShareBar>
-                  <span
-                    className={cn("h-full rounded-full", SERIES_BAR)}
-                    style={{ width: share(row.books, max) }}
-                  />
-                </ShareBar>
-              </Button>
-            </li>
-          );
-        })}
-        {shown.length === 0 && (
-          <li className="px-2 text-sm text-muted-foreground">
-            No {pluralNoun} match.
-          </li>
+        {searchable && (
+          <Input
+            aria-label={`Search ${pluralNoun}`}
+            className="mb-2 h-8 shrink-0"
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={`Search ${pluralNoun}`}
+            value={search}
+          />
         )}
-      </ul>
+        <ul
+          className={cn(
+            "-mx-2 space-y-0.5",
+            expanded && "min-h-0 flex-1 overflow-y-auto",
+          )}
+        >
+          {shown.map((row) => {
+            const active = selected === row.value;
+            return (
+              <li key={row.value}>
+                <Button
+                  aria-pressed={active}
+                  className={cn(
+                    "grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/60",
+                    active && "bg-accent",
+                  )}
+                  onClick={() => onSelect(row.value)}
+                  variant="unstyled"
+                >
+                  <span className="min-w-0 truncate" title={row.label}>
+                    {row.label}
+                  </span>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {formatCount(row.books, "book")}
+                  </span>
+                  <ShareBar>
+                    <span
+                      className={cn("h-full rounded-full", SERIES_BAR)}
+                      style={{ width: share(row.books, max) }}
+                    />
+                  </ShareBar>
+                </Button>
+              </li>
+            );
+          })}
+          {shown.length === 0 && (
+            <li className="px-2 text-sm text-muted-foreground">
+              No {pluralNoun} match.
+            </li>
+          )}
+        </ul>
+      </div>
       {rows.length > VISIBLE_ROWS && (
         <Button
           className="mt-2 text-xs"
           onClick={() => {
+            if (!expanded) {
+              setLockedHeight(listRef.current?.offsetHeight || null);
+            }
             setExpanded(!expanded);
             setSearch("");
           }}
@@ -511,12 +524,19 @@ export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {
 const FINISHED_COLUMNS =
   "md:grid md:grid-cols-[7rem_4.5rem_5rem_4.5rem] md:gap-4 md:text-right";
 
+// A read's recorded time: nothing when none was, and "<1m" for less than a
+// minute, which would otherwise read as none.
+const readTime = (seconds: number | null) => {
+  if (!seconds) return null;
+  return seconds < 60 ? "<1m" : formatDuration(seconds);
+};
+
 const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
   const rt = row.read_through;
   const finished = rt.end_day ? formatDate(rt.end_day) : null;
   const days =
     row.days_taken !== null ? formatCount(row.days_taken, "day") : null;
-  const time = row.seconds !== null ? formatDuration(row.seconds) : null;
+  const time = readTime(row.seconds);
   const rating = row.rating !== null ? `${formatRating(row.rating)} ★` : null;
   const details = [
     finished ? `Finished ${finished}` : "Finish date unknown",
@@ -528,11 +548,9 @@ const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
     <li className="flex items-center gap-3 px-3 py-2">
       <ReadThroughCover book={row.book} />
       <ReadThroughDetails entry={row}>
-        {details.map((detail) => (
-          <span className="text-muted-foreground md:hidden" key={detail}>
-            {detail}
-          </span>
-        ))}
+        <span className="text-muted-foreground md:hidden">
+          {details.join(" · ")}
+        </span>
       </ReadThroughDetails>
       <div
         className={cn(

@@ -145,7 +145,7 @@ The status and summary update after each change.
 
 ### Reading History Page
 
-**Reading History**, in a library's sidebar and the user menu, lists every Read-through you have, across every library, newest first: the ones you're on, then by end date. Each row shows the book's cover, title, and authors, how the read ended, and its dates. Filter by **Finished**, **Did Not Finish**, or **Underway**, and with **Removed from library** to see only reads of books that were deleted.
+**Reading History**, in the user menu, lists every Read-through you have, across every library, newest first: the ones you're on, then by end date. Each row shows the book's cover, title, and authors, how the read ended, and its dates. Filter by **Finished**, **Did Not Finish**, or **Underway**, and with **Removed from library** to see only reads of books that were deleted.
 
 Each row's menu offers:
 

@@ -414,12 +414,12 @@ describe("ReadingStatsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the first few tags, then all of them with a search", async () => {
+  it("shows the first five tags, then all of them with a search", async () => {
     const { user } = renderPage();
     const tags = await screen.findByRole("region", { name: "Tags" });
     expect(
       within(tags).getAllByRole("button", { pressed: false }),
-    ).toHaveLength(8);
+    ).toHaveLength(5);
     expect(
       within(tags).queryByRole("textbox", { name: "Search tags" }),
     ).not.toBeInTheDocument();
@@ -447,7 +447,7 @@ describe("ReadingStatsPage", () => {
     await user.click(within(tags).getByRole("button", { name: "Show fewer" }));
     expect(
       within(tags).getAllByRole("button", { pressed: false }),
-    ).toHaveLength(8);
+    ).toHaveLength(5);
   });
 
   it("filters the finished books by a breakdown row, until its chip is removed", async () => {
@@ -551,5 +551,26 @@ describe("ReadingStatsPage", () => {
     expect(
       within(finished).getByText("March 2026").parentElement,
     ).toHaveTextContent("3 books");
+  });
+
+  it("separates a finished book's details with dots, and leaves out time it has none of", async () => {
+    renderPage({
+      finished: [
+        finishedRow(1, "Dune", { rating: 4.5 }),
+        finishedRow(2, "Emma", { seconds: 0 }),
+        finishedRow(3, "Ubik", { seconds: 30 }),
+      ],
+    });
+    const list = await screen.findByRole("list", { name: "Books finished" });
+    const [dune, emma, ubik] = within(list).getAllByRole("listitem");
+    expect(
+      within(dune).getByText("Finished Mar 9, 2026 · 9 days · 1h 30m · 4.5 ★"),
+    ).toBeInTheDocument();
+    expect(
+      within(emma).getByText("Finished Mar 9, 2026 · 9 days"),
+    ).toBeInTheDocument();
+    expect(
+      within(ubik).getByText("Finished Mar 9, 2026 · 9 days · <1m"),
+    ).toBeInTheDocument();
   });
 });

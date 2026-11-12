@@ -1,6 +1,6 @@
 # Reading Stats
 
-**Reading Stats**, in a library's sidebar and the user menu, sums up your own reading for one year or for all time. It's private: other users, admins included, never see it.
+**Reading Stats**, in the user menu, sums up your own reading for one year or for all time. It's private: other users, admins included, never see it.
 
 It opens on the current year. The range picker offers every year you have reading in, plus **All time**. **Manage reading history** opens [Reading History](./reading-tracking.md#reading-history-page), where you can fix dates or delete a read that shouldn't count.
 

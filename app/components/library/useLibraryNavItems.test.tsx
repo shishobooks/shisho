@@ -34,8 +34,6 @@ describe("useLibraryNavItems", () => {
     expect(shownLabels()).toEqual([
       "Books",
       "Currently Reading",
-      "Reading Stats",
-      "Reading History",
       "Genres",
       "Tags",
       "Publishers",
@@ -48,8 +46,6 @@ describe("useLibraryNavItems", () => {
     expect(shownLabels()).toEqual([
       "Books",
       "Currently Reading",
-      "Reading Stats",
-      "Reading History",
       "Series",
       "People",
       "Genres",
