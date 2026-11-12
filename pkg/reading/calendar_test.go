@@ -1,0 +1,368 @@
+package reading
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"testing"
+
+	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func (f *statsFixture) calendar(year, month int) ReadingStatsCalendarResponse {
+	f.t.Helper()
+	return calendarFor(f.t, f.api, year, month)
+}
+
+func calendarFor(t *testing.T, api *readingAPI, year, month int) ReadingStatsCalendarResponse {
+	t.Helper()
+	rec := api.do(http.MethodGet, fmt.Sprintf("/stats/calendar?year=%d&month=%d", year, month), nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp ReadingStatsCalendarResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+func (f *statsFixture) day(day string) ReadingStatsDayResponse {
+	f.t.Helper()
+	return dayFor(f.t, f.api, day)
+}
+
+func dayFor(t *testing.T, api *readingAPI, day string) ReadingStatsDayResponse {
+	t.Helper()
+	rec := api.do(http.MethodGet, "/stats/day?day="+day, nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp ReadingStatsDayResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+func bookKey(book *models.Book) string { return fmt.Sprintf("book-%d", book.ID) }
+
+// calendarDay is the books on day, or nil when the calendar has nothing on it.
+func calendarDay(resp ReadingStatsCalendarResponse, day string) []ReadingStatsCalendarDayBook {
+	for _, d := range resp.Days {
+		if d.Day == day {
+			return d.Books
+		}
+	}
+	return nil
+}
+
+func calendarDays(resp ReadingStatsCalendarResponse) []string {
+	days := []string{}
+	for _, d := range resp.Days {
+		days = append(days, d.Day)
+	}
+	return days
+}
+
+func TestStats_HeatmapHasEachDaysTimeInTheRange(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	f.setTimeZone("America/Chicago")
+	book := createBook(t, f.db, "Dune")
+	ebook := f.addFile(book, models.FileTypeEPUB)
+	audio := f.addFile(book, models.FileTypeM4B)
+	f.session(sessionSpec{file: ebook, start: at(t, "America/Chicago", "2026-04-30 23:30"), end: at(t, "America/Chicago", "2026-05-01 00:30")})
+	f.session(sessionSpec{file: audio, start: at(t, "America/Chicago", "2026-05-01 08:00"), end: at(t, "America/Chicago", "2026-05-01 08:20")})
+	// The next year's reading isn't in this year's heatmap.
+	f.session(sessionSpec{file: ebook, start: at(t, "America/Chicago", "2027-01-01 08:00"), end: at(t, "America/Chicago", "2027-01-01 08:10")})
+
+	assert.Equal(t, []ReadingStatsDay{
+		{Day: "2026-04-30", ReadingSeconds: 1800},
+		{Day: "2026-05-01", ReadingSeconds: 1800, ListeningSeconds: 1200},
+	}, f.stats("?year=2026").Days)
+	assert.Len(t, f.stats("").Days, 3, "all time has every day")
+	assert.NotNil(t, f.stats("?year=2025").Days)
+}
+
+func TestCalendar_ASessionCrossingMidnightLandsOnBothDays(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	f.setTimeZone("America/Chicago")
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	rt := f.finished(dune, "2026-04-29", "2026-05-01")
+	f.session(sessionSpec{
+		file: file, readThrough: rt,
+		start: at(t, "America/Chicago", "2026-04-30 23:30"),
+		end:   at(t, "America/Chicago", "2026-05-01 00:30"),
+	})
+
+	april := f.calendar(2026, 4)
+	assert.Equal(t, 2026, april.Year)
+	assert.Equal(t, 4, april.Month)
+	assert.Equal(t, []string{"2026-04-30"}, calendarDays(april))
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: bookKey(dune), Seconds: 1800}}, calendarDay(april, "2026-04-30"))
+	require.Len(t, april.Books, 1)
+	assert.Equal(t, bookKey(dune), april.Books[0].Key)
+	assert.Equal(t, "Dune", april.Books[0].Title)
+	assert.False(t, april.Books[0].Removed)
+	require.NotNil(t, april.Books[0].Book)
+	assert.Equal(t, dune.ID, april.Books[0].Book.ID)
+
+	may := f.calendar(2026, 5)
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: bookKey(dune), Seconds: 1800, Finished: true}}, calendarDay(may, "2026-05-01"))
+
+	for _, day := range []string{"2026-04-30", "2026-05-01"} {
+		detail := f.day(day)
+		assert.Equal(t, day, detail.Day)
+		assert.Equal(t, "America/Chicago", detail.TimeZone)
+		require.Len(t, detail.Sessions, 1, day)
+		s := detail.Sessions[0]
+		assert.Equal(t, "Dune", s.Book.Title)
+		assert.Equal(t, 1800, s.Seconds, "only the part on %s", day)
+		assert.True(t, s.StartedAt.Equal(at(t, "America/Chicago", "2026-04-30 23:30")), "the whole Session's start")
+		assert.True(t, s.EndedAt.Equal(at(t, "America/Chicago", "2026-05-01 00:30")))
+	}
+	assert.Empty(t, f.day("2026-04-30").Finished)
+	finished := f.day("2026-05-01").Finished
+	require.Len(t, finished, 1)
+	assert.Equal(t, bookKey(dune), finished[0].Key)
+}
+
+// 2027-10-31 is 25 hours long in Berlin: clocks go back an hour that
+// morning. A day taken as 24 hours from its start would end at 23:00 and put
+// the first half of this Session on November 1.
+func TestCalendar_ADaySplitByDaylightSavingEndsAtItsRealMidnight(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	f.setTimeZone("Europe/Berlin")
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	f.session(sessionSpec{
+		file:  file,
+		start: at(t, "Europe/Berlin", "2027-10-31 23:30"),
+		end:   at(t, "Europe/Berlin", "2027-11-01 00:30"),
+	})
+
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: bookKey(dune), Seconds: 1800}}, calendarDay(f.calendar(2027, 10), "2027-10-31"))
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: bookKey(dune), Seconds: 1800}}, calendarDay(f.calendar(2027, 11), "2027-11-01"))
+	require.Len(t, f.day("2027-10-31").Sessions, 1)
+	assert.Equal(t, 1800, f.day("2027-10-31").Sessions[0].Seconds)
+}
+
+func TestCalendar_AFinishWithNoSessionsShowsOnlyItsMarker(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	f.finished(dune, "", "2026-03-14")
+	// Underway and abandoned Read-throughs mark nothing.
+	seedReadThrough(t, f.db, f.user, createBook(t, f.db, "Abandoned"), "2026-03-01", "2026-03-10", models.ReadThroughOutcomeAbandoned)
+	seedReadThrough(t, f.db, f.user, createBook(t, f.db, "Underway"), "2026-03-01", "", models.ReadThroughOutcomeUnderway)
+
+	march := f.calendar(2026, 3)
+	assert.Equal(t, []string{"2026-03-14"}, calendarDays(march))
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: bookKey(dune), Finished: true}}, calendarDay(march, "2026-03-14"))
+	require.Len(t, march.Books, 1)
+	assert.Equal(t, "Dune", march.Books[0].Title)
+
+	detail := f.day("2026-03-14")
+	assert.Empty(t, detail.Sessions)
+	assert.NotNil(t, detail.Sessions)
+	require.Len(t, detail.Finished, 1)
+	assert.Equal(t, "Dune", detail.Finished[0].Title)
+}
+
+func TestCalendar_ADetachedBookShowsByItsCopiedTitle(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	rt := f.finished(dune, "2026-02-01", "2026-02-02")
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-02-01 10:00"), end: at(t, "UTC", "2026-02-01 11:00")})
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-02-02 10:00"), end: at(t, "UTC", "2026-02-02 10:30")})
+	deleteBook(t, f.db, dune)
+
+	key := fmt.Sprintf("read-through-%d", rt.ID)
+	feb := f.calendar(2026, 2)
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: key, Seconds: 3600}}, calendarDay(feb, "2026-02-01"))
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: key, Seconds: 1800, Finished: true}}, calendarDay(feb, "2026-02-02"))
+	assert.Equal(t, []ReadingStatsBookRef{{Key: key, Title: "Dune", Removed: true}}, feb.Books)
+
+	detail := f.day("2026-02-01")
+	require.Len(t, detail.Sessions, 1)
+	assert.Equal(t, ReadingStatsBookRef{Key: key, Title: "Dune", Removed: true}, detail.Sessions[0].Book)
+}
+
+func TestCalendar_ABookOutOfReachShowsWithNoLink(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	f.session(sessionSpec{file: file, start: at(t, "UTC", "2026-02-01 10:00"), end: at(t, "UTC", "2026-02-01 11:00")})
+
+	f.user.LibraryAccess = []*models.UserLibraryAccess{{UserID: f.user.ID, LibraryID: intp(dune.LibraryID + 100)}}
+	api := newReadingAPI(t, f.db, f.user)
+	assert.Equal(t, []ReadingStatsBookRef{{Key: bookKey(dune), Title: "Dune"}}, calendarFor(t, api, 2026, 2).Books)
+	detail := dayFor(t, api, "2026-02-01")
+	require.Len(t, detail.Sessions, 1)
+	assert.Nil(t, detail.Sessions[0].Book.Book)
+}
+
+func TestCalendar_DayDetailListsSessionsInOrderWithHowFarEachWent(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	hyperion := createBook(t, f.db, "Hyperion")
+	duneFile := f.addFile(dune, models.FileTypeEPUB)
+	hyperionAudio := f.addFile(hyperion, models.FileTypeM4B)
+	f.session(sessionSpec{file: hyperionAudio, start: at(t, "UTC", "2026-06-10 20:00"), end: at(t, "UTC", "2026-06-10 21:00")})
+	f.session(sessionSpec{
+		file: duneFile, start: at(t, "UTC", "2026-06-10 08:00"), end: at(t, "UTC", "2026-06-10 08:45"),
+		source: models.ReadingSourceKOReader, duration: 1800,
+	})
+	_, err := f.db.ExecContext(f.ctx, `UPDATE reading_sessions SET start_percentage = 0.1, end_percentage = 0.25 WHERE file_id = ?`, duneFile.ID)
+	require.NoError(t, err)
+	// Another day's Session isn't listed.
+	f.session(sessionSpec{file: duneFile, start: at(t, "UTC", "2026-06-11 08:00"), end: at(t, "UTC", "2026-06-11 09:00")})
+
+	detail := f.day("2026-06-10")
+	assert.Equal(t, "UTC", detail.TimeZone)
+	require.Len(t, detail.Sessions, 2)
+	first, second := detail.Sessions[0], detail.Sessions[1]
+	assert.Equal(t, "Dune", first.Book.Title)
+	assert.Equal(t, 1800, first.Seconds)
+	assert.InDelta(t, 0.1, first.StartPercentage, 0.0001)
+	assert.InDelta(t, 0.25, first.EndPercentage, 0.0001)
+	assert.Equal(t, models.ReadingSourceKOReader, first.Source)
+	assert.Equal(t, models.ReadingKindReading, first.Kind)
+	assert.Equal(t, "Hyperion", second.Book.Title)
+	assert.Equal(t, models.ReadingKindListening, second.Kind)
+	assert.Equal(t, 3600, second.Seconds)
+
+	june := f.calendar(2026, 6)
+	assert.ElementsMatch(t, []ReadingStatsCalendarDayBook{
+		{Key: bookKey(dune), Seconds: 1800},
+		{Key: bookKey(hyperion), Seconds: 3600},
+	}, calendarDay(june, "2026-06-10"))
+	assert.Equal(t, []string{"Dune", "Hyperion"}, []string{june.Books[0].Title, june.Books[1].Title})
+}
+
+func TestCalendar_NeverShowsAnotherUsersReading(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	other := createUser(t, f.db, "other", 2)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	seedReadThrough(t, f.db, other, dune, "2026-01-01", "2026-01-02", models.ReadThroughOutcomeFinished)
+	seedSession(t, f.db, other, sessionSpec{file: file, start: at(t, "UTC", "2026-01-02 10:00"), end: at(t, "UTC", "2026-01-02 11:00")})
+
+	jan := f.calendar(2026, 1)
+	assert.Empty(t, jan.Days)
+	assert.NotNil(t, jan.Days)
+	assert.Empty(t, jan.Books)
+	assert.NotNil(t, jan.Books)
+	detail := f.day("2026-01-02")
+	assert.Empty(t, detail.Sessions)
+	assert.Empty(t, detail.Finished)
+	assert.Empty(t, f.stats("?year=2026").Days)
+
+	theirs := calendarFor(t, newReadingAPI(t, f.db, other), 2026, 1)
+	assert.Len(t, theirs.Days, 1)
+}
+
+func TestCalendar_RejectsAnInvalidMonthOrDay(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	for _, path := range []string{
+		"/stats/calendar?year=2026",
+		"/stats/calendar?year=2026&month=13",
+		"/stats/calendar?year=0&month=1",
+		"/stats/day",
+		"/stats/day?day=2026-02-30",
+		"/stats/day?day=yesterday",
+	} {
+		assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, path, nil).Code, path)
+	}
+}
+
+func TestSessions_DeletingOnesOwnSessionRemovesItsTimeEverywhere(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	rt := f.finished(dune, "2026-06-10", "2026-06-10")
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-10 08:00"), end: at(t, "UTC", "2026-06-10 09:00")})
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-10 20:00"), end: at(t, "UTC", "2026-06-10 20:30")})
+
+	sessions := f.day("2026-06-10").Sessions
+	require.Len(t, sessions, 2)
+	rec := f.api.do(http.MethodDelete, fmt.Sprintf("/sessions/%d", sessions[0].ID), nil)
+	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
+
+	remaining := f.day("2026-06-10").Sessions
+	require.Len(t, remaining, 1)
+	assert.Equal(t, sessions[1].ID, remaining[0].ID)
+	stats := f.stats("?year=2026")
+	assert.Equal(t, 1800, stats.Totals.ReadingSeconds)
+	assert.Equal(t, []ReadingStatsDay{{Day: "2026-06-10", ReadingSeconds: 1800}}, stats.Days)
+	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: bookKey(dune), Seconds: 1800, Finished: true}}, calendarDay(f.calendar(2026, 6), "2026-06-10"))
+	finished := f.finishedList("?year=2026").Items
+	require.Len(t, finished, 1)
+	require.NotNil(t, finished[0].Seconds)
+	assert.Equal(t, 1800, *finished[0].Seconds)
+
+	assert.Equal(t, http.StatusNotFound, f.api.do(http.MethodDelete, fmt.Sprintf("/sessions/%d", sessions[0].ID), nil).Code, "already gone")
+}
+
+func TestSessions_AnotherUsersSessionIsNotFound(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	other := createUser(t, f.db, "other", 2)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	seedSession(t, f.db, other, sessionSpec{file: file, start: at(t, "UTC", "2026-06-10 08:00"), end: at(t, "UTC", "2026-06-10 09:00")})
+	theirs := dayFor(t, newReadingAPI(t, f.db, other), "2026-06-10").Sessions
+	require.Len(t, theirs, 1)
+
+	assert.Equal(t, http.StatusNotFound, f.api.do(http.MethodDelete, fmt.Sprintf("/sessions/%d", theirs[0].ID), nil).Code)
+	assert.Equal(t, http.StatusNotFound, f.api.do(http.MethodDelete, "/sessions/abc", nil).Code)
+	assert.Len(t, dayFor(t, newReadingAPI(t, f.db, other), "2026-06-10").Sessions, 1, "theirs is untouched")
+}
+
+func TestSessions_DeleteFailureIs500(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	f.session(sessionSpec{file: file, start: at(t, "UTC", "2026-06-10 08:00"), end: at(t, "UTC", "2026-06-10 09:00")})
+	id := f.day("2026-06-10").Sessions[0].ID
+	_, err := f.db.Exec(`CREATE TRIGGER fail_delete BEFORE DELETE ON reading_sessions BEGIN SELECT RAISE(ABORT, 'boom'); END`)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusInternalServerError,
+		f.api.do(http.MethodDelete, fmt.Sprintf("/sessions/%d", id), nil).Code,
+		"a failed delete isn't a missing Reading Session")
+}
+
+// With no Read-through, a Session names its Book only through its File.
+// Once both are gone, nothing says two such Sessions were the same Book, so
+// they never join into one bar.
+func TestCalendar_SessionsWithNothingLeftToNameThemStayApart(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	emma := createBook(t, f.db, "Emma")
+	f.session(sessionSpec{file: f.addFile(dune, models.FileTypeEPUB), start: at(t, "UTC", "2026-06-10 08:00"), end: at(t, "UTC", "2026-06-10 09:00")})
+	f.session(sessionSpec{file: f.addFile(emma, models.FileTypeEPUB), start: at(t, "UTC", "2026-06-11 08:00"), end: at(t, "UTC", "2026-06-11 09:00")})
+	deleteBook(t, f.db, dune)
+	deleteBook(t, f.db, emma)
+
+	june := f.calendar(2026, 6)
+	first, second := calendarDay(june, "2026-06-10"), calendarDay(june, "2026-06-11")
+	require.Len(t, first, 1)
+	require.Len(t, second, 1)
+	assert.NotEqual(t, first[0].Key, second[0].Key)
+	require.Len(t, june.Books, 2)
+	for _, ref := range june.Books {
+		assert.Empty(t, ref.Title)
+		assert.True(t, ref.Removed)
+	}
+	detail := f.day("2026-06-10")
+	require.Len(t, detail.Sessions, 1)
+	assert.Equal(t, first[0].Key, detail.Sessions[0].Book.Key)
+}

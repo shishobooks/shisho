@@ -46,7 +46,7 @@ func formatValidationError(err validator.FieldError) string {
 
 	switch err.Tag() {
 	case date:
-		return fmt.Sprintf("%q should be in the format of YYYY-MM-DD", field)
+		return fmt.Sprintf("%q should be a calendar day as YYYY-MM-DD", field)
 	case email:
 		return fmt.Sprintf("%q is not a valid email", field)
 	case gt:

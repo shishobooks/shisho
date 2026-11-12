@@ -8,13 +8,16 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
+  formatDayTime,
   formatDuration,
   formatElapsed,
   formatFileSize,
+  formatLongDay,
   formatMonthName,
   formatPageCount,
   formatPersonCredits,
   formatPlayerTime,
+  formatShortDay,
   formatShowingRange,
   formatYear,
 } from "./format";
@@ -280,5 +283,23 @@ describe("formatMonthName", () => {
     expect(formatMonthName(2026, 3, { long: true, withYear: true })).toBe(
       "March 2026",
     );
+  });
+});
+
+describe("calendar days", () => {
+  it("names a day in full or briefly, whatever the browser's zone", () => {
+    expect(formatLongDay("2026-04-07")).toBe("Tuesday, April 7, 2026");
+    expect(formatShortDay("2026-04-07")).toBe("Apr 7");
+  });
+
+  it("gives a time of day in a zone, with the date when it's another day", () => {
+    const instant = "2026-06-01T04:30:00Z"; // 11:30 PM, May 31, in Chicago
+    expect(formatDayTime(instant, "2026-05-31", "America/Chicago")).toBe(
+      "11:30 PM",
+    );
+    expect(formatDayTime(instant, "2026-06-01", "America/Chicago")).toBe(
+      "May 31, 11:30 PM",
+    );
+    expect(formatDayTime(instant, "2026-06-01", "UTC")).toBe("4:30 AM");
   });
 });

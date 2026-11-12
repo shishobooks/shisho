@@ -21,7 +21,7 @@ import {
   formatMonthName,
   formatRating,
 } from "@/utils/format";
-import type { CountRow } from "@/utils/readingStats";
+import { SOURCE_LABELS, type CountRow } from "@/utils/readingStats";
 
 // Reading and listening keep the same colours on every chart.
 const READING_BAR = "bg-reading";
@@ -496,12 +496,6 @@ export const CountList = ({
       )}
     </div>
   );
-};
-
-const SOURCE_LABELS: Record<ReadingStatsPlace["source"], string> = {
-  web_reader: "Shisho reader",
-  kobo: "Kobo",
-  koreader: "KOReader",
 };
 
 const placeLabel = (place: ReadingStatsPlace) =>

@@ -192,6 +192,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"limit" must be less than or equal to 100`,
 		},
 		{
+			name:   "a Reading Stats calendar month that can't exist",
+			method: http.MethodGet, path: "/api/reading/stats/calendar?year=2026&month=13",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"month" must be less than or equal to 12`,
+		},
+		{
+			name:   "a Reading Stats day that isn't on the calendar",
+			method: http.MethodGet, path: "/api/reading/stats/day?day=2026-02-30",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"day" should be a calendar day as YYYY-MM-DD`,
+		},
+		{
 			name:   "position update with no percentage",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
 			body:   `{"cfi":"epubcfi(/6/4!/4/2)"}`,
@@ -295,6 +305,11 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			name:   "read-through that does not exist",
 			method: http.MethodDelete, path: "/api/reading/read-throughs/999999",
 			status: http.StatusNotFound, code: "not_found", message: "Read-through not found.",
+		},
+		{
+			name:   "reading session that does not exist",
+			method: http.MethodDelete, path: "/api/reading/sessions/999999",
+			status: http.StatusNotFound, code: "not_found", message: "Reading Session not found.",
 		},
 		{
 			name:   "device with an unknown type",

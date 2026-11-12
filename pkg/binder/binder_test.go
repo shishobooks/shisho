@@ -126,3 +126,29 @@ func newContext(payload, mime string) echo.Context {
 	rr := httptest.NewRecorder()
 	return e.NewContext(req, rr)
 }
+
+func TestBind_DateMustBeACalendarDay(t *testing.T) {
+	t.Parallel()
+	b, err := New()
+	require.NoError(t, err)
+	type dated struct {
+		Day string `json:"day" validate:"date"`
+	}
+	for value, ok := range map[string]bool{
+		"2026-02-28": true,
+		"2028-02-29": true,
+		"":           true,
+		"2026-02-30": false,
+		"2026-02-29": false,
+		"2026-04-31": false,
+		"2026-13-01": false,
+		"yesterday":  false,
+	} {
+		err := b.Bind(&dated{}, newContext(`{"day":"`+value+`"}`, echo.MIMEApplicationJSON))
+		if ok {
+			assert.NoError(t, err, value)
+		} else {
+			assert.Error(t, err, value)
+		}
+	}
+}

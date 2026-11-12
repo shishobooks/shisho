@@ -477,6 +477,63 @@ func (h *handler) listStatsFinished(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
+// statsCalendar returns one month of the caller's Reading Stats calendar.
+// Like stats, it takes no user.
+func (h *handler) statsCalendar(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReadingStatsCalendarQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.StatsCalendar(c.Request().Context(), user, params.Year, params.Month)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// statsDay returns one day of the caller's Reading Sessions for Reading
+// Stats. Like stats, it takes no user.
+func (h *handler) statsDay(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReadingStatsDayQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.StatsDay(c.Request().Context(), user, params.Day)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// deleteSession deletes the caller's own :id Reading Session for good, from
+// a day on Reading Stats. Anyone else's is not found.
+func (h *handler) deleteSession(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	id, err := httputil.ParamID(c, "id", "Reading Session")
+	if err != nil {
+		return err
+	}
+	deleted, err := h.readingService.DeleteSession(c.Request().Context(), user.ID, id)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return errcodes.NotFound("Reading Session")
+	}
+	return errors.WithStack(c.NoContent(http.StatusNoContent))
+}
+
 func (h *handler) addToRead(c echo.Context) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {

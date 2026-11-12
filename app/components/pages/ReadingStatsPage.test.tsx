@@ -18,6 +18,8 @@ import { AuthProvider } from "@/components/contexts/Auth";
 import { MobileNavProvider } from "@/contexts/MobileNav";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type {
+  ReadingStatsCalendarResponse,
+  ReadingStatsDayResponse,
   ReadingStatsFinishedBook,
   ReadingStatsResponse,
   ReadThrough,
@@ -82,6 +84,7 @@ const emptyStats = (year: number | null): ReadingStatsResponse => ({
     average_rating: null,
   },
   periods: [],
+  days: [],
   genres: [],
   tags: [],
   authors: [],
@@ -151,15 +154,31 @@ const LocationProbe = () => (
   <output data-testid="location">{useLocation().search}</output>
 );
 
+const emptyCalendar = (
+  year: number,
+  month: number,
+): ReadingStatsCalendarResponse => ({ year, month, books: [], days: [] });
+
+const emptyDay = (day: string): ReadingStatsDayResponse => ({
+  day,
+  time_zone: "UTC",
+  sessions: [],
+  finished: [],
+});
+
 const renderPage = ({
   stats = busyStats,
   finished = finishedRows,
   finishedTotal = finished.length,
+  calendar = emptyCalendar,
+  day = emptyDay,
   initialEntry = "/reading-stats",
 }: {
   stats?: (year: number | null) => ReadingStatsResponse;
   finished?: ReadingStatsFinishedBook[];
   finishedTotal?: number;
+  calendar?: (year: number, month: number) => ReadingStatsCalendarResponse;
+  day?: (day: string) => ReadingStatsDayResponse;
   initialEntry?: string;
 } = {}) => {
   mockCoverDimensions();
@@ -174,9 +193,23 @@ const renderPage = ({
   );
   const fetchMock = vi
     .spyOn(globalThis, "fetch")
-    .mockImplementation(async (input) => {
+    .mockImplementation(async (input, init) => {
       const url = new URL(String(input), "http://localhost");
       const path = url.pathname;
+      if (
+        init?.method === "DELETE" &&
+        path.startsWith("/api/reading/sessions/")
+      )
+        return new Response(null, { status: 204 });
+      if (path === "/api/reading/stats/calendar")
+        return Response.json(
+          calendar(
+            Number(url.searchParams.get("year")),
+            Number(url.searchParams.get("month")),
+          ),
+        );
+      if (path === "/api/reading/stats/day")
+        return Response.json(day(url.searchParams.get("day")!));
       if (path === "/api/auth/status")
         return Response.json({ needs_setup: false, demo_mode: false });
       if (path === "/api/auth/me")
@@ -633,5 +666,235 @@ describe("ReadingStatsPage", () => {
       name: "Where you read",
     });
     expect(places).toHaveTextContent("1h 0m reading, 20m listening");
+  });
+
+  describe("heatmap and calendar", () => {
+    const dune = {
+      key: "book-1",
+      title: "Dune",
+      removed: false,
+      book: { id: 1, library_id: 7, cover_cache_key: "" },
+    };
+    const emma = { key: "book-2", title: "Emma", removed: false, book: null };
+    const gone = {
+      key: "read-through-9",
+      title: "Gone",
+      removed: true,
+      book: null,
+    };
+    const entry = (key: string, seconds: number, finished = false) => ({
+      key,
+      seconds,
+      finished,
+    });
+    // June 2026 starts on a Monday, so June 1 is in the second column.
+    const june = (year: number, month: number) =>
+      month === 6
+        ? {
+            year,
+            month,
+            books: [dune, emma, gone],
+            days: [
+              { day: "2026-06-01", books: [entry("book-1", 600)] },
+              {
+                day: "2026-06-02",
+                books: [entry("book-1", 600), entry("book-2", 300)],
+              },
+              { day: "2026-06-03", books: [entry("book-1", 600, true)] },
+              { day: "2026-06-05", books: [entry("book-1", 600)] },
+              { day: "2026-06-10", books: [entry("read-through-9", 0, true)] },
+            ],
+          }
+        : month === 7
+          ? {
+              year,
+              month,
+              books: [dune],
+              days: [{ day: "2026-07-01", books: [entry("book-1", 900)] }],
+            }
+          : emptyCalendar(year, month);
+
+    const bars = (key: string) =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          `[data-book="${key}"][data-span]`,
+        ),
+      ].map((bar) => ({
+        span: bar.dataset.span,
+        color: bar.style.backgroundColor,
+      }));
+
+    it("shades the heatmap by each day's time", async () => {
+      renderPage({
+        stats: (year) => ({
+          ...busyStats(year),
+          days: [
+            { day: "2026-03-01", reading_seconds: 60, listening_seconds: 0 },
+            { day: "2026-03-02", reading_seconds: 3600, listening_seconds: 0 },
+          ],
+        }),
+      });
+      expect(
+        await screen.findByRole("region", { name: "Reading by day in 2026" }),
+      ).toBeInTheDocument();
+      const level = (day: string) =>
+        document.querySelector<HTMLElement>(`[data-day="${day}"]`)?.dataset
+          .level;
+      expect(level("2026-03-01")).toBe("1");
+      expect(level("2026-03-02")).toBe("4");
+      expect(level("2026-03-03")).toBe("0");
+      expect(
+        screen.getByText(/most reading in 2026 was 1h 0m on Monday, March 2/),
+      ).toBeInTheDocument();
+    });
+
+    it("opens on this month and moves between months within the year", async () => {
+      const { user } = renderPage({ calendar: june });
+      const calendar = await screen.findByRole("region", { name: "Calendar" });
+      expect(
+        within(calendar).getByRole("heading", { name: "June 2026" }),
+      ).toBeInTheDocument();
+
+      await user.click(
+        within(calendar).getByRole("button", { name: "Next month" }),
+      );
+      expect(
+        await within(calendar).findByRole("heading", { name: "July 2026" }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "?month=2026-07",
+      );
+    });
+
+    it("can't leave the year, and opens on this month under all time", async () => {
+      renderPage({ initialEntry: "/reading-stats?month=2026-01" });
+      const calendar = await screen.findByRole("region", { name: "Calendar" });
+      expect(
+        within(calendar).getByRole("heading", { name: "January 2026" }),
+      ).toBeInTheDocument();
+      expect(
+        within(calendar).getByRole("button", { name: "Previous month" }),
+      ).toBeDisabled();
+      cleanup();
+
+      renderPage({ initialEntry: "/reading-stats?year=all" });
+      const allTime = await screen.findByRole("region", { name: "Calendar" });
+      expect(
+        within(allTime).getByRole("heading", { name: "June 2026" }),
+      ).toBeInTheDocument();
+      expect(
+        within(allTime).getByRole("button", { name: "Next month" }),
+      ).toBeDisabled();
+      expect(
+        within(allTime).getByRole("button", { name: "Previous month" }),
+      ).toBeEnabled();
+    });
+
+    it("joins a book's consecutive days into one bar in its own colour", async () => {
+      const { user } = renderPage({ calendar: june });
+      await screen.findByRole("button", { name: /^Monday, June 1, 2026/ });
+
+      const duneBars = bars("book-1");
+      expect(duneBars.map((bar) => bar.span)).toEqual(["1-3", "5-5"]);
+      expect(duneBars[0].color).toBe(duneBars[1].color);
+      expect(bars("book-2").map((bar) => bar.span)).toEqual(["2-2"]);
+      expect(bars("book-2")[0].color).not.toBe("");
+
+      await user.click(screen.getByRole("button", { name: "Next month" }));
+      await screen.findByRole("heading", { name: "July 2026" });
+      await waitFor(() => expect(bars("book-1")).toHaveLength(1));
+      expect(bars("book-1")[0].color).toBe(duneBars[0].color);
+    });
+
+    it("marks the day a book was finished, even with no reading that day", async () => {
+      renderPage({ calendar: june });
+      expect(
+        await screen.findByRole("button", {
+          name: "Wednesday, June 3, 2026. Dune, finished",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        document.querySelectorAll('[data-finish][data-book="book-1"]'),
+      ).toHaveLength(1);
+      expect(
+        screen.getByRole("button", {
+          name: "Wednesday, June 10, 2026. Gone, finished",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        document.querySelectorAll('[data-finish][data-book="read-through-9"]'),
+      ).toHaveLength(1);
+      expect(bars("read-through-9")).toEqual([]);
+    });
+
+    it("opens a day's sessions, and deletes one after asking", async () => {
+      const { user, fetchMock } = renderPage({
+        calendar: june,
+        day: (day) => ({
+          ...emptyDay(day),
+          time_zone: "America/Chicago",
+          sessions: [
+            {
+              id: 41,
+              book: dune,
+              started_at: "2026-06-01T04:30:00Z",
+              ended_at: "2026-06-01T06:00:00Z",
+              seconds: 5400,
+              start_percentage: 0.1,
+              end_percentage: 0.25,
+              kind: "reading",
+              source: "koreader",
+              measured: false,
+            },
+          ],
+        }),
+      });
+      await user.click(
+        await screen.findByRole("button", { name: /^Monday, June 1, 2026/ }),
+      );
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "?day=2026-06-01",
+      );
+      const sessions = await screen.findByRole("list", {
+        name: "Reading sessions",
+      });
+      // 04:30 UTC is still May 31 in Chicago.
+      expect(sessions).toHaveTextContent(
+        "May 31, 11:30 PM to 1:00 AM · 1h 30m · 10% to 25% · KOReader (estimated)",
+      );
+      expect(
+        within(sessions).getByRole("link", { name: "Dune" }),
+      ).toHaveAttribute("href", "/libraries/7/books/1");
+
+      await user.click(
+        within(sessions).getByRole("button", {
+          name: "Delete session of Dune",
+        }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Delete this reading session?",
+      });
+      expect(
+        fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE"),
+      ).toBe(false);
+      await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+      await waitFor(() =>
+        expect(
+          fetchMock.mock.calls
+            .filter(([, init]) => init?.method === "DELETE")
+            .map(
+              ([input]) => new URL(String(input), "http://localhost").pathname,
+            ),
+        ).toEqual(["/api/reading/sessions/41"]),
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+
+      await user.click(screen.getByRole("button", { name: "Close day" }));
+      expect(
+        screen.queryByRole("list", { name: "Reading sessions" }),
+      ).toBeNull();
+    });
   });
 });

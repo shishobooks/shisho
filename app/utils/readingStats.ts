@@ -1,4 +1,5 @@
 import type {
+  ReadingSource,
   ReadingStatsCount,
   ReadingStatsKind,
   ReadingStatsKindCount,
@@ -48,3 +49,10 @@ export const ratingRows = (ratings: ReadingStatsRatingCount[]): CountRow[] =>
       label: ratingLabel(rating.rating),
       books: rating.books,
     }));
+
+/** What each reading source is called on Reading Stats. */
+export const SOURCE_LABELS: Record<ReadingSource, string> = {
+  web_reader: "Shisho reader",
+  kobo: "Kobo",
+  koreader: "KOReader",
+};

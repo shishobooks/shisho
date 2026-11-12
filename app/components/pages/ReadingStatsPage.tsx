@@ -12,6 +12,11 @@ import PaginationFooter, {
 } from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
 import {
+  ReadingCalendar,
+  ReadingHeatmap,
+  type YearMonth,
+} from "@/components/library/ReadingCalendar";
+import {
   CountList,
   FinishedChart,
   FinishedList,
@@ -49,6 +54,7 @@ import {
   formatDuration,
   formatShowingRange,
 } from "@/utils/format";
+import { shiftDay } from "@/utils/readingCalendar";
 import {
   countRows,
   KIND_LABELS,
@@ -120,13 +126,129 @@ const hasActivity = (stats: ReadingStatsResponse) =>
   stats.totals.reading_seconds > 0 ||
   stats.totals.listening_seconds > 0;
 
+const monthIndex = ({ year, month }: YearMonth) => year * 12 + month - 1;
+const fromMonthIndex = (index: number): YearMonth => ({
+  year: Math.floor(index / 12),
+  month: (index % 12) + 1,
+});
+const monthParam = ({ year, month }: YearMonth) =>
+  `${year}-${String(month).padStart(2, "0")}`;
+
+// The months the calendar can show: the year's, or under all time, from the
+// first year with reading to this month or the last month with any.
+const calendarBounds = (
+  stats: ReadingStatsResponse,
+  thisMonth: YearMonth,
+): [number, number] => {
+  if (stats.year !== null) {
+    return [stats.year * 12, stats.year * 12 + 11];
+  }
+  const first = Math.min(thisMonth.year, ...stats.years);
+  const last = Math.max(thisMonth.year, ...stats.years);
+  return [
+    first * 12,
+    last > thisMonth.year ? last * 12 + 11 : monthIndex(thisMonth),
+  ];
+};
+
+// The month the calendar opens on: this month for this year or all time,
+// and for a past year, its last month with any reading.
+const defaultCalendarMonth = (
+  stats: ReadingStatsResponse,
+  thisMonth: YearMonth,
+): YearMonth => {
+  if (stats.year === null || stats.year === thisMonth.year) return thisMonth;
+  const active = stats.periods.filter(
+    (p) => p.finished > 0 || p.reading_seconds + p.listening_seconds > 0,
+  );
+  return { year: stats.year, month: active[active.length - 1]?.month ?? 12 };
+};
+
+// The year heatmap and the month calendar. The month and the day open
+// under it are kept in the URL; the heatmap shows the calendar's year.
+const DailySection = ({
+  stats,
+  today,
+  pending,
+}: {
+  stats: ReadingStatsResponse;
+  today: string;
+  /** Another range's figures are loading, so stats is the last range's. */
+  pending: boolean;
+}) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const thisMonth = {
+    year: Number(today.slice(0, 4)),
+    month: Number(today.slice(5, 7)),
+  };
+  const [first, last] = calendarBounds(stats, thisMonth);
+  const fallback = defaultCalendarMonth(stats, thisMonth);
+  const raw = searchParams.get("month");
+  let month = fallback;
+  if (raw && /^\d{4}-\d{2}$/.test(raw)) {
+    const m = Number(raw.slice(5));
+    const index = Number(raw.slice(0, 4)) * 12 + m - 1;
+    if (m >= 1 && m <= 12 && index >= first && index <= last) {
+      month = fromMonthIndex(index);
+    }
+  }
+  // A day in the month in view, and a real one: not June 31.
+  const rawDay = searchParams.get("day");
+  const selectedDay =
+    rawDay &&
+    /^\d{4}-\d{2}-\d{2}$/.test(rawDay) &&
+    rawDay.startsWith(`${monthParam(month)}-`) &&
+    shiftDay(rawDay, 0) === rawDay
+      ? rawDay
+      : null;
+
+  const changeMonth = (by: number) => {
+    const next = fromMonthIndex(monthIndex(month) + by);
+    const params = new URLSearchParams(searchParams);
+    if (monthIndex(next) === monthIndex(fallback)) params.delete("month");
+    else params.set("month", monthParam(next));
+    params.delete("day");
+    setSearchParams(params, { preventScrollReset: true });
+  };
+  const selectDay = (day: string | null) => {
+    const params = new URLSearchParams(searchParams);
+    if (day) params.set("day", day);
+    else params.delete("day");
+    setSearchParams(params, { preventScrollReset: true });
+  };
+
+  return (
+    // minmax(0, 1fr) lets the heatmap scroll inside its card on a phone
+    // rather than widen the page.
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:gap-6">
+      <StatsCard title={`Reading by day in ${month.year}`}>
+        <ReadingHeatmap days={stats.days} year={month.year} />
+      </StatsCard>
+      <ReadingCalendar
+        canGoBack={monthIndex(month) > first}
+        canGoForward={monthIndex(month) < last}
+        enabled={!pending}
+        month={month}
+        onMonthChange={changeMonth}
+        onSelectDay={selectDay}
+        selectedDay={selectedDay}
+        today={today}
+      />
+    </div>
+  );
+};
+
 const StatsBody = ({
   stats,
+  pending,
+  today,
   filters,
   onToggleFilter,
   onClearFilter,
 }: {
   stats: ReadingStatsResponse;
+  pending: boolean;
+  today: string;
   filters: FinishedFilters;
   onToggleFilter: (param: FilterParam, value: string) => void;
   onClearFilter: (param: FilterParam) => void;
@@ -202,6 +324,8 @@ const StatsBody = ({
           </StatsCard>
         </div>
       )}
+
+      <DailySection pending={pending} stats={stats} today={today} />
 
       <div>
         <p className="mb-2 text-xs text-muted-foreground">
@@ -391,9 +515,8 @@ const FinishedSection = ({
 const ReadingStatsPage = () => {
   usePageTitle("Reading Stats");
   const settingsQuery = useUserSettings();
-  const currentYear = Number(
-    todayDay(settingsQuery.data?.time_zone).slice(0, 4),
-  );
+  const today = todayDay(settingsQuery.data?.time_zone);
+  const currentYear = Number(today.slice(0, 4));
   const [searchParams, setSearchParams] = useSearchParams();
   const yearParam = searchParams.get("year");
   const parsed = parseRange(yearParam);
@@ -427,6 +550,8 @@ const ReadingStatsPage = () => {
     const params = new URLSearchParams(searchParams);
     if (value === String(currentYear)) params.delete("year");
     else params.set("year", value);
+    params.delete("month");
+    params.delete("day");
     resetPaging(params);
     setSearchParams(params, { preventScrollReset: true });
   };
@@ -496,7 +621,9 @@ const ReadingStatsPage = () => {
           key={stats.year ?? "all"}
           onClearFilter={clearFilter}
           onToggleFilter={toggleFilter}
+          pending={statsQuery.isPlaceholderData}
           stats={stats}
+          today={today}
         />
       </div>
     );

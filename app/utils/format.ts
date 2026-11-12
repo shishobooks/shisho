@@ -239,6 +239,56 @@ export const formatMonthName = (
   });
 
 /**
+ * A calendar day (YYYY-MM-DD) in full, the same in any browser time zone.
+ * @example formatLongDay("2026-04-07") // "Tuesday, April 7, 2026"
+ */
+export const formatLongDay = (day: string): string =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/**
+ * A calendar day (YYYY-MM-DD) as its month and day.
+ * @example formatShortDay("2026-04-07") // "Apr 7"
+ */
+export const formatShortDay = (day: string): string =>
+  new Date(`${day}T12:00:00Z`).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+/**
+ * An instant's time of day in an IANA time zone, with its date when it
+ * falls on another day than `day` (YYYY-MM-DD) there.
+ * @example formatDayTime("2026-06-01T04:30:00Z", "2026-06-01", "America/Chicago") // "May 31, 11:30 PM"
+ */
+export const formatDayTime = (
+  instant: string,
+  day: string,
+  timeZone: string,
+): string => {
+  const date = new Date(instant);
+  const time = date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
+  // en-CA formats a date as YYYY-MM-DD.
+  const onDay = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  return onDay === day ? time : `${formatShortDay(onDay)}, ${time}`;
+};
+
+/**
  * The month and year of a date, as UTC like formatDate.
  * @example formatMonthYear("2024-03-02") // "Mar 2024"
  */

@@ -63,18 +63,10 @@ func (svc *Service) BuildHistoryEntries(ctx context.Context, user *models.User, 
 	books := map[int]*models.Book{}
 	underway := map[int]bool{}
 	if len(bookIDs) > 0 {
-		var loaded []*models.Book
-		err := svc.db.NewSelect().
-			Model(&loaded).
-			Relation("Library").
-			Relation("Files").
-			Where("b.id IN (?)", bun.List(bookIDs)).
-			Scan(ctx)
+		var err error
+		books, err = svc.loadBooks(ctx, bookIDs)
 		if err != nil {
-			return nil, errors.WithStack(err)
-		}
-		for _, b := range loaded {
-			books[b.ID] = b
+			return nil, err
 		}
 		var underwayIDs []int
 		err = svc.db.NewSelect().
@@ -115,19 +107,50 @@ func (svc *Service) BuildHistoryEntries(ctx context.Context, user *models.User, 
 		if names := authors[book.ID]; names != nil {
 			entry.Authors = names
 		}
-		if user.HasLibraryAccess(book.LibraryID) {
-			aspectRatio := ""
-			if book.Library != nil {
-				aspectRatio = book.Library.CoverAspectRatio
-			}
-			entry.Book = &ReadingHistoryBook{
-				ID:            book.ID,
-				LibraryID:     book.LibraryID,
-				CoverCacheKey: covers.CacheKey(book.Files, aspectRatio),
-			}
+		if entry.Book = bookLink(user, book); entry.Book != nil {
 			entry.CanReread = !underway[book.ID]
 		}
 		entries = append(entries, entry)
 	}
 	return entries, nil
+}
+
+// loadBooks loads the Books with ids that still exist, with what bookLink
+// needs, by id.
+func (svc *Service) loadBooks(ctx context.Context, ids []int) (map[int]*models.Book, error) {
+	books := map[int]*models.Book{}
+	if len(ids) == 0 {
+		return books, nil
+	}
+	var loaded []*models.Book
+	err := svc.db.NewSelect().
+		Model(&loaded).
+		Relation("Library").
+		Relation("Files").
+		Where("b.id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, b := range loaded {
+		books[b.ID] = b
+	}
+	return books, nil
+}
+
+// bookLink is what a row needs to link to book and show its cover, or nil
+// when user can't reach its library. book comes from loadBooks.
+func bookLink(user *models.User, book *models.Book) *ReadingHistoryBook {
+	if !user.HasLibraryAccess(book.LibraryID) {
+		return nil
+	}
+	aspectRatio := ""
+	if book.Library != nil {
+		aspectRatio = book.Library.CoverAspectRatio
+	}
+	return &ReadingHistoryBook{
+		ID:            book.ID,
+		LibraryID:     book.LibraryID,
+		CoverCacheKey: covers.CacheKey(book.Files, aspectRatio),
+	}
 }

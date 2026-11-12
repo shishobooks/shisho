@@ -112,7 +112,7 @@ func (s *pullStore) replay(ctx context.Context, userID int, deviceID, document s
 	for _, pull := range touched {
 		switch {
 		case !pull.PairedAt.Before(since):
-			err = s.readingService.DeleteSession(ctx, userID, *pull.SessionID)
+			_, err = s.readingService.DeleteSession(ctx, userID, *pull.SessionID)
 		case pull.PreviousEndedAt != nil && pull.PreviousEndPercentage != nil:
 			err = s.readingService.SetEstimatedSessionEnd(ctx, userID, *pull.SessionID, *pull.PreviousEndedAt, *pull.PreviousEndPercentage)
 		}
