@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/cache"
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -177,6 +178,30 @@ func (f *statsFixture) mustGet() StatsResponse {
 	return resp
 }
 
+func (f *statsFixture) getReading(query string) (*httptest.ResponseRecorder, ReadingResponse) {
+	f.t.Helper()
+	e := echo.New()
+	b, err := binder.New()
+	require.NoError(f.t, err)
+	e.Binder = b
+	e.HTTPErrorHandler = errcodes.NewHandler().Handle
+	e.GET("/server-stats/reading", f.h.retrieveReading)
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/server-stats/reading"+query, nil))
+	var resp ReadingResponse
+	if rec.Code == http.StatusOK {
+		require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	}
+	return rec, resp
+}
+
+func (f *statsFixture) mustGetReading(query string) ReadingResponse {
+	f.t.Helper()
+	rec, resp := f.getReading(query)
+	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
+	return resp
+}
+
 func strp(s string) *string { return &s }
 
 func TestServerStats_CountsContentPerLibraryAndInTotal(t *testing.T) {
@@ -307,18 +332,21 @@ func TestServerStats_EmptyServer(t *testing.T) {
 	assert.Equal(t, ContentCounts{Files: []FileTypeCount{}}, resp.Totals)
 }
 
-func TestServerStats_ReadingTotals(t *testing.T) {
+// The reading figures across the server for one year or, with no year,
+// all time.
+func TestServerStatsReading_TotalsForAYearAndAllTime(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	lib := f.library("Fiction")
 	book := f.book(lib, "Dune", fixtureNow)
 	recent := f.createUser("recent")
 	lapsed := f.createUser("lapsed")
+	f.createUser("idle")
 
-	// This year: 1h reading and 30m listening.
+	// 2026: 1h reading and 30m listening.
 	f.session(recent, models.ReadingKindReading, fixtureNow.AddDate(0, 0, -5), 3600)
 	f.session(recent, models.ReadingKindListening, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC), 1800)
-	// Last year only counts toward all time.
+	// 2025.
 	f.session(lapsed, models.ReadingKindReading, time.Date(2025, time.December, 31, 23, 0, 0, 0, time.UTC), 600)
 	f.session(lapsed, models.ReadingKindListening, time.Date(2025, time.June, 1, 0, 0, 0, 0, time.UTC), 1200)
 
@@ -331,26 +359,66 @@ func TestServerStats_ReadingTotals(t *testing.T) {
 	// Finished with no end day counts only for all time.
 	f.readThrough(recent, &book.ID, models.ReadThroughOutcomeFinished, nil)
 	f.readThrough(recent, &book.ID, models.ReadThroughOutcomeAbandoned, strp("2026-04-01"))
+	f.readThrough(lapsed, &book.ID, models.ReadThroughOutcomeAbandoned, strp("2024-04-01"))
 	f.readThrough(recent, &book.ID, models.ReadThroughOutcomeUnderway, nil)
 
-	resp := f.mustGet()
-	assert.Equal(t, ReadingTotals{
-		Year: 2026,
-		ThisYear: ReadingPeriod{
-			ReadingSeconds:       3600,
-			ListeningSeconds:     1800,
-			ReadThroughsFinished: 3,
-		},
-		AllTime: ReadingPeriod{
-			ReadingSeconds:       4200,
-			ListeningSeconds:     3000,
-			ReadThroughsFinished: 5,
-		},
-		ActiveUsers: 1,
-	}, resp.Reading)
+	year := 2026
+	assert.Equal(t, ReadingResponse{
+		Year:                 &year,
+		Years:                []int{2026, 2025, 2024},
+		ReadingSeconds:       3600,
+		ListeningSeconds:     1800,
+		ReadThroughsFinished: 3,
+		DidNotFinish:         1,
+		// lapsed finished a book in 2026 without a session in it.
+		Readers: 2,
+	}, f.mustGetReading("?year=2026"))
+
+	last := 2025
+	assert.Equal(t, ReadingResponse{
+		Year:                 &last,
+		Years:                []int{2026, 2025, 2024},
+		ReadingSeconds:       600,
+		ListeningSeconds:     1200,
+		ReadThroughsFinished: 1,
+		Readers:              1,
+	}, f.mustGetReading("?year=2025"))
+
+	assert.Equal(t, ReadingResponse{
+		Years:                []int{2026, 2025, 2024},
+		ReadingSeconds:       4200,
+		ListeningSeconds:     3000,
+		ReadThroughsFinished: 5,
+		DidNotFinish:         2,
+		Readers:              2,
+	}, f.mustGetReading(""))
 }
 
-func TestServerStats_ActiveUsersInLast30Days(t *testing.T) {
+// The current year is always offered, even with no reading at all.
+func TestServerStatsReading_EmptyServerOffersTheCurrentYear(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	year := 2026
+	assert.Equal(t, ReadingResponse{Year: &year, Years: []int{2026}}, f.mustGetReading("?year=2026"))
+}
+
+func TestServerStatsReading_RejectsAYearThatIsNotOne(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	rec, _ := f.getReading("?year=0")
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+}
+
+func TestServerStatsReading_FailedQueryIs500(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	_, err := f.db.ExecContext(f.ctx, `DROP TABLE reading_sessions`)
+	require.NoError(t, err)
+	rec, _ := f.getReading("?year=2026")
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+}
+
+func TestServerStats_ActiveReadersInLast30Days(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	a := f.createUser("a")
@@ -362,10 +430,12 @@ func TestServerStats_ActiveUsersInLast30Days(t *testing.T) {
 	f.session(b, models.ReadingKindReading, fixtureNow.AddDate(0, 0, -30).Add(-time.Hour), 2*3600)
 	f.session(c, models.ReadingKindReading, fixtureNow.AddDate(0, 0, -31), 60)
 
-	assert.Equal(t, 2, f.mustGet().Reading.ActiveUsers)
+	resp := f.mustGet()
+	assert.Equal(t, 2, resp.ActiveReaders)
+	assert.Equal(t, 2026, resp.CurrentYear)
 }
 
-func TestServerStats_ReadingTotalsUseServerTimeZone(t *testing.T) {
+func TestServerStatsReading_UsesServerTimeZone(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	chicago, err := time.LoadLocation("America/Chicago")
@@ -376,9 +446,11 @@ func TestServerStats_ReadingTotalsUseServerTimeZone(t *testing.T) {
 	f.session(reader, models.ReadingKindReading, time.Date(2026, time.January, 1, 3, 0, 0, 0, time.UTC), 600)
 	f.session(reader, models.ReadingKindReading, time.Date(2026, time.January, 1, 7, 0, 0, 0, time.UTC), 60)
 
-	resp := f.mustGet()
-	assert.Equal(t, int64(60), resp.Reading.ThisYear.ReadingSeconds)
-	assert.Equal(t, int64(660), resp.Reading.AllTime.ReadingSeconds)
+	assert.Equal(t, int64(60), f.mustGetReading("?year=2026").ReadingSeconds)
+	resp := f.mustGetReading("?year=2025")
+	assert.Equal(t, int64(600), resp.ReadingSeconds)
+	assert.Equal(t, []int{2026, 2025}, resp.Years)
+	assert.Equal(t, int64(660), f.mustGetReading("").ReadingSeconds)
 }
 
 func TestServerStats_NothingIdentifiesAUserOrABook(t *testing.T) {
@@ -392,7 +464,9 @@ func TestServerStats_NothingIdentifiesAUserOrABook(t *testing.T) {
 
 	rec, _ := f.get()
 	require.Equal(t, http.StatusOK, rec.Code)
-	body := rec.Body.String()
+	readingRec, _ := f.getReading("")
+	require.Equal(t, http.StatusOK, readingRec.Code)
+	body := rec.Body.String() + readingRec.Body.String()
 	assert.NotContains(t, body, "privatereader")
 	assert.NotContains(t, body, "Secret Diary")
 	assert.NotContains(t, body, `"user_id"`)
@@ -499,6 +573,31 @@ func TestServerStats_VolumesSayWhatShishoKeepsOnThem(t *testing.T) {
 		TotalBytes: 5000, UsedBytes: 1000, FreeBytes: 4000,
 		CacheBytes: 350,
 	}, resp.Volumes[1])
+}
+
+// A relative data or cache directory is relative to where the server
+// started, which the reader can't know, so it's reported in full.
+func TestServerStats_RelativePathsAreReportedInFull(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	f.h.databasePath = "tmp/data.sqlite"
+	f.h.cacheDir = "./tmp/cache"
+	var statted []string
+	f.h.statVolume = func(path string, _ bool) (volumeStat, error) {
+		statted = append(statted, path)
+		return volumeStat{id: 1, total: 10, free: 5, used: 5}, nil
+	}
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	resp := f.mustGet()
+	require.Len(t, resp.Volumes, 1)
+	var paths []string
+	for _, p := range resp.Volumes[0].Paths {
+		paths = append(paths, p.Path)
+	}
+	assert.Equal(t, []string{filepath.Join(cwd, "tmp"), filepath.Join(cwd, "tmp", "cache")}, paths)
+	assert.Equal(t, paths, statted)
 }
 
 func TestServerStats_VolumeThatCannotBeReadIsLeftOut(t *testing.T) {

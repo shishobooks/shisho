@@ -25,8 +25,13 @@ type StatsResponse struct {
 	Devices int         `json:"devices"`
 	// Growth is Books by the month they were added, from the first such
 	// month to the current one, with empty months included.
-	Growth  []GrowthMonth `json:"growth"`
-	Reading ReadingTotals `json:"reading"`
+	Growth []GrowthMonth `json:"growth"`
+	// ActiveReaders is the number of users with a Reading Session in the
+	// last 30 days.
+	ActiveReaders int `json:"active_readers"`
+	// CurrentYear is the year in the server's time zone, which GET
+	// /server-stats/reading defaults to on the page.
+	CurrentYear int `json:"current_year"`
 }
 
 // ContentCounts is what one Library, or every Library, holds.
@@ -101,21 +106,29 @@ type GrowthMonth struct {
 	Books int    `json:"books"`
 }
 
-// ReadingTotals is reading across the whole server. Year is the current
-// year in the server's time zone, which ThisYear covers.
-type ReadingTotals struct {
-	Year     int           `json:"year"`
-	ThisYear ReadingPeriod `json:"this_year"`
-	AllTime  ReadingPeriod `json:"all_time"`
-	// ActiveUsers is the number of users with a Reading Session in the
-	// last 30 days.
-	ActiveUsers int `json:"active_users"`
+// ReadingQuery picks the range GET /server-stats/reading covers: a year in
+// the server's time zone, or all time when Year is omitted.
+type ReadingQuery struct {
+	Year *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
 }
 
-// ReadingPeriod is reading over one period. Reading and listening come from
-// the kind each Reading Session recorded.
-type ReadingPeriod struct {
-	ReadingSeconds       int64 `json:"reading_seconds"`
-	ListeningSeconds     int64 `json:"listening_seconds"`
-	ReadThroughsFinished int   `json:"read_throughs_finished"`
+// ReadingResponse is GET /server-stats/reading: reading across every user
+// over one range, never broken down by user or by Book. Reading and
+// listening come from the kind each Reading Session recorded.
+type ReadingResponse struct {
+	// Year is the year covered, or null for all time.
+	Year *int `json:"year" tstype:"number | null,required"`
+	// Years runs from the current year back to the first year with any
+	// reading, newest first.
+	Years            []int `json:"years"`
+	ReadingSeconds   int64 `json:"reading_seconds"`
+	ListeningSeconds int64 `json:"listening_seconds"`
+	// ReadThroughsFinished and DidNotFinish count Read-throughs that ended
+	// in the range, rereads included; all time also counts those with no
+	// end day.
+	ReadThroughsFinished int `json:"read_throughs_finished"`
+	DidNotFinish         int `json:"did_not_finish"`
+	// Readers is the number of users who read in the range: a Reading
+	// Session started in it, or a Read-through ended in it.
+	Readers int `json:"readers"`
 }

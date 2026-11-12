@@ -1,22 +1,31 @@
 import { Fragment, useId, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import LibraryGrowthChart from "@/components/library/LibraryGrowthChart";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TruncatedText from "@/components/library/TruncatedText";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useServerStats } from "@/hooks/queries/serverStats";
+import {
+  useServerStats,
+  useServerStatsReading,
+} from "@/hooks/queries/serverStats";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import type {
   CacheSize,
   ContentCounts,
-  ReadingPeriod,
   StatsResponse,
   Volume,
   VolumePath,
@@ -32,10 +41,12 @@ import {
 interface SectionProps {
   title: string;
   description?: string;
+  /** A control for the whole section, beside its title. */
+  action?: ReactNode;
   children: ReactNode;
 }
 
-const Section = ({ title, description, children }: SectionProps) => {
+const Section = ({ title, description, action, children }: SectionProps) => {
   const headingId = useId();
   return (
     <section
@@ -44,14 +55,22 @@ const Section = ({ title, description, children }: SectionProps) => {
       // table scrolls inside its card instead of widening the page.
       className="min-w-0 border border-border rounded-md p-4 md:p-6"
     >
-      <h2 className="text-base md:text-lg font-semibold mb-1" id={headingId}>
-        {title}
-      </h2>
-      {description && (
-        <p className="text-xs md:text-sm text-muted-foreground">
-          {description}
-        </p>
-      )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h2
+            className="text-base md:text-lg font-semibold mb-1"
+            id={headingId}
+          >
+            {title}
+          </h2>
+          {description && (
+            <p className="text-xs md:text-sm text-muted-foreground">
+              {description}
+            </p>
+          )}
+        </div>
+        {action && <div className="shrink-0">{action}</div>}
+      </div>
       <div className="mt-3 md:mt-4">{children}</div>
     </section>
   );
@@ -60,14 +79,17 @@ const Section = ({ title, description, children }: SectionProps) => {
 interface StatProps {
   label: string;
   value: string;
+  /** Qualifies the figure, under it ("Last 30 days"). */
+  note?: string;
 }
 
-const Stat = ({ label, value }: StatProps) => (
-  <div className="min-w-0">
-    <dt className="text-xs md:text-sm text-muted-foreground">{label}</dt>
-    <dd className="text-xl md:text-2xl font-semibold tabular-nums break-words">
+const Stat = ({ label, value, note }: StatProps) => (
+  <div aria-label={label} className="min-w-0" role="group">
+    <div className="text-xs md:text-sm text-muted-foreground">{label}</div>
+    <div className="text-xl md:text-2xl font-semibold tabular-nums break-words">
       {value}
-    </dd>
+    </div>
+    {note && <div className="text-xs text-muted-foreground">{note}</div>}
   </div>
 );
 
@@ -117,7 +139,7 @@ const FilesBreakdown = ({
 
 const Overview = ({ stats }: { stats: StatsResponse }) => (
   <Section title="Overview">
-    <dl className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
       <Stat label="Books" value={stats.totals.books.toLocaleString()} />
       <Stat label="Files" value={totalFiles(stats.totals).toLocaleString()} />
       <Stat
@@ -125,56 +147,104 @@ const Overview = ({ stats }: { stats: StatsResponse }) => (
         value={formatFileSize(stats.totals.size_bytes)}
       />
       <Stat label="Users" value={stats.users.toLocaleString()} />
+      <Stat
+        label="Active readers"
+        note="Last 30 days"
+        value={stats.active_readers.toLocaleString()}
+      />
       <Stat label="Devices" value={stats.devices.toLocaleString()} />
-    </dl>
+    </div>
   </Section>
 );
 
-const ReadingGroup = ({
-  label,
-  period,
-}: {
-  label: string;
-  period: ReadingPeriod;
-}) => {
-  const labelId = useId();
-  return (
-    <div aria-labelledby={labelId} role="group">
-      <h3 className="text-sm font-medium mb-2" id={labelId}>
-        {label}
-      </h3>
-      <dl className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Stat label="Reading" value={formatDuration(period.reading_seconds)} />
+const ALL_TIME = "all";
+
+// The range in the URL: a four-digit year, or "all" (null) for all time.
+// Undefined when it's absent or anything else, which shows the server's
+// current year.
+const parseRange = (value: string | null): number | null | undefined => {
+  if (value === ALL_TIME) return null;
+  if (!value || !/^\d{4}$/.test(value)) return undefined;
+  return Number(value);
+};
+
+interface ReadingProps {
+  range: number | null;
+  currentYear: number;
+  query: ReturnType<typeof useServerStatsReading>;
+  onRangeChange: (value: string) => void;
+}
+
+const Reading = ({
+  range,
+  currentYear,
+  query,
+  onRangeChange,
+}: ReadingProps) => {
+  const reading = query.data;
+  // The current year and the year in view are always offered, with or
+  // without reading in them.
+  const years = [
+    ...new Set([
+      currentYear,
+      ...(range ? [range] : []),
+      ...(reading?.years ?? []),
+    ]),
+  ].sort((a, b) => b - a);
+  const renderBody = () => {
+    if (query.error && !reading) {
+      return <QueryError fallback="Failed to load reading" query={query} />;
+    }
+    if (!reading) return <LoadingSpinner />;
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <Stat
-          label="Listening"
-          value={formatDuration(period.listening_seconds)}
+          label="Reading time"
+          value={formatDuration(reading.reading_seconds)}
+        />
+        <Stat
+          label="Listening time"
+          value={formatDuration(reading.listening_seconds)}
         />
         <Stat
           label="Read-throughs finished"
-          value={period.read_throughs_finished.toLocaleString()}
+          value={reading.read_throughs_finished.toLocaleString()}
         />
-      </dl>
-    </div>
+        <Stat
+          label="Did Not Finish"
+          value={reading.did_not_finish.toLocaleString()}
+        />
+        <Stat label="Readers" value={reading.readers.toLocaleString()} />
+      </div>
+    );
+  };
+  return (
+    <Section
+      action={
+        <Select
+          onValueChange={onRangeChange}
+          value={range === null ? ALL_TIME : String(range)}
+        >
+          <SelectTrigger aria-label="Range" className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {years.map((y) => (
+              <SelectItem key={y} value={String(y)}>
+                {y}
+              </SelectItem>
+            ))}
+            <SelectItem value={ALL_TIME}>All time</SelectItem>
+          </SelectContent>
+        </Select>
+      }
+      description={`Totals across every user for ${range === null ? "all time" : range}.`}
+      title="Reading"
+    >
+      {renderBody()}
+    </Section>
   );
 };
-
-const Reading = ({ stats }: { stats: StatsResponse }) => (
-  <Section description="Totals across every user." title="Reading">
-    <div className="grid gap-6">
-      <ReadingGroup
-        label={String(stats.reading.year)}
-        period={stats.reading.this_year}
-      />
-      <ReadingGroup label="All time" period={stats.reading.all_time} />
-      <dl>
-        <Stat
-          label="Users who read in the last 30 days"
-          value={stats.reading.active_users.toLocaleString()}
-        />
-      </dl>
-    </div>
-  </Section>
-);
 
 const LibraryRow = ({
   name,
@@ -370,14 +440,6 @@ const VolumePaths = ({
                 scope="row"
               >
                 {pathLocation(p)}
-                {p.kind === "cache" && (
-                  <Link
-                    className="block whitespace-nowrap text-primary hover:underline sm:ml-2 sm:inline"
-                    to="/admin/cache"
-                  >
-                    Manage caches
-                  </Link>
-                )}
               </th>
               <td className={cn(cell, "pr-3 min-w-0")}>
                 {/* Long paths keep their end, the folder's own name, and
@@ -410,6 +472,18 @@ const VolumePaths = ({
                   </td>
                 </tr>
               ))}
+            {p.kind === "cache" && (
+              <tr>
+                <td className={cn(cell, "pl-3")} colSpan={3}>
+                  <Link
+                    className="text-primary hover:underline"
+                    to="/admin/cache"
+                  >
+                    Manage caches
+                  </Link>
+                </td>
+              </tr>
+            )}
           </Fragment>
         ))}
       </tbody>
@@ -564,6 +638,23 @@ const AdminServerStats = () => {
   const statsQuery = useServerStats();
   const { data: stats, isLoading } = statsQuery;
 
+  // Reading covers the year in the URL, or the server's current year, which
+  // the page learns from the stats; it waits for them unless the URL already
+  // says.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const parsed = parseRange(searchParams.get("year"));
+  const range = parsed === undefined ? stats?.current_year : parsed;
+  const readingQuery = useServerStatsReading(
+    range == null ? {} : { year: range },
+    { enabled: range !== undefined },
+  );
+  const setRange = (value: string) => {
+    const params = new URLSearchParams(searchParams);
+    if (value === String(stats?.current_year)) params.delete("year");
+    else params.set("year", value);
+    setSearchParams(params, { preventScrollReset: true });
+  };
+
   if (isLoading) {
     return <LoadingSpinner />;
   }
@@ -597,7 +688,12 @@ const AdminServerStats = () => {
       {pageHeader}
       <div className="grid gap-6">
         <Overview stats={stats} />
-        <Reading stats={stats} />
+        <Reading
+          currentYear={stats.current_year}
+          onRangeChange={setRange}
+          query={readingQuery}
+          range={range ?? null}
+        />
         <Libraries stats={stats} />
         <LibraryGrowth stats={stats} />
         <DiskSpace stats={stats} />

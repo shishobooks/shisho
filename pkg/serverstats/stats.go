@@ -12,10 +12,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/uptrace/bun"
 )
 
 // activeWindow is how recent a Reading Session makes its user active.
 const activeWindow = 30 * 24 * time.Hour
+
+// endedOutcomes are the Read-through outcomes that end one.
+var endedOutcomes = []string{models.ReadThroughOutcomeFinished, models.ReadThroughOutcomeAbandoned}
 
 // earliestAdded is before any Book could have been added to Shisho; an
 // earlier date isn't a real one.
@@ -65,8 +69,14 @@ func (h *handler) compute(ctx context.Context, user *models.User) (StatsResponse
 	if resp.Growth, err = h.growth(ctx, now); err != nil {
 		return resp, err
 	}
-	if resp.Reading, err = h.reading(ctx, now); err != nil {
-		return resp, err
+	resp.CurrentYear = now.Year()
+	err = h.db.NewSelect().
+		Table("reading_sessions").
+		ColumnExpr("COUNT(DISTINCT user_id)").
+		Where("ended_at >= ?", now.Add(-activeWindow)).
+		Scan(ctx, &resp.ActiveReaders)
+	if err != nil {
+		return resp, errors.Wrap(err, "count active readers")
 	}
 	return resp, nil
 }
@@ -207,10 +217,10 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 		})
 	}
 	if h.databasePath != "" && h.databasePath != ":memory:" {
-		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindData, Name: "Data", Path: filepath.Dir(h.databasePath), SizeBytes: databaseBytes}, true, true})
+		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindData, Name: "Data", Path: absolute(filepath.Dir(h.databasePath)), SizeBytes: databaseBytes}, true, true})
 	}
 	if h.cacheDir != "" {
-		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindCache, Name: "Cache", Path: h.cacheDir, SizeBytes: cacheBytes}, true, false})
+		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindCache, Name: "Cache", Path: absolute(h.cacheDir), SizeBytes: cacheBytes}, true, false})
 	}
 
 	volumes := []Volume{}
@@ -240,6 +250,15 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 		}
 	}
 	return volumes, nil
+}
+
+// absolute resolves a configured path against the server's working
+// directory: a relative one means nothing to someone reading the page.
+func absolute(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return path
 }
 
 // libraryPathBytes is the stored size of the library's files under lp,
@@ -337,63 +356,118 @@ func (h *handler) growth(ctx context.Context, now time.Time) ([]GrowthMonth, err
 	return months, nil
 }
 
-// reading totals reading across the server, never by user or by Book.
-// "This year" is the current year in the server's time zone; Read-through
-// end days are calendar days, so they're compared as they're stored.
-func (h *handler) reading(ctx context.Context, now time.Time) (ReadingTotals, error) {
-	yearStart := time.Date(now.Year(), time.January, 1, 0, 0, 0, 0, h.location)
-	totals := ReadingTotals{Year: now.Year()}
+// reading totals reading across the server for one year in the server's
+// time zone, or all time when year is nil, never by user or by Book.
+// Read-through end days are calendar days, so they're compared as stored.
+func (h *handler) reading(ctx context.Context, year *int) (ReadingResponse, error) {
+	resp := ReadingResponse{Year: year}
+
+	// The range as session instants and as Read-through end days.
+	sessions := func(q *bun.SelectQuery) *bun.SelectQuery { return q }
+	ended := func(q *bun.SelectQuery) *bun.SelectQuery { return q }
+	if year != nil {
+		start := time.Date(*year, time.January, 1, 0, 0, 0, 0, h.location)
+		end := start.AddDate(1, 0, 0)
+		sessions = func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("started_at >= ? AND started_at < ?", start, end)
+		}
+		ended = func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("end_day >= ? AND end_day < ?", start.Format("2006-01-02"), end.Format("2006-01-02"))
+		}
+	}
 
 	var seconds []struct {
-		Kind     *string `bun:"kind"`
-		AllTime  int64   `bun:"all_time"`
-		ThisYear int64   `bun:"this_year"`
+		Kind    *string `bun:"kind"`
+		Seconds int64   `bun:"seconds"`
 	}
 	err := h.db.NewSelect().
 		Table("reading_sessions").
-		ColumnExpr("kind").
-		ColumnExpr("COALESCE(SUM(duration), 0) AS all_time").
-		ColumnExpr("COALESCE(SUM(CASE WHEN started_at >= ? THEN duration ELSE 0 END), 0) AS this_year", yearStart).
+		ColumnExpr("kind, COALESCE(SUM(duration), 0) AS seconds").
+		Apply(sessions).
 		Group("kind").
 		Scan(ctx, &seconds)
 	if err != nil {
-		return totals, errors.Wrap(err, "sum reading sessions")
+		return resp, errors.Wrap(err, "sum reading sessions")
 	}
 	for _, row := range seconds {
 		// A Session with no recorded kind counts as reading.
 		if row.Kind != nil && *row.Kind == models.ReadingKindListening {
-			totals.AllTime.ListeningSeconds += row.AllTime
-			totals.ThisYear.ListeningSeconds += row.ThisYear
+			resp.ListeningSeconds += row.Seconds
 		} else {
-			totals.AllTime.ReadingSeconds += row.AllTime
-			totals.ThisYear.ReadingSeconds += row.ThisYear
+			resp.ReadingSeconds += row.Seconds
 		}
 	}
 
-	var finished struct {
-		AllTime  int `bun:"all_time"`
-		ThisYear int `bun:"this_year"`
+	var outcomes []struct {
+		Outcome string `bun:"outcome"`
+		Count   int    `bun:"count"`
 	}
 	err = h.db.NewSelect().
 		Table("read_throughs").
-		ColumnExpr("COUNT(*) AS all_time").
-		ColumnExpr("COALESCE(SUM(CASE WHEN end_day >= ? AND end_day < ? THEN 1 ELSE 0 END), 0) AS this_year",
-			yearStart.Format("2006-01-02"), yearStart.AddDate(1, 0, 0).Format("2006-01-02")).
-		Where("outcome = ?", models.ReadThroughOutcomeFinished).
-		Scan(ctx, &finished)
+		ColumnExpr("outcome, COUNT(*) AS count").
+		Where("outcome IN (?)", bun.List(endedOutcomes)).
+		Apply(ended).
+		Group("outcome").
+		Scan(ctx, &outcomes)
 	if err != nil {
-		return totals, errors.Wrap(err, "count finished read-throughs")
+		return resp, errors.Wrap(err, "count ended read-throughs")
 	}
-	totals.AllTime.ReadThroughsFinished = finished.AllTime
-	totals.ThisYear.ReadThroughsFinished = finished.ThisYear
+	for _, row := range outcomes {
+		if row.Outcome == models.ReadThroughOutcomeFinished {
+			resp.ReadThroughsFinished = row.Count
+		} else {
+			resp.DidNotFinish = row.Count
+		}
+	}
 
+	// Readers: anyone with a Session started in the range or a Read-through
+	// that ended in it.
+	readerSessions := h.db.NewSelect().Table("reading_sessions").Column("user_id").Apply(sessions)
+	readerEnds := h.db.NewSelect().Table("read_throughs").Column("user_id").
+		Where("outcome IN (?)", bun.List(endedOutcomes)).
+		Apply(ended)
 	err = h.db.NewSelect().
-		Table("reading_sessions").
-		ColumnExpr("COUNT(DISTINCT user_id)").
-		Where("ended_at >= ?", now.Add(-activeWindow)).
-		Scan(ctx, &totals.ActiveUsers)
+		TableExpr("(?) AS readers", readerSessions.Union(readerEnds)).
+		ColumnExpr("COUNT(*)").
+		Scan(ctx, &resp.Readers)
 	if err != nil {
-		return totals, errors.Wrap(err, "count active users")
+		return resp, errors.Wrap(err, "count readers")
 	}
-	return totals, nil
+
+	resp.Years, err = h.readingYears(ctx)
+	return resp, err
+}
+
+// readingYears runs from the current year back to the first year with a
+// Reading Session or an ended Read-through, newest first.
+func (h *handler) readingYears(ctx context.Context) ([]int, error) {
+	current := h.now().In(h.location).Year()
+	first := current
+
+	var firstSession []time.Time
+	err := h.db.NewSelect().Table("reading_sessions").ColumnExpr("MIN(started_at)").
+		Having("COUNT(*) > 0").Scan(ctx, &firstSession)
+	if err != nil {
+		return nil, errors.Wrap(err, "first reading session")
+	}
+	if len(firstSession) > 0 {
+		first = min(first, firstSession[0].In(h.location).Year())
+	}
+	var firstEnd []string
+	err = h.db.NewSelect().Table("read_throughs").ColumnExpr("MIN(end_day)").
+		Where("end_day IS NOT NULL").Having("COUNT(*) > 0").Scan(ctx, &firstEnd)
+	if err != nil {
+		return nil, errors.Wrap(err, "first read-through end")
+	}
+	if len(firstEnd) > 0 {
+		if t, err := time.Parse("2006-01-02", firstEnd[0]); err == nil {
+			first = min(first, t.Year())
+		}
+	}
+
+	years := make([]int, 0, current-first+1)
+	for y := current; y >= first; y-- {
+		years = append(years, y)
+	}
+	return years, nil
 }

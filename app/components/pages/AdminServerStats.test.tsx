@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setAuth } from "@/testing/auth";
 import type {
   ContentCounts,
+  ReadingQuery,
+  ReadingResponse,
   StatsResponse,
 } from "@/types/generated/serverstats";
 
@@ -125,20 +127,8 @@ const stats: StatsResponse = {
     { month: "2026-10", books: 0 },
     { month: "2026-11", books: 319 },
   ],
-  reading: {
-    year: 2026,
-    this_year: {
-      reading_seconds: 36 * 3600,
-      listening_seconds: 12 * 3600 + 30 * 60,
-      read_throughs_finished: 41,
-    },
-    all_time: {
-      reading_seconds: 120 * 3600,
-      listening_seconds: 50 * 3600,
-      read_throughs_finished: 130,
-    },
-    active_users: 3,
-  },
+  active_readers: 3,
+  current_year: 2026,
 };
 
 let query: {
@@ -150,7 +140,7 @@ let query: {
   refetch: () => void;
 };
 
-const loaded = (data?: StatsResponse, error: Error | null = null) => ({
+const loaded = <T = StatsResponse,>(data?: T, error: Error | null = null) => ({
   data,
   isLoading: false,
   error,
@@ -159,13 +149,34 @@ const loaded = (data?: StatsResponse, error: Error | null = null) => ({
   refetch: vi.fn(),
 });
 
+const reading = (year: number | null): ReadingResponse => ({
+  year,
+  years: [2026, 2025],
+  reading_seconds: year === null ? 120 * 3600 : 36 * 3600,
+  listening_seconds: year === null ? 50 * 3600 : 12 * 3600 + 30 * 60,
+  read_throughs_finished: year === null ? 130 : 41,
+  did_not_finish: year === null ? 9 : 2,
+  readers: year === null ? 5 : 4,
+});
+
+// The range each render asked for, as the page passes it to the hook.
+let readingCalls: { query: ReadingQuery; enabled?: boolean }[] = [];
+const lastReadingCall = () => readingCalls[readingCalls.length - 1];
+
 vi.mock("@/hooks/queries/serverStats", () => ({
   useServerStats: () => query,
+  useServerStatsReading: (
+    readingQuery: ReadingQuery,
+    options: { enabled?: boolean } = {},
+  ) => {
+    readingCalls.push({ query: readingQuery, enabled: options.enabled });
+    return loaded(reading(readingQuery.year ?? null));
+  },
 }));
 
-const renderPage = () =>
+const renderPage = (url = "/admin/server-stats") =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[url]}>
       <AdminServerStats />
     </MemoryRouter>,
   );
@@ -176,6 +187,7 @@ describe("AdminServerStats", () => {
   beforeEach(() => {
     setAuth({ permissions: ["config:read"] });
     query = loaded(stats);
+    readingCalls = [];
   });
 
   it("shows the server's totals", () => {
@@ -190,6 +202,10 @@ describe("AdminServerStats", () => {
     expect(within(overview).getByText("203 GB")).toBeInTheDocument();
     expect(within(overview).getByText("4")).toBeInTheDocument();
     expect(within(overview).getByText("6")).toBeInTheDocument();
+    // Readers in the last 30 days sits with the users it's a share of.
+    expect(
+      within(overview).getByRole("group", { name: "Active readers" }),
+    ).toHaveTextContent("3Last 30 days");
   });
 
   it("shows each library's contents and a total row", () => {
@@ -346,6 +362,11 @@ describe("AdminServerStats", () => {
     expect(
       within(paths).getByRole("link", { name: "Manage caches" }),
     ).toHaveAttribute("href", "/admin/cache");
+    // The link has a row of its own, after the caches, so it never wraps
+    // into the location.
+    expect(
+      within(paths).getByRole("row", { name: /^Cache/ }),
+    ).not.toHaveTextContent("Manage caches");
     expect(
       screen.queryByRole("region", { name: "Server Data" }),
     ).not.toBeInTheDocument();
@@ -366,20 +387,48 @@ describe("AdminServerStats", () => {
     expect(tooltip).toHaveTextContent("20% of the volume");
   });
 
-  it("shows reading for this year and all time with no names", () => {
+  it("shows the server's current year of reading by default", () => {
     renderPage();
 
-    const reading = section("Reading");
-    const thisYear = within(reading).getByRole("group", { name: "2026" });
-    expect(within(thisYear).getByText("36h 0m")).toBeInTheDocument();
-    expect(within(thisYear).getByText("12h 30m")).toBeInTheDocument();
-    expect(within(thisYear).getByText("41")).toBeInTheDocument();
-    const allTime = within(reading).getByRole("group", { name: "All time" });
-    expect(within(allTime).getByText("130")).toBeInTheDocument();
-    expect(within(reading).getByText("3")).toBeInTheDocument();
+    const readingSection = section("Reading");
+    expect(lastReadingCall().query).toEqual({ year: 2026 });
     expect(
-      within(reading).getByText("Totals across every user."),
+      within(readingSection).getByRole("combobox", { name: "Range" }),
+    ).toHaveTextContent("2026");
+    const tile = (name: string) =>
+      within(readingSection).getByRole("group", { name });
+    expect(tile("Reading time")).toHaveTextContent("36h 0m");
+    expect(tile("Listening time")).toHaveTextContent("12h 30m");
+    expect(tile("Read-throughs finished")).toHaveTextContent("41");
+    expect(tile("Did Not Finish")).toHaveTextContent("2");
+    expect(tile("Readers")).toHaveTextContent("4");
+    expect(
+      within(readingSection).getByText("Totals across every user for 2026."),
     ).toBeInTheDocument();
+  });
+
+  it("shows all time or a past year from the URL", () => {
+    const { unmount } = renderPage("/admin/server-stats?year=all");
+    expect(lastReadingCall().query).toEqual({});
+    const readingSection = section("Reading");
+    expect(
+      within(readingSection).getByRole("combobox", { name: "Range" }),
+    ).toHaveTextContent("All time");
+    expect(
+      within(readingSection).getByRole("group", {
+        name: "Read-throughs finished",
+      }),
+    ).toHaveTextContent("130");
+    unmount();
+
+    renderPage("/admin/server-stats?year=2025");
+    expect(lastReadingCall().query).toEqual({ year: 2025 });
+  });
+
+  it("waits for the server's year before asking for reading", () => {
+    query = { ...loaded(undefined), isLoading: true };
+    renderPage();
+    expect(readingCalls.every((c) => c.enabled === false)).toBe(true);
   });
 
   it("charts the running total, padded out to a year", () => {

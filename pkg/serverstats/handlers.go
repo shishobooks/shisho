@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/cache"
 	"github.com/shishobooks/shisho/pkg/config"
@@ -51,6 +52,18 @@ func (h *handler) retrieve(c echo.Context) error {
 		return err
 	}
 	resp, err := h.compute(c.Request().Context(), user)
+	if err != nil {
+		return err
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+func (h *handler) retrieveReading(c echo.Context) error {
+	var params ReadingQuery
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.reading(c.Request().Context(), params.Year)
 	if err != nil {
 		return err
 	}

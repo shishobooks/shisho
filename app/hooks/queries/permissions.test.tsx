@@ -175,6 +175,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useSeriesBooks: requires("series:read", [1, {}, on]),
   // serverStats
   useServerStats: requires("config:read", []),
+  useServerStatsReading: requires("config:read", [{ year: 2026 }, on]),
   // settings
   useUserSettings: authenticated([on]),
   // sharing

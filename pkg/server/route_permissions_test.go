@@ -301,6 +301,9 @@ func TestServerStats_ConfigRead(t *testing.T) {
 	f.expect(f.admin, http.MethodGet, "/api/server-stats", "", http.StatusOK)
 	f.expect(reader, http.MethodGet, "/api/server-stats", "", http.StatusForbidden)
 	f.expect(nil, http.MethodGet, "/api/server-stats", "", http.StatusUnauthorized)
+	f.expect(auditor, http.MethodGet, "/api/server-stats/reading?year=2026", "", http.StatusOK)
+	f.expect(reader, http.MethodGet, "/api/server-stats/reading", "", http.StatusForbidden)
+	f.expect(nil, http.MethodGet, "/api/server-stats/reading", "", http.StatusUnauthorized)
 }
 
 // The review criteria page needs Config Read, the review panel Books Read.

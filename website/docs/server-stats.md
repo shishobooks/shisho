@@ -4,17 +4,17 @@
 
 ## Overview
 
-The totals across every library: books, files, library size, users, and [Devices](./users-and-permissions.md#devices). The file count includes [supplement files](./supplement-files.md). The user count includes deactivated users.
+The totals across every library: books, files, library size, users, active readers, and [Devices](./users-and-permissions.md#devices). The file count includes [supplement files](./supplement-files.md). The user count includes deactivated users. **Active readers** counts users with any reading session in the last 30 days.
 
 ## Reading
 
-Reading totals for the current year and for all time, across every user:
+Reading totals across every user for one year, the current year unless you pick another with the range menu, or for all time. The menu offers each year back to the first one with any reading.
 
-- **Reading** and **Listening** are the time recorded in reading sessions. Listening is time spent in an audiobook; everything else counts as reading. A session counts in the year it started. Time from KOReader and Kobo is estimated, as [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains.
-- **Read-throughs finished** counts every finished read, so a reread counts again. A read is in the current year when its end date is. A finished read with no end date counts only toward all time.
-- **Users who read in the last 30 days** counts users with any reading session in that time.
+- **Reading time** and **Listening time** are the time recorded in reading sessions. Listening is time spent in an audiobook; everything else counts as reading. A session counts in the year it started. Time from KOReader and Kobo is estimated, as [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains.
+- **Read-throughs finished** and **Did Not Finish** count every read that ended in the year, so a reread counts again. A read with no end date counts only toward all time.
+- **Readers** counts users with a reading session in the year, or a read that ended in it.
 
-"The current year" is the year in the server's time zone, not each reader's: the `TZ` environment variable, or the host's time zone when it isn't set. The Docker image uses UTC unless you set `TZ`.
+Years are counted in the server's time zone, not each reader's: the `TZ` environment variable, or the host's time zone when it isn't set. The Docker image uses UTC unless you set `TZ`.
 
 Server Stats never shows reading by user or by book. Admins can't see who read what here; each user's reading stays on their own pages.
 
