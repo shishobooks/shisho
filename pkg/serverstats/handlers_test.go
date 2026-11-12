@@ -178,7 +178,7 @@ func (f *statsFixture) mustGet() StatsResponse {
 	return resp
 }
 
-func (f *statsFixture) getReading(query string) (*httptest.ResponseRecorder, ReadingResponse) {
+func (f *statsFixture) getReading(query string) (*httptest.ResponseRecorder, ServerReadingResponse) {
 	f.t.Helper()
 	e := echo.New()
 	b, err := binder.New()
@@ -188,14 +188,14 @@ func (f *statsFixture) getReading(query string) (*httptest.ResponseRecorder, Rea
 	e.GET("/server-stats/reading", f.h.retrieveReading)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/server-stats/reading"+query, nil))
-	var resp ReadingResponse
+	var resp ServerReadingResponse
 	if rec.Code == http.StatusOK {
 		require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	}
 	return rec, resp
 }
 
-func (f *statsFixture) mustGetReading(query string) ReadingResponse {
+func (f *statsFixture) mustGetReading(query string) ServerReadingResponse {
 	f.t.Helper()
 	rec, resp := f.getReading(query)
 	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
@@ -363,7 +363,7 @@ func TestServerStatsReading_TotalsForAYearAndAllTime(t *testing.T) {
 	f.readThrough(recent, &book.ID, models.ReadThroughOutcomeUnderway, nil)
 
 	year := 2026
-	assert.Equal(t, ReadingResponse{
+	assert.Equal(t, ServerReadingResponse{
 		Year:                 &year,
 		Years:                []int{2026, 2025, 2024},
 		ReadingSeconds:       3600,
@@ -375,7 +375,7 @@ func TestServerStatsReading_TotalsForAYearAndAllTime(t *testing.T) {
 	}, f.mustGetReading("?year=2026"))
 
 	last := 2025
-	assert.Equal(t, ReadingResponse{
+	assert.Equal(t, ServerReadingResponse{
 		Year:                 &last,
 		Years:                []int{2026, 2025, 2024},
 		ReadingSeconds:       600,
@@ -384,7 +384,7 @@ func TestServerStatsReading_TotalsForAYearAndAllTime(t *testing.T) {
 		Readers:              1,
 	}, f.mustGetReading("?year=2025"))
 
-	assert.Equal(t, ReadingResponse{
+	assert.Equal(t, ServerReadingResponse{
 		Years:                []int{2026, 2025, 2024},
 		ReadingSeconds:       4200,
 		ListeningSeconds:     3000,
@@ -399,7 +399,24 @@ func TestServerStatsReading_EmptyServerOffersTheCurrentYear(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	year := 2026
-	assert.Equal(t, ReadingResponse{Year: &year, Years: []int{2026}}, f.mustGetReading("?year=2026"))
+	assert.Equal(t, ServerReadingResponse{Year: &year, Years: []int{2026}}, f.mustGetReading("?year=2026"))
+}
+
+// A date no one read on (a mistyped end day, a zero timestamp) doesn't
+// fill the range menu with centuries; it still counts toward all time.
+func TestServerStatsReading_YearsStartNoEarlierThan2000(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	reader := f.createUser("reader")
+	lib := f.library("Fiction")
+	book := f.book(lib, "Dune", fixtureNow)
+	f.readThrough(reader, &book.ID, models.ReadThroughOutcomeFinished, strp("0202-05-01"))
+	f.session(reader, models.ReadingKindReading, time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC), 60)
+
+	resp := f.mustGetReading("")
+	assert.Equal(t, 2026, resp.Years[0])
+	assert.Equal(t, 2000, resp.Years[len(resp.Years)-1])
+	assert.Equal(t, 1, resp.ReadThroughsFinished)
 }
 
 func TestServerStatsReading_RejectsAYearThatIsNotOne(t *testing.T) {
@@ -499,12 +516,12 @@ func TestServerStats_VolumesReportEachMountOnce(t *testing.T) {
 				{Kind: VolumePathKindLibrary, Name: "Audio", Path: "/media/audio"},
 				{Kind: VolumePathKindLibrary, Name: "Books", Path: "/media/books"},
 				{Kind: VolumePathKindLibrary, Name: "Books", Path: "/media/more-books"},
-				{Kind: VolumePathKindData, Name: "Data", Path: "/data"},
+				{Kind: VolumePathKindData, Path: "/data"},
 			},
 			TotalBytes: 1000, UsedBytes: 750, FreeBytes: 250,
 		},
 		{
-			Paths:      []VolumePath{{Kind: VolumePathKindCache, Name: "Cache", Path: "/fast/cache"}},
+			Paths:      []VolumePath{{Kind: VolumePathKindCache, Path: "/fast/cache"}},
 			TotalBytes: 500, UsedBytes: 100, FreeBytes: 400,
 		},
 	}, resp.Volumes)
@@ -561,7 +578,7 @@ func TestServerStats_VolumesSayWhatShishoKeepsOnThem(t *testing.T) {
 		Paths: []VolumePath{
 			{Kind: VolumePathKindLibrary, Name: "Books", Path: "/media/books", SizeBytes: 1200},
 			{Kind: VolumePathKindLibrary, Name: "Books", Path: "/media/más libros", SizeBytes: 30},
-			{Kind: VolumePathKindData, Name: "Data", Path: dir, SizeBytes: 4000},
+			{Kind: VolumePathKindData, Path: dir, SizeBytes: 4000},
 		},
 		TotalBytes: 100000, UsedBytes: 75000, FreeBytes: 25000,
 		// The hidden library's files count toward the volume, unnamed.
@@ -569,7 +586,7 @@ func TestServerStats_VolumesSayWhatShishoKeepsOnThem(t *testing.T) {
 		DatabaseBytes: 4000,
 	}, resp.Volumes[0])
 	assert.Equal(t, Volume{
-		Paths:      []VolumePath{{Kind: VolumePathKindCache, Name: "Cache", Path: "/fast/cache", SizeBytes: 350}},
+		Paths:      []VolumePath{{Kind: VolumePathKindCache, Path: "/fast/cache", SizeBytes: 350}},
 		TotalBytes: 5000, UsedBytes: 1000, FreeBytes: 4000,
 		CacheBytes: 350,
 	}, resp.Volumes[1])
@@ -598,6 +615,28 @@ func TestServerStats_RelativePathsAreReportedInFull(t *testing.T) {
 	}
 	assert.Equal(t, []string{filepath.Join(cwd, "tmp"), filepath.Join(cwd, "tmp", "cache")}, paths)
 	assert.Equal(t, paths, statted)
+}
+
+// A library folder inside another of the same library's folders lists its
+// own size, but its files count toward the volume once.
+func TestServerStats_NestedLibraryFoldersCountOnce(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	added := time.Date(2026, time.March, 3, 0, 0, 0, 0, time.UTC)
+	lib := f.library("Books", "/media/books", "/media/books/comics")
+	book := f.book(lib, "Dune", added)
+	f.fileAt(book, "/media/books/Dune.epub", 100)
+	f.fileAt(book, "/media/books/comics/Saga.cbz", 40)
+
+	resp := f.mustGet()
+	require.Len(t, resp.Volumes, 1)
+	assert.Equal(t, int64(140), resp.Volumes[0].LibraryBytes)
+	sizes := map[string]int64{}
+	for _, p := range resp.Volumes[0].Paths {
+		sizes[p.Path] = p.SizeBytes
+	}
+	assert.Equal(t, int64(140), sizes["/media/books"])
+	assert.Equal(t, int64(40), sizes["/media/books/comics"])
 }
 
 func TestServerStats_VolumeThatCannotBeReadIsLeftOut(t *testing.T) {

@@ -1,4 +1,5 @@
-import { Fragment, useId, type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
+import { Fragment, useEffect, useId, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import LibraryGrowthChart from "@/components/library/LibraryGrowthChart";
@@ -165,7 +166,8 @@ const ALL_TIME = "all";
 const parseRange = (value: string | null): number | null | undefined => {
   if (value === ALL_TIME) return null;
   if (!value || !/^\d{4}$/.test(value)) return undefined;
-  return Number(value);
+  const year = Number(value);
+  return year >= 1000 ? year : undefined;
 };
 
 interface ReadingProps {
@@ -196,8 +198,16 @@ const Reading = ({
       return <QueryError fallback="Failed to load reading" query={query} />;
     }
     if (!reading) return <LoadingSpinner />;
+    // The previous range's figures stay while another loads, dimmed and
+    // marked busy so they aren't read as the new range's.
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div
+        aria-busy={query.isPlaceholderData}
+        className={cn(
+          "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 transition-opacity",
+          query.isPlaceholderData && "opacity-50",
+        )}
+      >
         <Stat
           label="Reading time"
           value={formatDuration(reading.reading_seconds)}
@@ -221,22 +231,31 @@ const Reading = ({
   return (
     <Section
       action={
-        <Select
-          onValueChange={onRangeChange}
-          value={range === null ? ALL_TIME : String(range)}
-        >
-          <SelectTrigger aria-label="Range" className="w-32">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {years.map((y) => (
-              <SelectItem key={y} value={String(y)}>
-                {y}
-              </SelectItem>
-            ))}
-            <SelectItem value={ALL_TIME}>All time</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          {query.isPlaceholderData && (
+            <Loader2
+              aria-label="Loading reading"
+              className="h-4 w-4 animate-spin text-muted-foreground"
+              role="status"
+            />
+          )}
+          <Select
+            onValueChange={onRangeChange}
+            value={range === null ? ALL_TIME : String(range)}
+          >
+            <SelectTrigger aria-label="Range" className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {years.map((y) => (
+                <SelectItem key={y} value={String(y)}>
+                  {y}
+                </SelectItem>
+              ))}
+              <SelectItem value={ALL_TIME}>All time</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       }
       description={`Totals across every user for ${range === null ? "all time" : range}.`}
       title="Reading"
@@ -281,13 +300,26 @@ const LibraryRow = ({
   );
 };
 
+// The server's totals get their own row when there's more than one row to
+// sum, or when they include libraries the viewer can't see.
+const showsAllLibraries = (stats: StatsResponse) =>
+  stats.libraries.length > 1 ||
+  stats.libraries.reduce((sum, lib) => sum + lib.books, 0) !==
+    stats.totals.books ||
+  stats.libraries.reduce((sum, lib) => sum + lib.size_bytes, 0) !==
+    stats.totals.size_bytes;
+
 const Libraries = ({ stats }: { stats: StatsResponse }) => (
   <Section
     description="Size is the stored size of every file, supplements included."
     title="Libraries"
   >
     {stats.libraries.length === 0 ? (
-      <p className="text-sm text-muted-foreground">No libraries yet.</p>
+      <p className="text-sm text-muted-foreground">
+        {stats.totals.books > 0 || stats.totals.size_bytes > 0
+          ? "No libraries you can access."
+          : "No libraries yet."}
+      </p>
     ) : (
       // The table scrolls on its own on a phone, not the page.
       <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
@@ -331,7 +363,7 @@ const Libraries = ({ stats }: { stats: StatsResponse }) => (
                 name={library.name}
               />
             ))}
-            {stats.libraries.length > 1 && (
+            {showsAllLibraries(stats) && (
               <LibraryRow counts={stats.totals} isTotal name="All libraries" />
             )}
           </tbody>
@@ -394,11 +426,56 @@ const diskSegments = (volume: Volume): DiskSegment[] => {
 };
 
 // "20%", or "<1%" for a sliver that would round to nothing.
-const shareOf = (bytes: number, volume: Volume) => {
-  if (volume.total_bytes <= 0) return "0%";
-  const percent = (bytes / volume.total_bytes) * 100;
-  return percent > 0 && percent < 1 ? "<1%" : `${Math.round(percent)}%`;
-};
+const formatShare = (percent: number) =>
+  percent > 0 && percent < 1 ? "<1%" : `${Math.round(percent)}%`;
+
+const pathCell = "py-1.5 align-top";
+
+// Each cache's size, then a link to manage them. Indented under the cache
+// path's row, or on their own when that path's volume couldn't be read.
+const CacheRows = ({
+  caches,
+  indent = false,
+}: {
+  caches: CacheSize[];
+  indent?: boolean;
+}) => (
+  <>
+    {caches.map((c) => (
+      <tr
+        className={cn(
+          "text-muted-foreground",
+          !indent && "border-t border-border",
+        )}
+        key={c.id}
+      >
+        <th
+          className={cn(
+            pathCell,
+            "pr-3 text-left font-normal",
+            indent && "pl-3",
+          )}
+          scope="row"
+        >
+          {c.name}
+        </th>
+        <td className={cn(pathCell, "pr-3")}>
+          {formatCount(c.file_count, "file")}
+        </td>
+        <td className={cn(pathCell, "text-right tabular-nums")}>
+          {formatFileSize(c.size_bytes)}
+        </td>
+      </tr>
+    ))}
+    <tr>
+      <td className={cn(pathCell, indent && "pl-3")} colSpan={3}>
+        <Link className="text-primary hover:underline" to="/admin/cache">
+          Manage caches
+        </Link>
+      </td>
+    </tr>
+  </>
+);
 
 const VolumePaths = ({
   name,
@@ -409,7 +486,7 @@ const VolumePaths = ({
   paths: VolumePath[];
   caches: CacheSize[];
 }) => {
-  const cell = "py-1.5 align-top";
+  const cell = pathCell;
   return (
     <table
       aria-label={`${name} paths`}
@@ -455,35 +532,7 @@ const VolumePaths = ({
                 {formatFileSize(p.size_bytes)}
               </td>
             </tr>
-            {p.kind === "cache" &&
-              caches.map((c) => (
-                <tr className="text-muted-foreground" key={c.id}>
-                  <th
-                    className={cn(cell, "pl-3 pr-3 text-left font-normal")}
-                    scope="row"
-                  >
-                    {c.name}
-                  </th>
-                  <td className={cn(cell, "pr-3")}>
-                    {formatCount(c.file_count, "file")}
-                  </td>
-                  <td className={cn(cell, "text-right tabular-nums")}>
-                    {formatFileSize(c.size_bytes)}
-                  </td>
-                </tr>
-              ))}
-            {p.kind === "cache" && (
-              <tr>
-                <td className={cn(cell, "pl-3")} colSpan={3}>
-                  <Link
-                    className="text-primary hover:underline"
-                    to="/admin/cache"
-                  >
-                    Manage caches
-                  </Link>
-                </td>
-              </tr>
-            )}
+            {p.kind === "cache" && <CacheRows caches={caches} indent />}
           </Fragment>
         ))}
       </tbody>
@@ -529,7 +578,10 @@ const VolumeItem = ({
           {
             label: "Free",
             bytes: volume.free_bytes,
-            percent: 0,
+            percent:
+              volume.total_bytes > 0
+                ? (volume.free_bytes / volume.total_bytes) * 100
+                : 0,
             swatch: "flex-1 bg-muted",
           },
         ].map((seg) => (
@@ -538,7 +590,7 @@ const VolumeItem = ({
               <div
                 className={cn("min-w-[3px] shrink-0", seg.swatch)}
                 data-segment={seg.label}
-                style={seg.percent > 0 ? { width: `${seg.percent}%` } : {}}
+                style={seg.label === "Free" ? {} : { width: `${seg.percent}%` }}
               />
             </TooltipTrigger>
             <TooltipContent
@@ -548,8 +600,10 @@ const VolumeItem = ({
             >
               <div className="font-semibold">{seg.label}</div>
               <div className="tabular-nums text-muted-foreground">
-                {formatFileSize(seg.bytes)} · {shareOf(seg.bytes, volume)} of
-                the volume
+                {/* The share the bar draws, which a compressed volume's
+                    stored sizes can exceed. */}
+                {formatFileSize(seg.bytes)} · {formatShare(seg.percent)} of the
+                volume
               </div>
             </TooltipContent>
           </Tooltip>
@@ -616,6 +670,41 @@ const DiskSpace = ({ stats }: { stats: StatsResponse }) => (
         ))}
       </ul>
     )}
+    {/* The caches are listed under the cache path's volume; when that
+        volume couldn't be read, they're listed here instead. */}
+    {stats.caches.length > 0 &&
+      !stats.volumes.some((v) => v.paths.some((p) => p.kind === "cache")) && (
+        <table aria-label="Caches" className="mt-4 w-full table-fixed text-xs">
+          <thead>
+            <tr className="text-muted-foreground">
+              <th
+                className={cn(
+                  pathCell,
+                  "w-1/3 pr-3 text-left font-medium sm:w-1/4",
+                )}
+                scope="col"
+              >
+                Cache
+              </th>
+              <th
+                className={cn(pathCell, "pr-3 text-left font-medium")}
+                scope="col"
+              >
+                Files
+              </th>
+              <th
+                className={cn(pathCell, "w-20 text-right font-medium")}
+                scope="col"
+              >
+                Size
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <CacheRows caches={stats.caches} />
+          </tbody>
+        </table>
+      )}
   </Section>
 );
 
@@ -648,6 +737,20 @@ const AdminServerStats = () => {
     range == null ? {} : { year: range },
     { enabled: range !== undefined },
   );
+  // A "year" in the URL that isn't one goes at once, so the URL always
+  // says what the page shows.
+  const strayYear = searchParams.get("year") !== null && parsed === undefined;
+  useEffect(() => {
+    if (!strayYear) return;
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        params.delete("year");
+        return params;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [strayYear, setSearchParams]);
   const setRange = (value: string) => {
     const params = new URLSearchParams(searchParams);
     if (value === String(stats?.current_year)) params.delete("year");

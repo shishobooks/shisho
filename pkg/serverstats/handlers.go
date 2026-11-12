@@ -59,7 +59,7 @@ func (h *handler) retrieve(c echo.Context) error {
 }
 
 func (h *handler) retrieveReading(c echo.Context) error {
-	var params ReadingQuery
+	var params ServerReadingQuery
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}

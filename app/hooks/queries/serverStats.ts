@@ -6,8 +6,8 @@ import {
 
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
-  ReadingQuery,
-  ReadingResponse,
+  ServerReadingQuery,
+  ServerReadingResponse,
   StatsResponse,
 } from "@/types/generated/serverstats";
 
@@ -31,13 +31,13 @@ export const useServerStats = () =>
 // Reading across the server for one year, or all time with no year. The
 // previous range stays on screen while another loads.
 export const useServerStatsReading = (
-  query: ReadingQuery,
+  query: ServerReadingQuery,
   options: Omit<
-    UseQueryOptions<ReadingResponse, ShishoAPIError>,
+    UseQueryOptions<ServerReadingResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) =>
-  useQuery<ReadingResponse, ShishoAPIError>({
+  useQuery<ServerReadingResponse, ShishoAPIError>({
     placeholderData: keepPreviousData,
     refetchOnMount: "always",
     ...options,

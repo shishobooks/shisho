@@ -80,7 +80,7 @@ type Volume struct {
 }
 
 // VolumePath is one of Shisho's paths on a Volume. Name is the Library's
-// name for a library path.
+// name for a library path, and empty for the data and cache directories.
 type VolumePath struct {
 	Kind string `json:"kind" tstype:"VolumePathKind"`
 	Name string `json:"name"`
@@ -106,16 +106,16 @@ type GrowthMonth struct {
 	Books int    `json:"books"`
 }
 
-// ReadingQuery picks the range GET /server-stats/reading covers: a year in
+// ServerReadingQuery picks the range GET /server-stats/reading covers: a year in
 // the server's time zone, or all time when Year is omitted.
-type ReadingQuery struct {
+type ServerReadingQuery struct {
 	Year *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
 }
 
-// ReadingResponse is GET /server-stats/reading: reading across every user
+// ServerReadingResponse is GET /server-stats/reading: reading across every user
 // over one range, never broken down by user or by Book. Reading and
 // listening come from the kind each Reading Session recorded.
-type ReadingResponse struct {
+type ServerReadingResponse struct {
 	// Year is the year covered, or null for all time.
 	Year *int `json:"year" tstype:"number | null,required"`
 	// Years runs from the current year back to the first year with any

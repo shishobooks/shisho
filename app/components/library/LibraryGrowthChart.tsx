@@ -64,7 +64,7 @@ const LibraryGrowthChart = ({ growth }: { growth: GrowthMonth[] }) => {
         </div>
         <div className="relative flex-1 min-w-0">
           <div
-            className="relative h-48 touch-none"
+            className="relative h-48 touch-pan-y"
             onPointerLeave={() => setActive(null)}
             onPointerMove={onPointerMove}
           >

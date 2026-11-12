@@ -21,8 +21,8 @@ const activeWindow = 30 * 24 * time.Hour
 // endedOutcomes are the Read-through outcomes that end one.
 var endedOutcomes = []string{models.ReadThroughOutcomeFinished, models.ReadThroughOutcomeAbandoned}
 
-// earliestAdded is before any Book could have been added to Shisho; an
-// earlier date isn't a real one.
+// earliestAdded is before any Book could have been added to Shisho or read
+// in it; an earlier date isn't a real one.
 var earliestAdded = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 
 // compute builds the whole Server Stats payload. Everything is counted on
@@ -202,6 +202,9 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 		VolumePath
 		shown     bool
 		mustExist bool
+		// nested is a library folder inside another folder of the same
+		// library, whose files that folder's size already counts.
+		nested bool
 	}
 	canReadLibraries := user.HasPermission(models.ResourceLibraries, models.OperationRead)
 	paths := make([]statPath, 0, len(libraryPaths)+2)
@@ -214,13 +217,21 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 			VolumePath: VolumePath{Kind: VolumePathKindLibrary, Name: names[lp.LibraryID], Path: lp.Filepath, SizeBytes: size},
 			shown:      canReadLibraries && user.HasLibraryAccess(lp.LibraryID),
 			mustExist:  true,
+			nested:     insideAnother(lp, libraryPaths),
 		})
 	}
 	if h.databasePath != "" && h.databasePath != ":memory:" {
-		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindData, Name: "Data", Path: absolute(filepath.Dir(h.databasePath)), SizeBytes: databaseBytes}, true, true})
+		paths = append(paths, statPath{
+			VolumePath: VolumePath{Kind: VolumePathKindData, Path: absolute(filepath.Dir(h.databasePath)), SizeBytes: databaseBytes},
+			shown:      true,
+			mustExist:  true,
+		})
 	}
 	if h.cacheDir != "" {
-		paths = append(paths, statPath{VolumePath{Kind: VolumePathKindCache, Name: "Cache", Path: absolute(h.cacheDir), SizeBytes: cacheBytes}, true, false})
+		paths = append(paths, statPath{
+			VolumePath: VolumePath{Kind: VolumePathKindCache, Path: absolute(h.cacheDir), SizeBytes: cacheBytes},
+			shown:      true,
+		})
 	}
 
 	volumes := []Volume{}
@@ -239,7 +250,9 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 		}
 		switch p.Kind {
 		case VolumePathKindLibrary:
-			volumes[i].LibraryBytes += p.SizeBytes
+			if !p.nested {
+				volumes[i].LibraryBytes += p.SizeBytes
+			}
 		case VolumePathKindData:
 			volumes[i].DatabaseBytes += p.SizeBytes
 		case VolumePathKindCache:
@@ -250,6 +263,18 @@ func (h *handler) volumes(ctx context.Context, user *models.User, libraries []Li
 		}
 	}
 	return volumes, nil
+}
+
+// insideAnother reports whether lp sits inside another folder of the same
+// library.
+func insideAnother(lp *models.LibraryPath, all []*models.LibraryPath) bool {
+	for _, other := range all {
+		if other != lp && other.LibraryID == lp.LibraryID &&
+			strings.HasPrefix(lp.Filepath, strings.TrimRight(other.Filepath, "/")+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // absolute resolves a configured path against the server's working
@@ -359,8 +384,8 @@ func (h *handler) growth(ctx context.Context, now time.Time) ([]GrowthMonth, err
 // reading totals reading across the server for one year in the server's
 // time zone, or all time when year is nil, never by user or by Book.
 // Read-through end days are calendar days, so they're compared as stored.
-func (h *handler) reading(ctx context.Context, year *int) (ReadingResponse, error) {
-	resp := ReadingResponse{Year: year}
+func (h *handler) reading(ctx context.Context, year *int) (ServerReadingResponse, error) {
+	resp := ServerReadingResponse{Year: year}
 
 	// The range as session instants and as Read-through end days.
 	sessions := func(q *bun.SelectQuery) *bun.SelectQuery { return q }
@@ -465,6 +490,9 @@ func (h *handler) readingYears(ctx context.Context) ([]int, error) {
 		}
 	}
 
+	// An earlier date is a mistake (a mistyped end day, a zero timestamp)
+	// rather than reading; it still counts toward all time.
+	first = max(first, earliestAdded.Year())
 	years := make([]int, 0, current-first+1)
 	for y := current; y >= first; y-- {
 		years = append(years, y)
