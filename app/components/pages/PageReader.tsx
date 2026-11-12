@@ -133,31 +133,29 @@ const ScrolledPage = memo(function ScrolledPage({
 }: ScrolledPageProps) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const placeholder = useRef<{ height: number; above: boolean } | null>(null);
+  const placeholderHeight = useRef<number | null>(null);
 
+  // Whether the page was wholly above the view is decided here, as it grows,
+  // not when its image loaded: the reader can scroll in between. Growing
+  // doesn't move the page's top, so its placeholder's bottom is that top plus
+  // the placeholder's height.
   useLayoutEffect(() => {
     if (!loaded) return;
     const box = boxRef.current;
     const scroller = scrollerRef.current;
-    const before = placeholder.current;
-    placeholder.current = null;
-    if (!before?.above || !box || !scroller) return;
-    scroller.scrollTop += box.offsetHeight - before.height;
+    const before = placeholderHeight.current;
+    placeholderHeight.current = null;
+    if (before == null || !box || !scroller) return;
+    const above =
+      box.getBoundingClientRect().top + before <=
+      scroller.getBoundingClientRect().top + 1;
+    if (above) scroller.scrollTop += box.offsetHeight - before;
   }, [loaded, scrollerRef]);
 
   // The image stays out of the layout until it loads, so the box still has
   // its placeholder height here.
   const handleDone = () => {
-    const box = boxRef.current;
-    const scroller = scrollerRef.current;
-    if (box && scroller) {
-      placeholder.current = {
-        height: box.offsetHeight,
-        above:
-          box.getBoundingClientRect().bottom <=
-          scroller.getBoundingClientRect().top + 1,
-      };
-    }
+    placeholderHeight.current = boxRef.current?.offsetHeight ?? null;
     setLoaded(true);
   };
 
@@ -342,10 +340,19 @@ export default function PageReader({
   }, [currentPage, scrolled]);
 
   // Entering the scrolled flow shows the current page, and takes focus so
-  // the arrow keys, Space, and Page Down scroll the pages.
+  // Space and Page Down scroll the pages, unless something else has it:
+  // taking it from the open settings would close them, whether scrolling was
+  // picked there or the flow settled on it while they were open.
   const showCurrentPage = useEffectEvent(() => {
     pageRefs.current[currentPage]?.scrollIntoView({ block: "start" });
-    mainRef.current?.focus({ preventScroll: true });
+    const main = mainRef.current;
+    const focused = document.activeElement;
+    if (
+      main &&
+      (!focused || focused === document.body || main.contains(focused))
+    ) {
+      main.focus({ preventScroll: true });
+    }
   });
   useLayoutEffect(() => {
     if (scrolled) showCurrentPage();
@@ -832,9 +839,11 @@ export default function PageReader({
               />
             )}
 
-            {/* Loading spinner */}
+            {/* Loading spinner. It takes no touches: the rest of a touch goes
+                to the element it started on, so a swipe begun on the spinner
+                would be lost when the page loads and the spinner goes. */}
             {imageLoading && (
-              <div className="absolute inset-0 flex items-center justify-center z-[5] bg-black/60">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-[5] bg-black/60">
                 <LoadingSpinner />
               </div>
             )}
