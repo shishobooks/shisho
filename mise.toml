@@ -83,7 +83,8 @@ outputs = ["app/types/generated/**/*.ts"]
 [tasks.lint]
 description = "Run Go linting"
 depends = ["lint:emdash", "lint:docrefs", "lint:versions"]
-run = "golangci-lint run"
+# check:quiet sets SHISHO_GO_PACKAGE_DIRS; see the comment there.
+run = "golangci-lint run ${SHISHO_GO_PACKAGE_DIRS:-./...}"
 
 [tasks."lint:emdash"]
 description = "Reject em-dashes on lines added since the merge base with master"
@@ -119,7 +120,8 @@ run = "pnpm lint:types"
 [tasks.test]
 description = "Run Go tests with coverage"
 env = { TZ = "America/Chicago", CI = "true" }
-run = "go test ./... -coverprofile coverage.out"
+# check:quiet sets SHISHO_GO_PACKAGE_DIRS; see the comment there.
+run = "go test ${SHISHO_GO_PACKAGE_DIRS:-./...} -coverprofile coverage.out"
 
 [tasks."test:race"]
 description = "Run Go tests with race detection"
@@ -196,6 +198,16 @@ else
   echo "flock not found — running without host-wide lock (install with 'brew install flock' on macOS)"
 fi
 echo "Running checks..."
+# A ./... pattern walks the whole tree, including directories the steps
+# below create and delete while they run (Playwright's test-results, vitest's
+# coverage, the docs build). Lint or test walking one of them at the wrong
+# moment fails with "no such file or directory". So list the Go package
+# directories once, before any step starts, and have lint and test take that
+# list: given directories rather than a pattern, they walk nothing.
+module=$(go list -m) || exit 1
+packages=$(go list ./...) || exit 1
+SHISHO_GO_PACKAGE_DIRS=$(printf '%s\n' "$packages" | sed "s#^$module#.#")
+export SHISHO_GO_PACKAGE_DIRS
 tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 for step in lint test test:js:fast lint:js test:scripts; do
