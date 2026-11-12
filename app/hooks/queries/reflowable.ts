@@ -22,13 +22,15 @@ export const useReflowableBlob = (
     ...options,
     enabled: useRequires("books:read", options.enabled ?? true),
     queryKey: [QueryKey.ReflowableBlob, fileId],
-    // staleTime matches gcTime: Blobs are a few MB and add up across books.
-    // We want a short cache window (~60s — long enough for tab-switch-back
-    // to feel instant, short enough not to hold multiple books in memory),
-    // and a longer staleTime would be unreachable because the cache gets
-    // GC'd before it could suppress a refetch.
-    staleTime: 60 * 1000,
-    gcTime: 60 * 1000,
+    // Each new Blob makes the reader close the book and open it again, so the
+    // reader gets one per opening. Never stale: returning to the tab doesn't
+    // download the book again. Not kept once the reader closes: reopening it
+    // would show the cached Blob and then the one refetchOnMount: "always"
+    // brings. The book a reader opened stays put while it is open, so a change
+    // to the file, such as a chapter edit in another tab, shows when the
+    // reader next opens.
+    staleTime: Infinity,
+    gcTime: 0,
     queryFn: async ({ signal }) => {
       try {
         // checkStatus rejects with the API's error; the body is a file
