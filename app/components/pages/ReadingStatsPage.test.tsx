@@ -242,8 +242,11 @@ describe("ReadingStatsPage", () => {
     expect(screen.getByText("2h 0m")).toBeInTheDocument();
     expect(screen.getByText("30m")).toBeInTheDocument();
     expect(
-      screen.getByRole("group", { name: "Average Rating" }),
-    ).toHaveTextContent("4.5 ★");
+      within(screen.getByRole("group", { name: "Average Rating" })).getByRole(
+        "img",
+        { name: "Rated 4.5 stars" },
+      ),
+    ).toHaveTextContent("4.5");
     expect(screen.getByText("Bedside Kobo")).toBeInTheDocument();
     expect(screen.getByText("KOReader")).toBeInTheDocument();
     expect(screen.getByText(/time from them is estimated/)).toBeInTheDocument();
@@ -522,8 +525,12 @@ describe("ReadingStatsPage", () => {
     renderPage();
     const list = await screen.findByRole("list", { name: "Books finished" });
     const [dune, gone] = within(list).getAllByRole("listitem");
-    expect(dune).toHaveTextContent("Rated 4.5");
-    expect(gone).not.toHaveTextContent("Rated");
+    expect(
+      within(dune).getAllByRole("img", { name: "Rated 4.5 stars" }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(gone).queryByRole("img", { name: /^Rated/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows a month's figures on hover, with an axis in round steps", async () => {
@@ -563,8 +570,11 @@ describe("ReadingStatsPage", () => {
     });
     const list = await screen.findByRole("list", { name: "Books finished" });
     const [dune, emma, ubik] = within(list).getAllByRole("listitem");
+    const duneLine = within(dune).getByText(
+      /^Finished Mar 9, 2026 · 9 days · 1h 30m ·$/,
+    );
     expect(
-      within(dune).getByText("Finished Mar 9, 2026 · 9 days · 1h 30m · 4.5 ★"),
+      within(duneLine).getByRole("img", { name: "Rated 4.5 stars" }),
     ).toBeInTheDocument();
     expect(
       within(emma).getByText("Finished Mar 9, 2026 · 9 days"),

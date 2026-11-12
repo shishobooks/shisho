@@ -1,3 +1,4 @@
+import { Star } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 
 import { ChartFrame, ChartTooltip } from "@/components/library/ChartFrame";
@@ -95,13 +96,37 @@ export const StatsCard = ({
   </section>
 );
 
+/**
+ * A Rating as its number and a gold star, as the book page and book cards
+ * show one, read out as "Rated 4.5 stars".
+ */
+export const RatingValue = ({
+  stars,
+  starClassName = "h-3.5 w-3.5",
+}: {
+  stars: number;
+  starClassName?: string;
+}) => (
+  <span
+    aria-label={`Rated ${formatCount(stars, "star")}`}
+    className="inline-flex items-center gap-1"
+    role="img"
+  >
+    {formatRating(stars)}
+    <Star
+      aria-hidden
+      className={cn("shrink-0 fill-amber-400 text-amber-400", starClassName)}
+    />
+  </span>
+);
+
 export const StatTile = ({
   label,
   value,
   note,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   note?: string;
 }) => (
   <div
@@ -340,9 +365,8 @@ const ShareBar = ({ children }: { children: ReactNode }) => (
   </span>
 );
 
-// Rows shown before "Show all", and how many it takes to offer a search.
+// Rows shown before "Show all".
 const VISIBLE_ROWS = 5;
-const SEARCH_FROM = 20;
 
 /**
  * A breakdown of finished books, most first. It shows the first few and
@@ -375,7 +399,6 @@ export const CountList = ({
     return <EmptyNote>{emptyMessage}</EmptyNote>;
   }
   const max = Math.max(...rows.map((row) => row.books));
-  const searchable = expanded && rows.length >= SEARCH_FROM;
   const needle = search.trim().toLowerCase();
   const shown = expanded
     ? rows.filter((row) => !needle || row.label.toLowerCase().includes(needle))
@@ -387,7 +410,8 @@ export const CountList = ({
         ref={listRef}
         style={expanded && lockedHeight ? { height: lockedHeight } : undefined}
       >
-        {searchable && (
+        {/* Also what shows that the expanded list now scrolls. */}
+        {expanded && (
           <Input
             aria-label={`Search ${pluralNoun}`}
             className="mb-2 h-8 shrink-0"
@@ -537,12 +561,10 @@ const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
   const days =
     row.days_taken !== null ? formatCount(row.days_taken, "day") : null;
   const time = readTime(row.seconds);
-  const rating = row.rating !== null ? `${formatRating(row.rating)} ★` : null;
   const details = [
     finished ? `Finished ${finished}` : "Finish date unknown",
     days,
     time,
-    rating,
   ].filter((detail): detail is string => detail !== null);
   return (
     <li className="flex items-center gap-3 px-3 py-2">
@@ -550,6 +572,12 @@ const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
       <ReadThroughDetails entry={row}>
         <span className="text-muted-foreground md:hidden">
           {details.join(" · ")}
+          {row.rating !== null && (
+            <>
+              {" · "}
+              <RatingValue starClassName="h-3 w-3" stars={row.rating} />
+            </>
+          )}
         </span>
       </ReadThroughDetails>
       <div
@@ -564,17 +592,7 @@ const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
         </span>
         <span>{days}</span>
         <span>{time}</span>
-        <span>
-          {row.rating !== null && (
-            <>
-              <span className="sr-only">Rated </span>
-              {formatRating(row.rating)}{" "}
-              <span aria-hidden className="text-foreground">
-                ★
-              </span>
-            </>
-          )}
-        </span>
+        <span>{row.rating !== null && <RatingValue stars={row.rating} />}</span>
       </div>
     </li>
   );

@@ -16,6 +16,7 @@ import {
   FinishedChart,
   FinishedList,
   PlaceList,
+  RatingValue,
   StatsCard,
   StatTile,
   TimeChart,
@@ -45,7 +46,6 @@ import type { ReadingStatsKind, ReadingStatsResponse } from "@/types";
 import {
   formatCount,
   formatDuration,
-  formatRating,
   formatShowingRange,
 } from "@/utils/format";
 import {
@@ -169,9 +169,14 @@ const StatsBody = ({
         <StatTile
           label="Average Rating"
           value={
-            totals.average_rating === null
-              ? "None"
-              : `${formatRating(totals.average_rating)} ★`
+            totals.average_rating === null ? (
+              "None"
+            ) : (
+              <RatingValue
+                starClassName="h-5 w-5"
+                stars={totals.average_rating}
+              />
+            )
           }
         />
       </div>
