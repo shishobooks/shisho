@@ -25,7 +25,7 @@ Reading and listening time includes every session in the range, whether or not i
 
 Time is split into days in your time zone, under **Preferences > Reading > Time zone**, or in UTC while it's unset. A session that runs past midnight is split between the two days. Changing your time zone moves time to the days it fell on in the new zone, but never moves a read's start or end date.
 
-**Kobo and KOReader time is estimated.** Neither device times your reading the way Shisho's web reader and player do; [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains how Shisho estimates it.
+**Kobo time, and KOReader time without the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin), is estimated.** Neither times your reading the way Shisho's web reader and player do; [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains how Shisho estimates it. KOReader time the plugin sends is measured.
 
 ## Charts and Breakdowns
 

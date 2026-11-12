@@ -593,8 +593,9 @@ const ReadingStatsPage = () => {
             {renderBody()}
             {stats?.places.some((place) => place.source !== "web_reader") && (
               <p className="mt-6 text-xs text-muted-foreground">
-                Kobo and KOReader don't time your reading the way Shisho's web
-                reader and player do, so time from them is estimated.
+                Kobo, and KOReader without the KOReader plugin, don't time your
+                reading the way Shisho's web reader and player do, so time from
+                them is estimated.
               </p>
             )}
           </TabsContent>
