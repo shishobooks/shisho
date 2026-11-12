@@ -1,6 +1,7 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/libraries/utils";
+import { yPercent } from "@/utils/chartTicks";
 
 /**
  * The frame every app chart draws in: y-axis labels at its ticks, a
@@ -24,7 +25,6 @@ export const ChartFrame = ({
   plotProps?: HTMLAttributes<HTMLDivElement>;
   children: ReactNode;
 }) => {
-  const top = ticks[ticks.length - 1] || 1;
   return (
     <div aria-hidden="true" className="flex gap-2">
       {/* Y-axis labels, aligned with the gridlines. */}
@@ -33,7 +33,7 @@ export const ChartFrame = ({
           <span
             className="absolute right-0 translate-y-1/2 leading-none"
             key={t}
-            style={{ bottom: `${(t / top) * 100}%` }}
+            style={{ bottom: `${yPercent(ticks, t)}%` }}
           >
             {formatTick(t)}
           </span>
@@ -42,13 +42,13 @@ export const ChartFrame = ({
       <div className="relative min-w-0 flex-1">
         <div
           {...plotProps}
-          className={cn("relative h-48 touch-none", plotProps?.className)}
+          className={cn("relative h-48 touch-pan-y", plotProps?.className)}
         >
           {ticks.map((t) => (
             <div
               className="absolute inset-x-0 border-t border-border"
               key={t}
-              style={{ bottom: `${(t / top) * 100}%` }}
+              style={{ bottom: `${yPercent(ticks, t)}%` }}
             />
           ))}
           {children}

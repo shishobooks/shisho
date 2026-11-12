@@ -42,6 +42,7 @@ import {
   useSectionPaging,
 } from "@/hooks/useSectionPaging";
 import { parsePageParam, resetPaging } from "@/libraries/pagination";
+import { cn } from "@/libraries/utils";
 import type { ReadingStatsKind, ReadingStatsResponse } from "@/types";
 import {
   formatCount,
@@ -480,12 +481,24 @@ const ReadingStatsPage = () => {
       );
     }
     return (
-      <StatsBody
-        filters={filters}
-        onClearFilter={clearFilter}
-        onToggleFilter={toggleFilter}
-        stats={stats}
-      />
+      // Keyed by range, so expanded panels and a hovered bar start over
+      // with the new range's figures. The last range's figures stay, dimmed,
+      // while the next one loads.
+      <div
+        aria-busy={statsQuery.isPlaceholderData}
+        className={cn(
+          "transition-opacity",
+          statsQuery.isPlaceholderData && "opacity-60",
+        )}
+      >
+        <StatsBody
+          filters={filters}
+          key={stats.year ?? "all"}
+          onClearFilter={clearFilter}
+          onToggleFilter={toggleFilter}
+          stats={stats}
+        />
+      </div>
     );
   };
 

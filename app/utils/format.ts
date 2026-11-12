@@ -119,8 +119,11 @@ export const formatShowingRange = (
 /**
  * Formats seconds into a human-readable duration string.
  * @example formatDuration(3661) // "1h 1m"
+ * @example formatDuration(30) // "<1m"
  */
 export const formatDuration = (seconds: number): string => {
+  // Some time, but under a minute, would otherwise read as none.
+  if (seconds > 0 && seconds < 60) return "<1m";
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   if (hours > 0) {
@@ -215,6 +218,25 @@ export const formatDaysAgo = (instant: string, now = new Date()): string => {
  */
 export const formatRating = (stars: number): string =>
   stars.toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+/**
+ * A calendar month by name, short or in full, optionally with its year.
+ * @example formatMonthName(2026, 3) // "Mar"
+ * @example formatMonthName(2026, 3, { long: true, withYear: true }) // "March 2026"
+ */
+export const formatMonthName = (
+  year: number,
+  month: number,
+  {
+    long = false,
+    withYear = false,
+  }: { long?: boolean; withYear?: boolean } = {},
+): string =>
+  new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(undefined, {
+    month: long ? "long" : "short",
+    ...(withYear ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  });
 
 /**
  * The month and year of a date, as UTC like formatDate.

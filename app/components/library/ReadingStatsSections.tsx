@@ -18,6 +18,7 @@ import {
   formatCount,
   formatDate,
   formatDuration,
+  formatMonthName,
   formatRating,
 } from "@/utils/format";
 import type { CountRow } from "@/utils/readingStats";
@@ -30,41 +31,15 @@ const LISTENING_BAR = "bg-listening";
 // in dark mode.
 const SERIES_BAR = READING_BAR;
 
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
-
 const periodLabel = (period: ReadingStatsPeriod) =>
-  period.month ? MONTHS[period.month - 1] : String(period.year);
+  period.month
+    ? formatMonthName(period.year, period.month)
+    : String(period.year);
 
 const periodName = (period: ReadingStatsPeriod) =>
-  period.month ? MONTH_NAMES[period.month - 1] : String(period.year);
+  period.month
+    ? formatMonthName(period.year, period.month, { long: true })
+    : String(period.year);
 
 const periodKey = (period: ReadingStatsPeriod) =>
   `${period.year}-${period.month ?? ""}`;
@@ -72,7 +47,7 @@ const periodKey = (period: ReadingStatsPeriod) =>
 // A period with its year, for a tooltip: "March 2026", or "2026".
 const periodTitle = (period: ReadingStatsPeriod) =>
   period.month
-    ? `${MONTH_NAMES[period.month - 1]} ${period.year}`
+    ? formatMonthName(period.year, period.month, { long: true, withYear: true })
     : String(period.year);
 
 const share = (value: number, max: number) =>
@@ -218,7 +193,7 @@ const PeriodBars = ({
             </div>
           ))}
         </div>
-        {active !== null && (
+        {active !== null && periods[active] && (
           <ChartTooltip offset={4} xPercent={tooltipX}>
             {renderTooltip(periods[active])}
           </ChartTooltip>
@@ -500,7 +475,8 @@ export const CountList = ({
           </li>
         )}
       </ul>
-      {rows.length > VISIBLE_ROWS && (
+      {/* While expanded, "Show fewer" stays even if a refetch leaves few rows. */}
+      {(expanded || rows.length > VISIBLE_ROWS) && (
         <Button
           className={cn("mt-2 self-start text-xs", expanded && "mt-auto pt-2")}
           onClick={() => {
@@ -561,8 +537,8 @@ export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {
             <TruncatedText className="min-w-0 truncate">
               {placeLabel(place)}
             </TruncatedText>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {formatDuration(place.reading_seconds + place.listening_seconds)}
+            <span className="text-right text-xs tabular-nums text-muted-foreground">
+              {placeTime(place)}
             </span>
             <ShareBar>
               <span
@@ -587,12 +563,9 @@ export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {
 const FINISHED_COLUMNS =
   "md:grid md:grid-cols-[7rem_4.5rem_5rem_4.5rem] md:gap-4 md:text-right";
 
-// A read's recorded time: nothing when none was, and "<1m" for less than a
-// minute, which would otherwise read as none.
-const readTime = (seconds: number | null) => {
-  if (!seconds) return null;
-  return seconds < 60 ? "<1m" : formatDuration(seconds);
-};
+// A read's recorded time, or nothing when it recorded none.
+const readTime = (seconds: number | null) =>
+  seconds ? formatDuration(seconds) : null;
 
 const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
   const rt = row.read_through;
@@ -629,8 +602,14 @@ const FinishedRow = ({ row }: { row: ReadingStatsFinishedBook }) => {
           <span className="sr-only">Finished </span>
           {finished ?? "Unknown"}
         </span>
-        <span>{days}</span>
-        <span>{time}</span>
+        <span>
+          {days && <span className="sr-only">Took </span>}
+          {days}
+        </span>
+        <span>
+          {time && <span className="sr-only">Read for </span>}
+          {time}
+        </span>
         <span>{row.rating !== null && <RatingValue stars={row.rating} />}</span>
       </div>
     </li>

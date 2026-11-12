@@ -465,6 +465,11 @@ func (h *handler) listStatsFinished(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}
+	if params.Rating != nil {
+		if _, ok := RatingUnits(*params.Rating); !ok {
+			return errcodes.ValidationError("A rating is in quarter stars from 0.25 to 5.")
+		}
+	}
 	resp, err := h.readingService.StatsFinished(c.Request().Context(), user, StatsFinishedOptions(params))
 	if err != nil {
 		return err

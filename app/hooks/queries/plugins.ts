@@ -37,6 +37,7 @@ import type {
 } from "@/types";
 
 import { useRequires, type Requirement } from "./permissions";
+import { invalidateReadingRecords } from "./reading";
 
 // Re-export generated types so consumers can import from this module.
 // PluginHookConfig is re-exported as PluginOrder for backward compatibility.
@@ -661,6 +662,9 @@ export const usePluginApply = () => {
       );
     },
     onSuccess: async () => {
+      // Applied metadata can change the genres, tags, and authors Reading
+      // Stats counts finished books by.
+      invalidateReadingRecords(queryClient);
       // Apply accepts entity name strings; the server creates new persons,
       // series, publishers, genres, or tags as needed. Invalidate
       // those caches so newly-created entities show up in admin pages and

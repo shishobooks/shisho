@@ -749,6 +749,8 @@ func TestStats_FinishedFiltersByWhatTheBreakdownsCount(t *testing.T) {
 	assert.Empty(t, titlesFor("?year=2026&genre=Romance"))
 	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/finished?kind=scroll", nil).Code)
 	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/finished?rating=6", nil).Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/finished?rating=0.3", nil).Code,
+		"a rating is a quarter step")
 }
 
 func TestStats_FinishedRowsCarryTheCurrentRating(t *testing.T) {
@@ -765,4 +767,22 @@ func TestStats_FinishedRowsCarryTheCurrentRating(t *testing.T) {
 	assert.Nil(t, rows[0].Rating, "Emma is unrated")
 	require.NotNil(t, rows[1].Rating)
 	assert.InDelta(t, 4.5, *rows[1].Rating, 0.001)
+}
+
+// A device Session that recorded no time is no reading there, so it adds no
+// place, and the page's note about estimated device time stays away.
+func TestStats_ASessionWithNoTimeAddsNoPlace(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	file := f.addFile(book, models.FileTypeEPUB)
+	f.session(sessionSpec{file: file, start: at(t, "UTC", "2026-03-01 10:00"), end: at(t, "UTC", "2026-03-01 10:10")})
+	f.session(sessionSpec{
+		file: file, start: at(t, "UTC", "2026-03-02 10:00"), end: at(t, "UTC", "2026-03-02 10:00"),
+		source: models.ReadingSourceKobo,
+	})
+
+	assert.Equal(t, []ReadingStatsPlace{
+		{Source: models.ReadingSourceWebReader, ReadingSeconds: 600},
+	}, f.stats("?year=2026").Places)
 }

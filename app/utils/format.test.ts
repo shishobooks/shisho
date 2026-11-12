@@ -8,8 +8,10 @@ import {
   formatCount,
   formatDate,
   formatDateTime,
+  formatDuration,
   formatElapsed,
   formatFileSize,
+  formatMonthName,
   formatPageCount,
   formatPersonCredits,
   formatPlayerTime,
@@ -259,5 +261,24 @@ describe("fileTypeLabel", () => {
   it("writes every other File Type in capitals", () => {
     expect(fileTypeLabel("epub")).toBe("EPUB");
     expect(fileTypeLabel("cbz")).toBe("CBZ");
+  });
+});
+
+describe("formatDuration", () => {
+  it("shows hours and minutes, and marks under a minute rather than none", () => {
+    expect(formatDuration(3661)).toBe("1h 1m");
+    expect(formatDuration(600)).toBe("10m");
+    expect(formatDuration(30)).toBe("<1m");
+    expect(formatDuration(0)).toBe("0m");
+  });
+});
+
+describe("formatMonthName", () => {
+  it("names a month short, or in full with its year", () => {
+    expect(formatMonthName(2026, 3)).toBe("Mar");
+    expect(formatMonthName(2026, 12, { long: true })).toBe("December");
+    expect(formatMonthName(2026, 3, { long: true, withYear: true })).toBe(
+      "March 2026",
+    );
   });
 });

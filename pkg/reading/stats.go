@@ -337,6 +337,10 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 		m.listening += p.listening
 	}
 	for _, p := range order {
+		if roundSeconds(p.reading)+roundSeconds(p.listening) == 0 {
+			// A Session that recorded no time is no reading there.
+			continue
+		}
 		row := ReadingStatsPlace{
 			Source:           p.source,
 			ReadingSeconds:   roundSeconds(p.reading),
@@ -475,13 +479,13 @@ func (svc *Service) StatsFinished(ctx context.Context, user *models.User, opts S
 	if opts.Rating != nil {
 		q = q.Where(`EXISTS (SELECT 1 FROM user_books AS fub
 			WHERE fub.user_id = rt.user_id AND fub.book_id = rt.book_id AND fub.rating = ?)`,
-			int(math.Round(*opts.Rating*4)))
+			ratingUnitsOrZero(*opts.Rating))
 	}
 	if opts.Kind != nil {
 		// A kind comes from Sessions and Files, not a column, so work out
 		// which of the matches so far were read as it, then page those.
 		var candidates []*models.ReadThrough
-		if err := q.Clone().Model(&candidates).Scan(ctx); err != nil {
+		if err := q.Clone().Model(&candidates).Column("rt.id", "rt.book_id").Scan(ctx); err != nil {
 			return nil, errors.WithStack(err)
 		}
 		kinds, err := svc.readThroughKinds(ctx, candidates)
@@ -719,6 +723,13 @@ func (svc *Service) kindCounts(ctx context.Context, finished []*models.ReadThrou
 	return counts, nil
 }
 
+// ratingUnitsOrZero is stars in quarter-star units, or 0, which matches no
+// Rating, for a value the handler should already have refused.
+func ratingUnitsOrZero(stars float64) int {
+	units, _ := RatingUnits(stars)
+	return units
+}
+
 // currentRatings are userID's Ratings, in stars, of the Books of
 // readThroughs, by Book id. Unrated Books are left out.
 func (svc *Service) currentRatings(ctx context.Context, userID int, readThroughs []*models.ReadThrough) (map[int]float64, error) {
@@ -745,7 +756,7 @@ func (svc *Service) currentRatings(ctx context.Context, userID int, readThroughs
 		return nil, errors.WithStack(err)
 	}
 	for _, row := range rows {
-		ratings[row.BookID] = float64(row.Rating) / 4
+		ratings[row.BookID] = *RatingStars(&row.Rating)
 	}
 	return ratings, nil
 }
@@ -777,7 +788,7 @@ func (svc *Service) readThroughKinds(ctx context.Context, finished []*models.Rea
 	}
 	err := svc.db.NewSelect().
 		TableExpr("reading_sessions AS rs").
-		ColumnExpr("rs.read_through_id, rs.kind, f.file_type").
+		ColumnExpr("DISTINCT rs.read_through_id, rs.kind, f.file_type").
 		Join("LEFT JOIN files AS f ON f.id = rs.file_id").
 		Where("rs.read_through_id IN (?)", bun.List(ids)).
 		Scan(ctx, &sessionRows)
@@ -860,9 +871,9 @@ func (svc *Service) ratingCounts(ctx context.Context, userID int, bookIDs []int)
 		byUnits[u]++
 		sum += u
 	}
-	for u := 1; u <= 20; u++ {
+	for u := 1; u <= maxRatingUnits; u++ {
 		if n := byUnits[u]; n > 0 {
-			counts = append(counts, ReadingStatsRatingCount{Rating: float64(u) / 4, Books: n})
+			counts = append(counts, ReadingStatsRatingCount{Rating: *RatingStars(&u), Books: n})
 		}
 	}
 	average := float64(sum) / float64(len(units)) / 4

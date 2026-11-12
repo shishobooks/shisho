@@ -1,4 +1,8 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
 import {
   cleanup,
   render,
@@ -192,8 +196,12 @@ const renderPage = ({
       }
       return Response.json({ items: [], total: 0 });
     });
+  // As the app's client does, a new range keeps the last one's figures
+  // until it loads.
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: {
+      queries: { retry: false, placeholderData: keepPreviousData },
+    },
   });
   render(
     <QueryClientProvider client={client}>
@@ -582,5 +590,48 @@ describe("ReadingStatsPage", () => {
     expect(
       within(ubik).getByText("Finished Mar 9, 2026 · 9 days · <1m"),
     ).toBeInTheDocument();
+  });
+
+  it("starts panels collapsed again on a new range", async () => {
+    const { user } = renderPage();
+    const tags = await screen.findByRole("region", { name: "Tags" });
+    await user.click(
+      within(tags).getByRole("button", { name: "Show all 150 tags" }),
+    );
+    expect(
+      within(tags).getByRole("textbox", { name: "Search tags" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox", { name: "Range" }));
+    await user.click(screen.getByRole("option", { name: "2024" }));
+    const after = await screen.findByRole("region", { name: "Tags" });
+    await waitFor(() =>
+      expect(
+        within(after).queryByRole("textbox", { name: "Search tags" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(
+      within(after).getByRole("button", { name: "Show all 150 tags" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows reading and listening time apart for each place", async () => {
+    renderPage({
+      stats: (year) => ({
+        ...busyStats(year),
+        places: [
+          {
+            source: "web_reader",
+            device_name: null,
+            reading_seconds: 3600,
+            listening_seconds: 1200,
+          },
+        ],
+      }),
+    });
+    const places = await screen.findByRole("region", {
+      name: "Where you read",
+    });
+    expect(places).toHaveTextContent("1h 0m reading, 20m listening");
   });
 });

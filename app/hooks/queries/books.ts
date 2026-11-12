@@ -323,6 +323,8 @@ export const useDeleteFile = () => {
       return API.request("DELETE", `/books/files/${fileId}`, null, null);
     },
     onSuccess: () => {
+      // A File's type is the kind Reading Stats counts a finished book as.
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveBook] });
       queryClient.invalidateQueries({
