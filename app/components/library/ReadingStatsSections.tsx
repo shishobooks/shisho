@@ -1,5 +1,5 @@
 import { Star } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 import { ChartFrame, ChartTooltip } from "@/components/library/ChartFrame";
 import ReadThroughCover from "@/components/library/ReadThroughCover";
@@ -391,87 +391,122 @@ export const CountList = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [search, setSearch] = useState("");
-  // Expanded, the list keeps the height it had collapsed and scrolls
-  // inside it, so "Show all" never resizes the card.
-  const listRef = useRef<HTMLDivElement>(null);
+  // Expanded, the panel keeps the height it had collapsed, so "Show all"
+  // never resizes the card, and the list scrolls inside it.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const [lockedHeight, setLockedHeight] = useState<number | null>(null);
-  if (rows.length === 0) {
-    return <EmptyNote>{emptyMessage}</EmptyNote>;
-  }
-  const max = Math.max(...rows.map((row) => row.books));
+  const [listHeight, setListHeight] = useState<number | null>(null);
+
   const needle = search.trim().toLowerCase();
   const shown = expanded
     ? rows.filter((row) => !needle || row.label.toLowerCase().includes(needle))
     : rows.slice(0, VISIBLE_ROWS);
+
+  // The scrolling list ends halfway through a row, so the cut-off row shows
+  // there is more to scroll to. Any room left over falls below the toggle.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const list = listRef.current;
+    const toggle = toggleRef.current;
+    if (!expanded || !lockedHeight || !panel || !list || !toggle) {
+      setListHeight(null);
+      return;
+    }
+    const items = list.querySelectorAll("li");
+    const stride =
+      items.length > 1
+        ? items[1].getBoundingClientRect().top -
+          items[0].getBoundingClientRect().top
+        : 0;
+    const above =
+      list.getBoundingClientRect().top - panel.getBoundingClientRect().top;
+    const below =
+      toggle.offsetHeight + parseFloat(getComputedStyle(toggle).marginTop);
+    const room = lockedHeight - above - below;
+    if (stride <= 0 || list.scrollHeight <= room) {
+      setListHeight(null);
+      return;
+    }
+    const whole = Math.max(1, Math.floor(room / stride - 0.5));
+    setListHeight((whole + 0.5) * stride);
+  }, [expanded, lockedHeight, shown.length]);
+
+  if (rows.length === 0) {
+    return <EmptyNote>{emptyMessage}</EmptyNote>;
+  }
+  const max = Math.max(...rows.map((row) => row.books));
   return (
-    <>
-      <div
-        className={cn(expanded && "flex flex-col")}
-        ref={listRef}
-        style={expanded && lockedHeight ? { height: lockedHeight } : undefined}
-      >
-        {/* Also what shows that the expanded list now scrolls. */}
-        {expanded && (
-          <Input
-            aria-label={`Search ${pluralNoun}`}
-            className="mb-2 h-8 shrink-0"
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={`Search ${pluralNoun}`}
-            value={search}
-          />
+    <div
+      className="flex flex-col"
+      ref={panelRef}
+      style={expanded && lockedHeight ? { height: lockedHeight } : undefined}
+    >
+      {/* Also what shows that the expanded list now scrolls. */}
+      {expanded && (
+        <Input
+          aria-label={`Search ${pluralNoun}`}
+          className="mb-2 h-8 shrink-0"
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder={`Search ${pluralNoun}`}
+          value={search}
+        />
+      )}
+      <ul
+        className={cn(
+          "-mx-2 space-y-0.5",
+          expanded && "min-h-0 shrink overflow-y-auto",
         )}
-        <ul
-          className={cn(
-            "-mx-2 space-y-0.5",
-            expanded && "min-h-0 flex-1 overflow-y-auto",
-          )}
-        >
-          {shown.map((row) => {
-            const active = selected === row.value;
-            return (
-              <li key={row.value}>
-                <Button
-                  aria-pressed={active}
-                  className={cn(
-                    "grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/60",
-                    active && "bg-accent",
-                  )}
-                  onClick={() => onSelect(row.value)}
-                  variant="unstyled"
-                >
-                  <span className="min-w-0 truncate" title={row.label}>
-                    {row.label}
-                  </span>
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {formatCount(row.books, "book")}
-                  </span>
-                  <ShareBar>
-                    <span
-                      className={cn("h-full rounded-full", SERIES_BAR)}
-                      style={{ width: share(row.books, max) }}
-                    />
-                  </ShareBar>
-                </Button>
-              </li>
-            );
-          })}
-          {shown.length === 0 && (
-            <li className="px-2 text-sm text-muted-foreground">
-              No {pluralNoun} match.
+        ref={listRef}
+        style={listHeight ? { height: listHeight } : undefined}
+      >
+        {shown.map((row) => {
+          const active = selected === row.value;
+          return (
+            <li key={row.value}>
+              <Button
+                aria-pressed={active}
+                className={cn(
+                  "grid w-full cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/60",
+                  active && "bg-accent",
+                )}
+                onClick={() => onSelect(row.value)}
+                variant="unstyled"
+              >
+                <span className="min-w-0 truncate" title={row.label}>
+                  {row.label}
+                </span>
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {formatCount(row.books, "book")}
+                </span>
+                <ShareBar>
+                  <span
+                    className={cn("h-full rounded-full", SERIES_BAR)}
+                    style={{ width: share(row.books, max) }}
+                  />
+                </ShareBar>
+              </Button>
             </li>
-          )}
-        </ul>
-      </div>
+          );
+        })}
+        {shown.length === 0 && (
+          <li className="px-2 text-sm text-muted-foreground">
+            No {pluralNoun} match.
+          </li>
+        )}
+      </ul>
       {rows.length > VISIBLE_ROWS && (
         <Button
-          className="mt-2 text-xs"
+          className="mt-2 self-start text-xs"
           onClick={() => {
             if (!expanded) {
-              setLockedHeight(listRef.current?.offsetHeight || null);
+              setLockedHeight(panelRef.current?.offsetHeight || null);
             }
             setExpanded(!expanded);
             setSearch("");
           }}
+          ref={toggleRef}
           variant="link"
         >
           {expanded
@@ -479,7 +514,7 @@ export const CountList = ({
             : `Show all ${formatCount(rows.length, singularNoun, pluralNoun)}`}
         </Button>
       )}
-    </>
+    </div>
   );
 };
 
