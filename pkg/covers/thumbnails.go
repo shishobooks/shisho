@@ -272,6 +272,10 @@ type ThumbnailCache struct {
 	flights  map[string]chan struct{}
 	decodes  *semaphore.Weighted
 	epoch    uint64
+	// beforePublish, when set, runs after a thumbnail is generated and just
+	// before the context check that guards publishing it, so a test can
+	// cancel the request at that point.
+	beforePublish func()
 }
 
 // NewThumbnailCache creates a lazy cache beneath the server's cache directory.
@@ -411,6 +415,9 @@ func (c *ThumbnailCache) get(ctx context.Context, owner, versionPath, versionSuf
 		}
 		if current.Size() != info.Size() || !current.ModTime().Equal(info.ModTime()) {
 			return Thumbnail{}, errors.Wrap(ErrUnsupportedThumbnail, "cover changed during generation")
+		}
+		if c.beforePublish != nil {
+			c.beforePublish()
 		}
 		c.mu.Lock()
 		// Clear changes the epoch. Work started before it must not repopulate

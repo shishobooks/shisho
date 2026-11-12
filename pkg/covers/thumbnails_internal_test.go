@@ -105,3 +105,25 @@ func TestThumbnailCache_GenerationWaitsForDecodeBudget(t *testing.T) {
 	_, err = cache.Get(context.Background(), file, 128)
 	require.NoError(t, err)
 }
+
+// A request canceled after its thumbnail is resized, but before it is
+// published, must not publish it: the last context check is under the lock.
+func TestThumbnailCache_DoesNotPublishGenerationCanceledBeforePublish(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	name := "cover.png"
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewGray(image.Rect(0, 0, 60, 90))))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), buf.Bytes(), 0644))
+	file := &models.File{ID: 1, FileType: models.FileTypeEPUB, Filepath: filepath.Join(dir, "book.epub"), CoverImageFilename: &name}
+	cache := NewThumbnailCache(t.TempDir(), 1<<20)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cache.beforePublish = cancel
+
+	_, err := cache.Get(ctx, file, 128)
+	require.ErrorIs(t, err, context.Canceled)
+	_, count, err := cache.SizeBytes()
+	require.NoError(t, err)
+	require.Zero(t, count)
+}

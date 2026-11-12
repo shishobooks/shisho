@@ -12,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,8 +168,11 @@ func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
 	cfg := &config.Config{WorkerProcesses: 1}
 	w := New(cfg, tc.db, nil, nil, nil, nil, nil, nil)
 
-	// The handler takes the pool's only connection before it signals, so
-	// Shutdown's cancel cannot land while it waits for one.
+	// The handler takes the pool's only connection, and the test waits until
+	// its query is running before calling Shutdown, so the cancel always lands
+	// mid-statement rather than while it waits for a connection or before
+	// the query starts.
+	probe, queryRunning := testdb.Reached(t)
 	jobStarted := make(chan struct{})
 	interrupted := make(chan bool, 1)
 	discarded := make(chan bool, 1)
@@ -180,7 +184,7 @@ func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
 		defer conn.Close()
 		close(jobStarted)
 		// This query never finishes on its own.
-		_, err = conn.ExecContext(ctx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
+		_, err = conn.ExecContext(ctx, `WITH RECURSIVE c(x) AS (SELECT `+probe+` UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
 		interrupted <- errors.Is(err, context.Canceled)
 		discardErr := conn.Raw(func(any) error { return driver.ErrBadConn })
 		discarded <- errors.Is(discardErr, driver.ErrBadConn)
@@ -203,8 +207,11 @@ func TestShutdown_PersistsFailedJobStatusAfterInterruptedQuery(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("job never started executing")
 	}
-	// Give the query time to start.
-	time.Sleep(50 * time.Millisecond)
+	select {
+	case <-queryRunning:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the job's query never started")
+	}
 
 	shutdownDone := make(chan struct{})
 	go func() {
