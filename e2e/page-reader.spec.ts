@@ -50,6 +50,46 @@ const pageTop = (page: Page, pageNumber: number) =>
 // off-screen, hidden from assistive tech.
 const pageImages = (page: Page) => page.locator("main").getByRole("img");
 
+// Holds the responses to the requests `matches` picks until the returned
+// function is called, so a test can act at a point in the page's loading
+// that it would otherwise reach only by luck.
+const holdResponses = async (page: Page, matches: (url: URL) => boolean) => {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(matches, async (route) => {
+    await released;
+    await route.continue();
+  });
+  return release;
+};
+
+// A six-page comic book with pages of the given size.
+const seedBook = async (
+  browserName: string,
+  title: string,
+  width: number,
+  height: number,
+) => {
+  const apiContext = await request.newContext({
+    baseURL: getApiBaseURL(browserName),
+  });
+  const resp = await apiContext.post("/api/test/books", {
+    data: {
+      libraryId,
+      title,
+      fileType: "cbz",
+      withFileOnDisk: true,
+      pageCount: 6,
+      pageWidth: width,
+      pageHeight: height,
+    },
+  });
+  expect(resp.ok()).toBe(true);
+  const book = (await resp.json()) as { id: number; fileId: number };
+  await apiContext.dispose();
+  return book;
+};
+
 test.describe("Page reader flows", () => {
   test.beforeAll(async ({ browser }) => {
     const apiContext = await request.newContext({
@@ -139,6 +179,51 @@ test.describe("Page reader flows", () => {
     await expect.poll(() => pageTop(page, 4)).toBe(0);
   });
 
+  // A page that loads grows, and the view keeps still only if the page is
+  // above it. The reader can scroll after the image loads but before the
+  // page takes its new height, so that is decided when it grows.
+  test("a webtoon page that loads as the reader scrolls past it keeps the view still", async ({
+    page,
+  }) => {
+    const release = await holdResponses(
+      page,
+      (url) =>
+        url.pathname === `/api/books/files/${webtoonFileId}/page/0` &&
+        !url.searchParams.has("size"),
+    );
+    await login(page);
+    await page.goto(readerUrl(webtoonBookId, webtoonFileId), {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(pageImages(page)).toHaveCount(6);
+
+    // The reader handles the load first, then this scrolls to page 3.
+    await page.evaluate(() => {
+      const main = document.querySelector("main")!;
+      const first = main.querySelector<HTMLImageElement>('img[alt="Page 1"]')!;
+      first.addEventListener(
+        "load",
+        () => {
+          const third = main.querySelector('img[alt="Page 3"]')!.parentElement!;
+          main.scrollTop = third.offsetTop + 100;
+        },
+        { once: true },
+      );
+    });
+    release();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            document.querySelector<HTMLImageElement>('main img[alt="Page 1"]')
+              ?.naturalWidth ?? 0,
+        ),
+      )
+      .toBeGreaterThan(0);
+    await expect.poll(() => pageTop(page, 3)).toBe(-100);
+    await expect(page.getByText("Page 3 of 6")).toBeVisible();
+  });
+
   test("a link to a webtoon page stays on it while the pages above load", async ({
     page,
   }) => {
@@ -182,6 +267,94 @@ test.describe("Page reader flows", () => {
 
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(pageImages(page)).toHaveCount(6);
+  });
+
+  // The pages take focus in the scrolled flow, so Space and Page Down scroll
+  // them. Each test reads a book of its own: scrolling by key saves a place.
+  test("a webtoon opens with the keys scrolling its pages", async ({
+    page,
+    browser,
+  }) => {
+    const book = await seedBook(
+      browser.browserType().name(),
+      "Keyed Webtoon",
+      200,
+      1000,
+    );
+    await login(page);
+    await page.goto(readerUrl(book.id, book.fileId), {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(pageImages(page)).toHaveCount(6);
+    await expect(page.locator("main")).toBeFocused();
+    await page.keyboard.press("PageDown");
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.querySelector("main")!.scrollTop),
+      )
+      .toBeGreaterThan(0);
+  });
+
+  test("closing the settings after picking Scrolled leaves the keys scrolling", async ({
+    page,
+    browser,
+  }) => {
+    const book = await seedBook(
+      browser.browserType().name(),
+      "Keyed Comic",
+      600,
+      900,
+    );
+    await login(page);
+    await page.goto(readerUrl(book.id, book.fileId), {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByRole("img", { name: "Page 1" })).toBeVisible();
+    await page.getByRole("button", { name: "Reader settings" }).click();
+    await page.getByRole("button", { name: "Scrolled", exact: true }).click();
+    await expect(pageImages(page)).toHaveCount(6);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("main")).toBeFocused();
+  });
+
+  test("settings opened while the reader loads stay open as it settles on scrolling", async ({
+    page,
+    browser,
+  }) => {
+    // A book of its own: picking Paginated saves that flow for the book,
+    // which would change how the shared webtoon opens in the tests above.
+    const book = await seedBook(
+      browser.browserType().name(),
+      "Settling Webtoon",
+      200,
+      1000,
+    );
+
+    // Hold the thumbnails the reader probes for the pages' shape, so the
+    // settings open before it knows the flow.
+    const release = await holdResponses(
+      page,
+      (url) =>
+        url.pathname.startsWith(`/api/books/files/${book.fileId}/page/`) &&
+        url.searchParams.has("size"),
+    );
+    await login(page);
+    await page.goto(readerUrl(book.id, book.fileId), {
+      waitUntil: "domcontentloaded",
+    });
+    await page.getByRole("button", { name: "Reader settings" }).click();
+    const paginated = page.getByRole("button", {
+      name: "Paginated",
+      exact: true,
+    });
+    await expect(paginated).toBeDisabled();
+
+    release();
+    // Tall strips scroll, and the settings stay open to pick another flow.
+    await expect(pageImages(page)).toHaveCount(6);
+    await expect(paginated).toBeEnabled();
+    await paginated.click();
+    await expect(pageImages(page)).toHaveCount(1);
   });
 
   test.describe("swiping on a phone", () => {
@@ -368,6 +541,38 @@ test.describe("Page reader flows", () => {
       await expect(page.getByText("Page 3 of 6")).toBeAttached();
     });
 
+    // Touch events go to the element the finger first landed on, so a swipe
+    // begun over the loading spinner must survive the spinner going away.
+    test("a swipe begun while the page loads still turns it", async ({
+      page,
+    }) => {
+      // Hold the first page's image, but not its thumbnail, which tells the
+      // reader the page's shape.
+      const release = await holdResponses(
+        page,
+        (url) =>
+          url.pathname === `/api/books/files/${swipeFileId}/page/0` &&
+          !url.searchParams.has("size"),
+      );
+      await login(page);
+      await page.goto(readerUrl(swipeBookId, swipeFileId, 0), {
+        waitUntil: "domcontentloaded",
+      });
+      // The track shows once the flow is known, which is when swipes turn on.
+      await expect(page.getByTestId("page-track")).toBeAttached();
+      const spinner = page.locator("main").getByRole("status");
+      await expect(spinner).toBeVisible();
+
+      const send = await touch(page);
+      await send("touchStart", WIDTH * 0.5);
+      await send("touchMove", WIDTH * 0.5 - 50);
+      release();
+      await expect(spinner).toBeHidden();
+      await send("touchMove", WIDTH * 0.5 - 100);
+      await send("touchEnd");
+      await expect(page.getByText("Page 2 of 6")).toBeVisible();
+    });
+
     test("a drag too short to turn springs back", async ({ page }) => {
       await openComic(page, 3);
       const send = await touch(page);
@@ -472,32 +677,6 @@ test.describe("Page reader flows", () => {
 
   test.describe("resuming", () => {
     // A book of its own per test: the first page turn starts a Read-through.
-    const seedBook = async (
-      browserName: string,
-      title: string,
-      width: number,
-      height: number,
-    ) => {
-      const apiContext = await request.newContext({
-        baseURL: getApiBaseURL(browserName),
-      });
-      const resp = await apiContext.post("/api/test/books", {
-        data: {
-          libraryId,
-          title,
-          fileType: "cbz",
-          withFileOnDisk: true,
-          pageCount: 6,
-          pageWidth: width,
-          pageHeight: height,
-        },
-      });
-      expect(resp.ok()).toBe(true);
-      const book = (await resp.json()) as { id: number; fileId: number };
-      await apiContext.dispose();
-      return book;
-    };
-
     test("a comic reopens on the page turned to, and the end marks it read", async ({
       page,
       browser,
