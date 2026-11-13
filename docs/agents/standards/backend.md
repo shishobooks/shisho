@@ -49,6 +49,7 @@ Rules a reviewer applies to a Go backend diff. Each rule names the violation to 
 - Handlers pass `c.Request().Context()` as the first argument to anything doing significant work (generation, file I/O, loops over content).
 - Long operations check `ctx.Err()` before expensive steps and never cache partial results after cancellation.
 - Work that must finish after the client leaves (usage counts, the search reindex) detaches with `context.WithoutCancel`.
+- A test of cancellation cancels at a point the work is known to have reached (a context or hook that pauses it, a channel it signals) or passes a context that is already canceled. Flag a short `context.WithTimeout` racing the work: a timer context reports its error only after its timer runs, which under load can come after the work has finished. The same goes for a `time.Sleep` that waits for a goroutine to get somewhere: wait for a signal from it instead.
 
 ## Output safety
 

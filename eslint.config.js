@@ -221,6 +221,7 @@ export default tseslint.config(
       "app/components/ui",
       "app/libraries/foliate/**",
       "test-results",
+      "coverage",
       "pkg/plugins/testdata/*",
       "packages/plugin-sdk/testing/index.js",
       "packages/plugin-sdk/testing/index.d.ts",
@@ -358,6 +359,23 @@ export default tseslint.config(
         ...mutateWithoutOnError,
         ...mutationReferences,
         ...uiConventions,
+      ],
+    },
+  },
+  {
+    // vitest.setup.ts installs one fake clock per test file. React's scheduler
+    // keeps the timer functions it found when it loaded, so swapping the clock
+    // strands its queued renders and stalls the tests that run after.
+    files: ["app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...["useFakeTimers", "useRealTimers"].map((property) => ({
+          object: "vi",
+          property,
+          message:
+            "Keep the fake timers vitest.setup.ts installs: advance them with vi.advanceTimersByTime and set the date with vi.setSystemTime. The setup resets both after each test.",
+        })),
       ],
     },
   },

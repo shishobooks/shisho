@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,11 +31,23 @@ func TestNew_PragmasSurviveConnectionReplacement(t *testing.T) {
 	)`)
 	require.NoError(t, err)
 
-	// Cancel a query that never finishes on its own.
-	cancelCtx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	// Cancel a query that never finishes on its own, once it is running, so
+	// the cancel lands mid-statement rather than before the query starts.
+	probe, running := testdb.Reached(t)
+	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	_, err = db.ExecContext(cancelCtx, `WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
-	require.Error(t, err)
+	result := make(chan error, 1)
+	go func() {
+		_, err := db.ExecContext(cancelCtx, `WITH RECURSIVE c(x) AS (SELECT `+probe+` UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c`)
+		result <- err
+	}()
+	select {
+	case <-running:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the query never started")
+	}
+	cancel()
+	require.ErrorIs(t, <-result, context.Canceled)
 
 	var foreignKeys int
 	require.NoError(t, db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys))

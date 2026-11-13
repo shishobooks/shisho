@@ -257,7 +257,8 @@ func TestThumbnailCache_ClearAllowsRegeneration(t *testing.T) {
 }
 
 // A context can pause a generation after it enters the resize queue, allowing
-// the test to clear the cache while another request is waiting on that work.
+// a test to act while that work is in progress: clear the cache while another
+// request waits on it, or cancel the request.
 type pausedThumbnailContext struct {
 	context.Context
 	entered atomic.Bool
@@ -325,14 +326,29 @@ func TestThumbnailCache_ClearDoesNotRepublishFromEarlierWaiters(t *testing.T) {
 	require.Equal(t, 1, count, "later requests can generate a fresh thumbnail")
 }
 
+// The request is canceled while its generation is paused mid-resize, so the
+// cancel always lands during the work. A short deadline would not: a timer
+// context reports its error only once its timer has run, which under load can
+// be after the generation has finished and published.
 func TestThumbnailCache_DoesNotPublishCanceledGeneration(t *testing.T) {
 	t.Parallel()
 	cache := covers.NewThumbnailCache(t.TempDir(), 1<<20)
 	file := coverFixture(t, 1, color.NRGBA{A: 255})
-	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	parent, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	_, err := cache.Get(ctx, file, 256)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	ctx := &pausedThumbnailContext{Context: parent, paused: make(chan struct{}), release: make(chan struct{})}
+	var release sync.Once
+	t.Cleanup(func() { release.Do(func() { close(ctx.release) }) })
+	result := make(chan error, 1)
+	go func() { _, err := cache.Get(ctx, file, 256); result <- err }()
+	select {
+	case <-ctx.paused:
+	case <-time.After(5 * time.Second):
+		t.Fatal("generation did not start")
+	}
+	cancel()
+	release.Do(func() { close(ctx.release) })
+	require.ErrorIs(t, <-result, context.Canceled)
 	_, count, err := cache.SizeBytes()
 	require.NoError(t, err)
 	require.Zero(t, count)

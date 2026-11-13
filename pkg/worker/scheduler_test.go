@@ -125,9 +125,6 @@ func TestScheduler_StartWithZeroInterval(t *testing.T) {
 	// Start the worker
 	tc.worker.Start()
 
-	// Give it a moment to start
-	time.Sleep(50 * time.Millisecond)
-
 	// Shutdown should complete without hanging
 	done := make(chan struct{})
 	go func() {

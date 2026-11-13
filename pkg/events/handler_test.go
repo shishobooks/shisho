@@ -17,6 +17,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// flushRecorder signals each Flush. The stream flushes once it has
+// subscribed and again after writing each event, so a test can wait for
+// those points instead of sleeping and hoping the handler got there.
+type flushRecorder struct {
+	*httptest.ResponseRecorder
+	flushes chan struct{}
+}
+
+func newFlushRecorder() *flushRecorder {
+	return &flushRecorder{ResponseRecorder: httptest.NewRecorder(), flushes: make(chan struct{}, 16)}
+}
+
+func (r *flushRecorder) Flush() {
+	r.ResponseRecorder.Flush()
+	r.flushes <- struct{}{}
+}
+
+func (r *flushRecorder) waitFlush(t *testing.T, what string) {
+	t.Helper()
+	select {
+	case <-r.flushes:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("the handler never flushed %s", what)
+	}
+}
+
 func TestSSEHandler_StreamsEvents(t *testing.T) {
 	t.Parallel()
 
@@ -31,7 +57,7 @@ func TestSSEHandler_StreamsEvents(t *testing.T) {
 	defer cancel()
 	req = req.WithContext(ctx)
 
-	rec := httptest.NewRecorder()
+	rec := newFlushRecorder()
 	c := e.NewContext(req, rec)
 	auth.SetUser(c, &models.User{})
 
@@ -41,14 +67,11 @@ func TestSSEHandler_StreamsEvents(t *testing.T) {
 		done <- h.stream(c)
 	}()
 
-	// Give handler time to subscribe and start streaming
-	time.Sleep(50 * time.Millisecond)
-
-	// Publish an event
+	// The first flush comes after the handler subscribes, so the event
+	// published next reaches it.
+	rec.waitFlush(t, "after subscribing")
 	b.Publish(Event{Type: "job.created", Data: `{"job_id":1}`})
-
-	// Give time for event to be written
-	time.Sleep(50 * time.Millisecond)
+	rec.waitFlush(t, "the event")
 
 	// Cancel context to stop handler
 	cancel()
@@ -89,7 +112,7 @@ func TestSSEHandler_ReturnsOnBrokerClose(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 	// Intentionally do NOT cancel the request context — we want to prove
 	// the handler observes broker shutdown independently of the client.
-	rec := httptest.NewRecorder()
+	rec := newFlushRecorder()
 	c := e.NewContext(req, rec)
 	auth.SetUser(c, &models.User{})
 
@@ -99,7 +122,7 @@ func TestSSEHandler_ReturnsOnBrokerClose(t *testing.T) {
 	}()
 
 	// Let the handler subscribe before signalling shutdown.
-	time.Sleep(50 * time.Millisecond)
+	rec.waitFlush(t, "after subscribing")
 
 	b.Close()
 

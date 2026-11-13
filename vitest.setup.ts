@@ -31,6 +31,13 @@ if (!HTMLElement.prototype.scrollIntoView) {
   HTMLElement.prototype.scrollIntoView = () => {};
 }
 
+// Nothing a test leaves on the clock reaches the next one
+// (app/testing/fakeTimers.test.tsx). React's scheduler queues renders on
+// these timers and never queues again once its pending one is cleared, so
+// whatever is due runs first: the test's components are unmounted by then.
+// The scheduler also keeps the timer functions it found when it loaded, so a
+// test must not swap the clock with vi.useFakeTimers or vi.useRealTimers.
 afterEach(() => {
+  vi.advanceTimersByTime(0);
   vi.clearAllTimers();
 });

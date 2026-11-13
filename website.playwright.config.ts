@@ -29,6 +29,8 @@ if (!fs.existsSync(configPath)) {
 
 export default defineConfig({
   testDir: "./website/e2e",
+  // Apart from the app suite's: see outputDir in playwright.config.ts.
+  outputDir: "test-results/docs",
   timeout: 30_000,
   use: {
     baseURL: `http://127.0.0.1:${port}`,

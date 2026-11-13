@@ -194,6 +194,11 @@ function createWebServers(config: BrowserConfig): WebServerConfig[] {
 function createProject(config: BrowserConfig) {
   return {
     name: config.browser,
+    // Playwright empties a project's output directory as its run starts.
+    // mise check:quiet runs this suite beside the docs suite, and mise
+    // test:e2e runs chromium beside firefox, so each keeps its own, or one
+    // run's start would delete the traces and failure snapshots of another.
+    outputDir: `test-results/${config.browser}`,
     use: {
       browserName: config.browser,
       baseURL: `http://localhost:${config.frontendPort}`,
