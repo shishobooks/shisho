@@ -21,7 +21,7 @@ import {
   formatMonthName,
   formatRating,
 } from "@/utils/format";
-import type { CountRow } from "@/utils/readingStats";
+import { placeRows, type CountRow, type PlaceRow } from "@/utils/readingStats";
 
 // Reading and listening keep the same colours on every chart.
 const READING_BAR = "bg-reading";
@@ -55,10 +55,13 @@ const share = (value: number, max: number) =>
 
 export const StatsCard = ({
   title,
+  action,
   children,
   className,
 }: {
   title: string;
+  /** A control beside the title, such as a picker for what the card shows. */
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) => (
@@ -66,7 +69,14 @@ export const StatsCard = ({
     aria-label={title}
     className={cn("rounded-md border border-border p-4", className)}
   >
-    <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+    {action ? (
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {action}
+      </div>
+    ) : (
+      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+    )}
     {children}
   </section>
 );
@@ -199,17 +209,21 @@ const PeriodBars = ({
           </ChartTooltip>
         )}
       </ChartFrame>
-      <table className="sr-only">
-        <caption>{caption}</caption>
-        <tbody>
-          {periods.map((period) => (
-            <tr key={periodKey(period)}>
-              <th scope="row">{periodName(period)}</th>
-              <td>{describe(period)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* A table ignores sr-only's 1px width and grows to its text, so a
+          wrapper keeps it from widening the page on a phone. */}
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <tbody>
+            {periods.map((period) => (
+              <tr key={periodKey(period)}>
+                <th scope="row">{periodName(period)}</th>
+                <td>{describe(period)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 };
@@ -498,16 +512,7 @@ export const CountList = ({
   );
 };
 
-const SOURCE_LABELS: Record<ReadingStatsPlace["source"], string> = {
-  web_reader: "Shisho reader",
-  kobo: "Kobo",
-  koreader: "KOReader",
-};
-
-const placeLabel = (place: ReadingStatsPlace) =>
-  place.device_name ?? SOURCE_LABELS[place.source];
-
-const placeTime = (place: ReadingStatsPlace) => {
+const placeTime = (place: PlaceRow) => {
   const parts: string[] = [];
   if (place.reading_seconds > 0)
     parts.push(`${formatDuration(place.reading_seconds)} reading`);
@@ -517,25 +522,26 @@ const placeTime = (place: ReadingStatsPlace) => {
 };
 
 export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {
-  if (places.length === 0) {
+  const rows = placeRows(places);
+  if (rows.length === 0) {
     return <EmptyNote>No reading time recorded.</EmptyNote>;
   }
   const max = Math.max(
-    ...places.map((p) => p.reading_seconds + p.listening_seconds),
+    ...rows.map((p) => p.reading_seconds + p.listening_seconds),
   );
   return (
     <>
       <Legend />
       <ul className="space-y-2">
-        {places.map((place, i) => (
+        {rows.map((place, i) => (
           // Two Devices can share a name, so the place in the list keys it.
           <li
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 text-sm"
-            key={`${i}-${place.source}-${place.device_name ?? ""}`}
+            key={`${i}-${place.label}`}
             title={placeTime(place)}
           >
             <TruncatedText className="min-w-0 truncate">
-              {placeLabel(place)}
+              {place.label}
             </TruncatedText>
             <span className="text-right text-xs tabular-nums text-muted-foreground">
               {placeTime(place)}

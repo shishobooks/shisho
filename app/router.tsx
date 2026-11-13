@@ -300,7 +300,7 @@ export const routes: RouteObject[] = [
         ),
       },
       {
-        path: "reading-stats",
+        path: "reading-stats/:tab?",
         element: (
           <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.readingStats}>
             <ReadingStatsPage />

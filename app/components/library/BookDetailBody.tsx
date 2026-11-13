@@ -509,7 +509,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         </section>
       )}
 
-      {!isShareLink && <ReadingHistory bookId={book.id} />}
+      {!isShareLink && <ReadingHistory bookId={book.id} title={book.title} />}
 
       {/* Under 1280px the Related panel follows the files: they matter more.
           It renders twice, one copy hidden by CSS at each width, so it can

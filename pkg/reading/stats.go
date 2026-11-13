@@ -255,9 +255,9 @@ func (t *periodTable) rows() []ReadingStatsPeriod {
 }
 
 // addSessionTime adds the Session time that fell on days in rng to the
-// periods, and to Places, which splits it by where it was read: the Shisho
-// reader, each of the user's Devices, or, for a Device since deleted, the
-// kind of reader it was.
+// periods, and to Places, which splits it by where
+// it was read: the Shisho reader, each of the user's Devices, or, for a
+// Device since deleted, the kind of reader it was.
 func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsResponse, userID int, periods *periodTable, sessions []statsSession, rng dayRange, loc *time.Location) error {
 	type place struct {
 		source             string

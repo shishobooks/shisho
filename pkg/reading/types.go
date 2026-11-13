@@ -17,7 +17,10 @@ type BookReadingResponse struct {
 	OnToRead     bool                  `json:"on_to_read"`
 	ToReadPlace  *int                  `json:"to_read_place" tstype:"number | null"` // 1-based place on To Read as the To Read page shows it, among Books in libraries the user can reach
 	ReadThroughs []*models.ReadThrough `json:"read_throughs" tstype:"ReadThrough[]"`
-	PageFlow     *string               `json:"page_flow" tstype:"PageFlow | null"` // The flow chosen for the Page-based reader; null lets the reader pick
+	// SessionCounts is how many Reading Sessions each Read-through has, by
+	// its id.
+	SessionCounts map[int]int `json:"session_counts"`
+	PageFlow      *string     `json:"page_flow" tstype:"PageFlow | null"` // The flow chosen for the Page-based reader; null lets the reader pick
 	// Progress is how far through the Book the user is, from 0 to 1: the
 	// furthest of its main Files' positions, while a Read-through is underway.
 	Progress *float64 `json:"progress" tstype:"number | null"`
@@ -162,6 +165,33 @@ type ReadingHistoryEntry struct {
 	// CanReread is whether "Start a reread" applies: the user can reach the
 	// Book and has no Read-through of it underway.
 	CanReread bool `json:"can_reread"`
+	// SessionCount is how many Reading Sessions the Read-through has.
+	SessionCount int `json:"session_count"`
+}
+
+// ReadThroughSessionsResponse is every Reading Session of one of the
+// user's Read-throughs, in the order they started. It's every one, so it
+// isn't paged.
+type ReadThroughSessionsResponse struct {
+	// TimeZone is the IANA zone to show the Sessions in: the user's, or UTC
+	// when they set none.
+	TimeZone string               `json:"time_zone"`
+	Items    []ReadThroughSession `json:"items"`
+}
+
+// ReadThroughSession is one Reading Session of a Read-through. Seconds is
+// the time it recorded, which can be less than its span.
+type ReadThroughSession struct {
+	ID              int       `json:"id"`
+	StartedAt       time.Time `json:"started_at"`
+	EndedAt         time.Time `json:"ended_at"`
+	Seconds         int       `json:"seconds"`
+	StartPercentage float64   `json:"start_percentage"`
+	EndPercentage   float64   `json:"end_percentage"`
+	Kind            string    `json:"kind" tstype:"ReadingKind"`
+	Source          string    `json:"source" tstype:"ReadingSource"`
+	// Measured is false for a Session its source estimated.
+	Measured bool `json:"measured"`
 }
 
 // ReadThroughEntry is one of the user's Read-throughs with what it takes to
@@ -344,4 +374,142 @@ type ReadingStatsFinishedBook struct {
 	// Rating is the Book's current Rating in stars; null when unrated or
 	// the Book was deleted.
 	Rating *float64 `json:"rating" tstype:"number | null,required"`
+}
+
+// ReadingStatsHeatmapQuery picks the heatmap's year, or the last 12 months
+// when Year is omitted.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsHeatmapQuery struct {
+	Year *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
+}
+
+// ReadingStatsHeatmapResponse is the signed-in user's reading for a year,
+// a day at a time, for the heatmap on Reading Stats' Calendar
+// tab. Days are in the user's time zone, a Session past midnight split
+// between both.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsHeatmapResponse struct {
+	// Today is the user's today.
+	Today string `json:"today"`
+	// From and To are the heatmap's first and last days: the last 12 months
+	// up to Today, or the whole year asked for, the current one included.
+	From string `json:"from"`
+	To   string `json:"to"`
+	// FirstDay is the earliest day the user read or began or ended a
+	// Read-through, however long ago, which the calendar goes back to. Null
+	// with no reading at all.
+	FirstDay *string `json:"first_day" tstype:"string | null,required"`
+	// Days are the days from From to To with Session time, in order.
+	Days []ReadingStatsDay `json:"days"`
+}
+
+// ReadingStatsDay is the Session time that fell on one day, in the user's
+// time zone, for the Reading Stats heatmap.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsDay struct {
+	Day              string `json:"day"`
+	ReadingSeconds   int    `json:"reading_seconds"`
+	ListeningSeconds int    `json:"listening_seconds"`
+}
+
+// ReadingStatsCalendarQuery picks the month the Reading Stats calendar
+// shows.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsCalendarQuery struct {
+	Year  int `query:"year" json:"year" validate:"required,min=1,max=9999"`
+	Month int `query:"month" json:"month" validate:"required,min=1,max=12"`
+}
+
+// ReadingStatsCalendarResponse is one month of the Reading Stats calendar:
+// each day with reading or a finish, and the Books on them. Days are in the
+// user's time zone, and a Session that ran past midnight is on both days.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsCalendarResponse struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+	// Books are every Book read or finished in the month, by title.
+	Books []ReadingStatsBookRef `json:"books"`
+	// Days are the days with anything on them, in order.
+	Days []ReadingStatsCalendarDay `json:"days"`
+}
+
+// ReadingStatsCalendarDay is one day of the calendar and the Books on it.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsCalendarDay struct {
+	Day   string                        `json:"day"`
+	Books []ReadingStatsCalendarDayBook `json:"books"`
+}
+
+// ReadingStatsCalendarDayBook is one Book on one calendar day: the Session
+// time spent on it that day, and whether a Read-through of it finished that
+// day. A Read-through logged by hand finishes with no time.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsCalendarDayBook struct {
+	Key      string `json:"key"`
+	Seconds  int    `json:"seconds"`
+	Finished bool   `json:"finished"`
+}
+
+// ReadingStatsBookRef names a Book on the calendar and in a day's detail.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsBookRef struct {
+	// Key stays the same for a Book in every month, so it can pick the
+	// Book's colour: "book-<id>"; once the Book is deleted, which keeps no
+	// link to it, "read-through-<id>" for each Read-through of it, or
+	// "session-<id>" for a Session with no Read-through to name it.
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	// Removed is true when the Book was deleted.
+	Removed bool `json:"removed"`
+	// Book is the Book when the user can still reach it: null when it was
+	// deleted or sits in a library they no longer have access to.
+	Book *ReadingHistoryBook `json:"book" tstype:"ReadingHistoryBook | null,required"`
+}
+
+// ReadingStatsDayQuery picks the day whose Sessions Reading Stats lists.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsDayQuery struct {
+	Day string `query:"day" json:"day" validate:"required,date"`
+}
+
+// ReadingStatsDayResponse is one day's Reading Sessions, in the user's time
+// zone, and the Read-throughs finished that day.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsDayResponse struct {
+	Day string `json:"day"`
+	// TimeZone is the IANA zone the day is in: the user's, or UTC when
+	// they set none.
+	TimeZone string                   `json:"time_zone"`
+	Sessions []ReadingStatsDaySession `json:"sessions"`
+	Finished []ReadingStatsBookRef    `json:"finished"`
+}
+
+// ReadingStatsDaySession is one Reading Session that touched the day, in
+// the order they started. StartedAt and EndedAt are the whole Session, which
+// may begin the day before or end the day after; Seconds is its time on
+// this day.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsDaySession struct {
+	ID              int                 `json:"id"`
+	Book            ReadingStatsBookRef `json:"book"`
+	StartedAt       time.Time           `json:"started_at"`
+	EndedAt         time.Time           `json:"ended_at"`
+	Seconds         int                 `json:"seconds"`
+	StartPercentage float64             `json:"start_percentage"`
+	EndPercentage   float64             `json:"end_percentage"`
+	Kind            string              `json:"kind" tstype:"ReadingKind"`
+	Source          string              `json:"source" tstype:"ReadingSource"`
+	// Measured is false for a Session its source estimated.
+	Measured bool `json:"measured"`
 }

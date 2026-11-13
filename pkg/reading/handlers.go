@@ -129,16 +129,25 @@ func (h *handler) buildBookReadingResponse(c echo.Context, user *models.User, bo
 		}
 		place = &p
 	}
+	counts, err := h.readingService.sessionCounts(ctx, reading.ReadThroughs)
+	if err != nil {
+		return BookReadingResponse{}, err
+	}
+	sessionCounts := make(map[int]int, len(reading.ReadThroughs))
+	for _, rt := range reading.ReadThroughs {
+		sessionCounts[rt.ID] = counts[rt.ID]
+	}
 	resp := BookReadingResponse{
-		BookID:       bookID,
-		Status:       reading.Status,
-		OnToRead:     reading.OnToRead,
-		ToReadPlace:  place,
-		ReadThroughs: reading.ReadThroughs,
-		PageFlow:     reading.PageFlow,
-		Positions:    reading.Positions,
-		Progress:     reading.Progress,
-		LastReadAt:   reading.LastReadAt,
+		BookID:        bookID,
+		SessionCounts: sessionCounts,
+		Status:        reading.Status,
+		OnToRead:      reading.OnToRead,
+		ToReadPlace:   place,
+		ReadThroughs:  reading.ReadThroughs,
+		PageFlow:      reading.PageFlow,
+		Positions:     reading.Positions,
+		Progress:      reading.Progress,
+		LastReadAt:    reading.LastReadAt,
 	}
 	resp.Rating = RatingStars(reading.RatingUnits)
 	return resp, nil
@@ -371,6 +380,24 @@ func (h *handler) deleteReadThrough(c echo.Context) error {
 	return h.respondReadThrough(c, user, rt)
 }
 
+// listReadThroughSessions lists the Reading Sessions of the caller's own :id
+// Read-through, whether or not its Book still exists or is in reach.
+func (h *handler) listReadThroughSessions(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	rt, err := h.requireOwnReadThrough(c, user)
+	if err != nil {
+		return err
+	}
+	resp, err := h.readingService.ReadThroughSessions(c.Request().Context(), user.ID, rt.ID)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
 // endReadThrough ends the caller's own :id Read-through underway with
 // outcome, for Reading History, where its Book may be gone.
 func (h *handler) endReadThrough(c echo.Context, outcome string) error {
@@ -475,6 +502,81 @@ func (h *handler) listStatsFinished(c echo.Context) error {
 		return err
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// statsHeatmap returns the caller's reading for a year, or the last 12
+// months, a day at a time. Like stats, it takes no user.
+func (h *handler) statsHeatmap(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReadingStatsHeatmapQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.StatsHeatmap(c.Request().Context(), user, params.Year)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// statsCalendar returns one month of the caller's Reading Stats calendar.
+// Like stats, it takes no user.
+func (h *handler) statsCalendar(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReadingStatsCalendarQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.StatsCalendar(c.Request().Context(), user, params.Year, params.Month)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// statsDay returns one day of the caller's Reading Sessions for Reading
+// Stats. Like stats, it takes no user.
+func (h *handler) statsDay(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := ReadingStatsDayQuery{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	resp, err := h.readingService.StatsDay(c.Request().Context(), user, params.Day)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// deleteSession deletes the caller's own :id Reading Session for good, from
+// a day on Reading Stats. Anyone else's is not found.
+func (h *handler) deleteSession(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	id, err := httputil.ParamID(c, "id", "Reading Session")
+	if err != nil {
+		return err
+	}
+	deleted, err := h.readingService.DeleteSession(c.Request().Context(), user.ID, id)
+	if err != nil {
+		return err
+	}
+	if !deleted {
+		return errcodes.NotFound("Reading Session")
+	}
+	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
 func (h *handler) addToRead(c echo.Context) error {

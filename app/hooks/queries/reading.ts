@@ -19,9 +19,16 @@ import {
   type ListReadingStatsFinishedQuery,
   type ListReadingStatsFinishedResponse,
   type PageFlow,
+  type ReadingStatsCalendarQuery,
+  type ReadingStatsCalendarResponse,
+  type ReadingStatsDayQuery,
+  type ReadingStatsDayResponse,
+  type ReadingStatsHeatmapQuery,
+  type ReadingStatsHeatmapResponse,
   type ReadingStatsQuery,
   type ReadingStatsResponse,
   type ReadThroughChangeResponse,
+  type ReadThroughSessionsResponse,
   type ReorderToReadPayload,
   type SetPageFlowPayload,
   type SetRatingPayload,
@@ -34,6 +41,7 @@ import { todayDay, type ReadingTransition } from "@/utils/readingStatus";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
+import { QueryKey as ServerStatsQueryKey } from "./serverStats";
 import { QueryKey as SettingsQueryKey } from "./settings";
 
 export enum QueryKey {
@@ -173,6 +181,85 @@ export const useReadingStatsFinished = (
     queryKey: [QueryKey.ReadingStats, "finished", query],
     queryFn: ({ signal }) =>
       API.request("GET", "/reading/stats/finished", null, query, signal),
+  });
+};
+
+// The signed-in user's reading a day at a time for a year, or the last 12
+// months, for the heatmap on Reading Stats' Calendar tab, under the Reading
+// Stats key.
+export const useReadingStatsHeatmap = (
+  query: ReadingStatsHeatmapQuery,
+  options: Omit<
+    UseQueryOptions<ReadingStatsHeatmapResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ReadingStatsHeatmapResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingStats, "heatmap", query],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/stats/heatmap", null, query, signal),
+  });
+};
+
+// One month of the signed-in user's Reading Stats calendar. Like the
+// finished list, it sits under the Reading Stats key.
+export const useReadingStatsCalendar = (
+  query: ReadingStatsCalendarQuery,
+  options: Omit<
+    UseQueryOptions<ReadingStatsCalendarResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ReadingStatsCalendarResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingStats, "calendar", query],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/stats/calendar", null, query, signal),
+  });
+};
+
+// One day's Reading Sessions for the Reading Stats calendar, under the
+// Reading Stats key.
+export const useReadingStatsDay = (
+  query: ReadingStatsDayQuery,
+  options: Omit<
+    UseQueryOptions<ReadingStatsDayResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ReadingStatsDayResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingStats, "day", query],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/stats/day", null, query, signal),
+  });
+};
+
+// The Reading Sessions of one of the signed-in user's Read-throughs. It
+// sits under the Reading History key, so deleting a Session refetches it.
+export const useReadThroughSessions = (
+  readThroughId: number,
+  options: Omit<
+    UseQueryOptions<ReadThroughSessionsResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ReadThroughSessionsResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingHistory, "sessions", readThroughId],
+    queryFn: ({ signal }) =>
+      API.request(
+        "GET",
+        `/reading/read-throughs/${readThroughId}/sessions`,
+        null,
+        null,
+        signal,
+      ),
   });
 };
 
@@ -353,7 +440,33 @@ export const useDeleteReadThrough = () => {
     mutationFn: (id) => {
       return API.request("DELETE", `/reading/read-throughs/${id}`, null, null);
     },
-    onSuccess: (data) => onReadThroughChanged(queryClient, data),
+    onSuccess: (data) => {
+      onReadThroughChanged(queryClient, data);
+      // Its Sessions go with it, and Server Stats totals everyone's time.
+      queryClient.invalidateQueries({
+        queryKey: [ServerStatsQueryKey.ServerStats],
+      });
+    },
+  });
+};
+
+// Deletes one of the signed-in user's Reading Sessions for good. Its time
+// leaves Reading Stats and Server Stats, and its Read-through's session
+// count drops on Reading History and the Book's page.
+export const useDeleteReadingSession = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, ShishoAPIError, number>({
+    mutationFn: (id) => {
+      return API.request("DELETE", `/reading/sessions/${id}`, null, null);
+    },
+    onSuccess: () => {
+      invalidateReadingRecords(queryClient);
+      queryClient.invalidateQueries({ queryKey: [QueryKey.BookReading] });
+      // Server Stats totals everyone's reading time.
+      queryClient.invalidateQueries({
+        queryKey: [ServerStatsQueryKey.ServerStats],
+      });
+    },
   });
 };
 

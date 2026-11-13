@@ -675,11 +675,17 @@ func (svc *Service) SetEstimatedSessionEnd(ctx context.Context, userID, id int, 
 	return errors.WithStack(err)
 }
 
-// DeleteSession deletes userID's Reading Session id, one that turned out not
-// to be reading.
-func (svc *Service) DeleteSession(ctx context.Context, userID, id int) error {
-	_, err := svc.db.NewDelete().Model((*models.ReadingSession)(nil)).Where("id = ? AND user_id = ?", id, userID).Exec(ctx)
-	return errors.WithStack(err)
+// DeleteSession deletes userID's Reading Session id for good, one that
+// turned out not to be reading, and reports whether there was one: another
+// user's is never deleted. It's a plain delete, which KOReader sync relies
+// on to keep a deleted Session from coming back.
+func (svc *Service) DeleteSession(ctx context.Context, userID, id int) (bool, error) {
+	res, err := svc.db.NewDelete().Model((*models.ReadingSession)(nil)).Where("id = ? AND user_id = ?", id, userID).Exec(ctx)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, errors.WithStack(err)
 }
 
 // RetrievePosition loads userID's Reading Position in fileID, or nil when

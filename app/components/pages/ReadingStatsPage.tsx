@@ -1,6 +1,12 @@
 import { History } from "lucide-react";
 import { useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
 import {
   FilterChip,
@@ -11,6 +17,7 @@ import PaginationFooter, {
   type PageChangeHandler,
 } from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
+import ReadingCalendarTab from "@/components/library/ReadingCalendarTab";
 import {
   CountList,
   FinishedChart,
@@ -30,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContentWidth } from "@/contexts/ContentWidth";
 import {
   useReadingStats,
@@ -386,26 +394,42 @@ const FinishedSection = ({
   );
 };
 
-// The signed-in user's own reading, summarized for one year or all time.
-// It takes no user, so it never shows anyone else's.
+// The page's tabs, each at its own path; Overview is the bare one.
+const TABS = ["overview", "calendar"] as const;
+type Tab = (typeof TABS)[number];
+const isTab = (value: string): value is Tab =>
+  (TABS as readonly string[]).includes(value);
+
+// The signed-in user's own reading, summarized for one year or all time on
+// Overview and day by day on Calendar. It takes no user, so it never shows
+// anyone else's.
 const ReadingStatsPage = () => {
   usePageTitle("Reading Stats");
+  const { tab: tabParam } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
+  const tab: Tab | null =
+    tabParam === undefined
+      ? "overview"
+      : isTab(tabParam) && tabParam !== "overview"
+        ? tabParam
+        : null;
   const settingsQuery = useUserSettings();
-  const currentYear = Number(
-    todayDay(settingsQuery.data?.time_zone).slice(0, 4),
-  );
+  const today = todayDay(settingsQuery.data?.time_zone);
+  const currentYear = Number(today.slice(0, 4));
   const [searchParams, setSearchParams] = useSearchParams();
   const yearParam = searchParams.get("year");
   const parsed = parseRange(yearParam);
   const year = parsed === undefined ? currentYear : parsed;
-  const statsQuery = useReadingStats(year === null ? {} : { year });
+  const statsQuery = useReadingStats(year === null ? {} : { year }, {
+    enabled: tab === "overview",
+  });
   const stats = statsQuery.data;
 
   // A "year" in the URL that isn't one goes at once, so the URL always
   // names what the page shows.
   const strayYear = yearParam !== null && parsed === undefined;
   useEffect(() => {
-    if (!strayYear) return;
+    if (!strayYear || tab !== "overview") return;
     setSearchParams(
       (prev) => {
         const params = new URLSearchParams(prev);
@@ -415,7 +439,7 @@ const ReadingStatsPage = () => {
       },
       { replace: true, preventScrollReset: true },
     );
-  }, [strayYear, setSearchParams]);
+  }, [strayYear, tab, setSearchParams]);
 
   // The current year is always offered, with or without reading in it, as
   // is the year in view.
@@ -458,6 +482,19 @@ const ReadingStatsPage = () => {
   };
 
   const rangeLabel = year === null ? "all time" : String(year);
+
+  // An unknown tab goes to the first, so the URL names what's shown.
+  if (tab === null) {
+    return <Navigate replace to="/reading-stats" />;
+  }
+
+  // Each tab keeps its own URL parameters, so switching drops the other's.
+  const changeTab = (value: string) => {
+    navigate(
+      value === "overview" ? "/reading-stats" : `/reading-stats/${value}`,
+      { preventScrollReset: true },
+    );
+  };
 
   const renderBody = () => {
     if (statsQuery.error && !stats) {
@@ -510,26 +547,30 @@ const ReadingStatsPage = () => {
           <div className="min-w-0">
             <h1 className="mb-2 text-2xl font-semibold">Reading Stats</h1>
             <p className="text-sm text-muted-foreground md:text-base">
-              Your reading for {rangeLabel}. Only you can see this.
+              {tab === "overview"
+                ? `Your reading for ${rangeLabel}. Only you can see this.`
+                : "Your reading, day by day. Only you can see this."}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Select
-              onValueChange={setRange}
-              value={year === null ? ALL_TIME : String(year)}
-            >
-              <SelectTrigger aria-label="Range" className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((y) => (
-                  <SelectItem key={y} value={String(y)}>
-                    {y}
-                  </SelectItem>
-                ))}
-                <SelectItem value={ALL_TIME}>All time</SelectItem>
-              </SelectContent>
-            </Select>
+            {tab === "overview" && (
+              <Select
+                onValueChange={setRange}
+                value={year === null ? ALL_TIME : String(year)}
+              >
+                <SelectTrigger aria-label="Range" className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={ALL_TIME}>All time</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Button asChild size="sm" variant="outline">
               <Link aria-label="Manage reading history" to="/reading-history">
                 <History className="h-4 w-4" />
@@ -539,14 +580,28 @@ const ReadingStatsPage = () => {
           </div>
         </div>
 
-        {renderBody()}
-
-        {stats?.places.some((place) => place.source !== "web_reader") && (
-          <p className="mt-6 text-xs text-muted-foreground">
-            Kobo and KOReader don't time your reading the way the Shisho reader
-            does, so time from them is estimated.
-          </p>
-        )}
+        <Tabs onValueChange={changeTab} value={tab}>
+          <TabsList className="mb-4 w-full justify-start overflow-x-auto md:mb-6">
+            <TabsTrigger className="text-xs sm:text-sm" value="overview">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm" value="calendar">
+              Calendar
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview">
+            {renderBody()}
+            {stats?.places.some((place) => place.source !== "web_reader") && (
+              <p className="mt-6 text-xs text-muted-foreground">
+                Kobo and KOReader don't time your reading the way Shisho's web
+                reader and player do, so time from them is estimated.
+              </p>
+            )}
+          </TabsContent>
+          <TabsContent value="calendar">
+            <ReadingCalendarTab />
+          </TabsContent>
+        </Tabs>
       </ContentWidth>
     </div>
   );

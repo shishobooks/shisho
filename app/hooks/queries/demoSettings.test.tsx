@@ -141,6 +141,7 @@ describe("Demo Mode settings", () => {
       on_to_read: false,
       to_read_place: null,
       read_throughs: [],
+      session_counts: {},
       positions: [],
       page_flow: null,
     };
@@ -192,6 +193,7 @@ describe("Demo Mode settings", () => {
       on_to_read: false,
       to_read_place: null,
       read_throughs: [],
+      session_counts: {},
       positions: [],
       page_flow: null,
     });
