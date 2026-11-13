@@ -52,19 +52,20 @@ export const ratingRows = (ratings: ReadingStatsRatingCount[]): CountRow[] =>
       books: rating.books,
     }));
 
-// What each reading source is called. The web app has a reader and a
-// player, named apart below; "web" leaves room for other apps of Shisho's.
+// What each reading source is called. Shisho's own are named as Shisho's,
+// apart from third-party devices and readers; "web" leaves room for other
+// apps of Shisho's. The web app has a reader and a player, named apart.
 const SOURCE_LABELS: Record<ReadingSource, string> = {
-  web_reader: "Web reader",
+  web_reader: "Shisho web reader",
   kobo: "Kobo",
   koreader: "KOReader",
 };
-const WEB_PLAYER = "Web player";
+const WEB_PLAYER = "Shisho web player";
 
 /**
- * Where a Reading Session happened: "Web reader", "Web player" for
- * listening in the web app, or the device's kind, marked when its time was
- * estimated.
+ * Where a Reading Session happened: "Shisho web reader", "Shisho web
+ * player" for listening in the web app, or the device's kind, marked when
+ * its time was estimated.
  */
 export const sessionSourceLabel = (session: {
   source: ReadingSource;

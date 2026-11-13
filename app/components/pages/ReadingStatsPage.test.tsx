@@ -709,8 +709,8 @@ describe("ReadingStatsPage", () => {
     });
     const rows = within(places).getAllByRole("listitem");
     expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringMatching(/^Web reader1h 0m reading/),
-      expect.stringMatching(/^Web player20m listening/),
+      expect.stringMatching(/^Shisho web reader1h 0m reading/),
+      expect.stringMatching(/^Shisho web player20m listening/),
     ]);
   });
 

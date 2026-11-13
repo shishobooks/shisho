@@ -85,7 +85,7 @@ describe("ReadingHistory on a book's page", () => {
     await user.click(toggle);
     const list = await screen.findByRole("list", { name: "Sessions of Dune" });
     expect(list).toHaveTextContent(
-      "Mar 2, 7:00 PM to 8:00 PM · 1h 0m · 0% to 40% · Web player",
+      "Mar 2, 7:00 PM to 8:00 PM · 1h 0m · 0% to 40% · Shisho web player",
     );
 
     await user.click(

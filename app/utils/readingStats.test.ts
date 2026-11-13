@@ -10,14 +10,14 @@ describe("sessionSourceLabel", () => {
         kind: "reading",
         measured: true,
       }),
-    ).toBe("Web reader");
+    ).toBe("Shisho web reader");
     expect(
       sessionSourceLabel({
         source: "web_reader",
         kind: "listening",
         measured: true,
       }),
-    ).toBe("Web player");
+    ).toBe("Shisho web player");
     expect(
       sessionSourceLabel({
         source: "koreader",
@@ -46,9 +46,17 @@ describe("placeRows", () => {
         },
       ]),
     ).toEqual([
-      { label: "Web player", reading_seconds: 0, listening_seconds: 3000 },
+      {
+        label: "Shisho web player",
+        reading_seconds: 0,
+        listening_seconds: 3000,
+      },
       { label: "Bedside Kobo", reading_seconds: 1200, listening_seconds: 0 },
-      { label: "Web reader", reading_seconds: 600, listening_seconds: 0 },
+      {
+        label: "Shisho web reader",
+        reading_seconds: 600,
+        listening_seconds: 0,
+      },
     ]);
   });
 
@@ -69,7 +77,11 @@ describe("placeRows", () => {
         },
       ]),
     ).toEqual([
-      { label: "Web reader", reading_seconds: 600, listening_seconds: 0 },
+      {
+        label: "Shisho web reader",
+        reading_seconds: 600,
+        listening_seconds: 0,
+      },
       { label: "KOReader", reading_seconds: 60, listening_seconds: 0 },
     ]);
   });
