@@ -330,7 +330,7 @@ func TestPluginMenuOffersReinstallOnlyWithSeveralServers(t *testing.T) {
 	require.NoError(t, os.WriteFile(state, []byte(`return { servers = { { url = "http://a.example" } } }`), 0o644))
 	one := s.run(Args{Command: "plugin-menu"})
 	assert.Equal(t, []string{
-		"a.example", "a.example > Sign in again", "a.example > Remove server",
+		"a.example", "a.example > Enabled", "a.example > Sign in again", "a.example > Remove server",
 		"Add a server", "Sync now", "Settings", "Settings > Sync on sleep",
 		"Settings > Newer position from another reader", "Settings > Older position from another reader",
 		"Settings > Check for plugin update", "Settings > Plugin version " + one.Plugin.Version,

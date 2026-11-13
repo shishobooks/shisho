@@ -3,8 +3,10 @@ The plugin's own state, in its own file in KOReader's settings directory:
 
 - servers: every server signed in to, each { url, username, credential,
   device_id, device_name, needs_login, update_required, info, stats_cursor,
-  last_synced }, where info is what the server last answered about itself
-  and stats_cursor is the last statistics row it acknowledged.
+  last_synced, disabled }, where info is what the server last answered about
+  itself, stats_cursor is the last statistics row it acknowledged, and
+  disabled marks one the user turned off: the plugin leaves it alone, and
+  nothing waits for it, until it's enabled again.
 - installed_from: the server the plugin was last installed from.
 - pairing_handled: the short code of a paired zip the plugin already acted
   on, so it acts on it once.
@@ -33,6 +35,30 @@ end
 
 function State:servers()
     return self.data.servers
+end
+
+-- isEnabled reports whether the plugin syncs with server.
+function State:isEnabled(server)
+    return not server.disabled
+end
+
+-- enabledServers is every server the plugin syncs with, checks for updates
+-- with, and keeps reading waiting for.
+function State:enabledServers()
+    local enabled = {}
+    for __, server in ipairs(self.data.servers) do
+        if self:isEnabled(server) then table.insert(enabled, server) end
+    end
+    return enabled
+end
+
+-- setEnabled turns the server at url on or off.
+function State:setEnabled(url, enabled)
+    local server = self:find(url)
+    if server then
+        server.disabled = not enabled or nil
+    end
+    return server
 end
 
 function State:find(url)

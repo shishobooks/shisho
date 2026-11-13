@@ -49,6 +49,8 @@ for __, module in ipairs({ "ui/elements/filemanager_menu_order", "ui/elements/re
     end
 end
 
+local NONE_ENABLED = _("No Shisho server is enabled. Turn one on with Enabled under it in the Shisho menu.")
+
 local Shisho = WidgetContainer:extend{
     name = "shisho",
     is_doc_only = false,
@@ -310,7 +312,7 @@ end
 -- sign-in or a newer plugin. In the background it gives up on a server
 -- quickly.
 function Shisho:checkIn(background)
-    for __, server in ipairs(self.state:servers()) do
+    for __, server in ipairs(self.state:enabledServers()) do
         local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
             background and Client.BACKGROUND or nil)
         local status, body, headers = client:status()
@@ -336,9 +338,13 @@ function Shisho:checkForUpdate(interactive)
         end
         return nil
     end
+    if #self.state:enabledServers() == 0 then
+        if interactive then self:notify(NONE_ENABLED) end
+        return nil
+    end
     self.checked_at = os.time()
     self:checkIn(not interactive)
-    local offer, blocked = Versions.offer(self:installed(), self.state:servers())
+    local offer, blocked = Versions.offer(self:installed(), self.state:enabledServers())
     self.offer = offer
     -- An offer declined once isn't pressed again until something newer
     -- comes along, or the person checks themselves.
@@ -365,7 +371,7 @@ function Shisho:checkForUpdate(interactive)
         -- A server that needs a new sign-in offers nothing, so it can't be
         -- called up to date.
         local signed_out = {}
-        for __, server in ipairs(self.state:servers()) do
+        for __, server in ipairs(self.state:enabledServers()) do
             if server.needs_login then table.insert(signed_out, Urls.label(server.url)) end
         end
         if #signed_out > 0 then
@@ -427,12 +433,12 @@ function Shisho:onNetworkConnected()
         -- A clock set back since the check doesn't count as recent.
         local since = self.checked_at and os.time() - self.checked_at
         local recent = since and since >= 0 and since < RECHECK_AFTER
-        if #self.state:servers() > 0 and not recent and not self.awaiting_restart then
+        if #self.state:enabledServers() > 0 and not recent and not self.awaiting_restart then
             self:checkForUpdate(false)
         end
         -- Whatever turned Wi-Fi on, what's waiting goes out. A sync that just
         -- ran, such as Sync now's or sleep's, isn't repeated.
-        if #self.state:servers() > 0 and not self.awaiting_restart
+        if #self.state:enabledServers() > 0 and not self.awaiting_restart
             and not Sync.ranRecently(self.synced_at, os.time()) then
             self:syncAll(false)
         end
@@ -451,7 +457,7 @@ function Shisho:onReaderReady()
     self.last_page = self.ui.getCurrentPage and self.ui:getCurrentPage()
     self.last_page_turn = nil
     -- Opening a book never waits for Wi-Fi.
-    if #self.state:servers() > 0 and NetworkMgr:isOnline() then
+    if #self.state:enabledServers() > 0 and NetworkMgr:isOnline() then
         UIManager:nextTick(function() self:pullOpenBook(false) end)
     end
 end
@@ -476,7 +482,7 @@ end
 function Shisho:onSuspend()
     if self.record_task then UIManager:unschedule(self.record_task) end
     self:recordPosition(true)
-    if #self.state:servers() == 0 or not self:settings().sync_on_sleep then return end
+    if #self.state:enabledServers() == 0 or not self:settings().sync_on_sleep then return end
     -- Sync on sleep turns Wi-Fi on to do it, as KOReader's progress sync
     -- does, following KOReader's own Wi-Fi setting. It pulls no position: a
     -- question would wait on a sleeping screen.
@@ -506,7 +512,7 @@ end
 -- recordPosition journals the open book's place, timed by the last page
 -- turn, for every signed-in server.
 function Shisho:recordPosition(flush)
-    if #self.state:servers() == 0 or not self.last_page_turn then return end
+    if #self.state:enabledServers() == 0 or not self.last_page_turn then return end
     local document, place = self:documentHash(), self:currentPlace()
     if not document or not place then return end
     if self.journal:recordPosition(document, place.progress, place.percentage, self.last_page_turn) and flush then
@@ -529,7 +535,7 @@ function Shisho:pullOpenBook(interactive)
     local here = self:currentPlace()
     if not document or not here then return end
     local candidates = {}
-    for __, server in ipairs(self.state:servers()) do
+    for __, server in ipairs(self.state:enabledServers()) do
         if not server.needs_login then
             local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
                 not interactive and Client.BACKGROUND or nil)
@@ -615,6 +621,10 @@ function Shisho:syncAll(interactive, going_to_sleep)
         end
         return
     end
+    if #self.state:enabledServers() == 0 then
+        if interactive then self:notify(NONE_ENABLED) end
+        return
+    end
     self.syncing = true
     local ok, problems, statistics_on = pcall(self.syncServers, self, interactive)
     self.syncing = false
@@ -654,7 +664,7 @@ function Shisho:syncServers(interactive)
         read_pages = function(cursor, limit) return Statistics.read(path, cursor, limit) end
     end
     local problems = {}
-    for __, server in ipairs(self.state:servers()) do
+    for __, server in ipairs(self.state:enabledServers()) do
         local label = Urls.label(server.url)
         if server.needs_login then
             table.insert(problems, T(_("%1 needs a new sign-in."), label))
@@ -686,7 +696,19 @@ end
 -- Menu -------------------------------------------------------------------------
 
 function Shisho:serverMenu(server)
-    local items = {}
+    local items = {
+        {
+            text = _("Enabled"),
+            help_text = _("Sync with this server. Turn it off for a server you can't always reach, such as one on your own computer: the plugin then doesn't contact it at all, so it never waits on it, doesn't offer its plugin updates, and keeps nothing waiting for it. Turned on again, it gets the reading time KOReader recorded in the meantime, but not places from while it was off."),
+            checked_func = function() return self.state:isEnabled(server) end,
+            keep_menu_open = true,
+            callback = function()
+                self.state:setEnabled(server.url, not self.state:isEnabled(server))
+                self.journal:prune()
+                self.state:flush()
+            end,
+        },
+    }
     if server.last_synced then
         table.insert(items, {
             text = T(_("Last synced %1"), os.date("%Y-%m-%d %H:%M", server.last_synced)),
@@ -738,7 +760,9 @@ function Shisho:serverHelp(server)
     else
         table.insert(lines, _("Not synced yet."))
     end
-    if server.needs_login then
+    if server.disabled then
+        table.insert(lines, _("Disabled: the plugin doesn't sync with this server or check it for updates until you turn on Enabled under it."))
+    elseif server.needs_login then
         table.insert(lines, _("Needs login: the server no longer accepts this sign-in, such as after the Device's password was regenerated. Your reading waits on this device until you sign in again."))
     elseif server.update_required then
         table.insert(lines, _("Update required: the server no longer accepts this plugin. Install the update it offers."))

@@ -46,7 +46,7 @@ With Wi-Fi on, a plugin downloaded from the Device's page signs itself in on its
 
 Later than that, KOReader opens **Sign in to Shisho** with the server's URL filled in. On the Device's page, click **Pair** and enter the code it shows as the **Pairing code**. A pairing code lasts 30 minutes, and clicking **Pair** or **Download Plugin** again replaces it. To sign in without the Device's page, choose **Use password** and enter your Shisho username and the Device's password. A server URL typed without `http://` or `https://` is tried with `https://` first.
 
-The plugin's menu is **Shisho** in the top menu's tools tab, in the file browser and in an open book. Hold any item in it to see what it does. **Add a server** signs in to another Shisho server, each as a Device of its own on that server. Under each server, **Sign in again** signs in afresh and **Remove server** removes the plugin's sign-in for it, leaving KOReader's books and OPDS catalogs alone.
+The plugin's menu is **Shisho** in the top menu's tools tab, in the file browser and in an open book. Hold any item in it to see what it does. **Add a server** signs in to another Shisho server, each as a Device of its own on that server. Under each server, **Enabled** turns syncing with it on or off, **Sign in again** signs in afresh, and **Remove server** removes the plugin's sign-in for it, leaving KOReader's books and OPDS catalogs alone.
 
 Signing in adds the server's catalog to KOReader's OPDS catalogs as **Shisho** with the server's address, signed in with the Device's password, so you can browse and download without typing a password. If the catalog list already has an entry for the server's OPDS URL, such as one you added by hand, the plugin updates that entry instead of adding another, and keeps its name.
 
@@ -74,7 +74,7 @@ Once signed in, the plugin syncs on its own whenever Wi-Fi comes on, for any rea
 
 A sync sends your reading time and your place in each book you read since the last one. Everything waits on the e-reader while it's offline, for days, weeks, or months, and a restart or a flat battery loses nothing that KOReader had already saved. A sync cut off halfway picks up where it stopped without sending anything twice. **Sync now** says when it finishes or fails; a sync that runs on its own stays quiet.
 
-If you're signed in to several servers, each gets the reading for every book it has, and one server being down doesn't hold up the others.
+If you're signed in to several servers, each gets the reading for every book it has, and one server being down doesn't hold up the others. Each server the plugin can't reach still costs a short wait on every sync. For a server you can't always reach, such as one on your own computer, turn off **Enabled** under it in the plugin's menu: the plugin then doesn't contact it, offers no plugin updates from it, and keeps nothing waiting for it. Turned on again, it gets the reading time KOReader recorded in the meantime, but not your places from while it was off.
 
 ### Reading Time
 

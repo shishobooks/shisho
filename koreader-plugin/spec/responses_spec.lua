@@ -65,6 +65,7 @@ return {
     ["a refused sign-in shows needs login"] = function()
         assert_eq(Responses.serverStatus({ needs_login = true }), "Needs login")
         assert_eq(Responses.serverStatus({}), nil)
+        assert_eq(Responses.serverStatus({ disabled = true, needs_login = true }), "Disabled")
     end,
 
     ["uses the server's own message"] = function()

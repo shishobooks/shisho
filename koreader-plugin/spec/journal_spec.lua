@@ -68,6 +68,19 @@ return {
         assert_eq(#state:get("journal").entries, 0)
     end,
 
+    ["a disabled server keeps nothing waiting"] = function()
+        local state = stateWith("https://a.example", "https://b.example")
+        local journal = Journal.new(state)
+        journal:recordPosition("doc1", "3", 0.3, 1000)
+        local id = journal:pending("https://a.example")[1].id
+        state:setEnabled("https://b.example", false)
+
+        journal:acknowledge("https://a.example", { id })
+        journal:prune()
+
+        assert_eq(#state:get("journal").entries, 0)
+    end,
+
     ["pending is bounded"] = function()
         local state = stateWith("https://a.example")
         local journal = Journal.new(state)

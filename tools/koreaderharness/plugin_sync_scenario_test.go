@@ -23,14 +23,21 @@ import (
 // refuses reading from before its Device existed.
 func (s *scenario) signInPlugin(since time.Time) {
 	s.t.Helper()
+	s.signInPluginWith(since, "")
+}
+
+// signInPluginWith is signInPlugin with extra fields, as Lua, on the server's
+// entry in the plugin's state.
+func (s *scenario) signInPluginWith(since time.Time, extra string) {
+	s.t.Helper()
 	bundle, err := koreaderplugin.DefaultBundle()
 	require.NoError(s.t, err)
 	s.installPlugin(bundle.Zip())
 	state := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
 	require.NoError(s.t, os.MkdirAll(filepath.Dir(state), 0o755))
 	content := fmt.Sprintf(`return { servers = { { url = %q, username = %q, credential = %q, device_id = %q, device_name = %q,
-		stats_cursor = { rowid = 0 } } } }`,
-		s.containerServer(), s.user.Username, s.device.Credential, s.device.ID, s.device.Name)
+		stats_cursor = { rowid = 0 }, %s } } }`,
+		s.containerServer(), s.user.Username, s.device.Credential, s.device.ID, s.device.Name, extra)
 	require.NoError(s.t, os.WriteFile(state, []byte(content), 0o644))
 	_, err = s.db.NewUpdate().Model((*devices.Device)(nil)).Set("created_at = ?", since).Where("id = ?", s.device.ID).Exec(s.ctx)
 	require.NoError(s.t, err)
@@ -110,6 +117,44 @@ func TestPluginSyncsReadingTimeAfterOfflineDays(t *testing.T) {
 	// Syncing again sends nothing new and changes nothing.
 	s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
 	assert.Len(t, s.pluginSessions(), 3)
+}
+
+// A server turned off in the plugin gets nothing and is never contacted, so
+// one that's out of reach costs nothing; turned on again, it gets the
+// reading from where it left off.
+func TestPluginLeavesADisabledServerAlone(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	start := time.Now().UTC().Add(-3 * time.Hour)
+	s.signInPluginWith(start.Add(-24*time.Hour), "disabled = true")
+	stats := []StatRow{
+		{Document: document, Page: 2, TotalPages: 100, StartTime: start.Unix(), Duration: 60},
+		{Document: document, Page: 3, TotalPages: 100, StartTime: start.Add(time.Minute).Unix(), Duration: 60},
+	}
+
+	off := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, Stats: stats})
+	assert.Empty(t, s.pluginSessions())
+	require.Len(t, off.Plugin.Servers, 1)
+	assert.Equal(t, int64(0), off.Plugin.Servers[0].StatsCursor.RowID)
+	assert.Zero(t, off.Plugin.Journal, "nothing waits for it")
+	device, err := s.devices.Retrieve(s.ctx, s.user.ID, s.device.ID)
+	require.NoError(t, err)
+	assert.Nil(t, device.PluginLastConnectedAt, "not even checked in with")
+	assert.Contains(t, strings.Join(off.Shown, " "), "No Shisho server is enabled")
+
+	menu := s.run(Args{Command: "plugin-menu"})
+	assert.Contains(t, menu.Plugin.Menu, s.containerLabel()+" (Disabled)")
+	assert.Contains(t, menu.Plugin.Menu, s.containerLabel()+" (Disabled) > Enabled")
+
+	// Turned on again, it gets what it missed from statistics.
+	state := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
+	data, err := os.ReadFile(state)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(state, []byte(strings.Replace(string(data), "disabled = true", "disabled = nil", 1)), 0o644))
+	s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	require.Len(t, s.pluginSessions(), 1)
+	assert.Equal(t, 120, s.pluginSessions()[0].Duration)
 }
 
 // A sync refused for a regenerated credential keeps everything queued, and
@@ -196,4 +241,14 @@ func TestPluginPushesAndPullsPositions(t *testing.T) {
 	assert.Equal(t, "20", prompted.Progress, "the jump waits for an answer")
 	confirmed := s.run(Args{Command: "plugin-open", File: "comic.cbz", Online: true, Confirm: true})
 	assert.Equal(t, "25", confirmed.Progress)
+}
+
+// containerLabel is how the plugin's menu names the scenario's server: its
+// URL without the scheme.
+func (s *scenario) containerLabel() string {
+	label := s.containerServer()
+	if i := strings.Index(label, "://"); i >= 0 {
+		label = label[i+3:]
+	}
+	return label
 }

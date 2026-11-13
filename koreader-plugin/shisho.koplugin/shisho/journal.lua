@@ -1,7 +1,7 @@
 --[[--
 The journal of what KOReader doesn't record itself (ADR 0016): for now, each
 book's latest position, with when the reader was there. An entry waits until
-every signed-in server has acknowledged it, so a server that needs a new
+every enabled server has acknowledged it, so a server that needs a new
 sign-in, or that's offline, keeps it queued. A newer position replaces the
 one waiting for its book, under a new id, since only the latest place
 matters. It lives in the plugin's state file. No UI.
@@ -94,9 +94,10 @@ function Journal:acknowledge(url, ids)
     end
 end
 
--- prune drops the entries every signed-in server has acknowledged.
+-- prune drops the entries every enabled server has acknowledged. A disabled
+-- server keeps nothing waiting: turned on again, it gets places from then on.
 function Journal:prune()
-    local servers = self.state:servers()
+    local servers = self.state:enabledServers()
     local kept = {}
     for __, entry in ipairs(self.data.entries) do
         local done = true
