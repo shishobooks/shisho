@@ -221,6 +221,7 @@ export default tseslint.config(
       "app/components/ui",
       "app/libraries/foliate/**",
       "test-results",
+      "coverage",
       "pkg/plugins/testdata/*",
       "packages/plugin-sdk/testing/index.js",
       "packages/plugin-sdk/testing/index.d.ts",

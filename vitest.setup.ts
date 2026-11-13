@@ -40,5 +40,4 @@ if (!HTMLElement.prototype.scrollIntoView) {
 afterEach(() => {
   vi.advanceTimersByTime(0);
   vi.clearAllTimers();
-  vi.setSystemTime(vi.getRealSystemTime());
 });

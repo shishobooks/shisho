@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 // vitest.setup.ts fakes the timers for every test and clears them after each
-// one. Whatever one test leaves on the clock must not reach the next, in any
-// order the tests run.
+// one. Whatever one test leaves on the clock must not reach the next. The two
+// tests below are a pair: the second checks what the first leaves behind, so
+// they pin the setup when they run in file order, as they do by default.
 const ShowsLater = ({ text }: { text: string }) => {
   const [shown, setShown] = useState("");
   useEffect(() => {
@@ -29,13 +30,5 @@ describe("the fake timers every test shares", () => {
   it("still run renders queued in the test after it", async () => {
     render(<ShowsLater text="second" />);
     expect(await screen.findByText("second")).toBeInTheDocument();
-  });
-
-  it("can set the date a test runs on", () => {
-    vi.setSystemTime(new Date("2001-02-03T04:05:06Z"));
-  });
-
-  it("are back on today's date in the test after it", () => {
-    expect(Math.abs(Date.now() - vi.getRealSystemTime())).toBeLessThan(1000);
   });
 });

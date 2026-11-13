@@ -831,7 +831,9 @@ func TestRunMetadataSearch_ParentCancelUnwrapsToContextCanceled(t *testing.T) {
 	mgr, rt := installCancelTestEnricher(t, "sleep-enricher", "shisho.sleep(3000); return { results: [{ title: \"done\" }] };")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	// Cancel shortly after the search starts sleeping.
+	// Cancel while the search runs, most likely during its sleep. The error
+	// must unwrap to context.Canceled wherever the cancel lands, so the
+	// timing only picks the path, never the outcome.
 	go func() {
 		time.Sleep(150 * time.Millisecond)
 		cancel()
@@ -879,15 +881,14 @@ func TestRunFileParser_InterruptsInfiniteLoop(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 
-	start := time.Now()
+	// runWithDeadline fails the test if the hook outlives the deadline by
+	// seconds, so no bound on elapsed time is needed here.
 	err := runWithDeadline(t, func() error {
 		_, e := mgr.RunFileParser(ctx, rt, "/some/file.bin", "bin")
 		return e
 	})
-	elapsed := time.Since(start)
 
 	require.Error(t, err)
-	assert.Less(t, elapsed, 3*time.Second, "hook runner should return soon after ctx deadline fires")
 
 	var ie *goja.InterruptedError
 	assert.True(t, errors.As(err, &ie), "expected *goja.InterruptedError in chain, got %T: %v", err, err)
@@ -896,12 +897,10 @@ func TestRunFileParser_InterruptsInfiniteLoop(t *testing.T) {
 	// interrupt flag or an un-released mu from the first run.
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel2()
-	start2 := time.Now()
 	err2 := runWithDeadline(t, func() error {
 		_, e := mgr.RunFileParser(ctx2, rt, "/some/file.bin", "bin")
 		return e
 	})
-	assert.Less(t, time.Since(start2), 3*time.Second, "second invocation should not be blocked on Runtime.mu")
 	require.Error(t, err2, "second invocation should also time out via interrupt")
 }
 

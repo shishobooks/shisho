@@ -14,7 +14,7 @@ import (
 // reachedFunc is the SQL function that the expressions Reached returns call.
 const reachedFunc = "testdb_reached"
 
-// probes maps a probe's id to the channel it closes.
+// probes maps a probe's id to its probe.
 var (
 	probes   sync.Map
 	probeSeq atomic.Int64

@@ -24,10 +24,8 @@ export const rejectingMutate = () =>
  * `stop()` waits a macrotask so Node has reported any such rejection, then
  * stops watching and returns what it saw.
  *
- * Two limits: reject from a plain async function, not a `vi.fn()` mock,
- * because Vitest's spy handles the promise its mock returns and so hides the
- * leak; and do not call `stop()` under `vi.useFakeTimers()` without
- * `shouldAdvanceTime`, since it waits on a real `setTimeout`.
+ * Reject from a plain async function, not a `vi.fn()` mock, because Vitest's
+ * spy handles the promise its mock returns and so hides the leak.
  */
 export const watchUnhandledRejections = () => {
   const reasons: unknown[] = [];
