@@ -222,7 +222,11 @@ const DailySection = ({
     // rather than widen the page.
     <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:gap-6">
       <StatsCard title={`Reading by day in ${month.year}`}>
-        <ReadingHeatmap days={stats.days} year={month.year} />
+        <ReadingHeatmap
+          days={stats.days}
+          month={month.month}
+          year={month.year}
+        />
       </StatsCard>
       <ReadingCalendar
         canGoBack={monthIndex(month) > first}

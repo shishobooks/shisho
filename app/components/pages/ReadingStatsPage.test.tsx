@@ -12,6 +12,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { toast, Toaster } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AuthProvider } from "@/components/contexts/Auth";
@@ -33,6 +34,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  toast.dismiss();
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -172,6 +174,7 @@ const renderPage = ({
   finishedTotal = finished.length,
   calendar = emptyCalendar,
   day = emptyDay,
+  deleteSession = () => new Response(null, { status: 204 }),
   initialEntry = "/reading-stats",
 }: {
   stats?: (year: number | null) => ReadingStatsResponse;
@@ -179,6 +182,7 @@ const renderPage = ({
   finishedTotal?: number;
   calendar?: (year: number, month: number) => ReadingStatsCalendarResponse;
   day?: (day: string) => ReadingStatsDayResponse;
+  deleteSession?: () => Response;
   initialEntry?: string;
 } = {}) => {
   mockCoverDimensions();
@@ -200,7 +204,7 @@ const renderPage = ({
         init?.method === "DELETE" &&
         path.startsWith("/api/reading/sessions/")
       )
-        return new Response(null, { status: 204 });
+        return deleteSession();
       if (path === "/api/reading/stats/calendar")
         return Response.json(
           calendar(
@@ -245,6 +249,7 @@ const renderPage = ({
               <Route element={<ReadingStatsPage />} path="/reading-stats" />
             </Routes>
             <LocationProbe />
+            <Toaster />
           </MemoryRouter>
         </MobileNavProvider>
       </AuthProvider>
@@ -825,6 +830,59 @@ describe("ReadingStatsPage", () => {
         document.querySelectorAll('[data-finish][data-book="read-through-9"]'),
       ).toHaveLength(1);
       expect(bars("read-through-9")).toEqual([]);
+    });
+
+    it("closes the delete dialog when Demo Mode refuses it", async () => {
+      const { user } = renderPage({
+        calendar: june,
+        day: (day) => ({
+          ...emptyDay(day),
+          sessions: [
+            {
+              id: 41,
+              book: dune,
+              started_at: "2026-06-01T20:00:00Z",
+              ended_at: "2026-06-01T21:00:00Z",
+              seconds: 3600,
+              start_percentage: 0.1,
+              end_percentage: 0.25,
+              kind: "reading",
+              source: "web_reader",
+              measured: true,
+            },
+          ],
+        }),
+        deleteSession: () =>
+          Response.json(
+            {
+              error: {
+                code: "demo_mode",
+                message: "This action is unavailable in the demo.",
+              },
+            },
+            { status: 403 },
+          ),
+      });
+      await user.click(
+        await screen.findByRole("button", { name: /^Monday, June 1, 2026/ }),
+      );
+      await user.click(
+        await screen.findByRole("button", { name: "Delete session of Dune" }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Delete this reading session?",
+      });
+      await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+      expect(
+        await screen.findByText("This action is unavailable in the demo."),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      );
+      expect(
+        screen.getAllByText("This action is unavailable in the demo."),
+      ).toHaveLength(1);
     });
 
     it("opens a day's sessions, and deletes one after asking", async () => {

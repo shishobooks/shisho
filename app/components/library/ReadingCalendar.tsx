@@ -1,5 +1,5 @@
 import { Check, ChevronLeft, ChevronRight, Trash2, X } from "lucide-react";
-import { useState, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -14,7 +14,7 @@ import {
   useReadingStatsCalendar,
   useReadingStatsDay,
 } from "@/hooks/queries/reading";
-import { toastRequestError } from "@/libraries/api";
+import { isDemoModeError, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type {
   ReadingStatsBookRef,
@@ -66,12 +66,16 @@ const HEAT_SHADES = [
  */
 export const ReadingHeatmap = ({
   year,
+  month,
   days,
 }: {
   year: number;
+  /** The month to bring into view where the year doesn't fit, 1 to 12. */
+  month: number;
   days: ReadingStatsDay[];
 }) => {
   const [active, setActive] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const byDay = new Map(
     days
       .filter((d) => d.day.startsWith(`${year}-`))
@@ -82,9 +86,22 @@ export const ReadingHeatmap = ({
   const busiest = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
   const activeSeconds = active ? (byDay.get(active) ?? 0) : 0;
 
+  // On a narrow screen, centre the month the calendar shows rather than
+  // open on January.
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    const cell = el.querySelector(`[data-day="${monthStart}"]`);
+    if (!cell) return;
+    const offset =
+      cell.getBoundingClientRect().left - el.getBoundingClientRect().left;
+    el.scrollLeft += offset - el.clientWidth / 2;
+  }, [monthStart]);
+
   return (
     <div>
-      <div className="overflow-x-auto pb-1">
+      <div className="overflow-x-auto pb-1" ref={scrollRef}>
         <div
           aria-hidden="true"
           className="inline-grid grid-flow-col gap-[3px]"
@@ -266,7 +283,8 @@ export const ReadingCalendar = ({
                       className={cn(
                         "flex items-start justify-start px-1 py-0.5 text-left text-xs hover:bg-accent/50",
                         col > 0 && "border-l border-border",
-                        selectedDay === day && "bg-accent",
+                        selectedDay === day &&
+                          "bg-accent ring-2 ring-inset ring-primary",
                       )}
                       key={day}
                       onClick={() =>
@@ -355,10 +373,13 @@ export const ReadingCalendar = ({
             );
           })}
         </div>
-        <p className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-          Each book keeps its own colour.
-          <FinishMarker className="ml-1" color="var(--muted-foreground)" />
-          marks the day you finished one.
+        {/* The marker stays with its words when the line wraps. */}
+        <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span>Each book keeps its own colour.</span>
+          <span className="inline-flex items-center gap-1">
+            <FinishMarker color="var(--muted-foreground)" />
+            marks the day you finished one.
+          </span>
         </p>
       </div>
     );
@@ -525,6 +546,8 @@ const DayDetail = ({ day, onClose }: { day: string; onClose: () => void }) => {
       toast.success("Reading session deleted");
       setDeleting(null);
     } catch (error) {
+      // Demo Mode's refusal has been toasted and won't change on a retry.
+      if (isDemoModeError(error)) setDeleting(null);
       toastRequestError(error, "Failed to delete reading session");
     }
   };

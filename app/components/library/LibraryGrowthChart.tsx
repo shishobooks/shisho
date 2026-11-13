@@ -109,25 +109,29 @@ const LibraryGrowthChart = ({ growth }: { growth: GrowthMonth[] }) => {
         {formatCount(points[last].total, "book")} now, with{" "}
         {points[last].added.toLocaleString()} added in {points[last].label}.
       </p>
-      <table className="sr-only">
-        <caption>Library growth by {unit}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{unitHeading[unit]}</th>
-            <th scope="col">Books added</th>
-            <th scope="col">Total books</th>
-          </tr>
-        </thead>
-        <tbody>
-          {points.map((p) => (
-            <tr key={p.label}>
-              <th scope="row">{p.label}</th>
-              <td>{p.added.toLocaleString()}</td>
-              <td>{p.total.toLocaleString()}</td>
+      {/* A table ignores sr-only's 1px width and grows to its text, so a
+          wrapper keeps it from widening the page on a phone. */}
+      <div className="sr-only">
+        <table>
+          <caption>Library growth by {unit}</caption>
+          <thead>
+            <tr>
+              <th scope="col">{unitHeading[unit]}</th>
+              <th scope="col">Books added</th>
+              <th scope="col">Total books</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.label}>
+                <th scope="row">{p.label}</th>
+                <td>{p.added.toLocaleString()}</td>
+                <td>{p.total.toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 };

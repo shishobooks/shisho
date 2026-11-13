@@ -199,17 +199,21 @@ const PeriodBars = ({
           </ChartTooltip>
         )}
       </ChartFrame>
-      <table className="sr-only">
-        <caption>{caption}</caption>
-        <tbody>
-          {periods.map((period) => (
-            <tr key={periodKey(period)}>
-              <th scope="row">{periodName(period)}</th>
-              <td>{describe(period)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* A table ignores sr-only's 1px width and grows to its text, so a
+          wrapper keeps it from widening the page on a phone. */}
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <tbody>
+            {periods.map((period) => (
+              <tr key={periodKey(period)}>
+                <th scope="row">{periodName(period)}</th>
+                <td>{describe(period)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 };
