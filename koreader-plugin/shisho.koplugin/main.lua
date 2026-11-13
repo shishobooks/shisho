@@ -10,6 +10,9 @@ from KOReader's statistics and positions to each of them.
 local Client = require("shisho/client")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DataStorage = require("datastorage")
+local DateTimeWidget = require("ui/widget/datetimewidget")
+local Daily = require("shisho/daily")
+local Device = require("device")
 local Event = require("ui/event")
 local InfoMessage = require("ui/widget/infomessage")
 local Installer = require("shisho/installer")
@@ -61,6 +64,7 @@ function Shisho:init()
     self.stamps = Stamps.load(self.path)
     self.state = State.open(self.state_file)
     self.journal = Journal.new(self.state)
+    self:scheduleDaily()
     self.ui.menu:registerToMainMenu(self)
 
     -- A zip from a Device's page signs itself in on first launch. Once its
@@ -145,6 +149,7 @@ function Shisho:signedIn(url, answer, username, credential)
         self.state:set("installed_from", server.url)
     end
     self.state:flush()
+    self:scheduleDaily()
     self:writeCatalog(server)
     self:notify(T(_("Signed in to %1 as %2."), Urls.label(server.url), server.device_name or username), 3)
     return server
@@ -482,6 +487,7 @@ end
 function Shisho:onSuspend()
     if self.record_task then UIManager:unschedule(self.record_task) end
     self:recordPosition(true)
+    self:armDailyWakeup()
     local servers = self.state:enabledServers()
     if #servers == 0 or not self:settings().sync_on_sleep then return end
     -- Short sittings between other things shouldn't turn Wi-Fi on at every
@@ -492,13 +498,36 @@ function Shisho:onSuspend()
     -- question would wait on a sleeping screen. Wi-Fi it turned on goes off
     -- again before the device sleeps: KOReader turned it off for a reason,
     -- since a Kobo can fail to sleep, or hang, with Wi-Fi on.
-    local turned_on = NetworkMgr:willRerunWhenOnline(function()
-        self:syncAll(false, true)
+    self:syncInBackground(true)
+end
+
+-- WIFI_ASKS is what to tell someone turning on a sync that happens while
+-- they're away, when KOReader would ask before turning Wi-Fi on.
+local WIFI_ASKS = _("KOReader asks before turning Wi-Fi on, so this sync only happens when Wi-Fi is already on. To let it turn Wi-Fi on by itself, set Settings > Network > Action when Wi-Fi is off to Turn on.")
+
+-- wifiTurnsOnByItself reports whether KOReader turns Wi-Fi on without
+-- asking. A sync while the person is away, as the device goes to sleep or at
+-- the daily time, never leaves a question on the screen.
+function Shisho:wifiTurnsOnByItself()
+    return G_reader_settings:readSetting("wifi_enable_action") == "turn_on"
+end
+
+--[[--
+syncInBackground syncs while the person is away: on Wi-Fi already on, or on
+Wi-Fi it turns on and off again, when KOReader turns it on without asking.
+Going to sleep, it pulls no position, since a question would wait on a
+sleeping screen.
+]]
+function Shisho:syncInBackground(going_to_sleep)
+    if NetworkMgr:isOnline() then
+        self:syncAll(false, going_to_sleep)
+        return
+    end
+    if not self:wifiTurnsOnByItself() then return end
+    NetworkMgr:willRerunWhenOnline(function()
+        self:syncAll(false, going_to_sleep)
         NetworkMgr:disableWifi()
     end)
-    if not turned_on then
-        self:syncAll(false, true)
-    end
 end
 
 -- documentHash is the open book's document hash, as KOReader keeps it.
@@ -581,6 +610,111 @@ function Shisho:pullOpenBook(interactive)
     return action
 end
 
+-- Daily sync ------------------------------------------------------------------
+-- While KOReader is awake, a timer runs daily sync. While the device sleeps,
+-- a wake-up alarm does, on a device that has them (Kobo, some Kindles): it
+-- wakes, the plugin syncs, and KOReader puts it back to sleep.
+
+function Shisho:dailySettings()
+    return Daily.settings(self.state:get("settings"))
+end
+
+-- secondsToDaily is how long until daily sync next runs after since (now
+-- when nil), or nil when it's off or no server is signed in.
+function Shisho:secondsToDaily(since)
+    local daily = self:dailySettings()
+    if not daily.enabled or #self.state:servers() == 0 then return nil end
+    local now = os.time()
+    return Daily.nextRun(math.max(now, since or now), daily.hour, daily.min) - now
+end
+
+-- scheduleDaily sets the timer for daily sync's next run while awake.
+function Shisho:scheduleDaily()
+    if not self.daily_task then
+        self.daily_task = function() self:runDailySync(false) end
+    end
+    UIManager:unschedule(self.daily_task)
+    local seconds = self:secondsToDaily()
+    if seconds then UIManager:scheduleIn(seconds, self.daily_task) end
+end
+
+-- armDailyWakeup trades the timer for a wake-up alarm as the device sleeps,
+-- since a timer doesn't run while it's asleep.
+-- After a woken run, the next alarm counts from the one that just went off:
+-- KOReader runs an alarm's task even when it wakes the device a little early,
+-- and from then, today's time would still be to come.
+function Shisho:armDailyWakeup(after_alarm)
+    if self.daily_task then UIManager:unschedule(self.daily_task) end
+    self:removeDailyWakeup()
+    local seconds = self:secondsToDaily(after_alarm)
+    if not seconds or not Device.wakeup_mgr then return end
+    if not self.daily_wakeup then
+        self.daily_wakeup = function() self:runDailySync(true) end
+    end
+    self.daily_alarm = os.time() + seconds
+    Device.wakeup_mgr:addTask(seconds, self.daily_wakeup)
+end
+
+function Shisho:removeDailyWakeup()
+    if Device.wakeup_mgr and self.daily_wakeup then
+        Device.wakeup_mgr:removeTasks(nil, self.daily_wakeup)
+    end
+end
+
+function Shisho:onResume()
+    self:removeDailyWakeup()
+    self:scheduleDaily()
+end
+
+function Shisho:onCloseWidget()
+    if self.daily_task then UIManager:unschedule(self.daily_task) end
+end
+
+--[[--
+runDailySync syncs every enabled server, turning Wi-Fi on for it and off
+again. Woken by the alarm, it has the time KOReader gives a scheduled wake-up
+before sleeping again, so it waits for Wi-Fi and syncs before returning, then
+sets the next day's alarm once KOReader has removed this one.
+]]
+function Shisho:runDailySync(woken)
+    if woken then
+        local was_online = NetworkMgr:isOnline()
+        if was_online or self:wifiTurnsOnByItself() then
+            local ok, err = pcall(function()
+                NetworkMgr:goOnlineToRun(function() self:syncAll(false, true) end)
+            end)
+            if not ok then logger.warn("Shisho: daily sync failed:", err) end
+            -- A Kobo can't sleep with Wi-Fi on.
+            if not was_online then NetworkMgr:disableWifi() end
+        end
+        local alarm = self.daily_alarm
+        UIManager:nextTick(function() self:armDailyWakeup(alarm) end)
+        return
+    end
+    self:syncInBackground(false)
+    self:scheduleDaily()
+end
+
+function Shisho:showDailyTime()
+    local daily = self:dailySettings()
+    UIManager:show(DateTimeWidget:new{
+        hour = daily.hour,
+        min = daily.min,
+        title_text = _("Daily sync time"),
+        ok_text = _("Set time"),
+        callback = function(time)
+            local saved = self.state:get("settings")
+            if type(saved) ~= "table" then
+                saved = {}
+                self.state:set("settings", saved)
+            end
+            saved.daily_sync_hour, saved.daily_sync_min = time.hour, time.min
+            self.state:flush()
+            self:scheduleDaily()
+        end,
+    })
+end
+
 -- Syncing -----------------------------------------------------------------------
 
 local STATISTICS_OFF = _("Reading statistics are off in KOReader, so reading time won't sync. Positions still do.")
@@ -597,6 +731,7 @@ function Shisho:saveSetting(key, value)
     end
     saved[key] = value
     self.state:flush()
+    self:scheduleDaily()
 end
 
 -- flushStatistics asks the statistics plugin to write the pages it still
@@ -717,6 +852,7 @@ function Shisho:serverMenu(server)
                 self.state:setEnabled(server.url, not self.state:isEnabled(server))
                 self.journal:prune()
                 self.state:flush()
+                self:scheduleDaily()
             end,
         },
     }
@@ -754,6 +890,7 @@ function Shisho:serverMenu(server)
                 ok_callback = function()
                     self.state:remove(server.url)
                     self.state:flush()
+                    self:scheduleDaily()
                     if touchmenu_instance then touchmenu_instance:backToUpperMenu() end
                 end,
             })
@@ -805,9 +942,39 @@ function Shisho:settingsMenu()
     return {
         {
             text = _("Sync on sleep"),
-            help_text = _("The plugin syncs on its own whenever Wi-Fi comes on, but never turns Wi-Fi on by itself. With this on, it also turns Wi-Fi on briefly when the device goes to sleep, syncs, and turns Wi-Fi off again, so Shisho stays current even if you rarely use Wi-Fi. It does this at most once an hour, so short sittings don't turn Wi-Fi on every time. It uses some battery."),
+            help_text = _("The plugin syncs on its own whenever Wi-Fi comes on, but never turns Wi-Fi on by itself. With this on, it also turns Wi-Fi on briefly when the device goes to sleep, syncs, and turns Wi-Fi off again, so Shisho stays current even if you rarely use Wi-Fi. It does this at most once an hour, so short sittings don't turn Wi-Fi on every time. It uses some battery. It turns Wi-Fi on only if Settings > Network > Action when Wi-Fi is off is set to Turn on."),
             checked_func = function() return self:settings().sync_on_sleep end,
-            callback = function() self:saveSetting("sync_on_sleep", not self:settings().sync_on_sleep) end,
+            callback = function()
+                local on = not self:settings().sync_on_sleep
+                self:saveSetting("sync_on_sleep", on)
+                if on and not self:wifiTurnsOnByItself() then self:notify(WIFI_ASKS) end
+            end,
+        },
+        {
+            text = _("Daily sync"),
+            help_text_func = function()
+                local text = _("Sync once a day at the time below, turning Wi-Fi on for it and off again, so Shisho is current each morning without you doing anything. It uses a little battery once a day. It turns Wi-Fi on only if Settings > Network > Action when Wi-Fi is off is set to Turn on.")
+                if Device.wakeup_mgr then
+                    return text .. "\n\n" .. _("If the device is asleep then, it wakes up to sync and goes back to sleep. A device that's turned off doesn't sync.")
+                end
+                return text .. "\n\n" .. _("This device can't wake itself, so the sync happens only if KOReader is open and awake then.")
+            end,
+            checked_func = function() return self:dailySettings().enabled end,
+            callback = function()
+                local on = not self:dailySettings().enabled
+                self:saveSetting("daily_sync", on)
+                if on and not self:wifiTurnsOnByItself() then self:notify(WIFI_ASKS) end
+            end,
+        },
+        {
+            text_func = function()
+                local daily = self:dailySettings()
+                return T(_("Daily sync time: %1"), Daily.label(daily.hour, daily.min))
+            end,
+            help_text = _("When daily sync runs each day, on this device's clock. 04:00 unless you change it."),
+            enabled_func = function() return self:dailySettings().enabled end,
+            keep_menu_open = true,
+            callback = function() self:showDailyTime() end,
         },
         {
             text = _("Newer position from another reader"),

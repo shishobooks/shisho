@@ -143,6 +143,57 @@ func TestPluginSyncsOnSleepAtMostHourly(t *testing.T) {
 	assert.Len(t, s.pluginSessions(), 1)
 }
 
+// Daily sync wakes a sleeping device at its time, 4:00 by default, syncs
+// with Wi-Fi it turns off again, and sets the next day's alarm.
+func TestPluginDailySyncWakesTheDevice(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	start := time.Now().UTC().Add(-3 * time.Hour)
+	s.signInPlugin(start.Add(-24 * time.Hour))
+	stats := []StatRow{
+		{Document: document, Page: 2, TotalPages: 100, StartTime: start.Unix(), Duration: 60},
+		{Document: document, Page: 3, TotalPages: 100, StartTime: start.Add(time.Minute).Unix(), Duration: 60},
+	}
+
+	asleep := s.run(Args{Command: "plugin-daily", Stats: stats})
+	require.Len(t, asleep.Plugin.AlarmsArmed, 1, "going to sleep sets the alarm")
+	alarm := time.Unix(asleep.Plugin.AlarmsArmed[0], 0).UTC()
+	// The container's KOReader runs on UTC.
+	assert.Equal(t, 4, alarm.Hour())
+	assert.Equal(t, 0, alarm.Minute())
+	assert.True(t, alarm.After(time.Now()) && alarm.Before(time.Now().Add(24*time.Hour)), "the next 4:00: %s", alarm)
+	assert.Empty(t, s.pluginSessions(), "nothing until the alarm")
+
+	woken := s.run(Args{Command: "plugin-daily", Fire: true})
+	assert.True(t, woken.Plugin.WifiTurnedOn)
+	assert.False(t, woken.Plugin.WifiLeftOn, "Wi-Fi is off again before the device goes back to sleep")
+	require.Len(t, s.pluginSessions(), 1)
+	require.Len(t, woken.Plugin.AlarmsAfter, 1, "the next day's alarm is set")
+	assert.Equal(t, int64(24*60*60), woken.Plugin.AlarmsAfter[0]-woken.Plugin.AlarmsArmed[0])
+}
+
+// KOReader asks before turning Wi-Fi on unless told to turn it on by itself,
+// and a question on a sleeping screen helps no one, so syncing on sleep and
+// daily sync need that setting and otherwise leave Wi-Fi alone.
+func TestPluginSyncsOnSleepOnlyWhenKOReaderTurnsWifiOnByItself(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	start := time.Now().UTC().Add(-3 * time.Hour)
+	s.signInPlugin(start.Add(-24 * time.Hour))
+	stats := []StatRow{{Document: document, Page: 2, TotalPages: 100, StartTime: start.Unix(), Duration: 60}}
+
+	slept := s.run(Args{Command: "plugin-sleep", WifiPrompt: true, Stats: stats})
+	assert.False(t, slept.Plugin.WifiTurnedOn)
+	assert.Empty(t, slept.Prompted, "nothing asks on the sleep screen")
+	assert.Empty(t, s.pluginSessions())
+
+	woken := s.run(Args{Command: "plugin-daily", WifiPrompt: true, Fire: true})
+	assert.False(t, woken.Plugin.WifiTurnedOn)
+	assert.Empty(t, s.pluginSessions())
+}
+
 // A server turned off in the plugin gets nothing and is never contacted, so
 // one that's out of reach costs nothing; turned on again, it gets the
 // reading from where it left off.

@@ -549,6 +549,8 @@ end
 commands["plugin-sleep"] = function()
     withPlugin(function(plugin)
         seedStatistics()
+        -- KOReader turns Wi-Fi on by itself only when told to; it asks by default.
+        G_reader_settings:saveSetting("wifi_enable_action", args.wifi_prompt and "prompt" or "turn_on")
         plugin:saveSetting("sync_on_sleep", true)
         local NetworkMgr = require("ui/network/manager")
         local turned_on = false
@@ -568,6 +570,61 @@ commands["plugin-sleep"] = function()
         end
         plugin:onSuspend()
         return { wifi_turned_on = turned_on, wifi_left_on = NetworkMgr:isWifiOn() }
+    end)
+end
+
+-- plugin-daily turns on daily sync, puts the device to sleep, and reports the
+-- wake-up alarm the plugin set. With fire, the alarm then goes off as a Kobo's
+-- does: the plugin's task runs, KOReader removes it, and the device stays
+-- awake a while before sleeping again. Wi-Fi comes on when asked to.
+commands["plugin-daily"] = function()
+    withPlugin(function(plugin)
+        seedStatistics()
+        -- KOReader turns Wi-Fi on by itself only when told to; it asks by default.
+        G_reader_settings:saveSetting("wifi_enable_action", args.wifi_prompt and "prompt" or "turn_on")
+        plugin:saveSetting("daily_sync", true)
+        local NetworkMgr = require("ui/network/manager")
+        local turned_on = false
+        local function setOnline(online)
+            NetworkMgr.isOnline = function() return online end
+            NetworkMgr.isConnected = NetworkMgr.isOnline
+            NetworkMgr.isWifiOn = NetworkMgr.isOnline
+        end
+        NetworkMgr.goOnlineToRun = function(_, callback)
+            if not NetworkMgr:isOnline() then turned_on = true; setOnline(true) end
+            callback()
+            return true
+        end
+        NetworkMgr.disableWifi = function() setOnline(false) end
+        -- The device's wake-up alarms, as KOReader's WakeupMgr keeps them.
+        local Device = require("device")
+        local tasks = {}
+        Device.wakeup_mgr = {
+            addTask = function(_, seconds, callback)
+                table.insert(tasks, { epoch = os.time() + seconds, callback = callback })
+                table.sort(tasks, function(a, b) return a.epoch < b.epoch end)
+            end,
+            removeTasks = function(_, epoch, callback)
+                for i = #tasks, 1, -1 do
+                    if (not epoch or tasks[i].epoch == epoch) and (not callback or tasks[i].callback == callback) then
+                        table.remove(tasks, i)
+                    end
+                end
+            end,
+        }
+        local function alarms()
+            local out = {}
+            for __, task in ipairs(tasks) do table.insert(out, task.epoch) end
+            return #out > 0 and out or nil
+        end
+        plugin:onSuspend()
+        local armed = alarms()
+        if args.fire and tasks[1] then
+            tasks[1].callback()
+            table.remove(tasks, 1)
+            stepUI()
+        end
+        return { alarms_armed = armed, alarms_after = alarms(), wifi_turned_on = turned_on, wifi_left_on = NetworkMgr:isWifiOn() }
     end)
 end
 

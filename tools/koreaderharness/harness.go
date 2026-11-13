@@ -101,9 +101,14 @@ type PluginReport struct {
 	Journal int `json:"journal"`
 	// WifiTurnedOn and WifiLeftOn say, after plugin-sleep, whether going to
 	// sleep turned Wi-Fi on and whether Wi-Fi was still on afterwards.
-	WifiTurnedOn bool     `json:"wifi_turned_on"`
-	WifiLeftOn   bool     `json:"wifi_left_on"`
-	Problems     []string `json:"problems"`
+	WifiTurnedOn bool `json:"wifi_turned_on"`
+	WifiLeftOn   bool `json:"wifi_left_on"`
+	// AlarmsArmed and AlarmsAfter are the wake-up alarms set, in Unix
+	// seconds, after plugin-daily put the device to sleep, and after the
+	// first went off.
+	AlarmsArmed []int64  `json:"alarms_armed"`
+	AlarmsAfter []int64  `json:"alarms_after"`
+	Problems    []string `json:"problems"`
 	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu,
 	// and Menu what the Shisho menu does, with a submenu's items as
 	// "Parent > Item".
@@ -185,6 +190,12 @@ type Args struct {
 	Stats         []StatRow
 	StatisticsOff bool
 	SyncNow       bool
+	// Fire sets off the wake-up alarm plugin-daily set.
+	Fire bool
+	// WifiPrompt leaves KOReader asking before it turns Wi-Fi on, its
+	// default, for plugin-sleep and plugin-daily, which otherwise set it to
+	// turn Wi-Fi on by itself.
+	WifiPrompt bool
 }
 
 // Run runs one command in a fresh container, as KOReader's unit tests start
@@ -259,6 +270,12 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.StatisticsOff {
 		payload["statistics_off"] = true
+	}
+	if a.WifiPrompt {
+		payload["wifi_prompt"] = true
+	}
+	if a.Fire {
+		payload["fire"] = true
 	}
 	if a.SyncNow {
 		payload["sync_now"] = true

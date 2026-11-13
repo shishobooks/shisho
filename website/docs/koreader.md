@@ -71,6 +71,9 @@ Once signed in, the plugin syncs on its own whenever Wi-Fi comes on, for any rea
 
 - **Sync now** in the plugin's menu turns Wi-Fi on if needed and sends everything at once. Use it before you switch to another device.
 - **Settings > Sync on sleep**, off by default, turns Wi-Fi on briefly when the e-reader goes to sleep, syncs, and turns it off again, so Shisho stays current at the cost of some battery. It does this at most once an hour after the last sync, so putting the e-reader down often between short sittings doesn't turn Wi-Fi on each time. The sync runs while the sleep screen shows; waking the e-reader during it wakes it once the sync finishes.
+- **Settings > Daily sync**, off by default, syncs once a day at **Daily sync time**, 04:00 unless you change it, turning Wi-Fi on for it and off again. On a Kobo, and a Kindle that can wake on a timer, it wakes the e-reader from sleep to do it, and it goes back to sleep afterwards. On other devices, it syncs only if KOReader is open and awake then. An e-reader that's turned off doesn't sync.
+
+Both turn Wi-Fi on only when KOReader is set to do that without asking: **Settings > Network > Action when Wi-Fi is off** set to **Turn on**. Otherwise they sync only when Wi-Fi is already on, so no question is left waiting on the sleep screen.
 
 A sync sends your reading time and your place in each book you read since the last one. Everything waits on the e-reader while it's offline, for days, weeks, or months, and a restart or a flat battery loses nothing that KOReader had already saved. A sync cut off halfway picks up where it stopped without sending anything twice. **Sync now** says when it finishes or fails; a sync that runs on its own stays quiet.
 
