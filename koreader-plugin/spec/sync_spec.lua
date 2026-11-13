@@ -165,4 +165,15 @@ return {
         assert_eq(Sync.ranRecently(1000, 1000 + Sync.RAN_RECENTLY), false)
         assert_eq(Sync.ranRecently(1000, 900), false, "a clock set back since doesn't count as recent")
     end,
+
+    ["sleep syncs only once the last sync is an hour old"] = function()
+        local servers = { { url = "a", last_synced = 1000 }, { url = "b", last_synced = 5000 }, { url = "c" } }
+        assert_eq(Sync.lastSynced(servers), 5000, "the latest of any server")
+        assert_eq(Sync.lastSynced({ { url = "c" } }), nil)
+
+        assert_eq(Sync.dueOnSleep(nil, 1000), true, "never synced")
+        assert_eq(Sync.dueOnSleep(5000, 5000 + Sync.SLEEP_GAP - 1), false)
+        assert_eq(Sync.dueOnSleep(5000, 5000 + Sync.SLEEP_GAP), true)
+        assert_eq(Sync.dueOnSleep(5000, 4000), true, "a clock set back since can't hold it off")
+    end,
 }

@@ -32,6 +32,29 @@ function Sync.ranRecently(synced_at, now)
     return since >= 0 and since < Sync.RAN_RECENTLY
 end
 
+-- SLEEP_GAP is how many seconds sync on sleep waits after the last sync,
+-- so short sittings between other things don't turn Wi-Fi on at every sleep.
+Sync.SLEEP_GAP = 60 * 60
+
+-- lastSynced is when any of servers last synced, or nil when none has.
+function Sync.lastSynced(servers)
+    local latest
+    for __, server in ipairs(servers) do
+        if server.last_synced and (not latest or server.last_synced > latest) then
+            latest = server.last_synced
+        end
+    end
+    return latest
+end
+
+-- dueOnSleep reports whether going to sleep at now syncs, the last sync
+-- having been at last_synced. A clock set back since can't hold it off.
+function Sync.dueOnSleep(last_synced, now)
+    if not last_synced then return true end
+    local since = now - last_synced
+    return since < 0 or since >= Sync.SLEEP_GAP
+end
+
 local function payloadRow(row)
     return {
         document = row.document,

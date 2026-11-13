@@ -542,6 +542,35 @@ commands["plugin-sync"] = function()
     end, not args.sync_now)
 end
 
+-- plugin-sleep seeds statistics with Wi-Fi off, turns on sync on sleep, and
+-- puts the device to sleep. Wi-Fi comes on when asked to, as KOReader's
+-- "turn on" Wi-Fi action does, and the report says whether it was turned on
+-- and whether it was left on.
+commands["plugin-sleep"] = function()
+    withPlugin(function(plugin)
+        seedStatistics()
+        plugin:saveSetting("sync_on_sleep", true)
+        local NetworkMgr = require("ui/network/manager")
+        local turned_on = false
+        NetworkMgr.willRerunWhenOnline = function(_, callback)
+            if NetworkMgr:isOnline() then return false end
+            turned_on = true
+            NetworkMgr.isOnline = function() return true end
+            NetworkMgr.isConnected = NetworkMgr.isOnline
+            NetworkMgr.isWifiOn = NetworkMgr.isOnline
+            callback()
+            return true
+        end
+        NetworkMgr.disableWifi = function()
+            NetworkMgr.isOnline = function() return false end
+            NetworkMgr.isConnected = NetworkMgr.isOnline
+            NetworkMgr.isWifiOn = NetworkMgr.isOnline
+        end
+        plugin:onSuspend()
+        return { wifi_turned_on = turned_on, wifi_left_on = NetworkMgr:isWifiOn() }
+    end)
+end
+
 -- plugin-open opens a book in the reader with the plugin loaded, online or
 -- not: opening pulls its position. Then it can go to a place, and tap Sync
 -- now.

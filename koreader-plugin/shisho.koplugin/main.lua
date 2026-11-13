@@ -482,12 +482,23 @@ end
 function Shisho:onSuspend()
     if self.record_task then UIManager:unschedule(self.record_task) end
     self:recordPosition(true)
-    if #self.state:enabledServers() == 0 or not self:settings().sync_on_sleep then return end
+    local servers = self.state:enabledServers()
+    if #servers == 0 or not self:settings().sync_on_sleep then return end
+    -- Short sittings between other things shouldn't turn Wi-Fi on at every
+    -- sleep, so it waits an hour after the last sync.
+    if not Sync.dueOnSleep(Sync.lastSynced(servers), os.time()) then return end
     -- Sync on sleep turns Wi-Fi on to do it, as KOReader's progress sync
     -- does, following KOReader's own Wi-Fi setting. It pulls no position: a
-    -- question would wait on a sleeping screen.
-    if NetworkMgr:willRerunWhenOnline(function() self:syncAll(false, true) end) then return end
-    self:syncAll(false, true)
+    -- question would wait on a sleeping screen. Wi-Fi it turned on goes off
+    -- again before the device sleeps: KOReader turned it off for a reason,
+    -- since a Kobo can fail to sleep, or hang, with Wi-Fi on.
+    local turned_on = NetworkMgr:willRerunWhenOnline(function()
+        self:syncAll(false, true)
+        NetworkMgr:disableWifi()
+    end)
+    if not turned_on then
+        self:syncAll(false, true)
+    end
 end
 
 -- documentHash is the open book's document hash, as KOReader keeps it.
@@ -794,7 +805,7 @@ function Shisho:settingsMenu()
     return {
         {
             text = _("Sync on sleep"),
-            help_text = _("The plugin syncs on its own whenever Wi-Fi comes on, but never turns Wi-Fi on by itself. With this on, it also turns Wi-Fi on briefly each time the device goes to sleep and syncs, so Shisho stays current even if you rarely use Wi-Fi. Turning Wi-Fi on at every sleep uses more battery."),
+            help_text = _("The plugin syncs on its own whenever Wi-Fi comes on, but never turns Wi-Fi on by itself. With this on, it also turns Wi-Fi on briefly when the device goes to sleep, syncs, and turns Wi-Fi off again, so Shisho stays current even if you rarely use Wi-Fi. It does this at most once an hour, so short sittings don't turn Wi-Fi on every time. It uses some battery."),
             checked_func = function() return self:settings().sync_on_sleep end,
             callback = function() self:saveSetting("sync_on_sleep", not self:settings().sync_on_sleep) end,
         },

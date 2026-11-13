@@ -70,7 +70,7 @@ When a server no longer accepts the installed plugin, it shows **Update required
 Once signed in, the plugin syncs on its own whenever Wi-Fi comes on, for any reason, so syncing never costs a Wi-Fi connection of its own. It never turns Wi-Fi on by itself unless you ask it to:
 
 - **Sync now** in the plugin's menu turns Wi-Fi on if needed and sends everything at once. Use it before you switch to another device.
-- **Settings > Sync on sleep**, off by default, turns Wi-Fi on briefly each time the e-reader goes to sleep, so Shisho stays current at the cost of some battery.
+- **Settings > Sync on sleep**, off by default, turns Wi-Fi on briefly when the e-reader goes to sleep, syncs, and turns it off again, so Shisho stays current at the cost of some battery. It does this at most once an hour after the last sync, so putting the e-reader down often between short sittings doesn't turn Wi-Fi on each time. The sync runs while the sleep screen shows; waking the e-reader during it wakes it once the sync finishes.
 
 A sync sends your reading time and your place in each book you read since the last one. Everything waits on the e-reader while it's offline, for days, weeks, or months, and a restart or a flat battery loses nothing that KOReader had already saved. A sync cut off halfway picks up where it stopped without sending anything twice. **Sync now** says when it finishes or fails; a sync that runs on its own stays quiet.
 

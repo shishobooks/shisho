@@ -119,6 +119,30 @@ func TestPluginSyncsReadingTimeAfterOfflineDays(t *testing.T) {
 	assert.Len(t, s.pluginSessions(), 3)
 }
 
+// Sync on sleep turns Wi-Fi on to sync and off again, since a Kobo can't
+// sleep with Wi-Fi on, and waits an hour after a sync before doing it again.
+func TestPluginSyncsOnSleepAtMostHourly(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	start := time.Now().UTC().Add(-3 * time.Hour)
+	s.signInPlugin(start.Add(-24 * time.Hour))
+	row := func(page int, at time.Time) StatRow {
+		return StatRow{Document: document, Page: page, TotalPages: 100, StartTime: at.Unix(), Duration: 60}
+	}
+
+	slept := s.run(Args{Command: "plugin-sleep", Stats: []StatRow{row(2, start), row(3, start.Add(time.Minute))}})
+	assert.True(t, slept.Plugin.WifiTurnedOn)
+	assert.False(t, slept.Plugin.WifiLeftOn, "Wi-Fi is off again before the device sleeps")
+	require.Len(t, s.pluginSessions(), 1)
+
+	// Sleeping again within the hour leaves Wi-Fi off and sends nothing.
+	again := s.run(Args{Command: "plugin-sleep", Stats: []StatRow{row(4, start.Add(2*time.Hour))}})
+	assert.False(t, again.Plugin.WifiTurnedOn)
+	assert.False(t, again.Plugin.WifiLeftOn)
+	assert.Len(t, s.pluginSessions(), 1)
+}
+
 // A server turned off in the plugin gets nothing and is never contacted, so
 // one that's out of reach costs nothing; turned on again, it gets the
 // reading from where it left off.

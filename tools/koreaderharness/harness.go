@@ -98,8 +98,12 @@ type PluginReport struct {
 	PromptedUpdate string         `json:"prompted_update"`
 	// Journal is how many positions wait for a server to acknowledge them,
 	// and Problems what Sync now reported.
-	Journal  int      `json:"journal"`
-	Problems []string `json:"problems"`
+	Journal int `json:"journal"`
+	// WifiTurnedOn and WifiLeftOn say, after plugin-sleep, whether going to
+	// sleep turned Wi-Fi on and whether Wi-Fi was still on afterwards.
+	WifiTurnedOn bool     `json:"wifi_turned_on"`
+	WifiLeftOn   bool     `json:"wifi_left_on"`
+	Problems     []string `json:"problems"`
 	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu,
 	// and Menu what the Shisho menu does, with a submenu's items as
 	// "Parent > Item".
