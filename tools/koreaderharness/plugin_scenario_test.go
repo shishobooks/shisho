@@ -331,16 +331,19 @@ func TestPluginMenuOffersReinstallOnlyWithSeveralServers(t *testing.T) {
 	one := s.run(Args{Command: "plugin-menu"})
 	assert.Equal(t, []string{
 		"a.example", "a.example > Sign in again", "a.example > Remove server",
-		"Sync now", "Settings", "Settings > Sync on sleep",
+		"Add a server", "Sync now", "Settings", "Settings > Sync on sleep",
 		"Settings > Newer position from another reader", "Settings > Older position from another reader",
-		"Add a server", "Check for plugin update", "Plugin version " + one.Plugin.Version,
+		"Settings > Check for plugin update", "Settings > Plugin version " + one.Plugin.Version,
 	}, one.Plugin.Menu)
+	// Holding any item explains it.
+	assert.Empty(t, one.Plugin.WithoutHelp)
 
 	require.NoError(t, os.WriteFile(state, []byte(`return { servers = { { url = "http://a.example" }, { url = "http://b.example" } } }`), 0o644))
 	two := s.run(Args{Command: "plugin-menu"})
 	assert.Contains(t, two.Plugin.Menu, "a.example > Reinstall plugin from this server")
 	assert.Contains(t, two.Plugin.Menu, "b.example > Reinstall plugin from this server")
 	assert.NotContains(t, two.Plugin.Menu, "Install plugin from")
+	assert.Empty(t, two.Plugin.WithoutHelp)
 }
 
 // Check for plugin update turns Wi-Fi on, and Wi-Fi's own check follows a

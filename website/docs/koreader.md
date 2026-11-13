@@ -46,7 +46,7 @@ With Wi-Fi on, a plugin downloaded from the Device's page signs itself in on its
 
 Later than that, KOReader opens **Sign in to Shisho** with the server's URL filled in. On the Device's page, click **Pair** and enter the code it shows as the **Pairing code**. A pairing code lasts 30 minutes, and clicking **Pair** or **Download Plugin** again replaces it. To sign in without the Device's page, choose **Use password** and enter your Shisho username and the Device's password. A server URL typed without `http://` or `https://` is tried with `https://` first.
 
-The plugin's menu is **Shisho** in the top menu's tools tab, in the file browser and in an open book. **Add a server** signs in to another Shisho server, each as a Device of its own on that server. Under each server, **Sign in again** signs in afresh and **Remove server** removes the plugin's sign-in for it, leaving KOReader's books and OPDS catalogs alone.
+The plugin's menu is **Shisho** in the top menu's tools tab, in the file browser and in an open book. Hold any item in it to see what it does. **Add a server** signs in to another Shisho server, each as a Device of its own on that server. Under each server, **Sign in again** signs in afresh and **Remove server** removes the plugin's sign-in for it, leaving KOReader's books and OPDS catalogs alone.
 
 Signing in adds the server's catalog to KOReader's OPDS catalogs as **Shisho** with the server's address, signed in with the Device's password, so you can browse and download without typing a password. If the catalog list already has an entry for the server's OPDS URL, such as one you added by hand, the plugin updates that entry instead of adding another, and keeps its name.
 
@@ -56,7 +56,7 @@ Regenerating the Device's credential stops the plugin's sign-in working too. The
 
 ## Update the Plugin
 
-Each time Wi-Fi comes on, the plugin asks every server it's signed in to which version of the plugin it serves, and offers to install a newer one, then restarts KOReader into it. If you cancel, it doesn't offer that build again on its own; **Check for plugin update** offers it again. Before the plugin signs in to a server, it checks for nothing.
+Each time Wi-Fi comes on, the plugin asks every server it's signed in to which version of the plugin it serves, and offers to install a newer one, then restarts KOReader into it. If you cancel, it doesn't offer that build again on its own; **Check for plugin update**, under **Settings** in the plugin's menu, offers it again. Before the plugin signs in to a server, it checks for nothing.
 
 - **Several servers:** it offers an update only from a server with a strictly newer version that every server it's signed in to accepts. When a newer plugin wouldn't work with one of your servers, **Check for plugin update** names the server to upgrade first.
 - **Builds of one version:** a different build of the version installed, such as one from a development server, is offered only by the server the plugin was last installed from.

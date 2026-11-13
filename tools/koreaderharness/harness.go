@@ -105,7 +105,9 @@ type PluginReport struct {
 	// "Parent > Item".
 	Tools []string `json:"tools"`
 	Menu  []string `json:"menu"`
-	Offer *struct {
+	// WithoutHelp lists the menu items that show nothing when held.
+	WithoutHelp []string `json:"without_help"`
+	Offer       *struct {
 		Server  string `json:"server"`
 		Version string `json:"version"`
 		Hash    string `json:"hash"`

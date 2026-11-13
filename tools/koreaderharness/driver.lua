@@ -438,11 +438,19 @@ commands["plugin-menu"] = function()
         local items = entries.shisho.sub_item_table_func()
         -- A submenu's items read "Parent > Item".
         local texts = {}
+        -- Items with nothing to show when held, which KOReader shows as help.
+        local without_help = {}
+        local function note(text, item)
+            table.insert(texts, text)
+            if not (item.help_text or item.help_text_func) then
+                table.insert(without_help, text)
+            end
+        end
         for __, item in ipairs(items) do
             local text = item.text_func and item.text_func() or item.text
-            table.insert(texts, text)
+            note(text, item)
             for __, sub in ipairs(item.sub_item_table or {}) do
-                table.insert(texts, text .. " > " .. (sub.text_func and sub.text_func() or sub.text))
+                note(text .. " > " .. (sub.text_func and sub.text_func() or sub.text), sub)
             end
         end
         -- The file manager's own Tools tab, as KOReader sorts it.
@@ -462,7 +470,8 @@ commands["plugin-menu"] = function()
             tab_item_table = { { text = entries.shisho.text, icon = "appbar.tools", table.unpack(items) } },
             show_parent = plugin.ui,
         })
-        return { menu = texts, tools = tools }
+        -- KOReader's JSON writes an empty table as an object, so none is nil.
+        return { menu = texts, tools = tools, without_help = #without_help > 0 and without_help or nil }
     end)
 end
 

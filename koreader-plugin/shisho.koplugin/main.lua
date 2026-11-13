@@ -691,43 +691,59 @@ function Shisho:serverMenu(server)
         table.insert(items, {
             text = T(_("Last synced %1"), os.date("%Y-%m-%d %H:%M", server.last_synced)),
             enabled = false,
+            help_text = _("When the plugin last sent this server your reading time and places."),
         })
     end
-    for __, item in ipairs({
-        {
-            text = _("Sign in again"),
-            keep_menu_open = true,
-            callback = function() self:showSignIn(server.url) end,
-        },
-    }) do
-        table.insert(items, item)
-    end
+    table.insert(items, {
+        text = _("Sign in again"),
+        help_text = _("Sign in to this server again with a new pairing code from the Device's page in Shisho, or with the Device's password. Use it after regenerating the Device's password. Reading waiting to sync is kept and sent once you're signed in."),
+        keep_menu_open = true,
+        callback = function() self:showSignIn(server.url) end,
+    })
     if Versions.reinstallable(self:installed(), self.state:servers(), server.url) then
         table.insert(items, {
             text = _("Reinstall plugin from this server"),
+            help_text = _("Install the plugin this server serves, even an older version, and restart KOReader. Automatic updates then come from this server for builds of the same version."),
             keep_menu_open = true,
             callback = function()
                 NetworkMgr:runWhenOnline(function() self:installFrom(server.url) end)
             end,
         })
     end
-    table.insert(items,
-        {
-            text = _("Remove server"),
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                UIManager:show(ConfirmBox:new{
-                    text = T(_("Stop using %1? This removes only the plugin's own sign-in for it. KOReader's books, statistics, and OPDS catalog stay."), Urls.label(server.url)),
-                    ok_text = _("Remove"),
-                    ok_callback = function()
-                        self.state:remove(server.url)
-                        self.state:flush()
-                        if touchmenu_instance then touchmenu_instance:backToUpperMenu() end
-                    end,
-                })
-            end,
-        })
+    table.insert(items, {
+        text = _("Remove server"),
+        help_text = _("Stop syncing with this server. This removes only the plugin's sign-in for it and what was waiting to go to it. KOReader's books, statistics, and OPDS catalog stay."),
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            UIManager:show(ConfirmBox:new{
+                text = T(_("Stop using %1? This removes only the plugin's own sign-in for it. KOReader's books, statistics, and OPDS catalog stay."), Urls.label(server.url)),
+                ok_text = _("Remove"),
+                ok_callback = function()
+                    self.state:remove(server.url)
+                    self.state:flush()
+                    if touchmenu_instance then touchmenu_instance:backToUpperMenu() end
+                end,
+            })
+        end,
+    })
     return items
+end
+
+-- serverHelp says which Device a server's entry signs in as, when it last
+-- synced, and what its status means.
+function Shisho:serverHelp(server)
+    local lines = { T(_("Signed in to %1 as the Device %2."), server.url, server.device_name or server.username or "?") }
+    if server.last_synced then
+        table.insert(lines, T(_("Last synced %1."), os.date("%Y-%m-%d %H:%M", server.last_synced)))
+    else
+        table.insert(lines, _("Not synced yet."))
+    end
+    if server.needs_login then
+        table.insert(lines, _("Needs login: the server no longer accepts this sign-in, such as after the Device's password was regenerated. Your reading waits on this device until you sign in again."))
+    elseif server.update_required then
+        table.insert(lines, _("Update required: the server no longer accepts this plugin. Install the update it offers."))
+    end
+    return table.concat(lines, "\n\n")
 end
 
 local POSITION_CHOICES = {
@@ -754,17 +770,38 @@ function Shisho:settingsMenu()
     return {
         {
             text = _("Sync on sleep"),
-            help_text = _("Turn Wi-Fi on to sync each time the device goes to sleep. This uses more battery."),
+            help_text = _("The plugin syncs on its own whenever Wi-Fi comes on, but never turns Wi-Fi on by itself. With this on, it also turns Wi-Fi on briefly each time the device goes to sleep and syncs, so Shisho stays current even if you rarely use Wi-Fi. Turning Wi-Fi on at every sleep uses more battery."),
             checked_func = function() return self:settings().sync_on_sleep end,
             callback = function() self:saveSetting("sync_on_sleep", not self:settings().sync_on_sleep) end,
         },
         {
             text = _("Newer position from another reader"),
+            help_text = _("What to do when a book is opened with Wi-Fi on, or after a sync, and another reader, such as the Shisho web reader or another device, was in the book more recently than this device: ask before going there, go there without asking, or ignore it. Asks by default."),
             sub_item_table = self:positionMenu("newer"),
         },
         {
             text = _("Older position from another reader"),
+            help_text = _("What to do when another reader's place in the book is from before this device's: ask before going there, go there without asking, or ignore it. Ignored by default, so an old place never moves you back."),
             sub_item_table = self:positionMenu("older"),
+            separator = true,
+        },
+        {
+            text = _("Check for plugin update"),
+            help_text = _("Ask your servers for a newer plugin now, turning Wi-Fi on if needed. The plugin also checks each time Wi-Fi comes on."),
+            keep_menu_open = true,
+            callback = function()
+                NetworkMgr:runWhenOnline(function() self:checkForUpdate(true) end)
+            end,
+        },
+        {
+            text_func = function()
+                return T(_("Plugin version %1"), self.stamps.version)
+            end,
+            help_text = _("The version of the Shisho plugin installed. Tap it to see its build."),
+            keep_menu_open = true,
+            callback = function()
+                self:notify(T(_("Shisho KOReader plugin %1\nBuild %2"), self.stamps.version, self.stamps.hash:sub(1, 12)))
+            end,
         },
     }
 end
@@ -779,6 +816,7 @@ function Shisho:addToMainMenu(menu_items)
                 -- One line of the menu holds only the gist; tapping it says the rest.
                 table.insert(items, {
                     text = _("Reading time won't sync: statistics off"),
+                    help_text = STATISTICS_OFF .. "\n\n" .. _("Turn them on under Tools > Reading statistics > Enabled."),
                     keep_menu_open = true,
                     separator = true,
                     callback = function() self:notify(STATISTICS_OFF) end,
@@ -789,11 +827,22 @@ function Shisho:addToMainMenu(menu_items)
                 local status = Responses.serverStatus(server)
                 table.insert(items, {
                     text = status and T("%1 (%2)", label, status) or label,
+                    help_text_func = function() return self:serverHelp(server) end,
                     sub_item_table = self:serverMenu(server),
                 })
             end
             table.insert(items, {
+                text = _("Add a server"),
+                help_text = _("Sign in to another Shisho server with a pairing code from a KOReader Device's page there. Each server gets the reading for the books it has."),
+                keep_menu_open = true,
+                separator = true,
+                callback = function()
+                    self:showSignIn(self.stamps.pairing and self.stamps.pairing.server_url or "")
+                end,
+            })
+            table.insert(items, {
                 text = _("Sync now"),
+                help_text = _("Send your reading time and places to every server now, turning Wi-Fi on if it's off, and check the open book for a newer place. Use it before switching to another device. The plugin also syncs on its own whenever Wi-Fi comes on."),
                 keep_menu_open = true,
                 callback = function()
                     if #self.state:servers() == 0 then
@@ -805,31 +854,8 @@ function Shisho:addToMainMenu(menu_items)
             })
             table.insert(items, {
                 text = _("Settings"),
+                help_text = _("Syncing on sleep, what to do with places from other readers, and plugin updates."),
                 sub_item_table = self:settingsMenu(),
-            })
-            table.insert(items, {
-                text = _("Add a server"),
-                keep_menu_open = true,
-                separator = true,
-                callback = function()
-                    self:showSignIn(self.stamps.pairing and self.stamps.pairing.server_url or "")
-                end,
-            })
-            table.insert(items, {
-                text = _("Check for plugin update"),
-                keep_menu_open = true,
-                callback = function()
-                    NetworkMgr:runWhenOnline(function() self:checkForUpdate(true) end)
-                end,
-            })
-            table.insert(items, {
-                text_func = function()
-                    return T(_("Plugin version %1"), self.stamps.version)
-                end,
-                keep_menu_open = true,
-                callback = function()
-                    self:notify(T(_("Shisho KOReader plugin %1\nBuild %2"), self.stamps.version, self.stamps.hash:sub(1, 12)))
-                end,
             })
             return items
         end,
