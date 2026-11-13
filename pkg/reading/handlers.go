@@ -371,6 +371,24 @@ func (h *handler) deleteReadThrough(c echo.Context) error {
 	return h.respondReadThrough(c, user, rt)
 }
 
+// listReadThroughSessions lists the Reading Sessions of the caller's own :id
+// Read-through, whether or not its Book still exists or is in reach.
+func (h *handler) listReadThroughSessions(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	rt, err := h.requireOwnReadThrough(c, user)
+	if err != nil {
+		return err
+	}
+	resp, err := h.readingService.ReadThroughSessions(c.Request().Context(), user.ID, rt.ID)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
 // endReadThrough ends the caller's own :id Read-through underway with
 // outcome, for Reading History, where its Book may be gone.
 func (h *handler) endReadThrough(c echo.Context, outcome string) error {

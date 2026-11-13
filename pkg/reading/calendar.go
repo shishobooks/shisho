@@ -14,7 +14,7 @@ import (
 
 // StatsHeatmap returns user's Session time on each day of year, or of the
 // year up to today when year is nil, in their time zone and split at local
-// midnight, and the first day they read anything. Neither ends after today.
+// midnight, and the first day they read anything.
 func (svc *Service) StatsHeatmap(ctx context.Context, user *models.User, year *int) (*ReadingStatsHeatmapResponse, error) {
 	loc, err := userLocation(ctx, svc.db, user.ID)
 	if err != nil {
@@ -25,7 +25,6 @@ func (svc *Service) StatsHeatmap(ctx context.Context, user *models.User, year *i
 	rng := dayRange{From: time.Date(y-1, m, d+1, 0, 0, 0, 0, time.UTC).Format(time.DateOnly), To: today}
 	if year != nil {
 		rng = yearRange(year)
-		rng.To = min(rng.To, today)
 	}
 	resp := &ReadingStatsHeatmapResponse{Today: today, From: rng.From, To: rng.To, Days: []ReadingStatsDay{}}
 
@@ -387,4 +386,37 @@ func (r *bookRefs) resolve(ctx context.Context, svc *Service, user *models.User)
 
 func compareRefs(a, b ReadingStatsBookRef) int {
 	return cmp.Or(cmp.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title)), cmp.Compare(a.Key, b.Key))
+}
+
+// ReadThroughSessions lists userID's Reading Sessions of readThroughID, in
+// the order they started. The caller checks the Read-through is theirs.
+func (svc *Service) ReadThroughSessions(ctx context.Context, userID, readThroughID int) (*ListReadThroughSessionsResponse, error) {
+	loc, err := userLocation(ctx, svc.db, userID)
+	if err != nil {
+		return nil, err
+	}
+	var sessions []*models.ReadingSession
+	err = svc.db.NewSelect().
+		Model(&sessions).
+		Where("rs.user_id = ? AND rs.read_through_id = ?", userID, readThroughID).
+		OrderExpr("rs.started_at, rs.id").
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	resp := &ListReadThroughSessionsResponse{TimeZone: loc.String(), Items: make([]ReadThroughSession, 0, len(sessions))}
+	for _, s := range sessions {
+		resp.Items = append(resp.Items, ReadThroughSession{
+			ID:              s.ID,
+			StartedAt:       s.StartedAt,
+			EndedAt:         s.EndedAt,
+			Seconds:         s.Duration,
+			StartPercentage: s.StartPercentage,
+			EndPercentage:   s.EndPercentage,
+			Kind:            s.Kind,
+			Source:          s.Source,
+			Measured:        s.Measured,
+		})
+	}
+	return resp, nil
 }

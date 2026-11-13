@@ -876,6 +876,49 @@ describe("ReadingStatsPage", () => {
       expect(document.querySelector('[data-day="2026-03-02"]')).toBeNull();
     });
 
+    it("shows a whole year in the heatmap, with days to come that open nothing", async () => {
+      const { user } = renderPage({ initialEntry: `${CALENDAR}?heatmap=2026` });
+      await screen.findByRole("region", { name: "Reading by day" });
+      const cell = (day: string) =>
+        document.querySelector<HTMLElement>(`[data-day="${day}"]`)!;
+      expect(cell("2026-01-01")).toBeEnabled();
+      expect(cell("2026-06-15")).toBeEnabled();
+      expect(cell("2026-12-31")).toBeDisabled();
+      await user.click(cell("2026-06-15"));
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "day=2026-06-15",
+      );
+    });
+
+    it("brings up the year of a day picked on the calendar that the heatmap doesn't show", async () => {
+      const { user, fetchMock } = renderPage({
+        initialEntry: `${CALENDAR}?month=2025-03`,
+      });
+      await user.click(
+        await screen.findByRole("button", {
+          name: /^Wednesday, March 5, 2025/,
+        }),
+      );
+      expect(screen.getByTestId("location")).toHaveTextContent("heatmap=2025");
+      await waitFor(() =>
+        expect(document.querySelector('[data-day="2025-03-05"]')).toHaveClass(
+          "ring-1",
+        ),
+      );
+      expect(
+        fetchMock.mock.calls
+          .map(([input]) => new URL(String(input), "http://localhost"))
+          .filter((url) => url.pathname === "/api/reading/stats/heatmap")
+          .map((url) => url.searchParams.get("year")),
+      ).toEqual([null, "2025"]);
+
+      // A day the heatmap already shows leaves it be.
+      await user.click(
+        screen.getByRole("button", { name: /^Thursday, March 6, 2025/ }),
+      );
+      expect(screen.getByTestId("location")).toHaveTextContent("heatmap=2025");
+    });
+
     it("opens on this month and goes back to the first month with reading", async () => {
       const { user } = renderPage({ calendar: june, initialEntry: CALENDAR });
       const calendar = await screen.findByRole("region", { name: "Calendar" });

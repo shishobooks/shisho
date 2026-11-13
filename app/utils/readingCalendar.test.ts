@@ -5,12 +5,14 @@ import {
   assignBookColors,
   BOOK_COLORS,
   bookColor,
+  dayIn,
   dayLanes,
   heatLevels,
   heatmapWeeks,
   layoutWeek,
   monthWeeks,
   shiftDay,
+  textOn,
 } from "@/utils/readingCalendar";
 
 const day = (
@@ -36,6 +38,29 @@ describe("bookColor", () => {
       Array.from({ length: 40 }, (_, i) => bookColor(`book-${i}`)),
     );
     expect(colors.size).toBeGreaterThan(BOOK_COLORS.length / 2);
+  });
+});
+
+describe("textOn", () => {
+  // WCAG relative luminance and contrast ratio of two #rrggbb colours.
+  const luminance = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => {
+      const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  it("gives every book colour text that meets 4.5:1", () => {
+    for (const color of BOOK_COLORS) {
+      const text = textOn(color);
+      const hex = text === "white" ? "#ffffff" : text;
+      expect(contrast(color, hex), color).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 
@@ -349,5 +374,12 @@ describe("dayLanes", () => {
       from: 0,
       to: 20,
     });
+  });
+});
+
+describe("dayIn", () => {
+  it("gives the day an instant falls on in a time zone", () => {
+    expect(dayIn("2026-06-01T04:30:00Z", "America/Chicago")).toBe("2026-05-31");
+    expect(dayIn("2026-06-01T04:30:00Z", "UTC")).toBe("2026-06-01");
   });
 });

@@ -113,6 +113,10 @@ const ReadingCalendarTab = () => {
     else params.set("month", monthParam(next));
     if (day) params.set("day", day);
     else params.delete("day");
+    // A day the heatmap doesn't show brings up the year it's in.
+    if (day && (day < heatmap.from || day > heatmap.to)) {
+      params.set("heatmap", day.slice(0, 4));
+    }
     setSearchParams(params, { preventScrollReset: true });
   };
 
@@ -149,6 +153,7 @@ const ReadingCalendarTab = () => {
           period={heatmapYear === null ? "the last year" : String(heatmapYear)}
           selectedDay={selectedDay}
           to={heatmap.to}
+          today={heatmap.today}
         />
       </StatsCard>
       <ReadingCalendar

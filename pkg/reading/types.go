@@ -162,6 +162,32 @@ type ReadingHistoryEntry struct {
 	// CanReread is whether "Start a reread" applies: the user can reach the
 	// Book and has no Read-through of it underway.
 	CanReread bool `json:"can_reread"`
+	// SessionCount is how many Reading Sessions the Read-through has.
+	SessionCount int `json:"session_count"`
+}
+
+// ListReadThroughSessionsResponse is every Reading Session of one of the
+// user's Read-throughs, in the order they started.
+type ListReadThroughSessionsResponse struct {
+	// TimeZone is the IANA zone to show the Sessions in: the user's, or UTC
+	// when they set none.
+	TimeZone string               `json:"time_zone"`
+	Items    []ReadThroughSession `json:"items"`
+}
+
+// ReadThroughSession is one Reading Session of a Read-through. Seconds is
+// the time it recorded, which can be less than its span.
+type ReadThroughSession struct {
+	ID              int       `json:"id"`
+	StartedAt       time.Time `json:"started_at"`
+	EndedAt         time.Time `json:"ended_at"`
+	Seconds         int       `json:"seconds"`
+	StartPercentage float64   `json:"start_percentage"`
+	EndPercentage   float64   `json:"end_percentage"`
+	Kind            string    `json:"kind" tstype:"ReadingKind"`
+	Source          string    `json:"source" tstype:"ReadingSource"`
+	// Measured is false for a Session its source estimated.
+	Measured bool `json:"measured"`
 }
 
 // ReadThroughEntry is one of the user's Read-throughs with what it takes to
@@ -364,7 +390,7 @@ type ReadingStatsHeatmapResponse struct {
 	// Today is the user's today.
 	Today string `json:"today"`
 	// From and To are the heatmap's first and last days: the year up to
-	// Today, or the year asked for, ending no later than Today.
+	// Today, or the whole year asked for, the current one included.
 	From string `json:"from"`
 	To   string `json:"to"`
 	// FirstDay is the earliest day the user read or began or ended a

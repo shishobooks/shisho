@@ -5,10 +5,9 @@ import type {
 } from "@/types";
 
 /**
- * Colours a Book's bars take on the Reading Stats calendar: twelve picked to
- * differ in lightness and saturation as well as hue, so even neighbours on
- * the colour wheel tell apart, each dark enough for white text on either
- * theme.
+ * Colours a Book's bars take on the Reading Stats calendar: twelve bright
+ * ones that differ in lightness as well as hue, so even neighbours on the
+ * colour wheel tell apart. The light ones carry dark text (`textOn`).
  */
 export const BOOK_COLORS = [
   "#1f6fb2", // blue
@@ -16,14 +15,25 @@ export const BOOK_COLORS = [
   "#23822b", // green
   "#c22b2b", // red
   "#7445b0", // purple
-  "#8a5446", // brown
+  "#facc15", // yellow
   "#b8337f", // pink
   "#566570", // slate
-  "#6f7316", // olive
+  "#84cc16", // lime
   "#11808f", // teal
   "#3445a6", // indigo
-  "#946604", // ochre
+  "#38bdf8", // sky
 ];
+
+// Book colours too light for white text, which take this instead.
+const DARK_TEXT = "#1a1a1a";
+const TAKES_DARK_TEXT = new Set(["#facc15", "#84cc16", "#38bdf8"]);
+
+/**
+ * The text colour that reads on a Book's colour, each pairing at least
+ * 4.5:1: white, or near-black on the light ones.
+ */
+export const textOn = (background: string): string =>
+  TAKES_DARK_TEXT.has(background) ? DARK_TEXT : "white";
 
 const colorIndex = (key: string): number => {
   let hash = 0x811c9dc5;
@@ -260,6 +270,16 @@ export const heatLevels = (values: number[]): ((value: number) => number) => {
 };
 
 const MINUTES_IN_DAY = 24 * 60;
+
+/** The calendar day (YYYY-MM-DD) an instant falls on in timeZone. */
+export const dayIn = (instant: string, timeZone: string): string =>
+  // en-CA formats a date as YYYY-MM-DD.
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(instant));
 
 // An instant's minutes into `day` in timeZone: 0 when it's on an earlier
 // day, the day's whole length when on a later one.

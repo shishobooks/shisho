@@ -49,6 +49,7 @@ const attached: ReadingHistoryEntry = {
   removed: false,
   book: { id: 1, library_id: 7, cover_cache_key: "1-1" },
   can_reread: true,
+  session_count: 2,
 };
 
 const detachedUnderway: ReadingHistoryEntry = {
@@ -64,6 +65,7 @@ const detachedUnderway: ReadingHistoryEntry = {
   removed: true,
   book: null,
   can_reread: false,
+  session_count: 0,
 };
 
 const unreachable: ReadingHistoryEntry = {
@@ -73,6 +75,7 @@ const unreachable: ReadingHistoryEntry = {
   removed: false,
   book: null,
   can_reread: false,
+  session_count: 0,
 };
 
 const renderPage = ({
@@ -108,6 +111,39 @@ const renderPage = ({
       if (path === "/api/user/libraries") return Response.json([]);
       if (path === "/api/reading/history")
         return Response.json({ items: entries, total: entries.length });
+      if (path === "/api/reading/read-throughs/1/sessions")
+        return Response.json({
+          time_zone: "America/Chicago",
+          items: [
+            {
+              id: 11,
+              started_at: "2026-03-02T01:30:00Z",
+              ended_at: "2026-03-02T02:30:00Z",
+              seconds: 3600,
+              start_percentage: 0,
+              end_percentage: 0.2,
+              kind: "reading",
+              source: "web_reader",
+              measured: true,
+            },
+            {
+              id: 12,
+              started_at: "2026-03-05T14:00:00Z",
+              ended_at: "2026-03-05T14:45:00Z",
+              seconds: 1800,
+              start_percentage: 0.2,
+              end_percentage: 0.3,
+              kind: "reading",
+              source: "kobo",
+              measured: false,
+            },
+          ],
+        });
+      if (
+        init?.method === "DELETE" &&
+        path.startsWith("/api/reading/sessions/")
+      )
+        return new Response(null, { status: 204 });
       if (init?.method === "DELETE" || init?.method === "POST")
         return Response.json({
           read_through: readThrough(2, { outcome: "finished" }),
@@ -271,6 +307,47 @@ describe("ReadingHistoryPage", () => {
         ([, init]) => init?.method === "DELETE",
       );
       expect(del?.[0]).toBe("/api/reading/read-throughs/2");
+    });
+  });
+
+  it("lists a Read-through's sessions and deletes one after confirming", async () => {
+    const { fetchMock, user } = renderPage();
+    await screen.findByText("Dune");
+    expect(
+      within(row("Gone")).queryByRole("button", { name: /session/ }),
+    ).not.toBeInTheDocument();
+
+    const toggle = within(row("Dune")).getByRole("button", {
+      name: "2 sessions",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const sessions = await screen.findByRole("list", {
+      name: "Sessions of Dune",
+    });
+    // 01:30 UTC on March 2 is still March 1 in Chicago.
+    expect(sessions).toHaveTextContent(
+      "Mar 1, 7:30 PM to 8:30 PM · 1h 0m · 0% to 20% · Shisho reader",
+    );
+    expect(sessions).toHaveTextContent("Kobo (estimated)");
+
+    await user.click(
+      within(sessions).getByRole("button", {
+        name: "Delete session of Dune on Mar 5, 8:00 AM to 8:45 AM",
+      }),
+    );
+    const confirm = await screen.findByRole("dialog", {
+      name: "Delete this reading session?",
+    });
+    await user.click(within(confirm).getByRole("button", { name: "Delete" }));
+    await waitFor(() => {
+      const del = fetchMock.mock.calls.find(
+        ([input, init]) =>
+          init?.method === "DELETE" &&
+          String(input).startsWith("/api/reading/sessions/"),
+      );
+      expect(del?.[0]).toBe("/api/reading/sessions/12");
     });
   });
 

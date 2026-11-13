@@ -153,6 +153,8 @@ Each row's menu offers:
 - **Start a reread** for a book you can still open and aren't reading now.
 - **Mark as finished** and **Mark as Did Not Finish** for a read you're on, dated the way the status menu dates them.
 
+A read with recorded time shows how many sessions it has, such as **8 sessions**. Select it to list each one, with its date, times, length, how far through the book it took you, and where you read it. Deleting a session can't be undone: its time stops counting toward your [Reading Stats](./reading-stats.md). To delete one, select the trash can beside it and confirm.
+
 A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its reads still count, and you can still edit or delete them.
 
 [Reading Stats](./reading-stats.md) sums up these reads, and the time you spent on them, by year.

@@ -1,6 +1,7 @@
 import {
   BookCheck,
   BookX,
+  ChevronDown,
   MoreHorizontal,
   Pencil,
   RotateCcw,
@@ -18,6 +19,7 @@ import PaginationFooter, {
 import QueryError from "@/components/library/QueryError";
 import ReadThroughCover from "@/components/library/ReadThroughCover";
 import ReadThroughDetails from "@/components/library/ReadThroughDetails";
+import ReadThroughSessions from "@/components/library/ReadThroughSessions";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,6 +79,8 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
   const endMutation = useEndReadThrough();
   const transitionMutation = useReadingTransition();
   const underway = rt.outcome === "underway";
+  const [showSessions, setShowSessions] = useState(false);
+  const sessionsId = `read-through-${rt.id}-sessions`;
 
   const handleEnd = async (outcome: "finish" | "abandon") => {
     try {
@@ -105,70 +109,99 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
   };
 
   return (
-    <li className="flex items-center gap-3 px-3 py-2">
-      <ReadThroughCover book={entry.book} />
-      <ReadThroughDetails entry={entry}>
-        <span className="font-medium">{readThroughOutcomeLabel(rt)}</span>
-        <span className="text-muted-foreground">
-          {readThroughDatesLabel(rt)}
-        </span>
-      </ReadThroughDetails>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            aria-label={`Actions for ${entry.title}`}
-            disabled={demoMode}
-            size="icon-sm"
-            variant="ghost"
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          onCloseAutoFocus={(e) => e.preventDefault()}
-        >
-          <DropdownMenuItem onSelect={() => onEdit(rt)}>
-            <Pencil className="h-4 w-4" />
-            Edit dates
-          </DropdownMenuItem>
-          {underway && (
-            <>
-              <DropdownMenuItem
-                disabled={endMutation.isPending}
-                onSelect={() => handleEnd("finish")}
-              >
-                <BookCheck className="h-4 w-4" />
-                Mark as finished
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                disabled={endMutation.isPending}
-                onSelect={() => handleEnd("abandon")}
-              >
-                <BookX className="h-4 w-4" />
-                Mark as Did Not Finish
-              </DropdownMenuItem>
-            </>
-          )}
-          {entry.can_reread && (
-            <DropdownMenuItem
-              disabled={transitionMutation.isPending}
-              onSelect={handleReread}
+    <li className="px-3 py-2">
+      <div className="flex items-center gap-3">
+        <ReadThroughCover book={entry.book} />
+        <ReadThroughDetails entry={entry}>
+          <span className="font-medium">{readThroughOutcomeLabel(rt)}</span>
+          <span className="text-muted-foreground">
+            {readThroughDatesLabel(rt)}
+          </span>
+          {entry.session_count > 0 && (
+            <Button
+              aria-controls={showSessions ? sessionsId : undefined}
+              aria-expanded={showSessions}
+              className="gap-0.5 text-xs text-muted-foreground"
+              onClick={() => setShowSessions((open) => !open)}
+              variant="link"
             >
-              <RotateCcw className="h-4 w-4" />
-              Start a reread
-            </DropdownMenuItem>
+              {formatCount(entry.session_count, "session")}
+              <ChevronDown
+                className={cn(
+                  "h-3 w-3 transition-transform",
+                  showSessions && "rotate-180",
+                )}
+              />
+            </Button>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onSelect={() => onDelete(entry)}
+        </ReadThroughDetails>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              aria-label={`Actions for ${entry.title}`}
+              disabled={demoMode}
+              size="icon-sm"
+              variant="ghost"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(e) => e.preventDefault()}
           >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+            <DropdownMenuItem onSelect={() => onEdit(rt)}>
+              <Pencil className="h-4 w-4" />
+              Edit dates
+            </DropdownMenuItem>
+            {underway && (
+              <>
+                <DropdownMenuItem
+                  disabled={endMutation.isPending}
+                  onSelect={() => handleEnd("finish")}
+                >
+                  <BookCheck className="h-4 w-4" />
+                  Mark as finished
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={endMutation.isPending}
+                  onSelect={() => handleEnd("abandon")}
+                >
+                  <BookX className="h-4 w-4" />
+                  Mark as Did Not Finish
+                </DropdownMenuItem>
+              </>
+            )}
+            {entry.can_reread && (
+              <DropdownMenuItem
+                disabled={transitionMutation.isPending}
+                onSelect={handleReread}
+              >
+                <RotateCcw className="h-4 w-4" />
+                Start a reread
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={() => onDelete(entry)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {showSessions && (
+        // Lined up under the title, past the cover.
+        <div className="mt-2 sm:pl-14" id={sessionsId}>
+          <ReadThroughSessions
+            disabled={demoMode}
+            readThroughId={rt.id}
+            title={entry.title}
+          />
+        </div>
+      )}
     </li>
   );
 };

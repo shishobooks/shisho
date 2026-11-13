@@ -18,6 +18,7 @@ import {
   type ListReadingHistoryResponse,
   type ListReadingStatsFinishedQuery,
   type ListReadingStatsFinishedResponse,
+  type ListReadThroughSessionsResponse,
   type PageFlow,
   type ReadingStatsCalendarQuery,
   type ReadingStatsCalendarResponse,
@@ -235,6 +236,30 @@ export const useReadingStatsDay = (
     queryKey: [QueryKey.ReadingStats, "day", query],
     queryFn: ({ signal }) =>
       API.request("GET", "/reading/stats/day", null, query, signal),
+  });
+};
+
+// The Reading Sessions of one of the signed-in user's Read-throughs. It
+// sits under the Reading History key, so deleting a Session refetches it.
+export const useReadThroughSessions = (
+  readThroughId: number,
+  options: Omit<
+    UseQueryOptions<ListReadThroughSessionsResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ListReadThroughSessionsResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingHistory, "sessions", readThroughId],
+    queryFn: ({ signal }) =>
+      API.request(
+        "GET",
+        `/reading/read-throughs/${readThroughId}/sessions`,
+        null,
+        null,
+        signal,
+      ),
   });
 };
 

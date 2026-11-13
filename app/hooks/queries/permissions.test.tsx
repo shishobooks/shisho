@@ -110,6 +110,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useReadingStatsCalendar: requires("books:read", [{ year: 2026, month: 6 }]),
   useReadingStatsDay: requires("books:read", [{ day: "2026-06-01" }]),
   useReadingStatsHeatmap: requires("books:read", [{}]),
+  useReadThroughSessions: requires("books:read", [1]),
   // entity-search
   usePeopleSearch: requires("people:read", [1, true, "a"]),
   useAuthorSearch: requires("people:read", [1, true, "a"]),

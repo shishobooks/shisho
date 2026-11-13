@@ -307,6 +307,11 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusNotFound, code: "not_found", message: "Read-through not found.",
 		},
 		{
+			name:   "sessions of a read-through that does not exist",
+			method: http.MethodGet, path: "/api/reading/read-throughs/999999/sessions",
+			status: http.StatusNotFound, code: "not_found", message: "Read-through not found.",
+		},
+		{
 			name:   "reading session that does not exist",
 			method: http.MethodDelete, path: "/api/reading/sessions/999999",
 			status: http.StatusNotFound, code: "not_found", message: "Reading Session not found.",

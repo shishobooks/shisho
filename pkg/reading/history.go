@@ -81,13 +81,20 @@ func (svc *Service) BuildHistoryEntries(ctx context.Context, user *models.User, 
 			underway[id] = true
 		}
 	}
+	sessionCounts, err := svc.sessionCounts(ctx, readThroughs)
+	if err != nil {
+		return nil, err
+	}
 	authors, err := authorNames(ctx, svc.db, bookIDs)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, rt := range readThroughs {
-		entry := &ReadingHistoryEntry{ReadThroughEntry: ReadThroughEntry{ReadThrough: rt, Authors: []string{}}}
+		entry := &ReadingHistoryEntry{
+			ReadThroughEntry: ReadThroughEntry{ReadThrough: rt, Authors: []string{}},
+			SessionCount:     sessionCounts[rt.ID],
+		}
 		book := (*models.Book)(nil)
 		if rt.BookID != nil {
 			book = books[*rt.BookID]
@@ -153,4 +160,33 @@ func bookLink(user *models.User, book *models.Book) *ReadingHistoryBook {
 		LibraryID:     book.LibraryID,
 		CoverCacheKey: covers.CacheKey(book.Files, aspectRatio),
 	}
+}
+
+// sessionCounts counts the Reading Sessions of each of readThroughs, by id.
+func (svc *Service) sessionCounts(ctx context.Context, readThroughs []*models.ReadThrough) (map[int]int, error) {
+	counts := map[int]int{}
+	if len(readThroughs) == 0 {
+		return counts, nil
+	}
+	ids := make([]int, 0, len(readThroughs))
+	for _, rt := range readThroughs {
+		ids = append(ids, rt.ID)
+	}
+	var rows []struct {
+		ReadThroughID int `bun:"read_through_id"`
+		Count         int `bun:"count"`
+	}
+	err := svc.db.NewSelect().
+		TableExpr("reading_sessions AS rs").
+		ColumnExpr("rs.read_through_id, COUNT(*) AS count").
+		Where("rs.read_through_id IN (?)", bun.List(ids)).
+		GroupExpr("rs.read_through_id").
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range rows {
+		counts[row.ReadThroughID] = row.Count
+	}
+	return counts, nil
 }

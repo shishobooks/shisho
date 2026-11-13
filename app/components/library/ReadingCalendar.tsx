@@ -38,6 +38,7 @@ import {
   heatmapWeeks,
   layoutWeek,
   monthWeeks,
+  textOn,
   type DayLane,
 } from "@/utils/readingCalendar";
 import { SOURCE_LABELS } from "@/utils/readingStats";
@@ -83,6 +84,7 @@ const WEEKDAY_LABELS: Record<number, string> = { 1: "Mon", 3: "Wed", 5: "Fri" };
 export const ReadingHeatmap = ({
   from,
   to,
+  today,
   period,
   days,
   selectedDay,
@@ -91,6 +93,8 @@ export const ReadingHeatmap = ({
   /** The first and last days shown. */
   from: string;
   to: string;
+  /** Days after it are still to come: empty, and nothing to open. */
+  today: string;
   /** What the days are, for the total: "the last year", "2025". */
   period: string;
   days: ReadingStatsDay[];
@@ -123,10 +127,13 @@ export const ReadingHeatmap = ({
     }
   });
 
-  // Where the year doesn't fit, bring the selected day into view, or the
-  // last day shown, at the end.
+  // Where the year doesn't fit, bring the selected day into view, or
+  // today, or the last day shown.
+  const lastSoFar = today < to ? today : to;
   const focus =
-    selectedDay && selectedDay >= from && selectedDay <= to ? selectedDay : to;
+    selectedDay && selectedDay >= from && selectedDay <= to
+      ? selectedDay
+      : lastSoFar;
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
@@ -197,6 +204,7 @@ export const ReadingHeatmap = ({
                   )}
                   data-day={day}
                   data-level={level(byDay.get(day) ?? 0)}
+                  disabled={day > today}
                   key={day}
                   onClick={() => onSelectDay(day)}
                   onPointerEnter={(event) => {
@@ -395,7 +403,7 @@ export const ReadingCalendar = ({
                     <div
                       aria-hidden="true"
                       className={cn(
-                        "pointer-events-none relative z-10 h-1.5 min-w-0 truncate text-[10px] font-medium leading-4 text-white sm:h-4 sm:px-1",
+                        "pointer-events-none relative z-10 h-1.5 min-w-0 truncate text-[10px] font-medium leading-4 sm:h-4 sm:px-1",
                         item.continuesBefore ? "ml-0" : "ml-1 rounded-l-sm",
                         item.continuesAfter ? "mr-0" : "mr-1 rounded-r-sm",
                       )}
@@ -412,6 +420,7 @@ export const ReadingCalendar = ({
                       key={`${item.key}-${item.start}`}
                       style={{
                         backgroundColor: color,
+                        color: textOn(color),
                         gridColumn: `${item.start + 1} / ${item.end + 2}`,
                         gridRow: row,
                       }}
@@ -529,11 +538,11 @@ const FinishMarker = ({
   <span
     aria-hidden="true"
     className={cn(
-      "pointer-events-none z-20 inline-flex h-3 w-3 items-center justify-center self-center justify-self-end rounded-full text-white ring-2 ring-background sm:mr-1 sm:h-4 sm:w-4",
+      "pointer-events-none z-20 inline-flex h-3 w-3 items-center justify-center self-center justify-self-end rounded-full ring-2 ring-background sm:mr-1 sm:h-4 sm:w-4",
       className,
     )}
     data-finish=""
-    style={{ backgroundColor: color, ...style }}
+    style={{ backgroundColor: color, color: textOn(color), ...style }}
     {...props}
   >
     <Check className="h-2 w-2 sm:h-3 sm:w-3" strokeWidth={3} />

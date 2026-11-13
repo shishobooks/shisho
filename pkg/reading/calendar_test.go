@@ -136,14 +136,15 @@ func TestHeatmap_ShowsAWholePastYear(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/heatmap?year=0", nil).Code)
 }
 
-// This year's heatmap ends today, with no days yet to come.
-func TestHeatmap_ThisYearEndsToday(t *testing.T) {
+// This year, like any other, runs January to December, its days yet to
+// come shown empty.
+func TestHeatmap_ThisYearRunsToDecember(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	year := f.heatmap().Today[:4]
 	resp := heatmapFor(t, f.api, "?year="+year)
 	assert.Equal(t, year+"-01-01", resp.From)
-	assert.Equal(t, resp.Today, resp.To)
+	assert.Equal(t, year+"-12-31", resp.To)
 }
 
 func TestHeatmap_FirstDayCountsReadThroughsWithNoSessions(t *testing.T) {
@@ -464,4 +465,83 @@ func TestCalendar_SessionsWithNothingLeftToNameThemStayApart(t *testing.T) {
 	detail := f.day("2026-06-10")
 	require.Len(t, detail.Sessions, 1)
 	assert.Equal(t, first[0].Key, detail.Sessions[0].Book.Key)
+}
+
+func (f *statsFixture) readThroughSessions(rt *models.ReadThrough) ListReadThroughSessionsResponse {
+	f.t.Helper()
+	rec := f.api.do(http.MethodGet, fmt.Sprintf("/read-throughs/%d/sessions", rt.ID), nil)
+	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp ListReadThroughSessionsResponse
+	require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+func TestSessions_AReadThroughListsItsSessionsInOrder(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	f.setTimeZone("America/Chicago")
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	rt := f.finished(dune, "2026-06-01", "2026-06-03")
+	other := f.finished(createBook(t, f.db, "Emma"), "2026-06-01", "2026-06-02")
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-03 20:00"), end: at(t, "UTC", "2026-06-03 20:30"), source: models.ReadingSourceKobo, duration: 1500})
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-01 08:00"), end: at(t, "UTC", "2026-06-01 09:00")})
+	f.session(sessionSpec{readThrough: other, start: at(t, "UTC", "2026-06-02 08:00"), end: at(t, "UTC", "2026-06-02 09:00")})
+
+	resp := f.readThroughSessions(rt)
+	assert.Equal(t, "America/Chicago", resp.TimeZone)
+	require.Len(t, resp.Items, 2)
+	first, second := resp.Items[0], resp.Items[1]
+	assert.True(t, first.StartedAt.Equal(at(t, "UTC", "2026-06-01 08:00")))
+	assert.Equal(t, 3600, first.Seconds)
+	assert.Equal(t, models.ReadingSourceKobo, second.Source)
+	assert.Equal(t, 1500, second.Seconds, "the time the Session recorded, not its span")
+	assert.False(t, second.Measured)
+
+	// Deleting one from here is the same delete as from a day.
+	require.Equal(t, http.StatusNoContent, f.api.do(http.MethodDelete, fmt.Sprintf("/sessions/%d", first.ID), nil).Code)
+	assert.Len(t, f.readThroughSessions(rt).Items, 1)
+
+	empty := f.readThroughSessions(f.finished(createBook(t, f.db, "Hand"), "", "2026-06-05"))
+	assert.NotNil(t, empty.Items)
+	assert.Empty(t, empty.Items)
+}
+
+func TestSessions_ADetachedReadThroughStillListsItsSessions(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	rt := f.finished(dune, "2026-06-01", "2026-06-01")
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-01 08:00"), end: at(t, "UTC", "2026-06-01 09:00")})
+	deleteBook(t, f.db, dune)
+
+	assert.Len(t, f.readThroughSessions(rt).Items, 1)
+}
+
+func TestSessions_AnotherUsersReadThroughIsNotFound(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	other := createUser(t, f.db, "other", 2)
+	theirs := seedReadThrough(t, f.db, other, createBook(t, f.db, "Dune"), "2026-06-01", "2026-06-02", models.ReadThroughOutcomeFinished)
+	seedSession(t, f.db, other, sessionSpec{readThrough: theirs, start: at(t, "UTC", "2026-06-01 08:00"), end: at(t, "UTC", "2026-06-01 09:00")})
+
+	assert.Equal(t, http.StatusNotFound, f.api.do(http.MethodGet, fmt.Sprintf("/read-throughs/%d/sessions", theirs.ID), nil).Code)
+}
+
+func TestHistory_EachReadThroughCountsItsSessions(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	rt := f.finished(dune, "2026-06-01", "2026-06-02")
+	f.finished(createBook(t, f.db, "Emma"), "2026-05-01", "2026-05-02")
+	for _, day := range []string{"2026-06-01", "2026-06-02"} {
+		f.session(sessionSpec{readThrough: rt, start: at(t, "UTC", day+" 08:00"), end: at(t, "UTC", day+" 09:00")})
+	}
+
+	counts := map[string]int{}
+	for _, item := range f.api.history("").Items {
+		counts[item.Title] = item.SessionCount
+	}
+	assert.Equal(t, map[string]int{"Dune": 2, "Emma": 0}, counts)
 }
