@@ -101,8 +101,8 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Recommended. The plugin signs in to Shisho once, sets up this server's
-        OPDS catalog, syncs your reading time and position, and keeps itself up
-        to date.
+        OPDS catalog, syncs your reading time, position, status, and Rating, and
+        keeps itself up to date.
       </p>
       <PluginStatus device={device} />
       <div className="flex flex-wrap gap-2">
