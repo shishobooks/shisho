@@ -59,7 +59,7 @@ Regenerating the Device's credential stops the plugin's sign-in working too. The
 Each time Wi-Fi comes on, the plugin asks every server it's signed in to which version of the plugin it serves, and offers to install a newer one, then restarts KOReader into it. If you cancel, it doesn't offer that build again on its own; **Check for plugin update**, under **Settings** in the plugin's menu, offers it again. Before the plugin signs in to a server, it checks for nothing.
 
 - **Several servers:** it offers an update only from a server with a strictly newer version that every server it's signed in to accepts. When a newer plugin wouldn't work with one of your servers, **Check for plugin update** names the server to upgrade first.
-- **Builds of one version:** a different build of the version installed, such as one from a development server, is offered only by the server the plugin was last installed from.
+- **Builds of one version:** a different build of the version installed, such as one from a development server, is offered automatically only by the server the plugin was last installed from, so two development servers don't keep asking to swap it. **Check for plugin update** offers another server's build too, when the server it was installed from has nothing different.
 - **On purpose:** **Reinstall plugin from this server** under a server installs the plugin that server serves, newer or older, and makes it the server the plugin was installed from. It's there when you're signed in to more than one server, or when the server serves a plugin an update would never install, such as an older version.
 - **Signed out:** a server that shows **Needs login** offers no update until you sign in to it again.
 

@@ -349,7 +349,8 @@ function Shisho:checkForUpdate(interactive)
     end
     self.checked_at = os.time()
     self:checkIn(not interactive)
-    local offer, blocked = Versions.offer(self:installed(), self.state:enabledServers())
+    -- Checking yourself also offers another server's build of this version.
+    local offer, blocked = Versions.offer(self:installed(), self.state:enabledServers(), { any_build = interactive })
     self.offer = offer
     -- An offer declined once isn't pressed again until something newer
     -- comes along, or the person checks themselves.
