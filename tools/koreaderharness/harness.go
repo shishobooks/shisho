@@ -190,6 +190,11 @@ type Args struct {
 	Stats         []StatRow
 	StatisticsOff bool
 	SyncNow       bool
+	// Turns is how many pages plugin-read turns, and Close and Sleep close the
+	// book or put the device to sleep afterwards.
+	Turns int
+	Close bool
+	Sleep bool
 	// Fire sets off the wake-up alarm plugin-daily set.
 	Fire bool
 	// WifiPrompt leaves KOReader asking before it turns Wi-Fi on, its
@@ -273,6 +278,15 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.WifiPrompt {
 		payload["wifi_prompt"] = true
+	}
+	if a.Turns > 0 {
+		payload["turns"] = a.Turns
+	}
+	if a.Close {
+		payload["close"] = true
+	}
+	if a.Sleep {
+		payload["sleep"] = true
 	}
 	if a.Fire {
 		payload["fire"] = true

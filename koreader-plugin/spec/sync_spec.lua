@@ -166,6 +166,13 @@ return {
         assert_eq(Sync.ranRecently(1000, 900), false, "a clock set back since doesn't count as recent")
     end,
 
+    ["reading with Wi-Fi on syncs every 20 pages"] = function()
+        assert_eq(Sync.dueAfterPages(nil), false)
+        assert_eq(Sync.dueAfterPages(Sync.PAGES_BETWEEN - 1), false)
+        assert_eq(Sync.dueAfterPages(Sync.PAGES_BETWEEN), true)
+        assert_eq(Sync.PAGES_BETWEEN, 20)
+    end,
+
     ["sleep syncs only once the last sync is an hour old"] = function()
         local servers = { { url = "a", last_synced = 1000 }, { url = "b", last_synced = 5000 }, { url = "c" } }
         assert_eq(Sync.lastSynced(servers), 5000, "the latest of any server")

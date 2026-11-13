@@ -472,6 +472,11 @@ function Shisho:onPageUpdate(page)
     if not self.reader_ready or page == nil or page == self.last_page then return end
     self.last_page = page
     self.last_page_turn = os.time()
+    self.pages_since_sync = (self.pages_since_sync or 0) + 1
+    if Sync.dueAfterPages(self.pages_since_sync) and NetworkMgr:isOnline() then
+        -- After the page is drawn, so the turn itself isn't held up.
+        UIManager:nextTick(function() self:syncWhileOnline() end)
+    end
     if not self.record_task then
         self.record_task = function() self:recordPosition(true) end
     end
@@ -483,6 +488,20 @@ function Shisho:onCloseDocument()
     if self.record_task then UIManager:unschedule(self.record_task) end
     self:recordPosition(true)
     self.reader_ready = nil
+    self:syncWhileOnline()
+end
+
+--[[--
+syncWhileOnline syncs on Wi-Fi that's already on, as a book closes, the
+device sleeps, or every few pages, so a device that stays online keeps
+Shisho current. It never turns Wi-Fi on, doesn't repeat a sync that just ran,
+and pulls no position: a question mid-read, or as a book closes, would only
+get in the way.
+]]
+function Shisho:syncWhileOnline()
+    if not NetworkMgr:isOnline() or #self.state:enabledServers() == 0 then return end
+    if Sync.ranRecently(self.synced_at, os.time()) then return end
+    self:syncAll(false, true)
 end
 
 function Shisho:onSuspend()
@@ -490,7 +509,14 @@ function Shisho:onSuspend()
     self:recordPosition(true)
     self:armDailyWakeup()
     local servers = self.state:enabledServers()
-    if #servers == 0 or not self:settings().sync_on_sleep then return end
+    if #servers == 0 then return end
+    -- With Wi-Fi left on, as on Android, going to sleep syncs at no cost. (A
+    -- Kobo's Wi-Fi is already off by now: KOReader turns it off first.)
+    if NetworkMgr:isOnline() then
+        self:syncWhileOnline()
+        return
+    end
+    if not self:settings().sync_on_sleep then return end
     -- Short sittings between other things shouldn't turn Wi-Fi on at every
     -- sleep, so it waits an hour after the last sync.
     if not Sync.dueOnSleep(Sync.lastSynced(servers), os.time()) then return end
@@ -773,6 +799,7 @@ function Shisho:syncAll(interactive, going_to_sleep)
         return
     end
     self.syncing = true
+    self.pages_since_sync = 0
     local ok, problems, statistics_on = pcall(self.syncServers, self, interactive)
     self.syncing = false
     self.synced_at = os.time()
@@ -1045,7 +1072,7 @@ function Shisho:addToMainMenu(menu_items)
             })
             table.insert(items, {
                 text = _("Sync now"),
-                help_text = _("Send your reading time and places to every server now, turning Wi-Fi on if it's off, and check the open book for a newer place. Use it before switching to another device. The plugin also syncs on its own whenever Wi-Fi comes on."),
+                help_text = _("Send your reading time and places to every server now, turning Wi-Fi on if it's off, and check the open book for a newer place. Use it before switching to another device. The plugin also syncs on its own whenever Wi-Fi comes on, and while Wi-Fi is on, every 20 pages, when a book closes, and when the device goes to sleep."),
                 keep_menu_open = true,
                 callback = function()
                     if #self.state:servers() == 0 then

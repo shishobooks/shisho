@@ -628,6 +628,32 @@ commands["plugin-daily"] = function()
     end)
 end
 
+-- plugin-read opens a book with Wi-Fi on or off, turns turns pages one at a
+-- time as a reader does, and then, with close or sleep, closes the book or
+-- puts the device to sleep, as KOReader's events would.
+commands["plugin-read"] = function()
+    stubNetwork(args.online)
+    runWithReader(function(ui)
+        local plugin = ui.shisho
+        if not plugin then fail("the KOReader plugin didn't load") end
+        stepUI()
+        local Event = require("ui/event")
+        for __ = 1, args.turns or 0 do
+            ui:handleEvent(Event:new("GotoViewRel", 1))
+            stepUI()
+        end
+        if args.close then
+            plugin:onCloseDocument()
+            stepUI()
+        end
+        if args.sleep then
+            plugin:onSuspend()
+            stepUI()
+        end
+        return { plugin = pluginReport(plugin) }
+    end)
+end
+
 -- plugin-open opens a book in the reader with the plugin loaded, online or
 -- not: opening pulls its position. Then it can go to a place, and tap Sync
 -- now.

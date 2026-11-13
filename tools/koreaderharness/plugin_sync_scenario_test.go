@@ -194,6 +194,59 @@ func TestPluginSyncsOnSleepOnlyWhenKOReaderTurnsWifiOnByItself(t *testing.T) {
 	assert.Empty(t, s.pluginSessions())
 }
 
+// readingScenario signs in to a scenario with a comic on the device, and
+// returns a way to ask where the server has this Device in it.
+func readingScenario(t *testing.T) (*scenario, func() *int) {
+	s := newScenario(t)
+	s.downloadOPDS("Comic", "comic.cbz")
+	cbz := s.file(models.FileTypeCBZ)
+	s.signInPlugin(time.Now().Add(-time.Hour))
+	return s, func() *int {
+		position, err := s.reading.RetrievePosition(s.ctx, s.user.ID, cbz.ID)
+		require.NoError(t, err)
+		if position == nil || position.SourceDeviceID == nil || *position.SourceDeviceID != s.device.ID {
+			return nil
+		}
+		return position.Page
+	}
+}
+
+// With Wi-Fi left on, the plugin syncs every 20 pages, never turning Wi-Fi on
+// for it. The comic has 30 pages, so the runs together stay short of its end.
+func TestPluginSyncsEveryTwentyPagesWhileOnline(t *testing.T) {
+	s, sent := readingScenario(t)
+
+	offline := s.run(Args{Command: "plugin-read", File: "comic.cbz", Turns: 3})
+	assert.Nil(t, sent(), "nothing goes with Wi-Fi off")
+	assert.Equal(t, 1, offline.Plugin.Journal, "the place waits")
+
+	s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 2})
+	assert.Nil(t, sent(), "a couple of pages isn't enough")
+
+	// The first turn after opening isn't a page change in the harness, so 21
+	// turns are 20 pages.
+	read := s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 21})
+	assert.NotNil(t, sent(), "shown: %v", read.Shown)
+	assert.Empty(t, read.Prompted, "no question in the middle of reading")
+}
+
+// With Wi-Fi left on, closing a book syncs.
+func TestPluginSyncsOnClosingABookWhileOnline(t *testing.T) {
+	s, sent := readingScenario(t)
+	s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 3})
+	require.Nil(t, sent())
+
+	s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 3, Close: true})
+	assert.NotNil(t, sent())
+}
+
+// With Wi-Fi left on, going to sleep syncs, even with sync on sleep off.
+func TestPluginSyncsOnSleepWhileOnline(t *testing.T) {
+	s, sent := readingScenario(t)
+	s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 3, Sleep: true})
+	assert.NotNil(t, sent())
+}
+
 // A server turned off in the plugin gets nothing and is never contacted, so
 // one that's out of reach costs nothing; turned on again, it gets the
 // reading from where it left off.

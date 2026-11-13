@@ -67,7 +67,7 @@ When a server no longer accepts the installed plugin, it shows **Update required
 
 ## Sync Reading with the Plugin
 
-Once signed in, the plugin syncs on its own whenever Wi-Fi comes on, for any reason, so syncing never costs a Wi-Fi connection of its own. It never turns Wi-Fi on by itself unless you ask it to:
+Once signed in, the plugin syncs on its own whenever Wi-Fi comes on, for any reason, so syncing never costs a Wi-Fi connection of its own. While Wi-Fi stays on, as it often does on Android, it also syncs every 20 pages, when you close a book, and when the device goes to sleep. It never turns Wi-Fi on by itself unless you ask it to:
 
 - **Sync now** in the plugin's menu turns Wi-Fi on if needed and sends everything at once. Use it before you switch to another device.
 - **Settings > Sync on sleep**, off by default, turns Wi-Fi on briefly when the e-reader goes to sleep, syncs, and turns it off again, so Shisho stays current at the cost of some battery. It does this at most once an hour after the last sync, so putting the e-reader down often between short sittings doesn't turn Wi-Fi on each time. The sync runs while the sleep screen shows; waking the e-reader during it wakes it once the sync finishes.

@@ -32,6 +32,15 @@ function Sync.ranRecently(synced_at, now)
     return since >= 0 and since < Sync.RAN_RECENTLY
 end
 
+-- PAGES_BETWEEN is how many pages turned with Wi-Fi already on bring a
+-- sync, so a device that stays online keeps Shisho current as you read.
+Sync.PAGES_BETWEEN = 20
+
+-- dueAfterPages reports whether pages turned since the last sync bring one.
+function Sync.dueAfterPages(pages)
+    return type(pages) == "number" and pages >= Sync.PAGES_BETWEEN
+end
+
 -- SLEEP_GAP is how many seconds sync on sleep waits after the last sync,
 -- so short sittings between other things don't turn Wi-Fi on at every sleep.
 Sync.SLEEP_GAP = 60 * 60
