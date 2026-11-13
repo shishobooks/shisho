@@ -1,18 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { useAutoHideChrome } from "./useAutoHideChrome";
 
 // jsdom has no PointerEvent constructor.
 const pointerMove = (pointerType: string) =>
   Object.assign(new Event("pointermove"), { pointerType });
-
-beforeEach(() => {
-  vi.useFakeTimers();
-});
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe("useAutoHideChrome", () => {
   it("always returns chromeVisible true when disabled", () => {

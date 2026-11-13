@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { PluginVersion } from "@/hooks/queries/plugins";
 
@@ -23,11 +23,7 @@ const makeVersion = (
 describe("PluginVersionCard date formatting", () => {
   beforeEach(() => {
     // Pin to a known "now" so the "relative" string is deterministic.
-    vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-04-20T12:00:00Z"));
-  });
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it("treats a date-only releaseDate as local, not UTC", () => {

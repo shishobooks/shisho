@@ -72,7 +72,10 @@ describe("formatLastRead", () => {
         formatLastRead(new Date(2026, 10, 1, 0, 10).toISOString(), now),
       ).toBe("Last read yesterday");
     } finally {
-      process.env.TZ = zone;
+      // Assigning undefined would store the string "undefined", which Node
+      // reads as UTC for every test after this one.
+      if (zone === undefined) delete process.env.TZ;
+      else process.env.TZ = zone;
     }
   });
 

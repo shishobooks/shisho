@@ -3,15 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
-import {
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
@@ -379,7 +371,6 @@ describe("ReflowableReader", () => {
   });
 
   it("shows the extended-wait hint after 10 seconds of loading", () => {
-    vi.useFakeTimers();
     vi.mocked(useReflowableBlob).mockReturnValue({
       data: undefined,
       isLoading: true,
@@ -395,8 +386,6 @@ describe("ReflowableReader", () => {
       vi.advanceTimersByTime(10_000);
     });
     expect(screen.getByText(/may take a moment/i)).toBeInTheDocument();
-
-    vi.useRealTimers();
   });
 
   it("hides chrome toggle button in scrolled flow even with auto-hide enabled", () => {
@@ -473,7 +462,6 @@ describe("ReflowableReader", () => {
     });
 
     it("show hidden controls on a tap in scrolled flow", () => {
-      vi.useFakeTimers();
       const { container } = renderWithAutoHide("scrolled");
       const doc = loadSection(container);
       act(() => vi.advanceTimersByTime(2000));
@@ -491,7 +479,6 @@ describe("ReflowableReader", () => {
         p.click();
       });
       expect(header()).not.toHaveClass("-translate-y-full");
-      vi.useRealTimers();
     });
 
     it("leave the controls alone when following a link", () => {
@@ -719,15 +706,11 @@ describe("ReflowableReader", () => {
 
     describe("while the controls are hidden", () => {
       const setupHidden = () => {
-        vi.useFakeTimers();
         const result = setup(true);
         act(() => vi.advanceTimersByTime(2000));
         expect(result.header).toHaveClass("-translate-y-full");
         return result;
       };
-      afterEach(() => {
-        vi.useRealTimers();
-      });
 
       it("bring them back along the top edge, where the gear was", () => {
         const { view, header, tapBook } = setupHidden();
@@ -974,7 +957,6 @@ describe("ReflowableReader", () => {
   });
 
   it("updates settings when the theme button is clicked", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     const mutate = vi.fn();
     vi.mocked(useUserSettings).mockReturnValue({
       data: {
@@ -1007,7 +989,6 @@ describe("ReflowableReader", () => {
   });
 
   it("toasts when saving a setting fails", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
     const error = vi.spyOn(toast, "error");
     vi.mocked(useUserSettings).mockReturnValue({
       data: {

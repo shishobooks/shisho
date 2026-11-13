@@ -362,6 +362,23 @@ export default tseslint.config(
     },
   },
   {
+    // vitest.setup.ts installs one fake clock per test file. React's scheduler
+    // keeps the timer functions it found when it loaded, so swapping the clock
+    // strands its queued renders and stalls the tests that run after.
+    files: ["app/**/*.test.{ts,tsx}"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        ...["useFakeTimers", "useRealTimers"].map((property) => ({
+          object: "vi",
+          property,
+          message:
+            "Keep the fake timers vitest.setup.ts installs: advance them with vi.advanceTimersByTime and set the date with vi.setSystemTime. The setup resets both after each test.",
+        })),
+      ],
+    },
+  },
+  {
     // copyText is the one place allowed to touch the async clipboard.
     files: ["app/utils/clipboard.ts"],
     rules: { "no-restricted-properties": "off" },

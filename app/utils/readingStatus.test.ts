@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ReadThrough } from "@/types";
 
@@ -26,10 +26,6 @@ const rt = (overrides: Partial<ReadThrough>): ReadThrough => ({
 });
 
 describe("todayDay", () => {
-  afterEach(() => {
-    vi.useFakeTimers();
-  });
-
   it("is the browser's local day, not the UTC one", () => {
     // 11pm on Oct 28 in a zone behind UTC is already Oct 29 in UTC.
     vi.setSystemTime(new Date(2026, 9, 28, 23, 30));
