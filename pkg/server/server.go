@@ -83,6 +83,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	e.Use(compressionMiddleware())
 	if cfg.DemoMode {
 		e.Use(demoModeMiddleware)
+		// The Public Demo's database is prepared once and baked into the
+		// image, so its reading is moved to end yesterday before serving,
+		// and again each day after.
+		shifter := reading.NewDemoDateShifter(db, time.Now)
+		if days, err := shifter.Refresh(context.Background()); err != nil {
+			logDemoDateShift(0, err)
+		} else {
+			logger.New().Info("shifted demo reading dates", logger.Data{"days": days})
+		}
+		e.Use(demoDateShiftMiddleware(shifter))
 	}
 
 	health.RegisterRoutes(e)
