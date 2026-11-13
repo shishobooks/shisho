@@ -238,7 +238,9 @@ func TestUpload_RepeatsStayIgnoredAfterTheUserDeletesTheSession(t *testing.T) {
 	f.upload(batch)
 	sessions := f.sessions(f.user)
 	require.Len(t, sessions, 1)
-	require.NoError(t, f.reading.DeleteSession(f.ctx, f.user.ID, sessions[0].ID))
+	deleted, err := f.reading.DeleteSession(f.ctx, f.user.ID, sessions[0].ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
 
 	f.upload(batch)
 
@@ -506,7 +508,9 @@ func TestUpload_RowsNextToADeletedSessionStayDeleted(t *testing.T) {
 	f.upload(UploadPayload{Pages: pages(syncHash, 2, 6, f.day1)})
 	sessions := f.sessions(f.user)
 	require.Len(t, sessions, 1)
-	require.NoError(t, f.reading.DeleteSession(f.ctx, f.user.ID, sessions[0].ID))
+	deleted, err := f.reading.DeleteSession(f.ctx, f.user.ID, sessions[0].ID)
+	require.NoError(t, err)
+	require.True(t, deleted)
 
 	// The rest of the same sitting, flushed after the first sync.
 	f.upload(UploadPayload{Pages: pages(syncHash, 7, 9, f.day1.Add(8*time.Minute))})
