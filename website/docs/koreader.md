@@ -50,7 +50,7 @@ The plugin's menu is **Shisho** in the top menu's tools tab, in the file browser
 
 Signing in adds the server's catalog to KOReader's OPDS catalogs as **Shisho** with the server's address, signed in with the Device's password, so you can browse and download without typing a password. If the catalog list already has an entry for the server's OPDS URL, such as one you added by hand, the plugin updates that entry instead of adding another, and keeps its name.
 
-The Device's page shows when the Device last connected through the plugin, and which version of the plugin it reported.
+The Device's page shows when the Device last synced through the plugin, or, before its first sync, when it last connected, with the version of the plugin it reported. Its install steps fold away once the plugin has connected.
 
 Regenerating the Device's credential stops the plugin's sign-in working too. The server shows **Needs login** in the plugin's menu: choose **Sign in again** under it, and the OPDS catalog entry is updated with the new password.
 
