@@ -53,7 +53,7 @@ When the exact spot can't be found, such as a place saved before the file was re
 
 Reading time from KOReader with the plugin is measured. Elsewhere, Shisho estimates it:
 
-- **KOReader with the plugin** sends the time its statistics recorded on each page. A break of more than ten minutes starts a new session, and a session's time counts only the time spent on its pages.
+- **KOReader with the plugin** sends the time its statistics recorded on each page. A break of more than ten minutes starts a new session, and a session's time counts only the time spent on its pages, so it can be shorter than the span from its start to its end. KOReader's statistics also leave out a page you turned past in under 5 seconds and count at most 2 minutes on any one page, by default; both are **Read page duration limits** under **Reading statistics > Settings** in KOReader.
 - **KOReader without the plugin**, using progress sync, doesn't report how long you read. A session runs from when KOReader pulls your position on opening a book to its last push before you close it.
 - **A Kobo** counts the minutes it spends on each book. Each time it reports more, the extra minutes become one session that ends when the Kobo reported them, so reading over a few days with Wi-Fi off becomes one session.
 
@@ -156,7 +156,7 @@ Each row's menu offers:
 - **Start a reread** for a book you can still open and aren't reading now.
 - **Mark as finished** and **Mark as Did Not Finish** for a read you're on, dated the way the status menu dates them.
 
-A read with recorded time shows how many sessions it has, such as **8 sessions**. Select it to list each one, with its date, times, length, how far through the book it took you, and where you read it. A book's page lists them the same way under **Reading history**. Deleting a session can't be undone: its time stops counting toward your [Reading Stats](./reading-stats.md). To delete one, select the trash can beside it and confirm.
+A read with recorded time shows how many sessions it has, such as **8 sessions**. Select it to list each one, with its date, times, length, how far through the book it took you, and where you read it, naming the Device it came from. A book's page lists them the same way under **Reading history**. Deleting a session can't be undone: its time stops counting toward your [Reading Stats](./reading-stats.md). To delete one, select the trash can beside it and confirm.
 
 A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its reads still count, and you can still edit or delete them.
 

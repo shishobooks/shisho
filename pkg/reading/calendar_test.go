@@ -578,3 +578,40 @@ func TestSessions_ABooksReadingRecordCountsEachReadThroughsSessions(t *testing.T
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, map[int]int{first.ID: 3, again.ID: 0}, resp.SessionCounts)
 }
+
+func TestSessions_NameTheDeviceTheyCameFrom(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	file := f.addFile(dune, models.FileTypeEPUB)
+	rt := f.finished(dune, "2026-06-01", "2026-06-01")
+	_, err := f.db.ExecContext(f.ctx, `INSERT INTO devices (id, user_id, name, device_type, credential, created_at, updated_at)
+		VALUES ('kobo-1', ?, 'Bedside Kobo', 'koreader', 'cred-1', '2026-01-01', '2026-01-01')`, f.user.ID)
+	require.NoError(t, err)
+	kobo := "kobo-1"
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-01 08:00"), end: at(t, "UTC", "2026-06-01 09:00"),
+		source: models.ReadingSourceKOReader, deviceID: &kobo, measured: true})
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-01 10:00"), end: at(t, "UTC", "2026-06-01 11:00"),
+		// Deleting a Device clears it from its Sessions.
+		source: models.ReadingSourceKOReader, measured: true})
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-01 12:00"), end: at(t, "UTC", "2026-06-01 13:00"),
+		source: models.ReadingSourceWebReader, measured: true})
+
+	items := f.readThroughSessions(rt).Items
+	require.Len(t, items, 3)
+	require.NotNil(t, items[0].DeviceID)
+	assert.Equal(t, "kobo-1", *items[0].DeviceID)
+	require.NotNil(t, items[0].DeviceName)
+	assert.Equal(t, "Bedside Kobo", *items[0].DeviceName)
+	assert.Nil(t, items[1].DeviceID, "a Device since deleted isn't named")
+	assert.Nil(t, items[1].DeviceName)
+	assert.Nil(t, items[2].DeviceName, "the web reader isn't a Device")
+
+	sessions := f.day("2026-06-01").Sessions
+	require.Len(t, sessions, 3)
+	require.NotNil(t, sessions[0].DeviceName)
+	assert.Equal(t, "Bedside Kobo", *sessions[0].DeviceName)
+	assert.Equal(t, "kobo-1", *sessions[0].DeviceID)
+	assert.Nil(t, sessions[1].DeviceName)
+	assert.Nil(t, sessions[2].DeviceName)
+}

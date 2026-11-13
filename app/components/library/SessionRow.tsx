@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/libraries/utils";
@@ -15,7 +16,36 @@ export interface SessionLine {
   kind: ReadingKind;
   source: ReadingSource;
   measured: boolean;
+  device_id: string | null;
+  device_name: string | null;
 }
+
+// progressLine is how far a session took the reader, or where it stayed
+// when it went nowhere, as opening a book and closing it again does.
+const progressLine = (start: number, end: number): string => {
+  const from = formatProgress(start);
+  const to = formatProgress(end);
+  return from === to ? `at ${from}` : `${from} to ${to}`;
+};
+
+// SessionSource names where a session was read: the Device it came from,
+// linking to its page, or the reader when it came from none.
+const SessionSource = ({ session }: { session: SessionLine }) => {
+  if (!session.device_id || !session.device_name) {
+    return <>{sessionSourceLabel(session)}</>;
+  }
+  return (
+    <>
+      <Link
+        className="underline underline-offset-2 hover:text-foreground"
+        to={`/user/devices/${session.device_id}`}
+      >
+        {session.device_name}
+      </Link>
+      {!session.measured && " (estimated)"}
+    </>
+  );
+};
 
 /**
  * One Reading Session as a line of a list: `when` it ran, how long, how far
@@ -41,9 +71,10 @@ const SessionRow = ({
       {[
         when,
         formatDuration(session.seconds),
-        `${formatProgress(session.start_percentage)} to ${formatProgress(session.end_percentage)}`,
-        sessionSourceLabel(session),
+        progressLine(session.start_percentage, session.end_percentage),
       ].join(" · ")}
+      {" · "}
+      <SessionSource session={session} />
     </p>
     <Button
       aria-label={`Delete session of ${title}, ${when}`}

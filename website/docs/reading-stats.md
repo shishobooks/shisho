@@ -8,14 +8,14 @@ Everything here comes from your [reading history](./reading-tracking.md#reading-
 
 ## Summary
 
-| Figure | What it counts |
-|--------|----------------|
-| **Books finished** | Reads you finished in the range, counted on the day each ended. A book you finished twice counts twice, and the note under the figure says how many were rereads. Reads of a book since deleted from Shisho are never counted as rereads. |
-| **Did Not Finish** | Reads you abandoned in the range, counted on the day each ended. |
-| **Reading time** | Time spent reading ebooks, comics, and PDFs. |
-| **Listening time** | Time spent listening to audiobooks, kept apart from reading time. |
-| **Median days to finish** | The middle value of how many days your finished reads took, from start date to end date, counting both. A book started and finished on the same day took 1 day. Reads missing either date are left out. |
-| **Average Rating** | The average of your current ratings of the books you finished in the range, each book once. |
+| Figure                    | What it counts                                                                                                                                                                                                                            |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Books finished**        | Reads you finished in the range, counted on the day each ended. A book you finished twice counts twice, and the note under the figure says how many were rereads. Reads of a book since deleted from Shisho are never counted as rereads. |
+| **Did Not Finish**        | Reads you abandoned in the range, counted on the day each ended.                                                                                                                                                                          |
+| **Reading time**          | Time spent reading ebooks, comics, and PDFs.                                                                                                                                                                                              |
+| **Listening time**        | Time spent listening to audiobooks, kept apart from reading time.                                                                                                                                                                         |
+| **Median days to finish** | The middle value of how many days your finished reads took, from start date to end date, counting both. A book started and finished on the same day took 1 day. Reads missing either date are left out.                                   |
+| **Average Rating**        | The average of your current ratings of the books you finished in the range, each book once.                                                                                                                                               |
 
 A read with no end date has no year, so it counts only under **All time**.
 
@@ -58,6 +58,6 @@ Under it, a calendar shows one month. It opens on the current month, and its arr
 - A check marks the day you finished a read. A read you logged by hand, with no recorded time, shows only its check.
 - A book deleted from Shisho still shows, by the title it had, but in a new colour, since nothing links its reads to the book any longer.
 
-Select a day to see it in detail. A timeline across the day's 24 hours has a line for each book, with a block wherever you read it; point at a block to see its book and times. Below it, each book is listed with its total for the day and each of its sessions: when it started and ended in your time zone, how long it ran that day, how far through the book it took you, and where you read it. A session that ran past midnight shows on both days, with the time spent on each. Books you finished that day are listed too.
+Select a day to see it in detail. A timeline across the day's 24 hours has a line for each book, with a block wherever you read it; point at a block to see its book and times. Below it, each book is listed with its total for the day and each of its sessions: when it started and ended in your time zone, how long it ran that day, how far through the book it took you (or where it stayed, for one that went nowhere), and where you read it: the Device by name, linked to its page, or the Shisho reader. A session that ran past midnight shows on both days, with the time spent on each. Books you finished that day are listed too.
 
 You can delete a session that wasn't really reading, such as a book left open overnight. Deleting a session can't be undone: its time leaves your totals, the heatmap, the calendar, and the time shown under [Finished](#finished). To delete one, select the trash can beside it in a day's list and confirm. A read's sessions can also be deleted from [Reading History](./reading-tracking.md#reading-history-page).

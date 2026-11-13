@@ -292,6 +292,8 @@ describe("dayLanes", () => {
     kind: "reading",
     source: "web_reader",
     measured: true,
+    device_id: null,
+    device_name: null,
   });
 
   it("gives each book a lane, in the order first read, with its sessions in minutes of the day", () => {
