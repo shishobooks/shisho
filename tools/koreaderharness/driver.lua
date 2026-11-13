@@ -332,6 +332,8 @@ local function pluginReport(plugin, extra)
     local report = extra or {}
     local state = LuaSettings:open(DataStorage:getSettingsDir() .. "/shisho.lua").data
     report.servers = state.servers or {}
+    report.journal = type(state.journal) == "table" and type(state.journal.entries) == "table"
+        and #state.journal.entries or 0
     report.installed_from = state.installed_from
     report.pairing_handled = state.pairing_handled
     if plugin then
@@ -354,22 +356,30 @@ end
 -- with network_after, KOReader starts offline and Wi-Fi comes on just before
 -- fn, which runs before the event arrives, as when a menu item turns Wi-Fi
 -- on and runs its action before KOReader's event loop delivers the event.
-local function withPlugin(fn, network_after)
-    -- Loading NetworkMgr broadcasts NetworkConnected when the machine
-    -- running the container is online. Drop that, so Wi-Fi is whatever the
-    -- command says, and deliver the event below.
+-- stubNetwork makes Wi-Fi whatever net.online says, which the caller can
+-- change. Loading NetworkMgr broadcasts NetworkConnected when the machine
+-- running the container is online, so that's dropped, and commands deliver
+-- the event themselves.
+local function stubNetwork(online)
+    local net = { online = online and true or false }
     local broadcast = UIManager.broadcastEvent
     UIManager.broadcastEvent = function(ui, event)
         if event and event.handler == "onNetworkConnected" then return end
         return broadcast(ui, event)
     end
     local NetworkMgr = require("ui/network/manager")
-    local online = args.online and not network_after and true or false
-    NetworkMgr.isOnline = function() return online end
-    NetworkMgr.isConnected = function() return online end
-    NetworkMgr.isWifiOn = function() return online end
-    NetworkMgr.runWhenOnline = function(_, callback) if online then callback() end end
+    NetworkMgr.isOnline = function() return net.online end
+    NetworkMgr.isConnected = function() return net.online end
+    NetworkMgr.isWifiOn = function() return net.online end
+    NetworkMgr.runWhenOnline = function(_, callback) if net.online then callback() end end
     NetworkMgr.runWhenConnected = NetworkMgr.runWhenOnline
+    NetworkMgr.willRerunWhenOnline = function() return not net.online end
+    return net
+end
+
+local function withPlugin(fn, network_after)
+    local net = stubNetwork(args.online and not network_after)
+    local online = net.online
     local restart = false
     UIManager.askForRestart = function() restart = true end
     UIManager.restartKOReader = function() restart = true end
@@ -384,7 +394,10 @@ local function withPlugin(fn, network_after)
         plugin:onNetworkConnected()
         stepUI()
     end
-    if args.online and network_after then online = true end
+    if args.online and network_after then
+        online = true
+        net.online = true
+    end
     local extra = fn and fn(plugin) or {}
     stepUI()
     if online and network_after then
@@ -423,13 +436,30 @@ commands["plugin-menu"] = function()
         local entries = {}
         plugin:addToMainMenu(entries)
         local items = entries.shisho.sub_item_table_func()
+        -- toggle_enabled taps Enabled under the first server, as a person
+        -- would, and the menu is then read as it is after.
+        if args.toggle_enabled then
+            for __, sub in ipairs(items[1] and items[1].sub_item_table or {}) do
+                if sub.text == "Enabled" then sub.callback() end
+            end
+            stepUI()
+            items = entries.shisho.sub_item_table_func()
+        end
         -- A submenu's items read "Parent > Item".
         local texts = {}
+        -- Items with nothing to show when held, which KOReader shows as help.
+        local without_help = {}
+        local function note(text, item)
+            table.insert(texts, text)
+            if not (item.help_text or item.help_text_func) then
+                table.insert(without_help, text)
+            end
+        end
         for __, item in ipairs(items) do
             local text = item.text_func and item.text_func() or item.text
-            table.insert(texts, text)
+            note(text, item)
             for __, sub in ipairs(item.sub_item_table or {}) do
-                table.insert(texts, text .. " > " .. (sub.text_func and sub.text_func() or sub.text))
+                note(text .. " > " .. (sub.text_func and sub.text_func() or sub.text), sub)
             end
         end
         -- The file manager's own Tools tab, as KOReader sorts it.
@@ -449,7 +479,8 @@ commands["plugin-menu"] = function()
             tab_item_table = { { text = entries.shisho.text, icon = "appbar.tools", table.unpack(items) } },
             show_parent = plugin.ui,
         })
-        return { menu = texts, tools = tools }
+        -- KOReader's JSON writes an empty table as an object, so none is nil.
+        return { menu = texts, tools = tools, without_help = #without_help > 0 and without_help or nil }
     end)
 end
 
@@ -470,6 +501,206 @@ commands["plugin-update"] = function()
         end
         return out
     end, true)
+end
+
+-- seedStatistics adds rows to KOReader's statistics database, as reading
+-- does: args.stats is a list of { document, page, total_pages, start_time,
+-- duration }, each book's row found or made by its document hash. The
+-- statistics plugin made the database when KOReader started.
+local function seedStatistics()
+    if type(args.stats) ~= "table" then return end
+    local SQ3 = require("lua-ljsqlite3/init")
+    local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+    local books = {}
+    local find = conn:prepare("SELECT id FROM book WHERE md5 = ?;")
+    local add_book = conn:prepare("INSERT INTO book (title, authors, md5, pages, last_open) VALUES (?, 'Harness', ?, ?, ?);")
+    local add_row = conn:prepare("INSERT OR IGNORE INTO page_stat_data VALUES (?, ?, ?, ?, ?);")
+    for __, row in ipairs(args.stats) do
+        local id = books[row.document]
+        if not id then
+            local found = find:reset():bind(row.document):step()
+            if found then
+                id = tonumber(found[1])
+            else
+                add_book:reset():bind("Book " .. row.document, row.document, row.total_pages, row.start_time):step()
+                id = tonumber(conn:rowexec("SELECT last_insert_rowid();"))
+            end
+            books[row.document] = id
+        end
+        add_row:reset():bind(id, row.page, row.start_time, row.duration, row.total_pages):step()
+    end
+    conn:close()
+end
+
+-- plugin-sync seeds statistics, with Wi-Fi off, then turns Wi-Fi on, which
+-- syncs by itself. With sync_now, it taps Sync now first instead.
+commands["plugin-sync"] = function()
+    withPlugin(function(plugin)
+        if args.statistics_off then
+            G_reader_settings:saveSetting("statistics", { is_enabled = false })
+        end
+        seedStatistics()
+        if args.sync_now then
+            -- Sync now, as the menu runs it: only once Wi-Fi is on.
+            local problems
+            require("ui/network/manager"):runWhenOnline(function() problems = plugin:syncAll(true) end)
+            -- An empty table encodes as an object, not a list.
+            return { problems = problems and #problems > 0 and problems or nil }
+        end
+        return {}
+    end, not args.sync_now)
+end
+
+-- plugin-sleep seeds statistics with Wi-Fi off, turns on sync on sleep, and
+-- puts the device to sleep. Wi-Fi comes on when asked to, as KOReader's
+-- "turn on" Wi-Fi action does, and the report says whether it was turned on
+-- and whether it was left on.
+commands["plugin-sleep"] = function()
+    withPlugin(function(plugin)
+        seedStatistics()
+        -- KOReader turns Wi-Fi on by itself only when told to; it asks by default.
+        G_reader_settings:saveSetting("wifi_enable_action", args.wifi_prompt and "prompt" or "turn_on")
+        plugin:saveSetting("sync_on_sleep", true)
+        local NetworkMgr = require("ui/network/manager")
+        local turned_on = false
+        NetworkMgr.willRerunWhenOnline = function(_, callback)
+            if NetworkMgr:isOnline() then return false end
+            turned_on = true
+            NetworkMgr.isOnline = function() return true end
+            NetworkMgr.isConnected = NetworkMgr.isOnline
+            NetworkMgr.isWifiOn = NetworkMgr.isOnline
+            callback()
+            return true
+        end
+        NetworkMgr.disableWifi = function()
+            NetworkMgr.isOnline = function() return false end
+            NetworkMgr.isConnected = NetworkMgr.isOnline
+            NetworkMgr.isWifiOn = NetworkMgr.isOnline
+        end
+        plugin:onSuspend()
+        return { wifi_turned_on = turned_on, wifi_left_on = NetworkMgr:isWifiOn() }
+    end)
+end
+
+-- plugin-daily turns on daily sync, puts the device to sleep, and reports the
+-- wake-up alarm the plugin set. With fire, the alarm then goes off as a Kobo's
+-- does: the plugin's task runs, KOReader removes it, and the device stays
+-- awake a while before sleeping again. Wi-Fi comes on when asked to.
+commands["plugin-daily"] = function()
+    withPlugin(function(plugin)
+        seedStatistics()
+        -- KOReader turns Wi-Fi on by itself only when told to; it asks by default.
+        G_reader_settings:saveSetting("wifi_enable_action", args.wifi_prompt and "prompt" or "turn_on")
+        plugin:saveSetting("daily_sync", true)
+        local NetworkMgr = require("ui/network/manager")
+        local turned_on = false
+        local function setOnline(online)
+            NetworkMgr.isOnline = function() return online end
+            NetworkMgr.isConnected = NetworkMgr.isOnline
+            NetworkMgr.isWifiOn = NetworkMgr.isOnline
+        end
+        NetworkMgr.goOnlineToRun = function(_, callback)
+            if args.wifi_fails then
+                -- As KOReader does when it can't connect: a message with no
+                -- timeout, and no callback.
+                UIManager:show(require("ui/widget/infomessage"):new{ text = "Error connecting to the network" })
+                return false
+            end
+            if not NetworkMgr:isOnline() then turned_on = true; setOnline(true) end
+            callback()
+            return true
+        end
+        NetworkMgr.disableWifi = function() setOnline(false) end
+        -- The device's wake-up alarms, as KOReader's WakeupMgr keeps them.
+        local Device = require("device")
+        local tasks = {}
+        Device.wakeup_mgr = {
+            addTask = function(_, seconds, callback)
+                table.insert(tasks, { epoch = os.time() + seconds, callback = callback })
+                table.sort(tasks, function(a, b) return a.epoch < b.epoch end)
+            end,
+            removeTasks = function(_, epoch, callback)
+                for i = #tasks, 1, -1 do
+                    if (not epoch or tasks[i].epoch == epoch) and (not callback or tasks[i].callback == callback) then
+                        table.remove(tasks, i)
+                    end
+                end
+            end,
+        }
+        local function alarms()
+            local out = {}
+            for __, task in ipairs(tasks) do table.insert(out, task.epoch) end
+            return #out > 0 and out or nil
+        end
+        -- KOReader shows the sleep screen before plugins hear the device is
+        -- going to sleep, and an alarm wakes it behind that screen.
+        Device.screen_saver_mode = true
+        plugin:onSuspend()
+        local armed = alarms()
+        if args.fire and tasks[1] then
+            tasks[1].callback()
+            table.remove(tasks, 1)
+            stepUI()
+        end
+        -- What a woken device would leave on its sleep screen.
+        local top = UIManager:getTopmostVisibleWidget()
+        local left = top and top.text or nil
+        return { alarms_armed = armed, alarms_after = alarms(), wifi_turned_on = turned_on,
+            wifi_left_on = NetworkMgr:isWifiOn(), left_on_screen = left }
+    end)
+end
+
+-- plugin-read opens a book with Wi-Fi on or off, turns pages one at a
+-- time as a reader does, and then, with close or sleep, closes the book or
+-- puts the device to sleep, as KOReader's events would.
+commands["plugin-read"] = function()
+    stubNetwork(args.online)
+    runWithReader(function(ui)
+        local plugin = ui.shisho
+        if not plugin then fail("the KOReader plugin didn't load") end
+        stepUI()
+        local Event = require("ui/event")
+        for __ = 1, args.turns or 0 do
+            ui:handleEvent(Event:new("GotoViewRel", 1))
+            stepUI()
+        end
+        if args.close then
+            plugin:onCloseDocument()
+            stepUI()
+        end
+        if args.sleep then
+            plugin:onSuspend()
+            stepUI()
+        end
+        return { plugin = pluginReport(plugin) }
+    end)
+end
+
+-- plugin-open opens a book in the reader with the plugin loaded, online or
+-- not: opening pulls its position. Then it can go to a place, and tap Sync
+-- now.
+commands["plugin-open"] = function()
+    stubNetwork(args.online)
+    runWithReader(function(ui)
+        local plugin = ui.shisho
+        if not plugin then fail("the KOReader plugin didn't load") end
+        stepUI()
+        local out = { prompted = confirm_box and confirm_box.text or nil }
+        if confirm_box and args.confirm then
+            confirm_box.ok_callback()
+            stepUI()
+        end
+        if args.page or args.xpointer or args.percent then
+            gotoCommand(ui)
+            stepUI()
+        end
+        if args.sync_now then
+            plugin:syncAll(true)
+            stepUI()
+        end
+        out.plugin = pluginReport(plugin)
+        return out
+    end)
 end
 
 local command = commands[args.command]

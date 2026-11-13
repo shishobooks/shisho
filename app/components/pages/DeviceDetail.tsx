@@ -1,6 +1,5 @@
 import {
   ArrowLeft,
-  ChevronRight,
   Copy,
   Pencil,
   RefreshCw,
@@ -13,6 +12,7 @@ import { toast } from "sonner";
 
 import DeviceRulesSection from "@/components/devices/DeviceRulesSection";
 import DeviceTypeRadioGroup from "@/components/devices/DeviceTypeRadioGroup";
+import Disclosure from "@/components/devices/Disclosure";
 import KOReaderPluginSetup from "@/components/devices/KOReaderPluginSetup";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
@@ -550,7 +550,6 @@ const ConnectionSetups = ({
 // keeps the connections it replaces in a collapsed section, for anyone who
 // doesn't want the plugin.
 const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
-  const [othersOpen, setOthersOpen] = useState(false);
   const hasPlugin = device.connections.includes(ConnectionKOReaderPlugin);
   const others = device.connections.filter(
     (connection) => connection !== ConnectionKOReaderPlugin,
@@ -569,29 +568,12 @@ const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
             device={device}
           />
           <div className="border-t border-border pt-4">
-            <Button
-              aria-controls="connections-without-plugin"
-              aria-expanded={othersOpen}
-              className="flex w-full items-center gap-2 text-left text-base font-medium"
-              onClick={() => setOthersOpen((open) => !open)}
-              variant="unstyled"
+            <Disclosure
+              description="Set up OPDS and KOReader's progress sync by hand instead."
+              title="Without the plugin"
             >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  othersOpen && "rotate-90",
-                )}
-              />
-              Without the plugin
-            </Button>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Set up OPDS and KOReader's progress sync by hand instead.
-            </p>
-            {othersOpen && (
-              <div className="mt-4 space-y-4" id="connections-without-plugin">
-                <ConnectionSetups connections={others} device={device} />
-              </div>
-            )}
+              <ConnectionSetups connections={others} device={device} />
+            </Disclosure>
           </div>
         </>
       ) : (

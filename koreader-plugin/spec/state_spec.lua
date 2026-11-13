@@ -43,6 +43,28 @@ return {
         assert_eq(state:servers()[1].url, "https://b.example.com")
     end,
 
+    ["a server can be disabled and enabled again, and stays signed in"] = function()
+        local path = scratch_dir() .. "/shisho.lua"
+        local state = State.open(path)
+        signIn(state, "https://a.example", "A")
+        signIn(state, "https://b.example", "B")
+        assert_eq(state:isEnabled(state:find("https://b.example")), true, "enabled by default")
+
+        state:setEnabled("https://B.example/", false)
+        assert_eq(state:flush(), true)
+        local reopened = State.open(path)
+        assert_eq(#reopened:servers(), 2)
+        assert_eq(#reopened:enabledServers(), 1)
+        assert_eq(reopened:enabledServers()[1].url, "https://a.example")
+        assert_eq(reopened:isEnabled(reopened:find("https://b.example")), false)
+
+        -- Signing in again leaves the choice alone.
+        signIn(reopened, "https://b.example", "NEW")
+        assert_eq(reopened:isEnabled(reopened:find("https://b.example")), false)
+        reopened:setEnabled("https://b.example", true)
+        assert_eq(#reopened:enabledServers(), 2)
+    end,
+
     ["a failed write leaves the old state"] = function()
         local dir = scratch_dir()
         local path = dir .. "/shisho.lua"

@@ -27,6 +27,10 @@ const (
 	AudioEndSeconds = 60.0
 )
 
+// sessionTrail is how long after a session ends the update its reader sent
+// with it can arrive and still have happened during it.
+const sessionTrail = time.Minute
+
 // ErrFileNotFound is returned for a position update on a File that doesn't
 // exist.
 var ErrFileNotFound = errors.New("file not found")
@@ -438,9 +442,12 @@ func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, sourc
 }
 
 // recordSession records session, if there is one, on rt, the Read-through
-// underway. With nothing underway, it belongs to the Read-through that was
-// while it ran: one that finished during it, say, since a reader sends a
-// session when it ends, after the update that finished the Book.
+// underway, when that was underway when the session started. Otherwise,
+// such as for a session a device sends weeks late, it's placed by its time
+// (ADR 0016): on the Read-through underway at its start, or on the one that
+// was while it ran, such as one that finished during it, since a reader
+// sends a session when it ends, after the update that finished the Book. Or
+// on none, and it still counts toward time.
 func recordSession(ctx context.Context, tx bun.Tx, userID, fileID int, source string, session *SessionInput, rt *models.ReadThrough, now time.Time) error {
 	if session == nil {
 		return nil
@@ -451,14 +458,28 @@ func recordSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 
 // insertSession records session as recordSession does, returning its id.
 func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source string, session SessionInput, rt *models.ReadThrough, now time.Time) (int, error) {
-	sessionReadThrough := readThroughID(rt)
+	file := &models.File{}
+	err := tx.NewSelect().Model(file).Column("f.book_id", "f.file_type").Where("f.id = ?", fileID).Scan(ctx)
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	day, err := userDay(ctx, tx, userID, session.StartedAt)
+	if err != nil {
+		return 0, err
+	}
+	var sessionReadThrough *int
+	if rt != nil && coversDay(rt, day) {
+		sessionReadThrough = &rt.ID
+	}
+	// An update sent during the session, such as the one it came with, says
+	// which read it was part of, even when that read began after midnight.
 	if sessionReadThrough == nil {
 		var ranDuring int
 		err := tx.NewSelect().
 			Model((*models.ReadingPositionUpdate)(nil)).
 			Column("rpu.read_through_id").
 			Where("rpu.user_id = ? AND rpu.file_id = ? AND rpu.read_through_id IS NOT NULL", userID, fileID).
-			Where("rpu.occurred_at >= ?", session.StartedAt).
+			Where("rpu.occurred_at >= ? AND rpu.occurred_at <= ?", session.StartedAt, session.EndedAt.Add(sessionTrail)).
 			OrderExpr("rpu.id DESC").
 			Limit(1).
 			Scan(ctx, &ranDuring)
@@ -469,11 +490,14 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 			sessionReadThrough = &ranDuring
 		}
 	}
-	var fileType string
-	err := tx.NewSelect().Model((*models.File)(nil)).Column("f.file_type").Where("f.id = ?", fileID).Scan(ctx, &fileType)
-	if err != nil {
-		return 0, errors.WithStack(err)
+	if sessionReadThrough == nil {
+		placed, err := readThroughAt(ctx, tx, userID, file.BookID, session.StartedAt)
+		if err != nil {
+			return 0, err
+		}
+		sessionReadThrough = readThroughID(placed)
 	}
+	fileType := file.FileType
 	inserted := &models.ReadingSession{
 		CreatedAt:       now,
 		UserID:          userID,

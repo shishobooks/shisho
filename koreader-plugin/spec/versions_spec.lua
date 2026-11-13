@@ -84,6 +84,30 @@ return {
         assert_eq(Versions.offer(from_nowhere, servers), nil, "a release zip installed by hand")
     end,
 
+    ["checking yourself offers another server's build of the same version"] = function()
+        local servers = {
+            server("http://a", "0.7.0", 1, "a-build"),
+            server("http://b", "0.7.0", 1, "b-build"),
+        }
+        local checking = { any_build = true }
+        -- The installed-from server's build comes first.
+        assert_eq(Versions.offer(installed, servers, checking), { server = "http://a", version = "0.7.0", hash = "a-build" })
+
+        -- Up to date with it, another server's build is offered when asked.
+        local from_b = { version = "0.7.0", hash = "b-build", installed_from = "http://b/" }
+        assert_eq(Versions.offer(from_b, servers, checking), { server = "http://a", version = "0.7.0", hash = "a-build" })
+        local from_nowhere = { version = "0.7.0", hash = "release" }
+        assert_eq(Versions.offer(from_nowhere, servers, checking).version, "0.7.0", "a release zip installed by hand")
+
+        -- Nothing different anywhere is up to date.
+        local same = { server("http://a", "0.7.0", 1, "x"), server("http://b", "0.7.0", 1, "x") }
+        assert_eq(Versions.offer({ version = "0.7.0", hash = "x", installed_from = "http://a" }, same, checking), nil)
+        -- A server that needs a new sign-in offers nothing.
+        local signed_out = server("http://b", "0.7.0", 1, "b-build")
+        signed_out.needs_login = true
+        assert_eq(Versions.offer(from_nowhere, { signed_out }, checking), nil)
+    end,
+
     ["prefers the installed-from server between equal newer versions"] = function()
         local offer = Versions.offer(installed, {
             server("http://b", "0.8.0"),

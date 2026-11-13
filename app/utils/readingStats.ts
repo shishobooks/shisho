@@ -76,8 +76,12 @@ export const sessionSourceLabel = (session: {
     session.source === "web_reader" && session.kind === "listening"
       ? WEB_PLAYER
       : SOURCE_LABELS[session.source];
-  return session.measured ? name : `${name} (estimated)`;
+  return withEstimate(name, session.measured);
 };
+
+/** A session's place, marked when its time was estimated. */
+export const withEstimate = (place: string, measured: boolean): string =>
+  measured ? place : `${place} (estimated)`;
 
 /** One row of "Where you read". */
 export interface PlaceRow {

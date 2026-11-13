@@ -96,12 +96,30 @@ type PluginReport struct {
 	Installed      bool           `json:"installed"`
 	Restart        bool           `json:"restart"`
 	PromptedUpdate string         `json:"prompted_update"`
+	// Journal is how many positions wait for a server to acknowledge them,
+	// and Problems what Sync now reported.
+	Journal int `json:"journal"`
+	// WifiTurnedOn and WifiLeftOn say, after plugin-sleep, whether going to
+	// sleep turned Wi-Fi on and whether Wi-Fi was still on afterwards.
+	WifiTurnedOn bool `json:"wifi_turned_on"`
+	WifiLeftOn   bool `json:"wifi_left_on"`
+	// AlarmsArmed and AlarmsAfter are the wake-up alarms set, in Unix
+	// seconds, after plugin-daily put the device to sleep, and after the
+	// first went off.
+	AlarmsArmed []int64 `json:"alarms_armed"`
+	AlarmsAfter []int64 `json:"alarms_after"`
+	// LeftOnScreen is the text of a message plugin-daily left on top of the
+	// sleep screen, if any.
+	LeftOnScreen string   `json:"left_on_screen"`
+	Problems     []string `json:"problems"`
 	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu,
 	// and Menu what the Shisho menu does, with a submenu's items as
 	// "Parent > Item".
 	Tools []string `json:"tools"`
 	Menu  []string `json:"menu"`
-	Offer *struct {
+	// WithoutHelp lists the menu items that show nothing when held.
+	WithoutHelp []string `json:"without_help"`
+	Offer       *struct {
 		Server  string `json:"server"`
 		Version string `json:"version"`
 		Hash    string `json:"hash"`
@@ -117,6 +135,23 @@ type PluginServer struct {
 	DeviceName     string `json:"device_name"`
 	NeedsLogin     bool   `json:"needs_login"`
 	UpdateRequired bool   `json:"update_required"`
+	// StatsCursor is the rowid of the last statistics row the server
+	// acknowledged, and
+	// LastSynced when it last took everything in, in Unix seconds.
+	StatsCursor *struct {
+		RowID int64 `json:"rowid"`
+	} `json:"stats_cursor"`
+	LastSynced int64 `json:"last_synced"`
+}
+
+// StatRow is one row of KOReader's page_stat_data, by its book's document
+// hash.
+type StatRow struct {
+	Document   string `json:"document"`
+	Page       int    `json:"page"`
+	TotalPages int    `json:"total_pages"`
+	StartTime  int64  `json:"start_time"`
+	Duration   int    `json:"duration"`
 }
 
 // OPDSServer is one catalog in KOReader's OPDS catalog list.
@@ -153,6 +188,27 @@ type Args struct {
 	Online bool
 	Code   string
 	From   string
+	// Stats seeds KOReader's statistics before a plugin-sync, StatisticsOff
+	// turns statistics off, and SyncNow taps Sync now.
+	Stats         []StatRow
+	StatisticsOff bool
+	SyncNow       bool
+	// Turns is how many pages plugin-read turns, and Close and Sleep close the
+	// book or put the device to sleep afterwards.
+	Turns int
+	Close bool
+	Sleep bool
+	// Fire sets off the wake-up alarm plugin-daily set.
+	Fire bool
+	// WifiFails makes connecting fail, as with a router that's off, for
+	// plugin-daily.
+	WifiFails bool
+	// ToggleEnabled taps Enabled under the first server in plugin-menu.
+	ToggleEnabled bool
+	// WifiPrompt leaves KOReader asking before it turns Wi-Fi on, its
+	// default, for plugin-sleep and plugin-daily, which otherwise set it to
+	// turn Wi-Fi on by itself.
+	WifiPrompt bool
 }
 
 // Run runs one command in a fresh container, as KOReader's unit tests start
@@ -221,6 +277,36 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.From != "" {
 		payload["from"] = containerURL(a.From)
+	}
+	if len(a.Stats) > 0 {
+		payload["stats"] = a.Stats
+	}
+	if a.StatisticsOff {
+		payload["statistics_off"] = true
+	}
+	if a.WifiPrompt {
+		payload["wifi_prompt"] = true
+	}
+	if a.Turns > 0 {
+		payload["turns"] = a.Turns
+	}
+	if a.Close {
+		payload["close"] = true
+	}
+	if a.Sleep {
+		payload["sleep"] = true
+	}
+	if a.WifiFails {
+		payload["wifi_fails"] = true
+	}
+	if a.ToggleEnabled {
+		payload["toggle_enabled"] = true
+	}
+	if a.Fire {
+		payload["fire"] = true
+	}
+	if a.SyncNow {
+		payload["sync_now"] = true
 	}
 	shot := ""
 	if a.Screenshot != "" {

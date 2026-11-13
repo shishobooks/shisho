@@ -87,7 +87,9 @@ end
 
 -- serverStatus is a short status for a signed-in server in the menu.
 function Responses.serverStatus(server)
-    if server.update_required then
+    if server.disabled then
+        return _("Disabled")
+    elseif server.update_required then
         return _("Update required")
     elseif server.needs_login then
         return _("Needs login")

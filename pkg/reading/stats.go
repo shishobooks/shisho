@@ -299,23 +299,9 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 		}
 	}
 
-	names := map[string]string{}
-	if len(deviceIDs) > 0 {
-		var devices []struct {
-			ID   string `bun:"id"`
-			Name string `bun:"name"`
-		}
-		err := svc.db.NewSelect().
-			TableExpr("devices AS d").
-			ColumnExpr("d.id, d.name").
-			Where("d.user_id = ? AND d.id IN (?)", userID, bun.List(deviceIDs)).
-			Scan(ctx, &devices)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		for _, d := range devices {
-			names[d.ID] = d.Name
-		}
+	names, err := deviceNames(ctx, svc.db, userID, deviceIDs)
+	if err != nil {
+		return err
 	}
 
 	// A Device's Sessions keep its id only while it exists, so its name is
@@ -878,4 +864,53 @@ func (svc *Service) ratingCounts(ctx context.Context, userID int, bookIDs []int)
 	}
 	average := float64(sum) / float64(len(units)) / 4
 	return counts, &average, nil
+}
+
+// deviceNames maps each of ids that is one of userID's Devices to its name.
+func deviceNames(ctx context.Context, db bun.IDB, userID int, ids []string) (map[string]string, error) {
+	names := map[string]string{}
+	if len(ids) == 0 {
+		return names, nil
+	}
+	var devices []struct {
+		ID   string `bun:"id"`
+		Name string `bun:"name"`
+	}
+	err := db.NewSelect().
+		TableExpr("devices AS d").
+		ColumnExpr("d.id, d.name").
+		Where("d.user_id = ? AND d.id IN (?)", userID, bun.List(ids)).
+		Scan(ctx, &devices)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, d := range devices {
+		names[d.ID] = d.Name
+	}
+	return names, nil
+}
+
+// presentIDs is the ids that are set.
+func presentIDs(ids []*string) []string {
+	present := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != nil {
+			present = append(present, *id)
+		}
+	}
+	return present
+}
+
+// sessionDevice is the id and name of the Device a Session came from, or
+// nils when it came from none, or one since deleted.
+func sessionDevice(names map[string]string, id *string) (*string, *string) {
+	if id == nil {
+		return nil, nil
+	}
+	name, ok := names[*id]
+	if !ok {
+		return nil, nil
+	}
+	deviceID := *id
+	return &deviceID, &name
 }

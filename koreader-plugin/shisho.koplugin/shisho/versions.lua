@@ -77,9 +77,13 @@ hasn't yet).
 - A server offers its plugin only when it's strictly newer than the one
   installed, and every server that has answered accepts its protocol. The
   newest such plugin wins, and between equals the installed-from server.
-- A build of the same version with a different hash is offered only by the
-  server the plugin was last installed from, so two dev servers never swap
-  it back and forth.
+- A build of the same version with a different hash is offered by the
+  server the plugin was last installed from. With opts.any_build, when the
+  person checks for an update themselves, another server's build of the
+  same version is offered too, once the installed-from server has nothing
+  different: someone moving between dev servers wants each one's build.
+  The automatic check never does, or two dev servers would ask to swap
+  the plugin back and forth every time Wi-Fi comes on.
 - A server that needs a new sign-in offers nothing: its last answer may be
   stale, and its download needs the sign-in. What it last accepted still
   counts.
@@ -88,7 +92,7 @@ Returns the offer { server, version, hash }, or nil and, when a newer plugin
 exists that some server would refuse, { server, version, upgrade }, naming
 the server to upgrade.
 ]]
-function Versions.offer(installed, servers)
+function Versions.offer(installed, servers, opts)
     local known = {}
     for __, server in ipairs(servers or {}) do
         if type(server.info) == "table" then
@@ -130,6 +134,16 @@ function Versions.offer(installed, servers)
                 and server.info.plugin_hash ~= installed.hash
                 and not refuser(server.info.plugin_protocol) then
             return offerFrom(server)
+        end
+    end
+    if opts and opts.any_build then
+        for __, server in ipairs(known) do
+            if not server.needs_login
+                    and Versions.compare(server.info.plugin_version, installed.version) == 0
+                    and server.info.plugin_hash ~= installed.hash
+                    and not refuser(server.info.plugin_protocol) then
+                return offerFrom(server)
+            end
         end
     end
     return nil, blocked

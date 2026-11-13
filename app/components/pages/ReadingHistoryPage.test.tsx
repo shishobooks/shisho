@@ -125,6 +125,8 @@ const renderPage = ({
               kind: "reading",
               source: "web_reader",
               measured: true,
+              device_id: null,
+              device_name: null,
             },
             {
               id: 12,
@@ -136,6 +138,8 @@ const renderPage = ({
               kind: "reading",
               source: "kobo",
               measured: false,
+              device_id: null,
+              device_name: null,
             },
           ],
         });

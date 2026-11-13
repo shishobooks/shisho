@@ -7,8 +7,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
-	"github.com/shishobooks/shisho/pkg/fingerprints"
-	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
@@ -19,11 +17,10 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, bookService *books.Service) {
 	deviceService := devices.NewService(db)
 	readingService := reading.NewService(db)
 	h := &handler{
-		deviceService:      deviceService,
-		fingerprintService: fingerprints.NewService(db),
-		readingService:     readingService,
-		reachService:       reach.NewService(db, bookService),
-		pulls:              &pullStore{db: db, readingService: readingService},
+		deviceService:  deviceService,
+		readingService: readingService,
+		docs:           NewDocuments(db, bookService),
+		pulls:          &pullStore{db: db, readingService: readingService},
 	}
 
 	g := e.Group("/koreader")

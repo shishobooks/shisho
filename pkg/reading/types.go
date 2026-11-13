@@ -192,6 +192,10 @@ type ReadThroughSession struct {
 	Source          string    `json:"source" tstype:"ReadingSource"`
 	// Measured is false for a Session its source estimated.
 	Measured bool `json:"measured"`
+	// DeviceID and DeviceName are the user's Device it came from, null for
+	// the web reader or a Device since deleted.
+	DeviceID   *string `json:"device_id" tstype:"string | null,required"`
+	DeviceName *string `json:"device_name" tstype:"string | null,required"`
 }
 
 // ReadThroughEntry is one of the user's Read-throughs with what it takes to
@@ -512,4 +516,8 @@ type ReadingStatsDaySession struct {
 	Source          string              `json:"source" tstype:"ReadingSource"`
 	// Measured is false for a Session its source estimated.
 	Measured bool `json:"measured"`
+	// DeviceID and DeviceName are the user's Device it came from, null for
+	// the web reader or a Device since deleted.
+	DeviceID   *string `json:"device_id" tstype:"string | null,required"`
+	DeviceName *string `json:"device_name" tstype:"string | null,required"`
 }

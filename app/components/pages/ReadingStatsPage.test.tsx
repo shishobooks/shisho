@@ -1031,6 +1031,8 @@ describe("ReadingStatsPage", () => {
               kind: "reading",
               source: "web_reader",
               measured: true,
+              device_id: null,
+              device_name: null,
             },
           ],
         }),
@@ -1088,6 +1090,36 @@ describe("ReadingStatsPage", () => {
               kind: "reading",
               source: "koreader",
               measured: false,
+              device_id: null,
+              device_name: null,
+            },
+            {
+              id: 42,
+              book: dune,
+              started_at: "2026-06-01T15:00:00Z",
+              ended_at: "2026-06-01T15:20:00Z",
+              seconds: 600,
+              start_percentage: 0.3,
+              end_percentage: 0.4,
+              kind: "reading",
+              source: "koreader",
+              measured: true,
+              device_id: "kobo-1",
+              device_name: "Bedside Kobo",
+            },
+            {
+              id: 43,
+              book: dune,
+              started_at: "2026-06-01T16:00:00Z",
+              ended_at: "2026-06-01T16:00:30Z",
+              seconds: 30,
+              start_percentage: 0.4,
+              end_percentage: 0.401,
+              kind: "reading",
+              source: "web_reader",
+              measured: true,
+              device_id: null,
+              device_name: null,
             },
           ],
         }),
@@ -1101,6 +1133,17 @@ describe("ReadingStatsPage", () => {
       const sessions = await screen.findByRole("list", {
         name: "Reading sessions",
       });
+      // A Device's session names it, linking to its page.
+      expect(sessions).toHaveTextContent(
+        "10:00 AM to 10:20 AM · 10m · 30% to 40% · Bedside Kobo",
+      );
+      expect(
+        within(sessions).getByRole("link", { name: "Bedside Kobo" }),
+      ).toHaveAttribute("href", "/user/devices/kobo-1");
+      // One that went nowhere says where it was.
+      expect(sessions).toHaveTextContent(
+        "11:00 AM to 11:00 AM · <1m · at 40% · Shisho web reader",
+      );
       // 04:30 UTC is still May 31 in Chicago.
       expect(sessions).toHaveTextContent(
         "May 31, 11:30 PM to 1:00 AM · 1h 30m · 10% to 25% · KOReader (estimated)",
@@ -1158,6 +1201,8 @@ describe("ReadingStatsPage", () => {
         kind: "reading" as const,
         source: "web_reader" as const,
         measured: true,
+        device_id: null,
+        device_name: null,
       });
       const { user } = renderPage({
         calendar: june,

@@ -1,6 +1,7 @@
 import { Download, KeyRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
+import Disclosure from "@/components/devices/Disclosure";
 import { Button } from "@/components/ui/button";
 import {
   useDownloadKOReaderPlugin,
@@ -99,62 +100,23 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Recommended. The plugin signs in to Shisho once, adds this server's
-        catalog to KOReader's OPDS catalogs with this Device's password, and
-        keeps itself up to date from Shisho.
+        Recommended. The plugin signs in to Shisho once, sets up this server's
+        OPDS catalog, syncs your reading time and position, and keeps itself up
+        to date.
       </p>
-      <p className="text-sm" data-testid="plugin-connection">
-        {device.plugin_last_connected_at
-          ? `Last connected through the plugin ${formatDateTime(device.plugin_last_connected_at)}${device.plugin_version ? `, version ${device.plugin_version}` : ""}.`
-          : "Not connected through the plugin yet."}
-      </p>
-      {/* Demo Mode hides downloads. */}
-      {!demoMode && (
-        <Button
-          disabled={download.isPending}
-          onClick={handleDownload}
-          size="sm"
-        >
-          <Download className="mr-2 h-4 w-4" />
-          {download.isPending ? "Downloading..." : "Download Plugin"}
-        </Button>
-      )}
-      <ol
-        aria-label="KOReader plugin setup"
-        className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
-      >
-        <li>
-          Connect the e-reader to your computer with USB, or on Android open a
-          file manager.
-        </li>
-        <li>
-          Unzip the download into KOReader's plugins folder, so a{" "}
-          <code className="rounded bg-muted px-1">shisho.koplugin</code> folder
-          sits inside it. The folder for each platform is below.
-        </li>
-        <li>
-          Eject the e-reader and restart KOReader with Wi-Fi on, within 30
-          minutes of downloading. The plugin signs itself in.
-        </li>
-        <li>
-          Later than that, KOReader asks for a pairing code: press Pair below
-          and enter it.
-        </li>
-      </ol>
-      <dl
-        aria-label="KOReader plugins folders"
-        className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm"
-      >
-        {KOREADER_PLUGIN_FOLDERS.map(({ platform, folder }) => (
-          <div className="contents" key={platform}>
-            <dt className="text-muted-foreground">{platform}</dt>
-            <dd className="min-w-0 break-all">
-              <code className="rounded bg-muted px-1">{folder}</code>
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <div className="space-y-3">
+      <PluginStatus device={device} />
+      <div className="flex flex-wrap gap-2">
+        {/* Demo Mode hides downloads. */}
+        {!demoMode && (
+          <Button
+            disabled={download.isPending}
+            onClick={handleDownload}
+            size="sm"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            {download.isPending ? "Downloading..." : "Download Plugin"}
+          </Button>
+        )}
         <Button
           disabled={pair.isPending}
           onClick={handlePair}
@@ -164,22 +126,111 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
           <KeyRound className="mr-2 h-4 w-4" />
           {pair.isPending ? "Pairing..." : "Pair"}
         </Button>
-        {short && <PairingCode key={short.short_code} short={short} />}
       </div>
-      <div className="space-y-1 text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">
-          The plugin and progress sync
-        </p>
-        <p>
+      {short && <PairingCode key={short.short_code} short={short} />}
+      {/* Once the plugin has connected, it's installed: the steps are there
+          for a reinstall, out of the way. */}
+      <Disclosure
+        defaultOpen={!device.plugin_last_connected_at}
+        size="sm"
+        title="Install steps"
+      >
+        <ol
+          aria-label="KOReader plugin setup"
+          className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
+        >
+          <li>
+            Connect the e-reader to your computer with USB, or on Android open a
+            file manager.
+          </li>
+          <li>
+            Unzip the download into KOReader's plugins folder, so a{" "}
+            <code className="rounded bg-muted px-1">shisho.koplugin</code>{" "}
+            folder sits inside it. The folder for each platform is below.
+          </li>
+          <li>
+            Eject the e-reader and restart KOReader with Wi-Fi on, within 30
+            minutes of downloading. The plugin signs itself in.
+          </li>
+          <li>
+            Later than that, KOReader asks for a pairing code: press Pair and
+            enter it.
+          </li>
+        </ol>
+        <dl
+          aria-label="KOReader plugins folders"
+          className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm"
+        >
+          {KOREADER_PLUGIN_FOLDERS.map(({ platform, folder }) => (
+            <div className="contents" key={platform}>
+              <dt className="text-muted-foreground">{platform}</dt>
+              <dd className="min-w-0">
+                <code className="rounded bg-muted px-1">
+                  <FolderPath path={folder} />
+                </code>
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </Disclosure>
+      <Disclosure size="sm" title="Why use the plugin?">
+        <p className="text-sm text-muted-foreground">
           With the plugin, you sign in once with a pairing code instead of
           typing this Device's password into KOReader twice, the OPDS catalog is
-          set up for you, and the plugin updates itself from Shisho. Progress
-          sync is built into KOReader and syncs your position in the open book.
-          The plugin doesn't sync reading yet, so keep progress sync set up as
-          well for now.
+          set up for you, and the plugin updates itself from Shisho. Your
+          reading time comes from KOReader's own statistics, page by page, and
+          reading done offline arrives on the days you did it, however long the
+          e-reader stays offline. Progress sync is built into KOReader and syncs
+          your position in the open book, but Shisho can only estimate your
+          reading time from it, and offline reading is dated when the e-reader
+          next connects. Once the plugin syncs, turn progress sync off.
+        </p>
+      </Disclosure>
+    </div>
+  );
+};
+
+// FolderPath lets a long folder wrap only after a slash, never mid-name,
+// even inside a name with a space, such as "Application Support".
+const FolderPath = ({ path }: { path: string }) =>
+  path.split("/").map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 && (
+        <>
+          /<wbr />
+        </>
+      )}
+      <span className="whitespace-nowrap">{part}</span>
+    </Fragment>
+  ));
+
+// PluginStatus says when the Device last synced through the plugin, or,
+// before its first sync, when it last connected. Once it syncs, Shisho
+// ignores its progress sync, so it says to turn that off.
+const PluginStatus = ({ device }: { device: DeviceResponse }) => {
+  const version = device.plugin_version
+    ? `, version ${device.plugin_version}`
+    : "";
+  if (device.plugin_last_synced_at) {
+    return (
+      <div className="space-y-1 text-sm">
+        <p data-testid="plugin-status">
+          {`Last synced through the plugin ${formatDateTime(device.plugin_last_synced_at)}${version}.`}
+        </p>
+        <p className="text-muted-foreground">
+          Turn off progress sync in KOReader (Tools &gt; Progress sync). Shisho
+          now ignores it from this Device, since the plugin reports the same
+          reading with its real time.
         </p>
       </div>
-    </div>
+    );
+  }
+  return (
+    <p className="text-sm" data-testid="plugin-status">
+      {device.plugin_last_connected_at
+        ? `Last connected through the plugin ${formatDateTime(device.plugin_last_connected_at)}${version}.`
+        : "Not connected through the plugin yet."}
+    </p>
   );
 };
 

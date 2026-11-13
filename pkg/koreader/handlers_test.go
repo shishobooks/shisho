@@ -714,3 +714,26 @@ func TestProgress_ServerFaultsAre500(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, f.pull(epubHash).Code)
 	assert.Equal(t, http.StatusInternalServerError, f.push(epubHash, xpointer, 0.3).Code)
 }
+
+func TestProgress_PushesIgnoredOnceTheDeviceSyncedThroughThePlugin(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	file := f.addFile(f.lib, models.FileTypeEPUB, epubHash)
+	require.NoError(t, f.devices.RecordPluginSync(f.ctx, f.device.ID, time.Now()))
+
+	rec := f.push(epubHash, xpointer, 0.4)
+
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var answer UpdateProgressResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &answer))
+	assert.Equal(t, epubHash, answer.Document, "acknowledged as KOReader expects")
+	position, err := f.reading.RetrievePosition(f.ctx, f.user.ID, file.ID)
+	require.NoError(t, err)
+	assert.Nil(t, position, "the plugin reports the same reading")
+	started, err := f.db.NewSelect().Model((*models.ReadThrough)(nil)).Where("rt.user_id = ?", f.user.ID).Exists(f.ctx)
+	require.NoError(t, err)
+	assert.False(t, started)
+
+	// Its pulls still answer.
+	assert.Equal(t, http.StatusOK, f.pull(epubHash).Code)
+}

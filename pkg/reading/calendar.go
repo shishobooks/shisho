@@ -235,6 +235,15 @@ func (svc *Service) StatsDay(ctx context.Context, user *models.User, day string)
 		return nil, err
 	}
 
+	ids := make([]*string, 0, len(touched))
+	for _, t := range touched {
+		ids = append(ids, t.session.SourceDeviceID)
+	}
+	names, err := deviceNames(ctx, svc.db, user.ID, presentIDs(ids))
+	if err != nil {
+		return nil, err
+	}
+
 	resp := &ReadingStatsDayResponse{
 		Day:      day,
 		TimeZone: loc.String(),
@@ -243,7 +252,7 @@ func (svc *Service) StatsDay(ctx context.Context, user *models.User, day string)
 	}
 	for _, t := range touched {
 		s := t.session
-		resp.Sessions = append(resp.Sessions, ReadingStatsDaySession{
+		session := ReadingStatsDaySession{
 			ID:              s.ID,
 			Book:            resolved[t.key],
 			StartedAt:       s.StartedAt,
@@ -254,7 +263,9 @@ func (svc *Service) StatsDay(ctx context.Context, user *models.User, day string)
 			Kind:            s.Kind,
 			Source:          s.Source,
 			Measured:        s.Measured,
-		})
+		}
+		session.DeviceID, session.DeviceName = sessionDevice(names, s.SourceDeviceID)
+		resp.Sessions = append(resp.Sessions, session)
 	}
 	for _, key := range finishedKeys {
 		resp.Finished = append(resp.Finished, resolved[key])
@@ -279,6 +290,7 @@ type calendarSession struct {
 	ReadThroughBookID *int      `bun:"rt_book_id"`
 	ReadThroughTitle  *string   `bun:"rt_book_title"`
 	FileBookID        *int      `bun:"file_book_id"`
+	SourceDeviceID    *string   `bun:"source_device_id"`
 }
 
 // calendarSessions loads userID's Sessions that may touch rng in any time
@@ -289,7 +301,7 @@ func (svc *Service) calendarSessions(ctx context.Context, userID int, rng dayRan
 	err := svc.db.NewSelect().
 		TableExpr("reading_sessions AS rs").
 		ColumnExpr("rs.id, rs.started_at, rs.ended_at, rs.duration, rs.kind, rs.source, rs.measured").
-		ColumnExpr("rs.start_percentage, rs.end_percentage, rs.read_through_id").
+		ColumnExpr("rs.start_percentage, rs.end_percentage, rs.read_through_id, rs.source_device_id").
 		ColumnExpr("rt.book_id AS rt_book_id, rt.book_title AS rt_book_title, f.book_id AS file_book_id").
 		Join("LEFT JOIN read_throughs AS rt ON rt.id = rs.read_through_id").
 		Join("LEFT JOIN files AS f ON f.id = rs.file_id").
@@ -407,9 +419,17 @@ func (svc *Service) ReadThroughSessions(ctx context.Context, userID, readThrough
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	ids := make([]*string, 0, len(sessions))
+	for _, s := range sessions {
+		ids = append(ids, s.SourceDeviceID)
+	}
+	names, err := deviceNames(ctx, svc.db, userID, presentIDs(ids))
+	if err != nil {
+		return nil, err
+	}
 	resp := &ReadThroughSessionsResponse{TimeZone: loc.String(), Items: make([]ReadThroughSession, 0, len(sessions))}
 	for _, s := range sessions {
-		resp.Items = append(resp.Items, ReadThroughSession{
+		item := ReadThroughSession{
 			ID:              s.ID,
 			StartedAt:       s.StartedAt,
 			EndedAt:         s.EndedAt,
@@ -419,7 +439,9 @@ func (svc *Service) ReadThroughSessions(ctx context.Context, userID, readThrough
 			Kind:            s.Kind,
 			Source:          s.Source,
 			Measured:        s.Measured,
-		})
+		}
+		item.DeviceID, item.DeviceName = sessionDevice(names, s.SourceDeviceID)
+		resp.Items = append(resp.Items, item)
 	}
 	return resp, nil
 }

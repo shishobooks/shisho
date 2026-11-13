@@ -6,13 +6,13 @@ Each user can record their reading of a book, rate it, and look back at its hist
 
 A book's **Reading Status** shows on its page, next to its actions, and as a bookmark hanging from the top of its cover, on its page and on its card wherever books are listed. Each status has its own bookmark color and icon, and hovering over the bookmark names it. It is one of:
 
-| Status | Meaning |
-|--------|---------|
+| Status                | Meaning                                                    |
+| --------------------- | ---------------------------------------------------------- |
 | **Currently Reading** | You started the book and haven't finished or abandoned it. |
-| **Paused** | You started the book and set it aside for now. |
-| **To Read** | The book is on your [To Read](#to-read) queue. |
-| **Read** | The last time you read the book, you finished it. |
-| **Did Not Finish** | The last time you read the book, you abandoned it. |
+| **Paused**            | You started the book and set it aside for now.             |
+| **To Read**           | The book is on your [To Read](#to-read) queue.             |
+| **Read**              | The last time you read the book, you finished it.          |
+| **Did Not Finish**    | The last time you read the book, you abandoned it.         |
 
 A book you have never tracked has no status and no bookmark.
 
@@ -35,7 +35,7 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 [KOReader](./koreader.md) and a [Kobo](./kobo-sync.md#reading-progress) can sync your reading with Shisho, which starts, resumes, and finishes Read-throughs, with the same [rereading](#starting-and-finishing-automatically) rule as reading in Shisho.
 
-- **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does.
+- **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does. With the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin), reading done offline is dated by when you read it: a book you start offline starts on the day you read it.
 - **A Kobo** says outright when you are reading a book and when you finish it, so opening a book on the Kobo starts it even on its first page, and a finish from the Kobo is never undone the way an automatic finish can be.
 
 ### Moving Between Readers
@@ -51,10 +51,13 @@ When the exact spot can't be found, such as a place saved before the file was re
 
 ### Reading Time From Devices
 
-Neither device times a sitting the way the Shisho reader does, so the reading time Shisho records for them is an estimate:
+Reading time from KOReader with the plugin is measured. Elsewhere, Shisho estimates it:
 
-- **KOReader** doesn't report how long you read. A session runs from when KOReader pulls your position on opening a book to its last push before you close it.
+- **KOReader with the plugin** sends the time its statistics recorded on each page. A break of more than ten minutes starts a new session, and a session's time counts only the time spent on its pages, so it can be shorter than the span from its start to its end. KOReader's statistics also leave out a page you turned past in under 5 seconds and count at most 2 minutes on any one page, by default; both are **Read page duration limits** under **Reading statistics > Settings** in KOReader.
+- **KOReader without the plugin**, using progress sync, doesn't report how long you read. A session runs from when KOReader pulls your position on opening a book to its last push before you close it.
 - **A Kobo** counts the minutes it spends on each book. Each time it reports more, the extra minutes become one session that ends when the Kobo reported them, so reading over a few days with Wi-Fi off becomes one session.
+
+A session that reaches Shisho late belongs to the Read-through you were on when it started, or to none if you weren't reading the book then, and counts toward your reading time either way.
 
 ## Reading in Shisho
 
@@ -153,7 +156,7 @@ Each row's menu offers:
 - **Start a reread** for a book you can still open and aren't reading now.
 - **Mark as finished** and **Mark as Did Not Finish** for a read you're on, dated the way the status menu dates them.
 
-A read with recorded time shows how many sessions it has, such as **8 sessions**. Select it to list each one, with its date, times, length, how far through the book it took you, and where you read it. A book's page lists them the same way under **Reading history**. Deleting a session can't be undone: its time stops counting toward your [Reading Stats](./reading-stats.md). To delete one, select the trash can beside it and confirm.
+A read with recorded time shows how many sessions it has, such as **8 sessions**. Select it to list each one, with its date, times, length, how far through the book it took you, and where you read it, naming the Device it came from. A book's page lists them the same way under **Reading history**. Deleting a session can't be undone: its time stops counting toward your [Reading Stats](./reading-stats.md). To delete one, select the trash can beside it and confirm.
 
 A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its reads still count, and you can still edit or delete them.
 

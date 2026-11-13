@@ -172,8 +172,8 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	if err != nil {
 		return nil, errors.Wrap(err, "build the KOReader plugin")
 	}
-	koreaderplugin.RegisterUserRoutes(api, db, pluginBundle, authMiddleware)
-	koreaderplugin.RegisterRoutes(e, db, pluginBundle)
+	koreaderplugin.RegisterUserRoutes(api, db, pluginBundle, svcs.books, authMiddleware)
+	koreaderplugin.RegisterRoutes(e, db, pluginBundle, svcs.books)
 	delivery.RegisterRoutes(api, db, authMiddleware)
 
 	// Register protected API routes

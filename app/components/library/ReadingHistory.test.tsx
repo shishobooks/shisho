@@ -51,6 +51,8 @@ const sessions: ReadThroughSessionsResponse = {
       kind: "listening",
       source: "web_reader",
       measured: true,
+      device_id: null,
+      device_name: null,
     },
   ],
 };

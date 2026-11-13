@@ -38,6 +38,10 @@ type Device struct {
 	// reported then. Both are nil until it first does.
 	PluginLastConnectedAt *time.Time `bun:"plugin_last_connected_at" json:"plugin_last_connected_at"`
 	PluginVersion         *string    `bun:"plugin_version" json:"plugin_version"`
+	// PluginLastSyncedAt is when the Device last uploaded its reading
+	// through the KOReader plugin. Once it has, its progress sync pushes are
+	// ignored, since the plugin reports the same reading.
+	PluginLastSyncedAt *time.Time `bun:"plugin_last_synced_at" json:"plugin_last_synced_at"`
 
 	Owner        *models.UserRef `bun:"rel:belongs-to,join:user_id=id" json:"-"`
 	ScopeLibrary *models.Library `bun:"rel:belongs-to,join:scope_library_id=id" json:"-"`

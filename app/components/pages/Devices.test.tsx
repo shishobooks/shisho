@@ -342,11 +342,25 @@ describe("DeviceDetail", () => {
     expect(
       screen.getByText("Not connected through the plugin yet."),
     ).toBeInTheDocument();
+    // Before the plugin first connects, the install steps are open.
+    expect(
+      screen.getByRole("button", { name: "Install steps" }),
+    ).toHaveAttribute("aria-expanded", "true");
     const folders = screen.getByText("Kobo", { selector: "dt" });
     expect(folders.nextElementSibling).toHaveTextContent(
       ".adds/koreader/plugins",
     );
-    expect(screen.getByText(/doesn't sync reading yet/)).toBeInTheDocument();
+
+    // Why the plugin beats progress sync is there for anyone who asks.
+    const why = screen.getByRole("button", { name: "Why use the plugin?" });
+    expect(why).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText(/reading time comes from KOReader's own statistics/),
+    ).not.toBeInTheDocument();
+    await user.click(why);
+    expect(
+      screen.getByText(/reading time comes from KOReader's own statistics/),
+    ).toBeInTheDocument();
 
     // Progress sync and OPDS sit in a collapsed section.
     const toggle = screen.getByRole("button", { name: "Without the plugin" });
@@ -379,7 +393,7 @@ describe("DeviceDetail", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows when a KOReader Device last connected through the plugin", async () => {
+  it("shows when a KOReader Device last connected through the plugin, before it syncs", async () => {
     stubAPI(
       koreader({
         plugin_last_connected_at: "2026-11-10T15:30:00Z",
@@ -388,10 +402,40 @@ describe("DeviceDetail", () => {
     );
     renderAt("/user/devices/koreader-1");
 
-    const connection = await screen.findByTestId("plugin-connection");
-    expect(connection).toHaveTextContent(
+    const status = await screen.findByTestId("plugin-status");
+    expect(status).toHaveTextContent(
       /^Last connected through the plugin .+, version 0\.8\.0\.$/,
     );
+    expect(
+      screen.queryByText(/Turn off progress sync in KOReader/),
+    ).not.toBeInTheDocument();
+    // Once installed, the steps tuck away.
+    expect(
+      screen.getByRole("button", { name: "Install steps" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByText("Kobo", { selector: "dt" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows when a KOReader Device last synced through the plugin, and says to turn off progress sync", async () => {
+    stubAPI(
+      koreader({
+        plugin_last_connected_at: "2026-11-11T15:30:00Z",
+        plugin_last_synced_at: "2026-11-10T15:30:00Z",
+        plugin_version: "0.8.0",
+      }),
+    );
+    renderAt("/user/devices/koreader-1");
+
+    const status = await screen.findByTestId("plugin-status");
+    expect(status).toHaveTextContent(
+      /^Last synced through the plugin .+, version 0\.8\.0\.$/,
+    );
+    expect(status).not.toHaveTextContent(/connected/);
+    expect(
+      screen.getByText(/Turn off progress sync in KOReader/),
+    ).toBeInTheDocument();
   });
 
   it("pairs the KOReader plugin with a code that counts down", async () => {
