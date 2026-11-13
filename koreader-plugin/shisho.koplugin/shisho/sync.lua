@@ -64,6 +64,83 @@ function Sync.dueOnSleep(last_synced, now)
     return since < 0 or since >= Sync.SLEEP_GAP
 end
 
+-- syncable is the servers a sync can go to: enabled, signed in, and with a
+-- plugin they accept.
+function Sync.syncable(servers)
+    local out = {}
+    for __, server in ipairs(servers) do
+        if not server.disabled and not server.needs_login and not server.update_required then
+            table.insert(out, server)
+        end
+    end
+    return out
+end
+
+--[[--
+onSleep is what going to sleep does, from opts { online, syncable (how many
+servers can take a sync), sync_on_sleep, last_synced, last_attempt,
+wifi_turns_on, now }: "sync" on Wi-Fi that's already on, which costs
+nothing; "wifi" to turn Wi-Fi on for it, only with sync on sleep on, an hour
+since the last sync or attempt, and KOReader turning Wi-Fi on without
+asking; or nil.
+]]
+function Sync.onSleep(opts)
+    if (opts.syncable or 0) == 0 then return nil end
+    if opts.online then return "sync" end
+    if not opts.sync_on_sleep then return nil end
+    local last = math.max(opts.last_synced or 0, opts.last_attempt or 0)
+    if last > 0 and not Sync.dueOnSleep(last, opts.now) then return nil end
+    if not opts.wifi_turns_on then return nil end
+    return "wifi"
+end
+
+-- BACKOFF is how many seconds a server that couldn't be reached, or failed,
+-- is left out of the syncs that happen while reading, so a server that's
+-- down doesn't hold up a page turn every few pages.
+Sync.BACKOFF = 15 * 60
+
+-- noteOutcome records how a sync with server went at now: a failure of the
+-- network or the server starts its back-off, and a success ends it. A
+-- refused sign-in or plugin isn't the network, and has its own status.
+function Sync.noteOutcome(server, outcome, now)
+    if outcome == "ok" then
+        server.last_failed = nil
+    elseif outcome == "unreachable" or outcome == "error" then
+        server.last_failed = now
+    end
+end
+
+-- backingOff reports whether server is left out of syncs while reading at
+-- now. A clock set back since doesn't hold it off.
+function Sync.backingOff(server, now)
+    if not server.last_failed then return false end
+    local since = now - server.last_failed
+    return since >= 0 and since < Sync.BACKOFF
+end
+
+-- afterPage is what a page turn does, pages having been turned since the
+-- last sync: "sync" once enough are, on a connection; "reset" without one,
+-- so it isn't tried again on every page until there is; or nil.
+function Sync.afterPage(pages, connected)
+    if not Sync.dueAfterPages(pages) then return nil end
+    return connected and "sync" or "reset"
+end
+
+--[[--
+onConnected is what Wi-Fi coming on does, from opts { servers (how many are
+enabled), background (a sync while away turned it on), screen_saver,
+recent_check, ran_recently, awaiting_restart }: { check, sync } for the
+update check and a sync. Wi-Fi a sync while away turned on, or that came on
+behind the sleep screen, does nothing more: no one is there to answer an
+update offer, and the sync has run.
+]]
+function Sync.onConnected(opts)
+    if (opts.servers or 0) == 0 or opts.awaiting_restart or opts.background or opts.screen_saver then
+        return { check = false, sync = false }
+    end
+    return { check = not opts.recent_check, sync = not opts.ran_recently }
+end
+
 local function payloadRow(row)
     return {
         document = row.document,

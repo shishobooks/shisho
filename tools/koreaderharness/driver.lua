@@ -436,6 +436,15 @@ commands["plugin-menu"] = function()
         local entries = {}
         plugin:addToMainMenu(entries)
         local items = entries.shisho.sub_item_table_func()
+        -- toggle_enabled taps Enabled under the first server, as a person
+        -- would, and the menu is then read as it is after.
+        if args.toggle_enabled then
+            for __, sub in ipairs(items[1] and items[1].sub_item_table or {}) do
+                if sub.text == "Enabled" then sub.callback() end
+            end
+            stepUI()
+            items = entries.shisho.sub_item_table_func()
+        end
         -- A submenu's items read "Parent > Item".
         local texts = {}
         -- Items with nothing to show when held, which KOReader shows as help.
@@ -591,6 +600,12 @@ commands["plugin-daily"] = function()
             NetworkMgr.isWifiOn = NetworkMgr.isOnline
         end
         NetworkMgr.goOnlineToRun = function(_, callback)
+            if args.wifi_fails then
+                -- As KOReader does when it can't connect: a message with no
+                -- timeout, and no callback.
+                UIManager:show(require("ui/widget/infomessage"):new{ text = "Error connecting to the network" })
+                return false
+            end
             if not NetworkMgr:isOnline() then turned_on = true; setOnline(true) end
             callback()
             return true
@@ -617,6 +632,9 @@ commands["plugin-daily"] = function()
             for __, task in ipairs(tasks) do table.insert(out, task.epoch) end
             return #out > 0 and out or nil
         end
+        -- KOReader shows the sleep screen before plugins hear the device is
+        -- going to sleep, and an alarm wakes it behind that screen.
+        Device.screen_saver_mode = true
         plugin:onSuspend()
         local armed = alarms()
         if args.fire and tasks[1] then
@@ -624,11 +642,15 @@ commands["plugin-daily"] = function()
             table.remove(tasks, 1)
             stepUI()
         end
-        return { alarms_armed = armed, alarms_after = alarms(), wifi_turned_on = turned_on, wifi_left_on = NetworkMgr:isWifiOn() }
+        -- What a woken device would leave on its sleep screen.
+        local top = UIManager:getTopmostVisibleWidget()
+        local left = top and top.text or nil
+        return { alarms_armed = armed, alarms_after = alarms(), wifi_turned_on = turned_on,
+            wifi_left_on = NetworkMgr:isWifiOn(), left_on_screen = left }
     end)
 end
 
--- plugin-read opens a book with Wi-Fi on or off, turns turns pages one at a
+-- plugin-read opens a book with Wi-Fi on or off, turns pages one at a
 -- time as a reader does, and then, with close or sleep, closes the book or
 -- puts the device to sleep, as KOReader's events would.
 commands["plugin-read"] = function()

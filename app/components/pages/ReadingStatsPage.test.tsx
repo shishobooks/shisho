@@ -1130,23 +1130,20 @@ describe("ReadingStatsPage", () => {
       expect(screen.getByTestId("location")).toHaveTextContent(
         "?day=2026-06-01",
       );
-      const named = await screen.findByRole("list", {
-        name: "Reading sessions",
-      });
-      // A Device's session names it, linking to its page.
-      expect(named).toHaveTextContent(
-        "10:00 AM to 10:20 AM · 10m · 30% to 40% · Bedside Kobo",
-      );
-      expect(
-        within(named).getByRole("link", { name: "Bedside Kobo" }),
-      ).toHaveAttribute("href", "/user/devices/kobo-1");
-      // One that went nowhere says where it was.
-      expect(named).toHaveTextContent(
-        "11:00 AM to 11:00 AM · <1m · at 40% · Shisho web reader",
-      );
       const sessions = await screen.findByRole("list", {
         name: "Reading sessions",
       });
+      // A Device's session names it, linking to its page.
+      expect(sessions).toHaveTextContent(
+        "10:00 AM to 10:20 AM · 10m · 30% to 40% · Bedside Kobo",
+      );
+      expect(
+        within(sessions).getByRole("link", { name: "Bedside Kobo" }),
+      ).toHaveAttribute("href", "/user/devices/kobo-1");
+      // One that went nowhere says where it was.
+      expect(sessions).toHaveTextContent(
+        "11:00 AM to 11:00 AM · <1m · at 40% · Shisho web reader",
+      );
       // 04:30 UTC is still May 31 in Chicago.
       expect(sessions).toHaveTextContent(
         "May 31, 11:30 PM to 1:00 AM · 1h 30m · 10% to 25% · KOReader (estimated)",

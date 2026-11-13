@@ -3,22 +3,24 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/libraries/utils";
-import type { ReadingKind, ReadingSource } from "@/types";
+import type { ReadingStatsDaySession, ReadThroughSession } from "@/types";
 import { formatDuration } from "@/utils/format";
-import { sessionSourceLabel } from "@/utils/readingStats";
+import { sessionSourceLabel, withEstimate } from "@/utils/readingStats";
 import { formatProgress } from "@/utils/readingStatus";
 
+type SessionFields =
+  | "seconds"
+  | "start_percentage"
+  | "end_percentage"
+  | "kind"
+  | "source"
+  | "measured"
+  | "device_id"
+  | "device_name";
+
 /** What a session's line shows, from either of the APIs that list them. */
-export interface SessionLine {
-  seconds: number;
-  start_percentage: number;
-  end_percentage: number;
-  kind: ReadingKind;
-  source: ReadingSource;
-  measured: boolean;
-  device_id: string | null;
-  device_name: string | null;
-}
+export type SessionLine = Pick<ReadThroughSession, SessionFields> &
+  Pick<ReadingStatsDaySession, SessionFields>;
 
 // progressLine is how far a session took the reader, or where it stayed
 // when it went nowhere, as opening a book and closing it again does.
@@ -42,7 +44,7 @@ const SessionSource = ({ session }: { session: SessionLine }) => {
       >
         {session.device_name}
       </Link>
-      {!session.measured && " (estimated)"}
+      {withEstimate("", session.measured)}
     </>
   );
 };

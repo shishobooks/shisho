@@ -890,6 +890,17 @@ func deviceNames(ctx context.Context, db bun.IDB, userID int, ids []string) (map
 	return names, nil
 }
 
+// presentIDs is the ids that are set.
+func presentIDs(ids []*string) []string {
+	present := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if id != nil {
+			present = append(present, *id)
+		}
+	}
+	return present
+}
+
 // sessionDevice is the id and name of the Device a Session came from, or
 // nils when it came from none, or one since deleted.
 func sessionDevice(names map[string]string, id *string) (*string, *string) {

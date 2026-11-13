@@ -235,13 +235,11 @@ func (svc *Service) StatsDay(ctx context.Context, user *models.User, day string)
 		return nil, err
 	}
 
-	var ids []string
+	ids := make([]*string, 0, len(touched))
 	for _, t := range touched {
-		if t.session.SourceDeviceID != nil {
-			ids = append(ids, *t.session.SourceDeviceID)
-		}
+		ids = append(ids, t.session.SourceDeviceID)
 	}
-	names, err := deviceNames(ctx, svc.db, user.ID, ids)
+	names, err := deviceNames(ctx, svc.db, user.ID, presentIDs(ids))
 	if err != nil {
 		return nil, err
 	}
@@ -421,13 +419,11 @@ func (svc *Service) ReadThroughSessions(ctx context.Context, userID, readThrough
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	var ids []string
+	ids := make([]*string, 0, len(sessions))
 	for _, s := range sessions {
-		if s.SourceDeviceID != nil {
-			ids = append(ids, *s.SourceDeviceID)
-		}
+		ids = append(ids, s.SourceDeviceID)
 	}
-	names, err := deviceNames(ctx, svc.db, userID, ids)
+	names, err := deviceNames(ctx, svc.db, userID, presentIDs(ids))
 	if err != nil {
 		return nil, err
 	}

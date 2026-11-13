@@ -596,9 +596,19 @@ func TestSessions_NameTheDeviceTheyCameFrom(t *testing.T) {
 		source: models.ReadingSourceKOReader, measured: true})
 	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-01 12:00"), end: at(t, "UTC", "2026-06-01 13:00"),
 		source: models.ReadingSourceWebReader, measured: true})
+	// Another user's Device is never named, whatever a Session says.
+	other := createUser(t, f.db, "other", 2)
+	_, err = f.db.ExecContext(f.ctx, `INSERT INTO devices (id, user_id, name, device_type, credential, created_at, updated_at)
+		VALUES ('theirs-1', ?, 'Their Kobo', 'koreader', 'cred-2', '2026-01-01', '2026-01-01')`, other.ID)
+	require.NoError(t, err)
+	theirs := "theirs-1"
+	f.session(sessionSpec{file: file, readThrough: rt, start: at(t, "UTC", "2026-06-01 14:00"), end: at(t, "UTC", "2026-06-01 15:00"),
+		source: models.ReadingSourceKOReader, deviceID: &theirs, measured: true})
 
 	items := f.readThroughSessions(rt).Items
-	require.Len(t, items, 3)
+	require.Len(t, items, 4)
+	assert.Nil(t, items[3].DeviceID)
+	assert.Nil(t, items[3].DeviceName)
 	require.NotNil(t, items[0].DeviceID)
 	assert.Equal(t, "kobo-1", *items[0].DeviceID)
 	require.NotNil(t, items[0].DeviceName)
@@ -608,7 +618,8 @@ func TestSessions_NameTheDeviceTheyCameFrom(t *testing.T) {
 	assert.Nil(t, items[2].DeviceName, "the web reader isn't a Device")
 
 	sessions := f.day("2026-06-01").Sessions
-	require.Len(t, sessions, 3)
+	require.Len(t, sessions, 4)
+	assert.Nil(t, sessions[3].DeviceName)
 	require.NotNil(t, sessions[0].DeviceName)
 	assert.Equal(t, "Bedside Kobo", *sessions[0].DeviceName)
 	assert.Equal(t, "kobo-1", *sessions[0].DeviceID)

@@ -173,6 +173,75 @@ return {
         assert_eq(Sync.PAGES_BETWEEN, 20)
     end,
 
+    ["only enabled servers that can take a sync are syncable"] = function()
+        local servers = {
+            { url = "a" }, { url = "b", disabled = true }, { url = "c", needs_login = true },
+            { url = "d", update_required = true },
+        }
+        local syncable = Sync.syncable(servers)
+        assert_eq(#syncable, 1)
+        assert_eq(syncable[1].url, "a")
+    end,
+
+    ["going to sleep syncs online, or turns Wi-Fi on only when all of it allows"] = function()
+        local now = 100000
+        local base = { online = false, syncable = 1, sync_on_sleep = true, wifi_turns_on = true, now = now }
+        local function with(changes)
+            local o = {}
+            for k, v in pairs(base) do o[k] = v end
+            for k, v in pairs(changes) do o[k] = v end
+            return o
+        end
+        assert_eq(Sync.onSleep(with{ online = true, sync_on_sleep = false }), "sync", "Wi-Fi already on costs nothing")
+        assert_eq(Sync.onSleep(with{}), "wifi")
+        assert_eq(Sync.onSleep(with{ syncable = 0 }), nil, "no server could take it")
+        assert_eq(Sync.onSleep(with{ syncable = 0, online = true }), nil)
+        assert_eq(Sync.onSleep(with{ sync_on_sleep = false }), nil)
+        assert_eq(Sync.onSleep(with{ wifi_turns_on = false }), nil, "KOReader would ask")
+        assert_eq(Sync.onSleep(with{ last_synced = now - 60 }), nil, "synced within the hour")
+        assert_eq(Sync.onSleep(with{ last_attempt = now - 60 }), nil, "tried within the hour, even if it failed")
+        assert_eq(Sync.onSleep(with{ last_synced = now - Sync.SLEEP_GAP, last_attempt = now - Sync.SLEEP_GAP }), "wifi")
+    end,
+
+    ["a server that just failed is skipped by syncs while reading for a while"] = function()
+        local server = { url = "a" }
+        local now = 50000
+        assert_eq(Sync.backingOff(server, now), false)
+        Sync.noteOutcome(server, "unreachable", now)
+        assert_eq(Sync.backingOff(server, now + 60), true)
+        assert_eq(Sync.backingOff(server, now + Sync.BACKOFF), false)
+        assert_eq(Sync.backingOff(server, now - 60), false, "a clock set back since doesn't hold it off")
+        Sync.noteOutcome(server, "error", now)
+        assert_eq(Sync.backingOff(server, now + 1), true)
+        Sync.noteOutcome(server, "ok", now + 2)
+        assert_eq(Sync.backingOff(server, now + 3), false, "a success clears it")
+        Sync.noteOutcome(server, "needs_login", now + 4)
+        assert_eq(Sync.backingOff(server, now + 5), false, "a refusal isn't the network")
+    end,
+
+    ["a page turn syncs only on a connection, and otherwise starts the count again"] = function()
+        assert_eq(Sync.afterPage(Sync.PAGES_BETWEEN - 1, true), nil)
+        assert_eq(Sync.afterPage(Sync.PAGES_BETWEEN, true), "sync")
+        assert_eq(Sync.afterPage(Sync.PAGES_BETWEEN, false), "reset", "no retry on every page while offline")
+    end,
+
+    ["Wi-Fi coming on for a sync while away does nothing more"] = function()
+        local base = { servers = 1, background = false, screen_saver = false, recent_check = false, ran_recently = false, awaiting_restart = false }
+        local function with(changes)
+            local o = {}
+            for k, v in pairs(base) do o[k] = v end
+            for k, v in pairs(changes) do o[k] = v end
+            return o
+        end
+        assert_eq(Sync.onConnected(with{}), { check = true, sync = true })
+        assert_eq(Sync.onConnected(with{ background = true }), { check = false, sync = false })
+        assert_eq(Sync.onConnected(with{ screen_saver = true }), { check = false, sync = false })
+        assert_eq(Sync.onConnected(with{ recent_check = true }), { check = false, sync = true })
+        assert_eq(Sync.onConnected(with{ ran_recently = true }), { check = true, sync = false })
+        assert_eq(Sync.onConnected(with{ servers = 0 }), { check = false, sync = false })
+        assert_eq(Sync.onConnected(with{ awaiting_restart = true }), { check = false, sync = false })
+    end,
+
     ["sleep syncs only once the last sync is an hour old"] = function()
         local servers = { { url = "a", last_synced = 1000 }, { url = "b", last_synced = 5000 }, { url = "c" } }
         assert_eq(Sync.lastSynced(servers), 5000, "the latest of any server")

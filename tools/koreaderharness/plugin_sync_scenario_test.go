@@ -247,6 +247,19 @@ func TestPluginSyncsOnSleepWhileOnline(t *testing.T) {
 	assert.NotNil(t, sent())
 }
 
+// A daily sync that can't connect, behind the sleep screen, leaves no message
+// there for the morning, and Wi-Fi off.
+func TestPluginDailySyncLeavesNothingOnTheSleepScreen(t *testing.T) {
+	s := newScenario(t)
+	s.signInPlugin(time.Now().Add(-24 * time.Hour))
+
+	woken := s.run(Args{Command: "plugin-daily", Fire: true, WifiFails: true})
+	require.Len(t, woken.Plugin.AlarmsArmed, 1)
+	assert.Empty(t, woken.Plugin.LeftOnScreen)
+	assert.False(t, woken.Plugin.WifiLeftOn)
+	require.Len(t, woken.Plugin.AlarmsAfter, 1, "tomorrow's alarm is still set")
+}
+
 // A server turned off in the plugin gets nothing and is never contacted, so
 // one that's out of reach costs nothing; turned on again, it gets the
 // reading from where it left off.
@@ -255,11 +268,16 @@ func TestPluginLeavesADisabledServerAlone(t *testing.T) {
 	epub := s.file(models.FileTypeEPUB)
 	document := s.documentHash(epub)
 	start := time.Now().UTC().Add(-3 * time.Hour)
-	s.signInPluginWith(start.Add(-24*time.Hour), "disabled = true")
+	s.signInPlugin(start.Add(-24 * time.Hour))
 	stats := []StatRow{
 		{Document: document, Page: 2, TotalPages: 100, StartTime: start.Unix(), Duration: 60},
 		{Document: document, Page: 3, TotalPages: 100, StartTime: start.Add(time.Minute).Unix(), Duration: 60},
 	}
+
+	// Turned off with Enabled under it in the menu.
+	menu := s.run(Args{Command: "plugin-menu", ToggleEnabled: true})
+	assert.Contains(t, menu.Plugin.Menu, s.containerLabel()+" (Disabled)")
+	assert.Contains(t, menu.Plugin.Menu, s.containerLabel()+" (Disabled) > Enabled")
 
 	off := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, Stats: stats})
 	assert.Empty(t, s.pluginSessions())
@@ -271,15 +289,9 @@ func TestPluginLeavesADisabledServerAlone(t *testing.T) {
 	assert.Nil(t, device.PluginLastConnectedAt, "not even checked in with")
 	assert.Contains(t, strings.Join(off.Shown, " "), "No Shisho server is enabled")
 
-	menu := s.run(Args{Command: "plugin-menu"})
-	assert.Contains(t, menu.Plugin.Menu, s.containerLabel()+" (Disabled)")
-	assert.Contains(t, menu.Plugin.Menu, s.containerLabel()+" (Disabled) > Enabled")
-
 	// Turned on again, it gets what it missed from statistics.
-	state := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
-	data, err := os.ReadFile(state)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(state, []byte(strings.Replace(string(data), "disabled = true", "disabled = nil", 1)), 0o644))
+	on := s.run(Args{Command: "plugin-menu", ToggleEnabled: true})
+	assert.Contains(t, on.Plugin.Menu, s.containerLabel())
 	s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
 	require.Len(t, s.pluginSessions(), 1)
 	assert.Equal(t, 120, s.pluginSessions()[0].Duration)

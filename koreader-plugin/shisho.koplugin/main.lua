@@ -432,23 +432,37 @@ end
 local RECHECK_AFTER = 60
 
 function Shisho:onNetworkConnected()
+    -- Wi-Fi a sync while away turned on is known now, before that sync turns
+    -- it off again.
+    local background = self:inBackgroundSync()
     UIManager:scheduleIn(1, function()
         if self:pairingAction() == "sign_in" then
             self:pairFromZip()
         end
         -- A clock set back since the check doesn't count as recent.
         local since = self.checked_at and os.time() - self.checked_at
-        local recent = since and since >= 0 and since < RECHECK_AFTER
-        if #self.state:enabledServers() > 0 and not recent and not self.awaiting_restart then
+        local actions = Sync.onConnected{
+            servers = #self.state:enabledServers(),
+            background = background or self:inBackgroundSync(),
+            screen_saver = Device.screen_saver_mode and true or false,
+            recent_check = since and since >= 0 and since < RECHECK_AFTER or false,
+            ran_recently = Sync.ranRecently(self.synced_at, os.time()),
+            awaiting_restart = self.awaiting_restart and true or false,
+        }
+        if actions.check then
             self:checkForUpdate(false)
         end
-        -- Whatever turned Wi-Fi on, what's waiting goes out. A sync that just
-        -- ran, such as Sync now's or sleep's, isn't repeated.
-        if #self.state:enabledServers() > 0 and not self.awaiting_restart
-            and not Sync.ranRecently(self.synced_at, os.time()) then
+        -- Whatever turned Wi-Fi on, what's waiting goes out.
+        if actions.sync then
             self:syncAll(false)
         end
     end)
+end
+
+-- inBackgroundSync reports whether a sync while away turned Wi-Fi on a
+-- moment ago. KOReader reports the connection up to a few seconds later.
+function Shisho:inBackgroundSync()
+    return self.background_until ~= nil and os.time() <= self.background_until
 end
 
 -- The reader -------------------------------------------------------------------
@@ -473,7 +487,12 @@ function Shisho:onPageUpdate(page)
     self.last_page = page
     self.last_page_turn = os.time()
     self.pages_since_sync = (self.pages_since_sync or 0) + 1
-    if Sync.dueAfterPages(self.pages_since_sync) and NetworkMgr:isOnline() then
+    -- Whether Wi-Fi is connected is cheap to ask; whether it reaches the
+    -- internet is a lookup, which waits only once there's a connection.
+    local action = Sync.afterPage(self.pages_since_sync, Sync.dueAfterPages(self.pages_since_sync) and NetworkMgr:isConnected())
+    if action == "reset" then
+        self.pages_since_sync = 0
+    elseif action == "sync" then
         -- After the page is drawn, so the turn itself isn't held up.
         UIManager:nextTick(function() self:syncWhileOnline() end)
     end
@@ -499,9 +518,12 @@ and pulls no position: a question mid-read, or as a book closes, would only
 get in the way.
 ]]
 function Shisho:syncWhileOnline()
-    if not NetworkMgr:isOnline() or #self.state:enabledServers() == 0 then return end
+    if #self.state:enabledServers() == 0 then return end
     if Sync.ranRecently(self.synced_at, os.time()) then return end
-    self:syncAll(false, true)
+    if not (NetworkMgr:isConnected() and NetworkMgr:isOnline()) then return end
+    -- A server that just failed is left out for a while, so one that's down
+    -- doesn't hold up reading every few pages.
+    self:syncAll(false, true, true)
 end
 
 function Shisho:onSuspend()
@@ -509,23 +531,30 @@ function Shisho:onSuspend()
     self:recordPosition(true)
     self:armDailyWakeup()
     local servers = self.state:enabledServers()
-    if #servers == 0 then return end
+    local now = os.time()
     -- With Wi-Fi left on, as on Android, going to sleep syncs at no cost. (A
     -- Kobo's Wi-Fi is already off by now: KOReader turns it off first.)
-    if NetworkMgr:isOnline() then
+    -- Otherwise, sync on sleep turns Wi-Fi on, at most once an hour.
+    local action = Sync.onSleep{
+        online = #servers > 0 and NetworkMgr:isConnected() and NetworkMgr:isOnline() or false,
+        syncable = #Sync.syncable(servers),
+        sync_on_sleep = self:settings().sync_on_sleep,
+        last_synced = Sync.lastSynced(servers),
+        last_attempt = self.state:get("sleep_sync_attempted"),
+        wifi_turns_on = self:wifiTurnsOnByItself(),
+        now = now,
+    }
+    if action == "sync" then
         self:syncWhileOnline()
-        return
+    elseif action == "wifi" then
+        -- Counted when tried, so a server that's down doesn't turn Wi-Fi on
+        -- at every sleep. It pulls no position: a question would wait on a
+        -- sleeping screen. Wi-Fi it turned on goes off again before the
+        -- device sleeps: a Kobo can fail to sleep, or hang, with Wi-Fi on.
+        self.state:set("sleep_sync_attempted", now)
+        self.state:flush()
+        self:syncInBackground(true)
     end
-    if not self:settings().sync_on_sleep then return end
-    -- Short sittings between other things shouldn't turn Wi-Fi on at every
-    -- sleep, so it waits an hour after the last sync.
-    if not Sync.dueOnSleep(Sync.lastSynced(servers), os.time()) then return end
-    -- Sync on sleep turns Wi-Fi on to do it, as KOReader's progress sync
-    -- does, following KOReader's own Wi-Fi setting. It pulls no position: a
-    -- question would wait on a sleeping screen. Wi-Fi it turned on goes off
-    -- again before the device sleeps: KOReader turned it off for a reason,
-    -- since a Kobo can fail to sleep, or hang, with Wi-Fi on.
-    self:syncInBackground(true)
 end
 
 -- WIFI_ASKS is what to tell someone turning on a sync that happens while
@@ -546,15 +575,39 @@ Going to sleep, it pulls no position, since a question would wait on a
 sleeping screen.
 ]]
 function Shisho:syncInBackground(going_to_sleep)
-    if NetworkMgr:isOnline() then
+    if NetworkMgr:isConnected() and NetworkMgr:isOnline() then
         self:syncAll(false, going_to_sleep)
         return
     end
     if not self:wifiTurnsOnByItself() then return end
+    local was_on = self:wifiWasOn()
+    self.background_until = os.time() + RECHECK_AFTER
     NetworkMgr:willRerunWhenOnline(function()
         self:syncAll(false, going_to_sleep)
-        NetworkMgr:disableWifi()
+        self:turnWifiOff(was_on)
     end)
+end
+
+-- wifiWasOn is KOReader's note that Wi-Fi was on, which it uses to turn
+-- Wi-Fi back on as the device wakes. Turning Wi-Fi on sets it.
+function Shisho:wifiWasOn()
+    return { setting = G_reader_settings:isTrue("wifi_was_on"), manager = NetworkMgr.wifi_was_on }
+end
+
+-- turnWifiOff turns off Wi-Fi a sync while away turned on, and puts back
+-- KOReader's note of whether Wi-Fi was on as it was before, so someone who
+-- keeps Wi-Fi off doesn't find it turned on at every wake afterwards.
+function Shisho:turnWifiOff(was_on)
+    local function restore()
+        if was_on.setting then
+            G_reader_settings:makeTrue("wifi_was_on")
+        else
+            G_reader_settings:makeFalse("wifi_was_on")
+        end
+        NetworkMgr.wifi_was_on = was_on.manager
+    end
+    NetworkMgr:disableWifi(restore)
+    restore()
 end
 
 -- documentHash is the open book's document hash, as KOReader keeps it.
@@ -646,39 +699,37 @@ function Shisho:dailySettings()
     return Daily.settings(self.state:get("settings"))
 end
 
--- secondsToDaily is how long until daily sync next runs after since (now
--- when nil), or nil when it's off or no server is signed in.
-function Shisho:secondsToDaily(since)
-    local daily = self:dailySettings()
-    if not daily.enabled or #self.state:servers() == 0 then return nil end
-    local now = os.time()
-    return Daily.nextRun(math.max(now, since or now), daily.hour, daily.min) - now
+-- dailyLastRun is the time daily sync last ran for, kept in the state so a
+-- restart can't run one day's sync twice.
+function Shisho:dailyLastRun()
+    return self.state:get("daily_last_run")
 end
 
--- scheduleDaily sets the timer for daily sync's next run while awake.
+-- scheduleDaily sets the timer for daily sync's next run. It keeps running
+-- while the device shows its sleep screen without sleeping, as some Kobos
+-- do while charging, where the wake-up alarm never goes off.
 function Shisho:scheduleDaily()
-    if not self.daily_task then
-        self.daily_task = function() self:runDailySync(false) end
-    end
-    UIManager:unschedule(self.daily_task)
-    local seconds = self:secondsToDaily()
-    if seconds then UIManager:scheduleIn(seconds, self.daily_task) end
+    if self.daily_task then UIManager:unschedule(self.daily_task) end
+    local now = os.time()
+    local seconds = Daily.secondsToNext(self.state:get("settings"), #self.state:enabledServers(), now, self:dailyLastRun())
+    if not seconds then return end
+    local target = now + seconds
+    self.daily_task = function() self:runDailySync(target) end
+    UIManager:scheduleIn(seconds, self.daily_task)
 end
 
--- armDailyWakeup trades the timer for a wake-up alarm as the device sleeps,
--- since a timer doesn't run while it's asleep.
--- After a woken run, the next alarm counts from the one that just went off:
--- KOReader runs an alarm's task even when it wakes the device a little early,
--- and from then, today's time would still be to come.
-function Shisho:armDailyWakeup(after_alarm)
-    if self.daily_task then UIManager:unschedule(self.daily_task) end
+-- armDailyWakeup sets the wake-up alarm for daily sync's next run as the
+-- device goes to sleep, since a timer doesn't run while it's asleep. It sets
+-- none when waking couldn't sync.
+function Shisho:armDailyWakeup()
     self:removeDailyWakeup()
-    local seconds = self:secondsToDaily(after_alarm)
-    if not seconds or not Device.wakeup_mgr then return end
-    if not self.daily_wakeup then
-        self.daily_wakeup = function() self:runDailySync(true) end
-    end
-    self.daily_alarm = os.time() + seconds
+    if not Device.wakeup_mgr then return end
+    local now = os.time()
+    local seconds = Daily.alarmIn(self.state:get("settings"), #self.state:enabledServers(),
+        self:wifiTurnsOnByItself(), now, self:dailyLastRun())
+    if not seconds then return end
+    local target = now + seconds
+    self.daily_wakeup = function() self:runDailySync(target) end
     Device.wakeup_mgr:addTask(seconds, self.daily_wakeup)
 end
 
@@ -698,28 +749,53 @@ function Shisho:onCloseWidget()
 end
 
 --[[--
-runDailySync syncs every enabled server, turning Wi-Fi on for it and off
-again. Woken by the alarm, it has the time KOReader gives a scheduled wake-up
-before sleeping again, so it waits for Wi-Fi and syncs before returning, then
-sets the next day's alarm once KOReader has removed this one.
+runDailySync runs the daily sync due at target, once: the timer and the
+wake-up alarm both aim at it, and whichever goes first claims it. Behind the
+sleep screen, woken by the alarm or on a device that didn't sleep, it has
+the moment before KOReader puts the device back to sleep, so it waits for
+Wi-Fi and syncs before returning, turns Wi-Fi off, and leaves nothing on the
+screen. Awake, it syncs as any sync while away does. Neither pulls a
+position: no one is there to answer a question. Then it sets the next day's.
 ]]
-function Shisho:runDailySync(woken)
-    if woken then
-        local was_online = NetworkMgr:isOnline()
-        if was_online or self:wifiTurnsOnByItself() then
-            local ok, err = pcall(function()
-                NetworkMgr:goOnlineToRun(function() self:syncAll(false, true) end)
-            end)
-            if not ok then logger.warn("Shisho: daily sync failed:", err) end
-            -- A Kobo can't sleep with Wi-Fi on.
-            if not was_online then NetworkMgr:disableWifi() end
+function Shisho:runDailySync(target)
+    if Daily.claim(target, self:dailyLastRun()) then
+        self.state:set("daily_last_run", target)
+        self.state:flush()
+        if Device.screen_saver_mode then
+            self:syncBehindSleepScreen()
+        else
+            self:syncInBackground(true)
         end
-        local alarm = self.daily_alarm
-        UIManager:nextTick(function() self:armDailyWakeup(alarm) end)
+    end
+    -- After KOReader removes the alarm that ran this, so the new one stays.
+    UIManager:nextTick(function()
+        if Device.screen_saver_mode then self:armDailyWakeup() end
+        self:scheduleDaily()
+    end)
+end
+
+-- syncBehindSleepScreen syncs while the sleep screen shows, waiting for
+-- Wi-Fi, and turns Wi-Fi off again. A failure to connect leaves no message
+-- on the sleep screen, where it would stay until someone woke the device.
+function Shisho:syncBehindSleepScreen()
+    if NetworkMgr:isConnected() and NetworkMgr:isOnline() then
+        self:syncAll(false, true)
         return
     end
-    self:syncInBackground(false)
-    self:scheduleDaily()
+    if not self:wifiTurnsOnByItself() then return end
+    local was_on = self:wifiWasOn()
+    local top = UIManager:getTopmostVisibleWidget()
+    self.background_until = os.time() + RECHECK_AFTER
+    local ok, err = pcall(function()
+        NetworkMgr:goOnlineToRun(function() self:syncAll(false, true) end)
+    end)
+    if not ok then logger.warn("Shisho: daily sync failed:", err) end
+    local left = UIManager:getTopmostVisibleWidget()
+    if left and left ~= top and getmetatable(left) and getmetatable(left).__index == InfoMessage then
+        UIManager:close(left)
+    end
+    -- A Kobo can't sleep with Wi-Fi on.
+    self:turnWifiOff(was_on)
 end
 
 function Shisho:showDailyTime()
@@ -730,14 +806,7 @@ function Shisho:showDailyTime()
         title_text = _("Daily sync time"),
         ok_text = _("Set time"),
         callback = function(time)
-            local saved = self.state:get("settings")
-            if type(saved) ~= "table" then
-                saved = {}
-                self.state:set("settings", saved)
-            end
-            saved.daily_sync_hour, saved.daily_sync_min = time.hour, time.min
-            self.state:flush()
-            self:scheduleDaily()
+            self:saveSettings{ daily_sync_hour = time.hour, daily_sync_min = time.min }
         end,
     })
 end
@@ -751,12 +820,18 @@ function Shisho:settings()
 end
 
 function Shisho:saveSetting(key, value)
+    self:saveSettings{ [key] = value }
+end
+
+-- saveSettings saves the settings in values and sets daily sync's timer
+-- from them.
+function Shisho:saveSettings(values)
     local saved = self.state:get("settings")
     if type(saved) ~= "table" then
         saved = {}
         self.state:set("settings", saved)
     end
-    saved[key] = value
+    for key, value in pairs(values) do saved[key] = value end
     self.state:flush()
     self:scheduleDaily()
 end
@@ -785,7 +860,7 @@ the open book's position, except when going to sleep. One server failing
 doesn't stop the others. A server that needs a new sign-in keeps everything
 queued until it gets one. Interactive, from Sync now, it says how it went.
 ]]
-function Shisho:syncAll(interactive, going_to_sleep)
+function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
     if self.syncing then return end
     if #self.state:servers() == 0 then
         if interactive then
@@ -800,7 +875,7 @@ function Shisho:syncAll(interactive, going_to_sleep)
     end
     self.syncing = true
     self.pages_since_sync = 0
-    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive)
+    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, skip_failing)
     self.syncing = false
     self.synced_at = os.time()
     if not ok then
@@ -827,8 +902,9 @@ function Shisho:syncAll(interactive, going_to_sleep)
 end
 
 -- syncServers runs the sync for each signed-in server, returning what went
--- wrong and whether statistics is on.
-function Shisho:syncServers(interactive)
+-- wrong and whether statistics is on. With skip_failing, a server that just
+-- failed is left out.
+function Shisho:syncServers(interactive, skip_failing)
     self:recordPosition(false)
     local statistics_on = self:statisticsEnabled()
     local read_pages
@@ -842,6 +918,8 @@ function Shisho:syncServers(interactive)
         local label = Urls.label(server.url)
         if server.needs_login then
             table.insert(problems, T(_("%1 needs a new sign-in."), label))
+        elseif skip_failing and Sync.backingOff(server, os.time()) then
+            logger.dbg("Shisho: leaving out a server that just failed:", server.url)
         else
             local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
                 not interactive and Client.BACKGROUND or nil)
@@ -856,6 +934,7 @@ function Shisho:syncServers(interactive)
                 logger.warn("Shisho: syncing failed:", outcome)
                 outcome = "error"
             end
+            Sync.noteOutcome(server, outcome, os.time())
             if outcome == "needs_login" then
                 table.insert(problems, T(_("%1 needs a new sign-in."), label))
             elseif outcome ~= "ok" then
@@ -897,7 +976,7 @@ function Shisho:serverMenu(server)
         keep_menu_open = true,
         callback = function() self:showSignIn(server.url) end,
     })
-    if Versions.reinstallable(self:installed(), self.state:servers(), server.url) then
+    if not server.disabled and Versions.reinstallable(self:installed(), self.state:servers(), server.url) then
         table.insert(items, {
             text = _("Reinstall plugin from this server"),
             help_text = _("Install the plugin this server serves, even an older version, and restart KOReader. Automatic updates then come from this server for builds of the same version."),
@@ -947,9 +1026,9 @@ function Shisho:serverHelp(server)
 end
 
 local POSITION_CHOICES = {
-    { "prompt", _("Ask") },
-    { "jump", _("Go there") },
-    { "ignore", _("Ignore") },
+    { "prompt", _("Ask"), _("Ask before going to the other reader's place, naming where it came from.") },
+    { "jump", _("Go there"), _("Go to the other reader's place without asking, and say so briefly.") },
+    { "ignore", _("Ignore"), _("Stay where you are on this device.") },
 }
 
 -- positionMenu chooses what to do with a newer or older position.
@@ -958,6 +1037,7 @@ function Shisho:positionMenu(key)
     for __, choice in ipairs(POSITION_CHOICES) do
         table.insert(items, {
             text = choice[2],
+            help_text = choice[3],
             radio = true,
             checked_func = function() return self:settings()[key] == choice[1] end,
             callback = function() self:saveSetting(key, choice[1]) end,
@@ -1020,6 +1100,7 @@ function Shisho:settingsMenu()
             help_text = _("Ask your servers for a newer plugin now, turning Wi-Fi on if needed. The plugin also checks each time Wi-Fi comes on."),
             keep_menu_open = true,
             callback = function()
+                if self:noneEnabled() then return end
                 NetworkMgr:runWhenOnline(function() self:checkForUpdate(true) end)
             end,
         },
@@ -1034,6 +1115,16 @@ function Shisho:settingsMenu()
             end,
         },
     }
+end
+
+-- noneEnabled tells someone who turned every server off, before anything
+-- turns Wi-Fi on for nothing.
+function Shisho:noneEnabled()
+    if #self.state:servers() > 0 and #self.state:enabledServers() == 0 then
+        self:notify(NONE_ENABLED)
+        return true
+    end
+    return false
 end
 
 function Shisho:addToMainMenu(menu_items)
@@ -1072,19 +1163,20 @@ function Shisho:addToMainMenu(menu_items)
             })
             table.insert(items, {
                 text = _("Sync now"),
-                help_text = _("Send your reading time and places to every server now, turning Wi-Fi on if it's off, and check the open book for a newer place. Use it before switching to another device. The plugin also syncs on its own whenever Wi-Fi comes on, and while Wi-Fi is on, every 20 pages, when a book closes, and when the device goes to sleep."),
+                help_text = T(_("Send your reading time and places to every enabled server now, turning Wi-Fi on if it's off, and check the open book for a newer place. Use it before switching to another device. The plugin also syncs on its own whenever Wi-Fi comes on, and while Wi-Fi is on, every %1 pages, when a book closes, and when the device goes to sleep."), Sync.PAGES_BETWEEN),
                 keep_menu_open = true,
                 callback = function()
                     if #self.state:servers() == 0 then
                         self:syncAll(true)
                         return
                     end
+                    if self:noneEnabled() then return end
                     NetworkMgr:runWhenOnline(function() self:syncAll(true) end)
                 end,
             })
             table.insert(items, {
                 text = _("Settings"),
-                help_text = _("Syncing on sleep, what to do with places from other readers, and plugin updates."),
+                help_text = _("Syncing on sleep and daily sync, what to do with places from other readers, and plugin updates."),
                 sub_item_table = self:settingsMenu(),
             })
             return items

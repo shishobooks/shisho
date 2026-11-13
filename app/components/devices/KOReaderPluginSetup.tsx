@@ -190,7 +190,8 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
   );
 };
 
-// FolderPath lets a long folder wrap only after a slash, never mid-name.
+// FolderPath lets a long folder wrap only after a slash, never mid-name,
+// even inside a name with a space, such as "Application Support".
 const FolderPath = ({ path }: { path: string }) =>
   path.split("/").map((part, i) => (
     <Fragment key={i}>
@@ -199,7 +200,7 @@ const FolderPath = ({ path }: { path: string }) =>
           /<wbr />
         </>
       )}
-      {part}
+      <span className="whitespace-nowrap">{part}</span>
     </Fragment>
   ));
 

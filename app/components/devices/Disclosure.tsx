@@ -18,7 +18,8 @@ const Disclosure = ({
   title: string;
   description?: string;
   defaultOpen?: boolean;
-  // base is a connection's own heading size; sm sits inside a connection.
+  // base is a connection's own heading size and spacing; sm sits inside a
+  // connection.
   size?: "base" | "sm";
   children: React.ReactNode;
 }) => {
@@ -46,7 +47,10 @@ const Disclosure = ({
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       )}
       {open && (
-        <div className="mt-3 space-y-3" id={id}>
+        <div
+          className={cn(size === "base" ? "mt-4 space-y-4" : "mt-3 space-y-3")}
+          id={id}
+        >
           {children}
         </div>
       )}

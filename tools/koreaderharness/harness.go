@@ -106,9 +106,12 @@ type PluginReport struct {
 	// AlarmsArmed and AlarmsAfter are the wake-up alarms set, in Unix
 	// seconds, after plugin-daily put the device to sleep, and after the
 	// first went off.
-	AlarmsArmed []int64  `json:"alarms_armed"`
-	AlarmsAfter []int64  `json:"alarms_after"`
-	Problems    []string `json:"problems"`
+	AlarmsArmed []int64 `json:"alarms_armed"`
+	AlarmsAfter []int64 `json:"alarms_after"`
+	// LeftOnScreen is the text of a message plugin-daily left on top of the
+	// sleep screen, if any.
+	LeftOnScreen string   `json:"left_on_screen"`
+	Problems     []string `json:"problems"`
 	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu,
 	// and Menu what the Shisho menu does, with a submenu's items as
 	// "Parent > Item".
@@ -197,6 +200,11 @@ type Args struct {
 	Sleep bool
 	// Fire sets off the wake-up alarm plugin-daily set.
 	Fire bool
+	// WifiFails makes connecting fail, as with a router that's off, for
+	// plugin-daily.
+	WifiFails bool
+	// ToggleEnabled taps Enabled under the first server in plugin-menu.
+	ToggleEnabled bool
 	// WifiPrompt leaves KOReader asking before it turns Wi-Fi on, its
 	// default, for plugin-sleep and plugin-daily, which otherwise set it to
 	// turn Wi-Fi on by itself.
@@ -287,6 +295,12 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.Sleep {
 		payload["sleep"] = true
+	}
+	if a.WifiFails {
+		payload["wifi_fails"] = true
+	}
+	if a.ToggleEnabled {
+		payload["toggle_enabled"] = true
 	}
 	if a.Fire {
 		payload["fire"] = true
