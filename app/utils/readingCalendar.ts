@@ -1,33 +1,71 @@
-import type { ReadingStatsCalendarDay } from "@/types";
+import type {
+  ReadingStatsBookRef,
+  ReadingStatsCalendarDay,
+  ReadingStatsDaySession,
+} from "@/types";
 
 /**
- * Colours a Book's bars take on the Reading Stats calendar. Each is dark
- * enough for white text on it, on either theme.
+ * Colours a Book's bars take on the Reading Stats calendar: twelve picked to
+ * differ in lightness and saturation as well as hue, so even neighbours on
+ * the colour wheel tell apart, each dark enough for white text on either
+ * theme.
  */
 export const BOOK_COLORS = [
-  "oklch(0.5 0.15 25)",
-  "oklch(0.5 0.12 60)",
-  "oklch(0.5 0.12 145)",
-  "oklch(0.5 0.1 185)",
-  "oklch(0.5 0.13 230)",
-  "oklch(0.5 0.17 265)",
-  "oklch(0.5 0.18 300)",
-  "oklch(0.5 0.17 340)",
-  "oklch(0.45 0.08 100)",
-  "oklch(0.45 0.05 250)",
-] as const;
+  "#1f6fb2", // blue
+  "#c2570c", // orange
+  "#23822b", // green
+  "#c22b2b", // red
+  "#7445b0", // purple
+  "#8a5446", // brown
+  "#b8337f", // pink
+  "#566570", // slate
+  "#6f7316", // olive
+  "#11808f", // teal
+  "#3445a6", // indigo
+  "#946604", // ochre
+];
 
-/**
- * A Book's colour, from its calendar key (FNV-1a), so it's the same in
- * every month.
- */
-export const bookColor = (key: string): string => {
+const colorIndex = (key: string): number => {
   let hash = 0x811c9dc5;
   for (let i = 0; i < key.length; i++) {
     hash ^= key.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193);
   }
-  return BOOK_COLORS[(hash >>> 0) % BOOK_COLORS.length];
+  return (hash >>> 0) % BOOK_COLORS.length;
+};
+
+/**
+ * A Book's own colour, from its calendar key (FNV-1a), which it keeps in
+ * every month where no other Book shown has it.
+ */
+export const bookColor = (key: string): string => BOOK_COLORS[colorIndex(key)];
+
+/**
+ * Colours for the Books shown together, by key: each keeps its own colour,
+ * except that when two share one, all but the first by key take the next
+ * free colour, so no two Books in view look alike (up to the palette's
+ * size). The result doesn't depend on the order of `keys`.
+ */
+export const assignBookColors = (keys: string[]): Map<string, string> => {
+  const sorted = [...new Set(keys)].sort();
+  const taken = new Map<number, string>();
+  const displaced: string[] = [];
+  for (const key of sorted) {
+    const index = colorIndex(key);
+    if (taken.has(index)) displaced.push(key);
+    else taken.set(index, key);
+  }
+  const colors = new Map<string, string>();
+  for (const [index, key] of taken) colors.set(key, BOOK_COLORS[index]);
+  for (const key of displaced) {
+    let index = colorIndex(key);
+    for (let step = 0; step < BOOK_COLORS.length && taken.has(index); step++) {
+      index = (index + 1) % BOOK_COLORS.length;
+    }
+    taken.set(index, key);
+    colors.set(key, BOOK_COLORS[index]);
+  }
+  return colors;
 };
 
 const toDay = (date: Date) => date.toISOString().slice(0, 10);
@@ -71,12 +109,9 @@ export const monthWeeks = (year: number, month: number): Week[] =>
     new Date(Date.UTC(year, month, 0)),
   );
 
-/** The weeks of a year, Sunday first, as the heatmap's columns. */
-export const heatmapWeeks = (year: number): Week[] =>
-  weeksBetween(
-    new Date(Date.UTC(year, 0, 1)),
-    new Date(Date.UTC(year, 11, 31)),
-  );
+/** The weeks from `from` to `to` (YYYY-MM-DD), Sunday first, as the heatmap's columns. */
+export const heatmapWeeks = (from: string, to: string): Week[] =>
+  weeksBetween(parseDay(from), parseDay(to));
 
 /** One bar, or a lone finish marker, in a week of the calendar. */
 export interface WeekItem {
@@ -222,4 +257,71 @@ export const heatLevels = (values: number[]): ((value: number) => number) => {
     if (value <= q3) return 3;
     return 4;
   };
+};
+
+const MINUTES_IN_DAY = 24 * 60;
+
+// An instant's minutes into `day` in timeZone: 0 when it's on an earlier
+// day, the day's whole length when on a later one.
+const minutesInto = (instant: string, day: string, timeZone: string) => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(instant))
+      .map((part) => [part.type, part.value]),
+  );
+  const onDay = `${parts.year}-${parts.month}-${parts.day}`;
+  if (onDay < day) return 0;
+  if (onDay > day) return MINUTES_IN_DAY;
+  return Number(parts.hour) * 60 + Number(parts.minute);
+};
+
+/** A Session placed on the day's timeline, in minutes from midnight. */
+export type TimelineSession = ReadingStatsDaySession & {
+  from: number;
+  to: number;
+};
+
+/** One Book's line on a day's timeline, and its time that day. */
+export interface DayLane {
+  book: ReadingStatsBookRef;
+  seconds: number;
+  sessions: TimelineSession[];
+}
+
+/**
+ * A day's Sessions as a line per Book, in the order each was first read,
+ * each Session placed in minutes from local midnight in timeZone and cut at
+ * the day's edges.
+ */
+export const dayLanes = (
+  sessions: ReadingStatsDaySession[],
+  day: string,
+  timeZone: string,
+): DayLane[] => {
+  const lanes = new Map<string, DayLane>();
+  const sorted = [...sessions].sort(
+    (a, b) => Date.parse(a.started_at) - Date.parse(b.started_at),
+  );
+  for (const session of sorted) {
+    let lane = lanes.get(session.book.key);
+    if (!lane) {
+      lane = { book: session.book, seconds: 0, sessions: [] };
+      lanes.set(session.book.key, lane);
+    }
+    lane.seconds += session.seconds;
+    lane.sessions.push({
+      ...session,
+      from: minutesInto(session.started_at, day, timeZone),
+      to: minutesInto(session.ended_at, day, timeZone),
+    });
+  }
+  return [...lanes.values()];
 };

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
@@ -59,24 +60,93 @@ func calendarDays(resp ReadingStatsCalendarResponse) []string {
 	return days
 }
 
-func TestStats_HeatmapHasEachDaysTimeInTheRange(t *testing.T) {
+func (f *statsFixture) heatmap() ReadingStatsHeatmapResponse {
+	f.t.Helper()
+	return heatmapFor(f.t, f.api)
+}
+
+func heatmapFor(t *testing.T, api *readingAPI) ReadingStatsHeatmapResponse {
+	t.Helper()
+	rec := api.do(http.MethodGet, "/stats/heatmap", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp ReadingStatsHeatmapResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+// daysAgo is n days before today in loc, at hh:mm there.
+func daysAgo(t *testing.T, loc *time.Location, n, hh, mm int) time.Time {
+	t.Helper()
+	y, m, d := time.Now().In(loc).Date()
+	return time.Date(y, m, d-n, hh, mm, 0, 0, loc)
+}
+
+func dayOf(instant time.Time) string { return instant.Format(time.DateOnly) }
+
+// The heatmap's year ends today in the user's time zone, so its sessions
+// are placed relative to now; a test run across midnight still sees them in
+// the window.
+func TestHeatmap_HasEachDaysTimeForTheYearUpToToday(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	f.setTimeZone("America/Chicago")
+	chicago, err := time.LoadLocation("America/Chicago")
+	require.NoError(t, err)
 	book := createBook(t, f.db, "Dune")
 	ebook := f.addFile(book, models.FileTypeEPUB)
 	audio := f.addFile(book, models.FileTypeM4B)
-	f.session(sessionSpec{file: ebook, start: at(t, "America/Chicago", "2026-04-30 23:30"), end: at(t, "America/Chicago", "2026-05-01 00:30")})
-	f.session(sessionSpec{file: audio, start: at(t, "America/Chicago", "2026-05-01 08:00"), end: at(t, "America/Chicago", "2026-05-01 08:20")})
-	// The next year's reading isn't in this year's heatmap.
-	f.session(sessionSpec{file: ebook, start: at(t, "America/Chicago", "2027-01-01 08:00"), end: at(t, "America/Chicago", "2027-01-01 08:10")})
+	lateNight := daysAgo(t, chicago, 30, 23, 30)
+	nextMorning := daysAgo(t, chicago, 29, 8, 0)
+	f.session(sessionSpec{file: ebook, start: lateNight, end: lateNight.Add(time.Hour)})
+	f.session(sessionSpec{file: audio, start: nextMorning, end: nextMorning.Add(20 * time.Minute)})
+	old := daysAgo(t, chicago, 400, 8, 0)
+	f.session(sessionSpec{file: ebook, start: old, end: old.Add(10 * time.Minute)})
 
+	resp := f.heatmap()
+	today, err := time.Parse(time.DateOnly, resp.Today)
+	require.NoError(t, err)
+	assert.Contains(t, []string{dayOf(daysAgo(t, chicago, 0, 12, 0)), dayOf(daysAgo(t, chicago, -1, 12, 0))}, resp.Today)
+	assert.Equal(t, today.AddDate(-1, 0, 1).Format(time.DateOnly), resp.From)
 	assert.Equal(t, []ReadingStatsDay{
-		{Day: "2026-04-30", ReadingSeconds: 1800},
-		{Day: "2026-05-01", ReadingSeconds: 1800, ListeningSeconds: 1200},
-	}, f.stats("?year=2026").Days)
-	assert.Len(t, f.stats("").Days, 3, "all time has every day")
-	assert.NotNil(t, f.stats("?year=2025").Days)
+		{Day: dayOf(lateNight), ReadingSeconds: 1800},
+		{Day: dayOf(nextMorning), ReadingSeconds: 1800, ListeningSeconds: 1200},
+	}, resp.Days, "split at local midnight, and nothing from more than a year ago")
+	require.NotNil(t, resp.FirstDay)
+	assert.Equal(t, dayOf(old), *resp.FirstDay, "the first day counts reading outside the heatmap")
+}
+
+func TestHeatmap_FirstDayCountsReadThroughsWithNoSessions(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	empty := f.heatmap()
+	assert.Nil(t, empty.FirstDay)
+	assert.NotNil(t, empty.Days)
+	assert.Empty(t, empty.Days)
+
+	f.finished(createBook(t, f.db, "Dune"), "2019-05-01", "2019-05-20")
+	f.finished(createBook(t, f.db, "Emma"), "", "2018-02-03")
+	resp := f.heatmap()
+	require.NotNil(t, resp.FirstDay)
+	assert.Equal(t, "2018-02-03", *resp.FirstDay)
+}
+
+func TestHeatmap_DropsADeletedSessionAndNeverShowsAnotherUsers(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	other := createUser(t, f.db, "other", 2)
+	book := createBook(t, f.db, "Dune")
+	file := f.addFile(book, models.FileTypeEPUB)
+	when := daysAgo(t, time.UTC, 10, 8, 0)
+	seedSession(t, f.db, other, sessionSpec{file: file, start: when, end: when.Add(time.Hour)})
+	assert.Empty(t, f.heatmap().Days)
+	assert.Nil(t, f.heatmap().FirstDay)
+
+	f.session(sessionSpec{file: file, start: when, end: when.Add(time.Hour)})
+	f.session(sessionSpec{file: file, start: when.Add(2 * time.Hour), end: when.Add(150 * time.Minute)})
+	assert.Equal(t, []ReadingStatsDay{{Day: dayOf(when), ReadingSeconds: 5400}}, f.heatmap().Days)
+	first := f.day(dayOf(when)).Sessions[0]
+	require.Equal(t, http.StatusNoContent, f.api.do(http.MethodDelete, fmt.Sprintf("/sessions/%d", first.ID), nil).Code)
+	assert.Equal(t, []ReadingStatsDay{{Day: dayOf(when), ReadingSeconds: 1800}}, f.heatmap().Days)
 }
 
 func TestCalendar_ASessionCrossingMidnightLandsOnBothDays(t *testing.T) {
@@ -259,7 +329,6 @@ func TestCalendar_NeverShowsAnotherUsersReading(t *testing.T) {
 	detail := f.day("2026-01-02")
 	assert.Empty(t, detail.Sessions)
 	assert.Empty(t, detail.Finished)
-	assert.Empty(t, f.stats("?year=2026").Days)
 
 	theirs := calendarFor(t, newReadingAPI(t, f.db, other), 2026, 1)
 	assert.Len(t, theirs.Days, 1)
@@ -299,7 +368,6 @@ func TestSessions_DeletingOnesOwnSessionRemovesItsTimeEverywhere(t *testing.T) {
 	assert.Equal(t, sessions[1].ID, remaining[0].ID)
 	stats := f.stats("?year=2026")
 	assert.Equal(t, 1800, stats.Totals.ReadingSeconds)
-	assert.Equal(t, []ReadingStatsDay{{Day: "2026-06-10", ReadingSeconds: 1800}}, stats.Days)
 	assert.Equal(t, []ReadingStatsCalendarDayBook{{Key: bookKey(dune), Seconds: 1800, Finished: true}}, calendarDay(f.calendar(2026, 6), "2026-06-10"))
 	finished := f.finishedList("?year=2026").Items
 	require.Len(t, finished, 1)

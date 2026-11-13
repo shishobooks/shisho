@@ -1,6 +1,12 @@
 import { History } from "lucide-react";
 import { useEffect } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
 import {
   FilterChip,
@@ -11,11 +17,7 @@ import PaginationFooter, {
   type PageChangeHandler,
 } from "@/components/library/PaginationFooter";
 import QueryError from "@/components/library/QueryError";
-import {
-  ReadingCalendar,
-  ReadingHeatmap,
-  type YearMonth,
-} from "@/components/library/ReadingCalendar";
+import ReadingCalendarTab from "@/components/library/ReadingCalendarTab";
 import {
   CountList,
   FinishedChart,
@@ -35,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ContentWidth } from "@/contexts/ContentWidth";
 import {
   useReadingStats,
@@ -54,7 +57,6 @@ import {
   formatDuration,
   formatShowingRange,
 } from "@/utils/format";
-import { shiftDay } from "@/utils/readingCalendar";
 import {
   countRows,
   KIND_LABELS,
@@ -126,133 +128,13 @@ const hasActivity = (stats: ReadingStatsResponse) =>
   stats.totals.reading_seconds > 0 ||
   stats.totals.listening_seconds > 0;
 
-const monthIndex = ({ year, month }: YearMonth) => year * 12 + month - 1;
-const fromMonthIndex = (index: number): YearMonth => ({
-  year: Math.floor(index / 12),
-  month: (index % 12) + 1,
-});
-const monthParam = ({ year, month }: YearMonth) =>
-  `${year}-${String(month).padStart(2, "0")}`;
-
-// The months the calendar can show: the year's, or under all time, from the
-// first year with reading to this month or the last month with any.
-const calendarBounds = (
-  stats: ReadingStatsResponse,
-  thisMonth: YearMonth,
-): [number, number] => {
-  if (stats.year !== null) {
-    return [stats.year * 12, stats.year * 12 + 11];
-  }
-  const first = Math.min(thisMonth.year, ...stats.years);
-  const last = Math.max(thisMonth.year, ...stats.years);
-  return [
-    first * 12,
-    last > thisMonth.year ? last * 12 + 11 : monthIndex(thisMonth),
-  ];
-};
-
-// The month the calendar opens on: this month for this year or all time,
-// and for a past year, its last month with any reading.
-const defaultCalendarMonth = (
-  stats: ReadingStatsResponse,
-  thisMonth: YearMonth,
-): YearMonth => {
-  if (stats.year === null || stats.year === thisMonth.year) return thisMonth;
-  const active = stats.periods.filter(
-    (p) => p.finished > 0 || p.reading_seconds + p.listening_seconds > 0,
-  );
-  return { year: stats.year, month: active[active.length - 1]?.month ?? 12 };
-};
-
-// The year heatmap and the month calendar. The month and the day open
-// under it are kept in the URL; the heatmap shows the calendar's year.
-const DailySection = ({
-  stats,
-  today,
-  pending,
-}: {
-  stats: ReadingStatsResponse;
-  today: string;
-  /** Another range's figures are loading, so stats is the last range's. */
-  pending: boolean;
-}) => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const thisMonth = {
-    year: Number(today.slice(0, 4)),
-    month: Number(today.slice(5, 7)),
-  };
-  const [first, last] = calendarBounds(stats, thisMonth);
-  const fallback = defaultCalendarMonth(stats, thisMonth);
-  const raw = searchParams.get("month");
-  let month = fallback;
-  if (raw && /^\d{4}-\d{2}$/.test(raw)) {
-    const m = Number(raw.slice(5));
-    const index = Number(raw.slice(0, 4)) * 12 + m - 1;
-    if (m >= 1 && m <= 12 && index >= first && index <= last) {
-      month = fromMonthIndex(index);
-    }
-  }
-  // A day in the month in view, and a real one: not June 31.
-  const rawDay = searchParams.get("day");
-  const selectedDay =
-    rawDay &&
-    /^\d{4}-\d{2}-\d{2}$/.test(rawDay) &&
-    rawDay.startsWith(`${monthParam(month)}-`) &&
-    shiftDay(rawDay, 0) === rawDay
-      ? rawDay
-      : null;
-
-  const changeMonth = (by: number) => {
-    const next = fromMonthIndex(monthIndex(month) + by);
-    const params = new URLSearchParams(searchParams);
-    if (monthIndex(next) === monthIndex(fallback)) params.delete("month");
-    else params.set("month", monthParam(next));
-    params.delete("day");
-    setSearchParams(params, { preventScrollReset: true });
-  };
-  const selectDay = (day: string | null) => {
-    const params = new URLSearchParams(searchParams);
-    if (day) params.set("day", day);
-    else params.delete("day");
-    setSearchParams(params, { preventScrollReset: true });
-  };
-
-  return (
-    // minmax(0, 1fr) lets the heatmap scroll inside its card on a phone
-    // rather than widen the page.
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 md:gap-6">
-      <StatsCard title={`Reading by day in ${month.year}`}>
-        <ReadingHeatmap
-          days={stats.days}
-          month={month.month}
-          year={month.year}
-        />
-      </StatsCard>
-      <ReadingCalendar
-        canGoBack={monthIndex(month) > first}
-        canGoForward={monthIndex(month) < last}
-        enabled={!pending}
-        month={month}
-        onMonthChange={changeMonth}
-        onSelectDay={selectDay}
-        selectedDay={selectedDay}
-        today={today}
-      />
-    </div>
-  );
-};
-
 const StatsBody = ({
   stats,
-  pending,
-  today,
   filters,
   onToggleFilter,
   onClearFilter,
 }: {
   stats: ReadingStatsResponse;
-  pending: boolean;
-  today: string;
   filters: FinishedFilters;
   onToggleFilter: (param: FilterParam, value: string) => void;
   onClearFilter: (param: FilterParam) => void;
@@ -328,8 +210,6 @@ const StatsBody = ({
           </StatsCard>
         </div>
       )}
-
-      <DailySection pending={pending} stats={stats} today={today} />
 
       <div>
         <p className="mb-2 text-xs text-muted-foreground">
@@ -516,8 +396,22 @@ const FinishedSection = ({
 
 // The signed-in user's own reading, summarized for one year or all time.
 // It takes no user, so it never shows anyone else's.
+// The page's tabs, each at its own path; Overview is the bare one.
+const TABS = ["overview", "calendar"] as const;
+type Tab = (typeof TABS)[number];
+const isTab = (value: string): value is Tab =>
+  (TABS as readonly string[]).includes(value);
+
 const ReadingStatsPage = () => {
   usePageTitle("Reading Stats");
+  const { tab: tabParam } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
+  const tab: Tab | null =
+    tabParam === undefined
+      ? "overview"
+      : isTab(tabParam) && tabParam !== "overview"
+        ? tabParam
+        : null;
   const settingsQuery = useUserSettings();
   const today = todayDay(settingsQuery.data?.time_zone);
   const currentYear = Number(today.slice(0, 4));
@@ -525,14 +419,16 @@ const ReadingStatsPage = () => {
   const yearParam = searchParams.get("year");
   const parsed = parseRange(yearParam);
   const year = parsed === undefined ? currentYear : parsed;
-  const statsQuery = useReadingStats(year === null ? {} : { year });
+  const statsQuery = useReadingStats(year === null ? {} : { year }, {
+    enabled: tab === "overview",
+  });
   const stats = statsQuery.data;
 
   // A "year" in the URL that isn't one goes at once, so the URL always
   // names what the page shows.
   const strayYear = yearParam !== null && parsed === undefined;
   useEffect(() => {
-    if (!strayYear) return;
+    if (!strayYear || tab !== "overview") return;
     setSearchParams(
       (prev) => {
         const params = new URLSearchParams(prev);
@@ -542,7 +438,7 @@ const ReadingStatsPage = () => {
       },
       { replace: true, preventScrollReset: true },
     );
-  }, [strayYear, setSearchParams]);
+  }, [strayYear, tab, setSearchParams]);
 
   // The current year is always offered, with or without reading in it, as
   // is the year in view.
@@ -554,8 +450,6 @@ const ReadingStatsPage = () => {
     const params = new URLSearchParams(searchParams);
     if (value === String(currentYear)) params.delete("year");
     else params.set("year", value);
-    params.delete("month");
-    params.delete("day");
     resetPaging(params);
     setSearchParams(params, { preventScrollReset: true });
   };
@@ -587,6 +481,18 @@ const ReadingStatsPage = () => {
   };
 
   const rangeLabel = year === null ? "all time" : String(year);
+
+  // An unknown tab goes to the first, so the URL names what's shown.
+  if (tab === null) {
+    return <Navigate replace to="/reading-stats" />;
+  }
+
+  // Each tab keeps its own URL parameters, so switching drops the other's.
+  const changeTab = (value: string) => {
+    navigate(
+      value === "overview" ? "/reading-stats" : `/reading-stats/${value}`,
+    );
+  };
 
   const renderBody = () => {
     if (statsQuery.error && !stats) {
@@ -625,9 +531,7 @@ const ReadingStatsPage = () => {
           key={stats.year ?? "all"}
           onClearFilter={clearFilter}
           onToggleFilter={toggleFilter}
-          pending={statsQuery.isPlaceholderData}
           stats={stats}
-          today={today}
         />
       </div>
     );
@@ -641,26 +545,30 @@ const ReadingStatsPage = () => {
           <div className="min-w-0">
             <h1 className="mb-2 text-2xl font-semibold">Reading Stats</h1>
             <p className="text-sm text-muted-foreground md:text-base">
-              Your reading for {rangeLabel}. Only you can see this.
+              {tab === "overview"
+                ? `Your reading for ${rangeLabel}. Only you can see this.`
+                : "Your reading, day by day. Only you can see this."}
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <Select
-              onValueChange={setRange}
-              value={year === null ? ALL_TIME : String(year)}
-            >
-              <SelectTrigger aria-label="Range" className="w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {years.map((y) => (
-                  <SelectItem key={y} value={String(y)}>
-                    {y}
-                  </SelectItem>
-                ))}
-                <SelectItem value={ALL_TIME}>All time</SelectItem>
-              </SelectContent>
-            </Select>
+            {tab === "overview" && (
+              <Select
+                onValueChange={setRange}
+                value={year === null ? ALL_TIME : String(year)}
+              >
+                <SelectTrigger aria-label="Range" className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={ALL_TIME}>All time</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
             <Button asChild size="sm" variant="outline">
               <Link aria-label="Manage reading history" to="/reading-history">
                 <History className="h-4 w-4" />
@@ -670,14 +578,28 @@ const ReadingStatsPage = () => {
           </div>
         </div>
 
-        {renderBody()}
-
-        {stats?.places.some((place) => place.source !== "web_reader") && (
-          <p className="mt-6 text-xs text-muted-foreground">
-            Kobo and KOReader don't time your reading the way the Shisho reader
-            does, so time from them is estimated.
-          </p>
-        )}
+        <Tabs onValueChange={changeTab} value={tab}>
+          <TabsList className="mb-4 w-full justify-start overflow-x-auto md:mb-6">
+            <TabsTrigger className="text-xs sm:text-sm" value="overview">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger className="text-xs sm:text-sm" value="calendar">
+              Calendar
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview">
+            {renderBody()}
+            {stats?.places.some((place) => place.source !== "web_reader") && (
+              <p className="mt-6 text-xs text-muted-foreground">
+                Kobo and KOReader don't time your reading the way the Shisho
+                reader does, so time from them is estimated.
+              </p>
+            )}
+          </TabsContent>
+          <TabsContent value="calendar">
+            <ReadingCalendarTab />
+          </TabsContent>
+        </Tabs>
       </ContentWidth>
     </div>
   );

@@ -23,6 +23,7 @@ import {
   type ReadingStatsCalendarResponse,
   type ReadingStatsDayQuery,
   type ReadingStatsDayResponse,
+  type ReadingStatsHeatmapResponse,
   type ReadingStatsQuery,
   type ReadingStatsResponse,
   type ReadThroughChangeResponse,
@@ -178,6 +179,23 @@ export const useReadingStatsFinished = (
     queryKey: [QueryKey.ReadingStats, "finished", query],
     queryFn: ({ signal }) =>
       API.request("GET", "/reading/stats/finished", null, query, signal),
+  });
+};
+
+// The signed-in user's reading a day at a time for the year up to today,
+// for the heatmap on Reading Stats' Calendar tab, under the Reading Stats key.
+export const useReadingStatsHeatmap = (
+  options: Omit<
+    UseQueryOptions<ReadingStatsHeatmapResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<ReadingStatsHeatmapResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires("books:read", options.enabled ?? true),
+    queryKey: [QueryKey.ReadingStats, "heatmap"],
+    queryFn: ({ signal }) =>
+      API.request("GET", "/reading/stats/heatmap", null, null, signal),
   });
 };
 

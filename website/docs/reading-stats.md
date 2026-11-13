@@ -2,7 +2,7 @@
 
 **Reading Stats**, in the user menu, sums up your own reading for one year or for all time. It's private: other users, admins included, never see it.
 
-It opens on the current year. The range picker offers every year you have reading in, plus **All time**. **Manage reading history** opens [Reading History](./reading-tracking.md#reading-history-page), where you can fix dates or delete a read that shouldn't count.
+It has two tabs. **Overview** sums up one year: it opens on the current year, and the range picker offers every year you have reading in, plus **All time**. [Calendar](#calendar) shows your reading day by day. **Manage reading history** opens [Reading History](./reading-tracking.md#reading-history-page), where you can fix dates or delete a read that shouldn't count.
 
 Everything here comes from your [reading history](./reading-tracking.md#reading-history): the Read-throughs you start and end, and the time each reader records as you read.
 
@@ -27,21 +27,6 @@ Time is split into days in your time zone, under **Preferences > Reading > Time 
 
 **Kobo and KOReader time is estimated.** Neither device times your reading the way the Shisho reader does; [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains how Shisho estimates it.
 
-## Heatmap and Calendar
-
-**Reading by day in** a year, such as **Reading by day in 2026**, is a heatmap with one square per day. A day you read or listened is shaded, and the more time you spent, the darker it is. Shades are relative to your own year, so the darkest squares are always your busiest days. Point at a square to see its date and time. Under **All time**, it shows the year the calendar is in.
-
-Under it, a calendar shows one month, with arrows to move between the months of the year. It opens on the current month for this year or **All time**, and on the last month you read in for a past year. Under **All time**, the arrows go back to the first year you read in.
-
-- Each day has a bar for every book you read that day. Reading a book on consecutive days makes one continuous bar across them.
-- Each book keeps the same colour in every month, so you can follow it from day to day.
-- A check marks the day you finished a read. A read you logged by hand, with no recorded time, shows only its check.
-- A book deleted from Shisho still shows, by the title it had, but in a new colour, since nothing links its reads to the book any longer.
-
-Select a day to list that day's sessions: the book, when the session started and ended in your time zone, how long it ran that day, how far through the book it took you, and where you read it. A session that ran past midnight is listed on both days, with the time spent on each. Books you finished that day are listed too.
-
-You can delete a session that wasn't really reading, such as a book left open overnight. Deleting a session can't be undone: its time leaves your totals, the heatmap, the calendar, and the time shown under [Finished](#finished). To delete one, select the trash can beside it in a day's list and confirm.
-
 ## Charts and Breakdowns
 
 - **Books finished by month** and **Reading and listening by month**: books finished and time spent in each month of the year. Under **All time**, they become **by year**.
@@ -59,3 +44,20 @@ Select a row in **Genres**, **Tags**, **Authors**, **Kind**, or **Ratings** to l
 Every book you finished in the range, latest first, 50 to a page, with the date you finished it, how many days it took, the time recorded for that read, and your rating. A book you read with no recorded time shows no time. A book you finished twice is listed for each read.
 
 A book that was deleted from Shisho shows as **Removed from library**, and one in a library you no longer have access to shows as **No access to this library**. Neither links to the book. Both still count toward your totals and time, but a deleted book has no genres, tags, authors, or rating left to count in the breakdowns.
+
+## Calendar
+
+The **Calendar** tab isn't tied to the range picker.
+
+**Reading by day** is a heatmap of the last year up to today, one square per day, with your total time for the year above it. A day you read or listened is shaded, and the more time you spent, the darker it is. Shades are relative to your own year, so the darkest squares are your busiest days. Point at a square to see its date and time, or select it to open that day in the calendar.
+
+Under it, a calendar shows one month. It opens on the current month, and its arrows go back to the first month you read in.
+
+- Each day has a bar for every book you read that day. Reading a book on consecutive days makes one continuous bar across them. A day with more books than fit shows how many more, and selecting it lists them all.
+- Each book has its own colour, the same from month to month. Two books shown in the same month never share a colour, so now and then a book takes a different colour in a month where its own is taken.
+- A check marks the day you finished a read. A read you logged by hand, with no recorded time, shows only its check.
+- A book deleted from Shisho still shows, by the title it had, but in a new colour, since nothing links its reads to the book any longer.
+
+Select a day to see it in detail. A timeline across the day's 24 hours has a line for each book, with a block wherever you read it. Below it, each book is listed with its total for the day and each of its sessions: when it started and ended in your time zone, how long it ran that day, how far through the book it took you, and where you read it. A session that ran past midnight shows on both days, with the time spent on each. Books you finished that day are listed too.
+
+You can delete a session that wasn't really reading, such as a book left open overnight. Deleting a session can't be undone: its time leaves your totals, the heatmap, the calendar, and the time shown under [Finished](#finished). To delete one, select the trash can beside it in a day's list and confirm.

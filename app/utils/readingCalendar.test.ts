@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { ReadingStatsCalendarDay } from "@/types";
+import type { ReadingStatsCalendarDay, ReadingStatsDaySession } from "@/types";
 import {
+  assignBookColors,
   BOOK_COLORS,
   bookColor,
+  dayLanes,
   heatLevels,
   heatmapWeeks,
   layoutWeek,
@@ -34,6 +36,39 @@ describe("bookColor", () => {
       Array.from({ length: 40 }, (_, i) => bookColor(`book-${i}`)),
     );
     expect(colors.size).toBeGreaterThan(BOOK_COLORS.length / 2);
+  });
+});
+
+describe("assignBookColors", () => {
+  it("gives the books shown together different colours", () => {
+    const keys = Array.from(
+      { length: BOOK_COLORS.length },
+      (_, i) => `book-${i}`,
+    );
+    const colors = assignBookColors(keys);
+    expect(new Set(keys.map((key) => colors.get(key))).size).toBe(keys.length);
+  });
+
+  it("keeps a book's own colour unless another book here has it", () => {
+    // Find two keys that hash to the same colour, and one that doesn't.
+    const keys = Array.from({ length: 200 }, (_, i) => `book-${i}`);
+    const [first, clash] = keys.filter(
+      (key) => bookColor(key) === bookColor(keys[0]),
+    );
+    const other = keys.find((key) => bookColor(key) !== bookColor(keys[0]))!;
+
+    expect(assignBookColors([first, other]).get(first)).toBe(bookColor(first));
+    expect(assignBookColors([clash, other]).get(clash)).toBe(bookColor(clash));
+    const together = assignBookColors([clash, other, first]);
+    expect(together.get(clash)).not.toBe(together.get(first));
+    expect(together.get(other)).toBe(bookColor(other));
+  });
+
+  it("doesn't depend on the order the books come in", () => {
+    const keys = Array.from({ length: 12 }, (_, i) => `book-${i * 7}`);
+    expect([...assignBookColors(keys)].sort()).toEqual(
+      [...assignBookColors([...keys].reverse())].sort(),
+    );
   });
 });
 
@@ -174,18 +209,28 @@ describe("layoutWeek with more books than lanes", () => {
 });
 
 describe("heatmapWeeks", () => {
-  it("covers the year in Sunday-first columns", () => {
-    // 2026 starts on a Thursday.
-    const weeks = heatmapWeeks(2026);
-    expect(weeks[0].slice(0, 5)).toEqual([
+  it("covers the days from one to another in Sunday-first columns", () => {
+    // 2025-11-14 is a Friday and 2026-11-13 a Friday.
+    const weeks = heatmapWeeks("2025-11-14", "2026-11-13");
+    expect(weeks[0]).toEqual([
       null,
       null,
       null,
       null,
-      "2026-01-01",
+      null,
+      "2025-11-14",
+      "2025-11-15",
     ]);
     expect(weeks.flat().filter(Boolean)).toHaveLength(365);
-    expect(weeks[weeks.length - 1]).toContain("2026-12-31");
+    expect(weeks[weeks.length - 1]).toEqual([
+      "2026-11-08",
+      "2026-11-09",
+      "2026-11-10",
+      "2026-11-11",
+      "2026-11-12",
+      "2026-11-13",
+      null,
+    ]);
   });
 });
 
@@ -201,5 +246,108 @@ describe("heatLevels", () => {
   it("puts every day at the top level when they're all the same", () => {
     const levels = heatLevels([600, 600]);
     expect(levels(600)).toBe(4);
+  });
+});
+
+describe("dayLanes", () => {
+  const session = (
+    id: number,
+    key: string,
+    started_at: string,
+    ended_at: string,
+    seconds: number,
+  ): ReadingStatsDaySession => ({
+    id,
+    book: { key, title: key, removed: false, book: null },
+    started_at,
+    ended_at,
+    seconds,
+    start_percentage: 0,
+    end_percentage: 0,
+    kind: "reading",
+    source: "web_reader",
+    measured: true,
+  });
+
+  it("gives each book a lane, in the order first read, with its sessions in minutes of the day", () => {
+    // Chicago is UTC-6 in November.
+    const lanes = dayLanes(
+      [
+        session(
+          1,
+          "book-1",
+          "2026-11-08T13:15:00Z",
+          "2026-11-08T13:40:00Z",
+          1500,
+        ),
+        session(
+          2,
+          "book-2",
+          "2026-11-08T14:15:00Z",
+          "2026-11-08T15:12:00Z",
+          3420,
+        ),
+        session(
+          3,
+          "book-1",
+          "2026-11-08T21:30:00Z",
+          "2026-11-08T22:20:00Z",
+          3000,
+        ),
+      ],
+      "2026-11-08",
+      "America/Chicago",
+    );
+    expect(lanes).toEqual([
+      {
+        book: expect.objectContaining({ key: "book-1" }),
+        seconds: 4500,
+        sessions: [
+          expect.objectContaining({
+            id: 1,
+            from: 7 * 60 + 15,
+            to: 7 * 60 + 40,
+          }),
+          expect.objectContaining({
+            id: 3,
+            from: 15 * 60 + 30,
+            to: 16 * 60 + 20,
+          }),
+        ],
+      },
+      {
+        book: expect.objectContaining({ key: "book-2" }),
+        seconds: 3420,
+        sessions: [
+          expect.objectContaining({
+            id: 2,
+            from: 8 * 60 + 15,
+            to: 9 * 60 + 12,
+          }),
+        ],
+      },
+    ]);
+  });
+
+  it("cuts a session past midnight at the edge of the day", () => {
+    const night = session(
+      1,
+      "book-1",
+      "2026-11-11T05:40:00Z",
+      "2026-11-11T06:20:00Z",
+      1200,
+    );
+    expect(
+      dayLanes([night], "2026-11-10", "America/Chicago")[0].sessions[0],
+    ).toMatchObject({
+      from: 23 * 60 + 40,
+      to: 24 * 60,
+    });
+    expect(
+      dayLanes([night], "2026-11-11", "America/Chicago")[0].sessions[0],
+    ).toMatchObject({
+      from: 0,
+      to: 20,
+    });
   });
 });

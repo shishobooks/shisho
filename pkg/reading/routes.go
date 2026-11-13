@@ -33,6 +33,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	g.GET("/history", h.listHistory)
 	g.GET("/stats", h.stats)
 	g.GET("/stats/finished", h.listStatsFinished)
+	g.GET("/stats/heatmap", h.statsHeatmap)
 	g.GET("/stats/calendar", h.statsCalendar)
 	g.GET("/stats/day", h.statsDay)
 	g.DELETE("/sessions/:id", h.deleteSession)

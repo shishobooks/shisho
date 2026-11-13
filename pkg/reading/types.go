@@ -220,9 +220,6 @@ type ReadingStatsResponse struct {
 	// Periods are the months of Year, or for all time each year from the
 	// first with activity to the last.
 	Periods []ReadingStatsPeriod `json:"periods"`
-	// Days are the days in the range with Session time, in order, for the
-	// heatmap.
-	Days []ReadingStatsDay `json:"days"`
 	// Genres, Tags, and Authors count the distinct finished Books under each
 	// name. A Book whose Read-through was detached from it isn't counted; one
 	// in a library the user can no longer reach is, as Reading History still
@@ -347,6 +344,25 @@ type ReadingStatsFinishedBook struct {
 	// Rating is the Book's current Rating in stars; null when unrated or
 	// the Book was deleted.
 	Rating *float64 `json:"rating" tstype:"number | null,required"`
+}
+
+// ReadingStatsHeatmapResponse is the signed-in user's reading for the year
+// up to today, a day at a time, for the heatmap on Reading Stats' Calendar
+// tab. Days are in the user's time zone, a Session past midnight split
+// between both.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsHeatmapResponse struct {
+	// Today is the user's today, the heatmap's last day.
+	Today string `json:"today"`
+	// From is the heatmap's first day: a year before Today, plus a day.
+	From string `json:"from"`
+	// FirstDay is the earliest day the user read or began or ended a
+	// Read-through, however long ago, which the calendar goes back to. Null
+	// with no reading at all.
+	FirstDay *string `json:"first_day" tstype:"string | null,required"`
+	// Days are the days from From to Today with Session time, in order.
+	Days []ReadingStatsDay `json:"days"`
 }
 
 // ReadingStatsDay is the Session time that fell on one day, in the user's

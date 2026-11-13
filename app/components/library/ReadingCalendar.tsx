@@ -30,11 +30,14 @@ import {
   formatShortDay,
 } from "@/utils/format";
 import {
+  assignBookColors,
   bookColor,
+  dayLanes,
   heatLevels,
   heatmapWeeks,
   layoutWeek,
   monthWeeks,
+  type DayLane,
 } from "@/utils/readingCalendar";
 import { SOURCE_LABELS } from "@/utils/readingStats";
 
@@ -59,98 +62,153 @@ const HEAT_SHADES = [
   "bg-reading",
 ];
 
+// Heatmap squares grow to fill the card up to this size, so a wide screen
+// isn't left with the year bunched at one side.
+const HEAT_CELL_MAX = "1.375rem";
+const HEAT_CELL_MIN = "0.6875rem";
+const HEAT_GAP = "3px";
+// Months are labelled at least this many weeks apart, so a short first
+// month doesn't run into the next label.
+const MONTH_LABEL_GAP = 3;
+const WEEKDAY_LABELS: Record<number, string> = { 1: "Mon", 3: "Wed", 5: "Fri" };
+
 /**
- * A year of reading and listening, one cell per day, darker for days with
- * more. It's drawn for sighted readers; a sentence under it gives screen
- * readers the busiest day.
+ * The year up to today, one square per day, darker for days with more
+ * reading and listening. Selecting a square opens that day in the calendar.
+ * It's drawn for sighted readers: the squares are out of the tab order, the
+ * calendar below reaches every day, and a sentence under it gives screen
+ * readers the year's total and busiest day.
  */
 export const ReadingHeatmap = ({
-  year,
-  month,
+  from,
+  today,
   days,
+  selectedDay,
+  onSelectDay,
 }: {
-  year: number;
-  /** The month to bring into view where the year doesn't fit, 1 to 12. */
-  month: number;
+  from: string;
+  today: string;
   days: ReadingStatsDay[];
+  selectedDay: string | null;
+  onSelectDay: (day: string) => void;
 }) => {
   const [active, setActive] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const byDay = new Map(
-    days
-      .filter((d) => d.day.startsWith(`${year}-`))
-      .map((d) => [d.day, d.reading_seconds + d.listening_seconds]),
+    days.map((d) => [d.day, d.reading_seconds + d.listening_seconds]),
   );
   const level = heatLevels([...byDay.values()]);
-  const weeks = heatmapWeeks(year);
+  const weeks = heatmapWeeks(from, today);
+  const heatmapMaxWidth = `calc(2rem + ${weeks.length} * (${HEAT_CELL_MAX} + ${HEAT_GAP}))`;
+  const total = [...byDay.values()].reduce((sum, s) => sum + s, 0);
   const busiest = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
   const activeSeconds = active ? (byDay.get(active) ?? 0) : 0;
 
-  // On a narrow screen, centre the month the calendar shows rather than
-  // open on January.
-  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const labels: { col: number; text: string }[] = [];
+  weeks.forEach((week, w) => {
+    const first = week.find((d) => d?.endsWith("-01"));
+    const last = labels[labels.length - 1];
+    if (first && (!last || w - last.col >= MONTH_LABEL_GAP)) {
+      labels.push({
+        col: w,
+        text: formatMonthName(
+          Number(first.slice(0, 4)),
+          Number(first.slice(5, 7)),
+        ),
+      });
+    }
+  });
+
+  // Where the year doesn't fit, bring the selected day into view, or
+  // today, at the end.
+  const focus = selectedDay ?? today;
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
-    const cell = el.querySelector(`[data-day="${monthStart}"]`);
+    const cell = el.querySelector(`[data-day="${focus}"]`);
     if (!cell) return;
     const offset =
       cell.getBoundingClientRect().left - el.getBoundingClientRect().left;
     el.scrollLeft += offset - el.clientWidth / 2;
-  }, [monthStart]);
+  }, [focus]);
 
   return (
     <div>
+      <p className="mb-3 text-xs text-muted-foreground">
+        {total > 0
+          ? `${formatDuration(total)} in the last year`
+          : "No reading in the last year"}
+      </p>
       <div className="overflow-x-auto pb-1" ref={scrollRef}>
         <div
           aria-hidden="true"
-          className="inline-grid grid-flow-col gap-[3px]"
+          // As wide as its squares, so the pinned weekday labels can follow
+          // a phone's scroll; on a wide screen, the card's width up to the
+          // squares' largest size.
+          className="grid w-max"
           onPointerLeave={() => setActive(null)}
           style={{
-            gridTemplateRows: "auto repeat(7, 0.6875rem)",
-            gridAutoColumns: "0.6875rem",
+            gap: HEAT_GAP,
+            gridTemplateColumns: `auto repeat(${weeks.length}, minmax(${HEAT_CELL_MIN}, 1fr))`,
+            minWidth: `min(100%, ${heatmapMaxWidth})`,
+            maxWidth: heatmapMaxWidth,
           }}
         >
-          {weeks.map((week, w) => {
-            const first = week.find((d) => d !== null)!;
-            // A month's label goes over the week its first day falls in.
-            const startsMonth = week.some((d) => d?.endsWith("-01"));
-            const labelDay = week.find((d) => d?.endsWith("-01"));
-            return [
+          {labels.map(({ col, text }) => (
+            <span
+              className="whitespace-nowrap text-[10px] leading-4 text-muted-foreground"
+              key={`${col}-${text}`}
+              style={{ gridColumn: col + 2, gridRow: 1 }}
+            >
+              {text}
+            </span>
+          ))}
+          {/* One solid column, pinned so the labels stay while a phone
+              scrolls the year, its rows the heatmap's own. */}
+          <div
+            className="sticky left-0 z-10 grid grid-rows-subgrid bg-background pr-1"
+            style={{ gridColumn: 1, gridRow: "2 / 9" }}
+          >
+            {Object.entries(WEEKDAY_LABELS).map(([row, text]) => (
               <span
-                className="overflow-visible whitespace-nowrap text-[10px] leading-4 text-muted-foreground"
-                key={`label-${first}`}
+                className="self-center text-[10px] leading-none text-muted-foreground"
+                key={text}
+                style={{ gridRow: Number(row) + 1 }}
               >
-                {startsMonth && labelDay
-                  ? formatMonthName(year, Number(labelDay.slice(5, 7)))
-                  : ""}
-              </span>,
-              ...week.map((day, d) =>
-                day ? (
-                  <span
-                    className={cn(
-                      "rounded-[2px]",
-                      HEAT_SHADES[level(byDay.get(day) ?? 0)],
-                      active === day && "ring-1 ring-foreground",
-                    )}
-                    data-day={day}
-                    data-level={level(byDay.get(day) ?? 0)}
-                    key={day}
-                    onPointerEnter={() => setActive(day)}
-                  />
-                ) : (
-                  <span key={`blank-${w}-${d}`} />
-                ),
-              ),
-            ];
-          })}
+                {text}
+              </span>
+            ))}
+          </div>
+          {weeks.flatMap((week, w) =>
+            week.map((day, d) =>
+              day ? (
+                <Button
+                  aria-label={`Open ${formatLongDay(day)}`}
+                  className={cn(
+                    "aspect-square w-full rounded-[2px]",
+                    HEAT_SHADES[level(byDay.get(day) ?? 0)],
+                    (active === day || selectedDay === day) &&
+                      "ring-1 ring-foreground",
+                  )}
+                  data-day={day}
+                  data-level={level(byDay.get(day) ?? 0)}
+                  key={day}
+                  onClick={() => onSelectDay(day)}
+                  onPointerEnter={() => setActive(day)}
+                  style={{ gridColumn: w + 2, gridRow: d + 2 }}
+                  tabIndex={-1}
+                  variant="unstyled"
+                />
+              ) : null,
+            ),
+          )}
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span aria-live="polite" className="tabular-nums">
           {active
             ? `${formatShortDay(active)}: ${activeSeconds > 0 ? formatDuration(activeSeconds) : "no reading"}`
-            : " "}
+            : "\u00a0"}
         </span>
         <span aria-hidden="true" className="flex items-center gap-1">
           Less
@@ -165,8 +223,8 @@ export const ReadingHeatmap = ({
       </div>
       <p className="sr-only">
         {busiest
-          ? `Your most reading in ${year} was ${formatDuration(busiest[1])} on ${formatLongDay(busiest[0])}.`
-          : `No reading time in ${year}.`}
+          ? `Your most reading in the last year was ${formatDuration(busiest[1])} on ${formatLongDay(busiest[0])}.`
+          : ""}
       </p>
     </div>
   );
@@ -183,7 +241,6 @@ const MAX_LANES = 3;
  */
 export const ReadingCalendar = ({
   month,
-  enabled = true,
   canGoBack,
   canGoForward,
   onMonthChange,
@@ -192,8 +249,6 @@ export const ReadingCalendar = ({
   today,
 }: {
   month: YearMonth;
-  /** False holds the month shown until the range's figures load. */
-  enabled?: boolean;
   canGoBack: boolean;
   canGoForward: boolean;
   onMonthChange: (by: number) => void;
@@ -201,7 +256,7 @@ export const ReadingCalendar = ({
   onSelectDay: (day: string | null) => void;
   today: string;
 }) => {
-  const calendarQuery = useReadingStatsCalendar(month, { enabled });
+  const calendarQuery = useReadingStatsCalendar(month);
   const calendar = calendarQuery.data;
   const monthTitle = formatMonthName(month.year, month.month, {
     long: true,
@@ -224,6 +279,7 @@ export const ReadingCalendar = ({
       calendar.days.map((d) => [d.day, d]),
     );
     const refs = new Map(calendar.books.map((b) => [b.key, b]));
+    const colors = assignBookColors(calendar.books.map((b) => b.key));
     // The last month's bars stay, dimmed, until the next one's load.
     const stale =
       calendar.year !== month.year || calendar.month !== month.month;
@@ -283,8 +339,7 @@ export const ReadingCalendar = ({
                       className={cn(
                         "flex items-start justify-start px-1 py-0.5 text-left text-xs hover:bg-accent/50",
                         col > 0 && "border-l border-border",
-                        selectedDay === day &&
-                          "bg-accent ring-2 ring-inset ring-primary",
+                        selectedDay === day && "bg-accent",
                       )}
                       key={day}
                       onClick={() =>
@@ -308,7 +363,7 @@ export const ReadingCalendar = ({
                 })}
                 {items.map((item) => {
                   const ref = refs.get(item.key) ?? emptyRef(item.key);
-                  const color = bookColor(item.key);
+                  const color = colors.get(item.key) ?? bookColor(item.key);
                   const row = item.lane + 2;
                   if (item.markerOnly) {
                     return (
@@ -369,6 +424,18 @@ export const ReadingCalendar = ({
                     </span>
                   ) : null,
                 )}
+                {/* The selected day's outline sits over its bars. */}
+                {selectedDay && week.includes(selectedDay) && (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none z-30 ring-2 ring-inset ring-primary"
+                    data-selected-outline=""
+                    style={{
+                      gridColumn: week.indexOf(selectedDay) + 1,
+                      gridRow: "1 / -1",
+                    }}
+                  />
+                )}
               </div>
             );
           })}
@@ -415,7 +482,11 @@ export const ReadingCalendar = ({
       </div>
       {renderGrid()}
       {selectedDay && (
-        <DayDetail day={selectedDay} onClose={() => onSelectDay(null)} />
+        <DayDetail
+          colors={assignBookColors(calendar?.books.map((b) => b.key) ?? [])}
+          day={selectedDay}
+          onClose={() => onSelectDay(null)}
+        />
       )}
     </section>
   );
@@ -453,7 +524,13 @@ const FinishMarker = ({
   </span>
 );
 
-const BookName = ({ book }: { book: ReadingStatsBookRef }) => {
+const BookName = ({
+  book,
+  color,
+}: {
+  book: ReadingStatsBookRef;
+  color: string;
+}) => {
   const title = (
     <TruncatedText className="truncate">{bookTitle(book)}</TruncatedText>
   );
@@ -462,7 +539,7 @@ const BookName = ({ book }: { book: ReadingStatsBookRef }) => {
       <span
         aria-hidden="true"
         className="h-2.5 w-2.5 shrink-0 rounded-sm"
-        style={{ backgroundColor: bookColor(book.key) }}
+        style={{ backgroundColor: color }}
       />
       <div className="min-w-0 text-sm font-medium">
         {book.book ? (
@@ -492,47 +569,106 @@ const BookName = ({ book }: { book: ReadingStatsBookRef }) => {
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
-const SessionRow = ({
-  session,
-  day,
-  timeZone,
-  onDelete,
-}: {
-  session: ReadingStatsDaySession;
-  day: string;
-  timeZone: string;
-  onDelete: () => void;
-}) => {
-  const details = [
+const sessionDetails = (
+  session: ReadingStatsDaySession,
+  day: string,
+  timeZone: string,
+) =>
+  [
     `${formatDayTime(session.started_at, day, timeZone)} to ${formatDayTime(session.ended_at, day, timeZone)}`,
     formatDuration(session.seconds),
     `${percent(session.start_percentage)} to ${percent(session.end_percentage)}`,
     session.kind === "listening" ? "Listening" : null,
     SOURCE_LABELS[session.source] + (session.measured ? "" : " (estimated)"),
-  ].filter((part): part is string => part !== null);
-  return (
-    <li className="flex items-start gap-2 px-3 py-2">
-      <div className="min-w-0 flex-1">
-        <BookName book={session.book} />
-        <p className="mt-0.5 pl-[1.125rem] text-xs text-muted-foreground">
-          {details.join(" · ")}
-        </p>
-      </div>
-      <Button
-        aria-label={`Delete session of ${bookTitle(session.book)}`}
-        className="shrink-0 text-muted-foreground hover:text-destructive"
-        onClick={onDelete}
-        size="icon-sm"
-        variant="ghost"
-      >
-        <Trash2 />
-      </Button>
-    </li>
-  );
-};
+  ]
+    .filter((part): part is string => part !== null)
+    .join(" · ");
+
+// Hours the day's timeline marks, with a label every six.
+const TIMELINE_HOURS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
+const hourLabel = (hour: number) =>
+  new Date(Date.UTC(2000, 0, 1, hour % 24)).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    timeZone: "UTC",
+  });
+
+/**
+ * A day as a 24-hour strip, a line per Book with a block for each Session
+ * at the time of day it ran. It's drawn for sighted readers; the list under
+ * it carries every Session's times.
+ */
+const DayTimeline = ({
+  lanes,
+  colors,
+}: {
+  lanes: DayLane[];
+  colors: Map<string, string>;
+}) => (
+  <div aria-hidden="true" className="mb-4" data-timeline="">
+    <div className="relative ml-0 h-4 text-[10px] text-muted-foreground">
+      {TIMELINE_HOURS.filter((h) => h % 6 === 0).map((hour) => (
+        <span
+          className={cn(
+            "absolute top-0 whitespace-nowrap",
+            hour === 0
+              ? ""
+              : hour === 24
+                ? "-translate-x-full"
+                : "-translate-x-1/2",
+          )}
+          key={hour}
+          style={{ left: `${(hour / 24) * 100}%` }}
+        >
+          {hourLabel(hour)}
+        </span>
+      ))}
+    </div>
+    <div className="relative space-y-1.5 py-1">
+      {TIMELINE_HOURS.map((hour) => (
+        <span
+          className="absolute inset-y-0 border-l border-border"
+          key={hour}
+          style={{ left: `${(hour / 24) * 100}%` }}
+        />
+      ))}
+      {lanes.map((lane) => {
+        const color = colors.get(lane.book.key) ?? bookColor(lane.book.key);
+        return (
+          <div
+            className="relative h-3 rounded-sm bg-muted/40"
+            data-lane={lane.book.key}
+            key={lane.book.key}
+          >
+            {lane.sessions.map((session) => (
+              <span
+                className="absolute inset-y-0 rounded-sm"
+                data-session={session.id}
+                key={session.id}
+                style={{
+                  backgroundColor: color,
+                  left: `${(session.from / 1440) * 100}%`,
+                  // A short Session still shows as a sliver.
+                  width: `max(3px, ${((session.to - session.from) / 1440) * 100}%)`,
+                }}
+              />
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
 
 /** One day's Reading Sessions and finishes, under the calendar. */
-const DayDetail = ({ day, onClose }: { day: string; onClose: () => void }) => {
+const DayDetail = ({
+  day,
+  colors,
+  onClose,
+}: {
+  day: string;
+  colors: Map<string, string>;
+  onClose: () => void;
+}) => {
   const dayQuery = useReadingStatsDay({ day });
   const detail = dayQuery.data?.day === day ? dayQuery.data : undefined;
   const headingId = `reading-day-${day}`;
@@ -559,6 +695,7 @@ const DayDetail = ({ day, onClose }: { day: string; onClose: () => void }) => {
     if (!detail) {
       return <LoadingSpinner className="py-4" />;
     }
+    const lanes = dayLanes(detail.sessions, day, detail.time_zone);
     if (detail.sessions.length === 0 && detail.finished.length === 0) {
       return (
         <p className="text-sm text-muted-foreground">No reading on this day.</p>
@@ -573,26 +710,64 @@ const DayDetail = ({ day, onClose }: { day: string; onClose: () => void }) => {
                 <span className="shrink-0 text-xs text-muted-foreground">
                   Finished
                 </span>
-                <BookName book={book} />
+                <BookName
+                  book={book}
+                  color={colors.get(book.key) ?? bookColor(book.key)}
+                />
               </li>
             ))}
           </ul>
         )}
-        {detail.sessions.length > 0 && (
-          <ul
-            aria-label="Reading sessions"
-            className="divide-y divide-border rounded-md border border-border"
-          >
-            {detail.sessions.map((session) => (
-              <SessionRow
-                day={day}
-                key={session.id}
-                onDelete={() => setDeleting(session)}
-                session={session}
-                timeZone={detail.time_zone}
-              />
-            ))}
-          </ul>
+        {lanes.length > 0 && (
+          <>
+            <DayTimeline colors={colors} lanes={lanes} />
+            <ul aria-label="Reading sessions" className="space-y-3">
+              {lanes.map((lane) => (
+                <li
+                  className="rounded-md border border-border"
+                  key={lane.book.key}
+                >
+                  <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <BookName
+                        book={lane.book}
+                        color={
+                          colors.get(lane.book.key) ?? bookColor(lane.book.key)
+                        }
+                      />
+                    </div>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {formatDuration(lane.seconds)}
+                    </span>
+                  </div>
+                  <ul
+                    aria-label={`Sessions of ${bookTitle(lane.book)}`}
+                    className="divide-y divide-border"
+                  >
+                    {lane.sessions.map((session) => (
+                      <li
+                        className="flex items-center gap-2 py-1 pl-[2.125rem] pr-1.5"
+                        key={session.id}
+                      >
+                        <p className="min-w-0 flex-1 text-xs text-muted-foreground">
+                          {sessionDetails(session, day, detail.time_zone)}
+                        </p>
+                        <Button
+                          aria-label={`Delete session of ${bookTitle(session.book)}`}
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleting(session)}
+                          size="icon-sm"
+                          variant="ghost"
+                        >
+                          <Trash2 />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </div>
     );

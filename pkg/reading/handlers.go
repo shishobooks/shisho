@@ -477,6 +477,20 @@ func (h *handler) listStatsFinished(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
+// statsHeatmap returns the caller's reading for the year up to today, a day
+// at a time. Like stats, it takes no user.
+func (h *handler) statsHeatmap(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	resp, err := h.readingService.StatsHeatmap(c.Request().Context(), user)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
 // statsCalendar returns one month of the caller's Reading Stats calendar.
 // Like stats, it takes no user.
 func (h *handler) statsCalendar(c echo.Context) error {

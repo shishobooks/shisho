@@ -12,6 +12,97 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
+// StatsHeatmap returns user's Session time on each day of the year up to
+// today in their time zone, split at local midnight, and the first day they
+// read anything.
+func (svc *Service) StatsHeatmap(ctx context.Context, user *models.User) (*ReadingStatsHeatmapResponse, error) {
+	loc, err := userLocation(ctx, svc.db, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	y, m, d := svc.now().In(loc).Date()
+	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	rng := dayRange{From: today.AddDate(-1, 0, 1).Format(time.DateOnly), To: today.Format(time.DateOnly)}
+	resp := &ReadingStatsHeatmapResponse{Today: rng.To, From: rng.From, Days: []ReadingStatsDay{}}
+
+	sessions, err := svc.statsSessions(ctx, user.ID, rng)
+	if err != nil {
+		return nil, err
+	}
+	type dayTime struct{ reading, listening float64 }
+	days := map[string]*dayTime{}
+	for _, s := range sessions {
+		for _, part := range splitByDay(s.StartedAt, s.EndedAt, s.Duration, loc) {
+			if !rng.contains(&part.Day) {
+				continue
+			}
+			t := days[part.Day]
+			if t == nil {
+				t = &dayTime{}
+				days[part.Day] = t
+			}
+			if s.Kind == models.ReadingKindListening {
+				t.listening += part.Seconds
+			} else {
+				t.reading += part.Seconds
+			}
+		}
+	}
+	for day, t := range days {
+		row := ReadingStatsDay{Day: day, ReadingSeconds: roundSeconds(t.reading), ListeningSeconds: roundSeconds(t.listening)}
+		if row.ReadingSeconds+row.ListeningSeconds > 0 {
+			resp.Days = append(resp.Days, row)
+		}
+	}
+	slices.SortFunc(resp.Days, func(a, b ReadingStatsDay) int { return cmp.Compare(a.Day, b.Day) })
+
+	resp.FirstDay, err = svc.firstReadingDay(ctx, user.ID, loc)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// firstReadingDay is the earliest day userID read in loc, or began or ended
+// a Read-through, or nil with neither.
+func (svc *Service) firstReadingDay(ctx context.Context, userID int, loc *time.Location) (*string, error) {
+	var days struct {
+		Begin *string `bun:"begin_day"`
+		End   *string `bun:"end_day"`
+	}
+	err := svc.db.NewSelect().
+		TableExpr("read_throughs AS rt").
+		ColumnExpr("MIN(rt.begin_day) AS begin_day, MIN(rt.end_day) AS end_day").
+		Where("rt.user_id = ?", userID).
+		Scan(ctx, &days)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var started []time.Time
+	err = svc.db.NewSelect().
+		TableExpr("reading_sessions AS rs").
+		ColumnExpr("rs.started_at").
+		Where("rs.user_id = ?", userID).
+		OrderExpr("rs.started_at").
+		Limit(1).
+		Scan(ctx, &started)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var first *string
+	candidates := []*string{days.Begin, days.End}
+	if len(started) > 0 {
+		day := started[0].In(loc).Format(time.DateOnly)
+		candidates = append(candidates, &day)
+	}
+	for _, day := range candidates {
+		if day != nil && (first == nil || *day < *first) {
+			first = day
+		}
+	}
+	return first, nil
+}
+
 // StatsCalendar returns one month of user's Reading Stats calendar: the
 // Session time on each Book on each day, split at midnight in the user's
 // time zone, and the days Read-throughs finished.

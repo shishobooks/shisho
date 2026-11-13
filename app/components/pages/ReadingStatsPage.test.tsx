@@ -19,9 +19,11 @@ import { AuthProvider } from "@/components/contexts/Auth";
 import { MobileNavProvider } from "@/contexts/MobileNav";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type {
+  ReadingStatsBookRef,
   ReadingStatsCalendarResponse,
   ReadingStatsDayResponse,
   ReadingStatsFinishedBook,
+  ReadingStatsHeatmapResponse,
   ReadingStatsResponse,
   ReadThrough,
 } from "@/types";
@@ -86,7 +88,6 @@ const emptyStats = (year: number | null): ReadingStatsResponse => ({
     average_rating: null,
   },
   periods: [],
-  days: [],
   genres: [],
   tags: [],
   authors: [],
@@ -151,10 +152,23 @@ const finishedRows = [
   finishedRow(3, "Elsewhere", { book: null }),
 ];
 
-// The page's query string, for asserting what the URL says.
-const LocationProbe = () => (
-  <output data-testid="location">{useLocation().search}</output>
-);
+// The page's path and query string, for asserting what the URL says.
+const LocationProbe = () => {
+  const location = useLocation();
+  return (
+    <>
+      <output data-testid="location">{location.search}</output>
+      <output data-testid="pathname">{location.pathname}</output>
+    </>
+  );
+};
+
+const emptyHeatmap: ReadingStatsHeatmapResponse = {
+  today: "2026-06-15",
+  from: "2025-06-16",
+  first_day: "2025-03-01",
+  days: [],
+};
 
 const emptyCalendar = (
   year: number,
@@ -174,6 +188,7 @@ const renderPage = ({
   finishedTotal = finished.length,
   calendar = emptyCalendar,
   day = emptyDay,
+  heatmap = emptyHeatmap,
   deleteSession = () => new Response(null, { status: 204 }),
   initialEntry = "/reading-stats",
 }: {
@@ -182,6 +197,7 @@ const renderPage = ({
   finishedTotal?: number;
   calendar?: (year: number, month: number) => ReadingStatsCalendarResponse;
   day?: (day: string) => ReadingStatsDayResponse;
+  heatmap?: ReadingStatsHeatmapResponse;
   deleteSession?: () => Response;
   initialEntry?: string;
 } = {}) => {
@@ -205,6 +221,7 @@ const renderPage = ({
         path.startsWith("/api/reading/sessions/")
       )
         return deleteSession();
+      if (path === "/api/reading/stats/heatmap") return Response.json(heatmap);
       if (path === "/api/reading/stats/calendar")
         return Response.json(
           calendar(
@@ -246,7 +263,10 @@ const renderPage = ({
         <MobileNavProvider>
           <MemoryRouter initialEntries={[initialEntry]}>
             <Routes>
-              <Route element={<ReadingStatsPage />} path="/reading-stats" />
+              <Route
+                element={<ReadingStatsPage />}
+                path="/reading-stats/:tab?"
+              />
             </Routes>
             <LocationProbe />
             <Toaster />
@@ -710,14 +730,15 @@ describe("ReadingStatsPage", () => {
               { day: "2026-06-10", books: [entry("read-through-9", 0, true)] },
             ],
           }
-        : month === 7
+        : month === 5
           ? {
               year,
               month,
               books: [dune],
-              days: [{ day: "2026-07-01", books: [entry("book-1", 900)] }],
+              days: [{ day: "2026-05-29", books: [entry("book-1", 900)] }],
             }
           : emptyCalendar(year, month);
+    const CALENDAR = "/reading-stats/calendar";
 
     const bars = (key: string) =>
       [
@@ -729,74 +750,111 @@ describe("ReadingStatsPage", () => {
         color: bar.style.backgroundColor,
       }));
 
-    it("shades the heatmap by each day's time", async () => {
-      renderPage({
-        stats: (year) => ({
-          ...busyStats(year),
+    it("puts Overview and Calendar on their own tabs, each at its own path", async () => {
+      const { user, fetchMock } = renderPage();
+      expect(await screen.findByText("Did Not Finish")).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: "Overview" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(
+        screen.queryByRole("region", { name: "Calendar" }),
+      ).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("tab", { name: "Calendar" }));
+      expect(
+        await screen.findByRole("region", { name: "Calendar" }),
+      ).toBeInTheDocument();
+      expect(screen.getByTestId("pathname")).toHaveTextContent(CALENDAR);
+      expect(
+        screen.queryByRole("combobox", { name: "Range" }),
+      ).not.toBeInTheDocument();
+      expect(statsRequests(fetchMock)).toEqual(["2026"]);
+    });
+
+    it("opens the Calendar tab without loading a year's figures, and sends an unknown tab to Overview", async () => {
+      const { fetchMock } = renderPage({ initialEntry: CALENDAR });
+      await screen.findByRole("region", { name: "Calendar" });
+      expect(statsRequests(fetchMock)).toEqual([]);
+      cleanup();
+
+      renderPage({ initialEntry: "/reading-stats/nope?year=2024" });
+      await screen.findByText("Did Not Finish");
+      expect(screen.getByTestId("pathname")).toHaveTextContent(
+        /^\/reading-stats$/,
+      );
+    });
+
+    it("shades the heatmap by each day's time, and opens a day from it", async () => {
+      const { user } = renderPage({
+        initialEntry: CALENDAR,
+        heatmap: {
+          ...emptyHeatmap,
           days: [
             { day: "2026-03-01", reading_seconds: 60, listening_seconds: 0 },
             { day: "2026-03-02", reading_seconds: 3600, listening_seconds: 0 },
           ],
-        }),
+        },
       });
       expect(
-        await screen.findByRole("region", { name: "Reading by day in 2026" }),
-      ).toBeInTheDocument();
-      const level = (day: string) =>
-        document.querySelector<HTMLElement>(`[data-day="${day}"]`)?.dataset
-          .level;
-      expect(level("2026-03-01")).toBe("1");
-      expect(level("2026-03-02")).toBe("4");
-      expect(level("2026-03-03")).toBe("0");
+        await screen.findByRole("region", { name: "Reading by day" }),
+      ).toHaveTextContent("1h 1m in the last year");
+      const cell = (day: string) =>
+        document.querySelector<HTMLElement>(`[data-day="${day}"]`);
+      expect(cell("2026-03-01")?.dataset.level).toBe("1");
+      expect(cell("2026-03-02")?.dataset.level).toBe("4");
+      expect(cell("2026-03-03")?.dataset.level).toBe("0");
+      expect(cell("2025-06-16")).not.toBeNull();
+      expect(cell("2025-06-15")).toBeNull();
+      expect(cell("2026-06-16")).toBeNull();
       expect(
-        screen.getByText(/most reading in 2026 was 1h 0m on Monday, March 2/),
+        screen.getByText(
+          /most reading in the last year was 1h 0m on Monday, March 2/,
+        ),
+      ).toBeInTheDocument();
+
+      await user.click(cell("2026-03-02")!);
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "?month=2026-03&day=2026-03-02",
+      );
+      expect(
+        await screen.findByRole("heading", { name: "March 2026" }),
       ).toBeInTheDocument();
     });
 
-    it("opens on this month and moves between months within the year", async () => {
-      const { user } = renderPage({ calendar: june });
+    it("opens on this month and goes back to the first month with reading", async () => {
+      const { user } = renderPage({ calendar: june, initialEntry: CALENDAR });
       const calendar = await screen.findByRole("region", { name: "Calendar" });
       expect(
         within(calendar).getByRole("heading", { name: "June 2026" }),
       ).toBeInTheDocument();
+      expect(
+        within(calendar).getByRole("button", { name: "Next month" }),
+      ).toBeDisabled();
 
       await user.click(
-        within(calendar).getByRole("button", { name: "Next month" }),
+        within(calendar).getByRole("button", { name: "Previous month" }),
       );
       expect(
-        await within(calendar).findByRole("heading", { name: "July 2026" }),
+        await within(calendar).findByRole("heading", { name: "May 2026" }),
       ).toBeInTheDocument();
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "?month=2026-07",
+        "?month=2026-05",
       );
-    });
-
-    it("can't leave the year, and opens on this month under all time", async () => {
-      renderPage({ initialEntry: "/reading-stats?month=2026-01" });
-      const calendar = await screen.findByRole("region", { name: "Calendar" });
-      expect(
-        within(calendar).getByRole("heading", { name: "January 2026" }),
-      ).toBeInTheDocument();
-      expect(
-        within(calendar).getByRole("button", { name: "Previous month" }),
-      ).toBeDisabled();
       cleanup();
 
-      renderPage({ initialEntry: "/reading-stats?year=all" });
-      const allTime = await screen.findByRole("region", { name: "Calendar" });
+      renderPage({ initialEntry: `${CALENDAR}?month=2025-03` });
+      const first = await screen.findByRole("region", { name: "Calendar" });
       expect(
-        within(allTime).getByRole("heading", { name: "June 2026" }),
+        within(first).getByRole("heading", { name: "March 2025" }),
       ).toBeInTheDocument();
       expect(
-        within(allTime).getByRole("button", { name: "Next month" }),
+        within(first).getByRole("button", { name: "Previous month" }),
       ).toBeDisabled();
-      expect(
-        within(allTime).getByRole("button", { name: "Previous month" }),
-      ).toBeEnabled();
     });
 
     it("joins a book's consecutive days into one bar in its own colour", async () => {
-      const { user } = renderPage({ calendar: june });
+      const { user } = renderPage({ calendar: june, initialEntry: CALENDAR });
       await screen.findByRole("button", { name: /^Monday, June 1, 2026/ });
 
       const duneBars = bars("book-1");
@@ -804,15 +862,16 @@ describe("ReadingStatsPage", () => {
       expect(duneBars[0].color).toBe(duneBars[1].color);
       expect(bars("book-2").map((bar) => bar.span)).toEqual(["2-2"]);
       expect(bars("book-2")[0].color).not.toBe("");
+      expect(bars("book-2")[0].color).not.toBe(duneBars[0].color);
 
-      await user.click(screen.getByRole("button", { name: "Next month" }));
-      await screen.findByRole("heading", { name: "July 2026" });
+      await user.click(screen.getByRole("button", { name: "Previous month" }));
+      await screen.findByRole("heading", { name: "May 2026" });
       await waitFor(() => expect(bars("book-1")).toHaveLength(1));
       expect(bars("book-1")[0].color).toBe(duneBars[0].color);
     });
 
     it("marks the day a book was finished, even with no reading that day", async () => {
-      renderPage({ calendar: june });
+      renderPage({ calendar: june, initialEntry: CALENDAR });
       expect(
         await screen.findByRole("button", {
           name: "Wednesday, June 3, 2026. Dune, finished",
@@ -835,6 +894,7 @@ describe("ReadingStatsPage", () => {
     it("closes the delete dialog when Demo Mode refuses it", async () => {
       const { user } = renderPage({
         calendar: june,
+        initialEntry: CALENDAR,
         day: (day) => ({
           ...emptyDay(day),
           sessions: [
@@ -888,6 +948,7 @@ describe("ReadingStatsPage", () => {
     it("opens a day's sessions, and deletes one after asking", async () => {
       const { user, fetchMock } = renderPage({
         calendar: june,
+        initialEntry: CALENDAR,
         day: (day) => ({
           ...emptyDay(day),
           time_zone: "America/Chicago",
@@ -953,6 +1014,89 @@ describe("ReadingStatsPage", () => {
       expect(
         screen.queryByRole("list", { name: "Reading sessions" }),
       ).toBeNull();
+    });
+
+    it("lays a day out by hour, a line per book, and groups its sessions by book", async () => {
+      const session = (
+        id: number,
+        book: ReadingStatsBookRef,
+        started_at: string,
+        ended_at: string,
+        seconds: number,
+      ) => ({
+        id,
+        book,
+        started_at,
+        ended_at,
+        seconds,
+        start_percentage: 0.1,
+        end_percentage: 0.2,
+        kind: "reading" as const,
+        source: "web_reader" as const,
+        measured: true,
+      });
+      renderPage({
+        calendar: june,
+        initialEntry: `${CALENDAR}?day=2026-06-02`,
+        day: (day) => ({
+          ...emptyDay(day),
+          sessions: [
+            session(
+              1,
+              dune,
+              "2026-06-02T07:00:00Z",
+              "2026-06-02T07:30:00Z",
+              1800,
+            ),
+            session(
+              2,
+              emma,
+              "2026-06-02T12:00:00Z",
+              "2026-06-02T13:00:00Z",
+              3600,
+            ),
+            session(
+              3,
+              dune,
+              "2026-06-02T18:00:00Z",
+              "2026-06-02T18:45:00Z",
+              2700,
+            ),
+          ],
+        }),
+      });
+      const sessions = await screen.findByRole("list", {
+        name: "Reading sessions",
+      });
+
+      const lanes = [
+        ...document.querySelectorAll<HTMLElement>(
+          "[data-timeline] [data-lane]",
+        ),
+      ];
+      expect(lanes.map((lane) => lane.dataset.lane)).toEqual([
+        "book-1",
+        "book-2",
+      ]);
+      const morning =
+        lanes[0].querySelector<HTMLElement>('[data-session="1"]')!;
+      expect(morning.style.left).toBe(`${((7 * 60) / 1440) * 100}%`);
+      expect(lanes[0].querySelectorAll("[data-session]")).toHaveLength(2);
+
+      const duneSessions = within(sessions).getByRole("list", {
+        name: "Sessions of Dune",
+      });
+      expect(within(duneSessions).getAllByRole("listitem")).toHaveLength(2);
+      expect(duneSessions).toHaveTextContent("7:00 AM to 7:30 AM");
+      expect(duneSessions).toHaveTextContent("6:00 PM to 6:45 PM");
+      // Dune's day total sits beside its title, once.
+      expect(
+        within(sessions).getAllByRole("link", { name: "Dune" }),
+      ).toHaveLength(1);
+      expect(sessions).toHaveTextContent("1h 15m");
+      expect(
+        within(sessions).getByRole("list", { name: "Sessions of Emma" }),
+      ).toBeInTheDocument();
     });
   });
 });

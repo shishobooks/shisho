@@ -46,7 +46,6 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 		Year:    year,
 		Years:   years,
 		Periods: []ReadingStatsPeriod{},
-		Days:    []ReadingStatsDay{},
 		Kinds:   []ReadingStatsKindCount{},
 		Ratings: []ReadingStatsRatingCount{},
 		Places:  []ReadingStatsPlace{},
@@ -256,7 +255,7 @@ func (t *periodTable) rows() []ReadingStatsPeriod {
 }
 
 // addSessionTime adds the Session time that fell on days in rng to the
-// periods, to Days for the heatmap, and to Places, which splits it by where
+// periods, and to Places, which splits it by where
 // it was read: the Shisho reader, each of the user's Devices, or, for a
 // Device since deleted, the kind of reader it was.
 func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsResponse, userID int, periods *periodTable, sessions []statsSession, rng dayRange, loc *time.Location) error {
@@ -267,8 +266,6 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 	}
 	places := map[[2]string]*place{}
 	var deviceIDs []string
-	type dayTime struct{ reading, listening float64 }
-	days := map[string]*dayTime{}
 	for _, s := range sessions {
 		key := [2]string{s.Source, ""}
 		if s.Source != models.ReadingSourceWebReader && s.SourceDeviceID != nil {
@@ -288,19 +285,12 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 				}
 			}
 			period := periods.at(part.Day)
-			day := days[part.Day]
-			if day == nil {
-				day = &dayTime{}
-				days[part.Day] = day
-			}
 			if listening {
-				day.listening += part.Seconds
 				p.listening += part.Seconds
 				if period != nil {
 					period.listening += part.Seconds
 				}
 			} else {
-				day.reading += part.Seconds
 				p.reading += part.Seconds
 				if period != nil {
 					period.reading += part.Seconds
@@ -308,14 +298,6 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 			}
 		}
 	}
-
-	for day, t := range days {
-		row := ReadingStatsDay{Day: day, ReadingSeconds: roundSeconds(t.reading), ListeningSeconds: roundSeconds(t.listening)}
-		if row.ReadingSeconds+row.ListeningSeconds > 0 {
-			resp.Days = append(resp.Days, row)
-		}
-	}
-	slices.SortFunc(resp.Days, func(a, b ReadingStatsDay) int { return cmp.Compare(a.Day, b.Day) })
 
 	names := map[string]string{}
 	if len(deviceIDs) > 0 {
