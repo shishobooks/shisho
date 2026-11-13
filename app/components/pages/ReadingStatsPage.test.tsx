@@ -816,7 +816,7 @@ describe("ReadingStatsPage", () => {
       });
       expect(
         await screen.findByRole("region", { name: "Reading by day" }),
-      ).toHaveTextContent("1h 1m in the last year");
+      ).toHaveTextContent("1h 1m in the last 12 months");
       const cell = (day: string) =>
         document.querySelector<HTMLElement>(`[data-day="${day}"]`);
       expect(cell("2026-03-01")?.dataset.level).toBe("1");
@@ -827,7 +827,7 @@ describe("ReadingStatsPage", () => {
       expect(cell("2026-06-16")).toBeNull();
       expect(
         screen.getByText(
-          /most reading in the last year was 1h 0m on Monday, March 2/,
+          /most reading in the last 12 months was 1h 0m on Monday, March 2/,
         ),
       ).toBeInTheDocument();
 
@@ -859,7 +859,7 @@ describe("ReadingStatsPage", () => {
       const card = await screen.findByRole("region", {
         name: "Reading by day",
       });
-      expect(card).toHaveTextContent("3h 0m in the last year");
+      expect(card).toHaveTextContent("3h 0m in the last 12 months");
 
       await user.click(
         within(card).getByRole("combobox", { name: "Heatmap year" }),
@@ -885,9 +885,10 @@ describe("ReadingStatsPage", () => {
       await screen.findByRole("region", { name: "Reading by day" });
       const cell = (day: string) =>
         document.querySelector<HTMLElement>(`[data-day="${day}"]`)!;
-      expect(cell("2026-01-01")).toBeEnabled();
-      expect(cell("2026-06-15")).toBeEnabled();
-      expect(cell("2026-12-31")).toBeDisabled();
+      expect(cell("2026-06-15")).not.toHaveAttribute("aria-disabled");
+      expect(cell("2026-12-31")).toHaveAttribute("aria-disabled", "true");
+      await user.click(cell("2026-12-31"));
+      expect(screen.getByTestId("location")).not.toHaveTextContent("day=");
       await user.click(cell("2026-06-15"));
       expect(screen.getByTestId("location")).toHaveTextContent(
         "day=2026-06-15",
@@ -921,6 +922,26 @@ describe("ReadingStatsPage", () => {
         screen.getByRole("button", { name: /^Thursday, March 6, 2025/ }),
       );
       expect(screen.getByTestId("location")).toHaveTextContent("heatmap=2025");
+    });
+
+    it("opens a square from before the first reading, since the calendar reaches as far as the heatmap", async () => {
+      const { user } = renderPage({
+        initialEntry: CALENDAR,
+        heatmap: (year) => ({
+          ...heatmapFor()(year),
+          first_day: "2026-01-10",
+        }),
+      });
+      await screen.findByRole("region", { name: "Reading by day" });
+      await user.click(
+        document.querySelector<HTMLElement>('[data-day="2025-07-04"]')!,
+      );
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "?month=2025-07&day=2025-07-04",
+      );
+      expect(
+        await screen.findByRole("heading", { name: "Friday, July 4, 2025" }),
+      ).toBeInTheDocument();
     });
 
     it("opens on this month and goes back to the first month with reading", async () => {
@@ -1028,7 +1049,9 @@ describe("ReadingStatsPage", () => {
         await screen.findByRole("button", { name: /^Monday, June 1, 2026/ }),
       );
       await user.click(
-        await screen.findByRole("button", { name: "Delete session of Dune" }),
+        await screen.findByRole("button", {
+          name: "Delete session of Dune, 8:00 PM to 9:00 PM",
+        }),
       );
       const dialog = await screen.findByRole("dialog", {
         name: "Delete this reading session?",
@@ -1088,7 +1111,7 @@ describe("ReadingStatsPage", () => {
 
       await user.click(
         within(sessions).getByRole("button", {
-          name: "Delete session of Dune",
+          name: "Delete session of Dune, May 31, 11:30 PM to 1:00 AM",
         }),
       );
       const dialog = await screen.findByRole("dialog", {

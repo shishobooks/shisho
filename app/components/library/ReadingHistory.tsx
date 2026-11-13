@@ -128,11 +128,7 @@ const ReadingHistory = ({ bookId, title }: ReadingHistoryProps) => {
               </div>
               {open && (
                 <div className="mt-2" id={sessionsId}>
-                  <ReadThroughSessions
-                    disabled={demoMode}
-                    readThroughId={rt.id}
-                    title={title}
-                  />
+                  <ReadThroughSessions readThroughId={rt.id} title={title} />
                 </div>
               )}
             </li>

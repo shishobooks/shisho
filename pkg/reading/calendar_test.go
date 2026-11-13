@@ -106,7 +106,7 @@ func TestHeatmap_HasEachDaysTimeForTheYearUpToToday(t *testing.T) {
 	today, err := time.Parse(time.DateOnly, resp.Today)
 	require.NoError(t, err)
 	assert.Contains(t, []string{dayOf(daysAgo(t, chicago, 0, 12, 0)), dayOf(daysAgo(t, chicago, -1, 12, 0))}, resp.Today)
-	assert.Equal(t, today.AddDate(-1, 0, 1).Format(time.DateOnly), resp.From)
+	assert.Equal(t, today.AddDate(0, 0, 1).AddDate(-1, 0, 0).Format(time.DateOnly), resp.From)
 	assert.Equal(t, resp.Today, resp.To)
 	assert.Equal(t, []ReadingStatsDay{
 		{Day: dayOf(lateNight), ReadingSeconds: 1800},
@@ -145,6 +145,19 @@ func TestHeatmap_ThisYearRunsToDecember(t *testing.T) {
 	resp := heatmapFor(t, f.api, "?year="+year)
 	assert.Equal(t, year+"-01-01", resp.From)
 	assert.Equal(t, year+"-12-31", resp.To)
+}
+
+// On a leap day, the last 12 months start on March 1 of the year before:
+// the day after a year back from tomorrow, with no day lost to February 29
+// rolling over.
+func TestHeatmap_TheLast12MonthsFromALeapDay(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	svc := newServiceWithClock(f.db, func() time.Time { return at(t, "UTC", "2028-02-29 12:00") })
+	resp, err := svc.StatsHeatmap(f.ctx, f.user, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "2028-02-29", resp.Today)
+	assert.Equal(t, "2027-03-01", resp.From)
 }
 
 func TestHeatmap_FirstDayCountsReadThroughsWithNoSessions(t *testing.T) {
@@ -467,11 +480,11 @@ func TestCalendar_SessionsWithNothingLeftToNameThemStayApart(t *testing.T) {
 	assert.Equal(t, first[0].Key, detail.Sessions[0].Book.Key)
 }
 
-func (f *statsFixture) readThroughSessions(rt *models.ReadThrough) ListReadThroughSessionsResponse {
+func (f *statsFixture) readThroughSessions(rt *models.ReadThrough) ReadThroughSessionsResponse {
 	f.t.Helper()
 	rec := f.api.do(http.MethodGet, fmt.Sprintf("/read-throughs/%d/sessions", rt.ID), nil)
 	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
-	var resp ListReadThroughSessionsResponse
+	var resp ReadThroughSessionsResponse
 	require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	return resp
 }

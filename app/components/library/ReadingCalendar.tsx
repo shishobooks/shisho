@@ -1,21 +1,19 @@
-import { Check, ChevronLeft, ChevronRight, Trash2, X } from "lucide-react";
-import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { useLayoutEffect, useMemo, useRef, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
+import SessionRow from "@/components/library/SessionRow";
 import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
-  useDeleteReadingSession,
   useReadingStatsCalendar,
   useReadingStatsDay,
 } from "@/hooks/queries/reading";
 import { useHoverTip } from "@/hooks/useHoverTip";
-import { isDemoModeError, toastRequestError } from "@/libraries/api";
+import { useSessionDelete } from "@/hooks/useSessionDelete";
 import { cn } from "@/libraries/utils";
 import type {
   ReadingStatsBookRef,
@@ -41,7 +39,6 @@ import {
   textOn,
   type DayLane,
 } from "@/utils/readingCalendar";
-import { sessionSourceLabel } from "@/utils/readingStats";
 
 /** A calendar month, 1 to 12. */
 export interface YearMonth {
@@ -75,7 +72,7 @@ const MONTH_LABEL_GAP = 3;
 const WEEKDAY_LABELS: Record<number, string> = { 1: "Mon", 3: "Wed", 5: "Fri" };
 
 /**
- * The year up to today, one square per day, darker for days with more
+ * The last 12 months, one square per day, darker for days with more
  * reading and listening. Selecting a square opens that day in the calendar.
  * It's drawn for sighted readers: the squares are out of the tab order, the
  * calendar below reaches every day, and a sentence under it gives screen
@@ -103,11 +100,15 @@ export const ReadingHeatmap = ({
 }) => {
   const hoverTip = useHoverTip();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const byDay = new Map(
-    days.map((d) => [d.day, d.reading_seconds + d.listening_seconds]),
+  const byDay = useMemo(
+    () =>
+      new Map(
+        days.map((d) => [d.day, d.reading_seconds + d.listening_seconds]),
+      ),
+    [days],
   );
-  const level = heatLevels([...byDay.values()]);
-  const weeks = heatmapWeeks(from, to);
+  const level = useMemo(() => heatLevels([...byDay.values()]), [byDay]);
+  const weeks = useMemo(() => heatmapWeeks(from, to), [from, to]);
   const heatmapMaxWidth = `calc(2rem + ${weeks.length} * (${HEAT_CELL_MAX} + ${HEAT_GAP}))`;
   const total = [...byDay.values()].reduce((sum, s) => sum + s, 0);
   const busiest = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -143,6 +144,63 @@ export const ReadingHeatmap = ({
       cell.getBoundingClientRect().left - el.getBoundingClientRect().left;
     el.scrollLeft += offset - el.clientWidth / 2;
   }, [focus]);
+
+  // Hovering shows a tip, which re-renders the heatmap; the squares, a year
+  // of them, only change with what they show.
+  const { show: showTip } = hoverTip;
+  const squares = useMemo(
+    () =>
+      weeks.flatMap((week, w) =>
+        week.map((day, d) => {
+          if (!day) return null;
+          const seconds = byDay.get(day) ?? 0;
+          // A day still to come has nothing to open. It stays hoverable, as a
+          // disabled button would swallow the pointer and strand the tip.
+          const future = day > today;
+          return (
+            <Button
+              aria-disabled={future || undefined}
+              aria-label={`Open ${formatLongDay(day)}`}
+              className={cn(
+                "aspect-square w-full rounded-[2px]",
+                HEAT_SHADES[level(seconds)],
+                future
+                  ? "cursor-default opacity-50"
+                  : "hover:ring-1 hover:ring-foreground",
+                selectedDay === day && "ring-1 ring-foreground",
+              )}
+              data-day={day}
+              data-level={level(seconds)}
+              key={day}
+              onClick={() => {
+                if (!future) onSelectDay(day);
+              }}
+              onPointerEnter={(event) =>
+                showTip(
+                  event.currentTarget,
+                  future ? (
+                    formatShortDay(day)
+                  ) : seconds > 0 ? (
+                    <>
+                      <span className="font-semibold">
+                        {formatDuration(seconds)}
+                      </span>{" "}
+                      on {formatShortDay(day)}
+                    </>
+                  ) : (
+                    `No reading on ${formatShortDay(day)}`
+                  ),
+                )
+              }
+              style={{ gridColumn: w + 2, gridRow: d + 2 }}
+              tabIndex={-1}
+              variant="unstyled"
+            />
+          );
+        }),
+      ),
+    [weeks, byDay, level, today, selectedDay, onSelectDay, showTip],
+  );
 
   return (
     <div>
@@ -191,45 +249,7 @@ export const ReadingHeatmap = ({
               </span>
             ))}
           </div>
-          {weeks.flatMap((week, w) =>
-            week.map((day, d) =>
-              day ? (
-                <Button
-                  aria-label={`Open ${formatLongDay(day)}`}
-                  className={cn(
-                    "aspect-square w-full rounded-[2px]",
-                    HEAT_SHADES[level(byDay.get(day) ?? 0)],
-                    "hover:ring-1 hover:ring-foreground",
-                    selectedDay === day && "ring-1 ring-foreground",
-                  )}
-                  data-day={day}
-                  data-level={level(byDay.get(day) ?? 0)}
-                  disabled={day > today}
-                  key={day}
-                  onClick={() => onSelectDay(day)}
-                  onPointerEnter={(event) => {
-                    const seconds = byDay.get(day) ?? 0;
-                    hoverTip.show(
-                      event.currentTarget,
-                      seconds > 0 ? (
-                        <>
-                          <span className="font-semibold">
-                            {formatDuration(seconds)}
-                          </span>{" "}
-                          on {formatShortDay(day)}
-                        </>
-                      ) : (
-                        `No reading on ${formatShortDay(day)}`
-                      ),
-                    );
-                  }}
-                  style={{ gridColumn: w + 2, gridRow: d + 2 }}
-                  tabIndex={-1}
-                  variant="unstyled"
-                />
-              ) : null,
-            ),
-          )}
+          {squares}
         </div>
       </div>
       {hoverTip.tip}
@@ -592,21 +612,14 @@ const BookName = ({
   );
 };
 
-const percent = (value: number) => `${Math.round(value * 100)}%`;
-
-const sessionDetails = (
+// When a session ran on the day shown: "7:00 AM to 8:00 AM", with the date
+// on a time that falls on another day.
+const sessionWhen = (
   session: ReadingStatsDaySession,
   day: string,
   timeZone: string,
 ) =>
-  [
-    `${formatDayTime(session.started_at, day, timeZone)} to ${formatDayTime(session.ended_at, day, timeZone)}`,
-    formatDuration(session.seconds),
-    `${percent(session.start_percentage)} to ${percent(session.end_percentage)}`,
-    sessionSourceLabel(session),
-  ]
-    .filter((part): part is string => part !== null)
-    .join(" · ");
+  `${formatDayTime(session.started_at, day, timeZone)} to ${formatDayTime(session.ended_at, day, timeZone)}`;
 
 // Hours the day's timeline marks, with a label every six.
 const TIMELINE_HOURS = [0, 3, 6, 9, 12, 15, 18, 21, 24];
@@ -724,21 +737,7 @@ const DayDetail = ({
   const dayQuery = useReadingStatsDay({ day });
   const detail = dayQuery.data?.day === day ? dayQuery.data : undefined;
   const headingId = `reading-day-${day}`;
-  const deleteMutation = useDeleteReadingSession();
-  const [deleting, setDeleting] = useState<ReadingStatsDaySession | null>(null);
-
-  const handleDelete = async () => {
-    if (!deleting) return;
-    try {
-      await deleteMutation.mutateAsync(deleting.id);
-      toast.success("Reading session deleted");
-      setDeleting(null);
-    } catch (error) {
-      // Demo Mode's refusal has been toasted and won't change on a retry.
-      if (isDemoModeError(error)) setDeleting(null);
-      toastRequestError(error, "Failed to delete reading session");
-    }
-  };
+  const sessionDelete = useSessionDelete();
 
   const renderBody = () => {
     if (dayQuery.error && !dayQuery.data) {
@@ -801,25 +800,25 @@ const DayDetail = ({
                     aria-label={`Sessions of ${bookTitle(lane.book)}`}
                     className="divide-y divide-border"
                   >
-                    {lane.sessions.map((session) => (
-                      <li
-                        className="flex items-center gap-2 py-1 pl-[2.125rem] pr-1.5"
-                        key={session.id}
-                      >
-                        <p className="min-w-0 flex-1 text-xs text-muted-foreground">
-                          {sessionDetails(session, day, detail.time_zone)}
-                        </p>
-                        <Button
-                          aria-label={`Delete session of ${bookTitle(session.book)}`}
-                          className="shrink-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleting(session)}
-                          size="icon-sm"
-                          variant="ghost"
-                        >
-                          <Trash2 />
-                        </Button>
-                      </li>
-                    ))}
+                    {lane.sessions.map((session) => {
+                      const title = bookTitle(session.book);
+                      const when = sessionWhen(session, day, detail.time_zone);
+                      return (
+                        <SessionRow
+                          className="pl-[2.125rem]"
+                          key={session.id}
+                          onDelete={() =>
+                            sessionDelete.requestDelete(
+                              session.id,
+                              `${title}, ${when}`,
+                            )
+                          }
+                          session={session}
+                          title={title}
+                          when={when}
+                        />
+                      );
+                    })}
                   </ul>
                 </li>
               ))}
@@ -849,20 +848,7 @@ const DayDetail = ({
         </Button>
       </div>
       {renderBody()}
-      <ConfirmDialog
-        confirmLabel="Delete"
-        description={
-          deleting
-            ? `${bookTitle(deleting.book)}, ${formatDayTime(deleting.started_at, day, detail?.time_zone ?? "UTC")} to ${formatDayTime(deleting.ended_at, day, detail?.time_zone ?? "UTC")}. Its time stops counting toward your Reading Stats, and it can't be brought back.`
-            : ""
-        }
-        isPending={deleteMutation.isPending}
-        onConfirm={handleDelete}
-        onOpenChange={(open) => !open && setDeleting(null)}
-        open={!!deleting}
-        title="Delete this reading session?"
-        variant="destructive"
-      />
+      {sessionDelete.dialog}
     </section>
   );
 };

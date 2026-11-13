@@ -30,11 +30,11 @@ const monthOf = (day: string): YearMonth => ({
 const monthParam = ({ year, month }: YearMonth) =>
   `${year}-${String(month).padStart(2, "0")}`;
 
-// The heatmap picker's value for the year up to today.
+// The heatmap picker's value for the last 12 months.
 const LAST_YEAR = "last";
 
 /**
- * Reading Stats' Calendar tab: a heatmap of the year up to today, or of a
+ * Reading Stats' Calendar tab: a heatmap of the last 12 months, or of a
  * year picked beside it, a month calendar that goes back to the first month
  * with any reading, and the day open under it. The heatmap's year, the
  * month, and the day are kept in the URL; with no month, the calendar opens
@@ -42,7 +42,7 @@ const LAST_YEAR = "last";
  */
 const ReadingCalendarTab = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  // The heatmap's year, or the year up to today without one.
+  // The heatmap's year, or the last 12 months without one.
   const heatmapParam = searchParams.get("heatmap");
   const heatmapYear =
     heatmapParam && /^\d{4}$/.test(heatmapParam) && Number(heatmapParam) >= 1000
@@ -64,8 +64,11 @@ const ReadingCalendarTab = () => {
 
   const thisMonth = monthOf(heatmap.today);
   const last = monthIndex(thisMonth);
+  // Back to the first month with any reading, and at least as far as the
+  // heatmap shows, so every square it shows opens its day.
   const first = Math.min(
     last,
+    monthIndex(monthOf(heatmap.from)),
     heatmap.first_day ? monthIndex(monthOf(heatmap.first_day)) : last,
   );
 
@@ -150,7 +153,9 @@ const ReadingCalendarTab = () => {
           days={heatmap.days}
           from={heatmap.from}
           onSelectDay={(day) => update(monthOf(day), day)}
-          period={heatmapYear === null ? "the last year" : String(heatmapYear)}
+          period={
+            heatmapYear === null ? "the last 12 months" : String(heatmapYear)
+          }
           selectedDay={selectedDay}
           to={heatmap.to}
           today={heatmap.today}

@@ -195,11 +195,7 @@ const HistoryRow = ({ entry, demoMode, onEdit, onDelete }: HistoryRowProps) => {
       {showSessions && (
         // Lined up under the title, past the cover.
         <div className="mt-2 sm:pl-14" id={sessionsId}>
-          <ReadThroughSessions
-            disabled={demoMode}
-            readThroughId={rt.id}
-            title={entry.title}
-          />
+          <ReadThroughSessions readThroughId={rt.id} title={entry.title} />
         </div>
       )}
     </li>

@@ -281,26 +281,51 @@ export const dayIn = (instant: string, timeZone: string): string =>
     day: "2-digit",
   }).format(new Date(instant));
 
-// An instant's minutes into `day` in timeZone: 0 when it's on an earlier
-// day, the day's whole length when on a later one.
-const minutesInto = (instant: string, day: string, timeZone: string) => {
+// How far timeZone is ahead of UTC at an instant, in milliseconds.
+const zoneOffset = (ms: number, timeZone: string) => {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
+    new Intl.DateTimeFormat("en-US", {
       timeZone,
+      hourCycle: "h23",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-      hourCycle: "h23",
+      second: "2-digit",
     })
-      .formatToParts(new Date(instant))
-      .map((part) => [part.type, part.value]),
+      .formatToParts(new Date(ms))
+      .map((part) => [part.type, Number(part.value)]),
   );
-  const onDay = `${parts.year}-${parts.month}-${parts.day}`;
-  if (onDay < day) return 0;
-  if (onDay > day) return MINUTES_IN_DAY;
-  return Number(parts.hour) * 60 + Number(parts.minute);
+  const local = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  return local - Math.floor(ms / 1000) * 1000;
+};
+
+// The instant `day` begins in timeZone: its local midnight, checked again
+// at the offset it lands on, so a day after a change starts on time.
+const startOfDay = (day: string, timeZone: string) => {
+  const utcMidnight = parseDay(day).getTime();
+  const guess = utcMidnight - zoneOffset(utcMidnight, timeZone);
+  return utcMidnight - zoneOffset(guess, timeZone);
+};
+
+// An instant's place on `day`'s 24-hour strip in timeZone, in minutes: the
+// time since local midnight, scaled so a 23- or 25-hour day still fills the
+// strip, and held to the day's edges.
+const minutesInto = (instant: string, day: string, timeZone: string) => {
+  const start = startOfDay(day, timeZone);
+  const dayMinutes = (startOfDay(shiftDay(day, 1), timeZone) - start) / 60000;
+  const minutes = (Date.parse(instant) - start) / 60000;
+  return (
+    Math.min(Math.max(minutes, 0), dayMinutes) * (MINUTES_IN_DAY / dayMinutes)
+  );
 };
 
 /** A Session placed on the day's timeline, in minutes from midnight. */

@@ -354,6 +354,24 @@ describe("dayLanes", () => {
     ]);
   });
 
+  // November 1, 2026 is 25 hours long in Chicago: 1 AM to 2 AM happens
+  // twice. A session across the change still has its real length, scaled
+  // to the day's 24-hour strip.
+  it("places a session across a daylight-saving change by the time it took", () => {
+    const fallBack = session(
+      1,
+      "book-1",
+      "2026-11-01T06:50:00Z", // 1:50 AM CDT
+      "2026-11-01T07:10:00Z", // 1:10 AM CST
+      1200,
+    );
+    const [placed] = dayLanes([fallBack], "2026-11-01", "America/Chicago")[0]
+      .sessions;
+    const scale = 1440 / (25 * 60);
+    expect(placed.from).toBeCloseTo(110 * scale);
+    expect(placed.to).toBeCloseTo(130 * scale);
+  });
+
   it("cuts a session past midnight at the edge of the day", () => {
     const night = session(
       1,

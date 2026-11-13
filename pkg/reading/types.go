@@ -169,9 +169,10 @@ type ReadingHistoryEntry struct {
 	SessionCount int `json:"session_count"`
 }
 
-// ListReadThroughSessionsResponse is every Reading Session of one of the
-// user's Read-throughs, in the order they started.
-type ListReadThroughSessionsResponse struct {
+// ReadThroughSessionsResponse is every Reading Session of one of the
+// user's Read-throughs, in the order they started. It's every one, so it
+// isn't paged.
+type ReadThroughSessionsResponse struct {
 	// TimeZone is the IANA zone to show the Sessions in: the user's, or UTC
 	// when they set none.
 	TimeZone string               `json:"time_zone"`
@@ -375,8 +376,8 @@ type ReadingStatsFinishedBook struct {
 	Rating *float64 `json:"rating" tstype:"number | null,required"`
 }
 
-// ReadingStatsHeatmapQuery picks the heatmap's year, or the year up to
-// today when Year is omitted.
+// ReadingStatsHeatmapQuery picks the heatmap's year, or the last 12 months
+// when Year is omitted.
 //
 //nolint:revive // named for the Reading Stats page, as generated TS types are global
 type ReadingStatsHeatmapQuery struct {
@@ -392,15 +393,15 @@ type ReadingStatsHeatmapQuery struct {
 type ReadingStatsHeatmapResponse struct {
 	// Today is the user's today.
 	Today string `json:"today"`
-	// From and To are the heatmap's first and last days: the year up to
-	// Today, or the whole year asked for, the current one included.
+	// From and To are the heatmap's first and last days: the last 12 months
+	// up to Today, or the whole year asked for, the current one included.
 	From string `json:"from"`
 	To   string `json:"to"`
 	// FirstDay is the earliest day the user read or began or ended a
 	// Read-through, however long ago, which the calendar goes back to. Null
 	// with no reading at all.
 	FirstDay *string `json:"first_day" tstype:"string | null,required"`
-	// Days are the days from From to Today with Session time, in order.
+	// Days are the days from From to To with Session time, in order.
 	Days []ReadingStatsDay `json:"days"`
 }
 

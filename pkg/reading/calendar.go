@@ -13,7 +13,7 @@ import (
 )
 
 // StatsHeatmap returns user's Session time on each day of year, or of the
-// year up to today when year is nil, in their time zone and split at local
+// last 12 months when year is nil, in their time zone and split at local
 // midnight, and the first day they read anything.
 func (svc *Service) StatsHeatmap(ctx context.Context, user *models.User, year *int) (*ReadingStatsHeatmapResponse, error) {
 	loc, err := userLocation(ctx, svc.db, user.ID)
@@ -22,7 +22,10 @@ func (svc *Service) StatsHeatmap(ctx context.Context, user *models.User, year *i
 	}
 	y, m, d := svc.now().In(loc).Date()
 	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
-	rng := dayRange{From: time.Date(y-1, m, d+1, 0, 0, 0, 0, time.UTC).Format(time.DateOnly), To: today}
+	// The last 12 months begin a year back from tomorrow, so a leap day
+	// begins on March 1 rather than losing it to February 29 rolling over.
+	from := time.Date(y, m, d+1, 0, 0, 0, 0, time.UTC).AddDate(-1, 0, 0)
+	rng := dayRange{From: from.Format(time.DateOnly), To: today}
 	if year != nil {
 		rng = yearRange(year)
 	}
@@ -390,7 +393,7 @@ func compareRefs(a, b ReadingStatsBookRef) int {
 
 // ReadThroughSessions lists userID's Reading Sessions of readThroughID, in
 // the order they started. The caller checks the Read-through is theirs.
-func (svc *Service) ReadThroughSessions(ctx context.Context, userID, readThroughID int) (*ListReadThroughSessionsResponse, error) {
+func (svc *Service) ReadThroughSessions(ctx context.Context, userID, readThroughID int) (*ReadThroughSessionsResponse, error) {
 	loc, err := userLocation(ctx, svc.db, userID)
 	if err != nil {
 		return nil, err
@@ -404,7 +407,7 @@ func (svc *Service) ReadThroughSessions(ctx context.Context, userID, readThrough
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	resp := &ListReadThroughSessionsResponse{TimeZone: loc.String(), Items: make([]ReadThroughSession, 0, len(sessions))}
+	resp := &ReadThroughSessionsResponse{TimeZone: loc.String(), Items: make([]ReadThroughSession, 0, len(sessions))}
 	for _, s := range sessions {
 		resp.Items = append(resp.Items, ReadThroughSession{
 			ID:              s.ID,

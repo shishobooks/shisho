@@ -334,7 +334,7 @@ describe("ReadingHistoryPage", () => {
 
     await user.click(
       within(sessions).getByRole("button", {
-        name: "Delete session of Dune on Mar 5, 8:00 AM to 8:45 AM",
+        name: "Delete session of Dune, Mar 5, 8:00 AM to 8:45 AM",
       }),
     );
     const confirm = await screen.findByRole("dialog", {

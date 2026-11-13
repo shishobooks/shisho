@@ -394,14 +394,15 @@ const FinishedSection = ({
   );
 };
 
-// The signed-in user's own reading, summarized for one year or all time.
-// It takes no user, so it never shows anyone else's.
 // The page's tabs, each at its own path; Overview is the bare one.
 const TABS = ["overview", "calendar"] as const;
 type Tab = (typeof TABS)[number];
 const isTab = (value: string): value is Tab =>
   (TABS as readonly string[]).includes(value);
 
+// The signed-in user's own reading, summarized for one year or all time on
+// Overview and day by day on Calendar. It takes no user, so it never shows
+// anyone else's.
 const ReadingStatsPage = () => {
   usePageTitle("Reading Stats");
   const { tab: tabParam } = useParams<{ tab?: string }>();
@@ -491,6 +492,7 @@ const ReadingStatsPage = () => {
   const changeTab = (value: string) => {
     navigate(
       value === "overview" ? "/reading-stats" : `/reading-stats/${value}`,
+      { preventScrollReset: true },
     );
   };
 
@@ -591,8 +593,8 @@ const ReadingStatsPage = () => {
             {renderBody()}
             {stats?.places.some((place) => place.source !== "web_reader") && (
               <p className="mt-6 text-xs text-muted-foreground">
-                Kobo and KOReader don't time your reading the way the Shisho
-                reader does, so time from them is estimated.
+                Kobo and KOReader don't time your reading the way Shisho's web
+                reader and player do, so time from them is estimated.
               </p>
             )}
           </TabsContent>

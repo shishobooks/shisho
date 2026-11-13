@@ -7,8 +7,8 @@ import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 import type {
   BookReadingResponse,
-  ListReadThroughSessionsResponse,
   ReadThrough,
+  ReadThroughSessionsResponse,
 } from "@/types";
 
 import ReadingHistory from "./ReadingHistory";
@@ -38,7 +38,7 @@ const reading: BookReadingResponse = {
   positions: [],
 };
 
-const sessions: ListReadThroughSessionsResponse = {
+const sessions: ReadThroughSessionsResponse = {
   time_zone: "UTC",
   items: [
     {

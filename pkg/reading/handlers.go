@@ -504,8 +504,8 @@ func (h *handler) listStatsFinished(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
 }
 
-// statsHeatmap returns the caller's reading for a year, or the year up to
-// today, a day at a time. Like stats, it takes no user.
+// statsHeatmap returns the caller's reading for a year, or the last 12
+// months, a day at a time. Like stats, it takes no user.
 func (h *handler) statsHeatmap(c echo.Context) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {
