@@ -83,7 +83,7 @@ If you're signed in to several servers, each gets the reading for every book it 
 
 The plugin sends the time KOReader's statistics recorded on each page, so your reading time in Shisho is measured, not estimated. [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) covers how it becomes reading sessions and which Read-through each belongs to. Reading a book you've never read, or one on To Read, starts its Read-through on the day you read it, even when that reading reaches Shisho days later.
 
-Deleting a Read-through in Shisho stays deleted: the plugin's next sync doesn't bring back its reading, even though KOReader still has it. Deleting or resetting statistics in KOReader changes nothing in Shisho.
+Deleting a [reading session](./reading-stats.md#calendar) or a Read-through in Shisho stays deleted: the plugin's next sync doesn't bring back its reading, even though KOReader still has it, and reading within ten minutes of a deleted session is left out too. Deleting or resetting statistics in KOReader changes nothing in Shisho.
 
 Reading time needs KOReader's statistics, which are on by default: **Enabled** under **Tools > Reading statistics**. With statistics turned off, the plugin's menu and **Sync now** say that reading time won't sync, and your place still does.
 
