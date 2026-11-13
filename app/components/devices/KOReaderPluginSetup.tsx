@@ -1,5 +1,5 @@
 import { Download, KeyRound } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import Disclosure from "@/components/devices/Disclosure";
 import { Button } from "@/components/ui/button";
@@ -164,8 +164,10 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
           {KOREADER_PLUGIN_FOLDERS.map(({ platform, folder }) => (
             <div className="contents" key={platform}>
               <dt className="text-muted-foreground">{platform}</dt>
-              <dd className="min-w-0 break-all">
-                <code className="rounded bg-muted px-1">{folder}</code>
+              <dd className="min-w-0">
+                <code className="rounded bg-muted px-1">
+                  <FolderPath path={folder} />
+                </code>
               </dd>
             </div>
           ))}
@@ -187,6 +189,19 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
     </div>
   );
 };
+
+// FolderPath lets a long folder wrap only after a slash, never mid-name.
+const FolderPath = ({ path }: { path: string }) =>
+  path.split("/").map((part, i) => (
+    <Fragment key={i}>
+      {i > 0 && (
+        <>
+          /<wbr />
+        </>
+      )}
+      {part}
+    </Fragment>
+  ));
 
 // PluginStatus says when the Device last synced through the plugin, or,
 // before its first sync, when it last connected. Once it syncs, Shisho
