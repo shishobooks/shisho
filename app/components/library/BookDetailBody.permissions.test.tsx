@@ -66,7 +66,7 @@ const requestedPaths = async (
         return { enabled: true, require_expiration: false };
       }
       return path.startsWith("/reading/books/")
-        ? { read_throughs: [], positions: [] }
+        ? { read_throughs: [], session_counts: {}, positions: [] }
         : [];
     });
   render(

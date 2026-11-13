@@ -26,6 +26,7 @@ const reading = (
   rating: null,
   on_to_read: false,
   read_throughs: [],
+  session_counts: {},
   positions: [],
   ...overrides,
 });
@@ -56,7 +57,7 @@ const renderControls = (initial: BookReadingResponse) => {
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>
         <BookReadingControls bookId={7} />
-        <ReadingHistory bookId={7} />
+        <ReadingHistory bookId={7} title="Dune" />
       </MemoryRouter>
     </QueryClientProvider>,
   );

@@ -17,7 +17,10 @@ type BookReadingResponse struct {
 	OnToRead     bool                  `json:"on_to_read"`
 	ToReadPlace  *int                  `json:"to_read_place" tstype:"number | null"` // 1-based place on To Read as the To Read page shows it, among Books in libraries the user can reach
 	ReadThroughs []*models.ReadThrough `json:"read_throughs" tstype:"ReadThrough[]"`
-	PageFlow     *string               `json:"page_flow" tstype:"PageFlow | null"` // The flow chosen for the Page-based reader; null lets the reader pick
+	// SessionCounts is how many Reading Sessions each Read-through has, by
+	// its id.
+	SessionCounts map[int]int `json:"session_counts"`
+	PageFlow      *string     `json:"page_flow" tstype:"PageFlow | null"` // The flow chosen for the Page-based reader; null lets the reader pick
 	// Progress is how far through the Book the user is, from 0 to 1: the
 	// furthest of its main Files' positions, while a Read-through is underway.
 	Progress *float64 `json:"progress" tstype:"number | null"`

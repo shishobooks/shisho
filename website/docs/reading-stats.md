@@ -25,7 +25,7 @@ Reading and listening time includes every session in the range, whether or not i
 
 Time is split into days in your time zone, under **Preferences > Reading > Time zone**, or in UTC while it's unset. A session that runs past midnight is split between the two days. Changing your time zone moves time to the days it fell on in the new zone, but never moves a read's start or end date.
 
-**Kobo and KOReader time is estimated.** Neither device times your reading the way the Shisho reader does; [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains how Shisho estimates it.
+**Kobo and KOReader time is estimated.** Neither device times your reading the way Shisho's web reader and player do; [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains how Shisho estimates it.
 
 ## Charts and Breakdowns
 
@@ -33,7 +33,7 @@ Time is split into days in your time zone, under **Preferences > Reading > Time 
 - **Genres**, **Tags**, and **Authors**: how many books you finished under each, most first. A book with several genres counts once under each. These use the book's current genres, tags, and authors.
 - **Kind**: how many books you finished as ebooks, comics, or audiobooks, from the files you read them in. A finished read with no recorded time counts under the kinds of its book's files, and as **Unknown** when those don't say either.
 - **Ratings**: how many of the books you finished have each rating.
-- **Where you read**: reading and listening time in the Shisho reader and on each of your devices, by name. Time from a device you've since removed, or recorded before Shisho kept track of which device it came from, shows as **Kobo** or **KOReader**.
+- **Where you read**: reading time in the **Web reader**, listening time in the **Web player**, and time on each of your devices, by name. Time from a device you've since removed, or recorded before Shisho kept track of which device it came from, shows as **Kobo** or **KOReader**.
 
 Each breakdown shows its first few rows. **Show all** lists every one in a scrolling list with a search box, so even a library with hundreds of tags stays easy to browse.
 

@@ -41,7 +41,7 @@ import {
   textOn,
   type DayLane,
 } from "@/utils/readingCalendar";
-import { SOURCE_LABELS } from "@/utils/readingStats";
+import { sessionSourceLabel } from "@/utils/readingStats";
 
 /** A calendar month, 1 to 12. */
 export interface YearMonth {
@@ -603,8 +603,7 @@ const sessionDetails = (
     `${formatDayTime(session.started_at, day, timeZone)} to ${formatDayTime(session.ended_at, day, timeZone)}`,
     formatDuration(session.seconds),
     `${percent(session.start_percentage)} to ${percent(session.end_percentage)}`,
-    session.kind === "listening" ? "Listening" : null,
-    SOURCE_LABELS[session.source] + (session.measured ? "" : " (estimated)"),
+    sessionSourceLabel(session),
   ]
     .filter((part): part is string => part !== null)
     .join(" · ");

@@ -165,6 +165,7 @@ vi.mock("@/hooks/queries/reading", () => ({
       rating: 4,
       on_to_read: false,
       positions: readingPositions.current,
+      session_counts: {},
       read_throughs: [
         {
           id: 1,

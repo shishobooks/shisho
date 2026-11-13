@@ -328,7 +328,7 @@ describe("ReadingHistoryPage", () => {
     });
     // 01:30 UTC on March 2 is still March 1 in Chicago.
     expect(sessions).toHaveTextContent(
-      "Mar 1, 7:30 PM to 8:30 PM · 1h 0m · 0% to 20% · Shisho reader",
+      "Mar 1, 7:30 PM to 8:30 PM · 1h 0m · 0% to 20% · Web reader",
     );
     expect(sessions).toHaveTextContent("Kobo (estimated)");
 

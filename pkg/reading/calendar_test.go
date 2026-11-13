@@ -545,3 +545,23 @@ func TestHistory_EachReadThroughCountsItsSessions(t *testing.T) {
 	}
 	assert.Equal(t, map[string]int{"Dune": 2, "Emma": 0}, counts)
 }
+
+func TestSessions_ABooksReadingRecordCountsEachReadThroughsSessions(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	dune := createBook(t, f.db, "Dune")
+	first := f.finished(dune, "2026-01-01", "2026-01-05")
+	again := f.finished(dune, "2026-03-01", "2026-03-02")
+	for _, day := range []string{"2026-01-01", "2026-01-02", "2026-01-03"} {
+		f.session(sessionSpec{readThrough: first, start: at(t, "UTC", day+" 08:00"), end: at(t, "UTC", day+" 09:00")})
+	}
+	// Another user's Session of the same Book isn't counted.
+	other := createUser(t, f.db, "other", 2)
+	seedSession(t, f.db, other, sessionSpec{readThrough: seedReadThrough(t, f.db, other, dune, "2026-01-01", "2026-01-02", models.ReadThroughOutcomeFinished), start: at(t, "UTC", "2026-01-01 08:00"), end: at(t, "UTC", "2026-01-01 09:00")})
+
+	rec := f.api.do(http.MethodGet, fmt.Sprintf("/books/%d", dune.ID), nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp BookReadingResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, map[int]int{first.ID: 3, again.ID: 0}, resp.SessionCounts)
+}

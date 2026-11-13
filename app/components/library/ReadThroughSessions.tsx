@@ -14,7 +14,7 @@ import { isDemoModeError, toastRequestError } from "@/libraries/api";
 import type { ReadThroughSession } from "@/types";
 import { formatDayTime, formatDuration, formatShortDay } from "@/utils/format";
 import { dayIn } from "@/utils/readingCalendar";
-import { SOURCE_LABELS } from "@/utils/readingStats";
+import { sessionSourceLabel } from "@/utils/readingStats";
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
 
@@ -88,9 +88,7 @@ const ReadThroughSessions = ({
                 sessionWhen(session, data.time_zone),
                 formatDuration(session.seconds),
                 `${percent(session.start_percentage)} to ${percent(session.end_percentage)}`,
-                session.kind === "listening" ? "Listening" : null,
-                SOURCE_LABELS[session.source] +
-                  (session.measured ? "" : " (estimated)"),
+                sessionSourceLabel(session),
               ]
                 .filter((part): part is string => part !== null)
                 .join(" · ")}

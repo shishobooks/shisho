@@ -21,7 +21,7 @@ import {
   formatMonthName,
   formatRating,
 } from "@/utils/format";
-import { SOURCE_LABELS, type CountRow } from "@/utils/readingStats";
+import { placeRows, type CountRow, type PlaceRow } from "@/utils/readingStats";
 
 // Reading and listening keep the same colours on every chart.
 const READING_BAR = "bg-reading";
@@ -512,10 +512,7 @@ export const CountList = ({
   );
 };
 
-const placeLabel = (place: ReadingStatsPlace) =>
-  place.device_name ?? SOURCE_LABELS[place.source];
-
-const placeTime = (place: ReadingStatsPlace) => {
+const placeTime = (place: PlaceRow) => {
   const parts: string[] = [];
   if (place.reading_seconds > 0)
     parts.push(`${formatDuration(place.reading_seconds)} reading`);
@@ -525,25 +522,26 @@ const placeTime = (place: ReadingStatsPlace) => {
 };
 
 export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {
-  if (places.length === 0) {
+  const rows = placeRows(places);
+  if (rows.length === 0) {
     return <EmptyNote>No reading time recorded.</EmptyNote>;
   }
   const max = Math.max(
-    ...places.map((p) => p.reading_seconds + p.listening_seconds),
+    ...rows.map((p) => p.reading_seconds + p.listening_seconds),
   );
   return (
     <>
       <Legend />
       <ul className="space-y-2">
-        {places.map((place, i) => (
+        {rows.map((place, i) => (
           // Two Devices can share a name, so the place in the list keys it.
           <li
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 text-sm"
-            key={`${i}-${place.source}-${place.device_name ?? ""}`}
+            key={`${i}-${place.label}`}
             title={placeTime(place)}
           >
             <TruncatedText className="min-w-0 truncate">
-              {placeLabel(place)}
+              {place.label}
             </TruncatedText>
             <span className="text-right text-xs tabular-nums text-muted-foreground">
               {placeTime(place)}

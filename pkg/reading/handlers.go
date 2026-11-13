@@ -129,16 +129,25 @@ func (h *handler) buildBookReadingResponse(c echo.Context, user *models.User, bo
 		}
 		place = &p
 	}
+	counts, err := h.readingService.sessionCounts(ctx, reading.ReadThroughs)
+	if err != nil {
+		return BookReadingResponse{}, err
+	}
+	sessionCounts := make(map[int]int, len(reading.ReadThroughs))
+	for _, rt := range reading.ReadThroughs {
+		sessionCounts[rt.ID] = counts[rt.ID]
+	}
 	resp := BookReadingResponse{
-		BookID:       bookID,
-		Status:       reading.Status,
-		OnToRead:     reading.OnToRead,
-		ToReadPlace:  place,
-		ReadThroughs: reading.ReadThroughs,
-		PageFlow:     reading.PageFlow,
-		Positions:    reading.Positions,
-		Progress:     reading.Progress,
-		LastReadAt:   reading.LastReadAt,
+		BookID:        bookID,
+		SessionCounts: sessionCounts,
+		Status:        reading.Status,
+		OnToRead:      reading.OnToRead,
+		ToReadPlace:   place,
+		ReadThroughs:  reading.ReadThroughs,
+		PageFlow:      reading.PageFlow,
+		Positions:     reading.Positions,
+		Progress:      reading.Progress,
+		LastReadAt:    reading.LastReadAt,
 	}
 	resp.Rating = RatingStars(reading.RatingUnits)
 	return resp, nil

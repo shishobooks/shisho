@@ -690,7 +690,7 @@ describe("ReadingStatsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows reading and listening time apart for each place", async () => {
+  it("shows the web reader and the web player as places of their own", async () => {
     renderPage({
       stats: (year) => ({
         ...busyStats(year),
@@ -707,7 +707,11 @@ describe("ReadingStatsPage", () => {
     const places = await screen.findByRole("region", {
       name: "Where you read",
     });
-    expect(places).toHaveTextContent("1h 0m reading, 20m listening");
+    const rows = within(places).getAllByRole("listitem");
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringMatching(/^Web reader1h 0m reading/),
+      expect.stringMatching(/^Web player20m listening/),
+    ]);
   });
 
   describe("heatmap and calendar", () => {
