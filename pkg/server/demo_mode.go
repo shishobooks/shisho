@@ -6,8 +6,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/demo"
 	"github.com/shishobooks/shisho/pkg/errcodes"
-	"github.com/shishobooks/shisho/pkg/reading"
 )
 
 // deniedDownloads are the explicit download routes. They stay closed to HEAD
@@ -43,12 +43,12 @@ func demoModeMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
-// demoDateShiftMiddleware moves the demo's reading dates on the first
+// demoDateShiftMiddleware moves the demo's dates on the first
 // request of each UTC day, so the latest reading stays on yesterday while a
 // suspended Machine resumes without restarting. The shift finishes even if
 // the request that started it is canceled, since it won't run again that
 // day. Stale dates beat no demo, so a failure only logs.
-func demoDateShiftMiddleware(shifter *reading.DemoDateShifter) echo.MiddlewareFunc {
+func demoDateShiftMiddleware(shifter *demo.DateShifter) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			logDemoDateShift(shifter.Refresh(context.WithoutCancel(c.Request().Context())))
@@ -62,8 +62,8 @@ func demoDateShiftMiddleware(shifter *reading.DemoDateShifter) echo.MiddlewareFu
 func logDemoDateShift(days int, err error) {
 	switch {
 	case err != nil:
-		logger.New().Err(err).Error("failed to shift demo reading dates")
+		logger.New().Err(err).Error("failed to shift demo dates")
 	case days != 0:
-		logger.New().Info("shifted demo reading dates", logger.Data{"days": days})
+		logger.New().Info("shifted demo dates", logger.Data{"days": days})
 	}
 }

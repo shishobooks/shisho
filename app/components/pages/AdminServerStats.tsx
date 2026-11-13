@@ -22,6 +22,7 @@ import {
   useServerStats,
   useServerStatsReading,
 } from "@/hooks/queries/serverStats";
+import { useIsPhone } from "@/hooks/useIsPhone";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { cn } from "@/libraries/utils";
 import type {
@@ -309,69 +310,139 @@ const showsAllLibraries = (stats: StatsResponse) =>
   stats.libraries.reduce((sum, lib) => sum + lib.size_bytes, 0) !==
     stats.totals.size_bytes;
 
-const Libraries = ({ stats }: { stats: StatsResponse }) => (
-  <Section
-    description="Size is the stored size of every file, supplements included."
-    title="Libraries"
-  >
-    {stats.libraries.length === 0 ? (
-      <p className="text-sm text-muted-foreground">
-        {stats.totals.books > 0 || stats.totals.size_bytes > 0
-          ? "No libraries you can access."
-          : "No libraries yet."}
-      </p>
-    ) : (
-      // The table scrolls on its own on a phone, not the page.
-      <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-muted-foreground">
-              <th className="py-2 pr-3 text-left font-medium" scope="col">
-                Library
-              </th>
-              <th className="py-2 px-3 text-right font-medium" scope="col">
-                Books
-              </th>
-              <th className="py-2 px-3 text-left font-medium" scope="col">
-                Files
-              </th>
-              <th className="py-2 px-3 text-right font-medium" scope="col">
-                Series
-              </th>
-              <th className="py-2 px-3 text-right font-medium" scope="col">
-                People
-              </th>
-              <th className="py-2 px-3 text-right font-medium" scope="col">
-                Genres
-              </th>
-              <th className="py-2 px-3 text-right font-medium" scope="col">
-                Tags
-              </th>
-              <th className="py-2 px-3 text-right font-medium" scope="col">
-                Publishers
-              </th>
-              <th className="py-2 px-3 text-right font-medium" scope="col">
-                Size
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {stats.libraries.map((library) => (
-              <LibraryRow
-                counts={library}
-                key={library.id}
-                name={library.name}
-              />
-            ))}
-            {showsAllLibraries(stats) && (
-              <LibraryRow counts={stats.totals} isTotal name="All libraries" />
-            )}
-          </tbody>
-        </table>
-      </div>
-    )}
-  </Section>
-);
+// A library's counts as a card, for a phone, where the table's nine
+// columns would leave most of them scrolled out of sight.
+const LibraryCard = ({
+  name,
+  counts,
+  isTotal = false,
+}: {
+  name: string;
+  counts: ContentCounts;
+  isTotal?: boolean;
+}) => {
+  const figures: [string, string][] = [
+    ["Books", counts.books.toLocaleString()],
+    ["Series", counts.series.toLocaleString()],
+    ["People", counts.persons.toLocaleString()],
+    ["Genres", counts.genres.toLocaleString()],
+    ["Tags", counts.tags.toLocaleString()],
+    ["Publishers", counts.publishers.toLocaleString()],
+    ["Size", formatFileSize(counts.size_bytes)],
+  ];
+  return (
+    <li
+      aria-label={name}
+      className={cn(
+        "space-y-2 py-3",
+        isTotal ? "border-t-2 border-border" : "border-t border-border",
+      )}
+    >
+      <h3 className="break-words text-sm font-semibold">{name}</h3>
+      <FilesBreakdown counts={counts} name={name} />
+      <dl className="grid grid-cols-3 gap-x-4 gap-y-2">
+        {figures.map(([label, value]) => (
+          <div className="min-w-0" key={label}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd
+              className={cn(
+                "text-sm tabular-nums break-words",
+                isTotal && "font-semibold",
+              )}
+            >
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </li>
+  );
+};
+
+const Libraries = ({ stats }: { stats: StatsResponse }) => {
+  const isPhone = useIsPhone();
+  return (
+    <Section
+      description="Size is the stored size of every file, supplements included."
+      title="Libraries"
+    >
+      {stats.libraries.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {stats.totals.books > 0 || stats.totals.size_bytes > 0
+            ? "No libraries you can access."
+            : "No libraries yet."}
+        </p>
+      ) : isPhone ? (
+        <ul aria-label="Libraries">
+          {stats.libraries.map((library) => (
+            <LibraryCard
+              counts={library}
+              key={library.id}
+              name={library.name}
+            />
+          ))}
+          {showsAllLibraries(stats) && (
+            <LibraryCard counts={stats.totals} isTotal name="All libraries" />
+          )}
+        </ul>
+      ) : (
+        // Between a phone and a wide screen, the table scrolls on its own,
+        // not the page.
+        <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-muted-foreground">
+                <th className="py-2 pr-3 text-left font-medium" scope="col">
+                  Library
+                </th>
+                <th className="py-2 px-3 text-right font-medium" scope="col">
+                  Books
+                </th>
+                <th className="py-2 px-3 text-left font-medium" scope="col">
+                  Files
+                </th>
+                <th className="py-2 px-3 text-right font-medium" scope="col">
+                  Series
+                </th>
+                <th className="py-2 px-3 text-right font-medium" scope="col">
+                  People
+                </th>
+                <th className="py-2 px-3 text-right font-medium" scope="col">
+                  Genres
+                </th>
+                <th className="py-2 px-3 text-right font-medium" scope="col">
+                  Tags
+                </th>
+                <th className="py-2 px-3 text-right font-medium" scope="col">
+                  Publishers
+                </th>
+                <th className="py-2 px-3 text-right font-medium" scope="col">
+                  Size
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {stats.libraries.map((library) => (
+                <LibraryRow
+                  counts={library}
+                  key={library.id}
+                  name={library.name}
+                />
+              ))}
+              {showsAllLibraries(stats) && (
+                <LibraryRow
+                  counts={stats.totals}
+                  isTotal
+                  name="All libraries"
+                />
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Section>
+  );
+};
 
 const pathKindLabel: Record<VolumePathKind, string> = {
   library: "Library",

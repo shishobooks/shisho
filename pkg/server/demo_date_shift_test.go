@@ -9,8 +9,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/demo"
 	"github.com/shishobooks/shisho/pkg/models"
-	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
@@ -60,7 +60,7 @@ func TestDemoDateShiftMiddleware_MovesTheReadingOnTheFirstRequestOfADay(t *testi
 	db := testdb.New(t)
 	seedDemoSession(t, db, time.Date(2026, 3, 10, 21, 0, 0, 0, time.UTC))
 	now := time.Date(2026, 11, 13, 4, 0, 0, 0, time.UTC)
-	shifter := reading.NewDemoDateShifter(db, func() time.Time { return now })
+	shifter := demo.NewDateShifter(db, func() time.Time { return now })
 
 	e := echo.New()
 	e.Use(demoDateShiftMiddleware(shifter))

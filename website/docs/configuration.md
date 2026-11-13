@@ -67,10 +67,10 @@ Set `demo_mode: true` or `DEMO_MODE=true` to let visitors browse, search, read, 
 
 Every role loses the administration links and security settings, and gallery size, default sort, and reader preferences are stored in each visitor's browser instead of the server.
 
-Prepare the library and user accounts before enabling Demo Mode. Scans, filesystem monitoring, job processing, and plugin loading are disabled regardless of their other settings. Reader caches, startup database migrations, and the reading date shift below still require writable storage.
+Prepare the library and user accounts before enabling Demo Mode. Scans, filesystem monitoring, job processing, and plugin loading are disabled regardless of their other settings. Reader caches, startup database migrations, and the date shift below still require writable storage.
 
-:::warning[Demo Mode Rewrites Reading Dates]
-At startup, and again on the first request of each new day (UTC), Demo Mode moves every date in the stored reading history by the same number of whole days, so that the latest reading falls on yesterday (UTC). This covers the dates of reads, reading sessions, reading positions, ratings, and To Read, and keeps a prepared demo looking current. The change is written to the database and stays after Demo Mode is turned off. Run Demo Mode only on a copy of the database, or back up `shisho.db` first.
+:::warning[Demo Mode Rewrites Stored Dates]
+At startup, and again on the first request of each new day (UTC), Demo Mode moves every date the database records by the same number of whole days, so that the latest reading falls on yesterday (UTC). That covers reading history, ratings, and To Read, and also when books, files, users, and everything else were added or changed, so a prepared demo looks current as a whole. Publication dates and the file modification times that scans compare against are left alone. The change is written to the database and stays after Demo Mode is turned off. Run Demo Mode only on a copy of the database, or back up `shisho.db` first.
 :::
 
 Hiding the download controls does not stop copying. The readers still need the generated download route, the page images, and the audio stream, so anyone signed in can save any main file by requesting its URL directly: the generated EPUB, CBZ, PDF, or M4B, or the full audiobook from the stream route. Demo Mode is not copy protection; only publish media you have permission to redistribute.

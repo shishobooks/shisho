@@ -615,3 +615,49 @@ describe("AdminServerStats", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("AdminServerStats on a phone", () => {
+  // jsdom has no matchMedia; this one matches only the phone query.
+  beforeEach(() => {
+    setAuth({ permissions: ["config:read"] });
+    query = loaded(stats);
+    readingCalls = [];
+    readingResult = null;
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((media: string) => ({
+        matches: media === "(max-width: 639px)",
+        media,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    return () => vi.unstubAllGlobals();
+  });
+
+  it("lists each library's counts without a table to scroll", () => {
+    renderPage();
+
+    const libraries = section("Libraries");
+    expect(within(libraries).queryByRole("table")).not.toBeInTheDocument();
+    const fiction = within(libraries).getByRole("listitem", {
+      name: "Fiction",
+    });
+    const figure = (label: string) =>
+      within(fiction).getByText(label, { selector: "dt" }).nextElementSibling;
+    expect(figure("Books")).toHaveTextContent("18,307");
+    expect(figure("Series")).toHaveTextContent("210");
+    expect(figure("Publishers")).toHaveTextContent("88");
+    expect(figure("Size")).toHaveTextContent("200 GB");
+    expect(
+      within(fiction).getByRole("list", { name: "Files in Fiction" }),
+    ).toBeInTheDocument();
+    expect(
+      within(libraries).getByRole("listitem", { name: "All libraries" }),
+    ).toHaveTextContent("18,319");
+  });
+});

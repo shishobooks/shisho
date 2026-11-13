@@ -43,7 +43,9 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
       className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-1 sm:gap-4 py-3 border-b border-border last:border-b-0"
       role="group"
     >
-      <div className="flex flex-col gap-1 sm:shrink-0">
+      {/* The description wraps in whatever the value leaves; a long one
+          would otherwise push the value off the row. */}
+      <div className="flex min-w-0 flex-col gap-1 sm:flex-1">
         <span
           className="text-sm font-medium text-foreground sm:whitespace-nowrap"
           id={labelId}
@@ -54,7 +56,7 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
           <p className="text-xs text-muted-foreground">{description}</p>
         )}
       </div>
-      <span className="text-xs sm:text-sm text-muted-foreground font-mono break-words sm:text-right min-w-0">
+      <span className="text-xs sm:text-sm text-muted-foreground font-mono break-words sm:text-right min-w-0 sm:max-w-[50%]">
         {displayValue}
       </span>
     </div>

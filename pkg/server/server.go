@@ -26,6 +26,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/config"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/delivery"
+	"github.com/shishobooks/shisho/pkg/demo"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/ereader"
@@ -84,13 +85,13 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	if cfg.DemoMode {
 		e.Use(demoModeMiddleware)
 		// The Public Demo's database is prepared once and baked into the
-		// image, so its reading is moved to end yesterday before serving,
-		// and again each day after.
-		shifter := reading.NewDemoDateShifter(db, time.Now)
+		// image, so its dates are moved for its reading to end yesterday
+		// before serving, and again each day after.
+		shifter := demo.NewDateShifter(db, time.Now)
 		if days, err := shifter.Refresh(context.Background()); err != nil {
 			logDemoDateShift(0, err)
 		} else {
-			logger.New().Info("shifted demo reading dates", logger.Data{"days": days})
+			logger.New().Info("shifted demo dates", logger.Data{"days": days})
 		}
 		e.Use(demoDateShiftMiddleware(shifter))
 	}
