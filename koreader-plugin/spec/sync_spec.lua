@@ -159,6 +159,71 @@ return {
         assert_eq(#journal:pending("https://a.example"), 0)
     end,
 
+    ["status and Rating changes follow the positions, and are synced once taken in"] = function()
+        local state, journal = setup("https://a.example")
+        journal:recordPosition("doc1", "9", 0.9, 900)
+        local changes = {
+            { id = "c1", type = "status", document = "doc1", status = "complete", previous_status = "reading", day = "2026-11-12" },
+            { id = "c2", type = "rating", document = "doc2", rating = 4, previous_rating = 0, at = 950 },
+        }
+        local store = { synced = { doc1 = { status = "reading" } }, asked = { doc1 = true, doc2 = true } }
+        local post, sent = server()
+        local outcome = Sync.run{ state = state, journal = journal, server = state:find("https://a.example"), post = post,
+            read_pages = rowsFrom({ row(100) }), changes = changes, store = store }
+        assert_eq(outcome, "ok")
+        assert_eq(#sent, 1)
+        assert_eq(sent[1].events[1].type, "position")
+        assert_eq(sent[1].events[2], changes[1])
+        assert_eq(sent[1].events[3], changes[2])
+        assert_eq(store.synced, { doc1 = { status = "complete" }, doc2 = { rating = 4 } })
+        assert_eq(store.asked, {}, "asked about again, in case the server kept its own")
+    end,
+
+    ["a change the server didn't take in stays unsynced"] = function()
+        local state, journal = setup("https://a.example")
+        local store = { synced = { doc1 = { status = "reading" } }, asked = { doc1 = true } }
+        local post = server({ 500 })
+        local outcome = Sync.run{ state = state, journal = journal, server = state:find("https://a.example"), post = post,
+            changes = { { id = "c1", type = "status", document = "doc1", status = "complete", previous_status = "reading" } },
+            store = store }
+        assert_eq(outcome, "error")
+        assert_eq(store.synced.doc1.status, "reading", "the next sync sends it again")
+    end,
+
+    ["pulling states asks about new books outright, then what changed since"] = function()
+        local state = setup("https://a.example")
+        local s = state:find("https://a.example")
+        local store = { synced = {}, asked = { old = true } }
+        local payloads, written = {}, {}
+        local function post(payload)
+            table.insert(payloads, payload)
+            return 200, { states = { { document = "new", status = "complete" }, { document = "changed", status = "reading" } }, cursor = 7000 }
+        end
+        local outcome = Sync.pullStates{ server = s, store = store, documents = { "old", "new", "unknown" }, clock = function() return 900 end,
+            post = post, write = function(pulled, outright) table.insert(written, { pulled.document, outright }) end }
+        assert_eq(outcome, "ok")
+        assert_eq(payloads, { { statuses = { "new", "unknown" } } })
+        assert_eq(written, { { "new", true }, { "changed", false } })
+        assert_eq(store.asked, { old = true, new = true, unknown = 900 }, "one it didn't recognize is asked about later")
+        assert_eq(s.states_cursor, 7000)
+
+        Sync.pullStates{ server = s, store = store, documents = { "old", "new", "unknown" }, clock = function() return 1000 end,
+            post = post, write = function() end }
+        assert_eq(payloads[2], { since = 7000 }, "only what changed")
+    end,
+
+    ["pulling states that fails asks again next time"] = function()
+        local state = setup("https://a.example")
+        local s = state:find("https://a.example")
+        local store = { synced = {}, asked = {} }
+        local outcome = Sync.pullStates{ server = s, store = store, documents = { "new" },
+            post = function() return 401 end, write = function() end }
+        assert_eq(outcome, "needs_login")
+        assert_eq(s.needs_login, true)
+        assert_eq(store.asked, {})
+        assert_eq(s.states_cursor, nil)
+    end,
+
     ["a sync that just ran isn't repeated"] = function()
         assert_eq(Sync.ranRecently(nil, 1000), false)
         assert_eq(Sync.ranRecently(1000, 1000 + Sync.RAN_RECENTLY - 1), true)

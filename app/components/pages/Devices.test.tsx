@@ -360,7 +360,9 @@ describe("DeviceDetail", () => {
     await user.click(why);
     expect(
       screen.getByText(/reading time comes from KOReader's own statistics/),
-    ).toBeInTheDocument();
+    ).toHaveTextContent(
+      /Finishing, pausing, and rating a book in KOReader carry over to Shisho/,
+    );
 
     // Progress sync and OPDS sit in a collapsed section.
     const toggle = screen.getByRole("button", { name: "Without the plugin" });

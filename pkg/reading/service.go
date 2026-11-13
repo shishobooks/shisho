@@ -809,14 +809,16 @@ func (svc *Service) SetRating(ctx context.Context, userID, bookID int, units *in
 	now := time.Now()
 	_, err := svc.db.NewInsert().
 		Model(&models.UserBook{
-			UserID:    userID,
-			BookID:    bookID,
-			CreatedAt: now,
-			UpdatedAt: now,
-			Rating:    units,
+			UserID:          userID,
+			BookID:          bookID,
+			CreatedAt:       now,
+			UpdatedAt:       now,
+			Rating:          units,
+			RatingUpdatedAt: &now,
 		}).
 		On("CONFLICT (user_id, book_id) DO UPDATE").
 		Set("rating = EXCLUDED.rating").
+		Set("rating_updated_at = EXCLUDED.rating_updated_at").
 		Set("updated_at = EXCLUDED.updated_at").
 		Exec(ctx)
 	return errors.WithStack(err)
@@ -862,7 +864,8 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 		args  []any
 	}{
 		{`UPDATE user_books AS t
-			SET rating = COALESCE(t.rating, s.rating),
+			SET rating_updated_at = CASE WHEN t.rating IS NULL THEN s.rating_updated_at ELSE t.rating_updated_at END,
+				rating = COALESCE(t.rating, s.rating),
 				to_read_position = COALESCE(t.to_read_position, s.to_read_position),
 				page_flow = COALESCE(t.page_flow, s.page_flow)
 			FROM user_books AS s

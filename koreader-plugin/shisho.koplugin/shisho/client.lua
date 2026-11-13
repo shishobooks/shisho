@@ -90,6 +90,13 @@ function Client:pull(documents, clock)
     return self:post("/koreader/plugin/pull", { clock = clock or os.time(), documents = documents })
 end
 
+-- pullStates asks for the statuses and Ratings to write to the device
+-- (shisho/sync's pullStates makes payload).
+function Client:pullStates(payload, clock)
+    payload.clock = clock or os.time()
+    return self:post("/koreader/plugin/pull", payload)
+end
+
 -- download saves the server's plugin zip to path. Returns the status, or
 -- nil and an error when path can't be written.
 function Client:download(path)

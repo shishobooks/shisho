@@ -5,13 +5,16 @@ hasn't acknowledged, in bounded batches. Each batch is acknowledged whole,
 and only then does the cursor move and the entries count as sent, so a sync
 cut off partway resumes without sending anything twice.
 
-Journal entries go only with the last batch of rows. The server places a
-session by its time and lets a position start a Read-through, so a position
-from the end of a long offline stretch must not arrive before the sessions
-that led up to it. No UI.
+Journal entries go only with the last batch of rows, and status and Rating
+changes after them. The server places a session by its time and lets a
+position start a Read-through, so a position from the end of a long offline
+stretch must not arrive before the sessions that led up to it, and a reread
+the device started must not arrive before its first pages, which the server
+then places on it. No UI.
 ]]
 local Responses = require("shisho/responses")
 local Statistics = require("shisho/statistics")
+local Summaries = require("shisho/summaries")
 
 local Sync = {}
 
@@ -141,6 +144,16 @@ function Sync.onConnected(opts)
     return { check = not opts.recent_check, sync = not opts.ran_recently }
 end
 
+-- noteRefusal marks server as refusing the sign-in or the plugin, which
+-- waits for the person, unlike a network failure.
+local function noteRefusal(server, outcome)
+    if outcome == "needs_login" then
+        server.needs_login = true
+    elseif outcome == "update_required" then
+        server.update_required = true
+    end
+end
+
 local function payloadRow(row)
     return {
         document = row.document,
@@ -160,6 +173,9 @@ run syncs opts.server. opts:
   is off, in which case only the journal goes
 - clock(): the device's clock, os.time by default
 - batch: rows per upload
+- changes: status and Rating changes for this server (Summaries.collect)
+- store: what was synced with this server (Summaries:server), where each
+  change the server takes in is noted
 
 Returns the outcome, as Responses.classify names it, and the number of
 rows and events sent.
@@ -168,6 +184,8 @@ function Sync.run(opts)
     local state, journal, server = opts.state, opts.journal, opts.server
     local batch = opts.batch or Sync.BATCH
     local clock = opts.clock or os.time
+    local changes = opts.changes or {}
+    local next_change = 1
     local sent_pages, sent_events = 0, 0
     while true do
         local rows = {}
@@ -176,9 +194,16 @@ function Sync.run(opts)
             if not read then return "error", sent_pages, sent_events, err end
             rows = read
         end
-        -- Positions follow every row, so they go only once the rows run out.
+        -- Positions follow every row, so they go only once the rows run out,
+        -- and status and Rating changes follow the positions.
         local last_rows = #rows < batch
         local events = last_rows and journal:pending(server.url, Sync.EVENT_BATCH) or {}
+        local batch_changes = {}
+        while last_rows and #events < Sync.EVENT_BATCH and next_change <= #changes do
+            table.insert(events, changes[next_change])
+            table.insert(batch_changes, changes[next_change])
+            next_change = next_change + 1
+        end
         if #rows == 0 and #events == 0 then break end
 
         local payload = { clock = clock() }
@@ -191,11 +216,8 @@ function Sync.run(opts)
         local status, body = opts.post(payload)
         local outcome = Responses.classify(status, body)
         if outcome ~= "ok" then
-            if outcome == "needs_login" then
-                server.needs_login = true
-            elseif outcome == "update_required" then
-                server.update_required = true
-            end
+            -- Changes not taken in are worked out again by the next sync.
+            noteRefusal(server, outcome)
             state:flush()
             return outcome, sent_pages, sent_events
         end
@@ -206,6 +228,9 @@ function Sync.run(opts)
         local ids = {}
         for __, event in ipairs(events) do table.insert(ids, event.id) end
         journal:acknowledge(server.url, ids)
+        for __, change in ipairs(batch_changes) do
+            Summaries.acknowledge(opts.store, change)
+        end
         server.needs_login = nil
         sent_pages = sent_pages + #rows
         sent_events = sent_events + #events
@@ -216,6 +241,52 @@ function Sync.run(opts)
     journal:prune()
     state:flush()
     return "ok", sent_pages, sent_events
+end
+
+--[[--
+pullStates asks opts.server for the statuses and Ratings the device should
+hold, and passes each state to opts.write(state, outright): every book whose
+status or Rating changed since its last pull, and, outright, the books in
+opts.documents it hasn't been asked about (Summaries.toAsk). opts.store is
+what was synced with the server (Summaries:server), opts.post(payload) sends
+a pull, and opts.clock() is the device's clock. Returns the outcome.
+]]
+function Sync.pullStates(opts)
+    local server, store = opts.server, opts.store
+    local clock = opts.clock or os.time
+    local first = true
+    while true do
+        local now = clock()
+        local ask = Summaries.toAsk(store.asked, opts.documents or {}, now)
+        if not first and #ask == 0 then break end
+        local payload = {}
+        if #ask > 0 then payload.statuses = ask end
+        if first and server.states_cursor then payload.since = server.states_cursor end
+        local status, body = opts.post(payload)
+        local outcome = Responses.classify(status, body)
+        if outcome ~= "ok" then
+            noteRefusal(server, outcome)
+            return outcome
+        end
+        local outright, recognized = {}, {}
+        for __, document in ipairs(ask) do outright[document] = true end
+        for __, pulled in ipairs(type(body.states) == "table" and body.states or {}) do
+            if type(pulled) == "table" and pulled.document then
+                recognized[pulled.document] = true
+                opts.write(pulled, outright[pulled.document] or false)
+            end
+        end
+        -- A book the server didn't recognize is asked about again later.
+        for __, document in ipairs(ask) do
+            store.asked[document] = recognized[document] or now
+        end
+        if first and tonumber(body.cursor) then
+            server.states_cursor = tonumber(body.cursor)
+        end
+        first = false
+        if #ask < Summaries.ASK_BATCH then break end
+    end
+    return "ok"
 end
 
 return Sync

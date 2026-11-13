@@ -112,6 +112,9 @@ type PluginReport struct {
 	// sleep screen, if any.
 	LeftOnScreen string   `json:"left_on_screen"`
 	Problems     []string `json:"problems"`
+	// Sidecars is the status and Rating each book in the books directory
+	// that has a sidecar holds, by file name.
+	Sidecars map[string]SidecarSummary `json:"sidecars"`
 	// Tools is what KOReader's Tools tab lists, in order, after plugin-menu,
 	// and Menu what the Shisho menu does, with a submenu's items as
 	// "Parent > Item".
@@ -142,6 +145,14 @@ type PluginServer struct {
 		RowID int64 `json:"rowid"`
 	} `json:"stats_cursor"`
 	LastSynced int64 `json:"last_synced"`
+}
+
+// SidecarSummary is a book's status and Rating as its sidecar holds them,
+// and the day its status last changed.
+type SidecarSummary struct {
+	Status   string `json:"status"`
+	Rating   int    `json:"rating"`
+	Modified string `json:"modified"`
 }
 
 // StatRow is one row of KOReader's page_stat_data, by its book's document
@@ -194,10 +205,14 @@ type Args struct {
 	StatisticsOff bool
 	SyncNow       bool
 	// Turns is how many pages plugin-read turns, and Close and Sleep close the
-	// book or put the device to sleep afterwards.
-	Turns int
-	Close bool
-	Sleep bool
+	// book or put the device to sleep afterwards. Before that, MarkFinished
+	// marks the book finished as the end-of-book prompt does, and Stars rates
+	// it as Book status does.
+	Turns        int
+	Close        bool
+	Sleep        bool
+	MarkFinished bool
+	Stars        int
 	// Fire sets off the wake-up alarm plugin-daily set.
 	Fire bool
 	// WifiFails makes connecting fail, as with a router that's off, for
@@ -292,6 +307,12 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.Close {
 		payload["close"] = true
+	}
+	if a.MarkFinished {
+		payload["mark_finished"] = true
+	}
+	if a.Stars > 0 {
+		payload["stars"] = a.Stars
 	}
 	if a.Sleep {
 		payload["sleep"] = true

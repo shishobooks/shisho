@@ -77,13 +77,15 @@ const (
 type UserBook struct {
 	bun.BaseModel `bun:"table:user_books,alias:ub" tstype:"-"`
 
-	UserID         int       `bun:",pk" json:"-"`
-	BookID         int       `bun:",pk" json:"book_id"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-	Rating         *int      `json:"rating_units"`
-	ToReadPosition *int      `json:"to_read_position"`
-	PageFlow       *string   `json:"page_flow" tstype:"PageFlow | null"`
+	UserID    int       `bun:",pk" json:"-"`
+	BookID    int       `bun:",pk" json:"book_id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	Rating    *int      `json:"rating_units"`
+	// RatingUpdatedAt is when Rating last changed, set or cleared.
+	RatingUpdatedAt *time.Time `json:"-"`
+	ToReadPosition  *int       `json:"to_read_position"`
+	PageFlow        *string    `json:"page_flow" tstype:"PageFlow | null"`
 }
 
 // Reading sources: what reported a Reading Position update or a Reading
