@@ -11,3 +11,5 @@ The image runs the Go binary as its only process, with no reverse proxy or super
 ## Public Demo
 
 Demo media and the prepared database live only in the `shishobooks/demo-corpus` repository; never commit them here (`demo/corpus/` is a gitignored CI checkout). `demo/README.md` covers authoring and operator setup, and `docs/agents/backend/demo-mode.md` covers Demo Mode behavior.
+
+Corpus work for an unreleased feature doesn't wait for a release, even though the authoring Compose file runs the pinned one. Migrate a copy of the corpus database with this repository's migrator (`DATABASE_FILE_PATH=<corpus>/config/shisho.db JWT_SECRET=x go run ./cmd/migrations migrate`), write to it directly or through a dev build, and check it with a Demo Mode dev build. Only the corpus merge waits: a push to corpus `master` redeploys the latest release, which can't use a database migrated past it, so leave that PR open until the release carrying those migrations is out.
