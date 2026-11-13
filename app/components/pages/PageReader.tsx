@@ -649,7 +649,17 @@ export default function PageReader({
                 <Settings className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-64">
+            <PopoverContent
+              align="end"
+              className="w-64"
+              // In the scrolled flow focus goes back to the pages, not the
+              // gear, so Space and Page Down scroll them again.
+              onCloseAutoFocus={(event) => {
+                if (!scrolled) return;
+                event.preventDefault();
+                mainRef.current?.focus({ preventScroll: true });
+              }}
+            >
               <div className="space-y-4">
                 <div>
                   <p className="text-sm font-medium">
