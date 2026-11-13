@@ -12,18 +12,22 @@ import (
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
-// StatsHeatmap returns user's Session time on each day of the year up to
-// today in their time zone, split at local midnight, and the first day they
-// read anything.
-func (svc *Service) StatsHeatmap(ctx context.Context, user *models.User) (*ReadingStatsHeatmapResponse, error) {
+// StatsHeatmap returns user's Session time on each day of year, or of the
+// year up to today when year is nil, in their time zone and split at local
+// midnight, and the first day they read anything. Neither ends after today.
+func (svc *Service) StatsHeatmap(ctx context.Context, user *models.User, year *int) (*ReadingStatsHeatmapResponse, error) {
 	loc, err := userLocation(ctx, svc.db, user.ID)
 	if err != nil {
 		return nil, err
 	}
 	y, m, d := svc.now().In(loc).Date()
-	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-	rng := dayRange{From: today.AddDate(-1, 0, 1).Format(time.DateOnly), To: today.Format(time.DateOnly)}
-	resp := &ReadingStatsHeatmapResponse{Today: rng.To, From: rng.From, Days: []ReadingStatsDay{}}
+	today := time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
+	rng := dayRange{From: time.Date(y-1, m, d+1, 0, 0, 0, 0, time.UTC).Format(time.DateOnly), To: today}
+	if year != nil {
+		rng = yearRange(year)
+		rng.To = min(rng.To, today)
+	}
+	resp := &ReadingStatsHeatmapResponse{Today: today, From: rng.From, To: rng.To, Days: []ReadingStatsDay{}}
 
 	sessions, err := svc.statsSessions(ctx, user.ID, rng)
 	if err != nil {

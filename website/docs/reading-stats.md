@@ -49,7 +49,7 @@ A book that was deleted from Shisho shows as **Removed from library**, and one i
 
 The **Calendar** tab isn't tied to the range picker.
 
-**Reading by day** is a heatmap of the last year up to today, one square per day, with your total time for the year above it. A day you read or listened is shaded, and the more time you spent, the darker it is. Shades are relative to your own year, so the darkest squares are your busiest days. Point at a square to see its date and time, or select it to open that day in the calendar.
+**Reading by day** is a heatmap of the last 12 months up to today, one square per day, with your total time above it. The picker beside it shows a whole calendar year instead, back to the first year you read in. A day you read or listened is shaded, and the more time you spent, the darker it is. Shades are relative to the year shown, so the darkest squares are your busiest days. Point at a square to see its date and time, or select it to open that day in the calendar.
 
 Under it, a calendar shows one month. It opens on the current month, and its arrows go back to the first month you read in.
 
@@ -58,6 +58,6 @@ Under it, a calendar shows one month. It opens on the current month, and its arr
 - A check marks the day you finished a read. A read you logged by hand, with no recorded time, shows only its check.
 - A book deleted from Shisho still shows, by the title it had, but in a new colour, since nothing links its reads to the book any longer.
 
-Select a day to see it in detail. A timeline across the day's 24 hours has a line for each book, with a block wherever you read it. Below it, each book is listed with its total for the day and each of its sessions: when it started and ended in your time zone, how long it ran that day, how far through the book it took you, and where you read it. A session that ran past midnight shows on both days, with the time spent on each. Books you finished that day are listed too.
+Select a day to see it in detail. A timeline across the day's 24 hours has a line for each book, with a block wherever you read it; point at a block to see its book and times. Below it, each book is listed with its total for the day and each of its sessions: when it started and ended in your time zone, how long it ran that day, how far through the book it took you, and where you read it. A session that ran past midnight shows on both days, with the time spent on each. Books you finished that day are listed too.
 
 You can delete a session that wasn't really reading, such as a book left open overnight. Deleting a session can't be undone: its time leaves your totals, the heatmap, the calendar, and the time shown under [Finished](#finished). To delete one, select the trash can beside it in a day's list and confirm.

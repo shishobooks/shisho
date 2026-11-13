@@ -55,10 +55,13 @@ const share = (value: number, max: number) =>
 
 export const StatsCard = ({
   title,
+  action,
   children,
   className,
 }: {
   title: string;
+  /** A control beside the title, such as a picker for what the card shows. */
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) => (
@@ -66,7 +69,14 @@ export const StatsCard = ({
     aria-label={title}
     className={cn("rounded-md border border-border p-4", className)}
   >
-    <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+    {action ? (
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {action}
+      </div>
+    ) : (
+      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+    )}
     {children}
   </section>
 );

@@ -62,12 +62,12 @@ func calendarDays(resp ReadingStatsCalendarResponse) []string {
 
 func (f *statsFixture) heatmap() ReadingStatsHeatmapResponse {
 	f.t.Helper()
-	return heatmapFor(f.t, f.api)
+	return heatmapFor(f.t, f.api, "")
 }
 
-func heatmapFor(t *testing.T, api *readingAPI) ReadingStatsHeatmapResponse {
+func heatmapFor(t *testing.T, api *readingAPI, query string) ReadingStatsHeatmapResponse {
 	t.Helper()
-	rec := api.do(http.MethodGet, "/stats/heatmap", nil)
+	rec := api.do(http.MethodGet, "/stats/heatmap"+query, nil)
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var resp ReadingStatsHeatmapResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
@@ -107,12 +107,43 @@ func TestHeatmap_HasEachDaysTimeForTheYearUpToToday(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, []string{dayOf(daysAgo(t, chicago, 0, 12, 0)), dayOf(daysAgo(t, chicago, -1, 12, 0))}, resp.Today)
 	assert.Equal(t, today.AddDate(-1, 0, 1).Format(time.DateOnly), resp.From)
+	assert.Equal(t, resp.Today, resp.To)
 	assert.Equal(t, []ReadingStatsDay{
 		{Day: dayOf(lateNight), ReadingSeconds: 1800},
 		{Day: dayOf(nextMorning), ReadingSeconds: 1800, ListeningSeconds: 1200},
 	}, resp.Days, "split at local midnight, and nothing from more than a year ago")
 	require.NotNil(t, resp.FirstDay)
 	assert.Equal(t, dayOf(old), *resp.FirstDay, "the first day counts reading outside the heatmap")
+}
+
+func TestHeatmap_ShowsAWholePastYear(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	f.setTimeZone("America/Chicago")
+	book := createBook(t, f.db, "Dune")
+	file := f.addFile(book, models.FileTypeEPUB)
+	f.session(sessionSpec{file: file, start: at(t, "America/Chicago", "2024-01-01 09:00"), end: at(t, "America/Chicago", "2024-01-01 10:00")})
+	f.session(sessionSpec{file: file, start: at(t, "America/Chicago", "2024-12-31 23:30"), end: at(t, "America/Chicago", "2025-01-01 00:30")})
+
+	resp := heatmapFor(t, f.api, "?year=2024")
+	assert.Equal(t, "2024-01-01", resp.From)
+	assert.Equal(t, "2024-12-31", resp.To)
+	assert.Equal(t, []ReadingStatsDay{
+		{Day: "2024-01-01", ReadingSeconds: 3600},
+		{Day: "2024-12-31", ReadingSeconds: 1800},
+	}, resp.Days)
+	assert.Equal(t, []ReadingStatsDay{{Day: "2025-01-01", ReadingSeconds: 1800}}, heatmapFor(t, f.api, "?year=2025").Days)
+	assert.Equal(t, http.StatusUnprocessableEntity, f.api.do(http.MethodGet, "/stats/heatmap?year=0", nil).Code)
+}
+
+// This year's heatmap ends today, with no days yet to come.
+func TestHeatmap_ThisYearEndsToday(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	year := f.heatmap().Today[:4]
+	resp := heatmapFor(t, f.api, "?year="+year)
+	assert.Equal(t, year+"-01-01", resp.From)
+	assert.Equal(t, resp.Today, resp.To)
 }
 
 func TestHeatmap_FirstDayCountsReadThroughsWithNoSessions(t *testing.T) {

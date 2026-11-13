@@ -166,9 +166,23 @@ const LocationProbe = () => {
 const emptyHeatmap: ReadingStatsHeatmapResponse = {
   today: "2026-06-15",
   from: "2025-06-16",
+  to: "2026-06-15",
   first_day: "2025-03-01",
   days: [],
 };
+
+// The heatmap for the year up to today, or a whole past year.
+const heatmapFor =
+  (days: ReadingStatsHeatmapResponse["days"] = []) =>
+  (year: number | null): ReadingStatsHeatmapResponse =>
+    year === null
+      ? { ...emptyHeatmap, days }
+      : {
+          ...emptyHeatmap,
+          from: `${year}-01-01`,
+          to: `${year}-12-31`,
+          days: days.filter((d) => d.day.startsWith(`${year}-`)),
+        };
 
 const emptyCalendar = (
   year: number,
@@ -188,7 +202,7 @@ const renderPage = ({
   finishedTotal = finished.length,
   calendar = emptyCalendar,
   day = emptyDay,
-  heatmap = emptyHeatmap,
+  heatmap = heatmapFor(),
   deleteSession = () => new Response(null, { status: 204 }),
   initialEntry = "/reading-stats",
 }: {
@@ -197,7 +211,7 @@ const renderPage = ({
   finishedTotal?: number;
   calendar?: (year: number, month: number) => ReadingStatsCalendarResponse;
   day?: (day: string) => ReadingStatsDayResponse;
-  heatmap?: ReadingStatsHeatmapResponse;
+  heatmap?: (year: number | null) => ReadingStatsHeatmapResponse;
   deleteSession?: () => Response;
   initialEntry?: string;
 } = {}) => {
@@ -221,7 +235,10 @@ const renderPage = ({
         path.startsWith("/api/reading/sessions/")
       )
         return deleteSession();
-      if (path === "/api/reading/stats/heatmap") return Response.json(heatmap);
+      if (path === "/api/reading/stats/heatmap") {
+        const year = url.searchParams.get("year");
+        return Response.json(heatmap(year ? Number(year) : null));
+      }
       if (path === "/api/reading/stats/calendar")
         return Response.json(
           calendar(
@@ -788,13 +805,10 @@ describe("ReadingStatsPage", () => {
     it("shades the heatmap by each day's time, and opens a day from it", async () => {
       const { user } = renderPage({
         initialEntry: CALENDAR,
-        heatmap: {
-          ...emptyHeatmap,
-          days: [
-            { day: "2026-03-01", reading_seconds: 60, listening_seconds: 0 },
-            { day: "2026-03-02", reading_seconds: 3600, listening_seconds: 0 },
-          ],
-        },
+        heatmap: heatmapFor([
+          { day: "2026-03-01", reading_seconds: 60, listening_seconds: 0 },
+          { day: "2026-03-02", reading_seconds: 3600, listening_seconds: 0 },
+        ]),
       });
       expect(
         await screen.findByRole("region", { name: "Reading by day" }),
@@ -813,6 +827,14 @@ describe("ReadingStatsPage", () => {
         ),
       ).toBeInTheDocument();
 
+      // Pointing at a square says its time on the spot.
+      await user.hover(cell("2026-03-02")!);
+      expect(screen.getByRole("tooltip")).toHaveTextContent("1h 0m on Mar 2");
+      await user.hover(cell("2026-03-03")!);
+      expect(screen.getByRole("tooltip")).toHaveTextContent(
+        "No reading on Mar 3",
+      );
+
       await user.click(cell("2026-03-02")!);
       expect(screen.getByTestId("location")).toHaveTextContent(
         "?month=2026-03&day=2026-03-02",
@@ -820,6 +842,38 @@ describe("ReadingStatsPage", () => {
       expect(
         await screen.findByRole("heading", { name: "March 2026" }),
       ).toBeInTheDocument();
+    });
+
+    it("shows a past year's heatmap from the picker beside it", async () => {
+      const { user, fetchMock } = renderPage({
+        initialEntry: CALENDAR,
+        heatmap: heatmapFor([
+          { day: "2025-04-01", reading_seconds: 7200, listening_seconds: 0 },
+          { day: "2026-03-02", reading_seconds: 3600, listening_seconds: 0 },
+        ]),
+      });
+      const card = await screen.findByRole("region", {
+        name: "Reading by day",
+      });
+      expect(card).toHaveTextContent("3h 0m in the last year");
+
+      await user.click(
+        within(card).getByRole("combobox", { name: "Heatmap year" }),
+      );
+      const options = screen.getAllByRole("option").map((o) => o.textContent);
+      expect(options).toEqual(["Last 12 months", "2026", "2025"]);
+      await user.click(screen.getByRole("option", { name: "2025" }));
+
+      expect(screen.getByTestId("location")).toHaveTextContent("?heatmap=2025");
+      await waitFor(() => expect(card).toHaveTextContent("2h 0m in 2025"));
+      expect(
+        fetchMock.mock.calls
+          .map(([input]) => new URL(String(input), "http://localhost"))
+          .filter((url) => url.pathname === "/api/reading/stats/heatmap")
+          .map((url) => url.searchParams.get("year")),
+      ).toEqual([null, "2025"]);
+      expect(document.querySelector('[data-day="2025-01-01"]')).not.toBeNull();
+      expect(document.querySelector('[data-day="2026-03-02"]')).toBeNull();
     });
 
     it("opens on this month and goes back to the first month with reading", async () => {
@@ -1035,7 +1089,7 @@ describe("ReadingStatsPage", () => {
         source: "web_reader" as const,
         measured: true,
       });
-      renderPage({
+      const { user } = renderPage({
         calendar: june,
         initialEntry: `${CALENDAR}?day=2026-06-02`,
         day: (day) => ({
@@ -1081,6 +1135,10 @@ describe("ReadingStatsPage", () => {
       const morning =
         lanes[0].querySelector<HTMLElement>('[data-session="1"]')!;
       expect(morning.style.left).toBe(`${((7 * 60) / 1440) * 100}%`);
+      await user.hover(morning);
+      expect(screen.getByRole("tooltip")).toHaveTextContent(
+        "Dune7:00 AM to 7:30 AM · 30m",
+      );
       expect(lanes[0].querySelectorAll("[data-session]")).toHaveLength(2);
 
       const duneSessions = within(sessions).getByRole("list", {

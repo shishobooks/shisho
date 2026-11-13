@@ -14,6 +14,7 @@ import {
   useReadingStatsCalendar,
   useReadingStatsDay,
 } from "@/hooks/queries/reading";
+import { useHoverTip } from "@/hooks/useHoverTip";
 import { isDemoModeError, toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type {
@@ -81,28 +82,31 @@ const WEEKDAY_LABELS: Record<number, string> = { 1: "Mon", 3: "Wed", 5: "Fri" };
  */
 export const ReadingHeatmap = ({
   from,
-  today,
+  to,
+  period,
   days,
   selectedDay,
   onSelectDay,
 }: {
+  /** The first and last days shown. */
   from: string;
-  today: string;
+  to: string;
+  /** What the days are, for the total: "the last year", "2025". */
+  period: string;
   days: ReadingStatsDay[];
   selectedDay: string | null;
   onSelectDay: (day: string) => void;
 }) => {
-  const [active, setActive] = useState<string | null>(null);
+  const hoverTip = useHoverTip();
   const scrollRef = useRef<HTMLDivElement>(null);
   const byDay = new Map(
     days.map((d) => [d.day, d.reading_seconds + d.listening_seconds]),
   );
   const level = heatLevels([...byDay.values()]);
-  const weeks = heatmapWeeks(from, today);
+  const weeks = heatmapWeeks(from, to);
   const heatmapMaxWidth = `calc(2rem + ${weeks.length} * (${HEAT_CELL_MAX} + ${HEAT_GAP}))`;
   const total = [...byDay.values()].reduce((sum, s) => sum + s, 0);
   const busiest = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
-  const activeSeconds = active ? (byDay.get(active) ?? 0) : 0;
 
   const labels: { col: number; text: string }[] = [];
   weeks.forEach((week, w) => {
@@ -119,9 +123,10 @@ export const ReadingHeatmap = ({
     }
   });
 
-  // Where the year doesn't fit, bring the selected day into view, or
-  // today, at the end.
-  const focus = selectedDay ?? today;
+  // Where the year doesn't fit, bring the selected day into view, or the
+  // last day shown, at the end.
+  const focus =
+    selectedDay && selectedDay >= from && selectedDay <= to ? selectedDay : to;
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
@@ -136,8 +141,8 @@ export const ReadingHeatmap = ({
     <div>
       <p className="mb-3 text-xs text-muted-foreground">
         {total > 0
-          ? `${formatDuration(total)} in the last year`
-          : "No reading in the last year"}
+          ? `${formatDuration(total)} in ${period}`
+          : `No reading in ${period}`}
       </p>
       <div className="overflow-x-auto pb-1" ref={scrollRef}>
         <div
@@ -146,7 +151,7 @@ export const ReadingHeatmap = ({
           // a phone's scroll; on a wide screen, the card's width up to the
           // squares' largest size.
           className="grid w-max"
-          onPointerLeave={() => setActive(null)}
+          onPointerLeave={hoverTip.hide}
           style={{
             gap: HEAT_GAP,
             gridTemplateColumns: `auto repeat(${weeks.length}, minmax(${HEAT_CELL_MIN}, 1fr))`,
@@ -187,14 +192,29 @@ export const ReadingHeatmap = ({
                   className={cn(
                     "aspect-square w-full rounded-[2px]",
                     HEAT_SHADES[level(byDay.get(day) ?? 0)],
-                    (active === day || selectedDay === day) &&
-                      "ring-1 ring-foreground",
+                    "hover:ring-1 hover:ring-foreground",
+                    selectedDay === day && "ring-1 ring-foreground",
                   )}
                   data-day={day}
                   data-level={level(byDay.get(day) ?? 0)}
                   key={day}
                   onClick={() => onSelectDay(day)}
-                  onPointerEnter={() => setActive(day)}
+                  onPointerEnter={(event) => {
+                    const seconds = byDay.get(day) ?? 0;
+                    hoverTip.show(
+                      event.currentTarget,
+                      seconds > 0 ? (
+                        <>
+                          <span className="font-semibold">
+                            {formatDuration(seconds)}
+                          </span>{" "}
+                          on {formatShortDay(day)}
+                        </>
+                      ) : (
+                        `No reading on ${formatShortDay(day)}`
+                      ),
+                    );
+                  }}
                   style={{ gridColumn: w + 2, gridRow: d + 2 }}
                   tabIndex={-1}
                   variant="unstyled"
@@ -204,12 +224,8 @@ export const ReadingHeatmap = ({
           )}
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span aria-live="polite" className="tabular-nums">
-          {active
-            ? `${formatShortDay(active)}: ${activeSeconds > 0 ? formatDuration(activeSeconds) : "no reading"}`
-            : "\u00a0"}
-        </span>
+      {hoverTip.tip}
+      <div className="mt-2 flex justify-end text-xs text-muted-foreground">
         <span aria-hidden="true" className="flex items-center gap-1">
           Less
           {HEAT_SHADES.map((shade) => (
@@ -223,7 +239,7 @@ export const ReadingHeatmap = ({
       </div>
       <p className="sr-only">
         {busiest
-          ? `Your most reading in the last year was ${formatDuration(busiest[1])} on ${formatLongDay(busiest[0])}.`
+          ? `Your most reading in ${period} was ${formatDuration(busiest[1])} on ${formatLongDay(busiest[0])}.`
           : ""}
       </p>
     </div>
@@ -444,7 +460,7 @@ export const ReadingCalendar = ({
         <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>Each book keeps its own colour.</span>
           <span className="inline-flex items-center gap-1">
-            <FinishMarker color="var(--muted-foreground)" />
+            <FinishMarker color="var(--reading)" />
             marks the day you finished one.
           </span>
         </p>
@@ -600,64 +616,92 @@ const hourLabel = (hour: number) =>
 const DayTimeline = ({
   lanes,
   colors,
+  day,
+  timeZone,
 }: {
   lanes: DayLane[];
   colors: Map<string, string>;
-}) => (
-  <div aria-hidden="true" className="mb-4" data-timeline="">
-    <div className="relative ml-0 h-4 text-[10px] text-muted-foreground">
-      {TIMELINE_HOURS.filter((h) => h % 6 === 0).map((hour) => (
-        <span
-          className={cn(
-            "absolute top-0 whitespace-nowrap",
-            hour === 0
-              ? ""
-              : hour === 24
-                ? "-translate-x-full"
-                : "-translate-x-1/2",
-          )}
-          key={hour}
-          style={{ left: `${(hour / 24) * 100}%` }}
-        >
-          {hourLabel(hour)}
-        </span>
-      ))}
-    </div>
-    <div className="relative space-y-1.5 py-1">
-      {TIMELINE_HOURS.map((hour) => (
-        <span
-          className="absolute inset-y-0 border-l border-border"
-          key={hour}
-          style={{ left: `${(hour / 24) * 100}%` }}
-        />
-      ))}
-      {lanes.map((lane) => {
-        const color = colors.get(lane.book.key) ?? bookColor(lane.book.key);
-        return (
-          <div
-            className="relative h-3 rounded-sm bg-muted/40"
-            data-lane={lane.book.key}
-            key={lane.book.key}
+  day: string;
+  timeZone: string;
+}) => {
+  const hoverTip = useHoverTip();
+  return (
+    <div
+      aria-hidden="true"
+      className="mb-4"
+      data-timeline=""
+      onPointerLeave={hoverTip.hide}
+    >
+      <div className="relative ml-0 h-4 text-[10px] text-muted-foreground">
+        {TIMELINE_HOURS.filter((h) => h % 6 === 0).map((hour) => (
+          <span
+            className={cn(
+              "absolute top-0 whitespace-nowrap",
+              hour === 0
+                ? ""
+                : hour === 24
+                  ? "-translate-x-full"
+                  : "-translate-x-1/2",
+            )}
+            key={hour}
+            style={{ left: `${(hour / 24) * 100}%` }}
           >
-            {lane.sessions.map((session) => (
-              <span
-                className="absolute inset-y-0 rounded-sm"
-                data-session={session.id}
-                key={session.id}
-                style={{
-                  backgroundColor: color,
-                  left: `${(session.from / 1440) * 100}%`,
-                  // A short Session still shows as a sliver.
-                  width: `max(3px, ${((session.to - session.from) / 1440) * 100}%)`,
-                }}
-              />
-            ))}
-          </div>
-        );
-      })}
+            {hourLabel(hour)}
+          </span>
+        ))}
+      </div>
+      <div className="relative space-y-1.5 py-1">
+        {TIMELINE_HOURS.map((hour) => (
+          <span
+            className="absolute inset-y-0 border-l border-border"
+            key={hour}
+            style={{ left: `${(hour / 24) * 100}%` }}
+          />
+        ))}
+        {lanes.map((lane) => {
+          const color = colors.get(lane.book.key) ?? bookColor(lane.book.key);
+          return (
+            <div
+              className="relative h-3 rounded-sm bg-muted/40"
+              data-lane={lane.book.key}
+              key={lane.book.key}
+            >
+              {lane.sessions.map((session) => (
+                <span
+                  className="absolute inset-y-0 rounded-sm hover:ring-2 hover:ring-foreground"
+                  data-session={session.id}
+                  key={session.id}
+                  onPointerEnter={(event) =>
+                    hoverTip.show(
+                      event.currentTarget,
+                      <>
+                        <div className="font-semibold">
+                          {bookTitle(lane.book)}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {formatDayTime(session.started_at, day, timeZone)} to{" "}
+                          {formatDayTime(session.ended_at, day, timeZone)} ·{" "}
+                          {formatDuration(session.seconds)}
+                        </div>
+                      </>,
+                    )
+                  }
+                  style={{
+                    backgroundColor: color,
+                    left: `${(session.from / 1440) * 100}%`,
+                    // A short Session still shows as a sliver.
+                    width: `max(3px, ${((session.to - session.from) / 1440) * 100}%)`,
+                  }}
+                />
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      {hoverTip.tip}
     </div>
-  </div>
-);
+  );
+};
 
 /** One day's Reading Sessions and finishes, under the calendar. */
 const DayDetail = ({
@@ -720,7 +764,12 @@ const DayDetail = ({
         )}
         {lanes.length > 0 && (
           <>
-            <DayTimeline colors={colors} lanes={lanes} />
+            <DayTimeline
+              colors={colors}
+              day={day}
+              lanes={lanes}
+              timeZone={detail.time_zone}
+            />
             <ul aria-label="Reading sessions" className="space-y-3">
               {lanes.map((lane) => (
                 <li

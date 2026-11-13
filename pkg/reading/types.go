@@ -346,17 +346,27 @@ type ReadingStatsFinishedBook struct {
 	Rating *float64 `json:"rating" tstype:"number | null,required"`
 }
 
-// ReadingStatsHeatmapResponse is the signed-in user's reading for the year
-// up to today, a day at a time, for the heatmap on Reading Stats' Calendar
+// ReadingStatsHeatmapQuery picks the heatmap's year, or the year up to
+// today when Year is omitted.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsHeatmapQuery struct {
+	Year *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
+}
+
+// ReadingStatsHeatmapResponse is the signed-in user's reading for a year,
+// a day at a time, for the heatmap on Reading Stats' Calendar
 // tab. Days are in the user's time zone, a Session past midnight split
 // between both.
 //
 //nolint:revive // named for the Reading Stats page, as generated TS types are global
 type ReadingStatsHeatmapResponse struct {
-	// Today is the user's today, the heatmap's last day.
+	// Today is the user's today.
 	Today string `json:"today"`
-	// From is the heatmap's first day: a year before Today, plus a day.
+	// From and To are the heatmap's first and last days: the year up to
+	// Today, or the year asked for, ending no later than Today.
 	From string `json:"from"`
+	To   string `json:"to"`
 	// FirstDay is the earliest day the user read or began or ended a
 	// Read-through, however long ago, which the calendar goes back to. Null
 	// with no reading at all.
