@@ -10,8 +10,14 @@ changes after them. The server places a session by its time and lets a
 position start a Read-through, so a position from the end of a long offline
 stretch must not arrive before the sessions that led up to it, and a reread
 the device started must not arrive before its first pages, which the server
-then places on it. No UI.
+then places on it.
+
+History the person chose to send (shisho/history) goes before all of it:
+its rows, and then the statuses and Ratings KOReader recorded before signing
+in, so a finished book's Read-through begins on the day of its first session,
+and reading since sign-in lands on the Read-throughs history made. No UI.
 ]]
+local History = require("shisho/history")
 local Responses = require("shisho/responses")
 local Statistics = require("shisho/statistics")
 local Summaries = require("shisho/summaries")
@@ -21,6 +27,10 @@ local Sync = {}
 -- The most rows and events one upload carries.
 Sync.BATCH = 500
 Sync.EVENT_BATCH = 100
+
+-- HISTORY_WHILE_BUSY is how many batches of history rows a sync while
+-- reading or going to sleep sends, so a long history holds up neither.
+Sync.HISTORY_WHILE_BUSY = 2
 
 -- RAN_RECENTLY is how many seconds a sync stands for: Wi-Fi coming on
 -- within it, as it does right after Sync now or sync on sleep turns it on,
@@ -165,6 +175,54 @@ local function payloadRow(row)
 end
 
 --[[--
+sendHistory sends the history still to go to opts.server, as Sync.run does,
+through send(payload), which returns the outcome, adding what it sent to
+sent. Up to opts.history_batches batches of rows go, when set. Its statuses
+and Ratings wait until every row has gone, so with statistics off, they
+wait for statistics. Returns the outcome, and an error reading statistics.
+]]
+local function sendHistory(opts, send, sent)
+    local state, server = opts.state, opts.server
+    if type(server.history) ~= "table" then return "ok" end
+    local batch = opts.batch or Sync.BATCH
+    local batches = 0
+    while opts.read_pages and History.rowsPending(server) do
+        if opts.history_batches and batches >= opts.history_batches then return "ok" end
+        batches = batches + 1
+        local read, err = opts.read_pages(server.stats_cursor, batch)
+        if not read then return "error", err end
+        local rows = History.rows(server.history, read)
+        if #rows == 0 then
+            -- Rows statistics leaves out, such as ones with no time, end it.
+            server.stats_cursor = { rowid = server.history.through }
+            state:flush()
+            break
+        end
+        local payload = { backfill = true, pages = {} }
+        for __, row in ipairs(rows) do table.insert(payload.pages, payloadRow(row)) end
+        local outcome = send(payload)
+        if outcome ~= "ok" then return outcome end
+        server.stats_cursor = Statistics.cursorAfter(rows[#rows])
+        sent.pages = sent.pages + #rows
+        state:flush()
+        if opts.progress then opts.progress(sent.pages) end
+    end
+    if History.rowsPending(server) then return "ok" end
+    local events = opts.history or {}
+    local first = 1
+    while first <= #events do
+        local chunk = History.batch(events, first, Sync.EVENT_BATCH)
+        local outcome = send({ backfill = true, events = chunk })
+        if outcome ~= "ok" then return outcome end
+        for __, event in ipairs(chunk) do Summaries.acknowledge(opts.store, event) end
+        sent.events = sent.events + #chunk
+        first = first + #chunk
+        state:flush()
+    end
+    return "ok"
+end
+
+--[[--
 run syncs opts.server. opts:
 
 - state, journal: the plugin's state and journal
@@ -176,6 +234,11 @@ run syncs opts.server. opts:
 - changes: status and Rating changes for this server (Summaries.collect)
 - store: what was synced with this server (Summaries:server), where each
   change the server takes in is noted
+- history: the statuses and Ratings to send as history (History.events)
+- progress(pages): told how many rows of history went so far
+- history_batches: the most batches of history rows to send, for a sync
+  that shouldn't hold anything up long; the rest of the sync then waits
+  for one that sends the rest
 
 Returns the outcome, as Responses.classify names it, and the number of
 rows and events sent.
@@ -186,12 +249,32 @@ function Sync.run(opts)
     local clock = opts.clock or os.time
     local changes = opts.changes or {}
     local next_change = 1
-    local sent_pages, sent_events = 0, 0
+    local sent = { pages = 0, events = 0 }
+    -- send posts payload, noting a refusal, which waits for the person.
+    local function send(payload)
+        payload.clock = clock()
+        local status, body = opts.post(payload)
+        local outcome = Responses.classify(status, body)
+        if outcome ~= "ok" then
+            -- Changes not taken in are worked out again by the next sync.
+            noteRefusal(server, outcome)
+            state:flush()
+        else
+            server.needs_login = nil
+        end
+        return outcome
+    end
+
+    -- Statistics off leaves history rows to go, and reading after it can go
+    -- once statistics are on again. Only a sync cut short waits.
+    local outcome, err = sendHistory(opts, send, sent)
+    if outcome ~= "ok" then return outcome, sent.pages, sent.events, err end
+    if opts.read_pages and History.rowsPending(server) then return "ok", sent.pages, sent.events end
     while true do
         local rows = {}
         if opts.read_pages then
             local read, err = opts.read_pages(server.stats_cursor, batch)
-            if not read then return "error", sent_pages, sent_events, err end
+            if not read then return "error", sent.pages, sent.events, err end
             rows = read
         end
         -- Positions follow every row, so they go only once the rows run out,
@@ -206,21 +289,15 @@ function Sync.run(opts)
         end
         if #rows == 0 and #events == 0 then break end
 
-        local payload = { clock = clock() }
+        local payload = {}
         if #rows > 0 then
             payload.pages = {}
             for __, row in ipairs(rows) do table.insert(payload.pages, payloadRow(row)) end
         end
         if #events > 0 then payload.events = events end
 
-        local status, body = opts.post(payload)
-        local outcome = Responses.classify(status, body)
-        if outcome ~= "ok" then
-            -- Changes not taken in are worked out again by the next sync.
-            noteRefusal(server, outcome)
-            state:flush()
-            return outcome, sent_pages, sent_events
-        end
+        outcome = send(payload)
+        if outcome ~= "ok" then return outcome, sent.pages, sent.events end
 
         if #rows > 0 then
             server.stats_cursor = Statistics.cursorAfter(rows[#rows])
@@ -231,16 +308,15 @@ function Sync.run(opts)
         for __, change in ipairs(batch_changes) do
             Summaries.acknowledge(opts.store, change)
         end
-        server.needs_login = nil
-        sent_pages = sent_pages + #rows
-        sent_events = sent_events + #events
+        sent.pages = sent.pages + #rows
+        sent.events = sent.events + #events
         state:flush()
         if last_rows and #events < Sync.EVENT_BATCH then break end
     end
     server.last_synced = clock()
     journal:prune()
     state:flush()
-    return "ok", sent_pages, sent_events
+    return "ok", sent.pages, sent.events
 end
 
 --[[--

@@ -112,24 +112,54 @@ func (h *handler) statesBefore(ctx context.Context, user *models.User, events []
 	return h.reading.RetrieveStatusSummaries(ctx, user.ID, bookIDs)
 }
 
-// applyChange takes in a status or Rating change from the device, judging
-// whether Shisho changed too by before (statesBefore). It returns false for
-// one refused for its time. A book Shisho doesn't recognize, or a
-// supplement, which isn't the Book, is acknowledged and ignored.
-func (h *handler) applyChange(ctx context.Context, user *models.User, clock deviceClock, event EventPayload,
-	resolve func(string) (*models.DocumentHash, error), before map[int]*reading.StatusSummary) (bool, error) {
+// change is a status or Rating event about a Book, dated by changeDay in
+// the user's time zone, loc.
+type change struct {
+	file *models.DocumentHash
+	day  string
+	loc  *time.Location
+}
+
+// resolveChange finds the Book a status or Rating event is about and the day
+// it happened. It returns nil for a book Shisho doesn't recognize, or a
+// supplement, which isn't the Book, both acknowledged and ignored, and false
+// for one refused for its time.
+func (h *handler) resolveChange(ctx context.Context, user *models.User, clock deviceClock, event EventPayload,
+	resolve func(string) (*models.DocumentHash, error)) (*change, bool, error) {
 	file, err := resolve(event.Document)
 	if err != nil || file == nil || file.File == nil || file.File.FileRole == models.FileRoleSupplement {
-		return true, err
+		return nil, true, err
 	}
 	loc, err := h.reading.Location(ctx, user.ID)
 	if err != nil {
-		return false, err
+		return nil, false, err
 	}
 	day, ok := clock.changeDay(event, loc)
 	if !ok {
-		return false, nil
+		return nil, false, nil
 	}
+	return &change{file: file, day: day, loc: loc}, true, nil
+}
+
+// quarterStars is whole stars as a Rating in quarter-star units, nil for 0.
+func quarterStars(stars int) *int {
+	if stars <= 0 {
+		return nil
+	}
+	units := stars * 4
+	return &units
+}
+
+// applyChange takes in a status or Rating change from the device, judging
+// whether Shisho changed too by before (statesBefore). It returns false for
+// one refused for its time.
+func (h *handler) applyChange(ctx context.Context, user *models.User, clock deviceClock, event EventPayload,
+	resolve func(string) (*models.DocumentHash, error), before map[int]*reading.StatusSummary) (bool, error) {
+	c, ok, err := h.resolveChange(ctx, user, clock, event, resolve)
+	if c == nil || err != nil {
+		return ok, err
+	}
+	file, day, loc := c.file, c.day, c.loc
 	summaries, err := h.reading.RetrieveStatusSummaries(ctx, user.ID, []int{file.File.BookID})
 	if err != nil {
 		return false, err
@@ -156,12 +186,7 @@ func (h *handler) applyChange(ctx context.Context, user *models.User, clock devi
 		if wholeStars(prior.RatingUnits) != event.PreviousRating && shishoLater(prior.RatingAt) {
 			return true, nil
 		}
-		var units *int
-		if event.Rating > 0 {
-			stars := event.Rating * 4
-			units = &stars
-		}
-		return true, h.reading.SetRating(ctx, user.ID, file.File.BookID, units)
+		return true, h.reading.SetRating(ctx, user.ID, file.File.BookID, quarterStars(event.Rating))
 	}
 
 	shisho := koreaderStatus(summary.Status)
@@ -192,6 +217,31 @@ func (h *handler) applyChange(ctx context.Context, user *models.User, clock devi
 		Status: readingStatus(event.Status),
 		Day:    day,
 	})
+}
+
+// applyHistory takes in a status or Rating from the device's history, which
+// fills in only what Shisho has none of (ADR 0016): a status makes the
+// Book's one Read-through when it has none, and a Rating sets one when it
+// has none. It returns false for one refused for its time.
+func (h *handler) applyHistory(ctx context.Context, user *models.User, clock deviceClock, event EventPayload,
+	resolve func(string) (*models.DocumentHash, error)) (bool, error) {
+	c, ok, err := h.resolveChange(ctx, user, clock, event, resolve)
+	if c == nil || err != nil {
+		return ok, err
+	}
+	if event.Type == PluginEventStatus {
+		return true, h.reading.RecordHistoryStatus(ctx, reading.DeviceStatus{
+			UserID: user.ID,
+			FileID: c.file.FileID,
+			Status: readingStatus(event.Status),
+			Day:    c.day,
+		})
+	}
+	units := quarterStars(event.Rating)
+	if units == nil {
+		return true, nil
+	}
+	return true, h.reading.FillRating(ctx, user.ID, c.file.File.BookID, *units)
 }
 
 // pullStates returns the status and Rating the device should hold for each

@@ -96,6 +96,8 @@ type PluginReport struct {
 	Installed      bool           `json:"installed"`
 	Restart        bool           `json:"restart"`
 	PromptedUpdate string         `json:"prompted_update"`
+	// Asked is the question plugin-signin answered about sending history.
+	Asked string `json:"asked"`
 	// Journal is how many positions wait for a server to acknowledge them,
 	// and Problems what Sync now reported.
 	Journal int `json:"journal"`
@@ -148,6 +150,13 @@ type PluginServer struct {
 		RowID int64 `json:"rowid"`
 	} `json:"stats_cursor"`
 	LastSynced int64 `json:"last_synced"`
+	// History is the history the plugin sends the server, through the last
+	// statistics row recorded by sign-in, and AskingHistory marks a sign-in
+	// still asking whether to send it.
+	History *struct {
+		Through int64 `json:"through"`
+	} `json:"history"`
+	AskingHistory bool `json:"asking_history"`
 }
 
 // SidecarSummary is a book's status and Rating as its sidecar holds them,
@@ -232,6 +241,13 @@ type Args struct {
 	// default, for plugin-sleep and plugin-daily, which otherwise set it to
 	// turn Wi-Fi on by itself.
 	WifiPrompt bool
+	// History answers plugin-signin's question whether to send reading
+	// history: "send" or "skip". Unanswered, it stays asking.
+	History string
+	// Summaries seeds books' sidecar statuses and stars before a
+	// plugin-sync, by file name in the books directory, as KOReader records
+	// them when a book is opened and marked.
+	Summaries map[string]SidecarSummary
 }
 
 // Run runs one command in a fresh container, as KOReader's unit tests start
@@ -342,6 +358,12 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.SyncNow {
 		payload["sync_now"] = true
+	}
+	if a.History != "" {
+		payload["history"] = a.History
+	}
+	if len(a.Summaries) > 0 {
+		payload["summaries"] = a.Summaries
 	}
 	shot := ""
 	if a.Screenshot != "" {

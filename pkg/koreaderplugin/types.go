@@ -49,6 +49,13 @@ type UploadPayload struct {
 	Pages []PageRowPayload `json:"pages" validate:"max=1000,dive"`
 	// Events are journal entries, each with an id that's never reused.
 	Events []EventPayload `json:"events" validate:"max=200,dive"`
+	// Backfill marks a batch of the history KOReader recorded before the
+	// plugin signed in, sent when the user chose to (ADR 0016). Its times
+	// may predate the Device. Its pages start no Read-through, and its
+	// status and Rating events only fill in what Shisho has none of: a
+	// status makes a Read-through for a Book with none, and a Rating sets
+	// one for a Book with none.
+	Backfill bool `json:"backfill,omitempty"`
 }
 
 // PageRowPayload is one row of KOReader's page_stat_data, with the document

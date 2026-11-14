@@ -6,7 +6,8 @@ live in the shisho/ modules, which have no UI and are unit tested.
 It signs in to Shisho servers, adds their catalogs to KOReader's OPDS
 catalog list, keeps itself up to date from them, syncs reading time from
 KOReader's statistics and positions to each of them, and syncs each book's
-status and Rating both ways.
+status and Rating both ways. On first sign-in to a server, it can send the
+reading history KOReader recorded before.
 ]]
 local Client = require("shisho/client")
 local ConfirmBox = require("ui/widget/confirmbox")
@@ -17,6 +18,7 @@ local Device = require("device")
 local DocSettings = require("docsettings")
 local Event = require("ui/event")
 local HashIndex = require("shisho/hashindex")
+local History = require("shisho/history")
 local InfoMessage = require("ui/widget/infomessage")
 local Installer = require("shisho/installer")
 local Journal = require("shisho/journal")
@@ -88,6 +90,13 @@ function Shisho:init()
     elseif action == "sign_in" and NetworkMgr:isOnline() then
         UIManager:nextTick(function() self:pairFromZip() end)
     end
+
+    -- A sign-in whose question about history went unanswered, as when
+    -- KOReader closed first, asks again.
+    local waiting = History.waiting(self.state:servers())
+    if waiting then
+        UIManager:nextTick(function() self:askHistory(waiting) end)
+    end
 end
 
 function Shisho:installed()
@@ -142,7 +151,7 @@ end
 -- signedIn records a sign-in, adds the server's catalog to KOReader's OPDS
 -- list, and tells the user.
 function Shisho:signedIn(url, answer, username, credential)
-    local server, other_device = self.state:signIn{
+    local server, other_device, first = self.state:signIn{
         -- A server signed in to for the first time takes reading from now on.
         stats_cursor = Statistics.currentCursor(self:statisticsPath()),
         url = url,
@@ -163,11 +172,42 @@ function Shisho:signedIn(url, answer, username, credential)
     if not self.state:get("installed_from") and pairing and Urls.same(pairing.server_url, server.url) then
         self.state:set("installed_from", server.url)
     end
+    History.signIn(server, History.setting(self.state:get("settings")), first)
     self.state:flush()
     self:scheduleDaily()
     self:writeCatalog(server)
     self:notify(T(_("Signed in to %1 as %2."), Urls.label(server.url), server.device_name or username), 3)
+    if server.asking_history then
+        self:askHistory(server)
+    end
     return server
+end
+
+-- askHistory asks whether to send server the reading history KOReader
+-- recorded before signing in to it (shisho/history). Saying no sends only
+-- reading from sign-in on. Then it asks about the next server still
+-- waiting, if any, and once none is, a sync follows when online.
+function Shisho:askHistory(server)
+    local function answer(send)
+        if not self.state:find(server.url) then return end
+        History.answer(server, send)
+        self.state:flush()
+        local waiting = History.waiting(self.state:servers())
+        if waiting then
+            UIManager:nextTick(function() self:askHistory(waiting) end)
+        elseif NetworkMgr:isOnline() then
+            UIManager:nextTick(function() self:syncAll(true) end)
+        end
+    end
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Send your existing KOReader reading history to %1?\n\nShisho then shows the reading time KOReader recorded, on the days it happened, and your books' statuses and stars from KOReader. Otherwise only reading from now on is sent."), Urls.label(server.url)),
+        ok_text = _("Send history"),
+        cancel_text = _("Don't send"),
+        -- Tapping outside it isn't an answer.
+        dismissable = false,
+        ok_callback = function() answer(true) end,
+        cancel_callback = function() answer(false) end,
+    })
 end
 
 -- trySignIn calls request with each URL what the person typed may mean, and
@@ -854,7 +894,7 @@ function Shisho:pullStates(server, client, store, books)
         write = function(pulled, outright)
             local book = books[pulled.document]
             if not book then return end
-            local write = Summaries.applyTo(store, pulled, book, outright)
+            local write = Summaries.applyTo(store, pulled, book, outright, History.rowsPending(server))
             if write then self:writeSummary(book, write) end
         end,
     }
@@ -1045,7 +1085,7 @@ function Shisho:syncAll(interactive, going_to_sleep, while_reading)
     end
     self.syncing = true
     self.pages_since_sync = 0
-    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, while_reading)
+    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, while_reading, going_to_sleep)
     self.syncing = false
     self.synced_at = os.time()
     if self.summaries_written then
@@ -1080,8 +1120,10 @@ end
 -- syncServers runs the sync for each signed-in server, returning what went
 -- wrong and whether statistics is on. A sync while reading leaves out a
 -- server that just failed, and doesn't walk the device's folders or read the
--- sidecars of books only they hold.
-function Shisho:syncServers(interactive, while_reading)
+-- sidecars of books only they hold. A server still asking whether to send
+-- history waits for the answer. Unless going to sleep, a long history shows
+-- how far it got.
+function Shisho:syncServers(interactive, while_reading, going_to_sleep)
     self:observeStatus()
     self:recordPosition(false)
     local scanned = self:refreshHashes(interactive, while_reading)
@@ -1098,6 +1140,8 @@ function Shisho:syncServers(interactive, while_reading)
         local label = Urls.label(server.url)
         if server.needs_login then
             table.insert(problems, T(_("%1 needs a new sign-in."), label))
+        elseif server.asking_history then
+            logger.dbg("Shisho: waiting to hear whether to send history:", server.url)
         elseif while_reading and Sync.backingOff(server, os.time()) then
             logger.dbg("Shisho: leaving out a server that just failed:", server.url)
         else
@@ -1109,6 +1153,13 @@ function Shisho:syncServers(interactive, while_reading)
                 today = os.date("%Y-%m-%d"),
                 seen = self.summaries:seen(),
             })
+            -- A sync while reading or going to sleep sends history a little
+            -- at a time, so it holds up neither, and shows no progress.
+            local busy = while_reading or going_to_sleep
+            local progress
+            if read_pages and not busy then
+                progress = self:historyProgress(server)
+            end
             local ok, outcome = pcall(Sync.run, {
                 state = self.state,
                 journal = self.journal,
@@ -1117,7 +1168,11 @@ function Shisho:syncServers(interactive, while_reading)
                 post = function(payload) return client:upload(payload) end,
                 changes = changes,
                 store = store,
+                history = server.history and History.events(store, books) or nil,
+                progress = progress,
+                history_batches = busy and Sync.HISTORY_WHILE_BUSY or nil,
             })
+            self:closeHistoryProgress()
             if ok and outcome == "ok" then
                 ok, outcome = pcall(self.pullStates, self, server, client, store, books)
             end
@@ -1136,6 +1191,39 @@ function Shisho:syncServers(interactive, while_reading)
     end
     self.state:flush()
     return problems, statistics_on
+end
+
+-- historyRows is how many rows of server's history are still to go.
+function Shisho:historyRows(server)
+    if not History.rowsPending(server) then return 0 end
+    return Statistics.count(self:statisticsPath(), server.stats_cursor, server.history.through)
+end
+
+-- historyProgress shows how far sending server's history got, when more
+-- than a batch of it is to go and someone's there to see it, and returns
+-- what Sync.run tells as it goes.
+function Shisho:historyProgress(server)
+    if self:inBackgroundSync() or Device.screen_saver_mode then return nil end
+    local total = self:historyRows(server)
+    if total <= Sync.BATCH then return nil end
+    local label = Urls.label(server.url)
+    local function show(sent)
+        self:closeHistoryProgress()
+        self.history_message = InfoMessage:new{
+            text = T(_("Sending your reading history to %1: %2 of %3 pages."), label, sent, total),
+        }
+        UIManager:show(self.history_message)
+        UIManager:forceRePaint()
+    end
+    show(0)
+    return show
+end
+
+function Shisho:closeHistoryProgress()
+    if self.history_message then
+        UIManager:close(self.history_message)
+        self.history_message = nil
+    end
 end
 
 -- Menu -------------------------------------------------------------------------
@@ -1216,6 +1304,10 @@ function Shisho:serverHelp(server)
     elseif server.update_required then
         table.insert(lines, _("Update required: the server no longer accepts this plugin. Install the update it offers."))
     end
+    local history = self:historyRows(server)
+    if history > 0 then
+        table.insert(lines, T(_("Sending your reading history: %1 pages to go. It carries on at each sync."), history))
+    end
     return table.concat(lines, "\n\n")
 end
 
@@ -1235,6 +1327,27 @@ function Shisho:positionMenu(key)
             radio = true,
             checked_func = function() return self:settings()[key] == choice[1] end,
             callback = function() self:saveSetting(key, choice[1]) end,
+        })
+    end
+    return items
+end
+
+local HISTORY_CHOICES = {
+    { "ask", _("Ask"), _("Ask at each first sign-in to a server whether to send it your reading history.") },
+    { "send", _("Send"), _("Send your reading history to each server signed in to for the first time, without asking.") },
+    { "skip", _("Don't send"), _("Send servers only reading from sign-in on, without asking.") },
+}
+
+-- historyMenu chooses what first sign-in does about history.
+function Shisho:historyMenu()
+    local items = {}
+    for __, choice in ipairs(HISTORY_CHOICES) do
+        table.insert(items, {
+            text = choice[2],
+            help_text = choice[3],
+            radio = true,
+            checked_func = function() return History.setting(self.state:get("settings")) == choice[1] end,
+            callback = function() self:saveSetting("send_history", choice[1]) end,
         })
     end
     return items
@@ -1287,6 +1400,12 @@ function Shisho:settingsMenu()
             text = _("Older position from another reader"),
             help_text = _("What to do when another reader's place in the book is from before this device's: ask before going there, go there without asking, or ignore it. Ignored by default, so an old place never moves you back."),
             sub_item_table = self:positionMenu("older"),
+            separator = true,
+        },
+        {
+            text = _("Reading history on first sign-in"),
+            help_text = _("Whether signing in to a server for the first time sends it the reading history KOReader recorded before: reading time on the days it happened, and books KOReader shows finished, On hold, or reading. Asks by default."),
+            sub_item_table = self:historyMenu(),
             separator = true,
         },
         {
@@ -1370,7 +1489,7 @@ function Shisho:addToMainMenu(menu_items)
             })
             table.insert(items, {
                 text = _("Settings"),
-                help_text = _("Syncing on sleep and daily sync, what to do with places from other readers, and plugin updates."),
+                help_text = _("Syncing on sleep and daily sync, what to do with places from other readers, sending reading history on first sign-in, and plugin updates."),
                 sub_item_table = self:settingsMenu(),
             })
             return items

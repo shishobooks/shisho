@@ -146,6 +146,106 @@ return {
         assert_eq(s.stats_cursor.rowid, 50, "signing in again keeps its place")
     end,
 
+    ["history goes first, flagged, then its statuses, then reading after sign-in"] = function()
+        local state, journal = setup("https://a.example")
+        local s = state:find("https://a.example")
+        s.history = { through = 3 }
+        journal:recordPosition("doc1", "9", 0.9, 900)
+        local history = { { id = "h1", type = "status", document = "doc1", status = "complete", day = "2025-01-01" } }
+        local store = { synced = { doc1 = { status = "complete", before = true } }, asked = {} }
+        local post, sent = server()
+        local progress = {}
+        local outcome = Sync.run{ state = state, journal = journal, server = s, post = post, batch = 2,
+            read_pages = rowsFrom({ row(100), row(200), row(300), row(400), row(500) }),
+            history = history, store = store, progress = function(n) table.insert(progress, n) end }
+        assert_eq(outcome, "ok")
+        assert_eq(#sent, 5)
+        assert_eq(sent[1].backfill, true)
+        assert_eq(starts(sent[1]), { 100, 200 })
+        assert_eq(sent[2].backfill, true)
+        assert_eq(starts(sent[2]), { 300 }, "a batch of history ends where sign-in left off")
+        assert_eq(sent[3].backfill, true)
+        assert_eq(sent[3].pages, nil)
+        assert_eq(sent[3].events, history, "statuses follow every page of history")
+        assert_eq(sent[4].backfill, nil)
+        assert_eq(starts(sent[4]), { 400, 500 })
+        assert_eq(sent[5].events[1].type, "position")
+        assert_eq(progress, { 2, 3 })
+        assert_eq(store.synced.doc1, { status = "complete" }, "synced once taken in")
+        assert_eq(s.stats_cursor.rowid, 5)
+    end,
+
+    ["history cut off partway resumes, and its statuses wait for every page"] = function()
+        local state, journal = setup("https://a.example")
+        local s = state:find("https://a.example")
+        s.history = { through = 3 }
+        local rows = rowsFrom({ row(100), row(200), row(300) })
+        local history = { { id = "h1", type = "status", document = "doc1", status = "complete", day = "2025-01-01" } }
+        local store = { synced = { doc1 = { status = "complete", before = true } }, asked = {} }
+        local post, sent = server({ 200, "down" })
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post, batch = 2, read_pages = rows,
+            history = history, store = store }, "unreachable")
+        assert_eq(#sent, 2)
+        assert_eq(s.stats_cursor.rowid, 2)
+        assert_eq(store.synced.doc1.before, true, "its statuses wait")
+
+        local post2, sent2 = server()
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post2, batch = 2, read_pages = rows,
+            history = history, store = store }, "ok")
+        assert_eq(starts(sent2[1]), { 300 })
+        assert_eq(sent2[1].backfill, true)
+        assert_eq(sent2[2].events, history)
+        assert_eq(#sent2, 2)
+    end,
+
+    ["with statistics off, history statuses wait for its pages"] = function()
+        local state, journal = setup("https://a.example")
+        local s = state:find("https://a.example")
+        s.history = { through = 3 }
+        local history = { { id = "h1", type = "status", document = "doc1", status = "complete", day = "2025-01-01" } }
+        local store = { synced = { doc1 = { status = "complete", before = true } }, asked = {} }
+        local post, sent = server()
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post, read_pages = nil,
+            history = history, store = store }, "ok")
+        assert_eq(#sent, 0)
+        assert_eq(store.synced.doc1.before, true, "sent once statistics are on and its pages have gone")
+    end,
+
+    ["a sync while busy sends a little history at a time, and nothing after it"] = function()
+        local state, journal = setup("https://a.example")
+        local s = state:find("https://a.example")
+        s.history = { through = 5 }
+        journal:recordPosition("doc1", "9", 0.9, 900)
+        local rows = rowsFrom({ row(100), row(200), row(300), row(400), row(500), row(600) })
+        local post, sent = server()
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post, batch = 2, read_pages = rows,
+            history_batches = 2 }, "ok")
+        assert_eq(#sent, 2)
+        assert_eq(starts(sent[2]), { 300, 400 })
+        assert_eq(s.last_synced, nil, "the rest waits for the next sync")
+        assert_eq(#journal:pending("https://a.example"), 1)
+
+        local post2, sent2 = server()
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post2, batch = 2, read_pages = rows,
+            history_batches = 2 }, "ok")
+        assert_eq(starts(sent2[1]), { 500 })
+        assert_eq(sent2[1].backfill, true)
+        assert_eq(starts(sent2[2]), { 600 })
+        assert_eq(sent2[2].backfill, nil)
+        assert_eq(#journal:pending("https://a.example"), 0)
+    end,
+
+    ["rows statistics leaves out up to sign-in don't hold history up"] = function()
+        local state, journal = setup("https://a.example")
+        local s = state:find("https://a.example")
+        s.history = { through = 5 }
+        local post, sent = server()
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post, batch = 2,
+            read_pages = rowsFrom({ row(100), row(200) }) }, "ok")
+        assert_eq(#sent, 1)
+        assert_eq(s.stats_cursor.rowid, 5)
+    end,
+
     ["positions go only with the last batch, after every page row"] = function()
         local state, journal = setup("https://a.example")
         journal:recordPosition("doc1", "9", 0.9, 900)

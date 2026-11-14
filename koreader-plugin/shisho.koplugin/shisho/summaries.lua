@@ -362,14 +362,15 @@ book's sidecar, whose summary is current (nil without one), and records it
 as synced. A state with no status leaves the device's alone, as does one
 with no rating; rating 0 removes the device's. Asked for outright, it
 doesn't overwrite a status or stars KOReader recorded before signing in, only
-fills in what's missing. Returns { status, rating } to write, rating 0 for removing
-it, or nil when the sidecar already says so.
+fills in what's missing. With history_pending, history (shisho/history) is
+still to send them, so they stay marked as before. Returns { status, rating }
+to write, rating 0 for removing it, or nil when the sidecar already says so.
 ]]
-function Summaries.apply(synced, state, current, outright)
+function Summaries.apply(synced, state, current, outright, history_pending)
     local entry = synced[state.document] or {}
     synced[state.document] = entry
     local keep = outright and entry.before
-    entry.before = nil
+    if not history_pending then entry.before = nil end
     local write = {}
     local have_status = current and current.status
     if Summaries.STATUSES[state.status] and not (keep and have_status) then
@@ -398,12 +399,12 @@ with its server, store. A book whose sidecar wasn't read this sync isn't
 written: its own change may not have reached the server yet. It's asked about
 outright at the next sync that reads it instead.
 ]]
-function Summaries.applyTo(store, state, book, outright)
+function Summaries.applyTo(store, state, book, outright, history_pending)
     if book.unread then
         store.asked[state.document] = nil
         return nil
     end
-    return Summaries.apply(store.synced, state, book.current, outright)
+    return Summaries.apply(store.synced, state, book.current, outright, history_pending)
 end
 
 -- written is summary, a sidecar's, with write (from apply) in it, as

@@ -441,6 +441,8 @@ commands["plugin-launch"] = function()
     withPlugin()
 end
 
+-- plugin-signin signs in, and with history answers whether to send reading
+-- history, "send" or "skip", as a person tapping the question's button.
 commands["plugin-signin"] = function()
     withPlugin(function(plugin)
         local ok, outcome, message
@@ -449,7 +451,14 @@ commands["plugin-signin"] = function()
         else
             ok, outcome, message = plugin:signInWithPassword(args.server, args.username, args.password)
         end
-        return { signed_in = ok, outcome = outcome, message = message }
+        local out = { signed_in = ok, outcome = outcome, message = message }
+        if confirm_box and args.history then
+            out.asked = confirm_box.text
+            if args.history == "send" then confirm_box.ok_callback() else confirm_box.cancel_callback() end
+            UIManager:close(confirm_box)
+            stepUI()
+        end
+        return out
     end)
 end
 
@@ -556,6 +565,25 @@ local function seedStatistics()
     conn:close()
 end
 
+-- seedSummaries writes books' sidecar statuses and stars: args.summaries is
+-- { [file name] = { status, rating, modified } }, with the book's hash, as
+-- KOReader records them when it opens a book and a person marks it.
+local function seedSummaries()
+    if type(args.summaries) ~= "table" then return end
+    local DocSettings = require("docsettings")
+    for name, summary in pairs(args.summaries) do
+        local path = "/books/" .. name
+        local doc_settings = DocSettings:open(path)
+        doc_settings:saveSetting("partial_md5_checksum", require("util").partialMD5(path))
+        doc_settings:saveSetting("summary", {
+            status = summary.status ~= "" and summary.status or nil,
+            rating = (tonumber(summary.rating) or 0) > 0 and summary.rating or nil,
+            modified = summary.modified ~= "" and summary.modified or nil,
+        })
+        doc_settings:flush()
+    end
+end
+
 -- plugin-sync seeds statistics, with Wi-Fi off, then turns Wi-Fi on, which
 -- syncs by itself. With sync_now, it taps Sync now first instead.
 commands["plugin-sync"] = function()
@@ -564,6 +592,7 @@ commands["plugin-sync"] = function()
             G_reader_settings:saveSetting("statistics", { is_enabled = false })
         end
         seedStatistics()
+        seedSummaries()
         if args.sync_now then
             -- Sync now, as the menu runs it: only once Wi-Fi is on.
             local problems

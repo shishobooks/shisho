@@ -109,6 +109,15 @@ return {
         assert_eq(keys(Statistics.read(path, nil, 10)), { "aaa:2@1100" })
     end,
 
+    ["counts the rows read would read between two cursors"] = function()
+        local path = statsDB({ [1] = "aaa", [2] = false }, {
+            { 1, 1, 1000, 20 }, { 2, 1, 1000, 20 }, { 1, 2, 1100, 0 }, { 1, 3, 1200, 20 }, { 1, 4, 1300, 20 },
+        })
+        assert_eq(Statistics.count(path, { rowid = 0 }, 4), 2, "the rows read would leave out aren't counted")
+        assert_eq(Statistics.count(path, { rowid = 1 }, 5), 2)
+        assert_eq(Statistics.count(scratch_dir() .. "/missing.sqlite3", { rowid = 0 }, 4), 0)
+    end,
+
     ["a missing database reads as empty and isn't created"] = function()
         local path = scratch_dir() .. "/statistics.sqlite3"
         assert_eq(Statistics.read(path, nil, 10), {})

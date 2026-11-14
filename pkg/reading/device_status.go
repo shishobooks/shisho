@@ -41,18 +41,10 @@ type DeviceStatus struct {
 func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		now := svc.now()
-		file := &models.File{}
-		err := tx.NewSelect().Model(file).Column("f.book_id", "f.file_role").Where("f.id = ?", s.FileID).Scan(ctx)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrFileNotFound
+		bookID, err := statusBook(ctx, tx, s.FileID)
+		if err != nil || bookID == 0 {
+			return err
 		}
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		if file.FileRole == models.FileRoleSupplement {
-			return nil
-		}
-		bookID := file.BookID
 		underway, err := retrieveUnderway(ctx, tx, s.UserID, bookID)
 		if err != nil {
 			return err
@@ -103,6 +95,24 @@ func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 		}
 		return placeBookSessions(ctx, tx, s.UserID, bookID)
 	})
+}
+
+// statusBook is the Book a device's status for its copy of fileID is about,
+// or 0 for a supplement, which isn't the Book, so its status changes
+// nothing.
+func statusBook(ctx context.Context, tx bun.Tx, fileID int) (int, error) {
+	file := &models.File{}
+	err := tx.NewSelect().Model(file).Column("f.book_id", "f.file_role").Where("f.id = ?", fileID).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrFileNotFound
+	}
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	if file.FileRole == models.FileRoleSupplement {
+		return 0, nil
+	}
+	return file.BookID, nil
 }
 
 // placeBookSessions places each of userID's Reading Sessions of bookID that

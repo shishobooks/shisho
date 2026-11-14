@@ -17,14 +17,17 @@ local Statistics = {}
 -- How long a read waits on the statistics plugin's own writes, in ms.
 local BUSY_TIMEOUT = 2000
 
-local QUERY = [[
-    SELECT p.rowid, p.start_time, p.id_book, p.page, p.total_pages, p.duration, b.md5
+-- The rows synced, after a rowid: ones with a book's hash and some time.
+local ROWS = [[
     FROM page_stat_data AS p
     JOIN book AS b ON b.id = p.id_book
     WHERE p.rowid > ? AND b.md5 IS NOT NULL AND b.md5 != '' AND p.duration > 0
-    ORDER BY p.rowid
-    LIMIT ?;
 ]]
+
+local QUERY = "SELECT p.rowid, p.start_time, p.id_book, p.page, p.total_pages, p.duration, b.md5 "
+    .. ROWS .. " ORDER BY p.rowid LIMIT ?;"
+
+local COUNT = "SELECT COUNT(*) " .. ROWS .. " AND p.rowid <= ?;"
 
 -- withConnection runs fn with the database at path open read-only, and
 -- closes it. Returns fn's result, or nil and an error.
@@ -93,6 +96,18 @@ function Statistics.read(path, cursor, limit)
         stmt:close()
         return rows
     end)
+end
+
+-- count is how many rows read would read after cursor up to the row
+-- through, or 0 when they can't be counted.
+function Statistics.count(path, cursor, through)
+    if lfs.attributes(path, "mode") ~= "file" then
+        return 0
+    end
+    local count = withConnection(path, function(conn)
+        return scalar(conn, COUNT, rowidOf(conn, cursor), through)
+    end)
+    return count or 0
 end
 
 -- currentCursor is the cursor past every row recorded so far, where a

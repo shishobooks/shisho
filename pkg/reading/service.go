@@ -806,8 +806,11 @@ func RatingUnits(stars float64) (int, bool) {
 // SetRating sets userID's Rating of bookID in quarter-star units, or clears
 // it when units is nil.
 func (svc *Service) SetRating(ctx context.Context, userID, bookID int, units *int) error {
-	now := time.Now()
-	_, err := svc.db.NewInsert().
+	return setRating(ctx, svc.db, userID, bookID, units, time.Now())
+}
+
+func setRating(ctx context.Context, db bun.IDB, userID, bookID int, units *int, now time.Time) error {
+	_, err := db.NewInsert().
 		Model(&models.UserBook{
 			UserID:          userID,
 			BookID:          bookID,
