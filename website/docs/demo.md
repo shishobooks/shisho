@@ -17,6 +17,7 @@ The sign-in page pre-fills both fields; select **Sign in**. The demo runs on a s
 
 - Browse the library by series, author, genre, tag, and publisher, and search books, series, and people from the header.
 - Read EPUB, KePub, MOBI, AZW3, CBZ, and PDF files in the in-app readers and listen to M4B audiobooks with the player. See [Reading and Playback](./reading-and-playback.md).
+- See [Reading Stats](./reading-stats.md) and [Reading History](./reading-tracking.md#reading-history-page) for the `demo` account's sample reading, including a few books still underway. Its dates move forward every day, so the history always runs up to the last day or two.
 - Change the gallery size, default sort, and reader preferences. The demo keeps them in your browser, so they do not affect other visitors.
 
 ## What Is Disabled
@@ -25,7 +26,7 @@ The demo runs with [Demo Mode](./configuration.md#demo-mode) on, which rejects e
 
 - Editing books, files, metadata, series, and lists, including cover uploads, rescans, and deletion.
 - Sharing a list with other users.
-- Tracking reading: the reading status, rating, and history controls on a book's page, the **To Read** checkbox in **Add to list**, **Copy to To Read** on a list, and reordering To Read are visible but disabled. The readers don't remember your place or [track your reading](./reading-tracking.md#reading-in-shisho), so a book always opens at the start.
+- Tracking reading: the reading status, rating, and history controls on a book's page, on Reading History, and in a day's sessions on Reading Stats, the **To Read** checkbox in **Add to list**, **Copy to To Read** on a list, and reordering To Read are visible but disabled. The readers don't remember your place or [track your reading](./reading-tracking.md#reading-in-shisho), so a book always opens at the start, or where the sample reading left off.
 - Downloading files: the download controls for files, supplements, and whole books are hidden, and direct links to an unmodified file, a conversion such as KePub, or a bulk download are also blocked.
 - Administration: libraries, users, roles, plugins, and security settings.
 - Integrations: [OPDS](./opds.md), [Kobo Sync](./kobo-sync.md), the [eReader Browser](./ereader-browser.md), and [Share Links](./sharing.md) are not available.
@@ -33,7 +34,7 @@ The demo runs with [Demo Mode](./configuration.md#demo-mode) on, which rejects e
 
 ## About the Library
 
-The demo library contains only works that may be freely redistributed: openly licensed books and public-domain texts, recordings, and comics. Each book's description ends with its credit and license, and the full credits, sources, and modifications are listed in [`CORPUS.md`](https://github.com/shishobooks/demo-corpus/blob/master/CORPUS.md) in the `shishobooks/demo-corpus` repository.
+The demo library contains only works that may be freely redistributed: openly licensed books and public-domain texts, recordings, and comics. Each book's description ends with its credit and license, and the full credits, sources, and modifications are listed in [`CORPUS.md`](https://github.com/shishobooks/demo-corpus/blob/master/CORPUS.md) in the `shishobooks/demo-corpus` repository. The reading history on the `demo` account is sample data, not anyone's real reading.
 
 ## Next Steps
 

@@ -205,6 +205,7 @@ const renderPage = ({
   heatmap = heatmapFor(),
   deleteSession = () => new Response(null, { status: 204 }),
   initialEntry = "/reading-stats",
+  demoMode = false,
 }: {
   stats?: (year: number | null) => ReadingStatsResponse;
   finished?: ReadingStatsFinishedBook[];
@@ -214,6 +215,7 @@ const renderPage = ({
   heatmap?: (year: number | null) => ReadingStatsHeatmapResponse;
   deleteSession?: () => Response;
   initialEntry?: string;
+  demoMode?: boolean;
 } = {}) => {
   mockCoverDimensions();
   vi.stubGlobal("__APP_VERSION__", "test");
@@ -249,7 +251,7 @@ const renderPage = ({
       if (path === "/api/reading/stats/day")
         return Response.json(day(url.searchParams.get("day")!));
       if (path === "/api/auth/status")
-        return Response.json({ needs_setup: false, demo_mode: false });
+        return Response.json({ needs_setup: false, demo_mode: demoMode });
       if (path === "/api/auth/me")
         return Response.json({
           id: 1,
@@ -1011,6 +1013,48 @@ describe("ReadingStatsPage", () => {
         document.querySelectorAll('[data-finish][data-book="read-through-9"]'),
       ).toHaveLength(1);
       expect(bars("read-through-9")).toEqual([]);
+    });
+
+    it("disables a day's session deletes in Demo Mode and says why", async () => {
+      const { user } = renderPage({
+        calendar: june,
+        initialEntry: CALENDAR,
+        demoMode: true,
+        day: (day) => ({
+          ...emptyDay(day),
+          sessions: [
+            {
+              id: 41,
+              book: dune,
+              started_at: "2026-06-01T20:00:00Z",
+              ended_at: "2026-06-01T21:00:00Z",
+              seconds: 3600,
+              start_percentage: 0.1,
+              end_percentage: 0.25,
+              kind: "reading",
+              source: "web_reader",
+              measured: true,
+              device_id: null,
+              device_name: null,
+            },
+          ],
+        }),
+      });
+      await user.click(
+        await screen.findByRole("button", { name: /^Monday, June 1, 2026/ }),
+      );
+
+      const sessions = await screen.findByRole("list", {
+        name: "Reading sessions",
+      });
+      expect(
+        within(sessions).getByRole("button", {
+          name: "Delete session of Dune, 8:00 PM to 9:00 PM",
+        }),
+      ).toBeDisabled();
+      expect(
+        screen.getByText("This action is unavailable in the demo."),
+      ).toBeInTheDocument();
     });
 
     it("closes the delete dialog when Demo Mode refuses it", async () => {

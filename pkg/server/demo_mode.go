@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/demo"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
@@ -37,5 +40,30 @@ func demoModeMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			}
 		}
 		return errcodes.DemoMode()
+	}
+}
+
+// demoDateShiftMiddleware moves the demo's dates on the first
+// request of each UTC day, so the latest reading stays on yesterday while a
+// suspended Machine resumes without restarting. The shift finishes even if
+// the request that started it is canceled, since it won't run again that
+// day. Stale dates beat no demo, so a failure only logs.
+func demoDateShiftMiddleware(shifter *demo.DateShifter) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			logDemoDateShift(shifter.Refresh(context.WithoutCancel(c.Request().Context())))
+			return next(c)
+		}
+	}
+}
+
+// logDemoDateShift logs a shift that moved something or failed, and keeps
+// the quiet requests of the rest of the day out of the log.
+func logDemoDateShift(days int, err error) {
+	switch {
+	case err != nil:
+		logger.New().Err(err).Error("failed to shift demo dates")
+	case days != 0:
+		logger.New().Info("shifted demo dates", logger.Data{"days": days})
 	}
 }
