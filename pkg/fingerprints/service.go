@@ -195,15 +195,6 @@ func (svc *Service) LinkDocument(ctx context.Context, userID, fileID int, delive
 	return errors.WithStack(err)
 }
 
-// UnlinkDocument removes userID's link of a KOReader document hash, if any.
-func (svc *Service) UnlinkDocument(ctx context.Context, userID int, hash string) error {
-	_, err := svc.db.NewDelete().
-		Model((*models.KOReaderDocumentLink)(nil)).
-		Where("user_id = ? AND hash = ?", userID, hash).
-		Exec(ctx)
-	return errors.WithStack(err)
-}
-
 // FindDocumentLink returns the File userID linked a KOReader document hash
 // to, as a user-made entry with its File loaded, or nil for none.
 func (svc *Service) FindDocumentLink(ctx context.Context, userID int, hash string) (*models.DocumentHash, error) {

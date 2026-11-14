@@ -184,4 +184,32 @@ return {
         assert_eq(clipped.identifiers, nil, "an empty list is left out")
         assert_eq(Recognition.about(nil, nil, nil).title, nil)
     end,
+
+    ["a copy a server says it holds bare is described, unless this round it recognized it"] = function()
+        local r = open()
+        local round = r:beginRound()
+        r:record(A, { { document = "now-known", state = "recognized" } }, round)
+        r:undescribed(A, { "bare", "now-known" }, round)
+        assert_eq(r:answer(A, "now-known").state, "recognized")
+        assert_eq(r:needingDetails(A), { "bare" })
+    end,
+
+    ["a copy KOReader knows nothing of isn't asked about again until a while later"] = function()
+        local r = open()
+        local round = r:beginRound()
+        r:undescribed(A, { "gone" }, round)
+        r:cannotDescribe(A, "gone", round)
+        assert_eq(r:needingDetails(A), {})
+        -- Asked again at the next lookup, it's still left alone.
+        round = r:beginRound()
+        r:undescribed(A, { "gone" }, round)
+        assert_eq(r:needingDetails(A), {})
+        for _ = 1, Recognition.DESCRIBE_RETRY do r:beginRound() end
+        assert_eq(r:needingDetails(A), { "gone" }, "tried again, as when it's back on the device")
+    end,
+
+    ["a title of only spaces is no title"] = function()
+        assert_eq(Recognition.about({ title = "   " }, nil, nil).title, nil)
+    end,
 }
+

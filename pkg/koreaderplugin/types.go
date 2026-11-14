@@ -311,6 +311,12 @@ type LinkCandidatesQuery struct {
 	Q string `query:"q" json:"q" mod:"trim" validate:"required,max=256"`
 }
 
+// DismissAllPayload dismisses the copies still to link that the Device's
+// page listed. One that arrived since isn't dismissed unseen.
+type DismissAllPayload struct {
+	Documents []string `json:"documents" validate:"required,min=1,max=10000,dive,required,max=64"`
+}
+
 // LinkPayload links an unrecognized copy to a File.
 type LinkPayload struct {
 	FileID int `json:"file_id" validate:"required,min=1"`

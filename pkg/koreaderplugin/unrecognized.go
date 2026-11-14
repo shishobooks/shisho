@@ -164,19 +164,20 @@ func (h *handler) holdEvent(ctx context.Context, user *models.User, device *devi
 	return true, errors.WithStack(err)
 }
 
-// dropHeld deletes what device held for document: its ungrouped page rows
-// and its events.
-func (h *handler) dropHeld(ctx context.Context, deviceID, document string) error {
-	_, err := h.db.NewDelete().
+// dropHeld deletes what device held for each of documents: its ungrouped
+// page rows and its events. Dismissing one copy or many, and a claim, all
+// drop held data through it.
+func dropHeld(ctx context.Context, db bun.IDB, deviceID string, documents []string) error {
+	_, err := db.NewDelete().
 		Model((*models.KOReaderPageRow)(nil)).
-		Where("device_id = ? AND document = ? AND file_id IS NULL AND NOT grouped", deviceID, document).
+		Where("device_id = ? AND document IN (?) AND file_id IS NULL AND NOT grouped", deviceID, bun.List(documents)).
 		Exec(ctx)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	_, err = h.db.NewDelete().
+	_, err = db.NewDelete().
 		Model((*models.KOReaderHeldEvent)(nil)).
-		Where("device_id = ? AND document = ?", deviceID, document).
+		Where("device_id = ? AND document IN (?)", deviceID, bun.List(documents)).
 		Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -194,7 +195,7 @@ func (h *handler) dropClaimed(ctx context.Context, deviceID string, documents []
 		if book != nil && book.LinkedAt != nil {
 			continue
 		}
-		if err := h.dropHeld(ctx, deviceID, document); err != nil {
+		if err := dropHeld(ctx, h.db, deviceID, []string{document}); err != nil {
 			return err
 		}
 		if book != nil && book.DismissedAt != nil {
@@ -238,9 +239,10 @@ const maxUndescribed = 500
 
 // undescribed is the copies device holds as unrecognized with nothing
 // KOReader knows of them, no title or file type, which the plugin is asked
-// to describe.
-func (h *handler) undescribed(ctx context.Context, device *devices.Device) ([]string, error) {
-	documents := []string{}
+// to describe. A copy that resolves to a File now, as one Shisho has since
+// produced, isn't unrecognized any more, so it isn't asked about.
+func (h *handler) undescribed(ctx context.Context, user *models.User, device *devices.Device) ([]string, error) {
+	var candidates []string
 	err := h.db.NewSelect().
 		Model((*models.KOReaderUnrecognizedBook)(nil)).
 		Column("kub.document").
@@ -248,8 +250,21 @@ func (h *handler) undescribed(ctx context.Context, device *devices.Device) ([]st
 		Where("kub.title IS NULL AND kub.file_type IS NULL").
 		OrderExpr("kub.document").
 		Limit(maxUndescribed).
-		Scan(ctx, &documents)
-	return documents, errors.WithStack(err)
+		Scan(ctx, &candidates)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	documents := []string{}
+	for _, document := range candidates {
+		file, err := h.documents.Resolve(ctx, user, device, document)
+		if err != nil {
+			return nil, err
+		}
+		if file == nil {
+			documents = append(documents, document)
+		}
+	}
+	return documents, nil
 }
 
 // currentBook is the record of document on device, as unrecognized
@@ -481,17 +496,23 @@ func (h *handler) unlink(ctx context.Context, user *models.User, device *devices
 	if book == nil || book.UserID != user.ID || book.LinkedAt == nil {
 		return errCopyNotFound
 	}
-	if err := h.hashes.UnlinkDocument(ctx, user.ID, document); err != nil {
+	return h.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		_, err := tx.NewDelete().
+			Model((*models.KOReaderDocumentLink)(nil)).
+			Where("user_id = ? AND hash = ?", user.ID, document).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = tx.NewUpdate().
+			Model((*models.KOReaderUnrecognizedBook)(nil)).
+			Set("linked_at = NULL").
+			Set("linked_file_id = NULL").
+			Set("updated_at = ?", time.Now()).
+			Where("user_id = ? AND document = ? AND linked_at IS NOT NULL", user.ID, document).
+			Exec(ctx)
 		return errors.WithStack(err)
-	}
-	_, err = h.db.NewUpdate().
-		Model((*models.KOReaderUnrecognizedBook)(nil)).
-		Set("linked_at = NULL").
-		Set("linked_file_id = NULL").
-		Set("updated_at = ?", time.Now()).
-		Where("user_id = ? AND document = ? AND linked_at IS NOT NULL", user.ID, document).
-		Exec(ctx)
-	return errors.WithStack(err)
+	})
 }
 
 // dismiss dismisses document on device: what was held for it is deleted,
@@ -504,7 +525,7 @@ func (h *handler) dismiss(ctx context.Context, user *models.User, device *device
 	if book == nil || book.UserID != user.ID || book.DismissedAt != nil || book.LinkedAt != nil {
 		return errCopyNotFound
 	}
-	if err := h.dropHeld(ctx, device.ID, document); err != nil {
+	if err := dropHeld(ctx, h.db, device.ID, []string{document}); err != nil {
 		return err
 	}
 	now := time.Now()
@@ -517,42 +538,42 @@ func (h *handler) dismiss(ctx context.Context, user *models.User, device *device
 	return errors.WithStack(err)
 }
 
-// dismissAll dismisses every copy on device still to link, as dismiss does
-// one: what was held for them is deleted, and their data is dropped from then
-// on. Linked copies stay.
-func (h *handler) dismissAll(ctx context.Context, user *models.User, device *devices.Device) error {
-	return h.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		pending := tx.NewSelect().
-			Model((*models.KOReaderUnrecognizedBook)(nil)).
-			Column("kub.document").
-			Where("kub.device_id = ? AND kub.user_id = ?", device.ID, user.ID).
-			Where("kub.dismissed_at IS NULL AND kub.linked_at IS NULL")
-		_, err := tx.NewDelete().
-			Model((*models.KOReaderPageRow)(nil)).
-			Where("device_id = ? AND file_id IS NULL AND NOT grouped", device.ID).
-			Where("document IN (?)", pending).
-			Exec(ctx)
-		if err != nil {
+// dismissAll dismisses each of documents on device still to link, as
+// dismiss does one: what was held for it is deleted, and its data is
+// dropped from then on. Linked copies, and copies the page didn't list,
+// stay. It runs in batches, under SQLite's limit on bound values.
+func (h *handler) dismissAll(ctx context.Context, user *models.User, device *devices.Device, documents []string) error {
+	const batch = 500
+	for start := 0; start < len(documents); start += batch {
+		chunk := documents[start:min(start+batch, len(documents))]
+		err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+			var pending []string
+			err := tx.NewSelect().
+				Model((*models.KOReaderUnrecognizedBook)(nil)).
+				Column("kub.document").
+				Where("kub.device_id = ? AND kub.user_id = ? AND kub.document IN (?)", device.ID, user.ID, bun.List(chunk)).
+				Where("kub.dismissed_at IS NULL AND kub.linked_at IS NULL").
+				Scan(ctx, &pending)
+			if err != nil || len(pending) == 0 {
+				return errors.WithStack(err)
+			}
+			if err := dropHeld(ctx, tx, device.ID, pending); err != nil {
+				return err
+			}
+			now := time.Now()
+			_, err = tx.NewUpdate().
+				Model((*models.KOReaderUnrecognizedBook)(nil)).
+				Set("dismissed_at = ?", now).
+				Set("updated_at = ?", now).
+				Where("device_id = ? AND document IN (?)", device.ID, bun.List(pending)).
+				Exec(ctx)
 			return errors.WithStack(err)
-		}
-		_, err = tx.NewDelete().
-			Model((*models.KOReaderHeldEvent)(nil)).
-			Where("device_id = ?", device.ID).
-			Where("document IN (?)", pending).
-			Exec(ctx)
+		})
 		if err != nil {
-			return errors.WithStack(err)
+			return err
 		}
-		now := time.Now()
-		_, err = tx.NewUpdate().
-			Model((*models.KOReaderUnrecognizedBook)(nil)).
-			Set("dismissed_at = ?", now).
-			Set("updated_at = ?", now).
-			Where("device_id = ? AND user_id = ?", device.ID, user.ID).
-			Where("dismissed_at IS NULL AND linked_at IS NULL").
-			Exec(ctx)
-		return errors.WithStack(err)
-	})
+	}
+	return nil
 }
 
 // listUnrecognized lists device's unrecognized copies: the ones to link,

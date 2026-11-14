@@ -930,11 +930,7 @@ function Shisho:pullStates(server, client, store, books)
         write = function(pulled, outright)
             local book = books[pulled.document]
             if not book then return end
-            -- History still to go, or that can still be sent from the menu,
-            -- sends what KOReader recorded before signing in, so it stays
-            -- marked as before.
-            local history_unsent = History.rowsPending(server) or History.sendable(server)
-            local write = Summaries.applyTo(store, pulled, book, outright, history_unsent)
+            local write = Summaries.applyTo(store, pulled, book, outright, History.unsent(server))
             if write then self:writeSummary(book, write) end
         end,
     }
@@ -1227,6 +1223,18 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
     end
     self.recognition:flush()
     local enabled = self.state:enabledServers()
+    -- Where each book in the hash index is, worked out once for the books
+    -- this sync describes (aboutBook).
+    local paths
+    local function pathOf(document)
+        if not paths then
+            paths = {}
+            for file, entry in pairs(self.hashes:files()) do
+                if paths[entry.hash] == nil then paths[entry.hash] = file end
+            end
+        end
+        return paths[document]
+    end
 
     for __, plan in ipairs(plans) do
         local server, client, store, label = plan.server, plan.client, plan.store, plan.label
@@ -1253,7 +1261,7 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
                 recognition = self.recognition,
                 servers = enabled,
                 documents = documents,
-                about = function(document) return self:aboutBook(document, books) end,
+                about = function(document) return self:aboutBook(document, books, pathOf) end,
                 read_document = read_pages and function(document, from, through)
                     return Statistics.readDocument(self:statisticsPath(), document, from, through)
                 end or nil,
@@ -1282,15 +1290,11 @@ end
 
 -- aboutBook is what KOReader knows of the book document
 -- (Recognition.about), from statistics, and from its sidecar when the
--- plugin knows where the book is.
-function Shisho:aboutBook(document, books)
+-- plugin knows where the book is: in books, or else pathOf(document), from
+-- the hash index.
+function Shisho:aboutBook(document, books, pathOf)
     local stats = self:statisticsEnabled() and Statistics.book(self:statisticsPath(), document) or nil
-    local path = books[document] and books[document].path
-    if not path then
-        for file, entry in pairs(self.hashes:files()) do
-            if entry.hash == document then path = file break end
-        end
-    end
+    local path = books[document] and books[document].path or pathOf(document)
     local props
     if path then
         local ok, value = pcall(function()
@@ -1364,7 +1368,8 @@ function Shisho:serverMenu(server)
         keep_menu_open = true,
         callback = function() self:showSignIn(server.url) end,
     })
-    if History.sendable(server) then
+    -- A disabled server isn't synced, so it couldn't go at once.
+    if not server.disabled and History.sendable(server) then
         table.insert(items, {
             text = _("Send reading history"),
             help_text = _("Send this server the reading history KOReader recorded before you signed in to it, as first sign-in offers: your reading time on the days it happened, and your books' statuses and stars where Shisho has none. Reading time that already synced since you signed in isn't added again."),

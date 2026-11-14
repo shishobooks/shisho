@@ -477,7 +477,14 @@ describe("KOReaderUnrecognizedBooks", () => {
         name: "Dismiss all",
       }),
     );
-    expect(posts(request)).toEqual([["POST", `${LIST}/dismiss-all`]]);
+    // Only the books it listed.
+    expect(posts(request)).toEqual([
+      [
+        "POST",
+        `${LIST}/dismiss-all`,
+        { documents: [DOCUMENT, "e".repeat(32)] },
+      ],
+    ]);
     await waitFor(() =>
       expect(
         screen.queryByRole("list", { name: "Unrecognized books" }),
@@ -486,6 +493,39 @@ describe("KOReaderUnrecognizedBooks", () => {
     expect(
       screen.getByRole("list", { name: "Linked books" }),
     ).toHaveTextContent("Linked Copy");
+  });
+
+  it("keeps the linked books open while unlinking them", async () => {
+    const linkedCopy = (n: number) =>
+      unrecognized({
+        document: `${n}`.repeat(32),
+        title: `Linked ${n}`,
+        suggestions: [],
+        linked_at: "2026-11-01T00:00:00Z",
+        linked: candidate({ match: undefined }),
+      });
+    stubAPI([linkedCopy(1), linkedCopy(2)]);
+    const user = setupUser();
+    renderSection();
+
+    // With nothing to link, they start open.
+    const list = await screen.findByRole("list", { name: "Linked books" });
+    await user.click(
+      within(list).getByRole("button", { name: "Unlink Linked 1" }),
+    );
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Unlink",
+      }),
+    );
+
+    await screen.findByRole("list", { name: "Unrecognized books" });
+    expect(
+      within(screen.getByRole("list", { name: "Linked books" })).getByRole(
+        "listitem",
+        { name: "Linked 2" },
+      ),
+    ).toBeInTheDocument();
   });
 
   it("offers Dismiss all only with more than one book to link", async () => {

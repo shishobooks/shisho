@@ -136,4 +136,12 @@ return {
         assert_eq(History.rowsPending(server), true)
         assert_eq(History.sendable(server), false, "once is enough")
     end,
+
+    ["history is unsent while it's still to go or can still be sent"] = function()
+        assert_eq(History.unsent({}), true, "declined, or never asked")
+        assert_eq(History.unsent({ asking_history = true }), false, "the sign-in is still asking")
+        assert_eq(History.unsent({ history = { through = 5 }, stats_cursor = { rowid = 2 } }), true, "still going")
+        assert_eq(History.unsent({ history = { through = 5 }, stats_cursor = { rowid = 5 } }), false, "sent")
+    end,
 }
+

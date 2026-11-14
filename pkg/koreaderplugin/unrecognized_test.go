@@ -729,16 +729,19 @@ func TestUpload_DetailsAloneListNothingNew(t *testing.T) {
 	other := unrecognizedAbout()
 	other.Document = "ffffffffffffffffffffffffffffffff"
 
-	resp := f.upload(UploadPayload{Unrecognized: []UnrecognizedPayload{other, unrecognizedAbout()}})
+	f.upload(UploadPayload{Unrecognized: []UnrecognizedPayload{other, unrecognizedAbout()}})
 
-	assert.NotNil(t, resp)
 	assert.Empty(t, f.listUnrecognized(), "neither a copy with no data nor a dismissed one is listed")
 	assert.Equal(t, DocumentUnknown, f.lookupAs(f.device, other.Document)[other.Document])
 }
 
-func (f *syncFixture) dismissAllAs(user *models.User, device *devices.Device) error {
+// dismissAllAs dismisses documents, the books still to link the Device's
+// page listed.
+func (f *syncFixture) dismissAllAs(user *models.User, device *devices.Device, documents ...string) error {
 	f.t.Helper()
-	_, err := f.web(f.h.dismissAllUnrecognized, http.MethodPost, "/", user, "", "id", device.ID)
+	body, err := json.Marshal(DismissAllPayload{Documents: documents})
+	require.NoError(f.t, err)
+	_, err = f.web(f.h.dismissAllUnrecognized, http.MethodPost, "/", user, string(body), "id", device.ID)
 	return err
 }
 
@@ -763,16 +766,23 @@ func TestDismissAll_DismissesEveryBookStillToLink(t *testing.T) {
 	rec := f.uploadAs(other, UploadPayload{Pages: pages(oldCopy, 50, 52, f.day1), Unrecognized: []UnrecognizedPayload{unrecognizedAbout()}})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
-	require.NoError(t, f.dismissAllAs(f.user, f.device))
+	// A book that arrived after the page listed them isn't one it showed.
+	later := unrecognizedAbout()
+	later.Document = "cccccccccccccccccccccccccccccccc"
+	f.upload(UploadPayload{Pages: pages(later.Document, 1, 3, f.day1.Add(2*time.Hour)), Unrecognized: []UnrecognizedPayload{later}})
+
+	require.NoError(t, f.dismissAllAs(f.user, f.device, oldCopy, another.Document, linked.Document))
 
 	books := f.listUnrecognized()
-	require.Len(t, books, 1, "only the linked book stays")
+	require.Len(t, books, 2, "the linked book, and the one that arrived since, stay")
+	assert.Equal(t, later.Document, books[0].Document)
+	books = books[1:]
 	assert.Equal(t, linked.Document, books[0].Document)
 	states := f.lookupAs(f.device, oldCopy, another.Document)
 	assert.Equal(t, DocumentDismissed, states[oldCopy])
 	assert.Equal(t, DocumentDismissed, states[another.Document])
 	held, err := f.db.NewSelect().Model((*models.KOReaderPageRow)(nil)).
-		Where("device_id = ? AND file_id IS NULL", f.device.ID).Count(f.ctx)
+		Where("device_id = ? AND file_id IS NULL AND document != ?", f.device.ID, later.Document).Count(f.ctx)
 	require.NoError(t, err)
 	assert.Zero(t, held, "what was held for them is deleted")
 	assert.Zero(t, f.heldEventsOn(f.device))
@@ -787,7 +797,7 @@ func TestDismissAll_RefusesAnotherUsersDevice(t *testing.T) {
 	f.heldOldCopy()
 	other := f.addUser("other", true)
 
-	requireStatus(t, f.dismissAllAs(other, f.device), http.StatusNotFound)
+	requireStatus(t, f.dismissAllAs(other, f.device, oldCopy), http.StatusNotFound)
 	assert.Len(t, f.listUnrecognized(), 1)
 }
 
@@ -796,4 +806,41 @@ func (f *syncFixture) heldEventsOn(device *devices.Device) int {
 	n, err := f.db.NewSelect().Model((*models.KOReaderHeldEvent)(nil)).Where("device_id = ?", device.ID).Count(f.ctx)
 	require.NoError(f.t, err)
 	return int(n)
+}
+
+func TestLookup_AsksOnlyForTheDetailsOfThisDevicesCopiesStillToLink(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	bare := func(document string) {
+		f.upload(UploadPayload{Events: []EventPayload{
+			{ID: "bare-" + document, Type: PluginEventRating, Document: document, Day: day(f.day1), Rating: 2},
+		}})
+	}
+	bare(oldCopy)
+	dismissed := "dddddddddddddddddddddddddddddddd"
+	bare(dismissed)
+	_, err := f.web(f.h.dismissUnrecognized, http.MethodPost, "/", f.user, "", "id", f.device.ID, "document", dismissed)
+	require.NoError(t, err)
+	// A bare copy that resolves now, as one Shisho has produced since.
+	produced := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	bare(produced)
+	require.NoError(t, f.hashes.RecordDocumentHash(f.ctx, f.file.ID, models.FileTypeEPUB, produced))
+	// Another Device's bare copy is its own.
+	other := f.addDevice(f.user, devices.DeviceTypeKOReader)
+	f.backdate(other, time.Now().AddDate(0, -1, 0))
+	rec := f.uploadAs(other, UploadPayload{Events: []EventPayload{
+		{ID: "other-bare", Type: PluginEventRating, Document: "ffffffffffffffffffffffffffffffff", Day: day(f.day1), Rating: 2},
+	}})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	assert.Equal(t, []string{oldCopy}, f.undescribedNow())
+
+	// Details for a copy that resolves change nothing of it.
+	about := unrecognizedAbout()
+	about.Document = produced
+	f.upload(UploadPayload{Unrecognized: []UnrecognizedPayload{about}})
+	record, err := f.h.unrecognizedBook(f.ctx, f.device.ID, produced)
+	require.NoError(t, err)
+	require.NotNil(t, record)
+	assert.Nil(t, record.Title)
 }

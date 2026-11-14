@@ -463,7 +463,11 @@ function Sync.run(opts)
         local wanted = {}
         for __, document in ipairs(opts.recognition:needingDetails(server.url)) do
             local about = hold.about(document)
-            if about.title or about.file_type then table.insert(wanted, about) end
+            if about.title or about.file_type then
+                table.insert(wanted, about)
+            else
+                opts.recognition:cannotDescribe(server.url, document, opts.recognition:current())
+            end
         end
         local first = 1
         while first <= #wanted do

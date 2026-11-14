@@ -36,7 +36,7 @@ func (h *handler) lookup(c echo.Context) error {
 		}
 		documents = append(documents, DocumentLookedUp{Document: document, State: state})
 	}
-	undescribed, err := h.undescribed(ctx, device)
+	undescribed, err := h.undescribed(ctx, user, device)
 	if err != nil {
 		return err
 	}
@@ -149,13 +149,18 @@ func (h *handler) unlinkUnrecognized(c echo.Context) error {
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
-// dismissAllUnrecognized dismisses every copy on the Device still to link.
+// dismissAllUnrecognized dismisses the copies still to link that the
+// Device's page listed.
 func (h *handler) dismissAllUnrecognized(c echo.Context) error {
 	user, device, err := h.ownDevice(c)
 	if err != nil {
 		return err
 	}
-	if err := h.dismissAll(c.Request().Context(), user, device); err != nil {
+	var payload DismissAllPayload
+	if err := c.Bind(&payload); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := h.dismissAll(c.Request().Context(), user, device, payload.Documents); err != nil {
 		return err
 	}
 	return errors.WithStack(c.NoContent(http.StatusNoContent))

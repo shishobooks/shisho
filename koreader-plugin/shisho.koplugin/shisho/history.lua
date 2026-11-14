@@ -68,6 +68,13 @@ function History.sendable(server)
     return type(server.history) ~= "table" and not server.asking_history
 end
 
+-- unsent reports whether server's history is still to go, or can still be
+-- sent, so what KOReader recorded before signing in stays marked for it
+-- (Summaries.apply).
+function History.unsent(server)
+    return History.rowsPending(server) or History.sendable(server)
+end
+
 -- accept sends server history from the first statistics row up to where
 -- sign-in left off. Accepted again, it keeps its place.
 function History.accept(server)

@@ -23,6 +23,7 @@ import type {
   UpdateDevicePayload,
 } from "@/types/generated/devices";
 import type {
+  DismissAllPayload,
   LinkCandidate,
   LinkCandidatesQuery,
   LinkPayload,
@@ -394,15 +395,20 @@ export const useUnlinkKOReaderUnrecognized = () => {
   });
 };
 
-// Dismisses every book on a Device still to link, deleting the reading data
-// held for them. Linked books stay.
+// Dismisses the books on a Device still to link that its page listed,
+// deleting the reading data held for them. Linked books stay.
 export const useDismissAllKOReaderUnrecognized = () => {
   const queryClient = useQueryClient();
-  return useMutation<void, ShishoAPIError, { deviceId: string }>({
-    mutationFn: ({ deviceId }) =>
-      API.request(
+  return useMutation<
+    void,
+    ShishoAPIError,
+    { deviceId: string; documents: string[] }
+  >({
+    mutationFn: ({ deviceId, documents }) =>
+      API.request<void, DismissAllPayload>(
         "POST",
         `/user/devices/${deviceId}/koreader-unrecognized/dismiss-all`,
+        { documents },
       ),
     onSuccess: (_data, { deviceId }) => {
       queryClient.invalidateQueries({

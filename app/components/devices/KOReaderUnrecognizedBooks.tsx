@@ -27,7 +27,7 @@ import {
   type LinkCandidate,
   type UnrecognizedBook,
 } from "@/types/generated/koreaderplugin";
-import { fileTypeLabel, formatDuration } from "@/utils/format";
+import { fileTypeLabel, formatCount, formatDuration } from "@/utils/format";
 import { formatLastRead } from "@/utils/readingProgress";
 
 // The name a copy goes by: KOReader's title, or the start of its hash when
@@ -81,7 +81,8 @@ const CandidateList = ({
           <p
             className={cn(
               "flex items-center gap-2 font-medium",
-              compact ? "min-w-0 shrink-0" : "flex-wrap",
+              // Compact, the title gives way before the Link button does.
+              compact ? "min-w-0" : "flex-wrap",
             )}
           >
             <span className={compact ? "truncate" : "break-words"}>
@@ -248,13 +249,13 @@ const ToLinkRow = ({
         <Button
           aria-controls={panelId}
           aria-expanded={open}
-          aria-label={`${open ? "Fewer" : "More"} options for ${name}`}
+          aria-label={`More options for ${name}`}
           className="shrink-0"
           onClick={() => setOpen((value) => !value)}
           size="sm"
           variant="ghost"
         >
-          {open ? "Less" : "More"}
+          More
           <ChevronDown
             className={cn(
               "ml-1 h-4 w-4 transition-transform",
@@ -404,10 +405,28 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
   const dismissAll = useDismissAllKOReaderUnrecognized();
   const [confirmDismissAll, setConfirmDismissAll] = useState(false);
   const books = query.data ?? [];
+  const toLink = books.filter((book) => !book.linked_at);
+  const linked = books.filter((book) => book.linked_at);
+
+  // Linked books fold away while there are books to link, and open when
+  // none are left, as after Dismiss all or linking the last one. Opening or
+  // closing them by hand stays until that changes.
+  const nothingToLink = query.data ? toLink.length === 0 : null;
+  const [linkedOpen, setLinkedOpen] = useState(false);
+  const [wasNothingToLink, setWasNothingToLink] = useState(nothingToLink);
+  if (nothingToLink !== wasNothingToLink) {
+    setWasNothingToLink(nothingToLink);
+    if (nothingToLink) setLinkedOpen(true);
+  }
 
   const handleDismissAll = async () => {
     try {
-      await dismissAll.mutateAsync({ deviceId: device.id });
+      // Only the books listed, so one that arrived since isn't dismissed
+      // unseen.
+      await dismissAll.mutateAsync({
+        deviceId: device.id,
+        documents: toLink.map((book) => book.document),
+      });
       setConfirmDismissAll(false);
     } catch (error) {
       // Demo Mode already toasted the rejection; nothing will change, so
@@ -429,8 +448,6 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
   }
   if (books.length === 0) return null;
 
-  const toLink = books.filter((book) => !book.linked_at);
-  const linked = books.filter((book) => book.linked_at);
   const shown = showAll ? toLink : toLink.slice(0, FIRST_SHOWN);
 
   return (
@@ -442,7 +459,9 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
       {toLink.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium">{toLink.length} to link</p>
+            <p className="text-sm font-medium">
+              {toLink.length.toLocaleString()} to link
+            </p>
             {toLink.length > 1 && (
               <Button
                 onClick={() => setConfirmDismissAll(true)}
@@ -455,7 +474,7 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
           </div>
           <ConfirmDialog
             confirmLabel="Dismiss all"
-            description={`All ${toLink.length} books still to link are dismissed: the reading held for them is deleted, they stop appearing here, and later reading in them is dropped. Linked books stay. KOReader keeps its own record on the e-reader.`}
+            description={`All ${formatCount(toLink.length, "book")} still to link are dismissed: the reading held for them is deleted, they stop appearing here, and later reading in them is dropped. Linked books stay. KOReader keeps its own record on the e-reader.`}
             isPending={dismissAll.isPending}
             onConfirm={handleDismissAll}
             onOpenChange={setConfirmDismissAll}
@@ -476,18 +495,17 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
               size="sm"
               variant="outline"
             >
-              Show {toLink.length - shown.length} more
+              Show {(toLink.length - shown.length).toLocaleString()} more
             </Button>
           )}
         </div>
       )}
       {linked.length > 0 && (
         <Disclosure
-          defaultOpen={toLink.length === 0}
-          // Opens once nothing is left to link, as after Dismiss all.
-          key={toLink.length === 0 ? "open" : "folded"}
+          onOpenChange={setLinkedOpen}
+          open={linkedOpen}
           size="sm"
-          title={`Linked (${linked.length})`}
+          title={`Linked (${linked.length.toLocaleString()})`}
         >
           <p className="text-sm text-muted-foreground">
             A linked copy syncs your place as a percentage only, so it can land

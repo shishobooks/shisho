@@ -228,11 +228,18 @@ function Recognition:waiting(plans, sources)
     return documents
 end
 
+-- DESCRIBE_RETRY is how many syncs a book KOReader knew nothing of, when a
+-- server asked, waits before it's tried again, as when it's back on the
+-- device.
+Recognition.DESCRIBE_RETRY = 30
+
 -- The most a server takes of each thing KOReader knows of a book.
 Recognition.LIMITS = { text = 1000, list = 50, item = 500, language = 64, file_type = 16 }
 
 local function clip(value, limit)
-    if type(value) ~= "string" or value == "" then return nil end
+    if type(value) ~= "string" then return nil end
+    value = value:gsub("^%s+", ""):gsub("%s+$", "")
+    if value == "" then return nil end
     return #value > limit and value:sub(1, limit) or value
 end
 
@@ -284,10 +291,23 @@ end
 function Recognition:undescribed(url, documents, now)
     local known = self:server(url).known
     for __, document in ipairs(type(documents) == "table" and documents or {}) do
-        if type(document) == "string" then
-            known[document] = { state = "held", at = now, needs_details = true }
+        local prev = type(document) == "string" and known[document] or nil
+        -- This round's own answer about it stands.
+        local recognized = type(prev) == "table" and prev.state == "recognized" and prev.at == now
+        if type(document) == "string" and not recognized then
+            known[document] = {
+                state = "held", at = now, needs_details = true,
+                cannot_describe = type(prev) == "table" and prev.cannot_describe or nil,
+            }
         end
     end
+end
+
+-- cannotDescribe notes that KOReader knew nothing of document in round now,
+-- so it isn't tried again for DESCRIBE_RETRY syncs.
+function Recognition:cannotDescribe(url, document, now)
+    local answer = self:server(url).known[document]
+    if type(answer) == "table" then answer.cannot_describe = now end
 end
 
 -- needingDetails is the documents the server at url holds with nothing
@@ -296,7 +316,9 @@ end
 function Recognition:needingDetails(url)
     local out = {}
     for document, answer in pairs(self:server(url).known) do
-        if type(answer) == "table" and answer.state == "held" and answer.needs_details then
+        local waiting = type(answer) == "table" and tonumber(answer.cannot_describe)
+            and self:current() - answer.cannot_describe < Recognition.DESCRIBE_RETRY
+        if type(answer) == "table" and answer.state == "held" and answer.needs_details and not waiting then
             table.insert(out, document)
         end
     end

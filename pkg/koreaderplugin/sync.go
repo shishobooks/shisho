@@ -193,7 +193,7 @@ func (h *handler) upload(c echo.Context) error {
 	}
 
 	// Details of a copy the batch carries nothing else of fill in one the
-	// server already holds (NeedsDetails).
+	// server already holds (LookupResponse.Undescribed).
 	for i := range payload.Unrecognized {
 		about := &payload.Unrecognized[i]
 		if _, done := held[about.Document]; done {
