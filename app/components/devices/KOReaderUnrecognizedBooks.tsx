@@ -1,9 +1,10 @@
-import { Link as LinkIcon, Loader2, Search } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, Link as LinkIcon, Loader2, Search } from "lucide-react";
+import { useId, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import DeviceSection from "@/components/devices/DeviceSection";
+import Disclosure from "@/components/devices/Disclosure";
 import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
 } from "@/hooks/queries/devices";
 import { useDebounce } from "@/hooks/useDebounce";
 import { isDemoModeError, toastRequestError } from "@/libraries/api";
+import { cn } from "@/libraries/utils";
 import type { DeviceResponse } from "@/types/generated/devices";
 import {
   LinkMatchIdentifier,
@@ -46,31 +48,56 @@ const candidateDetails = (candidate: LinkCandidate) =>
     .join(" · ");
 
 // CandidateList offers Files to link a copy to, each with its own Link.
+// Compact puts each on one line, as a row's best match shows.
 const CandidateList = ({
   candidates,
   label,
   linking,
   onLink,
+  compact = false,
 }: {
   candidates: LinkCandidate[];
   label: string;
   linking: boolean;
   onLink: (candidate: LinkCandidate) => void;
+  compact?: boolean;
 }) => (
   <ul aria-label={label} className="space-y-2">
     {candidates.map((candidate) => (
       <li
-        className="flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3 py-2"
+        className={cn(
+          "flex items-center justify-between gap-3 rounded-md bg-muted/50 px-3",
+          compact ? "py-1.5" : "py-2",
+        )}
         key={candidate.file_id}
       >
-        <div className="min-w-0 text-sm">
-          <p className="flex flex-wrap items-center gap-2 font-medium">
-            <span className="break-words">{candidate.title}</span>
+        <div
+          className={cn(
+            "min-w-0 text-sm",
+            compact && "flex items-center gap-2",
+          )}
+        >
+          <p
+            className={cn(
+              "flex items-center gap-2 font-medium",
+              compact ? "min-w-0 shrink-0" : "flex-wrap",
+            )}
+          >
+            <span className={compact ? "truncate" : "break-words"}>
+              {candidate.title}
+            </span>
             {candidate.match === LinkMatchIdentifier && (
-              <Badge variant="secondary">Same identifier</Badge>
+              <Badge className="shrink-0" variant="secondary">
+                Same identifier
+              </Badge>
             )}
           </p>
-          <p className="break-words text-muted-foreground">
+          <p
+            className={cn(
+              "text-muted-foreground",
+              compact ? "min-w-0 truncate" : "break-words",
+            )}
+          >
             {candidateDetails(candidate)}
           </p>
         </div>
@@ -142,8 +169,25 @@ const CandidateSearch = ({
   );
 };
 
-// ToLink is a copy still to link: its suggestions, a search, and Dismiss.
-const ToLink = ({
+// How many books still to link show before the rest are asked for.
+const FIRST_SHOWN = 10;
+
+// details is what KOReader knows of a copy besides its title, on one line.
+const details = (book: UnrecognizedBook) =>
+  [
+    book.authors.join(", "),
+    book.reading_seconds > 0
+      ? `${formatDuration(book.reading_seconds)} read in KOReader`
+      : null,
+    formatLastRead(book.last_read_at),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+// ToLinkRow is a copy still to link, kept to a few lines: its best match,
+// if it has one, linked in one click, and More for the other suggestions, a
+// search, and Dismiss.
+const ToLinkRow = ({
   deviceId,
   book,
 }: {
@@ -151,9 +195,13 @@ const ToLink = ({
   book: UnrecognizedBook;
 }) => {
   const name = copyName(book);
+  const panelId = useId();
+  const [open, setOpen] = useState(false);
   const link = useLinkKOReaderUnrecognized();
   const dismiss = useDismissKOReaderUnrecognized();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const best = book.suggestions[0];
+  const about = details(book);
 
   const handleLink = async (candidate: LinkCandidate) => {
     try {
@@ -181,33 +229,79 @@ const ToLink = ({
   };
 
   return (
-    <>
-      {book.suggestions.length > 0 ? (
-        <CandidateList
-          candidates={book.suggestions}
-          label={`Suggestions for ${name}`}
-          linking={link.isPending}
-          onLink={handleLink}
-        />
+    <li aria-label={name} className="space-y-2 py-3 first:pt-0 last:pb-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium" title={name}>
+            {name}
+          </p>
+          {about && (
+            <p
+              className="line-clamp-2 text-sm text-muted-foreground sm:line-clamp-1"
+              title={about}
+            >
+              {about}
+            </p>
+          )}
+        </div>
+        <Button
+          aria-controls={panelId}
+          aria-expanded={open}
+          aria-label={`${open ? "Fewer" : "More"} options for ${name}`}
+          className="shrink-0"
+          onClick={() => setOpen((value) => !value)}
+          size="sm"
+          variant="ghost"
+        >
+          {open ? "Less" : "More"}
+          <ChevronDown
+            className={cn(
+              "ml-1 h-4 w-4 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </Button>
+      </div>
+      {open ? (
+        <div className="space-y-3" id={panelId}>
+          {book.suggestions.length > 0 ? (
+            <CandidateList
+              candidates={book.suggestions}
+              label={`Suggestions for ${name}`}
+              linking={link.isPending}
+              onLink={handleLink}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No suggestions. Search for the book to link it.
+            </p>
+          )}
+          <CandidateSearch
+            deviceId={deviceId}
+            linking={link.isPending}
+            name={name}
+            onLink={handleLink}
+          />
+          <Button
+            aria-label={`Dismiss ${name}`}
+            onClick={() => setConfirmOpen(true)}
+            size="sm"
+            variant="outline"
+          >
+            Dismiss
+          </Button>
+        </div>
       ) : (
-        <p className="text-sm text-muted-foreground">
-          No suggestions. Search for the book to link it.
-        </p>
+        best && (
+          <CandidateList
+            candidates={[best]}
+            compact
+            label={`Best match for ${name}`}
+            linking={link.isPending}
+            onLink={handleLink}
+          />
+        )
       )}
-      <CandidateSearch
-        deviceId={deviceId}
-        linking={link.isPending}
-        name={name}
-        onLink={handleLink}
-      />
-      <Button
-        aria-label={`Dismiss ${name}`}
-        onClick={() => setConfirmOpen(true)}
-        size="sm"
-        variant="outline"
-      >
-        Dismiss
-      </Button>
       <ConfirmDialog
         confirmLabel="Dismiss"
         description={`The reading held for "${name}" is deleted, it stops appearing here, and later reading in it is dropped. KOReader keeps its own record on the e-reader.`}
@@ -217,14 +311,13 @@ const ToLink = ({
         open={confirmOpen}
         title="Dismiss Book"
       />
-    </>
+    </li>
   );
 };
 
-// Linked is a copy already linked: the Book it's linked to, why downloading
-// the Book again syncs the exact place (ADR 0017), and Unlink for a link
-// made to the wrong Book.
-const Linked = ({
+// LinkedRow is a copy already linked, on one line: the Book it's linked to,
+// and Unlink for a link made to the wrong Book.
+const LinkedRow = ({
   deviceId,
   book,
 }: {
@@ -248,36 +341,35 @@ const Linked = ({
   };
 
   return (
-    <>
-      {book.linked ? (
-        <div className="space-y-1 text-sm">
-          <p>
+    <li
+      aria-label={name}
+      className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"
+    >
+      <div className="min-w-0 text-sm">
+        <p className="truncate font-medium" title={name}>
+          {name}
+        </p>
+        {book.linked ? (
+          <p className="truncate text-muted-foreground">
             Linked to{" "}
             <Link
-              className="font-medium underline underline-offset-2 hover:text-foreground"
+              className="text-foreground underline underline-offset-2"
               to={bookPath(book.linked)}
             >
               {book.linked.title}
-            </Link>
-            <span className="text-muted-foreground">
-              {" "}
-              · {fileTypeLabel(book.linked.file_type)} ·{" "}
-              {book.linked.library_name}
-            </span>
+            </Link>{" "}
+            · {fileTypeLabel(book.linked.file_type)} ·{" "}
+            {book.linked.library_name}
           </p>
+        ) : (
           <p className="text-muted-foreground">
-            This copy syncs your place as a percentage only, so it can land a
-            little off. Download the book again from Shisho to sync your exact
-            place.
+            Linked to a file that has since been deleted.
           </p>
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Linked to a file that has since been deleted.
-        </p>
-      )}
+        )}
+      </div>
       <Button
         aria-label={`Unlink ${name}`}
+        className="shrink-0"
         onClick={() => setConfirmOpen(true)}
         size="sm"
         variant="outline"
@@ -293,47 +385,6 @@ const Linked = ({
         open={confirmOpen}
         title="Unlink Book"
       />
-    </>
-  );
-};
-
-const UnrecognizedBookRow = ({
-  deviceId,
-  book,
-}: {
-  deviceId: string;
-  book: UnrecognizedBook;
-}) => {
-  const name = copyName(book);
-  const lastRead = formatLastRead(book.last_read_at);
-  const facts = [
-    book.reading_seconds > 0
-      ? `${formatDuration(book.reading_seconds)} read in KOReader`
-      : null,
-    lastRead,
-  ].filter(Boolean);
-
-  return (
-    <li
-      aria-label={name}
-      className="space-y-3 border-t border-border pt-4 first:border-t-0 first:pt-0"
-    >
-      <div className="min-w-0">
-        <p className="break-words font-medium">{name}</p>
-        {book.authors.length > 0 && (
-          <p className="break-words text-sm text-muted-foreground">
-            {book.authors.join(", ")}
-          </p>
-        )}
-        {facts.length > 0 && (
-          <p className="text-sm text-muted-foreground">{facts.join(" · ")}</p>
-        )}
-      </div>
-      {book.linked_at ? (
-        <Linked book={book} deviceId={deviceId} />
-      ) : (
-        <ToLink book={book} deviceId={deviceId} />
-      )}
     </li>
   );
 };
@@ -342,10 +393,13 @@ const UnrecognizedBookRow = ({
  * KOReaderUnrecognizedBooks lists the copies on a KOReader Device that no
  * server the KOReader plugin signed in to recognizes, such as ones downloaded
  * before Shisho recorded what it sent, so the user can link each to its Book
- * or dismiss it (ADR 0017). It shows nothing while there are none.
+ * or dismiss it (ADR 0017). A Device can hold many, so each row is a few
+ * lines, the first FIRST_SHOWN show until the rest are asked for, and the
+ * linked ones fold away. It shows nothing while there are none.
  */
 const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
   const query = useKOReaderUnrecognizedBooks(device.id);
+  const [showAll, setShowAll] = useState(false);
   const books = query.data ?? [];
 
   if (query.error && !query.data) {
@@ -360,21 +414,56 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
   }
   if (books.length === 0) return null;
 
+  const toLink = books.filter((book) => !book.linked_at);
+  const linked = books.filter((book) => book.linked_at);
+  const shown = showAll ? toLink : toLink.slice(0, FIRST_SHOWN);
+
   return (
     <DeviceSection
       description="Books KOReader has reading data for that Shisho doesn't recognize, such as copies downloaded before Shisho v0.7.0 or from somewhere else. Link each to its book to bring its reading history in, or dismiss it."
       id="unrecognized-heading"
       title="Unrecognized Books"
     >
-      <ul aria-label="Unrecognized books" className="space-y-4">
-        {books.map((book) => (
-          <UnrecognizedBookRow
-            book={book}
-            deviceId={device.id}
-            key={book.document}
-          />
-        ))}
-      </ul>
+      {toLink.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">{toLink.length} to link</p>
+          <ul
+            aria-label="Unrecognized books"
+            className="divide-y divide-border"
+          >
+            {shown.map((book) => (
+              <ToLinkRow book={book} deviceId={device.id} key={book.document} />
+            ))}
+          </ul>
+          {shown.length < toLink.length && (
+            <Button
+              onClick={() => setShowAll(true)}
+              size="sm"
+              variant="outline"
+            >
+              Show {toLink.length - shown.length} more
+            </Button>
+          )}
+        </div>
+      )}
+      {linked.length > 0 && (
+        <Disclosure
+          defaultOpen={toLink.length === 0}
+          size="sm"
+          title={`Linked (${linked.length})`}
+        >
+          <p className="text-sm text-muted-foreground">
+            A linked copy syncs your place as a percentage only, so it can land
+            a little off. Download the book again from Shisho to sync your exact
+            place.
+          </p>
+          <ul aria-label="Linked books" className="divide-y divide-border">
+            {linked.map((book) => (
+              <LinkedRow book={book} deviceId={device.id} key={book.document} />
+            ))}
+          </ul>
+        </Disclosure>
+      )}
     </DeviceSection>
   );
 };

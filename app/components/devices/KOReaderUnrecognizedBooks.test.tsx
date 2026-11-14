@@ -130,17 +130,31 @@ describe("KOReaderUnrecognizedBooks", () => {
   beforeEach(() => setAuth({ permissions: ["books:read"] }));
   afterEach(() => vi.restoreAllMocks());
 
-  it("shows each book as KOReader knows it, with suggestions to link it to", async () => {
+  it("shows each book as KOReader knows it, with its best match, and the rest under More", async () => {
     stubAPI([unrecognized()]);
+    const user = setupUser();
     renderSection();
 
     const row = await screen.findByRole("listitem", {
       name: "Left Hand of Darkness",
     });
-    expect(row).toHaveTextContent("Ursula Le Guin");
-    expect(row).toHaveTextContent("3h 25m read in KOReader");
-    expect(row).toHaveTextContent("Last read 2 hours ago");
+    expect(row).toHaveTextContent(
+      "Ursula Le Guin · 3h 25m read in KOReader · Last read 2 hours ago",
+    );
+    // Collapsed, it offers only its best match, and nothing to dismiss.
+    const best = within(row).getByRole("list", {
+      name: "Best match for Left Hand of Darkness",
+    });
+    expect(within(best).getAllByRole("listitem")).toHaveLength(1);
+    expect(best).toHaveTextContent("The Left Hand of Darkness");
+    expect(best).toHaveTextContent("Same identifier");
+    expect(within(row).queryByRole("button", { name: /^Dismiss / })).toBeNull();
 
+    await user.click(
+      within(row).getByRole("button", {
+        name: "More options for Left Hand of Darkness",
+      }),
+    );
     const suggestions = within(row).getByRole("list", {
       name: "Suggestions for Left Hand of Darkness",
     });
@@ -172,12 +186,12 @@ describe("KOReaderUnrecognizedBooks", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Link to The Left Hand of Darkness, KePub in Classics",
+        name: "Link to The Left Hand of Darkness, EPUB in Fiction",
       }),
     );
 
     expect(posts(request)).toEqual([
-      ["POST", `${LIST}/${DOCUMENT}/link`, { file_id: 52 }],
+      ["POST", `${LIST}/${DOCUMENT}/link`, { file_id: 41 }],
     ]);
     // The held reading data now shows on the Book's page, cards, history,
     // and stats.
@@ -188,7 +202,7 @@ describe("KOReaderUnrecognizedBooks", () => {
     const bookLink = await screen.findByRole("link", {
       name: "The Left Hand of Darkness",
     });
-    expect(bookLink).toHaveAttribute("href", "/libraries/2/books/5");
+    expect(bookLink).toHaveAttribute("href", "/libraries/1/books/4");
     expect(
       screen.getByText(/syncs your place as a percentage only/),
     ).toHaveTextContent(
@@ -228,10 +242,17 @@ describe("KOReaderUnrecognizedBooks", () => {
     const user = setupUser();
     renderSection();
 
+    const row = await screen.findByRole("listitem", {
+      name: "Left Hand of Darkness",
+    });
+    expect(within(row).queryByRole("list", { name: /^Best match/ })).toBeNull();
+    await user.click(
+      screen.getByRole("button", {
+        name: "More options for Left Hand of Darkness",
+      }),
+    );
     expect(
-      await screen.findByText(
-        "No suggestions. Search for the book to link it.",
-      ),
+      screen.getByText("No suggestions. Search for the book to link it."),
     ).toBeInTheDocument();
     await user.type(
       screen.getByRole("textbox", {
@@ -277,6 +298,11 @@ describe("KOReaderUnrecognizedBooks", () => {
     const user = setupUser();
     renderSection();
 
+    await user.click(
+      await screen.findByRole("button", {
+        name: "More options for Left Hand of Darkness",
+      }),
+    );
     await user.type(
       await screen.findByRole("textbox", {
         name: "Search for Left Hand of Darkness",
@@ -297,8 +323,11 @@ describe("KOReaderUnrecognizedBooks", () => {
 
     await user.click(
       await screen.findByRole("button", {
-        name: "Dismiss Left Hand of Darkness",
+        name: "More options for Left Hand of Darkness",
       }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Dismiss Left Hand of Darkness" }),
     );
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent(
@@ -364,12 +393,53 @@ describe("KOReaderUnrecognizedBooks", () => {
     expect(posts(request)).toEqual([["POST", `${LIST}/${DOCUMENT}/unlink`]]);
     expect(
       await screen.findByRole("button", {
-        name: "Dismiss Left Hand of Darkness",
+        name: "More options for Left Hand of Darkness",
       }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "The Left Hand of Darkness" }),
     ).toBeNull();
+  });
+
+  it("shows the first books to link, the rest on request, and folds the linked ones away", async () => {
+    const toLink = Array.from({ length: 12 }, (_, i) =>
+      unrecognized({
+        document: `${i}`.padStart(32, "a"),
+        title: `Copy ${i + 1}`,
+      }),
+    );
+    const linked = unrecognized({
+      document: "f".repeat(32),
+      title: "Linked Copy",
+      suggestions: [],
+      linked_at: "2026-11-01T00:00:00Z",
+      linked: candidate({ match: undefined }),
+    });
+    stubAPI([...toLink, linked]);
+    const user = setupUser();
+    renderSection();
+
+    const list = await screen.findByRole("list", {
+      name: "Unrecognized books",
+    });
+    expect(screen.getByText("12 to link")).toBeInTheDocument();
+    expect(
+      within(list).getAllByRole("listitem", { name: /^Copy / }),
+    ).toHaveLength(10);
+    await user.click(screen.getByRole("button", { name: "Show 2 more" }));
+    expect(
+      within(list).getAllByRole("listitem", { name: /^Copy / }),
+    ).toHaveLength(12);
+
+    // Linked books wait behind their heading while there are books to link.
+    expect(screen.queryByRole("list", { name: "Linked books" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Linked (1)" }));
+    expect(
+      within(screen.getByRole("list", { name: "Linked books" })).getByRole(
+        "listitem",
+        { name: "Linked Copy" },
+      ),
+    ).toHaveTextContent("Linked to The Left Hand of Darkness · EPUB · Fiction");
   });
 
   it("shows nothing when there are no unrecognized books", async () => {

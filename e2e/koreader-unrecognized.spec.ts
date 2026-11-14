@@ -133,13 +133,18 @@ test.describe("KOReader unrecognized books", () => {
         exact: true,
       })
       .click();
+    // It moves to the linked books, which say its place syncs as a
+    // percentage only.
+    const linked = page
+      .getByRole("list", { name: "Linked books" })
+      .getByRole("listitem", { name: TITLE, exact: true });
     await expect(
-      row.getByText(/syncs your place as a percentage only/),
+      page.getByText(/syncs your place as a percentage only/),
     ).toBeVisible();
 
     // The history arrived without a sync: the Book shows the Read-through
     // KOReader finished.
-    await row.getByRole("link", { name: TITLE, exact: true }).click();
+    await linked.getByRole("link", { name: TITLE, exact: true }).click();
     await page.waitForURL(`/libraries/${libraryId}/books/${bookId}`);
     const history = page.getByRole("region", { name: "Reading history" });
     await expect(history.getByText("Finished", { exact: true })).toBeVisible();
