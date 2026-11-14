@@ -1,5 +1,6 @@
 -- Sending page rows and journal events to one server.
 local Journal = require("shisho/journal")
+local Recognition = require("shisho/recognition")
 local State = require("shisho/state")
 local Summaries = require("shisho/summaries")
 local Sync = require("shisho/sync")
@@ -435,5 +436,207 @@ return {
         assert_eq(Sync.dueOnSleep(5000, 5000 + Sync.SLEEP_GAP - 1), false)
         assert_eq(Sync.dueOnSleep(5000, 5000 + Sync.SLEEP_GAP), true)
         assert_eq(Sync.dueOnSleep(5000, 4000), true, "a clock set back since can't hold it off")
+    end,
+
+    ["each server gets only the books it recognizes, and rows that wait are sent once it's decided"] = function()
+        local state, journal = setup("https://a.example", "https://b.example")
+        local a, b = state:find("https://a.example"), state:find("https://b.example")
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        local function at(start, document) local r = row(start); r.document = document; return r end
+        local list = { at(100, "a-book"), at(200, "b-book"), at(300, "old") }
+        recognition:noteSeen({ "a-book", "b-book", "old" }, 50)
+        -- B is down: only A answered.
+        recognition:record(a.url, {
+            { document = "a-book", state = "recognized" },
+            { document = "b-book", state = "unknown" },
+            { document = "old", state = "unknown" },
+        }, 50)
+        journal:recordPosition("old", "5", 0.05, 900)
+        local opts = function(post)
+            return {
+                state = state, journal = journal, server = a, post = post, read_pages = rowsFrom(list),
+                recognition = recognition, servers = state:enabledServers(),
+                documents = { "a-book", "b-book", "old" },
+                about = function(document) return { title = "Title of " .. document, authors = {}, identifiers = { "isbn:1" } } end,
+                read_document = function(document, from, through)
+                    local out = {}
+                    for __, r in ipairs(list) do
+                        if r.document == document and r.rowid > from and r.rowid <= through then table.insert(out, r) end
+                    end
+                    return out
+                end,
+            }
+        end
+
+        local post, sent = server()
+        assert_eq(Sync.run(opts(post)), "ok")
+        assert_eq(#sent, 1)
+        assert_eq(starts(sent[1]), { 100 }, "only A's own book")
+        assert_eq(sent[1].events, nil, "the old copy's position waits too")
+        assert_eq(sent[1].unrecognized, nil)
+        assert_eq(a.stats_cursor.rowid, 3, "the cursor moves past rows that wait")
+        assert_eq(recognition:deferred(a.url), { "b-book", "old" })
+        assert_eq(#journal:pending(a.url), 1)
+
+        -- B comes back: it recognizes its book, and not the old copy.
+        recognition:record(b.url, {
+            { document = "a-book", state = "unknown" },
+            { document = "b-book", state = "recognized" },
+            { document = "old", state = "unknown" },
+        }, 60)
+        local post2, sent2 = server()
+        assert_eq(Sync.run(opts(post2)), "ok")
+        assert_eq(#sent2, 2)
+        assert_eq(starts(sent2[1]), { 300 }, "the old copy's rows, deferred, go now")
+        assert_eq(sent2[1].unrecognized, { { document = "old", title = "Title of old", identifiers = { "isbn:1" } } },
+            "an empty list is left out, since KOReader's JSON would write it as an object")
+        assert_eq(sent2[2].events[1].document, "old")
+        assert_eq(recognition:answer(a.url, "old").state, "held", "A holds it now, so each sync asks again")
+        assert_eq(recognition:held(), { "old" })
+        assert_eq(recognition:deferred(a.url), {}, "B's book is never A's")
+        assert_eq(#journal:pending(a.url), 0)
+    end,
+
+    ["a server holding a book another now recognizes is told to drop it"] = function()
+        local state, journal = setup("https://a.example", "https://b.example")
+        local a, b = state:find("https://a.example"), state:find("https://b.example")
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        recognition:record(a.url, { { document = "old", state = "recognized" } }, 100)
+        recognition:record(b.url, { { document = "old", state = "held" } }, 100)
+        journal:recordPosition("old", "5", 0.05, 900)
+        local change = { id = "c1", type = "status", document = "old", status = "complete", day = "2026-01-01" }
+        local store = { synced = {}, asked = {} }
+        local post, sent = server()
+        local r = function() return row(100) end
+        local rowOld = r(); rowOld.document = "old"
+        assert_eq(Sync.run{
+            state = state, journal = journal, server = b, post = post, read_pages = rowsFrom({ rowOld }),
+            recognition = recognition, servers = state:enabledServers(), documents = { "old" },
+            changes = { change }, store = store,
+        }, "ok")
+        assert_eq(#sent, 1)
+        assert_eq(sent[1].claimed, { "old" })
+        assert_eq(sent[1].pages, nil)
+        assert_eq(recognition:decide(state:enabledServers(), b.url, "old"), "skip")
+        assert_eq(#journal:pending(b.url), 0, "its position is done with for B")
+        assert_eq(store.synced.old.status, "complete", "and so is its status")
+        assert_eq(b.stats_cursor.rowid, 1)
+
+        local post2, sent2 = server()
+        Sync.run{ state = state, journal = journal, server = b, post = post2, read_pages = rowsFrom({ rowOld }),
+            recognition = recognition, servers = state:enabledServers(), documents = { "old" } }
+        assert_eq(#sent2, 0, "claimed once")
+    end,
+
+    ["looking books up records each server's answers, and a refusal leaves them unanswered"] = function()
+        local state = setup("https://a.example")
+        local a = state:find("https://a.example")
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        for _ = 1, 70 do recognition:beginRound() end
+        local asked = {}
+        local outcome = Sync.lookUp{
+            server = a, recognition = recognition, documents = { "one", "two" },
+            post = function(documents)
+                table.insert(asked, documents)
+                return 200, { documents = { { document = "one", state = "recognized" }, { document = "two", state = "held" } } }
+            end,
+        }
+        assert_eq(outcome, "ok")
+        assert_eq(asked, { { "one", "two" } })
+        assert_eq(recognition:answer(a.url, "one"), { state = "recognized", at = 70 })
+        assert_eq(recognition:answer(a.url, "two").state, "held")
+
+        local refused = Sync.lookUp{ server = a, recognition = recognition, documents = { "three" },
+            post = function() return 401 end }
+        assert_eq(refused, "needs_login")
+        assert_eq(a.needs_login, true)
+        assert_eq(recognition:answer(a.url, "three"), nil)
+    end,
+
+    ["removing a server forgets only the plugin's own state and queue for it"] = function()
+        local state, journal = setup("https://a.example", "https://b.example")
+        local dir = scratch_dir()
+        local summaries = Summaries.open(dir .. "/summaries.lua")
+        local recognition = Recognition.open(dir .. "/recognition.lua")
+        summaries:server("https://a.example").synced.doc1 = { status = "complete" }
+        summaries:server("https://b.example").synced.doc1 = { status = "reading" }
+        recognition:record("https://a.example", { { document = "doc1", state = "held" } }, 10)
+        recognition:record("https://b.example", { { document = "doc1", state = "recognized" } }, 10)
+        journal:recordPosition("doc1", "5", 0.05, 900)
+        journal:acknowledge("https://a.example", { journal:pending("https://a.example")[1].id })
+        -- KOReader's own statistics, which removing never touches.
+        local stats = dir .. "/statistics.sqlite3"
+        local f = io.open(stats, "w"); f:write("koreader's"); f:close()
+
+        assert_eq(Sync.removeServer{ url = "https://b.example", state = state, journal = journal,
+            summaries = summaries, recognition = recognition }, true)
+
+        assert_eq(#state:servers(), 1)
+        assert_eq(state:find("https://b.example"), nil)
+        assert_eq(State.open(state.path):find("https://b.example"), nil, "written")
+        assert_eq(Summaries.open(dir .. "/summaries.lua").data.servers["https://b.example"], nil)
+        assert_eq(summaries:server("https://a.example").synced.doc1.status, "complete")
+        assert_eq(Recognition.open(dir .. "/recognition.lua"):answer("https://b.example", "doc1"), nil)
+        assert_eq(recognition:answer("https://a.example", "doc1").state, "held")
+        assert_eq(#state:get("journal").entries, 0, "nothing waits for a removed server")
+        f = io.open(stats, "r"); assert_eq(f:read("*a"), "koreader's"); f:close()
+        assert_eq(Sync.removeServer{ url = "https://b.example", state = state, journal = journal,
+            summaries = summaries, recognition = recognition }, false)
+    end,
+
+    ["claims go in batches, and a book a server holds keeps what KOReader knows of it current"] = function()
+        local state, journal = setup("https://a.example", "https://b.example")
+        local a, b = state:find("https://a.example"), state:find("https://b.example")
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        local documents, answers = {}, {}
+        for i = 1, Sync.CLAIM_BATCH + 1 do
+            local document = string.format("doc%04d", i)
+            table.insert(documents, document)
+            table.insert(answers, { document = document, state = "held" })
+        end
+        recognition:record(b.url, answers, 1)
+        local recognized = {}
+        for __, document in ipairs(documents) do table.insert(recognized, { document = document, state = "recognized" }) end
+        recognition:record(a.url, recognized, 1)
+        local post, sent = server()
+        assert_eq(Sync.run{ state = state, journal = journal, server = b, post = post, read_pages = rowsFrom({}),
+            recognition = recognition, servers = state:enabledServers(), documents = documents }, "ok")
+        assert_eq(#sent, 2)
+        assert_eq(#sent[1].claimed, Sync.CLAIM_BATCH)
+        assert_eq(sent[2].claimed, { documents[#documents] })
+
+        -- A book only this server holds goes with what KOReader knows of it,
+        -- so its reading time there stays current.
+        local c = Recognition.open(scratch_dir() .. "/recognition.lua")
+        c:record(a.url, { { document = "old", state = "held" } }, 1)
+        local r = row(100); r.document = "old"
+        local post2, sent2 = server()
+        Sync.run{ state = state, journal = journal, server = a, post = post2, read_pages = rowsFrom({ r }),
+            recognition = c, servers = state:enabledServers(), documents = { "old" },
+            about = function() return { title = "Old", reading_seconds = 90 } end }
+        assert_eq(sent2[1].unrecognized, { { document = "old", title = "Old", reading_seconds = 90 } })
+    end,
+
+    ["deferred rows start where the server's syncing did"] = function()
+        local state, journal = setup("https://a.example")
+        local a = state:find("https://a.example")
+        a.stats_from = 1
+        a.stats_cursor = { rowid = 2 }
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        recognition:defer(a.url, "old")
+        recognition:noteSeen({ "old" }, recognition:beginRound())
+        recognition:record(a.url, { { document = "old", state = "unknown" } }, recognition:current())
+        local asked
+        local post, sent = server()
+        Sync.run{ state = state, journal = journal, server = a, post = post, read_pages = rowsFrom({}),
+            recognition = recognition, servers = state:enabledServers(), documents = { "old" },
+            read_document = function(document, from, through)
+                asked = { document, from, through }
+                local r = row(200); r.document = "old"
+                return { r }
+            end }
+        assert_eq(asked, { "old", 1, 2 }, "rows before sign-in, not sent as history, stay out")
+        assert_eq(starts(sent[1]), { 200 })
+        assert_eq(recognition:deferred(a.url), {})
     end,
 }

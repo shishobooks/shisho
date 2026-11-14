@@ -179,6 +179,60 @@ func (svc *Service) FindDocumentHash(ctx context.Context, hash string) ([]*model
 	return hashes, nil
 }
 
+// LinkDocument records that userID linked a KOReader copy with document
+// hash to fileID, delivered as deliveredFileType (ADR 0017). Linking the
+// copy again replaces the link.
+func (svc *Service) LinkDocument(ctx context.Context, userID, fileID int, deliveredFileType, hash string) error {
+	_, err := svc.db.NewInsert().
+		Model(&models.KOReaderDocumentLink{
+			UserID: userID, Hash: hash, FileID: fileID, DeliveredFileType: deliveredFileType, CreatedAt: time.Now(),
+		}).
+		On("CONFLICT (user_id, hash) DO UPDATE").
+		Set("file_id = EXCLUDED.file_id").
+		Set("delivered_file_type = EXCLUDED.delivered_file_type").
+		Set("created_at = EXCLUDED.created_at").
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// FindDocumentLink returns the File userID linked a KOReader document hash
+// to, as a user-made entry with its File loaded, or nil for none.
+func (svc *Service) FindDocumentLink(ctx context.Context, userID int, hash string) (*models.DocumentHash, error) {
+	link := &models.KOReaderDocumentLink{}
+	err := svc.db.NewSelect().
+		Model(link).
+		Relation("File").
+		Where("kdl.user_id = ? AND kdl.hash = ?", userID, hash).
+		Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return &models.DocumentHash{
+		Hash: link.Hash, FileID: link.FileID, DeliveredFileType: link.DeliveredFileType,
+		CreatedAt: link.CreatedAt, UserMade: true, File: link.File,
+	}, nil
+}
+
+// LinkedHashesOfBooks returns the document hash of every copy userID linked
+// to a File of one of bookIDs.
+func (svc *Service) LinkedHashesOfBooks(ctx context.Context, userID int, bookIDs []int) ([]string, error) {
+	hashes := []string{}
+	if len(bookIDs) == 0 {
+		return hashes, nil
+	}
+	err := svc.db.NewSelect().
+		Model((*models.KOReaderDocumentLink)(nil)).
+		Column("kdl.hash").
+		Where("kdl.user_id = ?", userID).
+		Where("kdl.file_id IN (SELECT id FROM files WHERE book_id IN (?))", bun.List(bookIDs)).
+		OrderExpr("kdl.hash").
+		Scan(ctx, &hashes)
+	return hashes, errors.WithStack(err)
+}
+
 // DocumentHashesOfBooks returns every document hash in the map (ADR 0014)
 // that names a File of one of bookIDs.
 func (svc *Service) DocumentHashesOfBooks(ctx context.Context, bookIDs []int) ([]string, error) {

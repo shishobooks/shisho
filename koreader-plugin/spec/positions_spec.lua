@@ -56,4 +56,14 @@ return {
         assert_eq(Positions.settings(nil), { newer = "prompt", older = "ignore", sync_on_sleep = false })
         assert_eq(Positions.settings({ newer = "jump", sync_on_sleep = true }), { newer = "jump", older = "ignore", sync_on_sleep = true })
     end,
+
+    ["a percentage-only position from a linked copy is offered by its percentage"] = function()
+        local linked = remote{ progress = nil, percentage = 0.4 }
+        linked.progress = nil
+        assert_eq(Positions.decide(linked, here, {}), "prompt")
+        assert_eq(Positions.decide(remote{ percentage = 0.1 }, { percentage = 0.1, at = 1000 }, {}), "ignore", "the same place")
+        local nothing = remote{}
+        nothing.progress, nothing.percentage = nil, nil
+        assert_eq(Positions.decide(nothing, here, {}), "ignore")
+    end,
 }

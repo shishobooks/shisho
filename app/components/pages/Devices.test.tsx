@@ -151,6 +151,21 @@ const stubAPI = (initial: DeviceResponse) => {
           created_at: new Date().toISOString(),
         };
       }
+      if (
+        method === "GET" &&
+        path === `/user/devices/${device.id}/koreader-unrecognized`
+      ) {
+        return [
+          {
+            document: "0123456789abcdef0123456789abcdef",
+            title: "Left Hand of Darkness",
+            authors: [],
+            identifiers: [],
+            reading_seconds: 600,
+            suggestions: [],
+          },
+        ];
+      }
       if (path === "/user/libraries")
         return [
           { id: 1, name: "Fiction" },
@@ -502,6 +517,34 @@ describe("DeviceDetail", () => {
     expect(createObjectURL).toHaveBeenCalled();
     const link = click.mock.contexts[0] as HTMLAnchorElement;
     expect(link.download).toBe("shisho.koplugin.zip");
+  });
+
+  it("lists a KOReader Device's unrecognized books", async () => {
+    setAuth({ permissions: ["books:read"] });
+    stubAPI(koreader());
+    renderAt("/user/devices/koreader-1");
+
+    expect(
+      await screen.findByRole("heading", { name: "Unrecognized Books" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("listitem", { name: "Left Hand of Darkness" }),
+    ).toBeInTheDocument();
+  });
+
+  it("never asks for unrecognized books on a Device without the KOReader plugin", async () => {
+    setAuth({ permissions: ["books:read"] });
+    const request = stubAPI(kobo());
+    renderAt("/user/devices/kobo-1");
+
+    expect(
+      await screen.findByRole("heading", { name: "Connections" }),
+    ).toBeInTheDocument();
+    expect(
+      request.mock.calls.filter(([, path]) =>
+        path.includes("koreader-unrecognized"),
+      ),
+    ).toEqual([]);
   });
 
   it("toasts an error when copying fails", async () => {

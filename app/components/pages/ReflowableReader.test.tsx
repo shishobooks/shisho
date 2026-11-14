@@ -38,6 +38,9 @@ let mockAtEnd = false;
 let mockPage: number | undefined;
 // The saved position GET /reading/files/:id/position returns.
 let savedCfi: string | null = null;
+// A saved position with no locator, only a percentage, as a copy a user
+// linked stores (ADR 0017). It replaces savedCfi when set.
+let savedPercentageOnly: number | null = null;
 const SAVED_AT = "2026-10-01T09:00:00.000Z";
 // What POST /reading/files/:id/position reports it did.
 let saveResult: object = {};
@@ -82,6 +85,7 @@ beforeEach(() => {
   mockPage = undefined;
   mockDir = undefined;
   savedCfi = null;
+  savedPercentageOnly = null;
   saveResult = {};
   positionLoadFails = false;
   vi.spyOn(API, "request").mockImplementation(((
@@ -90,6 +94,15 @@ beforeEach(() => {
   ) => {
     if (method === "GET" && endpoint === "/reading/files/7/position") {
       if (positionLoadFails) return Promise.reject(new Error("offline"));
+      if (savedPercentageOnly !== null) {
+        return Promise.resolve({
+          position: {
+            file_id: 7,
+            percentage: savedPercentageOnly,
+            occurred_at: SAVED_AT,
+          },
+        });
+      }
       return Promise.resolve({
         position: savedCfi
           ? {
@@ -1214,6 +1227,24 @@ describe("ReflowableReader resuming", () => {
       vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
     });
     expect(positionSaves()).toEqual([]);
+  });
+
+  it("opens a saved place with no location at its percentage", async () => {
+    savedPercentageOnly = 0.4;
+    const view = await openBook();
+    expect(view.init).toHaveBeenCalledWith({
+      lastLocation: { fraction: 0.4 },
+    });
+
+    // Opening there isn't reading, so closing saves no place.
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    for (const save of positionSaves()) {
+      expect(save.cfi).toBeUndefined();
+      expect(save.percentage).toBeUndefined();
+    }
   });
 
   it("opens at the place saved on the server, not one cached earlier", async () => {

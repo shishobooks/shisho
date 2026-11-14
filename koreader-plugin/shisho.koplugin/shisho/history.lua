@@ -68,6 +68,7 @@ function History.accept(server)
     local cursor = server.stats_cursor
     server.history = { through = type(cursor) == "table" and tonumber(cursor.rowid) or 0 }
     server.stats_cursor = { rowid = 0 }
+    server.stats_from = 0
 end
 
 -- rowsPending reports whether rows of server's history are still to go.

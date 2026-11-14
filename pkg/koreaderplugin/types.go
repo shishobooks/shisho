@@ -1,5 +1,7 @@
 package koreaderplugin
 
+import "time"
+
 // ServerInfo is what every successful plugin response says about the
 // server, so the plugin can decide whether to update (ADR 0016).
 type ServerInfo struct {
@@ -49,6 +51,15 @@ type UploadPayload struct {
 	Pages []PageRowPayload `json:"pages" validate:"max=1000,dive"`
 	// Events are journal entries, each with an id that's never reused.
 	Events []EventPayload `json:"events" validate:"max=200,dive"`
+	// Unrecognized describes copies the batch has data for that no server
+	// the plugin signed in to recognizes or has linked (ADR 0017). The
+	// server holds their data and lists them on the Device's page.
+	// It can describe every book in the batch's pages and events.
+	Unrecognized []UnrecognizedPayload `json:"unrecognized,omitempty" validate:"max=1200,dive"`
+	// Claimed names copies another server the plugin signed in to now
+	// recognizes. This server drops what it held for them. The plugin sends
+	// them in batches of at most this many.
+	Claimed []string `json:"claimed,omitempty" validate:"max=500,dive,required,max=64"`
 	// Backfill marks a batch of the history KOReader recorded before the
 	// plugin signed in, sent when the user chose to (ADR 0016). Its times
 	// may predate the Device. Its pages start no Read-through, and its
@@ -56,6 +67,24 @@ type UploadPayload struct {
 	// status makes a Read-through for a Book with none, and a Rating sets
 	// one for a Book with none.
 	Backfill bool `json:"backfill,omitempty"`
+}
+
+// UnrecognizedPayload is what KOReader knows about a copy no server the
+// plugin signed in to recognizes: from its statistics and its sidecar.
+type UnrecognizedPayload struct {
+	Document    string   `json:"document" validate:"required,max=64"`
+	Title       string   `json:"title,omitempty" validate:"max=1024"`
+	Authors     []string `json:"authors,omitempty" validate:"max=50,dive,max=512"`
+	Identifiers []string `json:"identifiers,omitempty" validate:"max=50,dive,max=512"`
+	Language    string   `json:"language,omitempty" validate:"max=64"`
+	// FileType is the copy's file extension, such as epub or kepub.
+	FileType string `json:"file_type,omitempty" validate:"max=16"`
+	// ReadingSeconds is KOReader's total reading time in the copy, and
+	// FirstRead and LastRead when it was first and last read, on the
+	// device's clock, in Unix seconds.
+	ReadingSeconds int   `json:"reading_seconds,omitempty" validate:"min=0"`
+	FirstRead      int64 `json:"first_read,omitempty" validate:"min=0"`
+	LastRead       int64 `json:"last_read,omitempty" validate:"min=0"`
 }
 
 // PageRowPayload is one row of KOReader's page_stat_data, with the document
@@ -129,6 +158,40 @@ type UploadResponse struct {
 	Events []string `json:"events"`
 }
 
+// LookupPayload asks which of the copies the plugin holds data for the
+// server recognizes, before the plugin reports any as unrecognized (ADR
+// 0017).
+type LookupPayload struct {
+	Documents []string `json:"documents" validate:"max=500,dive,required,max=64"`
+}
+
+// What the server knows of a copy.
+const (
+	//tygo:emit export type DocumentState = typeof DocumentRecognized | typeof DocumentHeld | typeof DocumentDismissed | typeof DocumentUnknown;
+	// DocumentRecognized is a copy Shisho produced or a user linked, of a
+	// File the Device reaches.
+	DocumentRecognized = "recognized"
+	// DocumentHeld is a copy the server holds data for as unrecognized.
+	DocumentHeld = "held"
+	// DocumentDismissed is an unrecognized copy the user dismissed, whose
+	// data the server drops.
+	DocumentDismissed = "dismissed"
+	// DocumentUnknown is a copy the server knows nothing of.
+	DocumentUnknown = "unknown"
+)
+
+// LookupResponse says what the server knows of each copy asked about.
+type LookupResponse struct {
+	Server    ServerInfo         `json:"server"`
+	Documents []DocumentLookedUp `json:"documents"`
+}
+
+// DocumentLookedUp is what the server knows of one copy.
+type DocumentLookedUp struct {
+	Document string `json:"document"`
+	State    string `json:"state" tstype:"DocumentState"`
+}
+
 // PullPayload asks for the positions of the books the plugin names, and for
 // the statuses and Ratings it should write to the device.
 type PullPayload struct {
@@ -176,11 +239,13 @@ type PulledState struct {
 }
 
 // PulledPosition is a book's Reading Position, translated for the copy the
-// document hash names.
+// document hash names. A position with no Progress is a percentage only, for
+// a copy a user linked (ADR 0017) or a position kept as a percentage, and
+// KOReader goes to it by percentage.
 type PulledPosition struct {
 	Document string `json:"document"`
 	// Progress is an XPointer, or the 1-based page as a string.
-	Progress   string  `json:"progress"`
+	Progress   string  `json:"progress,omitempty"`
 	Percentage float64 `json:"percentage"`
 	// Timestamp is when the reader was there, on the device's clock, in Unix
 	// seconds.
@@ -190,4 +255,56 @@ type PulledPosition struct {
 	Source string `json:"source"`
 	// Own is a position this Device sent itself.
 	Own bool `json:"own"`
+}
+
+// UnrecognizedBook is a copy on a KOReader Device that no server the plugin
+// signed in to recognized (ADR 0017), as its Device's page lists it: the
+// ones still to link first, then the linked ones.
+type UnrecognizedBook struct {
+	Document    string   `json:"document"`
+	Title       *string  `json:"title" tstype:"string | null"`
+	Authors     []string `json:"authors"`
+	Identifiers []string `json:"identifiers"`
+	Language    *string  `json:"language" tstype:"string | null"`
+	FileType    *string  `json:"file_type" tstype:"string | null"`
+	// ReadingSeconds is KOReader's reading time in the copy, and FirstReadAt
+	// and LastReadAt when it was first and last read.
+	ReadingSeconds int        `json:"reading_seconds"`
+	FirstReadAt    *time.Time `json:"first_read_at" tstype:"string | null"`
+	LastReadAt     *time.Time `json:"last_read_at" tstype:"string | null"`
+	// LinkedAt is when the user linked the copy to a File, and Linked that
+	// File, nil once it's gone. A copy not linked yet has Suggestions.
+	LinkedAt    *time.Time      `json:"linked_at" tstype:"string | null"`
+	Linked      *LinkCandidate  `json:"linked" tstype:"LinkCandidate | null"`
+	Suggestions []LinkCandidate `json:"suggestions"`
+}
+
+// How a candidate File for a link was found.
+const (
+	//tygo:emit export type LinkMatch = typeof LinkMatchIdentifier | typeof LinkMatchSearch;
+	LinkMatchIdentifier = "identifier"
+	LinkMatchSearch     = "search"
+)
+
+// LinkCandidate is a File an unrecognized copy could be linked to.
+type LinkCandidate struct {
+	FileID      int      `json:"file_id"`
+	BookID      int      `json:"book_id"`
+	LibraryID   int      `json:"library_id"`
+	Title       string   `json:"title"`
+	Authors     []string `json:"authors"`
+	FileType    string   `json:"file_type"`
+	LibraryName string   `json:"library_name"`
+	// Match is how it was found, and empty for the File a copy is linked to.
+	Match string `json:"match,omitempty" tstype:"LinkMatch"`
+}
+
+// LinkCandidatesQuery searches the Files a copy could be linked to.
+type LinkCandidatesQuery struct {
+	Q string `query:"q" json:"q" mod:"trim" validate:"required,max=256"`
+}
+
+// LinkPayload links an unrecognized copy to a File.
+type LinkPayload struct {
+	FileID int `json:"file_id" validate:"required,min=1"`
 }

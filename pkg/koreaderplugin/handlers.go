@@ -7,14 +7,15 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
-	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/koreader"
+	"github.com/shishobooks/shisho/pkg/reach"
 	"github.com/shishobooks/shisho/pkg/reading"
+	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/uptrace/bun"
 )
 
@@ -53,6 +54,8 @@ type handler struct {
 	reading   *reading.Service
 	documents *koreader.Documents
 	hashes    *fingerprints.Service
+	reach     *reach.Service
+	search    *search.Service
 	bundle    *Bundle
 	limiter   *addressLimiter
 }
@@ -64,6 +67,8 @@ func newHandler(db *bun.DB, bundle *Bundle, bookService *books.Service) *handler
 		reading:   reading.NewService(db),
 		documents: koreader.NewDocuments(db, bookService),
 		hashes:    fingerprints.NewService(db),
+		reach:     reach.NewService(db, bookService),
+		search:    search.NewService(db),
 		bundle:    bundle,
 		limiter:   newAddressLimiter(),
 	}
@@ -185,19 +190,9 @@ func (h *handler) download(c echo.Context) error {
 // one, as getting a new setup URL does.
 func (h *handler) ownerDownload(c echo.Context) error {
 	ctx := c.Request().Context()
-	user, err := auth.RequireUser(c)
+	user, device, err := h.ownDevice(c)
 	if err != nil {
 		return err
-	}
-	device, err := h.devices.Retrieve(ctx, user.ID, c.Param("id"))
-	if errors.Is(err, devices.ErrNotFound) {
-		return errcodes.NotFound("Device")
-	}
-	if err != nil {
-		return errors.WithStack(err)
-	}
-	if !device.HasConnection(devices.ConnectionKOReaderPlugin) {
-		return errcodes.InvalidState("Only a KOReader Device can use the KOReader plugin.")
 	}
 	short, err := h.devices.GenerateShortURL(ctx, user.ID, device.ID)
 	if err != nil {

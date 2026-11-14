@@ -3,10 +3,12 @@ The plugin's own state, in its own file in KOReader's settings directory:
 
 - servers: every server signed in to, each { url, username, credential,
   device_id, device_name, needs_login, update_required, info, stats_cursor,
+  stats_from,
   last_synced, disabled, signed_in_day, states_cursor, history,
   asking_history }, where info is what
   the server last answered about itself, stats_cursor is the last statistics
-  row it acknowledged, disabled marks one the user turned off: the plugin
+  row it acknowledged, stats_from is the row its syncing started after (the
+  first row when it was sent history), disabled marks one the user turned off: the plugin
   leaves it alone, and nothing waits for it, until it's enabled again,
   signed_in_day is the day it was first signed in to, states_cursor is
   where its next pull of statuses and Ratings starts (shisho/summaries),
@@ -103,6 +105,7 @@ function State:signIn(fields)
     server.update_required = nil
     if not server.stats_cursor then
         server.stats_cursor = fields.stats_cursor or { rowid = 0 }
+        server.stats_from = tonumber(server.stats_cursor.rowid) or 0
     end
     State.signedInDay(server, fields.signed_in_day or os.date("%Y-%m-%d"))
     return server, other_device, first

@@ -63,6 +63,7 @@ func (svc *Service) RecordPageRows(ctx context.Context, userID int, deviceID str
 				StartedAt:  r.StartedAt.UTC(),
 				Duration:   r.Duration,
 				FileID:     fileID,
+				History:    history,
 			}
 			res, err := tx.NewInsert().Model(row).On("CONFLICT DO NOTHING").Exec(ctx)
 			if err != nil {
@@ -77,21 +78,62 @@ func (svc *Service) RecordPageRows(ctx context.Context, userID int, deviceID str
 		if fileID == nil || len(added) == 0 {
 			return nil
 		}
-		var sessions []*models.ReadingSession
-		for _, cluster := range clusterRows(added) {
-			session, err := groupCluster(ctx, tx, userID, deviceID, *fileID, cluster, !history, now)
-			if err != nil {
-				return err
-			}
-			if session == nil {
-				continue
-			}
-			if err := replaceEstimates(ctx, tx, userID, deviceID, *fileID, session); err != nil {
-				return err
-			}
-			sessions = append(sessions, session)
+		return groupRows(ctx, tx, userID, deviceID, *fileID, added, history, now)
+	})
+}
+
+// groupRows groups rows, new to fileID, into measured Reading Sessions, as
+// RecordPageRows describes.
+func groupRows(ctx context.Context, tx bun.Tx, userID int, deviceID string, fileID int, rows []*models.KOReaderPageRow, history bool, now time.Time) error {
+	var sessions []*models.ReadingSession
+	for _, cluster := range clusterRows(rows) {
+		session, err := groupCluster(ctx, tx, userID, deviceID, fileID, cluster, !history, now)
+		if err != nil {
+			return err
 		}
-		return placeUnattached(ctx, tx, userID, *fileID, sessions)
+		if session == nil {
+			continue
+		}
+		if err := replaceEstimates(ctx, tx, userID, deviceID, fileID, session); err != nil {
+			return err
+		}
+		sessions = append(sessions, session)
+	}
+	return placeUnattached(ctx, tx, userID, fileID, sessions)
+}
+
+// GroupHeldRows makes the rows deviceID sent for a document Shisho didn't
+// recognize, held ungrouped (RecordPageRows), rows of fileID, now that the
+// copy is linked to it (ADR 0017), and groups them as if they had just
+// arrived: either the ones from history, or the rest, so the caller can
+// apply history's statuses between the two.
+func (svc *Service) GroupHeldRows(ctx context.Context, userID int, deviceID, document string, fileID int, history bool) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		var rows []*models.KOReaderPageRow
+		err := tx.NewSelect().
+			Model(&rows).
+			Where("kpr.user_id = ? AND kpr.device_id = ? AND kpr.document = ?", userID, deviceID, document).
+			Where("kpr.file_id IS NULL AND NOT kpr.grouped AND kpr.history = ?", history).
+			Scan(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		for _, row := range rows {
+			row.FileID = &fileID
+		}
+		_, err = tx.NewUpdate().
+			Model((*models.KOReaderPageRow)(nil)).
+			Set("file_id = ?", fileID).
+			Where("user_id = ? AND device_id = ? AND document = ?", userID, deviceID, document).
+			Where("file_id IS NULL AND NOT grouped AND history = ?", history).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		return groupRows(ctx, tx, userID, deviceID, fileID, rows, history, svc.now())
 	})
 }
 

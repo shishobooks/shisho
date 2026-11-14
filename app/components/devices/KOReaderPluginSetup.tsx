@@ -182,10 +182,12 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
           reading done offline arrives on the days you did it, however long the
           e-reader stays offline. Finishing, pausing, and rating a book in
           KOReader carry over to Shisho, and the same changes made here show up
-          in KOReader. Progress sync is built into KOReader and syncs your
-          position in the open book, but Shisho can only estimate your reading
-          time from it, offline reading is dated when the e-reader next
-          connects, and a book counts as read only once you reach its last
+          in KOReader. One e-reader can sync with several Shisho servers, and a
+          copy Shisho doesn't recognize, such as one downloaded before v0.7.0,
+          can be linked to its book here. Progress sync is built into KOReader
+          and syncs your position in the open book, but Shisho can only estimate
+          your reading time from it, offline reading is dated when the e-reader
+          next connects, and a book counts as read only once you reach its last
           pages. Once the plugin syncs, turn progress sync off.
         </p>
       </Disclosure>

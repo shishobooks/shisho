@@ -15,18 +15,25 @@ then places on it.
 History the person chose to send (shisho/history) goes before all of it:
 its rows, and then the statuses and Ratings KOReader recorded before signing
 in, so a finished book's Read-through begins on the day of its first session,
-and reading since sign-in lands on the Read-throughs history made. No UI.
+and reading since sign-in lands on the Read-throughs history made.
+
+With several servers, each book's data goes only where shisho/recognition
+decides (ADR 0017): a book another server recognizes is skipped, or claimed
+from a server that held it, and one no server recognizes waits until every
+server has answered, its rows deferred and sent once it's decided. No UI.
 ]]
 local History = require("shisho/history")
+local Recognition = require("shisho/recognition")
 local Responses = require("shisho/responses")
 local Statistics = require("shisho/statistics")
 local Summaries = require("shisho/summaries")
 
 local Sync = {}
 
--- The most rows and events one upload carries.
+-- The most rows, events, and claims one upload carries.
 Sync.BATCH = 500
 Sync.EVENT_BATCH = 100
+Sync.CLAIM_BATCH = 500
 
 -- HISTORY_WHILE_BUSY is how many batches of history rows a sync while
 -- reading or going to sleep sends, so a long history holds up neither.
@@ -164,6 +171,96 @@ local function noteRefusal(server, outcome)
     end
 end
 
+--[[--
+holdBack is what opts.recognition decides for opts.server's data, for one
+sync: every book's data goes when there's no recognition to ask.
+]]
+local function holdBack(opts)
+    local recognition, url = opts.recognition, opts.server.url
+    local actions = {}
+    local h = {}
+
+    function h.action(document)
+        if not recognition then return "send" end
+        if not actions[document] then
+            actions[document] = recognition:decide(opts.servers or {}, url, document)
+        end
+        return actions[document]
+    end
+
+    -- forget drops what was decided for documents, after a claim.
+    function h.forget(documents)
+        for __, document in ipairs(documents) do actions[document] = nil end
+    end
+
+    -- rows keeps the rows of read whose data goes, deferring the ones that
+    -- wait, which are sent once it's decided.
+    function h.rows(read)
+        local out, deferred = {}, false
+        for __, row in ipairs(read) do
+            local action = h.action(row.document)
+            if Recognition.sendable(action) then
+                table.insert(out, row)
+            elseif action == "wait" then
+                recognition:defer(url, row.document)
+                deferred = true
+            end
+        end
+        -- Written before the cursor moves past them, so they're never lost.
+        if deferred then recognition:flush() end
+        return out
+    end
+
+    -- split divides events into the ones that go and the ones this server
+    -- never gets. The ones that wait are in neither.
+    function h.split(events)
+        local go, never = {}, {}
+        for __, event in ipairs(events) do
+            local action = h.action(event.document)
+            if Recognition.sendable(action) then
+                table.insert(go, event)
+            elseif action ~= "wait" then
+                table.insert(never, event)
+            end
+        end
+        return go, never
+    end
+
+    -- unrecognized reports whether document goes as unrecognized, or the
+    -- server already holds it as that, so what KOReader knows of it, such
+    -- as its reading time, stays current there.
+    local function unrecognized(document)
+        local action = h.action(document)
+        if action == "unrecognized" then return true end
+        local answer = recognition and recognition:answer(url, document)
+        return action == "send" and answer ~= nil and answer.state == "held"
+    end
+
+    -- describe adds what KOReader knows of each book payload carries that
+    -- goes as unrecognized.
+    function h.describe(payload)
+        local seen, list = {}, {}
+        local function add(document)
+            if seen[document] or not unrecognized(document) then return end
+            seen[document] = true
+            local about = opts.about and opts.about(document) or nil
+            if type(about) ~= "table" then about = {} end
+            about.document = document
+            -- KOReader's JSON writes an empty list as an object, which the
+            -- server refuses, so a list with nothing in it is left out.
+            for __, key in ipairs({ "authors", "identifiers" }) do
+                if type(about[key]) ~= "table" or #about[key] == 0 then about[key] = nil end
+            end
+            table.insert(list, about)
+        end
+        for __, row in ipairs(payload.pages or {}) do add(row.document) end
+        for __, event in ipairs(payload.events or {}) do add(event.document) end
+        if #list > 0 then payload.unrecognized = list end
+    end
+
+    return h
+end
+
 local function payloadRow(row)
     return {
         document = row.document,
@@ -181,7 +278,7 @@ sent. Up to opts.history_batches batches of rows go, when set. Its statuses
 and Ratings wait until every row has gone, so with statistics off, they
 wait for statistics. Returns the outcome, and an error reading statistics.
 ]]
-local function sendHistory(opts, send, sent)
+local function sendHistory(opts, send, sent, hold)
     local state, server = opts.state, opts.server
     if type(server.history) ~= "table" then return "ok" end
     local batch = opts.batch or Sync.BATCH
@@ -198,17 +295,21 @@ local function sendHistory(opts, send, sent)
             state:flush()
             break
         end
-        local payload = { backfill = true, pages = {} }
-        for __, row in ipairs(rows) do table.insert(payload.pages, payloadRow(row)) end
-        local outcome = send(payload)
-        if outcome ~= "ok" then return outcome end
+        local going = hold.rows(rows)
+        if #going > 0 then
+            local payload = { backfill = true, pages = {} }
+            for __, row in ipairs(going) do table.insert(payload.pages, payloadRow(row)) end
+            local outcome = send(payload)
+            if outcome ~= "ok" then return outcome end
+        end
         server.stats_cursor = Statistics.cursorAfter(rows[#rows])
-        sent.pages = sent.pages + #rows
+        sent.pages = sent.pages + #going
         state:flush()
         if opts.progress then opts.progress(sent.pages) end
     end
     if History.rowsPending(server) then return "ok" end
-    local events = opts.history or {}
+    local events, never = hold.split(opts.history or {})
+    for __, event in ipairs(never) do Summaries.acknowledge(opts.store, event) end
     local first = 1
     while first <= #events do
         local chunk = History.batch(events, first, Sync.EVENT_BATCH)
@@ -218,6 +319,51 @@ local function sendHistory(opts, send, sent)
         sent.events = sent.events + #chunk
         first = first + #chunk
         state:flush()
+    end
+    return "ok"
+end
+
+--[[--
+sendDeferred sends the rows of each book that waited for every server to
+answer, now that it's decided, through send, as Sync.run does: the ones
+from history flagged as history. It reads them with
+opts.read_document(document, from, through), every row of the book after
+the rowid its syncing started from and up to the rowid through. Returns the
+outcome, and an error reading statistics.
+]]
+local function sendDeferred(opts, send, sent, hold)
+    local recognition, server = opts.recognition, opts.server
+    if not recognition or not opts.read_document then return "ok" end
+    local batch = opts.batch or Sync.BATCH
+    local through = type(server.stats_cursor) == "table" and tonumber(server.stats_cursor.rowid) or 0
+    local from = tonumber(server.stats_from) or 0
+    local history_through = type(server.history) == "table" and tonumber(server.history.through) or 0
+    for __, document in ipairs(recognition:deferred(server.url)) do
+        local action = hold.action(document)
+        if Recognition.sendable(action) then
+            local rows, err = opts.read_document(document, from, through)
+            if not rows then return "error", err end
+            for __, history in ipairs({ true, false }) do
+                local part = {}
+                for __, row in ipairs(rows) do
+                    if (row.rowid <= history_through) == history then table.insert(part, row) end
+                end
+                local first = 1
+                while first <= #part do
+                    local payload = { pages = {}, backfill = history or nil }
+                    for i = first, math.min(first + batch - 1, #part) do
+                        table.insert(payload.pages, payloadRow(part[i]))
+                    end
+                    local outcome = send(payload)
+                    if outcome ~= "ok" then return outcome end
+                    sent.pages = sent.pages + #payload.pages
+                    first = first + batch
+                end
+            end
+            recognition:undefer(server.url, document)
+        elseif action ~= "wait" then
+            recognition:undefer(server.url, document)
+        end
     end
     return "ok"
 end
@@ -239,6 +385,15 @@ run syncs opts.server. opts:
 - history_batches: the most batches of history rows to send, for a sync
   that shouldn't hold anything up long; the rest of the sync then waits
   for one that sends the rest
+- recognition, servers: what each server said of each book
+  (shisho/recognition), and the enabled servers, to decide where each
+  book's data goes; without them, all of it goes
+- documents: the books with data waiting, any of which this server may be
+  told to drop
+- about(document): what KOReader knows of a book going as unrecognized
+- read_document(document, from, through): every statistics row of a book
+  after the rowid from and up to the rowid through, for rows that were
+  deferred
 
 Returns the outcome, as Responses.classify names it, and the number of
 rows and events sent.
@@ -247,11 +402,13 @@ function Sync.run(opts)
     local state, journal, server = opts.state, opts.journal, opts.server
     local batch = opts.batch or Sync.BATCH
     local clock = opts.clock or os.time
-    local changes = opts.changes or {}
+    local hold = holdBack(opts)
+    local changes, never = hold.split(opts.changes or {})
     local next_change = 1
     local sent = { pages = 0, events = 0 }
     -- send posts payload, noting a refusal, which waits for the person.
     local function send(payload)
+        hold.describe(payload)
         payload.clock = clock()
         local status, body = opts.post(payload)
         local outcome = Responses.classify(status, body)
@@ -261,13 +418,48 @@ function Sync.run(opts)
             state:flush()
         else
             server.needs_login = nil
+            -- The server holds what went as unrecognized now, and each sync
+            -- asks again, so a link made elsewhere reaches it.
+            if opts.recognition and payload.unrecognized then
+                local held = {}
+                for __, about in ipairs(payload.unrecognized) do
+                    table.insert(held, { document = about.document, state = "held" })
+                end
+                opts.recognition:record(server.url, held, opts.recognition:current())
+            end
         end
         return outcome
     end
 
+    -- A book another server recognizes now is dropped here first, so its
+    -- data stops going.
+    if opts.recognition then
+        local claims = opts.recognition:claims(opts.servers or {}, server.url, opts.documents or {})
+        local first = 1
+        while first <= #claims do
+            local chunk = {}
+            for i = first, math.min(first + Sync.CLAIM_BATCH - 1, #claims) do table.insert(chunk, claims[i]) end
+            local outcome = send({ claimed = chunk })
+            if outcome ~= "ok" then return outcome, sent.pages, sent.events end
+            opts.recognition:claimed(server.url, chunk, opts.recognition:current())
+            hold.forget(chunk)
+            first = first + #chunk
+        end
+        if #claims > 0 then changes, never = hold.split(opts.changes or {}) end
+    end
+    -- What this server never gets is done with for it.
+    for __, change in ipairs(never) do Summaries.acknowledge(opts.store, change) end
+    local __, journal_never = hold.split(journal:pending(server.url))
+    local never_ids = {}
+    for __, event in ipairs(journal_never) do table.insert(never_ids, event.id) end
+    journal:acknowledge(server.url, never_ids)
+
+    local outcome, err = sendDeferred(opts, send, sent, hold)
+    if outcome ~= "ok" then return outcome, sent.pages, sent.events, err end
+
     -- Statistics off leaves history rows to go, and reading after it can go
     -- once statistics are on again. Only a sync cut short waits.
-    local outcome, err = sendHistory(opts, send, sent)
+    outcome, err = sendHistory(opts, send, sent, hold)
     if outcome ~= "ok" then return outcome, sent.pages, sent.events, err end
     if opts.read_pages and History.rowsPending(server) then return "ok", sent.pages, sent.events end
     while true do
@@ -280,7 +472,9 @@ function Sync.run(opts)
         -- Positions follow every row, so they go only once the rows run out,
         -- and status and Rating changes follow the positions.
         local last_rows = #rows < batch
-        local events = last_rows and journal:pending(server.url, Sync.EVENT_BATCH) or {}
+        local events = last_rows and journal:pending(server.url, Sync.EVENT_BATCH, function(entry)
+            return Recognition.sendable(hold.action(entry.document))
+        end) or {}
         local batch_changes = {}
         while last_rows and #events < Sync.EVENT_BATCH and next_change <= #changes do
             table.insert(events, changes[next_change])
@@ -289,15 +483,18 @@ function Sync.run(opts)
         end
         if #rows == 0 and #events == 0 then break end
 
+        local going = hold.rows(rows)
         local payload = {}
-        if #rows > 0 then
+        if #going > 0 then
             payload.pages = {}
-            for __, row in ipairs(rows) do table.insert(payload.pages, payloadRow(row)) end
+            for __, row in ipairs(going) do table.insert(payload.pages, payloadRow(row)) end
         end
         if #events > 0 then payload.events = events end
 
-        outcome = send(payload)
-        if outcome ~= "ok" then return outcome, sent.pages, sent.events end
+        if payload.pages or payload.events then
+            outcome = send(payload)
+            if outcome ~= "ok" then return outcome, sent.pages, sent.events end
+        end
 
         if #rows > 0 then
             server.stats_cursor = Statistics.cursorAfter(rows[#rows])
@@ -308,7 +505,7 @@ function Sync.run(opts)
         for __, change in ipairs(batch_changes) do
             Summaries.acknowledge(opts.store, change)
         end
-        sent.pages = sent.pages + #rows
+        sent.pages = sent.pages + #going
         sent.events = sent.events + #events
         state:flush()
         if last_rows and #events < Sync.EVENT_BATCH then break end
@@ -317,6 +514,51 @@ function Sync.run(opts)
     journal:prune()
     state:flush()
     return "ok", sent.pages, sent.events
+end
+
+--[[--
+removeServer stops using the server at opts.url: it forgets the plugin's own
+sign-in, sync state, and queue for it, in opts.state, opts.summaries, and
+opts.recognition, and drops the journal entries only it was waiting for.
+KOReader's own records (its statistics, sidecars, and OPDS catalog) are
+never touched. Returns whether there was such a server.
+]]
+function Sync.removeServer(opts)
+    if not opts.state:remove(opts.url) then return false end
+    opts.summaries:remove(opts.url)
+    opts.recognition:remove(opts.url)
+    opts.journal:prune()
+    opts.state:flush()
+    opts.summaries:flush()
+    opts.recognition:flush()
+    return true
+end
+
+--[[--
+lookUp asks opts.server what it knows of each of opts.documents, in
+batches, through opts.post(documents), and records each answer in
+opts.recognition in its current round. Returns the outcome: a server that can't
+answer doesn't count as having answered, so books no server recognizes wait
+for it.
+]]
+function Sync.lookUp(opts)
+    local server, documents = opts.server, opts.documents or {}
+    local first = 1
+    while first <= #documents do
+        local batch = {}
+        for i = first, math.min(first + Recognition.ASK_BATCH - 1, #documents) do
+            table.insert(batch, documents[i])
+        end
+        local status, body = opts.post(batch)
+        local outcome = Responses.classify(status, body)
+        if outcome ~= "ok" then
+            noteRefusal(server, outcome)
+            return outcome
+        end
+        opts.recognition:record(server.url, body.documents, opts.recognition:current())
+        first = first + #batch
+    end
+    return "ok"
 end
 
 --[[--

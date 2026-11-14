@@ -46,6 +46,7 @@ Your place carries between the Shisho reader, KOReader, and a Kobo in every dire
 - **On a Kobo**, places are estimates within the chapter. The Kobo opens at the sentence nearest where you were, usually within a page or two, and the Shisho reader and KOReader open at or near the sentence the Kobo was on. This needs the Kobo to hold the book as a KePub.
 - **Comics and PDFs** carry the page.
 - **MOBI and AZW3 books** don't carry between the Shisho reader and KOReader: KOReader shows no progress for a place the Shisho reader saved.
+- **A KOReader copy you [linked](./koreader.md#books-shisho-doesnt-recognize)** carries only its percentage, since its file isn't the one in your library: the Shisho reader and your other devices open the book at that percentage.
 
 When the exact spot can't be found, such as a place saved before the file was replaced with another edition, the book opens nearby: in the same chapter when the chapter is still there, and at the same percentage of the book when it isn't.
 

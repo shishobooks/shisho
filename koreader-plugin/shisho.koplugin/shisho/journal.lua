@@ -66,11 +66,12 @@ function Journal:lastPositionAt(document)
 end
 
 -- pending returns up to limit entries the server at url hasn't acknowledged,
--- oldest first, as the upload sends them.
-function Journal:pending(url, limit)
+-- oldest first, as the upload sends them. With keep, only the entries it
+-- keeps.
+function Journal:pending(url, limit, keep)
     local out = {}
     for __, entry in ipairs(self.data.entries) do
-        if not entry.acked[url] then
+        if not entry.acked[url] and (not keep or keep(entry)) then
             if limit and #out >= limit then break end
             table.insert(out, {
                 id = entry.id,

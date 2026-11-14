@@ -529,6 +529,15 @@ func (h *handler) deleteAllEReaderData(c echo.Context) error {
 		Where("1=1").
 		Exec(ctx)
 
+	// Delete what KOReader Devices sent and linked, which the Devices and
+	// Files would otherwise take with them by cascade.
+	for _, model := range []any{
+		(*models.KOReaderHeldEvent)(nil), (*models.KOReaderUnrecognizedBook)(nil),
+		(*models.KOReaderPageRow)(nil), (*models.KOReaderPluginEvent)(nil), (*models.KOReaderDocumentLink)(nil), (*models.DocumentHash)(nil),
+	} {
+		_, _ = h.db.NewDelete().Model(model).Where("1=1").Exec(ctx)
+	}
+
 	// Delete Devices
 	result, _ := h.db.NewDelete().
 		Model((*devices.Device)(nil)).

@@ -28,6 +28,7 @@ local MultiInputDialog = require("ui/widget/multiinputdialog")
 local NetworkMgr = require("ui/network/manager")
 local Opds = require("shisho/opds")
 local Positions = require("shisho/positions")
+local Recognition = require("shisho/recognition")
 local Responses = require("shisho/responses")
 local Stamps = require("shisho/stamps")
 local State = require("shisho/state")
@@ -68,6 +69,7 @@ local Shisho = WidgetContainer:extend{
     state_file = DataStorage:getSettingsDir() .. "/shisho.lua",
     summaries_file = DataStorage:getSettingsDir() .. "/shisho_summaries.lua",
     hashes_file = DataStorage:getSettingsDir() .. "/shisho_hashes.lua",
+    recognition_file = DataStorage:getSettingsDir() .. "/shisho_recognition.lua",
 }
 
 function Shisho:init()
@@ -76,6 +78,7 @@ function Shisho:init()
     self.journal = Journal.new(self.state)
     self.summaries = Summaries.open(self.summaries_file)
     self.hashes = HashIndex.open(self.hashes_file)
+    self.recognition = Recognition.open(self.recognition_file)
     self:scheduleDaily()
     self.ui.menu:registerToMainMenu(self)
 
@@ -162,9 +165,12 @@ function Shisho:signedIn(url, answer, username, credential)
         info = answer.server,
     }
     if other_device then
-        -- Another Device's statuses and Ratings say nothing about this one's.
+        -- Another Device's statuses and Ratings, and what it held, say
+        -- nothing about this one's.
         self.summaries:remove(server.url)
         self.summaries:flush()
+        self.recognition:remove(server.url)
+        self.recognition:flush()
     end
     -- A zip from this server's Device page was installed from it, however
     -- the sign-in went once its code expired.
@@ -709,8 +715,13 @@ function Shisho:recordPosition(flush)
     end
 end
 
-function Shisho:goToProgress(progress)
-    if self.ui.document.info.has_pages then
+-- goToPosition goes to a pulled position: its XPointer or page, or, for
+-- one with only a percentage (ADR 0017), that far through the book.
+function Shisho:goToPosition(position)
+    local progress = position.progress
+    if not progress then
+        self.ui:handleEvent(Event:new("GotoPercent", (tonumber(position.percentage) or 0) * 100))
+    elseif self.ui.document.info.has_pages then
         self.ui:handleEvent(Event:new("GotoPage", tonumber(progress)))
     else
         self.ui:handleEvent(Event:new("GotoXPointer", progress))
@@ -743,7 +754,7 @@ function Shisho:pullOpenBook(interactive)
     local percent = Math.round((tonumber(remote.percentage) or 0) * 100)
     local source = remote.source or _("another reader")
     if action == "jump" then
-        self:goToProgress(remote.progress)
+        self:goToPosition(remote)
         self:notify(T(_("Went to %1% from %2."), percent, source), 3)
         return action
     end
@@ -754,7 +765,7 @@ function Shisho:pullOpenBook(interactive)
     UIManager:show(ConfirmBox:new{
         text = text,
         ok_text = _("Go"),
-        ok_callback = function() self:goToProgress(remote.progress) end,
+        ok_callback = function() self:goToPosition(remote) end,
     })
     return action
 end
@@ -1145,6 +1156,7 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
         read_pages = function(cursor, limit) return Statistics.read(path, cursor, limit) end
     end
     local problems = {}
+    local plans = {}
     for __, server in ipairs(self.state:enabledServers()) do
         local label = Urls.label(server.url)
         if server.needs_login then
@@ -1154,52 +1166,119 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
         elseif while_reading and Sync.backingOff(server, os.time()) then
             logger.dbg("Shisho: leaving out a server that just failed:", server.url)
         else
-            local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
-                not interactive and Client.BACKGROUND or nil)
             local store = self.summaries:server(server.url)
-            local changes = Summaries.collect(store, books, {
-                signed_in_day = State.signedInDay(server, os.date("%Y-%m-%d")),
-                today = os.date("%Y-%m-%d"),
-                seen = self.summaries:seen(),
+            table.insert(plans, {
+                server = server,
+                label = label,
+                client = Client.new(server.url, self.stamps.version, server.username, server.credential,
+                    not interactive and Client.BACKGROUND or nil),
+                store = store,
+                changes = Summaries.collect(store, books, {
+                    signed_in_day = State.signedInDay(server, os.date("%Y-%m-%d")),
+                    today = os.date("%Y-%m-%d"),
+                    seen = self.summaries:seen(),
+                }),
+                history = server.history and History.events(store, books) or nil,
             })
-            -- A sync while reading or going to sleep sends history a little
-            -- at a time, so it holds up neither, and shows no progress.
-            local busy = while_reading or going_to_sleep
-            local progress
-            if read_pages and not busy then
-                progress = self:historyProgress(server)
-            end
-            local ok, outcome = pcall(Sync.run, {
+        end
+    end
+
+    -- Each server says what it knows of the books with data waiting, so a
+    -- book goes to the servers that recognize it, and as unrecognized only
+    -- once every server has answered that none does (ADR 0017).
+    local statistics = statistics_on and self:statisticsPath()
+    local documents = self.recognition:waiting(plans, {
+        statistics = statistics and function(server) return Statistics.documents(statistics, server.stats_cursor) end,
+        journal = function(url) return self.journal:pending(url) end,
+    })
+    self.recognition:noteSeen(documents, self.recognition:beginRound())
+    for __, plan in ipairs(plans) do
+        local ok, outcome = pcall(Sync.lookUp, {
+            server = plan.server,
+            recognition = self.recognition,
+            documents = documents,
+            post = function(batch) return plan.client:lookup(batch) end,
+        })
+        if not ok then
+            logger.warn("Shisho: looking books up failed:", outcome)
+            outcome = "error"
+        end
+        plan.looked_up = outcome
+    end
+    self.recognition:flush()
+    local enabled = self.state:enabledServers()
+
+    for __, plan in ipairs(plans) do
+        local server, client, store, label = plan.server, plan.client, plan.store, plan.label
+        -- A sync while reading or going to sleep sends history a little
+        -- at a time, so it holds up neither, and shows no progress.
+        local busy = while_reading or going_to_sleep
+        local progress
+        if read_pages and not busy and plan.looked_up == "ok" then
+            progress = self:historyProgress(server)
+        end
+        local ok, outcome = true, plan.looked_up
+        if outcome == "ok" then
+            ok, outcome = pcall(Sync.run, {
                 state = self.state,
                 journal = self.journal,
                 server = server,
                 read_pages = read_pages,
                 post = function(payload) return client:upload(payload) end,
-                changes = changes,
+                changes = plan.changes,
                 store = store,
-                history = server.history and History.events(store, books) or nil,
+                history = plan.history,
                 progress = progress,
                 history_batches = busy and Sync.HISTORY_WHILE_BUSY or nil,
+                recognition = self.recognition,
+                servers = enabled,
+                documents = documents,
+                about = function(document) return self:aboutBook(document, books) end,
+                read_document = read_pages and function(document, from, through)
+                    return Statistics.readDocument(self:statisticsPath(), document, from, through)
+                end or nil,
             })
-            self:closeHistoryProgress()
-            if ok and outcome == "ok" then
-                ok, outcome = pcall(self.pullStates, self, server, client, store, books)
-            end
-            self.summaries:flush()
-            if not ok then
-                logger.warn("Shisho: syncing failed:", outcome)
-                outcome = "error"
-            end
-            Sync.noteOutcome(server, outcome, os.time())
-            if outcome == "needs_login" then
-                table.insert(problems, T(_("%1 needs a new sign-in."), label))
-            elseif outcome ~= "ok" then
-                table.insert(problems, T(_("Couldn't sync with %1: %2"), label, Responses.message(outcome, nil, server.info)))
-            end
+        end
+        self:closeHistoryProgress()
+        if ok and outcome == "ok" then
+            ok, outcome = pcall(self.pullStates, self, server, client, store, books)
+        end
+        self.summaries:flush()
+        self.recognition:flush()
+        if not ok then
+            logger.warn("Shisho: syncing failed:", outcome)
+            outcome = "error"
+        end
+        Sync.noteOutcome(server, outcome, os.time())
+        if outcome == "needs_login" then
+            table.insert(problems, T(_("%1 needs a new sign-in."), label))
+        elseif outcome ~= "ok" then
+            table.insert(problems, T(_("Couldn't sync with %1: %2"), label, Responses.message(outcome, nil, server.info)))
         end
     end
     self.state:flush()
     return problems, statistics_on
+end
+
+-- aboutBook is what KOReader knows of the book document
+-- (Recognition.about), from statistics, and from its sidecar when the
+-- plugin knows where the book is.
+function Shisho:aboutBook(document, books)
+    local stats = self:statisticsEnabled() and Statistics.book(self:statisticsPath(), document) or nil
+    local path = books[document] and books[document].path
+    if not path then
+        for file, entry in pairs(self.hashes:files()) do
+            if entry.hash == document then path = file break end
+        end
+    end
+    local props
+    if path then
+        local ok, value = pcall(function()
+            return DocSettings:findSidecarFile(path) and DocSettings:open(path):readSetting("doc_props") or nil
+        end)
+        if ok then props = value end
+    end
+    return Recognition.about(stats, path, props)
 end
 
 -- historyRows is how many rows of server's history are still to go.
@@ -1284,10 +1363,10 @@ function Shisho:serverMenu(server)
                 text = T(_("Stop using %1? This removes only the plugin's own sign-in for it. KOReader's books, statistics, and OPDS catalog stay."), Urls.label(server.url)),
                 ok_text = _("Remove"),
                 ok_callback = function()
-                    self.state:remove(server.url)
-                    self.state:flush()
-                    self.summaries:remove(server.url)
-                    self.summaries:flush()
+                    Sync.removeServer{
+                        url = server.url, state = self.state, journal = self.journal,
+                        summaries = self.summaries, recognition = self.recognition,
+                    }
                     self:scheduleDaily()
                     if touchmenu_instance then touchmenu_instance:backToUpperMenu() end
                 end,

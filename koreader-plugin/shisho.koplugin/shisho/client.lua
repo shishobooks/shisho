@@ -79,6 +79,11 @@ function Client:status()
     return self:post("/koreader/plugin/status")
 end
 
+-- lookup asks what the server knows of each of documents (shisho/recognition).
+function Client:lookup(documents)
+    return self:post("/koreader/plugin/lookup", { documents = documents })
+end
+
 -- upload sends one batch of page rows and journal entries (shisho/sync).
 function Client:upload(payload)
     return self:post("/koreader/plugin/upload", payload)

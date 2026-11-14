@@ -27,14 +27,15 @@ decide returns "prompt", "jump", or "ignore" for remote, a pulled position
 { progress, percentage, timestamp, source, own }, given here, this device's
 place { progress, percentage, at } where at is when it was last somewhere
 new in the book (nil if never), and the saved settings. Its second result
-is "newer" or "older".
+is "newer" or "older". A position with no progress is a percentage only,
+from a copy a user linked (ADR 0017), and is gone to by its percentage.
 ]]
 function Positions.decide(remote, here, saved)
-    if type(remote) ~= "table" or remote.own or not remote.progress then
+    if type(remote) ~= "table" or remote.own or (not remote.progress and type(remote.percentage) ~= "number") then
         return "ignore"
     end
     here = here or {}
-    if remote.progress == here.progress or samePercent(remote.percentage, here.percentage) then
+    if (remote.progress and remote.progress == here.progress) or samePercent(remote.percentage, here.percentage) then
         return "ignore"
     end
     local settings = Positions.settings(saved)

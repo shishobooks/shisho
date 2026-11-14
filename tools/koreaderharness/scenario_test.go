@@ -59,6 +59,9 @@ type scenario struct {
 	jobLog       *joblogs.JobLogger
 	cache        *downloadcache.Cache
 	library      string
+	// serve serves the scenario's server on listener, whose port it keeps.
+	serve    func(net.Listener)
+	listener net.Listener
 }
 
 func newScenario(t *testing.T) *scenario {
@@ -97,7 +100,8 @@ func newScenario(t *testing.T) *scenario {
 
 	listener, err := net.Listen("tcp", "0.0.0.0:0")
 	require.NoError(t, err)
-	go func() { _ = srv.Serve(listener) }()
+	serve := func(l net.Listener) { _ = srv.Serve(l) }
+	go serve(listener)
 	t.Cleanup(func() { _ = srv.Close() })
 	port := listener.Addr().(*net.TCPAddr).Port
 
@@ -128,7 +132,7 @@ func newScenario(t *testing.T) *scenario {
 		t: t, ctx: ctx, db: db, url: fmt.Sprintf("http://localhost:%d", port),
 		user: user, device: device, devices: deviceService,
 		reading: reading.NewService(db), fingerprints: fingerprintService,
-		worker: w, cache: cache, library: library,
+		worker: w, cache: cache, library: library, serve: serve, listener: listener,
 		jobLog: joblogs.NewService(db).NewJobLogger(ctx, 0, logger.FromContext(ctx)),
 		h: &Harness{
 			Dir:        filepath.Join(base, "koreader"),
@@ -141,6 +145,22 @@ func newScenario(t *testing.T) *scenario {
 
 	require.Equal(t, http.StatusOK, s.getStatus("/health"))
 	return s
+}
+
+// down stops the server answering, as when it's switched off, until up.
+func (s *scenario) down() {
+	s.t.Helper()
+	require.NoError(s.t, s.listener.Close())
+}
+
+// up has the server answer again, at the same address.
+func (s *scenario) up() {
+	s.t.Helper()
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", s.listener.Addr().(*net.TCPAddr).Port))
+	require.NoError(s.t, err)
+	s.listener = listener
+	go s.serve(listener)
+	require.Equal(s.t, http.StatusOK, s.getStatus("/health"))
 }
 
 func (s *scenario) getStatus(path string) int {

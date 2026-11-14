@@ -111,6 +111,10 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, "/api/user/devices", `{"name":"Kindle","device_type":"kindle"}`, http.StatusCreated)), &kindle))
+	var koreader struct {
+		ID string `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, "/api/user/devices", `{"name":"KOReader","device_type":"koreader"}`, http.StatusCreated)), &koreader))
 	var underway struct {
 		ReadThroughs []struct {
 			ID int `json:"id"`
@@ -354,6 +358,38 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			name:   "KOReader plugin download for a device that does not exist",
 			method: http.MethodPost, path: "/api/user/devices/missing/koreader-plugin",
 			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
+			name:   "unrecognized books of a Device that isn't KOReader",
+			method: http.MethodGet, path: "/api/user/devices/" + kindle.ID + "/koreader-unrecognized",
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "Only a KOReader Device can use the KOReader plugin.",
+		},
+		{
+			name:   "unrecognized books of a device that does not exist",
+			method: http.MethodGet, path: "/api/user/devices/missing/koreader-unrecognized",
+			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
+			name:   "link of an unrecognized book the Device doesn't hold",
+			method: http.MethodPost, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/0ddc0b7a11c0b7a11c0b7a11c0b7a11c/link",
+			body:   `{"file_id":1}`,
+			status: http.StatusNotFound, code: "not_found", message: "Unrecognized book not found.",
+		},
+		{
+			name:   "link of an unrecognized book with no File",
+			method: http.MethodPost, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/0ddc0b7a11c0b7a11c0b7a11c0b7a11c/link",
+			body:   `{}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
+			name:   "dismissal of an unrecognized book the Device doesn't hold",
+			method: http.MethodPost, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/0ddc0b7a11c0b7a11c0b7a11c0b7a11c/dismiss",
+			status: http.StatusNotFound, code: "not_found", message: "Unrecognized book not found.",
+		},
+		{
+			name:   "search for a File to link with no query",
+			method: http.MethodGet, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/candidates",
+			status: http.StatusUnprocessableEntity, code: "validation_error",
 		},
 		{
 			name:   "delivery preview of a device that does not exist",

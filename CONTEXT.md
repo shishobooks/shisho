@@ -86,6 +86,10 @@ _Avoid_: client, connection, API key (the credential is part of the Device, not 
 Shisho's add-on for KOReader. It signs into a Shisho server as a KOReader **Device**, and into several servers at once as a separate Device on each. It keeps that server's reading record: **Reading Positions**, **Reading Sessions** as KOReader timed them, Read-through outcomes, and **Ratings**. It holds them on the device while offline and sends them when it next connects. It replaces KOReader's built-in progress sync, which Shisho still accepts from a KOReader Device without the plugin.
 _Avoid_: Shisho plugin, sync plugin (a plugin in Shisho runs on the server)
 
+**Unrecognized book**:
+A copy on a KOReader **Device** that no server the **KOReader plugin** signs into recognizes, such as one downloaded before Shisho recorded the hashes of what it delivers. Each server holds its reading against the copy and lists it on the Device's page until the user links it to a **File**, which applies what was held, or dismisses it (ADR 0017).
+_Avoid_: unknown book, orphan, unmatched copy
+
 **Delivery Rules**:
 An ordered list of rules, at most one per source **File Type**, each naming the File Type to deliver it as (itself, or another reachable through **Conversion**). A source File Type with no rule is not delivered. Among a book's **Files** in one category (ebook or audiobook), the File matching the earliest rule is delivered, along with any File tied with it on that rule.
 _Avoid_: format preference, download preference, conversion settings
@@ -170,7 +174,7 @@ How the reader lays out a **Page-based** File's pages: paginated, one page at a 
 _Avoid_: scroll mode, webtoon mode, layout
 
 **Reading Position**:
-Where one user is within one **File**: a location in the text for a **Reflowable** File, a page for a **Page-based** one, a time for an audiobook, along with how far through the File that is. It belongs to the File, so a Book's ebook and audiobook each keep their own.
+Where one user is within one **File**: a location in the text for a **Reflowable** File, a page for a **Page-based** one, a time for an audiobook, along with how far through the File that is. It belongs to the File, so a Book's ebook and audiobook each keep their own. One from a linked **Unrecognized book** is only how far through, with no location (ADR 0017).
 _Avoid_: progress (alone), bookmark, location
 
 **Reading Session**:

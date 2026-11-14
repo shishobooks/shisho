@@ -22,9 +22,20 @@ import type {
   DeviceShortURL,
   UpdateDevicePayload,
 } from "@/types/generated/devices";
+import type {
+  LinkCandidate,
+  LinkCandidatesQuery,
+  LinkPayload,
+  UnrecognizedBook,
+} from "@/types/generated/koreaderplugin";
 
+import { QueryKey as BooksQueryKey } from "./books";
 import { useRequires } from "./permissions";
-import { QueryKey as ReadingQueryKey } from "./reading";
+import {
+  invalidateReadingRecords,
+  QueryKey as ReadingQueryKey,
+} from "./reading";
+import { QueryKey as ServerStatsQueryKey } from "./serverStats";
 
 export enum QueryKey {
   ListDevices = "ListDevices",
@@ -32,6 +43,8 @@ export enum QueryKey {
   ListAllDevices = "ListAllDevices",
   DeliveryPreview = "DeliveryPreview",
   BookDevices = "BookDevices",
+  KOReaderUnrecognizedBooks = "KOReaderUnrecognizedBooks",
+  KOReaderLinkCandidates = "KOReaderLinkCandidates",
 }
 
 // The caller's own Devices. Any signed-in user manages their own, so the
@@ -247,5 +260,112 @@ export const useBookDevices = (
     queryKey: [QueryKey.BookDevices, book.id, filesKey],
     queryFn: ({ signal }) =>
       API.request("GET", `/books/${book.id}/devices`, null, null, signal),
+  });
+};
+
+// A KOReader Device's unrecognized books. The KOReader plugin adds to them on
+// any sync, which changes nothing here, so they are refetched when shown.
+// They name the library's Books, so the routes need permission to read them.
+export const useKOReaderUnrecognizedBooks = (
+  deviceId: string,
+  options: { enabled?: boolean } = {},
+) => {
+  return useQuery<UnrecognizedBook[], ShishoAPIError>({
+    enabled: useRequires("books:read", options.enabled ?? true),
+    staleTime: 0,
+    queryKey: [QueryKey.KOReaderUnrecognizedBooks, deviceId],
+    queryFn: ({ signal }) =>
+      API.request(
+        "GET",
+        `/user/devices/${deviceId}/koreader-unrecognized`,
+        null,
+        null,
+        signal,
+      ),
+  });
+};
+
+// Files the Device reaches that an unrecognized book could be linked to,
+// for when none of its suggestions fits.
+export const useKOReaderLinkCandidates = (
+  deviceId: string,
+  q: string,
+  options: { enabled?: boolean } = {},
+) => {
+  return useQuery<LinkCandidate[], ShishoAPIError>({
+    enabled: useRequires(
+      "books:read",
+      (options.enabled ?? true) && q.trim() !== "",
+    ),
+    queryKey: [QueryKey.KOReaderLinkCandidates, deviceId, q],
+    queryFn: ({ signal }) =>
+      API.request<LinkCandidate[], null, LinkCandidatesQuery>(
+        "GET",
+        `/user/devices/${deviceId}/koreader-unrecognized/candidates`,
+        null,
+        { q },
+        signal,
+      ),
+    placeholderData: keepPreviousData,
+  });
+};
+
+interface LinkUnrecognizedVariables {
+  deviceId: string;
+  document: string;
+  fileId: number;
+}
+
+// Links an unrecognized book to a File. The server applies the reading data it
+// held for it at once: Reading Sessions, Read-throughs, status, Rating, and a
+// position. Those show on the Book's page, book cards, Reading History and
+// Stats, and Server Stats, and a finish can move every Book on To Read.
+export const useLinkKOReaderUnrecognized = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, ShishoAPIError, LinkUnrecognizedVariables>({
+    mutationFn: ({ deviceId, document, fileId }) =>
+      API.request<void, LinkPayload>(
+        "POST",
+        `/user/devices/${deviceId}/koreader-unrecognized/${document}/link`,
+        { file_id: fileId },
+      ),
+    onSuccess: (_data, { deviceId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.KOReaderUnrecognizedBooks, deviceId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [ReadingQueryKey.BookReading],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [ReadingQueryKey.FilePosition],
+      });
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      invalidateReadingRecords(queryClient);
+      queryClient.invalidateQueries({
+        queryKey: [ServerStatsQueryKey.ServerStats],
+      });
+    },
+  });
+};
+
+interface DismissUnrecognizedVariables {
+  deviceId: string;
+  document: string;
+}
+
+// Dismisses an unrecognized book, deleting the reading data held for it.
+export const useDismissKOReaderUnrecognized = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, ShishoAPIError, DismissUnrecognizedVariables>({
+    mutationFn: ({ deviceId, document }) =>
+      API.request(
+        "POST",
+        `/user/devices/${deviceId}/koreader-unrecognized/${document}/dismiss`,
+      ),
+    onSuccess: (_data, { deviceId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.KOReaderUnrecognizedBooks, deviceId],
+      });
+    },
   });
 };
