@@ -232,6 +232,9 @@ type Args struct {
 	WifiFails bool
 	// ToggleEnabled taps Enabled under the first server in plugin-menu.
 	ToggleEnabled bool
+	// SendHistory taps Send reading history under the first server in
+	// plugin-menu, and confirms.
+	SendHistory bool
 	// HomeDir and DownloadDir set KOReader's home folder and the folder its
 	// OPDS catalogs download to, inside the books directory, before KOReader
 	// starts.
@@ -352,6 +355,9 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.ToggleEnabled {
 		payload["toggle_enabled"] = true
+	}
+	if a.SendHistory {
+		payload["send_history"] = true
 	}
 	if a.Fire {
 		payload["fire"] = true

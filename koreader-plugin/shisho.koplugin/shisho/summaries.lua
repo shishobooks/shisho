@@ -363,7 +363,7 @@ as synced. A state with no status leaves the device's alone, as does one
 with no rating; rating 0 removes the device's. Asked for outright, it
 doesn't overwrite a status or stars KOReader recorded before signing in, only
 fills in what's missing. With history_pending, history (shisho/history) is
-still to send them, so they stay marked as before. Returns { status, rating }
+still to send them, or can still be sent, so they stay marked as before. Returns { status, rating }
 to write, rating 0 for removing it, or nil when the sidecar already says so.
 ]]
 function Summaries.apply(synced, state, current, outright, history_pending)

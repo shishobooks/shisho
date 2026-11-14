@@ -61,6 +61,13 @@ function History.waiting(servers)
     end
 end
 
+-- sendable reports whether server can still be sent history: it wasn't,
+-- and its sign-in isn't asking. History sent later (accept) goes up to
+-- every row recorded by then; the server ignores the ones it already has.
+function History.sendable(server)
+    return type(server.history) ~= "table" and not server.asking_history
+end
+
 -- accept sends server history from the first statistics row up to where
 -- sign-in left off. Accepted again, it keeps its place.
 function History.accept(server)

@@ -192,6 +192,22 @@ function Shisho:signedIn(url, answer, username, credential)
     return server
 end
 
+-- sendHistoryLater asks whether to send server the reading history KOReader
+-- recorded, for a server that wasn't sent it at sign-in, and sends it at
+-- once, turning Wi-Fi on if needed, as Sync now does.
+function Shisho:sendHistoryLater(server)
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Send your existing KOReader reading history to %1?\n\nShisho then shows the reading time KOReader recorded, on the days it happened, and your books' statuses and stars from KOReader, where it has none. Reading it already has isn't counted twice."), Urls.label(server.url)),
+        ok_text = _("Send history"),
+        ok_callback = function()
+            if not self.state:find(server.url) or not History.sendable(server) then return end
+            History.accept(server)
+            self.state:flush()
+            NetworkMgr:runWhenOnline(function() self:syncAll(true) end)
+        end,
+    })
+end
+
 -- historyDecided follows a decision about sending history: it asks about the
 -- next server still waiting, if any, and once none is, syncs when online, so
 -- history the person chose to send goes at once.
@@ -914,7 +930,11 @@ function Shisho:pullStates(server, client, store, books)
         write = function(pulled, outright)
             local book = books[pulled.document]
             if not book then return end
-            local write = Summaries.applyTo(store, pulled, book, outright, History.rowsPending(server))
+            -- History still to go, or that can still be sent from the menu,
+            -- sends what KOReader recorded before signing in, so it stays
+            -- marked as before.
+            local history_unsent = History.rowsPending(server) or History.sendable(server)
+            local write = Summaries.applyTo(store, pulled, book, outright, history_unsent)
             if write then self:writeSummary(book, write) end
         end,
     }
@@ -1344,6 +1364,14 @@ function Shisho:serverMenu(server)
         keep_menu_open = true,
         callback = function() self:showSignIn(server.url) end,
     })
+    if History.sendable(server) then
+        table.insert(items, {
+            text = _("Send reading history"),
+            help_text = _("Send this server the reading history KOReader recorded before you signed in to it, as first sign-in offers: your reading time on the days it happened, and your books' statuses and stars where Shisho has none. Reading it already has isn't counted twice."),
+            keep_menu_open = true,
+            callback = function() self:sendHistoryLater(server) end,
+        })
+    end
     if not server.disabled and Versions.reinstallable(self:installed(), self.state:servers(), server.url) then
         table.insert(items, {
             text = _("Reinstall plugin from this server"),

@@ -117,4 +117,23 @@ return {
         -- A batch holds at least one book, however small.
         assert_eq(History.batch(events, 2, 1), { { document = "b" }, { document = "b" } })
     end,
+
+    ["history can be sent later to a server that wasn't sent it"] = function()
+        local state = State.open(scratch_dir() .. "/shisho.lua")
+        local server = state:signIn{ url = "https://a.example", username = "r", credential = "C", stats_cursor = { rowid = 42 } }
+        server.asking_history = true
+        assert_eq(History.sendable(server), false, "not while sign-in is still asking")
+        History.answer(server, false)
+        assert_eq(History.sendable(server), true, "declined at sign-in")
+        -- Reading since sign-in went as usual.
+        server.stats_cursor = { rowid = 50 }
+
+        History.accept(server)
+
+        assert_eq(server.history, { through = 50 }, "every row recorded so far, which the server takes once")
+        assert_eq(server.stats_cursor, { rowid = 0 })
+        assert_eq(server.stats_from, 0)
+        assert_eq(History.rowsPending(server), true)
+        assert_eq(History.sendable(server), false, "once is enough")
+    end,
 }
