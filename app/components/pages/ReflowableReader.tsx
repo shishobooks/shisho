@@ -69,6 +69,11 @@ type FoliateRenderer = EndRenderer & {
 const BOOK_CONTROLS =
   "button, input, select, textarea, label, summary, audio, video";
 
+// The screen foliate shows, which a scroll moves only once it passes a
+// screen's height: reading time counts per screen.
+const screenOf = (section: number | undefined, renderer?: FoliateRenderer) =>
+  `${section}:${renderer?.page}`;
+
 // Flattens foliate's table of contents into menu entries, keeping headings
 // (entries without an href) so the menu shows the book's structure.
 const flattenToc = (
@@ -271,17 +276,23 @@ export default function ReflowableReader({
           }
         ).lastLocation;
         openedSectionRef.current = location?.section?.current;
+        const screen = screenOf(
+          location?.section?.current,
+          (view as HTMLElement & { renderer?: FoliateRenderer }).renderer,
+        );
         if (restored && saved?.cfi) {
           opened({
             cfi: saved.cfi,
             percentage: saved.percentage,
             atEnd: false,
+            screen,
           });
         } else if (location?.cfi) {
           opened({
             cfi: location.cfi,
             percentage: location.fraction ?? 0,
             atEnd: false,
+            screen,
           });
         }
       }
@@ -532,7 +543,7 @@ export default function ReflowableReader({
       // another screen size.
       const renderer = (view as HTMLElement & { renderer?: FoliateRenderer })
         .renderer;
-      const place = `${detail.section?.current}:${renderer?.page}`;
+      const place = screenOf(detail.section?.current, renderer);
       const samePlace = place === placeRef.current;
       placeRef.current = place;
       if (detail.reason === "snap" && samePlace) return;
@@ -555,6 +566,7 @@ export default function ReflowableReader({
       moved({
         cfi: detail.cfi,
         percentage: detail.fraction ?? 0,
+        screen: place,
         atEnd: readerAtEnd(
           foliate.renderer,
           detail.section?.current,

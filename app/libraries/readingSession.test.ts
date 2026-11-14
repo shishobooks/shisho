@@ -21,6 +21,7 @@ const at = (offsetMs: number) =>
 
 describe("ReadingSessionTracker", () => {
   let percentage: number | null;
+  let page: string | null;
   let ended: Array<{ session: SessionPayload; reason: SessionEndReason }>;
   let tracker: ReadingSessionTracker;
 
@@ -32,9 +33,11 @@ describe("ReadingSessionTracker", () => {
       get: () => visibility,
     });
     percentage = 0.1;
+    page = "1";
     ended = [];
     tracker = new ReadingSessionTracker({
       getPercentage: () => percentage,
+      getPage: () => page,
       onSessionEnd: (session, reason) => ended.push({ session, reason }),
     });
   });
@@ -45,7 +48,7 @@ describe("ReadingSessionTracker", () => {
 
   it("ends a session after five idle minutes, at the last input", () => {
     tracker.start();
-    vi.advanceTimersByTime(minutes(2));
+    vi.advanceTimersByTime(minutes(3));
     percentage = 0.2;
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
 
@@ -58,12 +61,129 @@ describe("ReadingSessionTracker", () => {
         reason: "idle",
         session: {
           started_at: at(0),
-          ended_at: at(minutes(2)),
+          ended_at: at(minutes(3)),
           start_percentage: 0.1,
           end_percentage: 0.2,
+          duration: 120,
         },
       },
     ]);
+  });
+
+  it("counts the time on each page, two minutes at most", () => {
+    tracker.start();
+    vi.advanceTimersByTime(30_000);
+    page = "2";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(minutes(4));
+    page = "3";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(minutes(1));
+    setVisibility("hidden");
+
+    expect(ended.map((e) => e.session)).toEqual([
+      {
+        started_at: at(0),
+        ended_at: at(minutes(5.5)),
+        start_percentage: 0.1,
+        end_percentage: 0.1,
+        duration: 30 + 120 + 60,
+      },
+    ]);
+  });
+
+  it("counts nothing for a page left within five seconds", () => {
+    tracker.start();
+    vi.advanceTimersByTime(4_000);
+    page = "2";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(4_999);
+    page = "3";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(5_000);
+    page = "4";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(minutes(1));
+    tracker.stop();
+
+    expect(ended[0].session.duration).toBe(5 + 60);
+  });
+
+  it("counts nothing before the reader knows its page", () => {
+    page = null;
+    tracker.start();
+    vi.advanceTimersByTime(10_000);
+    page = "1";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(30_000);
+    tracker.stop();
+
+    expect(ended.map((e) => e.session)).toEqual([
+      {
+        started_at: at(10_000),
+        ended_at: at(40_000),
+        start_percentage: 0.1,
+        end_percentage: 0.1,
+        duration: 30,
+      },
+    ]);
+  });
+
+  it("records nothing for a reader that never showed a page", () => {
+    page = null;
+    tracker.start();
+    vi.advanceTimersByTime(minutes(1));
+    tracker.recordActivity();
+    vi.advanceTimersByTime(READING_IDLE_MS);
+    tracker.stop();
+    expect(ended).toEqual([]);
+  });
+
+  it("counts input that stays on a page as the same visit", () => {
+    tracker.start();
+    for (let i = 0; i < 3; i++) {
+      vi.advanceTimersByTime(minutes(1));
+      tracker.recordActivity();
+    }
+    page = "2";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(minutes(1));
+    tracker.stop();
+
+    expect(ended[0].session.duration).toBe(120 + 60);
+  });
+
+  it("ends an idle session two minutes into its last page, when that's after the last input", () => {
+    tracker.start();
+    vi.advanceTimersByTime(minutes(1));
+    page = "2";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(30_000);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Shift" }));
+    vi.advanceTimersByTime(READING_IDLE_MS);
+
+    expect(ended).toEqual([
+      {
+        reason: "idle",
+        session: {
+          started_at: at(0),
+          ended_at: at(minutes(3)),
+          start_percentage: 0.1,
+          end_percentage: 0.1,
+          duration: 60 + 120,
+        },
+      },
+    ]);
+  });
+
+  it("records nothing for a session with no page read for five seconds", () => {
+    tracker.start();
+    vi.advanceTimersByTime(3_000);
+    page = "2";
+    tracker.recordActivity();
+    vi.advanceTimersByTime(4_000);
+    tracker.stop();
+    expect(ended).toEqual([]);
   });
 
   it("starts a new session on the next input after going idle", () => {
@@ -80,15 +200,17 @@ describe("ReadingSessionTracker", () => {
     expect(ended.map((e) => e.session)).toEqual([
       {
         started_at: at(0),
-        ended_at: at(minutes(1)),
+        ended_at: at(minutes(2)),
         start_percentage: 0.1,
         end_percentage: 0.1,
+        duration: 120,
       },
       {
         started_at: at(minutes(1) + READING_IDLE_MS + minutes(10)),
         ended_at: at(minutes(1) + READING_IDLE_MS + minutes(13)),
         start_percentage: 0.3,
         end_percentage: 0.3,
+        duration: 120,
       },
     ]);
   });
@@ -107,6 +229,7 @@ describe("ReadingSessionTracker", () => {
           ended_at: at(minutes(3)),
           start_percentage: 0.1,
           end_percentage: 0.15,
+          duration: 120,
         },
       },
     ]);
@@ -140,6 +263,7 @@ describe("ReadingSessionTracker", () => {
           ended_at: at(minutes(4)),
           start_percentage: 0.1,
           end_percentage: 0.1,
+          duration: 120,
         },
       },
     ]);
@@ -190,6 +314,7 @@ describe("ReadingSessionTracker", () => {
       tracker = new ReadingSessionTracker({
         timing: "playback",
         getPercentage: () => percentage,
+        getPage: () => null,
         onSessionEnd: (session, reason) => ended.push({ session, reason }),
       });
       tracker.start();

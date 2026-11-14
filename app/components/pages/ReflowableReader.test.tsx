@@ -34,6 +34,8 @@ let mockToc: unknown[] = [];
 let mockDir: string | undefined;
 // Whether the mocked renderer is at the end of the book.
 let mockAtEnd = false;
+// The screen the mocked renderer shows when the book opens.
+let mockPage: number | undefined;
 // The saved position GET /reading/files/:id/position returns.
 let savedCfi: string | null = null;
 const SAVED_AT = "2026-10-01T09:00:00.000Z";
@@ -56,6 +58,7 @@ beforeAll(() => {
           get atEnd() {
             return mockAtEnd;
           },
+          page: mockPage,
           setStyles: vi.fn(),
           setAttribute: vi.fn(),
         };
@@ -76,6 +79,7 @@ vi.mock("@/hooks/queries/settings", () => ({
 beforeEach(() => {
   setAuth({ permissions: ["books:read"] });
   mockAtEnd = false;
+  mockPage = undefined;
   mockDir = undefined;
   savedCfi = null;
   saveResult = {};
@@ -1260,8 +1264,9 @@ describe("ReflowableReader resuming", () => {
       fraction: 0.2,
       reason: "page",
     });
+    // Long enough to count as reading the page, and before the save timer.
     act(() => {
-      vi.advanceTimersByTime(1000);
+      vi.setSystemTime(Date.now() + 10_000);
       window.dispatchEvent(new Event("pagehide"));
     });
     expect(positionSaves()).toEqual([
@@ -1390,6 +1395,46 @@ describe("ReflowableReader resuming", () => {
     expect(positionSaves()).toEqual([
       expect.objectContaining({ cfi: "epubcfi(/6/2!/4/8)" }),
     ]);
+  });
+
+  // A scroll moves the location every few seconds, but time counts per screen.
+  it("counts scrolling within one screen as one page of reading", async () => {
+    mockPage = 1;
+    const view = await openBook();
+    const renderer = (
+      view as unknown as {
+        renderer: {
+          scrolled: boolean;
+          start: number;
+          size: number;
+          page: number;
+        };
+      }
+    ).renderer;
+    renderer.scrolled = true;
+    renderer.size = 800;
+    renderer.start = 900;
+    renderer.page = 1;
+    for (let i = 1; i <= 10; i++) {
+      relocate(view, {
+        cfi: `epubcfi(/6/2!/4/${2 * i})`,
+        fraction: 0.05,
+        reason: "scroll",
+      });
+      act(() => vi.advanceTimersByTime(3_000));
+    }
+    act(() => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+
+    // From opening to closing is one stay on one screen.
+    const sessions = positionSaves().filter((save) => save.session);
+    expect(sessions).toHaveLength(1);
+    const session = sessions[0].session!;
+    const span =
+      (Date.parse(session.ended_at) - Date.parse(session.started_at)) / 1000;
+    expect(span).toBeGreaterThanOrEqual(30);
+    expect(session.duration).toBe(Math.round(span));
   });
 
   it("saves nothing when the saved place failed to load", async () => {

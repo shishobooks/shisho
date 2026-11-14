@@ -246,6 +246,14 @@ export default function PageReader({
   }
   const { opened, openedFromLink, moved } = useReadingProgress(fileId, {
     enabled: !positionFailed,
+    // A page can pass in seconds, like a webtoon's strips, or take several
+    // screens, so the scrolled flow counts reading time per screen, as
+    // foliate numbers them.
+    getScreen: () => {
+      const main = mainRef.current;
+      if (flow !== "scrolled" || !main || main.clientHeight === 0) return null;
+      return Math.floor(main.scrollTop / main.clientHeight + 0.5);
+    },
   });
 
   // Image loading state

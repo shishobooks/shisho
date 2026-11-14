@@ -737,6 +737,7 @@ func (h *handler) updatePosition(c echo.Context) error {
 			StartPercentage: *s.StartPercentage,
 			EndPercentage:   *s.EndPercentage,
 			Measured:        true,
+			Duration:        s.Duration,
 		}
 	}
 	// A session with no position is a reader closed where it opened: it
