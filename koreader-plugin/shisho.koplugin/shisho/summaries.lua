@@ -10,11 +10,12 @@ noted as synced, so it's never sent back as a change: On hold written for
 Did Not Finish never returns as Paused, and a Rating rounded to whole stars
 never overwrites its quarter stars.
 
-Opening a book KOReader has no status for marks it reading, so reading on a
-book never synced isn't a change. Neither is anything KOReader recorded
-before the day the plugin signed in to the server: bringing that over is for
-the history sent on first sign-in (ADR 0016), so Shisho's state, asked for
-outright, doesn't overwrite it either. Only a later change in Shisho does.
+KOReader marks a book reading the first time it opens one with no status,
+and that goes to the server like any other change, so Shisho reads it too.
+What KOReader recorded before the day the plugin signed in to the server
+isn't a change: bringing that over is for the history sent on first sign-in
+(ADR 0016), so Shisho's state, asked for outright, doesn't overwrite it
+either. Only a later change in Shisho does.
 
 A sync while reading reads only the sidecars of the open book and of the
 books in KOReader's history. A book found only by the hash index is compared
@@ -199,7 +200,7 @@ function Summaries.diff(document, current, synced, opts)
     local seen = opts.seen
 
     if current.status and current.status ~= synced.status then
-        if before or (synced.status == nil and current.status == "reading") then
+        if before then
             note("status", current.status)
         else
             local at = Summaries.instant(seen, current)
@@ -360,8 +361,8 @@ apply decides what a pulled state, { document, status, rating }, writes to a
 book's sidecar, whose summary is current (nil without one), and records it
 as synced. A state with no status leaves the device's alone, as does one
 with no rating; rating 0 removes the device's. Asked for outright, it
-doesn't overwrite what KOReader recorded before signing in, only fills in
-what's missing. Returns { status, rating } to write, rating 0 for removing
+doesn't overwrite a status or stars KOReader recorded before signing in, only
+fills in what's missing. Returns { status, rating } to write, rating 0 for removing
 it, or nil when the sidecar already says so.
 ]]
 function Summaries.apply(synced, state, current, outright)
@@ -371,7 +372,7 @@ function Summaries.apply(synced, state, current, outright)
     entry.before = nil
     local write = {}
     local have_status = current and current.status
-    if Summaries.STATUSES[state.status] and not (keep and have_status and have_status ~= "reading") then
+    if Summaries.STATUSES[state.status] and not (keep and have_status) then
         entry.status = state.status
         if have_status ~= state.status then
             write.status = state.status

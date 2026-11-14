@@ -43,10 +43,16 @@ return {
         assert_eq(Summaries.diff("doc1", nil, { status = "complete" }, OPTS), {})
     end,
 
-    ["opening a book marks it reading, which isn't a change"] = function()
+    ["opening a book marks it reading, which goes like any change, as KOReader has it"] = function()
         local changes, baseline = Summaries.diff("doc1", summary("reading", nil, "2026-11-13"), nil, OPTS)
-        assert_eq(changes, {})
-        assert_eq(baseline, { status = "reading" })
+        assert_eq(strip(changes), {
+            { type = "status", document = "doc1", status = "reading", day = "2026-11-13" },
+        })
+        assert_eq(baseline, nil)
+        -- So does marking one reading that Shisho had nothing for.
+        changes = Summaries.diff("doc1", summary("reading", 3, "2026-11-13"), { rating = 3 }, OPTS)
+        assert_eq(#changes, 1)
+        assert_eq(changes[1].status, "reading")
     end,
 
     ["a book finished from the file manager after signing in is a change"] = function()
@@ -169,12 +175,16 @@ return {
         assert_eq(Summaries.apply(store.synced, { document = "doc1", status = "reading" }, current, false), { status = "reading" })
     end,
 
-    ["a book KOReader only opened before signing in takes Shisho's status"] = function()
+    ["a book KOReader marked reading before signing in keeps it, and gets stars it lacks"] = function()
         local store = { synced = {}, asked = {} }
         local current = summary("reading", nil, "2026-10-01")
         Summaries.collect(store, { doc1 = { current = current } }, OPTS)
         assert_eq(Summaries.apply(store.synced, { document = "doc1", status = "complete", rating = 4 }, current, true),
-            { status = "complete", rating = 4 })
+            { rating = 4 })
+        -- A book with no status from then gets Shisho's.
+        local bare = summary(nil, nil, "2026-10-01")
+        Summaries.collect(store, { doc2 = { current = bare } }, OPTS)
+        assert_eq(Summaries.apply(store.synced, { document = "doc2", status = "complete" }, bare, true), { status = "complete" })
     end,
 
     ["collects every book's changes and notes the rest"] = function()
@@ -185,8 +195,11 @@ return {
             unopened = { current = nil },
         }
         local changes = strip(Summaries.collect(store, books, OPTS))
-        assert_eq(changes, { { type = "status", document = "done", status = "complete", previous_status = "reading", day = "2026-11-12" } })
-        assert_eq(store.synced.opened, { status = "reading" })
+        assert_eq(changes, {
+            { type = "status", document = "done", status = "complete", previous_status = "reading", day = "2026-11-12" },
+            { type = "status", document = "opened", status = "reading", day = "2026-11-13" },
+        })
+        assert_eq(store.synced.opened, nil, "synced once the server takes it in")
         assert_eq(store.synced.unopened, nil)
         assert_eq(Summaries.documents(books), { "done", "opened", "unopened" })
     end,

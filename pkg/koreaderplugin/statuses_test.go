@@ -158,6 +158,32 @@ func TestStatus_AFinishMarkedInKOReaderStaysAfterPagingBack(t *testing.T) {
 	assert.Equal(t, models.ReadingStatusRead, f.status(f.file))
 }
 
+func TestStatus_OpeningABookInKOReaderReadsItInShisho(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	finished := f.addFile(models.FileTypeEPUB, "finished")
+	require.NoError(t, f.reading.End(f.ctx, f.user.ID, finished.BookID, models.ReadThroughOutcomeFinished, day(f.day1)))
+	f.changedOn(finished, f.day1)
+	openedOn := f.day1.Add(48 * time.Hour)
+
+	// KOReader marks a book reading the first time it opens it, with nothing
+	// synced for it before.
+	f.upload(UploadPayload{Events: []EventPayload{
+		{ID: "s1", Type: PluginEventStatus, Document: syncHash, Day: day(openedOn), Status: KOReaderStatusReading},
+		{ID: "s2", Type: PluginEventStatus, Document: "finished", Day: day(openedOn), Status: KOReaderStatusReading},
+	}})
+
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status(f.file))
+	rts := f.readThroughs(f.file)
+	require.Len(t, rts, 1)
+	assert.Equal(t, day(openedOn), *rts[0].BeginDay)
+	// A book finished before it was opened is being reread.
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status(finished))
+	rereads := f.readThroughs(finished)
+	require.Len(t, rereads, 2)
+	assert.Equal(t, day(openedOn), *rereads[1].BeginDay)
+}
+
 func TestStatus_FinishedWithOnlyADayRecordsAFinishedRead(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)

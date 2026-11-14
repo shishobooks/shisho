@@ -35,7 +35,7 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 [KOReader](./koreader.md) and a [Kobo](./kobo-sync.md#reading-progress) can sync your reading with Shisho, which starts, resumes, and finishes Read-throughs, with the same [rereading](#starting-and-finishing-automatically) rule as reading in Shisho.
 
-- **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does. With the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin), reading done offline is dated by when you read it: a book you start offline starts on the day you read it. The plugin also syncs KOReader's own [statuses and stars](./koreader.md#statuses-and-ratings) both ways, so finishing, pausing, or rating a book in KOReader counts in Shisho.
+- **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does. With the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin), reading done offline is dated by when you read it: a book you start offline starts on the day you read it. The plugin also syncs KOReader's own [statuses and stars](./koreader.md#statuses-and-ratings) both ways, so finishing, pausing, or rating a book in KOReader counts in Shisho, and so does opening one for the first time, which KOReader counts as reading it.
 - **A Kobo** says outright when you are reading a book and when you finish it, so opening a book on the Kobo starts it even on its first page, and a finish from the Kobo is never undone the way an automatic finish can be.
 
 ### Moving Between Readers

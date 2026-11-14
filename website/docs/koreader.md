@@ -110,7 +110,7 @@ From KOReader, at the next sync:
 | On hold     | Pauses the Read-through underway, or starts one, paused                                              |
 | Reading     | Resumes a paused Read-through, or starts one. A book you'd finished or stopped is then being reread |
 
-Opening a book you've already marked never changes its status in KOReader, so opening a finished book to look something up leaves it **Read** in both, and the time you spend in it still counts as reading time. KOReader marks a book Reading the first time you open it, which doesn't count as a change: the pages you read start its Read-through.
+Opening a book you've already marked never changes its status in KOReader, so opening a finished book to look something up leaves it **Read** in both, and the time you spend in it still counts as reading time. KOReader marks a book Reading the first time you open it, and Shisho follows as for any other change: the book becomes **Currently Reading**, and one you'd finished or stopped is being reread, from the day you opened it.
 
 From Shisho, at the next sync:
 
@@ -126,7 +126,7 @@ KOReader has nothing closer to Did Not Finish than On hold. The plugin remembers
 
 A status from Shisho reaches a book KOReader has never opened too, as when you finish a book on one e-reader and copy it onto another: the plugin keeps an index of the EPUB, KePub, PDF, CBZ, MOBI, and AZW3 files on the device, and marks the book as KOReader's file browser does. On an e-reader, such as a Kobo, Kindle, or PocketBook, the index covers every folder of its storage except hidden ones, wherever you copied or downloaded a book. On Android and computers, it covers the home folder and the OPDS download folder you've set in KOReader, if you've set them. Every **Sync now** brings the index up to date, as do the syncs when Wi-Fi comes on, **Sync on sleep**, and **Daily sync**, at most every ten minutes. The syncs as you read, when you close a book, and as the device sleeps with Wi-Fi already on leave it alone. A change made in the file browser to a book that isn't in KOReader's history goes at the next sync that brings the index up to date. A very large library is indexed over several syncs.
 
-At its first sync with a server, the plugin writes Shisho's statuses and Ratings to the books it finds, except where KOReader already had a status other than Reading, or stars, from before the day you first signed in to that server: those stay as they are on the e-reader, and aren't sent to Shisho, until one side changes.
+At its first sync with a server, the plugin writes Shisho's statuses and Ratings to the books it finds, except where KOReader already had a status or stars from before the day you first signed in to that server: those stay as they are on the e-reader, and aren't sent to Shisho, until one side changes.
 
 When a book's status changed in KOReader and in Shisho since the last sync, the later change wins, compared by day, since KOReader records only the day of a status change. On the same day, Shisho's change wins. KOReader's change is then replaced on the e-reader at that sync.
 

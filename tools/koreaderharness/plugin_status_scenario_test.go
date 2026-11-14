@@ -138,3 +138,27 @@ func TestPluginWritesARereadFromShisho(t *testing.T) {
 	require.Len(t, rts, 2)
 	assert.Equal(t, models.ReadThroughOutcomeUnderway, rts[1].Outcome, "the reread stays underway")
 }
+
+// Opening a book in KOReader for the first time marks it reading there, and
+// Shisho follows: a book finished days before is being reread, not set back
+// to finished on the device.
+func TestPluginOpeningABookReadInShishoRereadsIt(t *testing.T) {
+	s := newScenario(t)
+	s.downloadOPDS("Comic", "comic.cbz")
+	cbz := s.file(models.FileTypeCBZ)
+	s.signInPlugin(time.Now().Add(-72 * time.Hour))
+	finishedOn := time.Now().UTC().Add(-48 * time.Hour)
+	require.NoError(t, s.reading.End(s.ctx, s.user.ID, cbz.BookID, models.ReadThroughOutcomeFinished, finishedOn.Format(time.DateOnly)))
+	_, err := s.db.NewUpdate().Model((*models.ReadThrough)(nil)).Set("updated_at = ?", finishedOn).
+		Where("user_id = ? AND book_id = ?", s.user.ID, cbz.BookID).Exec(s.ctx)
+	require.NoError(t, err)
+
+	opened := s.run(Args{Command: "plugin-read", File: "comic.cbz", Turns: 3, Close: true})
+	require.Equal(t, "reading", opened.Plugin.Sidecars["comic.cbz"].Status, "KOReader marks it reading")
+
+	synced := s.run(Args{Command: "plugin-sync", Online: true})
+	assert.Equal(t, "reading", synced.Plugin.Sidecars["comic.cbz"].Status, "shown: %v", synced.Shown)
+	rts := s.readThroughs(cbz)
+	require.Len(t, rts, 2)
+	assert.Equal(t, models.ReadThroughOutcomeUnderway, rts[1].Outcome, "a reread")
+}
