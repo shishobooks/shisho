@@ -154,3 +154,16 @@ func (svc *Service) ChangedSince(ctx context.Context, userID int, since time.Tim
 func (svc *Service) Location(ctx context.Context, userID int) (*time.Location, error) {
 	return userLocation(ctx, svc.db, userID)
 }
+
+// KeepFinished makes a finish of the Book fileID belongs to that a position
+// update made automatically one the reader chose, as when a device reports
+// it finished after reaching the end, so going back no longer undoes it.
+func (svc *Service) KeepFinished(ctx context.Context, userID, fileID int) error {
+	_, err := svc.db.NewUpdate().
+		Model((*models.ReadingPositionUpdate)(nil)).
+		Set("auto_finished = FALSE").
+		Where("user_id = ? AND auto_finished", userID).
+		Where("file_id IN (SELECT id FROM files WHERE book_id = (SELECT book_id FROM files WHERE id = ?))", fileID).
+		Exec(ctx)
+	return errors.WithStack(err)
+}

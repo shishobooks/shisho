@@ -136,6 +136,28 @@ func TestRating_OnASupplementLeavesTheBookAlone(t *testing.T) {
 	assert.Nil(t, f.ratingUnits(f.file))
 }
 
+func TestStatus_AFinishMarkedInKOReaderStaysAfterPagingBack(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	require.NoError(t, f.reading.Start(f.ctx, f.user.ID, f.file.BookID, day(f.day1)))
+	now := time.Now()
+
+	// The last page finishes the book on its own, and KOReader's end-of-book
+	// prompt then marks it finished.
+	f.upload(UploadPayload{Events: []EventPayload{
+		position("p1", now.Add(-5*time.Minute), 1),
+		statusEvent("s1", KOReaderStatusFinished, KOReaderStatusReading, now.Add(-4*time.Minute)),
+	}})
+	require.Equal(t, models.ReadingStatusRead, f.status(f.file))
+
+	// Paging back soon after would undo a finish the reader didn't choose,
+	// but this one they did.
+	back := position("p2", now.Add(-time.Minute), 0.5)
+	back.Progress = "/body/DocFragment[1]/body/p[3]/text().0"
+	f.upload(UploadPayload{Events: []EventPayload{back}})
+	assert.Equal(t, models.ReadingStatusRead, f.status(f.file))
+}
+
 func TestStatus_FinishedWithOnlyADayRecordsAFinishedRead(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)

@@ -28,15 +28,15 @@ func (s *scenario) ratingUnits(file *models.File) *int {
 }
 
 // Finishing a book at KOReader's end-of-book prompt marks it Read in Shisho
-// at the next sync, ended the day it was finished, and Shisho's Read isn't
-// sent back to KOReader as a change.
+// at the next sync, ended the day it was finished, and its stars become its
+// Rating. Neither is sent back to KOReader as a change.
 func TestPluginSyncsAFinishFromKOReader(t *testing.T) {
 	s := newScenario(t)
 	s.downloadOPDS("Comic", "comic.cbz")
 	cbz := s.file(models.FileTypeCBZ)
 	s.signInPlugin(time.Now().Add(-time.Hour))
 
-	read := s.run(Args{Command: "plugin-read", File: "comic.cbz", Turns: 3, MarkFinished: true, Close: true})
+	read := s.run(Args{Command: "plugin-read", File: "comic.cbz", Turns: 3, MarkFinished: true, Stars: 4, Close: true})
 	require.Contains(t, read.Plugin.Sidecars, "comic.cbz")
 	require.Equal(t, "complete", read.Plugin.Sidecars["comic.cbz"].Status)
 	assert.Empty(t, s.readThroughs(cbz), "nothing goes with Wi-Fi off")
@@ -47,6 +47,8 @@ func TestPluginSyncsAFinishFromKOReader(t *testing.T) {
 	assert.Equal(t, models.ReadThroughOutcomeFinished, rts[0].Outcome)
 	require.NotNil(t, rts[0].EndDay)
 	assert.Equal(t, time.Now().UTC().Format(time.DateOnly), *rts[0].EndDay)
+	require.NotNil(t, s.ratingUnits(cbz))
+	assert.Equal(t, 16, *s.ratingUnits(cbz), "4 stars")
 
 	again := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
 	assert.Empty(t, again.Plugin.Problems)
@@ -128,7 +130,6 @@ func TestPluginWritesARereadFromShisho(t *testing.T) {
 	finished := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
 	require.Equal(t, "complete", finished.Plugin.Sidecars["long.epub"].Status)
 
-	time.Sleep(1100 * time.Millisecond)
 	require.NoError(t, s.reading.Start(s.ctx, s.user.ID, epub.BookID, today))
 	reread := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
 	assert.Equal(t, "reading", reread.Plugin.Sidecars["long.epub"].Status, "shown: %v", reread.Shown)

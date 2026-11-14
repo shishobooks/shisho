@@ -24,6 +24,9 @@ return {
             { status = "complete", rating = 4, day = "2026-11-02" })
         assert_eq(Summaries.read({ status = "new", rating = 0, modified = "24.01.2016" }), {})
         assert_eq(Summaries.read(nil), nil)
+        -- A day that doesn't exist, as in a hand-edited sidecar, is no day:
+        -- a server would refuse the whole sync over it.
+        assert_eq(Summaries.read({ status = "complete", modified = "2026-02-30" }), { status = "complete" })
     end,
 
     ["a status changed since the last sync goes with the one synced"] = function()
@@ -202,6 +205,50 @@ return {
         local store = { synced = {}, asked = {} }
         assert_eq(Summaries.collect(store, { unread = books.unread }, OPTS), {})
         assert_eq(store.synced, {})
+    end,
+
+    ["the device's books: the open one, then history, then the index"] = function()
+        local reads = {}
+        local sidecars = {
+            ["/h/a.epub"] = { "hashA", { status = "complete" } },
+            ["/i/c.epub"] = { nil, { status = "abandoned" } },
+        }
+        local function read(path)
+            table.insert(reads, path)
+            local sidecar = sidecars[path] or {}
+            return sidecar[1], sidecar[2]
+        end
+        local index = {
+            ["/h/a.epub"] = { hash = "hashA" },
+            ["/i/c.epub"] = { hash = "hashC" },
+            ["/i/d.epub"] = { hash = "hashA" },
+        }
+        local opts = {
+            open = { path = "/o/b.epub", recorded = "hashB", summary = { status = "reading" } },
+            history = { "/o/b.epub", "/h/a.epub", "/h/gone-from-index.epub" },
+            index = index, read = read, read_index = true,
+        }
+        local books = Summaries.localBooks(opts)
+        assert_eq(books, {
+            hashB = { path = "/o/b.epub", current = { status = "reading" } },
+            hashA = { path = "/h/a.epub", current = { status = "complete" } },
+            hashC = { path = "/i/c.epub", current = { status = "abandoned" } },
+        }, "a copy found twice keeps the place found first")
+        assert_eq(reads, { "/h/a.epub", "/h/gone-from-index.epub", "/i/c.epub", "/i/d.epub" }, "the open book is read from memory")
+
+        -- A sync while reading leaves the index's own books unread, and
+        -- neither asks about them outright nor writes to them.
+        opts.read_index = false
+        reads = {}
+        books = Summaries.localBooks(opts)
+        assert_eq(books.hashC, { path = "/i/c.epub", unread = true })
+        assert_eq(reads, { "/h/a.epub", "/h/gone-from-index.epub" })
+        assert_eq(Summaries.documents(books), { "hashA", "hashB" })
+        local store = { synced = {}, asked = { hashC = true } }
+        assert_eq(Summaries.applyTo(store, { document = "hashC", status = "complete" }, books.hashC, false), nil)
+        assert_eq(store.synced, {})
+        assert_eq(store.asked, {}, "asked about at the next sync that reads it")
+        assert_eq(Summaries.applyTo(store, { document = "hashB", status = "complete" }, books.hashB, false), { status = "complete" })
     end,
 
     ["asks outright about books not asked before, and unrecognized ones a day later"] = function()

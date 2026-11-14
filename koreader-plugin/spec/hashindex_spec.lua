@@ -73,6 +73,16 @@ return {
         assert_eq(index:flush(), true)
 
         os.remove(root .. "/two.epub")
+        -- Nothing changed, so nothing is written again.
+        os.remove(path)
+        assert_eq(index:flush(), true)
+        assert_eq(lfs.attributes(path, "mode"), nil)
+        index.data.scanned_at = 100
+        index.data.files.extra = { size = 1, mtime = 1, hash = "x" }
+        assert_eq(index:flush(), true)
+        index.data.files.extra = nil
+        assert_eq(index:flush(), true)
+
         local again = HashIndex.open(path)
         assert_eq(again:scannedAt(), 100)
         assert_eq(again:refresh(HashIndex.scan(root), hash, 200), 0)
@@ -139,5 +149,8 @@ return {
         assert_eq(HashIndex.due(1000, 1000 + HashIndex.SCAN_EVERY, false), true)
         -- A clock set back can't hold it off.
         assert_eq(HashIndex.due(1000, 500, false), true)
+        -- A sync while reading never scans, even when one is due.
+        assert_eq(HashIndex.due(nil, 1000, false, true), false)
+        assert_eq(HashIndex.due(1000, 1000 + HashIndex.SCAN_EVERY, true, true), false)
     end,
 }

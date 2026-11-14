@@ -744,19 +744,15 @@ end
 
 -- hashOf is a book file's document hash: the one its sidecar records, as
 -- KOReader computed it when the book was first opened, or else its own.
-local function hashOf(path)
-    if DocSettings:hasSidecarFile(path) then
-        local recorded = DocSettings:open(path):readSetting("partial_md5_checksum")
-        if recorded then return recorded end
-    end
-    return util.partialMD5(path)
+function Shisho:hashOf(path)
+    return (self:readSidecar(path)) or util.partialMD5(path)
 end
 
 -- refreshHashes brings the index of book files on the device up to date
 -- when it's due (HashIndex.due), and reports whether it scanned.
-function Shisho:refreshHashes(interactive)
+function Shisho:refreshHashes(interactive, while_reading)
     local now = os.time()
-    if not HashIndex.due(self.hashes:scannedAt(), now, interactive) then return false end
+    if not HashIndex.due(self.hashes:scannedAt(), now, interactive, while_reading) then return false end
     local roots = HashIndex.roots{
         storage = Device.home_dir,
         home = G_reader_settings:readSetting("home_dir"),
@@ -765,7 +761,7 @@ function Shisho:refreshHashes(interactive)
     }
     if #roots == 0 then return false end
     local ok, err = pcall(function()
-        self.hashes:refresh(HashIndex.scan(roots), hashOf, now)
+        self.hashes:refresh(HashIndex.scan(roots), function(path) return self:hashOf(path) end, now)
     end)
     if not ok then
         logger.warn("Shisho: indexing books failed:", err)
@@ -780,14 +776,15 @@ end
 function Shisho:readSidecar(path)
     local sidecar = DocSettings:findSidecarFile(path)
     if not sidecar then return nil, nil end
-    local mtime = lfs.attributes(sidecar, "modification")
+    local attr = lfs.attributes(sidecar) or {}
     self.sidecars = self.sidecars or {}
     local cached = self.sidecars[path]
-    if not cached or cached.sidecar ~= sidecar or cached.mtime ~= mtime then
+    if not cached or cached.sidecar ~= sidecar or cached.mtime ~= attr.modification or cached.size ~= attr.size then
         local doc_settings = DocSettings:open(path)
         cached = {
             sidecar = sidecar,
-            mtime = mtime,
+            mtime = attr.modification,
+            size = attr.size,
             recorded = doc_settings:readSetting("partial_md5_checksum"),
             summary = doc_settings:readSetting("summary"),
         }
@@ -796,43 +793,29 @@ function Shisho:readSidecar(path)
     return cached.recorded, cached.summary
 end
 
---[[--
-localBooks is every book whose status and Rating sync, by document hash
-(Summaries.addBook): the open book, the books in KOReader's history, and
-those in the hash index. With read_index false, the indexed books' sidecars
-are left unread: syncs while reading look only at what was read lately.
-]]
+-- localBooks is every book whose status and Rating sync
+-- (Summaries.localBooks). With read_index false, as in a sync while reading,
+-- the sidecars of books only the hash index found are left unread.
 function Shisho:localBooks(read_index)
-    local books, paths = {}, {}
-    local index = self.hashes:files()
-    local function indexed(path) return index[path] and index[path].hash end
-    local open = self.ui and self.ui.document
-    if open and self.ui.doc_settings then
-        paths[open.file] = true
-        Summaries.addBook(books, open.file, self.ui.doc_settings:readSetting("partial_md5_checksum"),
-            indexed(open.file), self.ui.doc_settings:readSetting("summary"))
+    local open
+    if self.ui and self.ui.document and self.ui.doc_settings then
+        open = {
+            path = self.ui.document.file,
+            recorded = self.ui.doc_settings:readSetting("partial_md5_checksum"),
+            summary = self.ui.doc_settings:readSetting("summary"),
+        }
     end
+    local history = {}
     for __, item in ipairs(require("readhistory").hist) do
-        local path = item.file
-        if path and not paths[path] and not item.dim then
-            paths[path] = true
-            local recorded, summary = self:readSidecar(path)
-            if recorded or indexed(path) then
-                Summaries.addBook(books, path, recorded, indexed(path), summary)
-            end
-        end
+        if item.file and not item.dim then table.insert(history, item.file) end
     end
-    for path, entry in pairs(index) do
-        if not paths[path] then
-            if read_index then
-                local recorded, summary = self:readSidecar(path)
-                Summaries.addBook(books, path, recorded, entry.hash, summary)
-            else
-                Summaries.addBook(books, path, nil, entry.hash, nil, true)
-            end
-        end
-    end
-    return books
+    return Summaries.localBooks{
+        open = open,
+        history = history,
+        index = self.hashes:files(),
+        read = function(path) return self:readSidecar(path) end,
+        read_index = read_index,
+    }
 end
 
 -- writeSummary writes what a server sent into a book's sidecar, as
@@ -840,10 +823,13 @@ end
 -- gets a sidecar.
 function Shisho:writeSummary(book, write)
     local open = self.ui and self.ui.document and self.ui.document.file == book.path
+    -- A book deleted since the index last saw it gets no sidecar.
+    if not open and lfs.attributes(book.path, "mode") ~= "file" then return end
     local doc_settings = open and self.ui.doc_settings or DocSettings:open(book.path)
     local summary = Summaries.written(doc_settings:readSetting("summary"), write, os.date("%Y-%m-%d"))
     doc_settings:saveSetting("summary", summary)
     doc_settings:flush()
+    if self.sidecars then self.sidecars[book.path] = nil end
     book.current = Summaries.read(summary)
     self.summaries_written = true
     if open then
@@ -857,39 +843,21 @@ function Shisho:writeSummary(book, write)
     end
 end
 
---[[--
-syncStates sends server the status and Rating changes of books, through
-run(changes, store), then pulls what the device should hold and writes it.
-Returns the outcome.
-]]
-function Shisho:syncStates(server, client, books, run)
-    local store = self.summaries:server(server.url)
-    local changes = Summaries.collect(store, books, {
-        signed_in_day = State.signedInDay(server, os.date("%Y-%m-%d")),
-        today = os.date("%Y-%m-%d"),
-        seen = self.summaries:seen(),
-    })
-    local outcome = run(changes, store)
-    if outcome == "ok" then
-        outcome = Sync.pullStates{
-            server = server,
-            store = store,
-            documents = Summaries.documents(books),
-            post = function(payload) return client:pullStates(payload) end,
-            write = function(pulled, outright)
-                local book = books[pulled.document]
-                if not book then return end
-                if book.unread then
-                    local _recorded, summary = self:readSidecar(book.path)
-                    book.current, book.unread = Summaries.read(summary), nil
-                end
-                local write = Summaries.apply(store.synced, pulled, book.current, outright)
-                if write then self:writeSummary(book, write) end
-            end,
-        }
-    end
-    self.summaries:flush()
-    return outcome
+-- pullStates pulls the statuses and Ratings server says the device should
+-- hold, and writes them to books' sidecars (Summaries.applyTo).
+function Shisho:pullStates(server, client, store, books)
+    return Sync.pullStates{
+        server = server,
+        store = store,
+        documents = Summaries.documents(books),
+        post = function(payload) return client:pullStates(payload) end,
+        write = function(pulled, outright)
+            local book = books[pulled.document]
+            if not book then return end
+            local write = Summaries.applyTo(store, pulled, book, outright)
+            if write then self:writeSummary(book, write) end
+        end,
+    }
 end
 
 -- Daily sync ------------------------------------------------------------------
@@ -1062,7 +1030,7 @@ the open book's position, except when going to sleep. One server failing
 doesn't stop the others. A server that needs a new sign-in keeps everything
 queued until it gets one. Interactive, from Sync now, it says how it went.
 ]]
-function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
+function Shisho:syncAll(interactive, going_to_sleep, while_reading)
     if self.syncing then return end
     if #self.state:servers() == 0 then
         if interactive then
@@ -1077,7 +1045,7 @@ function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
     end
     self.syncing = true
     self.pages_since_sync = 0
-    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, skip_failing)
+    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, while_reading)
     self.syncing = false
     self.synced_at = os.time()
     if self.summaries_written then
@@ -1110,14 +1078,13 @@ function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
 end
 
 -- syncServers runs the sync for each signed-in server, returning what went
--- wrong and whether statistics is on. With skip_failing, a server that just
--- failed is left out.
-function Shisho:syncServers(interactive, skip_failing)
+-- wrong and whether statistics is on. A sync while reading leaves out a
+-- server that just failed, and doesn't walk the device's folders or read the
+-- sidecars of books only they hold.
+function Shisho:syncServers(interactive, while_reading)
     self:observeStatus()
     self:recordPosition(false)
-    -- A sync while reading doesn't walk the device's folders, or read the sidecars
-    -- of books only it found.
-    local scanned = not skip_failing and self:refreshHashes(interactive)
+    local scanned = self:refreshHashes(interactive, while_reading)
     local books = self:localBooks(scanned)
     local statistics_on = self:statisticsEnabled()
     local read_pages
@@ -1131,22 +1098,30 @@ function Shisho:syncServers(interactive, skip_failing)
         local label = Urls.label(server.url)
         if server.needs_login then
             table.insert(problems, T(_("%1 needs a new sign-in."), label))
-        elseif skip_failing and Sync.backingOff(server, os.time()) then
+        elseif while_reading and Sync.backingOff(server, os.time()) then
             logger.dbg("Shisho: leaving out a server that just failed:", server.url)
         else
             local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
                 not interactive and Client.BACKGROUND or nil)
-            local ok, outcome = pcall(self.syncStates, self, server, client, books, function(changes, store)
-                return Sync.run{
-                    state = self.state,
-                    journal = self.journal,
-                    server = server,
-                    read_pages = read_pages,
-                    post = function(payload) return client:upload(payload) end,
-                    changes = changes,
-                    store = store,
-                }
-            end)
+            local store = self.summaries:server(server.url)
+            local changes = Summaries.collect(store, books, {
+                signed_in_day = State.signedInDay(server, os.date("%Y-%m-%d")),
+                today = os.date("%Y-%m-%d"),
+                seen = self.summaries:seen(),
+            })
+            local ok, outcome = pcall(Sync.run, {
+                state = self.state,
+                journal = self.journal,
+                server = server,
+                read_pages = read_pages,
+                post = function(payload) return client:upload(payload) end,
+                changes = changes,
+                store = store,
+            })
+            if ok and outcome == "ok" then
+                ok, outcome = pcall(self.pullStates, self, server, client, store, books)
+            end
+            self.summaries:flush()
             if not ok then
                 logger.warn("Shisho: syncing failed:", outcome)
                 outcome = "error"

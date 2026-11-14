@@ -166,7 +166,12 @@ func (h *handler) applyChange(ctx context.Context, user *models.User, clock devi
 
 	shisho := koreaderStatus(summary.Status)
 	if event.Status == shisho {
-		// Such as On hold for a Book Did Not Finish, which stays that.
+		// Such as On hold for a Book Did Not Finish, which stays that. A
+		// finish reaching the end made on its own is now one the reader
+		// chose, so paging back doesn't undo it.
+		if shisho == KOReaderStatusFinished {
+			return true, h.reading.KeepFinished(ctx, user.ID, file.FileID)
+		}
 		return true, nil
 	}
 	// A book whose status the plugin never synced was reading as far as

@@ -19,10 +19,9 @@ The plugin's own state, in its own file in KOReader's settings directory:
 Each write replaces the file atomically, so a crash or a dead battery leaves
 the old state or the new one, never half of either. No UI.
 ]]
+local Files = require("shisho/files")
 local LuaSettings = require("luasettings")
 local Urls = require("shisho/urls")
-local dump = require("dump")
-local ffiutil = require("ffi/util")
 
 local State = {}
 State.__index = State
@@ -129,36 +128,9 @@ function State:set(key, value)
     self.data[key] = value
 end
 
--- write writes data to path as a Lua file LuaSettings reads, through a
--- temporary file beside it renamed over the old one.
-function State.write(path, data, comment)
-    local tmp = path .. ".tmp"
-    local file, err = io.open(tmp, "wb")
-    if not file then
-        return nil, err
-    end
-    local written, write_err = file:write("-- ", comment, "\nreturn ", dump(data, nil, true), "\n")
-    if written then
-        ffiutil.fsyncOpenedFile(file)
-    end
-    local closed, close_err = file:close()
-    if not written or not closed then
-        -- A short write, as on a full disk, must never replace good state.
-        os.remove(tmp)
-        return nil, write_err or close_err
-    end
-    local ok, rename_err = os.rename(tmp, path)
-    if not ok then
-        os.remove(tmp)
-        return nil, rename_err
-    end
-    ffiutil.fsyncDirectory(path)
-    return true
-end
-
 -- flush writes the state atomically.
 function State:flush()
-    return State.write(self.path, self.data, "The Shisho KOReader plugin's state.")
+    return Files.write(self.path, self.data, "The Shisho KOReader plugin's state.")
 end
 
 return State

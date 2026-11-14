@@ -1,6 +1,7 @@
 -- Sending page rows and journal events to one server.
 local Journal = require("shisho/journal")
 local State = require("shisho/state")
+local Summaries = require("shisho/summaries")
 local Sync = require("shisho/sync")
 
 local function rowsFrom(list)
@@ -210,6 +211,24 @@ return {
         Sync.pullStates{ server = s, store = store, documents = { "old", "new", "unknown" }, clock = function() return 1000 end,
             post = post, write = function() end }
         assert_eq(payloads[2], { since = 7000 }, "only what changed")
+    end,
+
+    ["pulling states asks about a large library in batches"] = function()
+        local state = setup("https://a.example")
+        local s = state:find("https://a.example")
+        local store = { synced = {}, asked = {} }
+        local documents = {}
+        for i = 1, Summaries.ASK_BATCH + 3 do table.insert(documents, string.format("doc%04d", i)) end
+        local asked_in = {}
+        local function post(payload)
+            table.insert(asked_in, #(payload.statuses or {}))
+            local states = {}
+            for __, document in ipairs(payload.statuses or {}) do table.insert(states, { document = document }) end
+            return 200, { states = states, cursor = 7000 }
+        end
+        assert_eq(Sync.pullStates{ server = s, store = store, documents = documents, post = post, write = function() end }, "ok")
+        assert_eq(asked_in, { Summaries.ASK_BATCH, 3 })
+        assert_eq(store.asked[documents[#documents]], true)
     end,
 
     ["pulling states that fails asks again next time"] = function()

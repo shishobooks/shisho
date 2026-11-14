@@ -12,9 +12,15 @@ never overwrites its quarter stars.
 
 Opening a book KOReader has no status for marks it reading, so reading on a
 book never synced isn't a change. Neither is anything KOReader recorded
-before the day the plugin signed in to the server: bringing that over is
-the history backfill's to decide, so Shisho's state, asked for outright, doesn't
-overwrite it either. Only a later change in Shisho does.
+before the day the plugin signed in to the server: bringing that over is for
+the history sent on first sign-in (ADR 0016), so Shisho's state, asked for
+outright, doesn't overwrite it either. Only a later change in Shisho does.
+
+A sync while reading reads only the sidecars of the open book and of the
+books in KOReader's history. A book found only by the hash index is compared
+by a sync that scans, and until then nothing is written to it, so a change
+made on the device always reaches the server before Shisho's state can
+overwrite it.
 
 While a book is open, the plugin watches its status and stars, so a change
 goes with the moment it was made, not just a day.
@@ -33,9 +39,8 @@ books the server has been asked about outright (true when it recognized the
 book, or when it didn't), and seen holds when the plugin saw an open book's
 status or stars change. No UI.
 ]]
+local Files = require("shisho/files")
 local LuaSettings = require("luasettings")
-local State = require("shisho/state")
-local dump = require("dump")
 local random = require("frontend/random")
 
 local Summaries = {}
@@ -57,7 +62,11 @@ function Summaries.open(path)
     local data = LuaSettings:open(path).data
     if type(data.servers) ~= "table" then data.servers = {} end
     if type(data.seen) ~= "table" then data.seen = {} end
-    return setmetatable({ path = path, data = data }, Summaries)
+    return setmetatable({
+        path = path,
+        data = data,
+        writer = Files.writer(path, "What the Shisho KOReader plugin last synced of each book's status and Rating."),
+    }, Summaries)
 end
 
 -- server returns what was synced with the server at url.
@@ -82,18 +91,20 @@ function Summaries:seen()
     return self.data.seen
 end
 
--- flush writes the file atomically, only when it changed: it can hold
--- every book on the device.
+-- flush writes the file, only when it changed: it can hold every book on
+-- the device.
 function Summaries:flush()
-    local content = dump(self.data, nil, true)
-    if content == self.written then return true end
-    local ok, err = State.write(self.path, self.data, "What the Shisho KOReader plugin last synced of each book's status and Rating.")
-    if ok then self.written = content end
-    return ok, err
+    return self.writer:write(self.data)
 end
 
+-- isDay reports whether value is a real day as YYYY-MM-DD, which a server
+-- takes: a hand-edited sidecar's 2026-02-30 isn't.
 local function isDay(value)
-    return type(value) == "string" and value:match("^%d%d%d%d%-%d%d%-%d%d$") ~= nil
+    if type(value) ~= "string" then return false end
+    local y, m, d = value:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+    if not y then return false end
+    local t = os.time{ year = tonumber(y), month = tonumber(m), day = tonumber(d), hour = 12 }
+    return t ~= nil and os.date("%Y-%m-%d", t) == value
 end
 
 --[[--
@@ -274,9 +285,59 @@ function Summaries.addBook(books, path, recorded, indexed, summary, unread)
     books[document] = { path = path, current = not unread and Summaries.read(summary) or nil, unread = unread or nil }
 end
 
--- documents lists the books in books, in order.
+--[[--
+localBooks is every book whose status and Rating sync, by document hash
+(Summaries.addBook), from opts:
+
+- open: the open book, { path, recorded, summary }, as KOReader holds it
+- history: the paths of the books in KOReader's history that still exist
+- index: the hash index's files, by path (HashIndex:files)
+- read(path): a book's sidecar, as its recorded hash and summary
+- read_index: whether to read the sidecars of books only the index found;
+  a sync while reading doesn't, and leaves them unread
+
+The open book comes first, then the history, then the index, so a book
+found twice keeps the place that says most about it.
+]]
+function Summaries.localBooks(opts)
+    local books, seen = {}, {}
+    local index = opts.index or {}
+    local function indexed(path) return index[path] and index[path].hash end
+    if opts.open then
+        seen[opts.open.path] = true
+        Summaries.addBook(books, opts.open.path, opts.open.recorded, indexed(opts.open.path), opts.open.summary)
+    end
+    for __, path in ipairs(opts.history or {}) do
+        if not seen[path] then
+            seen[path] = true
+            local recorded, summary = opts.read(path)
+            Summaries.addBook(books, path, recorded, indexed(path), summary)
+        end
+    end
+    local paths = {}
+    for path in pairs(index) do
+        if not seen[path] then table.insert(paths, path) end
+    end
+    table.sort(paths)
+    for __, path in ipairs(paths) do
+        if opts.read_index then
+            local recorded, summary = opts.read(path)
+            Summaries.addBook(books, path, recorded, index[path].hash, summary)
+        else
+            Summaries.addBook(books, path, nil, index[path].hash, nil, true)
+        end
+    end
+    return books
+end
+
+-- documents lists the books whose state can be asked for outright: the ones
+-- whose sidecars were read this sync, in order.
 function Summaries.documents(books)
-    return sortedKeys(books)
+    local out = {}
+    for __, document in ipairs(sortedKeys(books)) do
+        if not books[document].unread then table.insert(out, document) end
+    end
+    return out
 end
 
 -- acknowledge records a change the server at store took in as synced. The
@@ -328,6 +389,20 @@ function Summaries.apply(synced, state, current, outright)
         end
     end
     return next(write) and write or nil
+end
+
+--[[--
+applyTo is apply for the book a pulled state names, with what was synced
+with its server, store. A book whose sidecar wasn't read this sync isn't
+written: its own change may not have reached the server yet. It's asked about
+outright at the next sync that reads it instead.
+]]
+function Summaries.applyTo(store, state, book, outright)
+    if book.unread then
+        store.asked[state.document] = nil
+        return nil
+    end
+    return Summaries.apply(store.synced, state, book.current, outright)
 end
 
 -- written is summary, a sidecar's, with write (from apply) in it, as

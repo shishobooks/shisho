@@ -2,16 +2,16 @@
 The document hash of each book file on the device (ADR 0016), so a status
 or Rating from Shisho can be written to a book this device has never opened,
 which has no sidecar recording its hash. HashIndex.roots says which folders
-it covers. A file is hashed
-again only when its size or modification time changes, and only during a
-sync. It lives in its own file in KOReader's settings directory:
+it covers. A file is hashed again only when its size or modification time
+changes, and only during a sync. It lives in its own file in KOReader's
+settings directory:
 
 files = { [path] = { size, mtime, hash } }, scanned_at
 
 No UI.
 ]]
+local Files = require("shisho/files")
 local LuaSettings = require("luasettings")
-local State = require("shisho/state")
 local lfs = require("libs/libkoreader-lfs")
 
 local HashIndex = {}
@@ -41,17 +41,24 @@ function HashIndex.open(path)
     if type(data.files) ~= "table" then
         data.files = {}
     end
-    return setmetatable({ path = path, data = data }, HashIndex)
+    return setmetatable({
+        path = path,
+        data = data,
+        writer = Files.writer(path, "The document hash of each book on the device, for the Shisho KOReader plugin."),
+    }, HashIndex)
 end
 
+-- flush writes the index, only when it changed.
 function HashIndex:flush()
-    return State.write(self.path, self.data, "The document hash of each book on the device, for the Shisho KOReader plugin.")
+    return self.writer:write(self.data)
 end
 
 -- due reports whether a sync at now scans the device's folders: one asked for
--- does, as does one SCAN_EVERY after the last scan. A clock set back since
--- doesn't hold it off.
-function HashIndex.due(scanned_at, now, asked)
+-- does, as does one SCAN_EVERY after the last scan, but never one while
+-- reading, which would hold up a page turn. A clock set back since doesn't
+-- hold it off.
+function HashIndex.due(scanned_at, now, asked, while_reading)
+    if while_reading then return false end
     if asked or not scanned_at then return true end
     local since = now - scanned_at
     return since < 0 or since >= HashIndex.SCAN_EVERY
