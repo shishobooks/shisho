@@ -179,6 +179,22 @@ func (svc *Service) FindDocumentHash(ctx context.Context, hash string) ([]*model
 	return hashes, nil
 }
 
+// DocumentHashesOfBooks returns every document hash in the map (ADR 0014)
+// that names a File of one of bookIDs.
+func (svc *Service) DocumentHashesOfBooks(ctx context.Context, bookIDs []int) ([]string, error) {
+	hashes := []string{}
+	if len(bookIDs) == 0 {
+		return hashes, nil
+	}
+	err := svc.db.NewSelect().
+		Model((*models.DocumentHash)(nil)).
+		ColumnExpr("DISTINCT kdh.hash").
+		Where("kdh.file_id IN (SELECT id FROM files WHERE book_id IN (?))", bun.List(bookIDs)).
+		OrderExpr("kdh.hash").
+		Scan(ctx, &hashes)
+	return hashes, errors.WithStack(err)
+}
+
 // ListForFile returns all fingerprints for a file matching the given algorithm.
 // Used by the scan move reconciliation phase to look up each orphan's stored sha256.
 func (svc *Service) ListForFile(ctx context.Context, fileID int, algorithm string) ([]*models.FileFingerprint, error) {

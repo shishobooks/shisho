@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/koreader"
 	"github.com/shishobooks/shisho/pkg/reading"
@@ -51,6 +52,7 @@ type handler struct {
 	devices   *devices.Service
 	reading   *reading.Service
 	documents *koreader.Documents
+	hashes    *fingerprints.Service
 	bundle    *Bundle
 	limiter   *addressLimiter
 }
@@ -61,6 +63,7 @@ func newHandler(db *bun.DB, bundle *Bundle, bookService *books.Service) *handler
 		devices:   devices.NewService(db),
 		reading:   reading.NewService(db),
 		documents: koreader.NewDocuments(db, bookService),
+		hashes:    fingerprints.NewService(db),
 		bundle:    bundle,
 		limiter:   newAddressLimiter(),
 	}

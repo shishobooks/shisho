@@ -109,6 +109,14 @@ func (h *handler) upload(c echo.Context) error {
 		return file, nil
 	}
 
+	// Whether Shisho changed a status or Rating is judged by what it held
+	// before this upload, since the device's own pages and positions in it
+	// can resume or finish a read before its status change is applied.
+	before, err := h.statesBefore(ctx, user, payload.Events, resolve)
+	if err != nil {
+		return err
+	}
+
 	refused := 0
 	var order []string
 	byDocument := map[string][]reading.PageRow{}
@@ -147,7 +155,7 @@ func (h *handler) upload(c echo.Context) error {
 
 	acknowledged := make([]string, 0, len(payload.Events))
 	for _, event := range payload.Events {
-		ok, err := h.applyEvent(ctx, user, device, clock, event, resolve)
+		ok, err := h.applyEvent(ctx, user, device, clock, event, resolve, before)
 		if err != nil {
 			return err
 		}
@@ -179,7 +187,7 @@ func (h *handler) upload(c echo.Context) error {
 // applyEvent takes in one journal event, once. It returns false for one
 // refused for its time.
 func (h *handler) applyEvent(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock, event EventPayload,
-	resolve func(string) (*models.DocumentHash, error)) (bool, error) {
+	resolve func(string) (*models.DocumentHash, error), before map[int]*reading.StatusSummary) (bool, error) {
 	exists, err := h.db.NewSelect().
 		Model((*models.KOReaderPluginEvent)(nil)).
 		Where("kpe.device_id = ? AND kpe.event_id = ?", device.ID, event.ID).
@@ -190,14 +198,24 @@ func (h *handler) applyEvent(ctx context.Context, user *models.User, device *dev
 	if exists {
 		return true, nil
 	}
-	at, ok := clock.instant(event.At)
-	if ok {
-		if err := h.applyPosition(ctx, user, device, event, at, resolve); err != nil {
+	var ok bool
+	switch event.Type {
+	case PluginEventStatus, PluginEventRating:
+		ok, err = h.applyChange(ctx, user, clock, event, resolve, before)
+		if err != nil {
 			return false, err
+		}
+	default:
+		var at time.Time
+		at, ok = clock.instant(event.At)
+		if ok {
+			if err := h.applyPosition(ctx, user, device, event, at, resolve); err != nil {
+				return false, err
+			}
 		}
 	}
 	// Recorded once applied, so a failure partway is retried. Applying a
-	// position twice changes nothing.
+	// position, a status, or a Rating twice changes nothing.
 	_, err = h.db.NewInsert().
 		Model(&models.KOReaderPluginEvent{DeviceID: device.ID, EventID: event.ID, CreatedAt: time.Now()}).
 		On("CONFLICT DO NOTHING").
@@ -239,7 +257,10 @@ func (h *handler) applyPosition(ctx context.Context, user *models.User, device *
 }
 
 // pull answers with the position of each named book that has one the
-// device can go to, translated for its copy and timed on its clock.
+// device can go to, translated for its copy and timed on its clock, and
+// with the statuses and Ratings the device should hold (pullStates). The
+// cursor is taken before the states are read, so nothing changed while
+// they are is missed.
 func (h *handler) pull(c echo.Context) error {
 	ctx := c.Request().Context()
 	user, err := auth.RequireUser(c)
@@ -292,6 +313,11 @@ func (h *handler) pull(c echo.Context) error {
 			Own:        own,
 		})
 	}
+	cursor := time.Now().Unix()
+	states, err := h.pullStates(ctx, user, device, payload)
+	if err != nil {
+		return err
+	}
 	if err := h.devices.RecordPluginConnection(ctx, device.ID, reportedVersion(c)); err != nil {
 		return errors.WithStack(err)
 	}
@@ -299,5 +325,7 @@ func (h *handler) pull(c echo.Context) error {
 		Server:      h.serverInfo(),
 		ClockOffset: clock.offset,
 		Positions:   positions,
+		States:      states,
+		Cursor:      cursor,
 	}))
 }

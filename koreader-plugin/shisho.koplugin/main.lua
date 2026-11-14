@@ -4,8 +4,9 @@ KOReader's events, menus, dialogs, Wi-Fi, and calls to the server. Decisions
 live in the shisho/ modules, which have no UI and are unit tested.
 
 It signs in to Shisho servers, adds their catalogs to KOReader's OPDS
-catalog list, keeps itself up to date from them, and syncs reading time
-from KOReader's statistics and positions to each of them.
+catalog list, keeps itself up to date from them, syncs reading time from
+KOReader's statistics and positions to each of them, and syncs each book's
+status and Rating both ways.
 ]]
 local Client = require("shisho/client")
 local ConfirmBox = require("ui/widget/confirmbox")
@@ -13,7 +14,9 @@ local DataStorage = require("datastorage")
 local DateTimeWidget = require("ui/widget/datetimewidget")
 local Daily = require("shisho/daily")
 local Device = require("device")
+local DocSettings = require("docsettings")
 local Event = require("ui/event")
+local HashIndex = require("shisho/hashindex")
 local InfoMessage = require("ui/widget/infomessage")
 local Installer = require("shisho/installer")
 local Journal = require("shisho/journal")
@@ -27,12 +30,15 @@ local Responses = require("shisho/responses")
 local Stamps = require("shisho/stamps")
 local State = require("shisho/state")
 local Statistics = require("shisho/statistics")
+local Summaries = require("shisho/summaries")
 local Sync = require("shisho/sync")
 local UIManager = require("ui/uimanager")
 local Urls = require("shisho/urls")
 local Versions = require("shisho/versions")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
+local util = require("util")
 local T = require("ffi/util").template
 local _ = require("gettext")
 
@@ -58,12 +64,16 @@ local Shisho = WidgetContainer:extend{
     name = "shisho",
     is_doc_only = false,
     state_file = DataStorage:getSettingsDir() .. "/shisho.lua",
+    summaries_file = DataStorage:getSettingsDir() .. "/shisho_summaries.lua",
+    hashes_file = DataStorage:getSettingsDir() .. "/shisho_hashes.lua",
 }
 
 function Shisho:init()
     self.stamps = Stamps.load(self.path)
     self.state = State.open(self.state_file)
     self.journal = Journal.new(self.state)
+    self.summaries = Summaries.open(self.summaries_file)
+    self.hashes = HashIndex.open(self.hashes_file)
     self:scheduleDaily()
     self.ui.menu:registerToMainMenu(self)
 
@@ -132,7 +142,7 @@ end
 -- signedIn records a sign-in, adds the server's catalog to KOReader's OPDS
 -- list, and tells the user.
 function Shisho:signedIn(url, answer, username, credential)
-    local server = self.state:signIn{
+    local server, other_device = self.state:signIn{
         -- A server signed in to for the first time takes reading from now on.
         stats_cursor = Statistics.currentCursor(self:statisticsPath()),
         url = url,
@@ -142,6 +152,11 @@ function Shisho:signedIn(url, answer, username, credential)
         device_name = answer.device_name,
         info = answer.server,
     }
+    if other_device then
+        -- Another Device's statuses and Ratings say nothing about this one's.
+        self.summaries:remove(server.url)
+        self.summaries:flush()
+    end
     -- A zip from this server's Device page was installed from it, however
     -- the sign-in went once its code expired.
     local pairing = self.stamps.pairing
@@ -476,6 +491,8 @@ function Shisho:onReaderReady()
     self.reader_ready = true
     self.last_page = self.ui.getCurrentPage and self.ui:getCurrentPage()
     self.last_page_turn = nil
+    -- The status as the book opens, so a change while it's open is seen.
+    self.open_status = self:openSummary()
     -- Opening a book never waits for Wi-Fi.
     if #self.state:enabledServers() > 0 and NetworkMgr:isOnline() then
         UIManager:nextTick(function() self:pullOpenBook(false) end)
@@ -484,6 +501,7 @@ end
 
 function Shisho:onPageUpdate(page)
     if not self.reader_ready or page == nil or page == self.last_page then return end
+    self:observeStatus()
     self.last_page = page
     self.last_page_turn = os.time()
     self.pages_since_sync = (self.pages_since_sync or 0) + 1
@@ -505,6 +523,7 @@ end
 
 function Shisho:onCloseDocument()
     if self.record_task then UIManager:unschedule(self.record_task) end
+    self:observeStatus()
     self:recordPosition(true)
     self.reader_ready = nil
     self:syncWhileOnline()
@@ -528,6 +547,7 @@ end
 
 function Shisho:onSuspend()
     if self.record_task then UIManager:unschedule(self.record_task) end
+    self:observeStatus()
     self:recordPosition(true)
     self:armDailyWakeup()
     local servers = self.state:enabledServers()
@@ -688,6 +708,156 @@ function Shisho:pullOpenBook(interactive)
         ok_callback = function() self:goToProgress(remote.progress) end,
     })
     return action
+end
+
+-- Statuses and Ratings ---------------------------------------------------------
+-- KOReader fires no event when a book's status or Rating changes, so each
+-- sync compares the books' sidecars with what was last synced
+-- (shisho/summaries). While a book is open, the plugin also watches its
+-- status and stars, so a book finished at the end-of-book prompt or in Book
+-- status goes with the moment it happened, not just the day.
+
+-- openSummary is the open book's summary, as KOReader holds it in memory.
+function Shisho:openSummary()
+    local doc_settings = self.ui and self.ui.document and self.ui.doc_settings
+    return doc_settings and Summaries.read(doc_settings:readSetting("summary"))
+end
+
+-- observeStatus notes when the open book's status or stars changed since it
+-- opened, or since it was last looked at.
+function Shisho:observeStatus()
+    if not self.reader_ready then return end
+    local document, now = self:documentHash(), self:openSummary()
+    if not document or not now then return end
+    local before = self.open_status
+    self.open_status = now
+    if Summaries.observe(self.summaries:seen(), document, before, now, os.time()) then
+        self.summaries:flush()
+    end
+end
+
+-- onEndOfBook looks at the status once KOReader has handled the end of the
+-- book, which marks it finished when set to.
+function Shisho:onEndOfBook()
+    UIManager:nextTick(function() self:observeStatus() end)
+end
+
+-- hashOf is a book file's document hash: the one its sidecar records, as
+-- KOReader computed it when the book was first opened, or else its own.
+function Shisho:hashOf(path)
+    return (self:readSidecar(path)) or util.partialMD5(path)
+end
+
+-- refreshHashes brings the index of book files on the device up to date
+-- when it's due (HashIndex.due), and reports whether it scanned.
+function Shisho:refreshHashes(interactive, while_reading)
+    local now = os.time()
+    if not HashIndex.due(self.hashes:scannedAt(), now, interactive, while_reading) then return false end
+    local roots = HashIndex.roots{
+        storage = Device.home_dir,
+        home = G_reader_settings:readSetting("home_dir"),
+        download = G_reader_settings:readSetting("download_dir"),
+        ereader = Device:isKobo() or Device:isKindle() or Device:isPocketBook() or Device:isCervantes() or Device:isRemarkable(),
+    }
+    if #roots == 0 then return false end
+    local ok, err = pcall(function()
+        self.hashes:refresh(HashIndex.scan(roots), function(path) return self:hashOf(path) end, now)
+    end)
+    if not ok then
+        logger.warn("Shisho: indexing books failed:", err)
+        return false
+    end
+    self.hashes:flush()
+    return true
+end
+
+-- readSidecar returns the document hash a book's sidecar records and its
+-- summary, reading a sidecar again only once it changed on disk.
+function Shisho:readSidecar(path)
+    local sidecar = DocSettings:findSidecarFile(path)
+    if not sidecar then return nil, nil end
+    local attr = lfs.attributes(sidecar) or {}
+    self.sidecars = self.sidecars or {}
+    local cached = self.sidecars[path]
+    if not cached or cached.sidecar ~= sidecar or cached.mtime ~= attr.modification or cached.size ~= attr.size then
+        local doc_settings = DocSettings:open(path)
+        cached = {
+            sidecar = sidecar,
+            mtime = attr.modification,
+            size = attr.size,
+            recorded = doc_settings:readSetting("partial_md5_checksum"),
+            summary = doc_settings:readSetting("summary"),
+        }
+        self.sidecars[path] = cached
+    end
+    return cached.recorded, cached.summary
+end
+
+-- localBooks is every book whose status and Rating sync
+-- (Summaries.localBooks). With read_index false, as in a sync while reading,
+-- the sidecars of books only the hash index found are left unread.
+function Shisho:localBooks(read_index)
+    local open
+    if self.ui and self.ui.document and self.ui.doc_settings then
+        open = {
+            path = self.ui.document.file,
+            recorded = self.ui.doc_settings:readSetting("partial_md5_checksum"),
+            summary = self.ui.doc_settings:readSetting("summary"),
+        }
+    end
+    local history = {}
+    for __, item in ipairs(require("readhistory").hist) do
+        if item.file and not item.dim then table.insert(history, item.file) end
+    end
+    return Summaries.localBooks{
+        open = open,
+        history = history,
+        index = self.hashes:files(),
+        read = function(path) return self:readSidecar(path) end,
+        read_index = read_index,
+    }
+end
+
+-- writeSummary writes what a server sent into a book's sidecar, as
+-- KOReader's file manager does when it marks a book: a book never opened
+-- gets a sidecar.
+function Shisho:writeSummary(book, write)
+    local open = self.ui and self.ui.document and self.ui.document.file == book.path
+    -- A book deleted since the index last saw it gets no sidecar.
+    if not open and lfs.attributes(book.path, "mode") ~= "file" then return end
+    local doc_settings = open and self.ui.doc_settings or DocSettings:open(book.path)
+    local summary = Summaries.written(doc_settings:readSetting("summary"), write, os.date("%Y-%m-%d"))
+    doc_settings:saveSetting("summary", summary)
+    doc_settings:flush()
+    if self.sidecars then self.sidecars[book.path] = nil end
+    book.current = Summaries.read(summary)
+    self.summaries_written = true
+    if open then
+        -- Written by the server, not changed by the reader.
+        self.open_status = book.current
+    end
+    local ok, BookList = pcall(require, "ui/widget/booklist")
+    if ok and BookList.setBookInfoCacheProperty then
+        if write.status then BookList.setBookInfoCacheProperty(book.path, "status", summary.status) end
+        if write.rating then BookList.setBookInfoCacheProperty(book.path, "rating", summary.rating or 0) end
+    end
+end
+
+-- pullStates pulls the statuses and Ratings server says the device should
+-- hold, and writes them to books' sidecars (Summaries.applyTo).
+function Shisho:pullStates(server, client, store, books)
+    return Sync.pullStates{
+        server = server,
+        store = store,
+        documents = Summaries.documents(books),
+        post = function(payload) return client:pullStates(payload) end,
+        write = function(pulled, outright)
+            local book = books[pulled.document]
+            if not book then return end
+            local write = Summaries.applyTo(store, pulled, book, outright)
+            if write then self:writeSummary(book, write) end
+        end,
+    }
 end
 
 -- Daily sync ------------------------------------------------------------------
@@ -860,7 +1030,7 @@ the open book's position, except when going to sleep. One server failing
 doesn't stop the others. A server that needs a new sign-in keeps everything
 queued until it gets one. Interactive, from Sync now, it says how it went.
 ]]
-function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
+function Shisho:syncAll(interactive, going_to_sleep, while_reading)
     if self.syncing then return end
     if #self.state:servers() == 0 then
         if interactive then
@@ -875,9 +1045,15 @@ function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
     end
     self.syncing = true
     self.pages_since_sync = 0
-    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, skip_failing)
+    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, while_reading)
     self.syncing = false
     self.synced_at = os.time()
+    if self.summaries_written then
+        -- The file browser, History, and Collections show the statuses and
+        -- stars written, as they do after KOReader's own Book information.
+        self.summaries_written = nil
+        UIManager:broadcastEvent(Event:new("BookMetadataChanged"))
+    end
     if not ok then
         logger.warn("Shisho: syncing failed:", problems)
         problems, statistics_on = { _("Couldn't sync. Try again later.") }, true
@@ -902,10 +1078,14 @@ function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
 end
 
 -- syncServers runs the sync for each signed-in server, returning what went
--- wrong and whether statistics is on. With skip_failing, a server that just
--- failed is left out.
-function Shisho:syncServers(interactive, skip_failing)
+-- wrong and whether statistics is on. A sync while reading leaves out a
+-- server that just failed, and doesn't walk the device's folders or read the
+-- sidecars of books only they hold.
+function Shisho:syncServers(interactive, while_reading)
+    self:observeStatus()
     self:recordPosition(false)
+    local scanned = self:refreshHashes(interactive, while_reading)
+    local books = self:localBooks(scanned)
     local statistics_on = self:statisticsEnabled()
     local read_pages
     if statistics_on then
@@ -918,18 +1098,30 @@ function Shisho:syncServers(interactive, skip_failing)
         local label = Urls.label(server.url)
         if server.needs_login then
             table.insert(problems, T(_("%1 needs a new sign-in."), label))
-        elseif skip_failing and Sync.backingOff(server, os.time()) then
+        elseif while_reading and Sync.backingOff(server, os.time()) then
             logger.dbg("Shisho: leaving out a server that just failed:", server.url)
         else
             local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
                 not interactive and Client.BACKGROUND or nil)
+            local store = self.summaries:server(server.url)
+            local changes = Summaries.collect(store, books, {
+                signed_in_day = State.signedInDay(server, os.date("%Y-%m-%d")),
+                today = os.date("%Y-%m-%d"),
+                seen = self.summaries:seen(),
+            })
             local ok, outcome = pcall(Sync.run, {
                 state = self.state,
                 journal = self.journal,
                 server = server,
                 read_pages = read_pages,
                 post = function(payload) return client:upload(payload) end,
+                changes = changes,
+                store = store,
             })
+            if ok and outcome == "ok" then
+                ok, outcome = pcall(self.pullStates, self, server, client, store, books)
+            end
+            self.summaries:flush()
             if not ok then
                 logger.warn("Shisho: syncing failed:", outcome)
                 outcome = "error"
@@ -967,7 +1159,7 @@ function Shisho:serverMenu(server)
         table.insert(items, {
             text = T(_("Last synced %1"), os.date("%Y-%m-%d %H:%M", server.last_synced)),
             enabled = false,
-            help_text = _("When the plugin last sent this server your reading time and places."),
+            help_text = _("When the plugin last sent this server your reading time, places, statuses, and Ratings."),
         })
     end
     table.insert(items, {
@@ -997,6 +1189,8 @@ function Shisho:serverMenu(server)
                 ok_callback = function()
                     self.state:remove(server.url)
                     self.state:flush()
+                    self.summaries:remove(server.url)
+                    self.summaries:flush()
                     self:scheduleDaily()
                     if touchmenu_instance then touchmenu_instance:backToUpperMenu() end
                 end,
@@ -1163,7 +1357,7 @@ function Shisho:addToMainMenu(menu_items)
             })
             table.insert(items, {
                 text = _("Sync now"),
-                help_text = T(_("Send your reading time and places to every enabled server now, turning Wi-Fi on if it's off, and check the open book for a newer place. Use it before switching to another device. The plugin also syncs on its own whenever Wi-Fi comes on, and while Wi-Fi is on, every %1 pages, when a book closes, and when the device goes to sleep."), Sync.PAGES_BETWEEN),
+                help_text = T(_("Send your reading time, places, and books' statuses and Ratings to every enabled server now, and bring back statuses and Ratings changed in Shisho, turning Wi-Fi on if it's off, and check the open book for a newer place. Use it before switching to another device. The plugin also syncs on its own whenever Wi-Fi comes on, and while Wi-Fi is on, every %1 pages, when a book closes, and when the device goes to sleep."), Sync.PAGES_BETWEEN),
                 keep_menu_open = true,
                 callback = function()
                     if #self.state:servers() == 0 then

@@ -96,4 +96,18 @@ return {
         local reopened = State.open(path)
         assert_eq(reopened:find("https://books.example.com").device_name, "Libra KOReader")
     end,
+
+    ["signing in as another Device syncs statuses afresh"] = function()
+        local state = State.open(scratch_dir() .. "/shisho.lua")
+        local s, other = state:signIn{ url = "https://a.example", username = "reader", credential = "C", device_id = "d1" }
+        assert_eq(other, false)
+        s.states_cursor = 7000
+        local _same, again = state:signIn{ url = "https://a.example", username = "reader", credential = "D", device_id = "d1" }
+        assert_eq(again, false)
+        assert_eq(s.states_cursor, 7000)
+        local _moved, moved = state:signIn{ url = "https://a.example", username = "friend", credential = "E", device_id = "d2" }
+        assert_eq(moved, true)
+        assert_eq(s.states_cursor, nil)
+        assert_eq(s.signed_in_day, os.date("%Y-%m-%d"))
+    end,
 }

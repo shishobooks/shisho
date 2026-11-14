@@ -965,3 +965,25 @@ func TestMergeBooks_KeepsTheToReadPlaceAReadThroughLeft(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeBooks_TakesTheSourcesRatingWithWhenItChanged(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	target, _ := f.addBook("Target")
+	// The target has a row of its own, from To Read, but no Rating.
+	require.NoError(t, f.svc.AddToRead(f.ctx, f.user.ID, target.ID))
+	units := 14
+	require.NoError(t, f.svc.SetRating(f.ctx, f.user.ID, f.book.ID, &units))
+	rated, err := f.svc.RetrieveStatusSummaries(f.ctx, f.user.ID, []int{f.book.ID})
+	require.NoError(t, err)
+	require.NotNil(t, rated[f.book.ID].RatingAt)
+
+	require.NoError(t, MergeBooks(f.ctx, f.db, f.book.ID, target.ID))
+
+	merged, err := f.svc.RetrieveStatusSummaries(f.ctx, f.user.ID, []int{target.ID})
+	require.NoError(t, err)
+	require.NotNil(t, merged[target.ID].RatingUnits)
+	assert.Equal(t, 14, *merged[target.ID].RatingUnits)
+	require.NotNil(t, merged[target.ID].RatingAt, "a Rating keeps when it was set")
+	assert.True(t, rated[f.book.ID].RatingAt.Equal(*merged[target.ID].RatingAt))
+}

@@ -101,8 +101,8 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Recommended. The plugin signs in to Shisho once, sets up this server's
-        OPDS catalog, syncs your reading time and position, and keeps itself up
-        to date.
+        OPDS catalog, syncs your reading time, position, status, and Rating, and
+        keeps itself up to date.
       </p>
       <PluginStatus device={device} />
       <div className="flex flex-wrap gap-2">
@@ -180,10 +180,13 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
           set up for you, and the plugin updates itself from Shisho. Your
           reading time comes from KOReader's own statistics, page by page, and
           reading done offline arrives on the days you did it, however long the
-          e-reader stays offline. Progress sync is built into KOReader and syncs
-          your position in the open book, but Shisho can only estimate your
-          reading time from it, and offline reading is dated when the e-reader
-          next connects. Once the plugin syncs, turn progress sync off.
+          e-reader stays offline. Finishing, pausing, and rating a book in
+          KOReader carry over to Shisho, and the same changes made here show up
+          in KOReader. Progress sync is built into KOReader and syncs your
+          position in the open book, but Shisho can only estimate your reading
+          time from it, offline reading is dated when the e-reader next
+          connects, and a book counts as read only once you reach its last
+          pages. Once the plugin syncs, turn progress sync off.
         </p>
       </Disclosure>
     </div>

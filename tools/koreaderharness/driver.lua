@@ -28,6 +28,8 @@ end
 -- Sidecars beside the books would land in read-only mounts and the books
 -- directory, so they go in KOReader's data directory.
 G_reader_settings:saveSetting("document_metadata_folder", "dir")
+-- The books directory is KOReader's home folder, as an e-reader's is.
+G_reader_settings:saveSetting("home_dir", "/books")
 
 einkfb = require("ffi/framebuffer") --luacheck: ignore
 einkfb.dummy = true --luacheck: ignore
@@ -40,6 +42,11 @@ Device.input.dummy = true
 
 local JSON = require("json")
 local args = JSON.decode(arg[1])
+
+-- KOReader's home folder, and the folder its OPDS catalogs download to, when
+-- a command moves them, set before KOReader starts.
+if args.home_dir then G_reader_settings:saveSetting("home_dir", args.home_dir) end
+if args.download_dir then G_reader_settings:saveSetting("download_dir", args.download_dir) end
 
 local function respond(result)
     real_stdout:write("\n@@RESULT@@", JSON.encode(result), "\n")
@@ -325,11 +332,16 @@ end
 
 -- The KOReader plugin ---------------------------------------------------------
 
+-- How often the plugin told the file browser to redraw, by announcing that
+-- books' metadata changed.
+local redrawn = 0
+
 -- What the plugin and KOReader's OPDS catalog list hold, read back from
 -- their files as a person inspecting the device would.
 local function pluginReport(plugin, extra)
     local LuaSettings = require("luasettings")
     local report = extra or {}
+    report.redrawn = redrawn
     local state = LuaSettings:open(DataStorage:getSettingsDir() .. "/shisho.lua").data
     report.servers = state.servers or {}
     report.journal = type(state.journal) == "table" and type(state.journal.entries) == "table"
@@ -346,6 +358,17 @@ local function pluginReport(plugin, extra)
             report.sign_in_url = plugin.sign_in_dialog.shisho_prefilled_url or ""
         end
     end
+    -- Each book's status and Rating, as its sidecar holds them.
+    local DocSettings = require("docsettings")
+    local sidecars = {}
+    for name in lfs.dir("/books") do
+        local path = "/books/" .. name
+        if lfs.attributes(path, "mode") == "file" and DocSettings:hasSidecarFile(path) then
+            local summary = DocSettings:open(path):readSetting("summary")
+            sidecars[name] = summary and { status = summary.status, rating = summary.rating, modified = summary.modified } or {}
+        end
+    end
+    report.sidecars = next(sidecars) and sidecars or nil
     local opds = LuaSettings:open(DataStorage:getSettingsDir() .. "/opds.lua").data
     return report, opds.servers or {}
 end
@@ -365,6 +388,7 @@ local function stubNetwork(online)
     local broadcast = UIManager.broadcastEvent
     UIManager.broadcastEvent = function(ui, event)
         if event and event.handler == "onNetworkConnected" then return end
+        if event and event.handler == "onBookMetadataChanged" then redrawn = redrawn + 1 end
         return broadcast(ui, event)
     end
     local NetworkMgr = require("ui/network/manager")
@@ -664,6 +688,16 @@ commands["plugin-read"] = function()
             ui:handleEvent(Event:new("GotoViewRel", 1))
             stepUI()
         end
+        -- Mark as finished, as the end-of-book prompt does.
+        if args.mark_finished then
+            ui.status:markBook(true)
+            stepUI()
+        end
+        -- Stars, as Book status sets them.
+        if args.stars then
+            local summary = ui.doc_settings:readSetting("summary", {})
+            summary.rating = args.stars > 0 and args.stars or nil
+        end
         if args.close then
             plugin:onCloseDocument()
             stepUI()
@@ -672,6 +706,9 @@ commands["plugin-read"] = function()
             plugin:onSuspend()
             stepUI()
         end
+        -- KOReader saves the book's sidecar as it closes, so the report reads
+        -- what it holds.
+        ui:saveSettings()
         return { plugin = pluginReport(plugin) }
     end)
 end

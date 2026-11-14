@@ -7,6 +7,7 @@ The **KOReader plugin**, which every Shisho server serves, is the recommended wa
 - **Reading time** comes from KOReader's own statistics, page by page, so it matches what KOReader's statistics screens show.
 - **Offline reading** keeps its real dates, however long the e-reader stays offline, and nothing is lost in the meantime.
 - **Your place** moves between KOReader, the Shisho reader, and your other devices.
+- **Statuses and Ratings** go both ways: finishing a book in KOReader marks it **Read** in Shisho, marking it **Read** in Shisho shows it finished in KOReader, and your stars follow.
 
 Without the plugin, KOReader's built-in [progress sync](#turn-on-progress-sync) still syncs your place, but Shisho can only estimate your reading time from it, and reading done offline is dated when the e-reader next connects.
 
@@ -75,7 +76,7 @@ Once signed in, the plugin syncs on its own whenever Wi-Fi comes on, for any rea
 
 Both turn Wi-Fi on only when KOReader is set to do that without asking: **Settings > Network > Action when Wi-Fi is off** set to **Turn on**. Otherwise they sync only when Wi-Fi is already on, so no question is left waiting on the sleep screen.
 
-A sync sends your reading time and your place in each book you read since the last one. Everything waits on the e-reader while it's offline, for days, weeks, or months, and a restart or a flat battery loses nothing that KOReader had already saved. A sync cut off halfway picks up where it stopped without sending anything twice. **Sync now** says when it finishes or fails; a sync that runs on its own stays quiet.
+A sync sends your reading time, your place in each book you read since the last one, and the [statuses and Ratings](#statuses-and-ratings) you changed, and brings back the ones changed in Shisho. Everything waits on the e-reader while it's offline, for days, weeks, or months, and a restart or a flat battery loses nothing that KOReader had already saved. A sync cut off halfway picks up where it stopped without sending anything twice. **Sync now** says when it finishes or fails; a sync that runs on its own stays quiet.
 
 If you're signed in to several servers, each gets the reading for every book it has, and one server being down doesn't hold up the others. Each server the plugin can't reach still costs a short wait on every sync. For a server you can't always reach, such as one on your own computer, turn off **Enabled** under it in the plugin's menu: the plugin then doesn't contact it, offers no plugin updates from it, and keeps nothing waiting for it. Turned on again, it gets the reading time KOReader recorded in the meantime, but not your places from while it was off.
 
@@ -97,9 +98,43 @@ The plugin sends your place in each book with the time you were there, so a plac
 
 When you open a book with Wi-Fi already on, when Wi-Fi comes on, and after **Sync now**, the plugin asks Shisho for your latest place in the open book. The syncs that happen while you read, or as the e-reader sleeps, don't, so no question interrupts you. A place saved anywhere else is offered by name: **Shisho web reader** for the Shisho reader, or the name of the other KOReader or Kobo Device. Opening a book never turns Wi-Fi on. Under **Settings** in the plugin's menu, **Newer position from another reader** and **Older position from another reader** set what happens: **Ask** asks before going there, **Go there** goes without asking, and **Ignore** stays put. By default a newer place asks and an older one is ignored. [Moving Between Readers](./reading-tracking.md#moving-between-readers) covers what carries for each format.
 
+### Statuses and Ratings
+
+A book's status in KOReader, which you set in **Book status**, at the end-of-book prompt, or from the file browser, syncs both ways with its [status](./reading-tracking.md) in Shisho, and so do its stars. This covers every book on the e-reader that [Shisho recognizes](#which-books-sync), including books KOReader has never opened.
+
+From KOReader, at the next sync:
+
+| In KOReader | In Shisho                                                                                            |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| Finished    | Marks the book **Read**, ending the day you finished it                                              |
+| On hold     | Pauses the Read-through underway, or starts one, paused                                              |
+| Reading     | Resumes a paused Read-through, or starts one. A book you'd finished or stopped is then being reread |
+
+Opening a book you've already marked never changes its status in KOReader, so opening a finished book to look something up leaves it **Read** in both, and the time you spend in it still counts as reading time. KOReader marks a book Reading the first time you open it, and Shisho follows as for any other change: the book becomes **Currently Reading**, and one you'd finished or stopped is being reread, from the day you opened it.
+
+From Shisho, at the next sync:
+
+| In Shisho             | In KOReader |
+| --------------------- | ----------- |
+| Read                  | Finished    |
+| Paused                | On hold     |
+| Did Not Finish        | On hold     |
+| Currently Reading     | Reading     |
+| To Read, or no status | Left alone  |
+
+KOReader has nothing closer to Did Not Finish than On hold. The plugin remembers that it wrote On hold, so the book stays **Did Not Finish** in Shisho and never comes back as **Paused**.
+
+A status from Shisho reaches a book KOReader has never opened too, as when you finish a book on one e-reader and copy it onto another: the plugin keeps an index of the EPUB, KePub, PDF, CBZ, MOBI, and AZW3 files on the device, and marks the book as KOReader's file browser does. On an e-reader, such as a Kobo, Kindle, or PocketBook, the index covers every folder of its storage except hidden ones, wherever you copied or downloaded a book. On Android and computers, it covers the home folder and the OPDS download folder you've set in KOReader, if you've set them. Every **Sync now** brings the index up to date, as do the syncs when Wi-Fi comes on, **Sync on sleep**, and **Daily sync**, at most every ten minutes. The syncs as you read, when you close a book, and as the device sleeps with Wi-Fi already on leave it alone. A change made in the file browser to a book that isn't in KOReader's history goes at the next sync that brings the index up to date. A very large library is indexed over several syncs.
+
+At its first sync with a server, the plugin writes Shisho's statuses and Ratings to the books it finds, except where KOReader already had a status or stars from before the day you first signed in to that server: those stay as they are on the e-reader, and aren't sent to Shisho, until one side changes.
+
+When a book's status changed in KOReader and in Shisho since the last sync, the later change wins, compared by day, since KOReader records only the day of a status change. On the same day, Shisho's change wins. KOReader's change is then replaced on the e-reader at that sync.
+
+**Ratings:** a book's stars in KOReader set its Rating in Shisho to that many stars. A Rating set in Shisho shows in KOReader rounded to whole stars, halves rounding up, and at least one star, so 3.75 stars show as 4. The plugin sends a Rating only when you change it in KOReader, so the rounded copy never replaces a quarter-star Rating, and removing a Rating in either place removes it in the other. When the Rating changed in both places since the last sync, the later day wins, as for statuses. KOReader doesn't date a Rating, so a change made with a book open is dated when the plugin saw it, and one made in the file browser by the day KOReader saved it.
+
 ### Switching Between Two KOReader Devices
 
-Sign in to Shisho with the plugin on both, each as its own KOReader Device. Before you put one down, choose **Sync now** on it. Then open the book on the other with Wi-Fi on, and it offers to jump to where you stopped.
+Sign in to Shisho with the plugin on both, each as its own KOReader Device. Before you put one down, choose **Sync now** on it. Then open the book on the other with Wi-Fi on, and it offers to jump to where you stopped. A book you finish on one shows finished on the other once both have synced.
 
 Leave KOReader's own statistics cloud sync (**Cloud sync** under **Reading statistics**) unset on both. It copies one device's statistics into the other's, and the plugin would then send that reading again as the other device's, counting it twice.
 
@@ -160,7 +195,7 @@ KOReader offers to jump to a position saved anywhere else, and names where it ca
 
 ## Finishing a Book
 
-Pushing a position 99% or more through a book marks it **Read**, as a streaming service counts an episode watched once the credits start. The last pages are usually back matter, and KOReader's continuous view never reports exactly 100%. In continuous view KOReader reports the top of the screen, so the last screen of a very short book can stay below 99%; use **Mark as read** in Shisho for those. Going back before that point in KOReader within 15 minutes undoes the finish, as it does in the [Shisho reader](./reading-tracking.md#starting-and-finishing-automatically). A push from KOReader can't undo a finish made in another reader, since it may be one KOReader queued from before.
+With the plugin, marking a book finished in KOReader marks it **Read**; see [Statuses and Ratings](#statuses-and-ratings). With either, pushing a position 99% or more through a book marks it **Read**, as a streaming service counts an episode watched once the credits start. The last pages are usually back matter, and KOReader's continuous view never reports exactly 100%. In continuous view KOReader reports the top of the screen, so the last screen of a very short book can stay below 99%; use **Mark as read** in Shisho for those. Going back before that point in KOReader within 15 minutes undoes the finish, as it does in the [Shisho reader](./reading-tracking.md#starting-and-finishing-automatically). A push from KOReader can't undo a finish made in another reader, since it may be one KOReader queued from before.
 
 ## Troubleshooting
 

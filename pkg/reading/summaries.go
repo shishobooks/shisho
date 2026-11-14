@@ -26,6 +26,10 @@ type StatusSummary struct {
 	// that day in the user's time zone.
 	LastBeginDay *string    `bun:"last_begin_day"`
 	LastBeganAt  *time.Time `bun:"-"`
+	// RatingUnits is the Rating in quarter-star units, nil when unrated, and
+	// RatingAt when it was last set or cleared.
+	RatingUnits *int       `bun:"rating"`
+	RatingAt    *time.Time `bun:"rating_at"`
 }
 
 // RetrieveStatusSummaries returns userID's StatusSummary of each of bookIDs,
@@ -43,6 +47,8 @@ func (svc *Service) RetrieveStatusSummaries(ctx context.Context, userID int, boo
 		ColumnExpr("(SELECT MAX(srt.updated_at) FROM read_throughs srt WHERE srt.user_id = ? AND srt.book_id = b.id) AS read_through_at", userID).
 		ColumnExpr("(SELECT sub.updated_at FROM user_books sub WHERE sub.user_id = ? AND sub.book_id = b.id) AS user_book_at", userID).
 		ColumnExpr("(SELECT COUNT(*) FROM read_throughs srt WHERE srt.user_id = ? AND srt.book_id = b.id) AS read_throughs", userID).
+		ColumnExpr("(SELECT sub.rating FROM user_books sub WHERE sub.user_id = ? AND sub.book_id = b.id) AS rating", userID).
+		ColumnExpr("(SELECT sub.rating_updated_at FROM user_books sub WHERE sub.user_id = ? AND sub.book_id = b.id) AS rating_at", userID).
 		// The Read-throughs in the order StatusExpr picks the one a status
 		// comes from: the one underway, then the latest ended.
 		ColumnExpr(`(SELECT srt.begin_day FROM read_throughs srt WHERE srt.user_id = ? AND srt.book_id = b.id
