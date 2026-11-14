@@ -176,6 +176,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "A reading session must be in the past and last at most a day.",
 		},
 		{
+			name:   "reading session that counts negative time",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
+			body:   `{"session":{"started_at":"2026-03-01T11:00:00Z","ended_at":"2026-03-01T12:00:00Z","start_percentage":0.4,"end_percentage":0.5,"duration":-1}}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `"duration" must be greater than or equal to 0`,
+		},
+		{
 			name:   "position update in two forms",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
 			body:   `{"cfi":"epubcfi(/6/4!/4/2)","page":3,"percentage":0.5}`,

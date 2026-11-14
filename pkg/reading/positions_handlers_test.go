@@ -283,6 +283,34 @@ func TestPositionRoutes_ASessionWithoutAPositionRecordsOnlyTheSession(t *testing
 	assert.Empty(t, f.status())
 }
 
+// The web reader counts at most a couple of minutes per page, so a session's
+// time can be less than its span, never more.
+func TestPositionRoutes_ASessionKeepsTheTimeTheReaderCounted(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	api := newReadingAPI(t, f.db, f.user)
+	path := fmt.Sprintf("/files/%d/position", f.file.ID)
+
+	post := func(startedAt string, duration any) {
+		session := map[string]any{
+			"started_at": startedAt, "ended_at": "2026-10-15T12:00:00Z",
+			"start_percentage": 0.125, "end_percentage": 0.125,
+		}
+		if duration != nil {
+			session["duration"] = duration
+		}
+		rec := api.do(http.MethodPost, path, map[string]any{"session": session})
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	}
+	post("2026-10-15T11:50:00Z", 90)
+	post("2026-10-15T11:59:00Z", 300)
+	post("2026-10-15T11:58:00Z", nil)
+
+	var durations []int
+	require.NoError(t, f.db.NewSelect().Table("reading_sessions").Column("duration").Order("id").Scan(f.ctx, &durations))
+	assert.Equal(t, []int{90, 60, 120}, durations)
+}
+
 // The web reader opens where KOReader left off: its XPointer, in the KePub
 // KOReader holds, comes back as a CFI in the File's own EPUB. The places are
 // the start of "Beta" in the handoff EPUB, as foliate and KOReader write it.

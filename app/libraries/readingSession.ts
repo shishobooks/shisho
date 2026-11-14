@@ -4,6 +4,12 @@ import type { SessionPayload } from "@/types";
 // overnight isn't eight hours of reading.
 export const READING_IDLE_MS = 5 * 60 * 1000;
 
+// Time on one page counts from 5 seconds, so pages flipped past add nothing,
+// up to 2 minutes, so a page left open doesn't count as reading it. These are
+// KOReader's defaults, so time from the two readers adds up the same way.
+const MIN_PAGE_MS = 5 * 1000;
+const MAX_PAGE_MS = 2 * 60 * 1000;
+
 // A sitting's minute of listening has long been decided by this age, and the
 // server refuses one older (maxSessionLength in pkg/reading/handlers.go).
 const MAX_SITTING_MS = 24 * 60 * 60 * 1000;
@@ -20,6 +26,10 @@ interface ReadingSessionTrackerOptions {
   timing?: SessionTiming;
   // How far through the File the reader is now, or null before it knows.
   getPercentage: () => number | null;
+  // Which page or screen the reader shows now, or null before it shows one.
+  // Time counts per page, so a change here on input is a page turn, and
+  // nothing counts while it's null.
+  getPage: () => string | null;
   onSessionEnd: (session: SessionPayload, reason: SessionEndReason) => void;
 }
 
@@ -27,7 +37,15 @@ interface OpenSession {
   startedAt: number;
   startPercentage: number | null;
   lastActivityAt: number;
+  // The page showing since pageSince, and the time counted on earlier pages.
+  page: string | null;
+  pageSince: number;
+  countedMs: number;
 }
+
+// The time a visit to one page counts for.
+const pageTime = (ms: number) =>
+  ms < MIN_PAGE_MS ? 0 : Math.min(ms, MAX_PAGE_MS);
 
 interface Sitting {
   startedAt: number;
@@ -44,10 +62,13 @@ export const ACTIVITY_EVENTS = [
   "touchstart",
 ];
 
-// Times Reading Sessions for one reader, shared by every web reader. Time
-// counts while the page is visible and there was input in the last five
-// minutes. A session ends after five idle minutes (at its last input), when
-// the page is hidden, when it closes, or on stop. With "playback" timing,
+// Times Reading Sessions for one reader, shared by every web reader. A
+// session runs while the page is visible and there was input in the last five
+// minutes. It ends after five idle minutes (at its last input, or two minutes
+// into the page showing when that's later), when the page is hidden, when it
+// closes, or on stop. Its time is the time on each page, from 5 seconds up to
+// 2 minutes, counted from when the first page shows, and a session with none
+// is left out. With "playback" timing,
 // time counts from setPlaying(true) until setPlaying(false), the page closing,
 // or stop, in a hidden tab too, and input means nothing.
 export class ReadingSessionTracker {
@@ -100,9 +121,12 @@ export class ReadingSessionTracker {
         this.sitting = { startedAt: now, playedMs: 0, pausedAt: now };
       }
       this.session = {
-        startedAt: Date.now(),
+        startedAt: now,
         startPercentage: this.options.getPercentage(),
-        lastActivityAt: Date.now(),
+        lastActivityAt: now,
+        page: null,
+        pageSince: now,
+        countedMs: 0,
       };
     }
   }
@@ -127,18 +151,35 @@ export class ReadingSessionTracker {
       return;
     }
     const now = Date.now();
+    const page = this.options.getPage();
     if (!this.session) {
       this.session = {
         startedAt: now,
         startPercentage: null,
         lastActivityAt: now,
+        page,
+        pageSince: now,
+        countedMs: 0,
       };
     }
-    this.session.startPercentage ??= this.options.getPercentage();
-    this.session.lastActivityAt = now;
+    const session = this.session;
+    if (page !== session.page) {
+      // Before the first page shows, the File was loading.
+      if (session.page === null) session.startedAt = now;
+      else session.countedMs += pageTime(now - session.pageSince);
+      session.page = page;
+      session.pageSince = now;
+    }
+    session.startPercentage ??= this.options.getPercentage();
+    session.lastActivityAt = now;
     if (this.idleTimer) clearTimeout(this.idleTimer);
     this.idleTimer = setTimeout(() => {
-      this.end("idle", this.session?.lastActivityAt ?? Date.now());
+      this.end(
+        "idle",
+        session.page === null
+          ? session.lastActivityAt
+          : Math.max(session.lastActivityAt, session.pageSince + MAX_PAGE_MS),
+      );
     }, READING_IDLE_MS);
   };
 
@@ -163,6 +204,16 @@ export class ReadingSessionTracker {
       this.sitting.pausedAt = endedAt;
     }
     if (!session || endedAt <= session.startedAt) return;
+    // Playback counts all of its time.
+    let duration: number | undefined;
+    if (this.options.timing !== "playback") {
+      const countedMs =
+        session.page === null
+          ? session.countedMs
+          : session.countedMs + pageTime(endedAt - session.pageSince);
+      duration = Math.round(countedMs / 1000);
+      if (duration === 0) return;
+    }
     const endPercentage =
       this.options.getPercentage() ?? session.startPercentage ?? 0;
     this.options.onSessionEnd(
@@ -171,6 +222,7 @@ export class ReadingSessionTracker {
         ended_at: new Date(endedAt).toISOString(),
         start_percentage: session.startPercentage ?? endPercentage,
         end_percentage: endPercentage,
+        duration,
       },
       reason,
     );

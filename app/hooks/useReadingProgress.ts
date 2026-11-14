@@ -41,6 +41,10 @@ export interface ReaderPosition {
   percentage: number;
   // The reader is at the end of the File, which finishes the Read-through.
   atEnd: boolean;
+  // Which screen the reader shows, when its location changes within one,
+  // as a CFI does with every scroll. Reading time counts per screen, and
+  // without this, per location.
+  screen?: string;
 }
 
 interface Tracked extends ReaderPosition {
@@ -55,6 +59,14 @@ interface Tracked extends ReaderPosition {
 const sameLocation = (a: ReaderPosition, b: ReaderPosition) =>
   a.cfi === b.cfi && a.page === b.page && a.seconds === b.seconds;
 
+// The page a session's time counts on. Each kind has its own prefix, so a
+// page number never matches a screen number.
+const pageOf = (position: ReaderPosition) => {
+  if (position.screen != null) return `s:${position.screen}`;
+  if (position.cfi != null) return `c:${position.cfi}`;
+  return position.page != null ? `p:${position.page}` : null;
+};
+
 // Keeps a File's Reading Position and Reading Sessions current for a web
 // reader. The reader tells it where it opened (opened) and where the reader
 // moves (moved); it saves moves a few seconds apart, or as far apart as the
@@ -68,7 +80,15 @@ export const useReadingProgress = (
   {
     enabled = true,
     timing,
-  }: { enabled?: boolean; timing?: SessionTiming } = {},
+    getScreen,
+  }: {
+    enabled?: boolean;
+    timing?: SessionTiming;
+    // The screen the reader shows right now, or null where screens don't
+    // apply. Reading time counts per screen when this gives one, for a
+    // reader that only reports moves between pages longer than a screen.
+    getScreen?: () => number | null;
+  } = {},
 ) => {
   const { demoMode } = useAuth();
   const active = enabled && !demoMode;
@@ -76,8 +96,10 @@ export const useReadingProgress = (
   const undoMutation = useUndoAutoFinish();
   // The toast's Undo runs after this render's mutation object is stale.
   const undoRef = useRef(undoMutation);
+  const getScreenRef = useRef(getScreen);
   useEffect(() => {
     undoRef.current = undoMutation;
+    getScreenRef.current = getScreen;
   });
 
   const currentRef = useRef<Tracked | null>(null);
@@ -189,6 +211,12 @@ export const useReadingProgress = (
     const tracker = new ReadingSessionTracker({
       timing,
       getPercentage: () => currentRef.current?.percentage ?? null,
+      getPage: () => {
+        const current = currentRef.current;
+        if (!current) return null;
+        const screen = getScreenRef.current?.();
+        return screen != null ? `s:${screen}` : pageOf(current);
+      },
       onSessionEnd: (session, reason) => save(session, reason !== "idle"),
     });
     trackerRef.current = tracker;
@@ -221,6 +249,9 @@ export const useReadingProgress = (
     };
     currentRef.current = tracked;
     savedRef.current = tracked;
+    // Time on the first page counts from when it shows, not from while the
+    // File was loading.
+    trackerRef.current?.recordActivity();
   }, []);
 
   // The reader moved, by the user's doing or by playing on. saveAfterMs is how
@@ -278,6 +309,8 @@ export const useReadingProgress = (
         linked: true,
         occurredAt: new Date().toISOString(),
       };
+      // Time on this page counts from when it shows, as in opened.
+      trackerRef.current?.recordActivity();
       save(undefined, true);
     },
     [active, save],

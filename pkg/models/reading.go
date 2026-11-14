@@ -220,7 +220,8 @@ type ReadingSession struct {
 	// Session is written so it survives its File.
 	Kind string `bun:",nullzero" json:"kind" tstype:"ReadingKind"`
 	// Duration is the seconds spent, which is the span from StartedAt to
-	// EndedAt unless the source knows the reader paused partway.
+	// EndedAt unless the source counted less, as readers that cap the time on
+	// one page do.
 	Duration int `bun:",notnull" json:"duration"`
 	// SourceDeviceID is the Device that reported the Session, when a Device
 	// did and still exists. A browser isn't a Device.

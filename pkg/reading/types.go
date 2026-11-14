@@ -112,6 +112,9 @@ type SessionPayload struct {
 	EndedAt         time.Time `json:"ended_at" validate:"required"`
 	StartPercentage *float64  `json:"start_percentage" validate:"required,min=0,max=1" tstype:",required"`
 	EndPercentage   *float64  `json:"end_percentage" validate:"required,min=0,max=1" tstype:",required"`
+	// Duration is the seconds the reader counted, which caps each page; none
+	// counts the whole span.
+	Duration *int `json:"duration,omitempty" validate:"omitempty,min=0"`
 }
 
 // UpdatePositionResponse says what a position update did, so the reader

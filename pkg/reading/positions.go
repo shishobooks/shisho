@@ -118,6 +118,9 @@ type SessionInput struct {
 	// DeviceID is the Device that reported the session, when a Device did.
 	// A session sent with a position update takes the update's.
 	DeviceID *string
+	// Duration is the seconds the source counted, when it counted less than
+	// the span; more is taken as the span.
+	Duration *int
 }
 
 // UpdatePosition is the position update service. In one transaction it:
@@ -498,6 +501,10 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 		sessionReadThrough = readThroughID(placed)
 	}
 	fileType := file.FileType
+	duration := int(session.EndedAt.Sub(session.StartedAt).Round(time.Second) / time.Second)
+	if session.Duration != nil && *session.Duration < duration {
+		duration = *session.Duration
+	}
 	inserted := &models.ReadingSession{
 		CreatedAt:       now,
 		UserID:          userID,
@@ -511,7 +518,7 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 		Measured:        session.Measured,
 		Kind:            models.ReadingKindForFileType(fileType),
 		SourceDeviceID:  session.DeviceID,
-		Duration:        int(session.EndedAt.Sub(session.StartedAt).Round(time.Second) / time.Second),
+		Duration:        duration,
 	}
 	_, err = tx.NewInsert().Model(inserted).Exec(ctx)
 	return inserted.ID, errors.WithStack(err)

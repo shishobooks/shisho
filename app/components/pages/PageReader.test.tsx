@@ -970,6 +970,66 @@ describe("PageReader position", () => {
       act(() => vi.advanceTimersToNextFrame());
     };
 
+    // Pages of a given height, scrolled to scrollTop with a wheel first, as a
+    // reader's input comes before the scroll it makes.
+    const scrollPages = (height: number) => {
+      const main = screen.getByRole("main");
+      const images = screen.getAllByRole("img", { name: /^Page / });
+      main.getBoundingClientRect = () => ({ top: 0 }) as DOMRect;
+      return (scrollTop: number) => {
+        images.forEach((img, index) => {
+          img.parentElement!.getBoundingClientRect = () =>
+            ({ top: index * height - scrollTop }) as DOMRect;
+        });
+        Object.defineProperties(main, {
+          scrollTop: { configurable: true, value: scrollTop },
+          clientHeight: { configurable: true, value: 1000 },
+          scrollHeight: { configurable: true, value: 20 * height },
+        });
+        fireEvent.wheel(window);
+        fireEvent.scroll(main);
+        act(() => vi.advanceTimersToNextFrame());
+      };
+    };
+    const sessionDurations = () =>
+      position.saves.flatMap((save) => {
+        const session = (save as { session?: { duration: number } }).session;
+        return session ? [session.duration] : [];
+      });
+    const close = () =>
+      act(() => {
+        window.dispatchEvent(new Event("pagehide"));
+      });
+
+    // Short webtoon strips pass in a few seconds each.
+    it("counts reading time per screen of short pages", () => {
+      flow.saved = "scrolled";
+      renderReader(20);
+      const scrollTo = scrollPages(200);
+      for (let page = 1; page <= 10; page++) {
+        act(() => vi.advanceTimersByTime(3_000));
+        scrollTo(page * 200);
+      }
+      act(() => vi.advanceTimersByTime(3_000));
+      close();
+
+      expect(sessionDurations()).toEqual([30]);
+    });
+
+    it("counts reading time per screen of a page taller than one", () => {
+      flow.saved = "scrolled";
+      renderReader(20);
+      const scrollTo = scrollPages(3000);
+      act(() => vi.advanceTimersByTime(60_000));
+      scrollTo(1000);
+      act(() => vi.advanceTimersByTime(60_000));
+      scrollTo(2000);
+      act(() => vi.advanceTimersByTime(60_000));
+      close();
+
+      expect(sessionDurations()).toEqual([180]);
+    });
+
     it("scrolls to the saved page once the flow is known", () => {
       flow.saved = "scrolled";
       position.savedPage = 12;

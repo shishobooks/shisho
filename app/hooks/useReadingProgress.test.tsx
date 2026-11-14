@@ -118,4 +118,52 @@ describe("useReadingProgress", () => {
     const sessions = posts.filter((post) => post.session);
     expect(sessions).toHaveLength(1);
   });
+
+  it("counts time from when a place opened from a link shows", () => {
+    const { hook } = setup();
+    act(() => vi.advanceTimersByTime(10_000));
+    act(() =>
+      hook.result.current.openedFromLink({
+        page: 3,
+        percentage: 0.3,
+        atEnd: false,
+      }),
+    );
+    act(() => vi.advanceTimersByTime(30_000));
+    hook.unmount();
+
+    const sessions = posts.filter((post) => post.session);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session).toMatchObject({ duration: 30 });
+  });
+
+  // Scrolling moves the CFI every few seconds, which would make every
+  // location a page too short to count.
+  it("counts reading time per screen, not per location", () => {
+    const { hook } = setup();
+    act(() =>
+      hook.result.current.opened({
+        cfi: "epubcfi(/6/4!/4/2)",
+        percentage: 0.1,
+        atEnd: false,
+        screen: "1:0",
+      }),
+    );
+    for (let i = 1; i <= 20; i++) {
+      act(() => vi.advanceTimersByTime(3_000));
+      act(() =>
+        hook.result.current.moved({
+          cfi: `epubcfi(/6/4!/4/2/${i})`,
+          percentage: 0.1,
+          atEnd: false,
+          screen: i < 10 ? "1:0" : "1:1",
+        }),
+      );
+    }
+    hook.unmount();
+
+    const sessions = posts.filter((post) => post.session);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session).toMatchObject({ duration: 30 + 30 });
+  });
 });

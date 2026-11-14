@@ -174,7 +174,7 @@ Where one user is within one **File**: a location in the text for a **Reflowable
 _Avoid_: progress (alone), bookmark, location
 
 **Reading Session**:
-One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. Its time is how long the user actually spent, which can be less than the span when they paused within it. It belongs to the **Read-through** underway at the time, if there is one; time spent in a Book with none underway, such as looking something up in a finished one, still counts toward reading time.
+One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. Its time is how long the user actually spent, which can be less than the span when they paused within it or when the reader caps the time counted on one page. It belongs to the **Read-through** underway at the time, if there is one; time spent in a Book with none underway, such as looking something up in a finished one, still counts toward reading time.
 _Avoid_: reading time, sitting, activity
 
 ### Stats
