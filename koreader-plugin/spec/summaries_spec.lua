@@ -175,6 +175,16 @@ return {
         assert_eq(Summaries.apply(store.synced, { document = "doc1", status = "reading" }, current, false), { status = "reading" })
     end,
 
+    ["a pull while history is still to go keeps what KOReader recorded before for it"] = function()
+        local store = { synced = {}, asked = {} }
+        local current = summary("complete", 5, "2026-10-01")
+        Summaries.collect(store, { doc1 = { current = current } }, OPTS)
+        assert_eq(Summaries.apply(store.synced, { document = "doc1", status = "reading", rating = 3 }, current, true, true), nil)
+        assert_eq(store.synced.doc1.before, true)
+        assert_eq(Summaries.apply(store.synced, { document = "doc1", status = "reading" }, current, true, false), nil)
+        assert_eq(store.synced.doc1.before, nil, "once history has gone")
+    end,
+
     ["a book KOReader marked reading before signing in keeps it, and gets stars it lacks"] = function()
         local store = { synced = {}, asked = {} }
         local current = summary("reading", nil, "2026-10-01")

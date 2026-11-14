@@ -3,18 +3,22 @@ The plugin's own state, in its own file in KOReader's settings directory:
 
 - servers: every server signed in to, each { url, username, credential,
   device_id, device_name, needs_login, update_required, info, stats_cursor,
-  last_synced, disabled, signed_in_day, states_cursor }, where info is what
+  last_synced, disabled, signed_in_day, states_cursor, history,
+  asking_history }, where info is what
   the server last answered about itself, stats_cursor is the last statistics
   row it acknowledged, disabled marks one the user turned off: the plugin
   leaves it alone, and nothing waits for it, until it's enabled again,
-  signed_in_day is the day it was first signed in to, and states_cursor is
-  where its next pull of statuses and Ratings starts (shisho/summaries).
+  signed_in_day is the day it was first signed in to, states_cursor is
+  where its next pull of statuses and Ratings starts (shisho/summaries),
+  history is the history it was sent (shisho/history), and asking_history
+  marks one whose sign-in is still asking whether to send it.
 - installed_from: the server the plugin was last installed from.
 - pairing_handled: the short code of a paired zip the plugin already acted
   on, so it acts on it once.
 - journal: positions not yet acknowledged by every server (shisho/journal).
-- settings: sync on sleep and what to do with pulled positions
-  (shisho/positions).
+- settings: sync on sleep, what to do with pulled positions
+  (shisho/positions), and what first sign-in does about history
+  (shisho/history).
 
 Each write replaces the file atomically, so a crash or a dead battery leaves
 the old state or the new one, never half of either. No UI.
@@ -71,14 +75,17 @@ function State:find(url)
 end
 
 -- signIn records a sign-in to the server at fields.url, replacing an earlier
--- one, and clears what needed attention. Returns the server, and whether it
--- now signs in as another Device, whose statuses and Ratings sync afresh. A
--- server signed in to for the first time takes reading from
--- fields.stats_cursor on, the statistics recorded by the time of sign-in;
--- signing in again keeps its place, so nothing queued is lost.
+-- one, and clears what needed attention. Returns the server, whether it now
+-- signs in as another Device, whose statuses and Ratings sync afresh, and
+-- whether it's the first sign-in to the server. A server signed in to for
+-- the first time takes reading from fields.stats_cursor on, the statistics
+-- recorded by the time of sign-in, unless it's sent history
+-- (shisho/history); signing in again keeps its place, so nothing queued is
+-- lost.
 function State:signIn(fields)
     local server = self:find(fields.url)
     local other_device = false
+    local first = not server
     if not server then
         server = { url = Urls.normalize(fields.url) }
         table.insert(self.data.servers, server)
@@ -98,7 +105,7 @@ function State:signIn(fields)
         server.stats_cursor = fields.stats_cursor or { rowid = 0 }
     end
     State.signedInDay(server, fields.signed_in_day or os.date("%Y-%m-%d"))
-    return server, other_device
+    return server, other_device, first
 end
 
 -- signedInDay is the day the plugin first signed in to server, taking today

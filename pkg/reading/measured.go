@@ -40,10 +40,14 @@ type PageRow struct {
 // of more than SessionGap starts a new one, and rows next to a session from
 // an earlier upload extend it. A new session is placed by its time: on the
 // Read-through underway when it started, or none. One that's real progress
-// in a Book never read, or on To Read, starts a Read-through on its own day.
-// Rows of a document Shisho doesn't recognize (fileID nil) are stored
-// ungrouped and count toward nothing until something groups them.
-func (svc *Service) RecordPageRows(ctx context.Context, userID int, deviceID string, fileID *int, rows []PageRow) error {
+// in a Book never read, or on To Read, starts a Read-through on its own day,
+// except in history: rows the device recorded before it began syncing,
+// whose Read-throughs come only from its statuses (RecordHistoryStatus).
+// Estimated sessions deviceID recorded in the File are deleted where a
+// measured one overlaps them, so the same time isn't counted twice. Rows of
+// a document Shisho doesn't recognize (fileID nil) are stored ungrouped and
+// count toward nothing until something groups them.
+func (svc *Service) RecordPageRows(ctx context.Context, userID int, deviceID string, fileID *int, rows []PageRow, history bool) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		now := svc.now()
 		var added []*models.KOReaderPageRow
@@ -75,16 +79,32 @@ func (svc *Service) RecordPageRows(ctx context.Context, userID int, deviceID str
 		}
 		var sessions []*models.ReadingSession
 		for _, cluster := range clusterRows(added) {
-			session, err := groupCluster(ctx, tx, userID, deviceID, *fileID, cluster, now)
+			session, err := groupCluster(ctx, tx, userID, deviceID, *fileID, cluster, !history, now)
 			if err != nil {
 				return err
 			}
-			if session != nil {
-				sessions = append(sessions, session)
+			if session == nil {
+				continue
 			}
+			if err := replaceEstimates(ctx, tx, userID, deviceID, *fileID, session); err != nil {
+				return err
+			}
+			sessions = append(sessions, session)
 		}
 		return placeUnattached(ctx, tx, userID, *fileID, sessions)
 	})
+}
+
+// replaceEstimates deletes the estimated Reading Sessions deviceID recorded
+// in fileID, as KOReader's progress sync does, whose spans overlap session,
+// which measured the same time. One that only touches it shares no time.
+func replaceEstimates(ctx context.Context, tx bun.Tx, userID int, deviceID string, fileID int, session *models.ReadingSession) error {
+	_, err := tx.NewDelete().
+		Model((*models.ReadingSession)(nil)).
+		Where("user_id = ? AND file_id = ? AND source_device_id = ? AND NOT measured", userID, fileID, deviceID).
+		Where("started_at < ? AND ended_at > ?", session.EndedAt, session.StartedAt).
+		Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // placeUnattached places again each of sessions on no Read-through, since a
@@ -140,9 +160,10 @@ func clusterRows(rows []*models.KOReaderPageRow) [][]*models.KOReaderPageRow {
 // of a measured session: the earliest one from deviceID in fileID within
 // SessionGap of it, or a new one. Sessions the cluster joins become one. A
 // cluster within SessionGap of a session the user deleted is the rest of
-// that sitting, so it's taken in as deleted too. It returns the session, or
-// nil for a deleted one.
-func groupCluster(ctx context.Context, tx bun.Tx, userID int, deviceID string, fileID int, cluster []*models.KOReaderPageRow, now time.Time) (*models.ReadingSession, error) {
+// that sitting, so it's taken in as deleted too. A new session may start a
+// Read-through only when startsRead. It returns the session, or nil for a
+// deleted one.
+func groupCluster(ctx context.Context, tx bun.Tx, userID int, deviceID string, fileID int, cluster []*models.KOReaderPageRow, startsRead bool, now time.Time) (*models.ReadingSession, error) {
 	start, end := cluster[0].StartedAt, cluster[0].EndedAt()
 	ids := make([]int, 0, len(cluster))
 	for _, row := range cluster {
@@ -179,7 +200,7 @@ func groupCluster(ctx context.Context, tx bun.Tx, userID int, deviceID string, f
 
 	var session *models.ReadingSession
 	if len(near) == 0 {
-		session, err = newMeasuredSession(ctx, tx, userID, deviceID, fileID, cluster, start, now)
+		session, err = newMeasuredSession(ctx, tx, userID, deviceID, fileID, cluster, start, startsRead, now)
 		if err != nil {
 			return nil, err
 		}
@@ -238,9 +259,9 @@ func nearDeletedSession(ctx context.Context, tx bun.Tx, deviceID string, fileID 
 }
 
 // newMeasuredSession records the session cluster begins, placed by start,
-// and starts a Read-through for it when it's real progress in a Book
-// reading would start.
-func newMeasuredSession(ctx context.Context, tx bun.Tx, userID int, deviceID string, fileID int, cluster []*models.KOReaderPageRow, start, now time.Time) (*models.ReadingSession, error) {
+// and, when startsRead, starts a Read-through for it when it's real
+// progress in a Book reading would start.
+func newMeasuredSession(ctx context.Context, tx bun.Tx, userID int, deviceID string, fileID int, cluster []*models.KOReaderPageRow, start time.Time, startsRead bool, now time.Time) (*models.ReadingSession, error) {
 	file := &models.File{}
 	err := tx.NewSelect().Model(file).Column("f.book_id", "f.file_type", "f.file_role").Where("f.id = ?", fileID).Scan(ctx)
 	if err != nil {
@@ -250,7 +271,7 @@ func newMeasuredSession(ctx context.Context, tx bun.Tx, userID int, deviceID str
 	if err != nil {
 		return nil, err
 	}
-	if rt == nil && file.FileRole != models.FileRoleSupplement && pastFirstPage(cluster) {
+	if rt == nil && startsRead && file.FileRole != models.FileRoleSupplement && pastFirstPage(cluster) {
 		starts, err := startsOnProgress(ctx, tx, userID, file.BookID)
 		if err != nil {
 			return nil, err

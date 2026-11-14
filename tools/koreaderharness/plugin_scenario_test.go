@@ -334,6 +334,7 @@ func TestPluginMenuOffersReinstallOnlyWithSeveralServers(t *testing.T) {
 		"Add a server", "Sync now", "Settings", "Settings > Sync on sleep",
 		"Settings > Daily sync", "Settings > Daily sync time: 04:00",
 		"Settings > Newer position from another reader", "Settings > Older position from another reader",
+		"Settings > Reading history on first sign-in",
 		"Settings > Check for plugin update", "Settings > Plugin version " + one.Plugin.Version,
 	}, one.Plugin.Menu)
 	// Holding any item explains it.

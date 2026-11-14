@@ -38,12 +38,18 @@ type deviceClock struct {
 	floor time.Time
 }
 
-func newDeviceClock(device *devices.Device, clock int64, now time.Time) deviceClock {
+// newDeviceClock is the clock of a request from device. History, which the
+// device recorded before it began syncing, predates the Device by design,
+// so only the year 2000 bounds it. It isn't shifted either: the clock's
+// offset now says nothing of how it was over the years history covers, and
+// shifting a year of it by a clock that's behind now would put it all after
+// it arrived.
+func newDeviceClock(device *devices.Device, clock int64, now time.Time, history bool) deviceClock {
 	c := deviceClock{offset: now.Unix() - clock, arrival: now, floor: earliestInstant}
-	if time.Duration(abs(c.offset))*time.Second > clockTolerance {
+	if !history && time.Duration(abs(c.offset))*time.Second > clockTolerance {
 		c.shift = c.offset
 	}
-	if device.CreatedAt.After(c.floor) {
+	if !history && device.CreatedAt.After(c.floor) {
 		c.floor = device.CreatedAt
 	}
 	return c
@@ -57,8 +63,8 @@ func abs(v int64) int64 {
 }
 
 // instant is when deviceTime happened, after correcting the clock, or false
-// for one that can't be right: before the year 2000 or before the Device
-// existed. One after the request arrived is taken as its arrival.
+// for one that can't be right: before the year 2000 or, outside history,
+// before the Device existed. One after the request arrived is taken as its arrival.
 func (c deviceClock) instant(deviceTime int64) (time.Time, bool) {
 	t := time.Unix(deviceTime+c.shift, 0).UTC()
 	if t.Before(c.floor) {
@@ -95,7 +101,7 @@ func (h *handler) upload(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 	now := time.Now()
-	clock := newDeviceClock(device, payload.Clock, now)
+	clock := newDeviceClock(device, payload.Clock, now, payload.Backfill)
 	files := map[string]*models.DocumentHash{}
 	resolve := func(document string) (*models.DocumentHash, error) {
 		if file, ok := files[document]; ok {
@@ -148,14 +154,14 @@ func (h *handler) upload(c echo.Context) error {
 		if file != nil {
 			fileID = &file.FileID
 		}
-		if err := h.reading.RecordPageRows(ctx, user.ID, device.ID, fileID, byDocument[document]); err != nil {
+		if err := h.reading.RecordPageRows(ctx, user.ID, device.ID, fileID, byDocument[document], payload.Backfill); err != nil {
 			return err
 		}
 	}
 
 	acknowledged := make([]string, 0, len(payload.Events))
 	for _, event := range payload.Events {
-		ok, err := h.applyEvent(ctx, user, device, clock, event, resolve, before)
+		ok, err := h.applyEvent(ctx, user, device, clock, event, payload.Backfill, resolve, before)
 		if err != nil {
 			return err
 		}
@@ -184,10 +190,10 @@ func (h *handler) upload(c echo.Context) error {
 	}))
 }
 
-// applyEvent takes in one journal event, once. It returns false for one
-// refused for its time.
+// applyEvent takes in one journal event, once, or one from history. It
+// returns false for one refused for its time.
 func (h *handler) applyEvent(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock, event EventPayload,
-	resolve func(string) (*models.DocumentHash, error), before map[int]*reading.StatusSummary) (bool, error) {
+	history bool, resolve func(string) (*models.DocumentHash, error), before map[int]*reading.StatusSummary) (bool, error) {
 	exists, err := h.db.NewSelect().
 		Model((*models.KOReaderPluginEvent)(nil)).
 		Where("kpe.device_id = ? AND kpe.event_id = ?", device.ID, event.ID).
@@ -199,8 +205,13 @@ func (h *handler) applyEvent(ctx context.Context, user *models.User, device *dev
 		return true, nil
 	}
 	var ok bool
-	switch event.Type {
-	case PluginEventStatus, PluginEventRating:
+	switch {
+	case history && (event.Type == PluginEventStatus || event.Type == PluginEventRating):
+		ok, err = h.applyHistory(ctx, user, clock, event, resolve)
+		if err != nil {
+			return false, err
+		}
+	case event.Type == PluginEventStatus || event.Type == PluginEventRating:
 		ok, err = h.applyChange(ctx, user, clock, event, resolve, before)
 		if err != nil {
 			return false, err
@@ -275,7 +286,7 @@ func (h *handler) pull(c echo.Context) error {
 	if err := c.Bind(&payload); err != nil {
 		return errors.WithStack(err)
 	}
-	clock := newDeviceClock(device, payload.Clock, time.Now())
+	clock := newDeviceClock(device, payload.Clock, time.Now(), false)
 	positions := []PulledPosition{}
 	for _, document := range payload.Documents {
 		file, err := h.documents.Resolve(ctx, user, device, document)

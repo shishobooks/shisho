@@ -90,7 +90,7 @@ Reading time needs KOReader's statistics, which are on by default: **Enabled** u
 
 ### The E-Reader's Clock
 
-Shisho dates your reading by the e-reader's clock, corrected when it syncs: if the clock is more than five minutes off, Shisho shifts everything in that sync by the difference. Times before the Device was added to Shisho, or before 2000, as after a clock resets when the battery runs flat, are ignored and logged. A time later than when the sync arrived is taken as the time it arrived. Days follow [your time zone](./reading-tracking.md#your-time-zone) in Shisho, not the e-reader's.
+Shisho dates your reading by the e-reader's clock, corrected when it syncs: if the clock is more than five minutes off, Shisho shifts everything in that sync by the difference. Times before the Device was added to Shisho, or before 2000, as after a clock resets when the battery runs flat, are ignored and logged. [History you send](#send-your-existing-reading-history) is the exception: it predates the Device, so only times before 2000 are ignored in it, and it isn't shifted, since how far off the clock is now says nothing about how it was when you read. A time later than when the sync arrived is taken as the time it arrived. Days follow [your time zone](./reading-tracking.md#your-time-zone) in Shisho, not the e-reader's.
 
 ### Your Place
 
@@ -126,11 +126,39 @@ KOReader has nothing closer to Did Not Finish than On hold. The plugin remembers
 
 A status from Shisho reaches a book KOReader has never opened too, as when you finish a book on one e-reader and copy it onto another: the plugin keeps an index of the EPUB, KePub, PDF, CBZ, MOBI, and AZW3 files on the device, and marks the book as KOReader's file browser does. On an e-reader, such as a Kobo, Kindle, or PocketBook, the index covers every folder of its storage except hidden ones, wherever you copied or downloaded a book. On Android and computers, it covers the home folder and the OPDS download folder you've set in KOReader, if you've set them. Every **Sync now** brings the index up to date, as do the syncs when Wi-Fi comes on, **Sync on sleep**, and **Daily sync**, at most every ten minutes. The syncs as you read, when you close a book, and as the device sleeps with Wi-Fi already on leave it alone. A change made in the file browser to a book that isn't in KOReader's history goes at the next sync that brings the index up to date. A very large library is indexed over several syncs.
 
-At its first sync with a server, the plugin writes Shisho's statuses and Ratings to the books it finds, except where KOReader already had a status or stars from before the day you first signed in to that server: those stay as they are on the e-reader, and aren't sent to Shisho, until one side changes.
+At its first sync with a server, the plugin writes Shisho's statuses and Ratings to the books it finds, except where KOReader already had a status or stars from before the day you first signed in to that server: those stay as they are on the e-reader until one side changes. They go to Shisho only if you [send your reading history](#send-your-existing-reading-history).
 
 When a book's status changed in KOReader and in Shisho since the last sync, the later change wins, compared by day, since KOReader records only the day of a status change. On the same day, Shisho's change wins. KOReader's change is then replaced on the e-reader at that sync.
 
 **Ratings:** a book's stars in KOReader set its Rating in Shisho to that many stars. A Rating set in Shisho shows in KOReader rounded to whole stars, halves rounding up, and at least one star, so 3.75 stars show as 4. The plugin sends a Rating only when you change it in KOReader, so the rounded copy never replaces a quarter-star Rating, and removing a Rating in either place removes it in the other. When the Rating changed in both places since the last sync, the later day wins, as for statuses. KOReader doesn't date a Rating, so a change made with a book open is dated when the plugin saw it, and one made in the file browser by the day KOReader saved it.
+
+### Send Your Existing Reading History
+
+The first time the plugin signs in to a server, it asks whether to send the history KOReader recorded before: your reading time, and your books' statuses and stars. Choose **Send history** to have [Reading Stats](./reading-stats.md) cover the years you've already read in KOReader, or **Don't send** to send only your reading from now on. Nothing goes to that server until you answer, and with Wi-Fi on, a sync starts as soon as you do. **Sign in again** never asks, and **Settings > Reading history on first sign-in** in the plugin's menu can answer for every later first sign-in: **Ask**, the default, **Send**, or **Don't send**. An answer from the setting syncs at once too.
+
+For each book the server [recognizes](#which-books-sync), history sends:
+
+- **Reading time:** every page KOReader's statistics timed, as reading sessions on the days they happened, however long ago, as [the e-reader's clock](#the-e-readers-clock) dated them.
+- **Statuses:** for a book with no Read-through in Shisho, its status in KOReader makes one, beginning on the day of its first reading session in Shisho, or on the day KOReader recorded the status when that's earlier or the book has no sessions.
+- **Ratings:** a book with no Rating in Shisho takes its stars from KOReader.
+
+| In KOReader | Read-through made in Shisho                                      |
+| ----------- | ---------------------------------------------------------------- |
+| Finished    | Finished, ending on the day KOReader recorded it finished        |
+| On hold     | Underway and paused                                              |
+| Reading     | Underway                                                         |
+
+A book that already has a Read-through or a Rating in Shisho keeps what it has: history fills in only what's missing, so sending it never changes a record you made in Shisho, and history that reaches Shisho twice adds nothing. A finished Read-through from history leaves a book on To Read, as a reread you queued. Once its history has gone, a book syncs like any other, so where Shisho's status or Rating differs from KOReader's, the e-reader takes Shisho's at that sync.
+
+History can't know everything:
+
+- **Rereads:** KOReader keeps only a book's current status, not its earlier reads, so history makes at most one Read-through per book. A book you read twice gets one Read-through, from your first session, and reading outside its dates still counts toward your reading time.
+- **Books with no status:** reading in a book KOReader shows no status for counts toward your reading time but starts no Read-through.
+- **Books Shisho doesn't recognize:** their reading time counts for nothing, and their statuses and stars don't go.
+
+A large history goes in batches, and the plugin shows how many pages have gone. If Wi-Fi drops partway, the next sync carries on where it stopped without sending anything twice, and holding the server in the plugin's menu shows how many pages are still to go. The syncs while you read and as the e-reader sleeps send only a little of it each time, so they don't hold you up. Statuses and stars go once every page has, so with KOReader's statistics turned off, they wait until you turn statistics on again.
+
+If you used [progress sync](#turn-off-progress-sync) on this Device before the plugin, its estimated time for the same reading is replaced, as below.
 
 ### Switching Between Two KOReader Devices
 
@@ -141,6 +169,8 @@ Leave KOReader's own statistics cloud sync (**Cloud sync** under **Reading stati
 ### Turn Off Progress Sync
 
 Once a Device syncs through the plugin, Shisho ignores KOReader's progress sync from it, since the plugin reports the same reading with its real time, and the Device's page says to turn progress sync off. In KOReader, open a book, open **Progress sync** from the tools menu, and turn off **Automatically keep documents in sync**.
+
+Shisho estimated the reading time progress sync reported. Wherever the plugin's measured time covers the same reading on the same Device in the same file, as when you [send your history](#send-your-existing-reading-history), the estimate is deleted, so the time isn't counted twice.
 
 ### Needs Login
 
