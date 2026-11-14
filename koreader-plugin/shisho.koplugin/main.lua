@@ -197,7 +197,7 @@ end
 -- once, turning Wi-Fi on if needed, as Sync now does.
 function Shisho:sendHistoryLater(server)
     UIManager:show(ConfirmBox:new{
-        text = T(_("Send your existing KOReader reading history to %1?\n\nShisho then shows the reading time KOReader recorded, on the days it happened, and your books' statuses and stars from KOReader, where it has none. Reading it already has isn't counted twice."), Urls.label(server.url)),
+        text = T(_("Send your existing KOReader reading history to %1?\n\nShisho then shows the reading time KOReader recorded, on the days it happened, and your books' statuses and stars from KOReader, where it has none. Reading that already synced since you signed in isn't added again."), Urls.label(server.url)),
         ok_text = _("Send history"),
         ok_callback = function()
             if not self.state:find(server.url) or not History.sendable(server) then return end
@@ -1367,7 +1367,7 @@ function Shisho:serverMenu(server)
     if History.sendable(server) then
         table.insert(items, {
             text = _("Send reading history"),
-            help_text = _("Send this server the reading history KOReader recorded before you signed in to it, as first sign-in offers: your reading time on the days it happened, and your books' statuses and stars where Shisho has none. Reading it already has isn't counted twice."),
+            help_text = _("Send this server the reading history KOReader recorded before you signed in to it, as first sign-in offers: your reading time on the days it happened, and your books' statuses and stars where Shisho has none. Reading that already synced since you signed in isn't added again."),
             keep_menu_open = true,
             callback = function() self:sendHistoryLater(server) end,
         })
