@@ -64,7 +64,7 @@ const unrecognized = (
 });
 
 // stubAPI answers the unrecognized books routes from an in-memory list,
-// applying each link and dismiss, and records every request.
+// applying each link, unlink, and dismiss, and records every request.
 const stubAPI = (
   initial: UnrecognizedBook[],
   searchResults: LinkCandidate[] = [],
@@ -89,6 +89,15 @@ const stubAPI = (
                 linked_at: new Date().toISOString(),
                 linked: all.find((c) => c.file_id === file_id) ?? null,
               }
+            : b,
+        );
+        return undefined;
+      }
+      const unlink = path.match(/\/koreader-unrecognized\/(\w+)\/unlink$/);
+      if (method === "POST" && unlink) {
+        books = books.map((b) =>
+          b.document === unlink[1]
+            ? { ...b, linked_at: null, linked: null }
             : b,
         );
         return undefined;
@@ -312,6 +321,55 @@ describe("KOReaderUnrecognizedBooks", () => {
         screen.queryByRole("heading", { name: "Unrecognized Books" }),
       ).toBeNull(),
     );
+  });
+
+  it("unlinks a book only once confirmed, listing it to link again", async () => {
+    const request = stubAPI([
+      unrecognized({
+        suggestions: [],
+        linked_at: "2026-11-01T00:00:00Z",
+        linked: {
+          file_id: 52,
+          book_id: 5,
+          library_id: 2,
+          title: "The Left Hand of Darkness",
+          authors: [],
+          file_type: "epub",
+          library_name: "Classics",
+        },
+      }),
+    ]);
+    const user = setupUser();
+    renderSection();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Unlink Left Hand of Darkness",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("listed to link again");
+    expect(dialog).toHaveTextContent("the link added stay");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(posts(request)).toEqual([]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Unlink Left Hand of Darkness" }),
+    );
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Unlink",
+      }),
+    );
+    expect(posts(request)).toEqual([["POST", `${LIST}/${DOCUMENT}/unlink`]]);
+    expect(
+      await screen.findByRole("button", {
+        name: "Dismiss Left Hand of Darkness",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "The Left Hand of Darkness" }),
+    ).toBeNull();
   });
 
   it("shows nothing when there are no unrecognized books", async () => {

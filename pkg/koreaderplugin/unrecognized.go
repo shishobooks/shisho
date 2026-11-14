@@ -442,6 +442,31 @@ func (h *handler) applyHeldEvent(ctx context.Context, user *models.User, device 
 	return h.applyChangeTo(ctx, user, c, event, nil)
 }
 
+// unlink undoes the user's link of document (ADR 0017): the copy stops
+// resolving to the File on every one of the user's Devices, goes back to
+// waiting for a link, and its reading from then on is held. What the link
+// already applied stays, for the user to correct by hand.
+func (h *handler) unlink(ctx context.Context, user *models.User, device *devices.Device, document string) error {
+	book, err := h.currentBook(ctx, user, device, document)
+	if err != nil {
+		return err
+	}
+	if book == nil || book.UserID != user.ID || book.LinkedAt == nil {
+		return errCopyNotFound
+	}
+	if err := h.hashes.UnlinkDocument(ctx, user.ID, document); err != nil {
+		return errors.WithStack(err)
+	}
+	_, err = h.db.NewUpdate().
+		Model((*models.KOReaderUnrecognizedBook)(nil)).
+		Set("linked_at = NULL").
+		Set("linked_file_id = NULL").
+		Set("updated_at = ?", time.Now()).
+		Where("user_id = ? AND document = ? AND linked_at IS NOT NULL", user.ID, document).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // dismiss dismisses document on device: what was held for it is deleted,
 // and its data is dropped from then on.
 func (h *handler) dismiss(ctx context.Context, user *models.User, device *devices.Device, document string) error {

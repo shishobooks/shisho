@@ -129,6 +129,22 @@ func (h *handler) linkUnrecognized(c echo.Context) error {
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
+// unlinkUnrecognized undoes a link, so the copy is one to link again.
+func (h *handler) unlinkUnrecognized(c echo.Context) error {
+	user, device, err := h.ownDevice(c)
+	if err != nil {
+		return err
+	}
+	err = h.unlink(c.Request().Context(), user, device, c.Param("document"))
+	if errors.Is(err, errCopyNotFound) {
+		return errcodes.NotFound("Linked book")
+	}
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.NoContent(http.StatusNoContent))
+}
+
 // dismissUnrecognized dismisses an unrecognized copy, deleting what was
 // held for it.
 func (h *handler) dismissUnrecognized(c echo.Context) error {

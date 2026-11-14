@@ -597,6 +597,7 @@ func TestUnrecognized_ALookupFailureIsAServerError(t *testing.T) {
 
 	for _, err := range []error{
 		f.linkAs(f.user, f.device, file.ID),
+		f.unlinkAs(f.user, f.device),
 		f.dismissAs(f.user, f.device),
 	} {
 		require.Error(t, err)
@@ -616,4 +617,73 @@ func TestLink_AFileLookupFailureIsAServerError(t *testing.T) {
 	require.Error(t, err)
 	var codeErr *errcodes.Error
 	assert.NotErrorAs(t, err, &codeErr, "a failed lookup isn't a 4xx")
+}
+
+func (f *syncFixture) unlinkAs(user *models.User, device *devices.Device) error {
+	f.t.Helper()
+	_, err := f.web(f.h.unlinkUnrecognized, http.MethodPost, "/", user, "", "id", device.ID, "document", oldCopy)
+	return err
+}
+
+func TestUnlink_StopsSyncingAndHoldsWhatComesNext(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	wrong := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	require.NoError(t, f.linkAs(f.user, f.device, wrong.ID))
+
+	require.NoError(t, f.unlinkAs(f.user, f.device))
+
+	// What the link applied stays, to clean up by hand.
+	assert.Len(t, f.sessionsOf(wrong), 1)
+	assert.Equal(t, DocumentHeld, f.lookupAs(f.device, oldCopy)[oldCopy])
+	books := f.listUnrecognized()
+	require.Len(t, books, 1)
+	assert.Nil(t, books[0].LinkedAt)
+	assert.NotEmpty(t, books[0].Suggestions)
+
+	// Reading from then on is held, not applied to the File.
+	f.upload(UploadPayload{Pages: pages(oldCopy, 80, 82, f.day1.Add(8*time.Hour))})
+	assert.Len(t, f.sessionsOf(wrong), 1)
+	assert.Equal(t, 3, f.heldRows())
+
+	// And it can be linked again.
+	right := f.addBook(f.lib, "The Left Hand of Darkness, annotated", "Ursula K. Le Guin", models.FileTypeEPUB)
+	require.NoError(t, f.linkAs(f.user, f.device, right.ID))
+	assert.Len(t, f.sessionsOf(right), 1)
+}
+
+func TestUnlink_UnlinksTheCopyOnEveryOneOfTheUsersDevices(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	other := f.addDevice(f.user, devices.DeviceTypeKOReader)
+	f.backdate(other, time.Now().AddDate(0, -1, 0))
+	rec := f.uploadAs(other, UploadPayload{Pages: pages(oldCopy, 70, 72, f.day1.Add(7*time.Hour))})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	require.NoError(t, f.linkAs(f.user, f.device, file.ID))
+
+	require.NoError(t, f.unlinkAs(f.user, f.device))
+
+	// The link is the user's, so no Device of theirs resolves the copy now.
+	assert.Equal(t, DocumentHeld, f.lookupAs(other, oldCopy)[oldCopy])
+	books, err := f.listUnrecognizedAs(f.user, other)
+	require.NoError(t, err)
+	require.Len(t, books, 1)
+	assert.Nil(t, books[0].LinkedAt)
+}
+
+func TestUnlink_RefusesACopyThatIsntLinked(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	other := f.addUser("other", true)
+	f.grantAll(other)
+	file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+
+	requireStatus(t, f.unlinkAs(f.user, f.device), http.StatusNotFound)
+	require.NoError(t, f.linkAs(f.user, f.device, file.ID))
+	requireStatus(t, f.unlinkAs(other, f.device), http.StatusNotFound)
+	assert.Equal(t, DocumentRecognized, f.lookupAs(f.device, oldCopy)[oldCopy])
 }

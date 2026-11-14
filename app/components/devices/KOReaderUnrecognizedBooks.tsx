@@ -14,6 +14,7 @@ import {
   useKOReaderLinkCandidates,
   useKOReaderUnrecognizedBooks,
   useLinkKOReaderUnrecognized,
+  useUnlinkKOReaderUnrecognized,
 } from "@/hooks/queries/devices";
 import { useDebounce } from "@/hooks/useDebounce";
 import { isDemoModeError, toastRequestError } from "@/libraries/api";
@@ -220,36 +221,79 @@ const ToLink = ({
   );
 };
 
-// Linked is a copy already linked: the Book it's linked to, and why
-// downloading the Book again syncs the exact place (ADR 0017).
-const Linked = ({ book }: { book: UnrecognizedBook }) => {
-  if (!book.linked) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Linked to a file that has since been deleted.
-      </p>
-    );
-  }
+// Linked is a copy already linked: the Book it's linked to, why downloading
+// the Book again syncs the exact place (ADR 0017), and Unlink for a link
+// made to the wrong Book.
+const Linked = ({
+  deviceId,
+  book,
+}: {
+  deviceId: string;
+  book: UnrecognizedBook;
+}) => {
+  const name = copyName(book);
+  const unlink = useUnlinkKOReaderUnrecognized();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleUnlink = async () => {
+    try {
+      await unlink.mutateAsync({ deviceId, document: book.document });
+      setConfirmOpen(false);
+    } catch (error) {
+      // Demo Mode already toasted the rejection; nothing will change, so
+      // there is nothing left to confirm.
+      if (isDemoModeError(error)) setConfirmOpen(false);
+      toastRequestError(error, "Failed to unlink the book");
+    }
+  };
+
   return (
-    <div className="space-y-1 text-sm">
-      <p>
-        Linked to{" "}
-        <Link
-          className="font-medium underline underline-offset-2 hover:text-foreground"
-          to={bookPath(book.linked)}
-        >
-          {book.linked.title}
-        </Link>
-        <span className="text-muted-foreground">
-          {" "}
-          · {fileTypeLabel(book.linked.file_type)} · {book.linked.library_name}
-        </span>
-      </p>
-      <p className="text-muted-foreground">
-        This copy syncs your place as a percentage only, so it can land a little
-        off. Download the book again from Shisho to sync your exact place.
-      </p>
-    </div>
+    <>
+      {book.linked ? (
+        <div className="space-y-1 text-sm">
+          <p>
+            Linked to{" "}
+            <Link
+              className="font-medium underline underline-offset-2 hover:text-foreground"
+              to={bookPath(book.linked)}
+            >
+              {book.linked.title}
+            </Link>
+            <span className="text-muted-foreground">
+              {" "}
+              · {fileTypeLabel(book.linked.file_type)} ·{" "}
+              {book.linked.library_name}
+            </span>
+          </p>
+          <p className="text-muted-foreground">
+            This copy syncs your place as a percentage only, so it can land a
+            little off. Download the book again from Shisho to sync your exact
+            place.
+          </p>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Linked to a file that has since been deleted.
+        </p>
+      )}
+      <Button
+        aria-label={`Unlink ${name}`}
+        onClick={() => setConfirmOpen(true)}
+        size="sm"
+        variant="outline"
+      >
+        Unlink
+      </Button>
+      <ConfirmDialog
+        confirmLabel="Unlink"
+        description={`"${name}" stops syncing with this book and is listed to link again, on every one of your Devices. Its reading from then on is held until you link it. The reading sessions, status, and Rating the link added stay; delete any that are wrong from the book's page.`}
+        isPending={unlink.isPending}
+        onConfirm={handleUnlink}
+        onOpenChange={setConfirmOpen}
+        open={confirmOpen}
+        title="Unlink Book"
+      />
+    </>
   );
 };
 
@@ -286,7 +330,7 @@ const UnrecognizedBookRow = ({
         )}
       </div>
       {book.linked_at ? (
-        <Linked book={book} />
+        <Linked book={book} deviceId={deviceId} />
       ) : (
         <ToLink book={book} deviceId={deviceId} />
       )}

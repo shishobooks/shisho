@@ -194,6 +194,7 @@ The plugin can bring in a copy Shisho doesn't [recognize](#which-books-sync), su
 For each book, the page suggests books from your libraries: ones with a matching identifier, such as an ISBN, first, and then ones whose title and author match. Suggestions and search cover only the libraries you can access and the Device's [scope](./users-and-permissions.md#scope), and never audiobooks. Only you see your Devices' unrecognized books, and a link is yours alone: another user with an identical copy links their own.
 
 - **Link** links the copy to the file you choose, from a suggestion or a search. Everything held for it is added at once, without waiting for the e-reader to sync: its reading sessions, its status, its Rating, and its place. [History](#send-your-existing-reading-history) you sent for it follows history's rules, so it fills in only what Shisho has none of. From then on, the copy syncs like any other book.
+- **Unlink**, on a linked copy, undoes a link made to the wrong book, after you confirm. The copy stops syncing with that book on all your Devices and is listed to link again, and its reading from then on is held until you do. What the link already added stays, so delete any wrong [reading sessions](./reading-stats.md#calendar) or Read-throughs, and change the book's status or Rating, by hand.
 - **Dismiss** deletes the reading held for the copy, after you confirm, and it stops appearing. Later reading in it is dropped too. Dismissing can't be undone on that server; KOReader keeps its own record on the e-reader.
 
 A linked copy keeps the reading sessions, status, and Rating of any other book, but its place syncs as a percentage only: its file isn't the one in your library, so an exact spot in it may not line up. The Shisho reader, a Kobo, and KOReader with the plugin open the book at that percentage, and KOReader goes to the same percentage of the copy. KOReader's built-in progress sync gets no place for it. The linked book's row on the Device's page suggests downloading the book again from Shisho to sync your exact place.
@@ -205,6 +206,7 @@ With [several servers](#several-servers):
 - A book is listed only when none of your servers recognizes it, and only once every enabled server has answered.
 - Linking a book on one server removes it from the others' lists at the plugin's next sync, along with the reading they held for it, so you link it once. To link the same copy on a second server, download the book from that server instead.
 - Dismissing a book on one server leaves the others' lists alone.
+- Unlinking a book lists it again on your other servers too, at the plugin's next sync, with only the reading since, since none of them recognizes it now.
 
 ## Browse Over OPDS
 

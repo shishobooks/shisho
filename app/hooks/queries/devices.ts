@@ -369,3 +369,27 @@ export const useDismissKOReaderUnrecognized = () => {
     },
   });
 };
+
+interface UnlinkUnrecognizedVariables {
+  deviceId: string;
+  document: string;
+}
+
+// Undoes a link, so the copy is listed to link again. The link is the
+// user's, so the copy goes back on every one of their Devices' lists. What
+// the link added to reading stays.
+export const useUnlinkKOReaderUnrecognized = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, ShishoAPIError, UnlinkUnrecognizedVariables>({
+    mutationFn: ({ deviceId, document }) =>
+      API.request(
+        "POST",
+        `/user/devices/${deviceId}/koreader-unrecognized/${document}/unlink`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.KOReaderUnrecognizedBooks],
+      });
+    },
+  });
+};
