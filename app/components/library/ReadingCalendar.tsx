@@ -12,8 +12,10 @@ import {
   useReadingStatsCalendar,
   useReadingStatsDay,
 } from "@/hooks/queries/reading";
+import { useAuth } from "@/hooks/useAuth";
 import { useHoverTip } from "@/hooks/useHoverTip";
 import { useSessionDelete } from "@/hooks/useSessionDelete";
+import { DEMO_MODE_MESSAGE } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type {
   ReadingStatsBookRef,
@@ -738,6 +740,7 @@ const DayDetail = ({
   const detail = dayQuery.data?.day === day ? dayQuery.data : undefined;
   const headingId = `reading-day-${day}`;
   const sessionDelete = useSessionDelete();
+  const { demoMode } = useAuth();
 
   const renderBody = () => {
     if (dayQuery.error && !dayQuery.data) {
@@ -823,6 +826,11 @@ const DayDetail = ({
                 </li>
               ))}
             </ul>
+            {demoMode && (
+              <p className="text-xs text-muted-foreground">
+                {DEMO_MODE_MESSAGE}
+              </p>
+            )}
           </>
         )}
       </div>

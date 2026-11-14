@@ -113,8 +113,15 @@ func (s *DateShifter) Refresh(ctx context.Context) (int, error) {
 //
 // Only the leading YYYY-MM-DD of each value changes. Instants are stored in
 // UTC, so that moves them by whole days exactly, and the rest of the text
-// keeps the form queries compare against. A zero time (year 1), and
-// anything that isn't a date, stays as it is.
+// keeps the form queries compare against. A zero time (year 1), anything
+// that isn't a date, and anything dated after the latest reading day stays
+// as it is: the last was written after the reading (curation, a migration
+// at boot) and is already about as recent as the rest will be, so moving it
+// would put it in the future.
+//
+// Moving files.updated_at changes the ?v= keys of cover and page URLs, so a
+// returning visitor's browser fetches them again once a day. The server's
+// own caches key on the files on disk and aren't affected.
 func ShiftDates(ctx context.Context, db *bun.DB, now time.Time) (int, error) {
 	var days int
 	err := db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
@@ -143,14 +150,15 @@ func ShiftDates(ctx context.Context, db *bun.DB, now time.Time) (int, error) {
 		modifier := fmt.Sprintf("%+d days", days)
 		for _, table := range tables {
 			sets := make([]string, len(table.columns))
-			args := make([]any, len(table.columns))
+			var args []any
 			for i, column := range table.columns {
-				// The year is compared as substr's text: against the column
+				// The dates are compared as substr's text: against the column
 				// itself, its numeric affinity would make '1000' a number.
 				sets[i] = fmt.Sprintf(
-					`"%[1]s" = CASE WHEN substr("%[1]s", 1, 4) < '1000' THEN "%[1]s" ELSE COALESCE(date(substr("%[1]s", 1, 10), ?) || substr("%[1]s", 11), "%[1]s") END`,
+					`"%[1]s" = CASE WHEN substr("%[1]s", 1, 4) < '1000' OR substr("%[1]s", 1, 10) > ? THEN "%[1]s" `+
+						`ELSE COALESCE(date(substr("%[1]s", 1, 10), ?) || substr("%[1]s", 11), "%[1]s") END`,
 					column)
-				args[i] = modifier
+				args = append(args, latest.String, modifier)
 			}
 			query := fmt.Sprintf(`UPDATE "%s" SET %s`, table.name, strings.Join(sets, ", "))
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {

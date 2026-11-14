@@ -46,10 +46,7 @@ const ConfigRow = ({ description, label, value }: ConfigRowProps) => {
       {/* The description wraps in whatever the value leaves; a long one
           would otherwise push the value off the row. */}
       <div className="flex min-w-0 flex-col gap-1 sm:flex-1">
-        <span
-          className="text-sm font-medium text-foreground sm:whitespace-nowrap"
-          id={labelId}
-        >
+        <span className="text-sm font-medium text-foreground" id={labelId}>
           {label}
         </span>
         {description && (

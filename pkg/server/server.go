@@ -88,6 +88,8 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		// image, so its dates are moved for its reading to end yesterday
 		// before serving, and again each day after.
 		shifter := demo.NewDateShifter(db, time.Now)
+		// Startup always logs the days moved, 0 included, so a deploy's log
+		// shows the shift ran; the middleware logs only moves and failures.
 		if days, err := shifter.Refresh(context.Background()); err != nil {
 			logDemoDateShift(0, err)
 		} else {

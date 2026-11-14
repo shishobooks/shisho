@@ -47,10 +47,15 @@ func TestNew_DemoModeMovesTheReadingToYesterdayBeforeServing(t *testing.T) {
 	cfg.DemoMode = true
 	cfg.CacheDir = t.TempDir()
 
+	before := time.Now()
 	_, err := New(cfg, db, &worker.Worker{}, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
+	after := time.Now()
 
-	assert.Equal(t, time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly), lastSessionDay(t, db))
+	// New reads the clock itself, so a run across UTC midnight may see
+	// either day.
+	yesterday := func(t time.Time) string { return t.UTC().AddDate(0, 0, -1).Format(time.DateOnly) }
+	assert.Contains(t, []string{yesterday(before), yesterday(after)}, lastSessionDay(t, db))
 }
 
 // The demo's Machine suspends when idle and resumes without restarting, so

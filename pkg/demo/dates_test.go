@@ -135,7 +135,10 @@ func TestShiftDates_MovesEveryDateSoTheLatestReadingIsYesterday(t *testing.T) {
 	for c, was := range before {
 		got := after[c]
 		name := c.table + "." + c.column
-		if notShifted[name] != "" || strings.HasPrefix(was, "0001-") {
+		// Excluded columns, zero times, and rows written after the reading
+		// (here, the ones migrations stamp when the test database is built)
+		// keep their value.
+		if notShifted[name] != "" || strings.HasPrefix(was, "0001-") || was[:10] > "2026-03-10" {
 			assert.Equal(t, was, got, "%s stays as it was", name)
 			continue
 		}
@@ -212,6 +215,12 @@ func TestShiftDates_LatestReadingDecidesTheShift(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 247, days)
 	assert.Equal(t, "2026-11-12", latestReadingDay(t, db))
+
+	// Written after the reading, it is already about as recent as anything
+	// in the demo, and moving it with the reading would put it in the future.
+	var updated string
+	require.NoError(t, db.QueryRowContext(context.Background(), `SELECT updated_at FROM books WHERE id = 90`).Scan(&updated))
+	assert.Equal(t, "2026-09-01 00:00:00+00:00", updated)
 }
 
 // A suspended Machine resumes without restarting, so the shift has to run
