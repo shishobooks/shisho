@@ -54,6 +54,7 @@ import {
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { fileStreamUrl } from "@/utils/downloadUrl";
 import { fileTitle, formatPlayerTime } from "@/utils/format";
+import { savedSeconds } from "@/utils/readingPosition";
 
 // How often the place saves while playing. Pausing and seeking save at once.
 const SAVE_WHILE_PLAYING_MS = 15_000;
@@ -308,7 +309,13 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   useEffect(() => {
     if (restoredRef.current || !metadataLoaded || !positionSettled) return;
     restoredRef.current = true;
-    const seconds = codecSupport.playable ? (saved?.seconds ?? 0) : 0;
+    // A position with no seconds, such as one from a copy a user linked,
+    // opens at its percentage of the book.
+    const length =
+      durationRef.current > 0
+        ? durationRef.current
+        : (audioRef.current?.duration ?? 0);
+    const seconds = codecSupport.playable ? savedSeconds(saved, length) : 0;
     if (seconds > 0) moveElementTo(seconds, RESTORE_SEEK_TIMEOUT_MS);
     // Playing from the very end restarts the book, which would read as going
     // back and undo a finish.

@@ -159,14 +159,21 @@ func (h *handler) applyChange(ctx context.Context, user *models.User, clock devi
 	if c == nil || err != nil {
 		return ok, err
 	}
+	return true, h.applyChangeTo(ctx, user, c, event, before)
+}
+
+// applyChangeTo applies a status or Rating change to the Book c is about,
+// judging whether Shisho changed too by before, or, without it, by Shisho's
+// state now.
+func (h *handler) applyChangeTo(ctx context.Context, user *models.User, c *change, event EventPayload, before map[int]*reading.StatusSummary) error {
 	file, day, loc := c.file, c.day, c.loc
 	summaries, err := h.reading.RetrieveStatusSummaries(ctx, user.ID, []int{file.File.BookID})
 	if err != nil {
-		return false, err
+		return err
 	}
 	summary := summaries[file.File.BookID]
 	if summary == nil {
-		return true, nil
+		return nil
 	}
 	prior := before[file.File.BookID]
 	if prior == nil {
@@ -181,12 +188,12 @@ func (h *handler) applyChange(ctx context.Context, user *models.User, clock devi
 		shisho := wholeStars(summary.RatingUnits)
 		if event.Rating == shisho {
 			// Nothing to change, and a quarter-star Rating keeps its quarter.
-			return true, nil
+			return nil
 		}
 		if wholeStars(prior.RatingUnits) != event.PreviousRating && shishoLater(prior.RatingAt) {
-			return true, nil
+			return nil
 		}
-		return true, h.reading.SetRating(ctx, user.ID, file.File.BookID, quarterStars(event.Rating))
+		return h.reading.SetRating(ctx, user.ID, file.File.BookID, quarterStars(event.Rating))
 	}
 
 	shisho := koreaderStatus(summary.Status)
@@ -195,9 +202,9 @@ func (h *handler) applyChange(ctx context.Context, user *models.User, clock devi
 		// finish reaching the end made on its own is now one the reader
 		// chose, so paging back doesn't undo it.
 		if shisho == KOReaderStatusFinished {
-			return true, h.reading.KeepFinished(ctx, user.ID, file.FileID)
+			return h.reading.KeepFinished(ctx, user.ID, file.FileID)
 		}
-		return true, nil
+		return nil
 	}
 	// A book whose status the plugin never synced was reading as far as
 	// KOReader knew, as KOReader takes a book with no status to be, so a read
@@ -209,9 +216,9 @@ func (h *handler) applyChange(ctx context.Context, user *models.User, clock devi
 	// To Read and no status are never written to the device, so they're
 	// nothing the device could have overruled.
 	if prev := koreaderStatus(prior.Status); prev != "" && prev != previous && shishoLater(prior.ReadThroughAt) {
-		return true, nil
+		return nil
 	}
-	return true, h.reading.SetDeviceStatus(ctx, reading.DeviceStatus{
+	return h.reading.SetDeviceStatus(ctx, reading.DeviceStatus{
 		UserID: user.ID,
 		FileID: file.FileID,
 		Status: readingStatus(event.Status),
@@ -229,8 +236,14 @@ func (h *handler) applyHistory(ctx context.Context, user *models.User, clock dev
 	if c == nil || err != nil {
 		return ok, err
 	}
+	return true, h.applyHistoryTo(ctx, user, c, event)
+}
+
+// applyHistoryTo applies a status or Rating from history to the Book c is
+// about.
+func (h *handler) applyHistoryTo(ctx context.Context, user *models.User, c *change, event EventPayload) error {
 	if event.Type == PluginEventStatus {
-		return true, h.reading.RecordHistoryStatus(ctx, reading.DeviceStatus{
+		return h.reading.RecordHistoryStatus(ctx, reading.DeviceStatus{
 			UserID: user.ID,
 			FileID: c.file.FileID,
 			Status: readingStatus(event.Status),
@@ -239,14 +252,14 @@ func (h *handler) applyHistory(ctx context.Context, user *models.User, clock dev
 	}
 	units := quarterStars(event.Rating)
 	if units == nil {
-		return true, nil
+		return nil
 	}
-	return true, h.reading.FillRating(ctx, user.ID, c.file.File.BookID, *units)
+	return h.reading.FillRating(ctx, user.ID, c.file.File.BookID, *units)
 }
 
 // pullStates returns the status and Rating the device should hold for each
-// book payload names, and each book changed after its Since, that this
-// device reaches.
+// book payload names, each book changed after its Since, and each copy the
+// user linked after it, that this device reaches.
 func (h *handler) pullStates(ctx context.Context, user *models.User, device *devices.Device, payload PullPayload) ([]PulledState, error) {
 	states := []PulledState{}
 	documents := []string{}
@@ -271,7 +284,20 @@ func (h *handler) pullStates(ctx context.Context, user *models.User, device *dev
 		if err != nil {
 			return nil, err
 		}
-		for _, hash := range hashes {
+		linkedHashes, err := h.hashes.LinkedHashesOfBooks(ctx, user.ID, bookIDs)
+		if err != nil {
+			return nil, err
+		}
+		for _, hash := range append(hashes, linkedHashes...) {
+			add(hash)
+		}
+		// A copy linked since is one the device should now hold Shisho's
+		// state for, though nothing about its Book changed.
+		linked, err := h.pullLinked(ctx, device.ID, since)
+		if err != nil {
+			return nil, err
+		}
+		for _, hash := range linked {
 			add(hash)
 		}
 	}

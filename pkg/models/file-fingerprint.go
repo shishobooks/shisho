@@ -44,6 +44,11 @@ type DocumentHash struct {
 	FileID            int       `bun:",pk" json:"file_id"`
 	DeliveredFileType string    `bun:",pk" json:"delivered_file_type"`
 	CreatedAt         time.Time `json:"created_at"`
+	// UserMade marks a hash the requesting user linked to the File
+	// (KOReaderDocumentLink), of a copy Shisho never produced (ADR 0017). Its
+	// locators may not line up with the File's, so it syncs by percentage
+	// only.
+	UserMade bool `bun:"-" json:"-"`
 
 	File *File `bun:"rel:belongs-to,join:file_id=id" json:"-"`
 }
@@ -99,6 +104,10 @@ type KOReaderPageRow struct {
 	FileID           *int
 	Grouped          bool `bun:",notnull"`
 	ReadingSessionID *int
+	// History marks a row held for an unrecognized copy that came from the
+	// history KOReader recorded before signing in, so linking the copy
+	// groups it by history's rules.
+	History bool `bun:",notnull"`
 }
 
 // EndedAt is when the visit ended.
@@ -114,4 +123,71 @@ type KOReaderPluginEvent struct {
 	DeviceID  string    `bun:",pk"`
 	EventID   string    `bun:",pk"`
 	CreatedAt time.Time `bun:",notnull"`
+}
+
+// KOReaderUnrecognizedBook is a copy a KOReader Device holds data for that no
+// server the KOReader plugin signed in to recognized (ADR 0017), with what
+// KOReader knows about it. Its data is held until the user links it to a
+// File or dismisses it. A dismissed copy stays, so the Device's data for it
+// keeps being dropped.
+type KOReaderUnrecognizedBook struct {
+	bun.BaseModel `bun:"table:koreader_unrecognized_books,alias:kub" tstype:"-"`
+
+	DeviceID    string    `bun:",pk"`
+	Document    string    `bun:",pk"`
+	UserID      int       `bun:",notnull"`
+	CreatedAt   time.Time `bun:",notnull"`
+	UpdatedAt   time.Time `bun:",notnull"`
+	Title       *string
+	Authors     []string `bun:",type:json,notnull"`
+	Identifiers []string `bun:",type:json,notnull"`
+	Language    *string
+	// FileType is the copy's File Type, from its file's extension.
+	FileType       *string
+	ReadingSeconds int `bun:",notnull"`
+	FirstReadAt    *time.Time
+	LastReadAt     *time.Time
+	DismissedAt    *time.Time
+	LinkedAt       *time.Time
+	LinkedFileID   *int
+
+	LinkedFile *File `bun:"rel:belongs-to,join:linked_file_id=id"`
+}
+
+// KOReaderHeldEvent is a journal event about an unrecognized copy, held until
+// the copy is linked (ADR 0017). Its times are already corrected for the
+// device's clock: OccurredAt is a position's instant, and ChangedDay the day
+// a status or Rating changed, in the user's time zone.
+type KOReaderHeldEvent struct {
+	bun.BaseModel `bun:"table:koreader_held_events,alias:khe" tstype:"-"`
+
+	ID             int       `bun:",pk,autoincrement"`
+	CreatedAt      time.Time `bun:",notnull"`
+	DeviceID       string    `bun:",notnull"`
+	Document       string    `bun:",notnull"`
+	EventID        string    `bun:",notnull"`
+	Type           string    `bun:",notnull"`
+	History        bool      `bun:",notnull"`
+	OccurredAt     *time.Time
+	ChangedDay     *string
+	Percentage     *float64
+	Status         *string
+	PreviousStatus *string
+	Rating         int `bun:",notnull"`
+	PreviousRating int `bun:",notnull"`
+}
+
+// KOReaderDocumentLink is a KOReader copy a user linked to a File, of bytes
+// Shisho never produced (ADR 0017). It's the user's own: it resolves the
+// hash only for them, after any hash Shisho produced.
+type KOReaderDocumentLink struct {
+	bun.BaseModel `bun:"table:koreader_document_links,alias:kdl" tstype:"-"`
+
+	UserID            int       `bun:",pk"`
+	Hash              string    `bun:",pk"`
+	FileID            int       `bun:",notnull"`
+	DeliveredFileType string    `bun:",notnull"`
+	CreatedAt         time.Time `bun:",notnull"`
+
+	File *File `bun:"rel:belongs-to,join:file_id=id"`
 }

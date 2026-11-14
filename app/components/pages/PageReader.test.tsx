@@ -57,6 +57,9 @@ const flow = vi.hoisted(() => ({
 // The saved position, whether it has loaded, and what saves were sent.
 const position = vi.hoisted(() => ({
   savedPage: null as number | null,
+  // A saved position with no page, only a percentage, as a copy a user
+  // linked stores (ADR 0017). It replaces savedPage when set.
+  savedPercentageOnly: null as number | null,
   loading: false,
   loadFails: false,
   saves: [] as Array<Record<string, unknown>>,
@@ -73,9 +76,11 @@ vi.mock("@/hooks/queries/reading", () => ({
         ? undefined
         : {
             position:
-              position.savedPage === null
-                ? null
-                : { page: position.savedPage, percentage: 0.5 },
+              position.savedPercentageOnly !== null
+                ? { percentage: position.savedPercentageOnly }
+                : position.savedPage === null
+                  ? null
+                  : { page: position.savedPage, percentage: 0.5 },
           },
     error: position.loadFails ? new Error("offline") : null,
     isEnabled: true,
@@ -129,6 +134,7 @@ afterEach(() => {
   settings.hideChrome = false;
   chapters.data = [];
   position.savedPage = null;
+  position.savedPercentageOnly = null;
   position.loading = false;
   position.loadFails = false;
 });
@@ -793,6 +799,16 @@ describe("PageReader position", () => {
 
     expect(screen.getByText("Page 13 of 20")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Page 13" })).toBeInTheDocument();
+    flush();
+    expect(position.saves).toEqual([]);
+  });
+
+  it("opens a saved place with no page at the page for its percentage", () => {
+    // 0.5 of the way from the first page to the last of 21 is page 11.
+    position.savedPercentageOnly = 0.5;
+    renderReader(21);
+
+    expect(screen.getByText("Page 11 of 21")).toBeInTheDocument();
     flush();
     expect(position.saves).toEqual([]);
   });

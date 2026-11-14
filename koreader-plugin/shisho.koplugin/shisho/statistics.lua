@@ -68,6 +68,22 @@ local function rowidOf(conn, cursor)
     return 0
 end
 
+local function readRows(stmt)
+    local rows = {}
+    for row in stmt:rows() do
+        table.insert(rows, {
+            rowid = tonumber(row[1]),
+            start_time = tonumber(row[2]),
+            id_book = tonumber(row[3]),
+            page = tonumber(row[4]),
+            total_pages = tonumber(row[5]),
+            duration = tonumber(row[6]),
+            document = tostring(row[7]),
+        })
+    end
+    return rows
+end
+
 --[[--
 read returns up to limit rows after cursor ({ rowid }, nil for the start),
 each { rowid, document, id_book, page, total_pages, start_time, duration }.
@@ -79,22 +95,94 @@ function Statistics.read(path, cursor, limit)
         return {}
     end
     return withConnection(path, function(conn)
-        local rows = {}
         local stmt = conn:prepare(QUERY)
         stmt:bind(rowidOf(conn, cursor), limit)
-        for row in stmt:rows() do
-            table.insert(rows, {
-                rowid = tonumber(row[1]),
-                start_time = tonumber(row[2]),
-                id_book = tonumber(row[3]),
-                page = tonumber(row[4]),
-                total_pages = tonumber(row[5]),
-                duration = tonumber(row[6]),
-                document = tostring(row[7]),
-            })
-        end
+        local rows = readRows(stmt)
         stmt:close()
         return rows
+    end)
+end
+
+local DOCUMENTS = "SELECT DISTINCT b.md5 " .. ROWS .. " ORDER BY b.md5;"
+
+-- documents is the document hash of every book with rows after cursor, as
+-- read would read them, or nil and an error.
+function Statistics.documents(path, cursor)
+    if lfs.attributes(path, "mode") ~= "file" then
+        return {}
+    end
+    return withConnection(path, function(conn)
+        local out = {}
+        local stmt = conn:prepare(DOCUMENTS)
+        stmt:bind(rowidOf(conn, cursor))
+        for row in stmt:rows() do table.insert(out, tostring(row[1])) end
+        stmt:close()
+        return out
+    end)
+end
+
+local DOCUMENT_ROWS = "SELECT p.rowid, p.start_time, p.id_book, p.page, p.total_pages, p.duration, b.md5 "
+    .. ROWS .. " AND b.md5 = ? AND p.rowid <= ? ORDER BY p.rowid;"
+
+-- readDocument returns every row of the book document after the row from
+-- and up to the row through, as read returns rows, or nil and an error.
+function Statistics.readDocument(path, document, from, through)
+    if lfs.attributes(path, "mode") ~= "file" then
+        return {}
+    end
+    return withConnection(path, function(conn)
+        local stmt = conn:prepare(DOCUMENT_ROWS)
+        stmt:bind(from or 0, document, through)
+        local rows = readRows(stmt)
+        stmt:close()
+        return rows
+    end)
+end
+
+local BOOK = [[
+    SELECT b.title, b.authors, b.language,
+        (SELECT SUM(p.duration) FROM page_stat_data AS p WHERE p.id_book = b.id),
+        (SELECT MIN(p.start_time) FROM page_stat_data AS p WHERE p.id_book = b.id),
+        (SELECT MAX(p.start_time + p.duration) FROM page_stat_data AS p WHERE p.id_book = b.id)
+    FROM book AS b WHERE b.md5 = ? ORDER BY b.id LIMIT 1;
+]]
+
+local function text(value)
+    if value == nil then return nil end
+    value = tostring(value)
+    return value ~= "" and value or nil
+end
+
+--[[--
+book is what statistics knows of the book document: { title, authors,
+language, reading_seconds, first_read, last_read }, where authors is a list
+(KOReader keeps one per line) and the times are the device's. Nil when
+statistics has no such book.
+]]
+function Statistics.book(path, document)
+    if lfs.attributes(path, "mode") ~= "file" then
+        return nil
+    end
+    return withConnection(path, function(conn)
+        local stmt = conn:prepare(BOOK)
+        stmt:bind(document)
+        local row = stmt:step()
+        stmt:close()
+        if not row then return nil end
+        local authors = {}
+        for author in (text(row[2]) or ""):gmatch("[^\n]+") do
+            author = author:gsub("^%s+", ""):gsub("%s+$", "")
+            -- KOReader records a book with no authors as N/A.
+            if author ~= "" and author ~= "N/A" then table.insert(authors, author) end
+        end
+        return {
+            title = text(row[1]),
+            authors = authors,
+            language = text(row[3]),
+            reading_seconds = tonumber(row[4]) or 0,
+            first_read = tonumber(row[5]),
+            last_read = tonumber(row[6]),
+        }
     end)
 end
 

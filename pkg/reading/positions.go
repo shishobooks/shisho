@@ -71,6 +71,10 @@ type PositionUpdate struct {
 	ReportedDeviceID *string
 	// Locator holds the position in the one form the source reads.
 	Locator models.ReadingLocator
+	// PercentageOnly is a position with no locator, only Percentage, from a
+	// copy whose locators may not line up with the File's, such as one a
+	// user linked to it (ADR 0017). Readers open it at its percentage.
+	PercentageOnly bool
 	// LocatorFileType is the File Type of the copy Locator points into, when
 	// it isn't the File's own.
 	LocatorFileType *string
@@ -139,7 +143,7 @@ type SessionInput struct {
 //     on the Read-through underway or just finished
 //
 // An update with no locator, a status reported on its own, changes the
-// Read-through and stores nothing else.
+// Read-through and stores nothing else, unless it's PercentageOnly.
 func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*UpdatePositionResponse, error) {
 	result := &UpdatePositionResponse{}
 	// A session sent with an update comes from the update's Device.
@@ -184,11 +188,13 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		}
 		result.Accepted = true
 
-		hasLocator := !u.Locator.IsZero()
+		percentageOnly := u.PercentageOnly && u.Locator.IsZero()
+		hasLocator := !u.Locator.IsZero() || percentageOnly
 		// Turning past the first screen is reading; reopening where the
 		// reader already was is not. Going back all the way to the start is
 		// still going back, so it can undo a finish.
-		moved := hasLocator && (stored == nil || !stored.Equal(u.Locator))
+		moved := hasLocator && (stored == nil || !stored.Equal(u.Locator) ||
+			percentageOnly && stored.Percentage != u.Percentage)
 		// A supplement keeps its own place but isn't the Book, and a place a
 		// link opened isn't reading: neither changes any Read-through.
 		reading := !u.Opened && file.FileRole != models.FileRoleSupplement

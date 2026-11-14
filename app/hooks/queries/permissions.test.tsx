@@ -99,6 +99,8 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useAllDevices: requires("users:read", []),
   useDeliveryPreview: authenticated(["abc"]),
   useBookDevices: requires("books:read", [{ id: 1, files: [] }]),
+  useKOReaderUnrecognizedBooks: requires("books:read", ["abc", on]),
+  useKOReaderLinkCandidates: requires("books:read", ["abc", "dune", on]),
   // delivery
   useDeliveryRules: authenticated([]),
   // reading

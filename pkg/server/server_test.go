@@ -207,7 +207,14 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				// the middleware refuses in Demo Mode.
 				"POST /api/user/devices/:id/koreader-plugin",
 				"POST /koreader/plugin/pair", "POST /koreader/plugin/status", "POST /koreader/plugin/download",
-				"POST /koreader/plugin/upload", "POST /koreader/plugin/pull",
+				"POST /koreader/plugin/lookup", "POST /koreader/plugin/upload", "POST /koreader/plugin/pull",
+				// A KOReader Device's unrecognized books can be viewed in
+				// Demo Mode; linking and dismissing are refused.
+				"GET /api/user/devices/:id/koreader-unrecognized", "GET /api/user/devices/:id/koreader-unrecognized/candidates",
+				"POST /api/user/devices/:id/koreader-unrecognized/:document/link",
+				"POST /api/user/devices/:id/koreader-unrecognized/:document/unlink",
+				"POST /api/user/devices/:id/koreader-unrecognized/dismiss-all",
+				"POST /api/user/devices/:id/koreader-unrecognized/:document/dismiss",
 				// Delivery Rules can be viewed in Demo Mode; the middleware
 				// rejects every change to them.
 				"GET /api/user/delivery-rules", "PUT /api/user/delivery-rules", "DELETE /api/user/delivery-rules",
@@ -264,6 +271,10 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodPost, "/api/user/devices/abc/short-url"},
 				{http.MethodDelete, "/api/user/devices/abc/kobo-sync"},
 				{http.MethodPost, "/api/user/devices/abc/koreader-plugin"},
+				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/0ddc/link"},
+				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/0ddc/unlink"},
+				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/dismiss-all"},
+				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/0ddc/dismiss"},
 				{http.MethodDelete, "/api/devices/abc"},
 				{http.MethodPut, "/api/user/delivery-rules"},
 				{http.MethodDelete, "/api/user/delivery-rules"},
@@ -281,7 +292,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			// The KOReader plugin's routes check its protocol before its
 			// sign-in, and pairing needs none, so outside Demo Mode they
 			// answer something other than the demo refusal.
-			for _, path := range []string{"/koreader/plugin/pair", "/koreader/plugin/status", "/koreader/plugin/download", "/koreader/plugin/upload", "/koreader/plugin/pull"} {
+			for _, path := range []string{"/koreader/plugin/pair", "/koreader/plugin/status", "/koreader/plugin/download", "/koreader/plugin/lookup", "/koreader/plugin/upload", "/koreader/plugin/pull"} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, nil))
 				if demo {

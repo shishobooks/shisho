@@ -11,9 +11,11 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import DeviceRulesSection from "@/components/devices/DeviceRulesSection";
+import DeviceSection from "@/components/devices/DeviceSection";
 import DeviceTypeRadioGroup from "@/components/devices/DeviceTypeRadioGroup";
 import Disclosure from "@/components/devices/Disclosure";
 import KOReaderPluginSetup from "@/components/devices/KOReaderPluginSetup";
+import KOReaderUnrecognizedBooks from "@/components/devices/KOReaderUnrecognizedBooks";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
@@ -113,28 +115,6 @@ const CopyField = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-const Section = ({
-  id,
-  title,
-  description,
-  children,
-}: {
-  id: string;
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) => (
-  <section className="rounded-md border border-border p-4 md:p-6">
-    <h2 className="text-lg font-semibold" id={id}>
-      {title}
-    </h2>
-    {description && (
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-    )}
-    <div className="mt-4 space-y-4">{children}</div>
-  </section>
-);
-
 const CredentialSection = ({ device }: { device: DeviceResponse }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const regenerate = useRegenerateDeviceCredential();
@@ -153,7 +133,7 @@ const CredentialSection = ({ device }: { device: DeviceResponse }) => {
   };
 
   return (
-    <Section
+    <DeviceSection
       description="Every connection signs in with this credential. Type it exactly as shown."
       id="credential-heading"
       title="Credential"
@@ -172,7 +152,7 @@ const CredentialSection = ({ device }: { device: DeviceResponse }) => {
         open={confirmOpen}
         title="Regenerate Credential"
       />
-    </Section>
+    </DeviceSection>
   );
 };
 
@@ -238,7 +218,7 @@ const ScopeSection = ({ device }: { device: DeviceResponse }) => {
       : "";
 
   return (
-    <Section
+    <DeviceSection
       description="Which books this Device reaches, through every connection."
       id="scope-heading"
       title="Scope"
@@ -325,7 +305,7 @@ const ScopeSection = ({ device }: { device: DeviceResponse }) => {
             so it reaches no books. Choose another.
           </p>
         )}
-    </Section>
+    </DeviceSection>
   );
 };
 
@@ -556,7 +536,7 @@ const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
   );
 
   return (
-    <Section
+    <DeviceSection
       description="How this Device connects to Shisho."
       id="connections-heading"
       title="Connections"
@@ -579,7 +559,7 @@ const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
       ) : (
         <ConnectionSetups connections={device.connections} device={device} />
       )}
-    </Section>
+    </DeviceSection>
   );
 };
 
@@ -830,7 +810,7 @@ const DeviceDetail = () => {
           <div className="min-w-0 space-y-6">
             <CredentialSection device={device} />
             <ScopeSection device={device} />
-            <Section
+            <DeviceSection
               description="Which File Types this Device receives, and as what. For each book, the earliest rule matching one of its files decides what goes."
               id="delivery-rules-heading"
               title="Delivery Rules"
@@ -839,10 +819,13 @@ const DeviceDetail = () => {
                 device={device}
                 onHasChangesChange={setRulesHaveChanges}
               />
-            </Section>
+            </DeviceSection>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-6">
             <ConnectionsSection device={device} />
+            {device.connections.includes(ConnectionKOReaderPlugin) && (
+              <KOReaderUnrecognizedBooks device={device} />
+            )}
           </div>
         </div>
 

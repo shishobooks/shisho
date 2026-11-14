@@ -12,18 +12,29 @@ const Disclosure = ({
   title,
   description,
   defaultOpen = false,
+  open: controlledOpen,
+  onOpenChange,
   size = "base",
   children,
 }: {
   title: string;
   description?: string;
   defaultOpen?: boolean;
+  // open and onOpenChange let the parent open or close it, as for a
+  // Disclosure that opens itself when its content changes.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   // base is a connection's own heading size and spacing; sm sits inside a
   // connection.
   size?: "base" | "sm";
   children: React.ReactNode;
 }) => {
-  const [open, setOpen] = useState(defaultOpen);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const open = controlledOpen ?? uncontrolledOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setUncontrolledOpen(next);
+    onOpenChange?.(next);
+  };
   const id = useId();
 
   return (
@@ -35,7 +46,7 @@ const Disclosure = ({
           "flex w-full items-center gap-2 text-left font-medium",
           size === "base" ? "text-base" : "text-sm",
         )}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpen(!open)}
         variant="unstyled"
       >
         <ChevronRight

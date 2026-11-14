@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
@@ -24,13 +25,24 @@ func registerPluginRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	// plugin should update to.
 	g.POST("/status", h.status, signIn, h.requireProtocol)
 	g.POST("/download", h.download, signIn)
+	g.POST("/lookup", h.lookup, signIn, h.requireProtocol)
 	g.POST("/upload", h.upload, signIn, h.requireProtocol)
 	g.POST("/pull", h.pull, signIn, h.requireProtocol)
 }
 
-// RegisterUserRoutes registers the plugin download on a user's own Device
-// page, under the /user/devices group's path.
+// RegisterUserRoutes registers the plugin download and the unrecognized
+// books on a user's own Device page, under the /user/devices group's path.
+// Only the Device's owner reaches them, and the unrecognized books, which
+// name the library's Books, need permission to read them.
 func RegisterUserRoutes(api *echo.Group, db *bun.DB, bundle *Bundle, bookService *books.Service, authMiddleware *auth.Middleware) {
 	h := newHandler(db, bundle, bookService)
 	api.POST("/user/devices/:id/koreader-plugin", h.ownerDownload, authMiddleware.Authenticate)
+	g := api.Group("/user/devices/:id/koreader-unrecognized",
+		authMiddleware.Authenticate, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
+	g.GET("", h.unrecognized)
+	g.GET("/candidates", h.linkCandidates)
+	g.POST("/dismiss-all", h.dismissAllUnrecognized)
+	g.POST("/:document/link", h.linkUnrecognized)
+	g.POST("/:document/unlink", h.unlinkUnrecognized)
+	g.POST("/:document/dismiss", h.dismissUnrecognized)
 }

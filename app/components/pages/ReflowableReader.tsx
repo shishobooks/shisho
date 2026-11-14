@@ -33,6 +33,7 @@ import {
   type EndRenderer,
 } from "@/utils/readerEnd";
 import { pageTurnForKey } from "@/utils/readerKeys";
+import { reflowableOpenTarget } from "@/utils/readingPosition";
 
 import "@/libraries/foliate/view.js";
 
@@ -220,7 +221,7 @@ export default function ReflowableReader({
       }
     ).init;
     const saved = savedRef.current;
-    const savedCfi = saved?.cfi;
+    const savedTarget = reflowableOpenTarget(saved);
 
     let cancelled = false;
     setBookReady(false);
@@ -246,16 +247,18 @@ export default function ReflowableReader({
       // 0% with an empty content area.
       if (viewInit) {
         restoringRef.current = true;
-        let restored = Boolean(savedCfi);
+        let restored = savedTarget !== undefined;
         try {
           await viewInit.call(
             view,
-            savedCfi ? { lastLocation: savedCfi } : { showTextStart: false },
+            savedTarget
+              ? { lastLocation: savedTarget }
+              : { showTextStart: false },
           );
         } catch (err) {
           // A saved location this copy of the book can't resolve (the file
           // changed) opens at the start.
-          if (!savedCfi) throw err;
+          if (!savedTarget) throw err;
           console.warn("ReflowableReader: saved location failed", err);
           restored = false;
           await viewInit.call(view, { showTextStart: false });
@@ -283,6 +286,15 @@ export default function ReflowableReader({
         if (restored && saved?.cfi) {
           opened({
             cfi: saved.cfi,
+            percentage: saved.percentage,
+            atEnd: false,
+            screen,
+          });
+        } else if (restored && saved && location?.cfi) {
+          // Opened at the saved percentage, which has no CFI to keep: the
+          // place is where foliate laid that percentage out.
+          opened({
+            cfi: location.cfi,
             percentage: saved.percentage,
             atEnd: false,
             screen,

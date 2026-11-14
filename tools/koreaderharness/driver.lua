@@ -478,6 +478,20 @@ commands["plugin-menu"] = function()
             stepUI()
             items = entries.shisho.sub_item_table_func()
         end
+        -- send_history taps Send reading history under the first server and
+        -- confirms, with Wi-Fi on, and the menu is then read as it is after.
+        if args.send_history then
+            for __, sub in ipairs(items[1] and items[1].sub_item_table or {}) do
+                if sub.text == "Send reading history" then sub.callback() end
+            end
+            if confirm_box then
+                confirm_box.ok_callback()
+                UIManager:close(confirm_box)
+                confirm_box = nil
+            end
+            stepUI()
+            items = entries.shisho.sub_item_table_func()
+        end
         -- A submenu's items read "Parent > Item".
         local texts = {}
         -- Items with nothing to show when held, which KOReader shows as help.

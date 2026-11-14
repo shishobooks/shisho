@@ -167,7 +167,13 @@ func (h *handler) updateProgress(c echo.Context) error {
 		Percentage: *params.Percentage,
 		AtEnd:      *params.Percentage >= FinishedAt,
 	}
-	if file.File != nil && file.DeliveredFileType != file.File.FileType {
+	switch {
+	case file.UserMade:
+		// A copy a user linked may not line up with the File, so only its
+		// percentage is kept (ADR 0017).
+		update.Locator = models.ReadingLocator{}
+		update.PercentageOnly = true
+	case file.File != nil && file.DeliveredFileType != file.File.FileType:
 		update.LocatorFileType = &file.DeliveredFileType
 	}
 	if params.Device != "" {

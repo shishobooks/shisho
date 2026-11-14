@@ -44,8 +44,11 @@ func NewDocuments(db *bun.DB, bookService *books.Service) *Documents {
 // reflowable one is translated into this copy's XPointer: the web reader's
 // CFI, another KOReader's XPointer in a copy with or without a KePub's span
 // markup, or this Device's own from its other copy.
+//
+// A copy a user linked (ADR 0017), or a position kept as a percentage only,
+// has no place KOReader's progress sync can go to, so it gets none.
 func (d *Documents) Progress(ctx context.Context, user *models.User, device *devices.Device, document string, file *models.DocumentHash, position *models.ReadingPosition) (ProgressResponse, error) {
-	if position == nil {
+	if position == nil || file.UserMade || position.IsZero() {
 		return ProgressResponse{}, nil
 	}
 	response := ProgressResponse{Document: document, Percentage: &position.Percentage}
@@ -88,21 +91,32 @@ func (d *Documents) Progress(ctx context.Context, user *models.User, device *dev
 	}
 
 	response.Timestamp = &timestamp
+	name, id, err := d.Source(ctx, user, position)
+	if err != nil {
+		return ProgressResponse{}, err
+	}
+	response.Device, response.DeviceID = name, id
+	return response, nil
+}
+
+// Source names the reader that wrote position, and gives it an id, as
+// KOReader shows another device's: the Device's own, or a stand-in for the
+// web reader or a Device since removed.
+func (d *Documents) Source(ctx context.Context, user *models.User, position *models.ReadingPosition) (string, string, error) {
 	switch {
 	case position.SourceDeviceID != nil:
 		source, err := d.deviceService.Retrieve(ctx, user.ID, *position.SourceDeviceID)
 		if err != nil {
-			return ProgressResponse{}, err
+			return "", "", err
 		}
-		response.Device, response.DeviceID = source.Name, source.ID
+		return source.Name, source.ID, nil
 	case position.Source == models.ReadingSourceKOReader:
-		response.Device, response.DeviceID = removedDeviceName, removedDeviceID
+		return removedDeviceName, removedDeviceID, nil
 	case position.Source == models.ReadingSourceKobo:
-		response.Device, response.DeviceID = removedKoboName, removedKoboID
+		return removedKoboName, removedKoboID, nil
 	default:
-		response.Device, response.DeviceID = webReaderDeviceName, webReaderDeviceID
+		return webReaderDeviceName, webReaderDeviceID, nil
 	}
-	return response, nil
 }
 
 // sameCopy reports whether position's XPointer was written in the copy file
@@ -139,13 +153,18 @@ func (d *Documents) translate(ctx context.Context, position *models.ReadingPosit
 // when it names none the request reaches. Identical bytes can map to several
 // Files, so it's the ones the user's library access and the Device's scope
 // reach, preferring one the user already has a position in, so reading doesn't
-// split across them, and then the oldest.
+// split across them, and then the oldest. Only when Shisho produced none of
+// them is it the File the user linked the copy to (ADR 0017), marked UserMade.
 func (d *Documents) Resolve(ctx context.Context, user *models.User, device *devices.Device, document string) (*models.DocumentHash, error) {
 	candidates, err := d.fingerprintService.FindDocumentHash(ctx, document)
 	if err != nil {
 		return nil, err
 	}
-	if len(candidates) == 0 {
+	link, err := d.fingerprintService.FindDocumentLink(ctx, user.ID, document)
+	if err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 && link == nil {
 		return nil, nil
 	}
 	r, err := d.reachService.Scope(ctx, user, device)
@@ -175,5 +194,12 @@ func (d *Documents) Resolve(ctx context.Context, user *models.User, device *devi
 			first = candidate
 		}
 	}
-	return first, nil
+	if first != nil || link == nil || link.File == nil || !user.HasLibraryAccess(link.File.LibraryID) {
+		return first, nil
+	}
+	holds, err := d.reachService.HoldsBook(ctx, r, link.File.LibraryID, link.File.BookID)
+	if err != nil || !holds {
+		return nil, errors.WithStack(err)
+	}
+	return link, nil
 }

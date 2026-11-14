@@ -130,4 +130,27 @@ return {
         assert_eq(Statistics.enabled({ is_enabled = false }, {}), false)
         assert_eq(Statistics.enabled({ is_enabled = true }, { statistics = true }), false)
     end,
+
+    ["lists the books with rows after a cursor, and reads one book's rows up to a row"] = function()
+        local path = statsDB({ [1] = "aaa", [2] = "bbb" }, {
+            { 1, 1, 1000, 20 }, { 2, 1, 1100, 20 }, { 1, 2, 1200, 20 }, { 2, 2, 1300, 20 },
+        })
+        assert_eq(Statistics.documents(path, nil), { "aaa", "bbb" })
+        assert_eq(Statistics.documents(path, { rowid = 3 }), { "bbb" })
+        assert_eq(keys(Statistics.readDocument(path, "aaa", 0, 3)), { "aaa:1@1000", "aaa:2@1200" })
+        assert_eq(keys(Statistics.readDocument(path, "aaa", 1, 3)), { "aaa:2@1200" }, "after where syncing started")
+        assert_eq(keys(Statistics.readDocument(path, "bbb", 0, 3)), { "bbb:1@1100" })
+    end,
+
+    ["says what it knows of a book: its title, authors, language, and reading time"] = function()
+        local path = statsDB({ [1] = "aaa" }, { { 1, 1, 1000, 20 }, { 1, 2, 1100, 40 } })
+        local conn = SQ3.open(path)
+        conn:exec([[UPDATE book SET authors = 'Ursula K. Le Guin' || char(10) || 'N/A', language = 'en' WHERE id = 1;]])
+        conn:close()
+        assert_eq(Statistics.book(path, "aaa"), {
+            title = "Book 1", authors = { "Ursula K. Le Guin" }, language = "en",
+            reading_seconds = 60, first_read = 1000, last_read = 1140,
+        })
+        assert_eq(Statistics.book(path, "zzz"), nil)
+    end,
 }

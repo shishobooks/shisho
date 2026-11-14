@@ -83,9 +83,11 @@ func (c deviceClock) onDevice(instant time.Time) int64 {
 
 // upload takes in a batch of page rows and journal events from the plugin
 // (ADR 0016). Everything is acknowledged, including what's ignored: a
-// repeat, a time that can't be right, or a document Shisho doesn't
-// recognize. That document's rows are stored ungrouped and count toward
-// nothing, so linking the copy to a File can group them later (ADR 0017).
+// repeat, or a time that can't be right. The rows and events of a document
+// Shisho doesn't recognize are held against its hash, counting toward
+// nothing, and the copy is listed on the Device's page, so linking it to a
+// File applies them (ADR 0017). A copy the user dismissed has its data
+// dropped, and one another server now recognizes (Claimed) is forgotten.
 func (h *handler) upload(c echo.Context) error {
 	ctx := c.Request().Context()
 	user, err := auth.RequireUser(c)
@@ -123,6 +125,33 @@ func (h *handler) upload(c echo.Context) error {
 		return err
 	}
 
+	if err := h.dropClaimed(ctx, device.ID, payload.Claimed); err != nil {
+		return err
+	}
+	about := map[string]*UnrecognizedPayload{}
+	for i := range payload.Unrecognized {
+		about[payload.Unrecognized[i].Document] = &payload.Unrecognized[i]
+	}
+	// hold reports whether data for document, which Shisho doesn't
+	// recognize, is held, noting the copy when it is.
+	held := map[string]bool{}
+	hold := func(document string) (bool, error) {
+		if ok, seen := held[document]; seen {
+			return ok, nil
+		}
+		dismissed, err := h.dismissed(ctx, device.ID, document)
+		if err != nil {
+			return false, err
+		}
+		if !dismissed {
+			if err := h.noteUnrecognized(ctx, user, device, clock, document, about[document]); err != nil {
+				return false, err
+			}
+		}
+		held[document] = !dismissed
+		return !dismissed, nil
+	}
+
 	refused := 0
 	var order []string
 	byDocument := map[string][]reading.PageRow{}
@@ -153,15 +182,38 @@ func (h *handler) upload(c echo.Context) error {
 		var fileID *int
 		if file != nil {
 			fileID = &file.FileID
+		} else if ok, err := hold(document); err != nil {
+			return err
+		} else if !ok {
+			continue
 		}
 		if err := h.reading.RecordPageRows(ctx, user.ID, device.ID, fileID, byDocument[document], payload.Backfill); err != nil {
 			return err
 		}
 	}
 
+	// Details of a copy the batch carries nothing else of fill in one the
+	// server already holds (LookupResponse.Undescribed).
+	for i := range payload.Unrecognized {
+		about := &payload.Unrecognized[i]
+		if _, done := held[about.Document]; done {
+			continue
+		}
+		file, err := resolve(about.Document)
+		if err != nil {
+			return err
+		}
+		if file != nil {
+			continue
+		}
+		if err := h.describeUnrecognized(ctx, device, clock, about); err != nil {
+			return err
+		}
+	}
+
 	acknowledged := make([]string, 0, len(payload.Events))
 	for _, event := range payload.Events {
-		ok, err := h.applyEvent(ctx, user, device, clock, event, payload.Backfill, resolve, before)
+		ok, err := h.applyEvent(ctx, user, device, clock, event, payload.Backfill, resolve, hold, before)
 		if err != nil {
 			return err
 		}
@@ -193,7 +245,8 @@ func (h *handler) upload(c echo.Context) error {
 // applyEvent takes in one journal event, once, or one from history. It
 // returns false for one refused for its time.
 func (h *handler) applyEvent(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock, event EventPayload,
-	history bool, resolve func(string) (*models.DocumentHash, error), before map[int]*reading.StatusSummary) (bool, error) {
+	history bool, resolve func(string) (*models.DocumentHash, error), hold func(string) (bool, error),
+	before map[int]*reading.StatusSummary) (bool, error) {
 	exists, err := h.db.NewSelect().
 		Model((*models.KOReaderPluginEvent)(nil)).
 		Where("kpe.device_id = ? AND kpe.event_id = ?", device.ID, event.ID).
@@ -204,8 +257,25 @@ func (h *handler) applyEvent(ctx context.Context, user *models.User, device *dev
 	if exists {
 		return true, nil
 	}
+	file, err := resolve(event.Document)
+	if err != nil {
+		return false, err
+	}
 	var ok bool
 	switch {
+	case file == nil:
+		var holding bool
+		holding, err = hold(event.Document)
+		if err != nil {
+			return false, err
+		}
+		ok = true
+		if holding {
+			ok, err = h.holdEvent(ctx, user, device, clock, event, history)
+			if err != nil {
+				return false, err
+			}
+		}
 	case history && (event.Type == PluginEventStatus || event.Type == PluginEventRating):
 		ok, err = h.applyHistory(ctx, user, clock, event, resolve)
 		if err != nil {
@@ -220,7 +290,7 @@ func (h *handler) applyEvent(ctx context.Context, user *models.User, device *dev
 		var at time.Time
 		at, ok = clock.instant(event.At)
 		if ok {
-			if err := h.applyPosition(ctx, user, device, event, at, resolve); err != nil {
+			if err := h.applyPositionTo(ctx, user, device, file, event, at); err != nil {
 				return false, err
 			}
 		}
@@ -234,36 +304,33 @@ func (h *handler) applyEvent(ctx context.Context, user *models.User, device *dev
 	return ok, errors.WithStack(err)
 }
 
-// applyPosition sends a position event through the update service, at the
-// time it happened.
-func (h *handler) applyPosition(ctx context.Context, user *models.User, device *devices.Device, event EventPayload, at time.Time,
-	resolve func(string) (*models.DocumentHash, error)) error {
-	file, err := resolve(event.Document)
-	if err != nil || file == nil {
+// applyPositionTo sends a position event in file through the update
+// service, at the time it happened. A copy a user linked syncs only its
+// percentage (ADR 0017).
+func (h *handler) applyPositionTo(ctx context.Context, user *models.User, device *devices.Device, file *models.DocumentHash, event EventPayload, at time.Time) error {
+	if event.Percentage == nil {
+		return nil
+	}
+	update := positionUpdate(user, device, file, *event.Percentage, at)
+	// A copy a user linked may not line up with the File (ADR 0017).
+	if file.UserMade {
+		update.PercentageOnly = true
+		_, err := h.reading.UpdatePosition(ctx, update)
 		return err
 	}
 	locator, ok := koreader.ParseProgress(event.Progress)
-	if !ok || event.Percentage == nil {
+	if !ok {
 		// Refusing it would leave it queued on the device for good.
 		logger.FromContext(ctx).Warn("koreader plugin position not readable", logger.Data{
 			"device_id": device.ID, "event_id": event.ID,
 		})
 		return nil
 	}
-	update := reading.PositionUpdate{
-		UserID:     user.ID,
-		FileID:     file.FileID,
-		Source:     models.ReadingSourceKOReader,
-		DeviceID:   &device.ID,
-		Locator:    locator,
-		Percentage: *event.Percentage,
-		AtEnd:      *event.Percentage >= koreader.FinishedAt,
-		OccurredAt: &at,
-	}
+	update.Locator = locator
 	if file.File != nil && file.DeliveredFileType != file.File.FileType {
 		update.LocatorFileType = &file.DeliveredFileType
 	}
-	_, err = h.reading.UpdatePosition(ctx, update)
+	_, err := h.reading.UpdatePosition(ctx, update)
 	return err
 }
 
@@ -303,26 +370,34 @@ func (h *handler) pull(c echo.Context) error {
 		if stored == nil {
 			continue
 		}
-		progress, err := h.documents.Progress(ctx, user, device, document, file, stored)
-		if err != nil {
-			return err
-		}
-		if progress.Progress == "" || progress.Percentage == nil {
-			continue
-		}
 		own := stored.SourceDeviceID != nil && *stored.SourceDeviceID == device.ID
-		source := progress.Device
-		if own {
-			source = device.Name
-		}
-		positions = append(positions, PulledPosition{
+		pulled := PulledPosition{
 			Document:   document,
-			Progress:   progress.Progress,
-			Percentage: *progress.Percentage,
+			Percentage: stored.Percentage,
 			Timestamp:  clock.onDevice(stored.OccurredAt),
-			Source:     source,
 			Own:        own,
-		})
+		}
+		if file.UserMade || stored.IsZero() {
+			// KOReader goes to it by percentage (ADR 0017).
+			pulled.Source, _, err = h.documents.Source(ctx, user, stored)
+			if err != nil {
+				return err
+			}
+		} else {
+			progress, err := h.documents.Progress(ctx, user, device, document, file, stored)
+			if err != nil {
+				return err
+			}
+			if progress.Progress == "" || progress.Percentage == nil {
+				continue
+			}
+			pulled.Progress = progress.Progress
+			pulled.Source = progress.Device
+		}
+		if own {
+			pulled.Source = device.Name
+		}
+		positions = append(positions, pulled)
 	}
 	cursor := time.Now().Unix()
 	states, err := h.pullStates(ctx, user, device, payload)

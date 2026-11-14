@@ -28,6 +28,9 @@ vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 // The saved position, and what saves were sent.
 const position = vi.hoisted(() => ({
   savedSeconds: null as number | null,
+  // A saved position with no seconds, only a percentage, as a copy a user
+  // linked stores (ADR 0017). It replaces savedSeconds when set.
+  savedPercentageOnly: null as number | null,
   loading: false,
   loadFails: false,
   saves: [] as Array<Record<string, unknown>>,
@@ -44,9 +47,11 @@ vi.mock("@/hooks/queries/reading", () => ({
         ? undefined
         : {
             position:
-              position.savedSeconds === null
-                ? null
-                : { seconds: position.savedSeconds, percentage: 0.5 },
+              position.savedPercentageOnly !== null
+                ? { percentage: position.savedPercentageOnly }
+                : position.savedSeconds === null
+                  ? null
+                  : { seconds: position.savedSeconds, percentage: 0.5 },
           },
     error: position.loadFails ? new Error("offline") : null,
     isEnabled: true,
@@ -85,6 +90,7 @@ let updateSettingsMutate: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   setAuth({ permissions: ["books:read"] });
   position.savedSeconds = null;
+  position.savedPercentageOnly = null;
   position.loading = false;
   position.loadFails = false;
   position.saves = [];
@@ -1031,6 +1037,18 @@ describe("M4BReader position", () => {
     position.loading = false;
     rerender(tree());
     expect(audio.currentTime).toBe(125);
+  });
+
+  it("seeks a saved place with no seconds to its percentage of the book", () => {
+    // The file is an hour long.
+    position.savedPercentageOnly = 0.25;
+    renderReader();
+    const audio = getAudio();
+    fireEvent.loadedMetadata(audio);
+
+    expect(audio.currentTime).toBe(900);
+    act(() => vi.advanceTimersByTime(SAVE_EVERY_MS));
+    expect(position.saves).toEqual([]);
   });
 
   it("stays at the start with nothing saved", () => {

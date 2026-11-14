@@ -171,3 +171,37 @@ func TestPluginSettingSendsHistoryAtSignIn(t *testing.T) {
 	assert.Len(t, s.pluginSessions(), len(y.sittings), "shown: %v", signedIn.Shown)
 	assert.Len(t, s.readThroughs(y.cbz), 1)
 }
+
+// History declined at sign-in can be sent later from the server's menu. It
+// arrives as at sign-in, and the reading already sent since isn't counted
+// twice.
+func TestPluginSendsHistoryLaterFromTheMenu(t *testing.T) {
+	s := newScenario(t)
+	y := s.recordPastYear()
+	s.signInFresh("skip")
+	_, err := s.db.NewUpdate().Model((*devices.Device)(nil)).Set("created_at = ?", time.Now().Add(-24*time.Hour)).
+		Where("id = ?", s.device.ID).Exec(s.ctx)
+	require.NoError(t, err)
+	now := time.Now().Add(-time.Hour).Truncate(time.Second)
+	s.run(Args{Command: "plugin-sync", Online: true, Stats: []StatRow{
+		{Document: s.documentHash(y.epub), Page: 320, TotalPages: 400, StartTime: now.Unix(), Duration: 60},
+	}})
+	require.Len(t, s.pluginSessions(), 1)
+
+	before := s.run(Args{Command: "plugin-menu"})
+	assert.Contains(t, before.Plugin.Menu, s.containerLabel()+" > Send reading history")
+
+	sent := s.run(Args{Command: "plugin-menu", Online: true, SendHistory: true})
+
+	assert.Len(t, s.pluginSessions(), len(y.sittings)+1, "a year of sittings, and the one since, once: %v", sent.Shown)
+	comic := s.readThroughs(y.cbz)
+	require.Len(t, comic, 1, "statuses from before sign-in come along")
+	assert.Equal(t, models.ReadThroughOutcomeFinished, comic[0].Outcome)
+	require.NotNil(t, s.ratingUnits(y.cbz))
+	assert.Equal(t, 16, *s.ratingUnits(y.cbz))
+	assert.NotContains(t, sent.Plugin.Menu, s.containerLabel()+" > Send reading history", "once is enough")
+
+	again := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	assert.Empty(t, again.Plugin.Problems)
+	assert.Len(t, s.pluginSessions(), len(y.sittings)+1)
+}

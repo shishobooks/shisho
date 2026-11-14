@@ -46,6 +46,7 @@ import {
   type UserSettingsPayload,
 } from "@/types";
 import { pageTurnForKey, type PageTurn } from "@/utils/readerKeys";
+import { savedPage } from "@/utils/readingPosition";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
 const flattenChapters = (chapters: Chapter[]): Chapter[] => {
@@ -237,11 +238,14 @@ export default function PageReader({
     settled: positionSettled,
     failed: positionFailed,
   } = useSavedPosition(fileId);
+  // A position with no page, such as one from a copy a user linked, opens at
+  // its percentage.
+  const savedAt = savedPage(saved, totalPages);
   const [restored, setRestored] = useState(false);
   if (!restored && positionSettled) {
     setRestored(true);
-    if (!urlNamedPage && saved?.page != null) {
-      setCurrentPage(clampPage(saved.page));
+    if (!urlNamedPage && savedAt != null) {
+      setCurrentPage(clampPage(savedAt));
     }
   }
   const { opened, openedFromLink, moved } = useReadingProgress(fileId, {
@@ -330,7 +334,7 @@ export default function PageReader({
         { replace: true, state: { readerPage: true } },
       );
     }
-    if (urlNamedPage && (saved?.page ?? 0) !== page) {
+    if (urlNamedPage && (savedAt ?? 0) !== page) {
       openedFromLink(position);
     } else {
       opened({ ...position, atEnd: false });
