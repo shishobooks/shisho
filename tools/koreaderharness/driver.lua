@@ -332,11 +332,16 @@ end
 
 -- The KOReader plugin ---------------------------------------------------------
 
+-- How often the plugin told the file browser to redraw, by announcing that
+-- books' metadata changed.
+local redrawn = 0
+
 -- What the plugin and KOReader's OPDS catalog list hold, read back from
 -- their files as a person inspecting the device would.
 local function pluginReport(plugin, extra)
     local LuaSettings = require("luasettings")
     local report = extra or {}
+    report.redrawn = redrawn
     local state = LuaSettings:open(DataStorage:getSettingsDir() .. "/shisho.lua").data
     report.servers = state.servers or {}
     report.journal = type(state.journal) == "table" and type(state.journal.entries) == "table"
@@ -383,6 +388,7 @@ local function stubNetwork(online)
     local broadcast = UIManager.broadcastEvent
     UIManager.broadcastEvent = function(ui, event)
         if event and event.handler == "onNetworkConnected" then return end
+        if event and event.handler == "onBookMetadataChanged" then redrawn = redrawn + 1 end
         return broadcast(ui, event)
     end
     local NetworkMgr = require("ui/network/manager")

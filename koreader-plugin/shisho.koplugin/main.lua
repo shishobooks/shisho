@@ -845,6 +845,7 @@ function Shisho:writeSummary(book, write)
     doc_settings:saveSetting("summary", summary)
     doc_settings:flush()
     book.current = Summaries.read(summary)
+    self.summaries_written = true
     if open then
         -- Written by the server, not changed by the reader.
         self.open_status = book.current
@@ -1079,6 +1080,12 @@ function Shisho:syncAll(interactive, going_to_sleep, skip_failing)
     local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, skip_failing)
     self.syncing = false
     self.synced_at = os.time()
+    if self.summaries_written then
+        -- The file browser, History, and Collections show the statuses and
+        -- stars written, as they do after KOReader's own Book information.
+        self.summaries_written = nil
+        UIManager:broadcastEvent(Event:new("BookMetadataChanged"))
+    end
     if not ok then
         logger.warn("Shisho: syncing failed:", problems)
         problems, statistics_on = { _("Couldn't sync. Try again later.") }, true

@@ -112,6 +112,9 @@ type PluginReport struct {
 	// sleep screen, if any.
 	LeftOnScreen string   `json:"left_on_screen"`
 	Problems     []string `json:"problems"`
+	// Redrawn is how often a plugin command told the file browser to redraw,
+	// as it must to show statuses the plugin wrote.
+	Redrawn int `json:"redrawn"`
 	// Sidecars is the status and Rating each book in the books directory
 	// that has a sidecar holds, by file name.
 	Sidecars map[string]SidecarSummary `json:"sidecars"`

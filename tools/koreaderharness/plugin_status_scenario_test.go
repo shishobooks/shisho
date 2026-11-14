@@ -115,3 +115,25 @@ func TestPluginWritesToABookOutsideTheHomeFolder(t *testing.T) {
 	require.Contains(t, synced.Plugin.Sidecars, "long.epub", "shown: %v", synced.Shown)
 	assert.Equal(t, "complete", synced.Plugin.Sidecars["long.epub"].Status)
 }
+
+// Reading a finished book again in Shisho sets it back to reading in
+// KOReader, taking the finished mark off.
+func TestPluginWritesARereadFromShisho(t *testing.T) {
+	s := newScenario(t)
+	s.downloadOPDS("Long Book", "long.epub")
+	epub := s.file(models.FileTypeEPUB)
+	s.signInPlugin(time.Now().Add(-time.Hour))
+	today := time.Now().UTC().Format(time.DateOnly)
+	require.NoError(t, s.reading.End(s.ctx, s.user.ID, epub.BookID, models.ReadThroughOutcomeFinished, today))
+	finished := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	require.Equal(t, "complete", finished.Plugin.Sidecars["long.epub"].Status)
+
+	time.Sleep(1100 * time.Millisecond)
+	require.NoError(t, s.reading.Start(s.ctx, s.user.ID, epub.BookID, today))
+	reread := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	assert.Equal(t, "reading", reread.Plugin.Sidecars["long.epub"].Status, "shown: %v", reread.Shown)
+	assert.Positive(t, reread.Plugin.Redrawn, "the file browser shows the status it now has")
+	rts := s.readThroughs(epub)
+	require.Len(t, rts, 2)
+	assert.Equal(t, models.ReadThroughOutcomeUnderway, rts[1].Outcome, "the reread stays underway")
+}
