@@ -1034,6 +1034,8 @@ describe("ReadingStatsPage", () => {
               kind: "reading",
               source: "web_reader",
               measured: true,
+              device_id: null,
+              device_name: null,
             },
           ],
         }),
