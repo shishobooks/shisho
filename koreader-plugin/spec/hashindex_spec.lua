@@ -107,6 +107,31 @@ return {
         assert_eq(#hashed, 5)
     end,
 
+    ["on an e-reader, every folder of its storage; elsewhere, the home and download folders"] = function()
+        local folders = { storage = "/mnt/onboard", home = "/mnt/onboard/books/", download = "/mnt/onboard/downloads" }
+        folders.ereader = true
+        assert_eq(HashIndex.roots(folders), { "/mnt/onboard" }, "the storage holds the others")
+        folders.ereader = false
+        assert_eq(HashIndex.roots(folders), { "/mnt/onboard/books", "/mnt/onboard/downloads" })
+        assert_eq(HashIndex.roots{ storage = "/sdcard", home = "/sdcard/Books", download = "/sdcard/Books/opds" }, { "/sdcard/Books" })
+        assert_eq(HashIndex.roots{ storage = "/mnt/onboard", ereader = true }, { "/mnt/onboard" })
+        assert_eq(HashIndex.roots{ home = "/books", download = "/bookshelf" }, { "/books", "/bookshelf" }, "a shared prefix isn't a parent")
+        assert_eq(HashIndex.roots{}, {})
+    end,
+
+    ["scans several folders, each book once"] = function()
+        local root = scratch_dir()
+        lfs.mkdir(root .. "/books")
+        lfs.mkdir(root .. "/other")
+        write(root .. "/books/a.epub", "a")
+        write(root .. "/other/b.cbz", "b")
+        write(root .. "/c.cbz", "c")
+        local paths = {}
+        for path in pairs(HashIndex.scan({ root .. "/books", root .. "/other" })) do table.insert(paths, path:sub(#root + 2)) end
+        table.sort(paths)
+        assert_eq(paths, { "books/a.epub", "other/b.cbz" })
+    end,
+
     ["a sync asked for scans; otherwise every few minutes"] = function()
         assert_eq(HashIndex.due(nil, 1000, false), true)
         assert_eq(HashIndex.due(1000, 1000 + 60, true), true)

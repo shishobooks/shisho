@@ -1,7 +1,8 @@
 --[[--
-The document hash of each book file under KOReader's home folder (ADR
-0016), so a status or Rating from Shisho can be written to a book this device
-has never opened, which has no sidecar recording its hash. A file is hashed
+The document hash of each book file on the device (ADR 0016), so a status
+or Rating from Shisho can be written to a book this device has never opened,
+which has no sidecar recording its hash. HashIndex.roots says which folders
+it covers. A file is hashed
 again only when its size or modification time changes, and only during a
 sync. It lives in its own file in KOReader's settings directory:
 
@@ -16,7 +17,7 @@ local lfs = require("libs/libkoreader-lfs")
 local HashIndex = {}
 HashIndex.__index = HashIndex
 
--- SCAN_EVERY is how many seconds the home folder goes between scans, except
+-- SCAN_EVERY is how many seconds the index goes between scans, except
 -- for a sync someone asked for. A sync while reading never scans.
 HashIndex.SCAN_EVERY = 10 * 60
 
@@ -44,11 +45,11 @@ function HashIndex.open(path)
 end
 
 function HashIndex:flush()
-    return State.write(self.path, self.data, "The document hash of each book in KOReader's home folder, for the Shisho KOReader plugin.")
+    return State.write(self.path, self.data, "The document hash of each book on the device, for the Shisho KOReader plugin.")
 end
 
--- due reports whether a sync at now scans the home folder: one asked for
--- does, as does one an hour after the last scan. A clock set back since
+-- due reports whether a sync at now scans the device's folders: one asked for
+-- does, as does one SCAN_EVERY after the last scan. A clock set back since
 -- doesn't hold it off.
 function HashIndex.due(scanned_at, now, asked)
     if asked or not scanned_at then return true end
@@ -56,12 +57,51 @@ function HashIndex.due(scanned_at, now, asked)
     return since < 0 or since >= HashIndex.SCAN_EVERY
 end
 
+local function trimmed(folder)
+    if type(folder) ~= "string" or folder == "" then return nil end
+    return folder == "/" and folder or (folder:gsub("/+$", ""))
+end
+
+local function inside(folder, parent)
+    return folder == parent or parent == "/" or folder:sub(1, #parent + 1) == parent .. "/"
+end
+
 --[[--
-scan lists the books under root (HashIndex.isBook), by path, each
-{ size, mtime }. Hidden folders, KOReader's sidecar folders (.sdr), and
-links are left out, so a link to a folder above can't loop.
+roots is the folders the index covers, from folders { storage, home,
+download, ereader }: storage is the device's own storage, home KOReader's
+home folder, and download the folder KOReader's OPDS catalogs download to.
+An e-reader's storage holds only what was put on it, so all of it is
+covered, wherever books were copied or downloaded. Elsewhere, as on Android
+or a computer, the storage is everything, so only the home and download
+folders are. A folder inside another one covered is left out.
 ]]
-function HashIndex.scan(root)
+function HashIndex.roots(folders)
+    local candidates = {}
+    if folders.ereader then table.insert(candidates, trimmed(folders.storage)) end
+    table.insert(candidates, trimmed(folders.home))
+    table.insert(candidates, trimmed(folders.download))
+    -- Shorter first, so a parent comes before what's inside it.
+    table.sort(candidates, function(a, b) return #a < #b or (#a == #b and a < b) end)
+    local roots = {}
+    for __, candidate in ipairs(candidates) do
+        local covered = false
+        for __, root in ipairs(roots) do
+            if inside(candidate, root) then covered = true end
+        end
+        if not covered then table.insert(roots, candidate) end
+    end
+    table.sort(roots)
+    return roots
+end
+
+--[[--
+scan lists the books in roots (a folder, or a list from HashIndex.roots),
+by path, each { size, mtime }, as HashIndex.isBook takes them. Hidden
+folders, KOReader's sidecar folders (.sdr), and links are left out, so a link
+to a folder above can't loop.
+]]
+function HashIndex.scan(roots)
+    if type(roots) ~= "table" then roots = { roots } end
     local files = {}
     local function walk(dir)
         local ok, iter, dir_obj = pcall(lfs.dir, dir)
@@ -78,8 +118,11 @@ function HashIndex.scan(root)
             end
         end
     end
-    if root and lfs.attributes(root, "mode") == "directory" then
-        walk((root:gsub("/+$", "")))
+    for __, root in ipairs(roots) do
+        root = trimmed(root)
+        if root and lfs.attributes(root, "mode") == "directory" then
+            walk(root == "/" and "" or root)
+        end
     end
     return files
 end

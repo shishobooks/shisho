@@ -220,6 +220,11 @@ type Args struct {
 	WifiFails bool
 	// ToggleEnabled taps Enabled under the first server in plugin-menu.
 	ToggleEnabled bool
+	// HomeDir and DownloadDir set KOReader's home folder and the folder its
+	// OPDS catalogs download to, inside the books directory, before KOReader
+	// starts.
+	HomeDir     string
+	DownloadDir string
 	// WifiPrompt leaves KOReader asking before it turns Wi-Fi on, its
 	// default, for plugin-sleep and plugin-daily, which otherwise set it to
 	// turn Wi-Fi on by itself.
@@ -307,6 +312,12 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.Close {
 		payload["close"] = true
+	}
+	if a.HomeDir != "" {
+		payload["home_dir"] = a.HomeDir
+	}
+	if a.DownloadDir != "" {
+		payload["download_dir"] = a.DownloadDir
 	}
 	if a.MarkFinished {
 		payload["mark_finished"] = true

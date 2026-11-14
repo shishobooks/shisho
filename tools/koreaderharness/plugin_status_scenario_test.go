@@ -100,3 +100,18 @@ func TestPluginWritesToABookNeverOpened(t *testing.T) {
 	assert.Equal(t, 15, *s.ratingUnits(epub), "the rounded copy isn't sent back")
 	assert.Len(t, s.readThroughs(epub), 1)
 }
+
+// A book saved outside KOReader's home folder, as KOReader's OPDS catalog
+// saves to its own download folder, still gets its status from Shisho.
+func TestPluginWritesToABookOutsideTheHomeFolder(t *testing.T) {
+	s := newScenario(t)
+	s.downloadOPDS("Long Book", "long.epub")
+	epub := s.file(models.FileTypeEPUB)
+	s.signInPlugin(time.Now().Add(-time.Hour))
+	require.NoError(t, s.reading.End(s.ctx, s.user.ID, epub.BookID, models.ReadThroughOutcomeFinished, time.Now().UTC().Format(time.DateOnly)))
+
+	// The book is in /books, and the home folder is a folder inside it.
+	synced := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, HomeDir: "/books/main", DownloadDir: "/books"})
+	require.Contains(t, synced.Plugin.Sidecars, "long.epub", "shown: %v", synced.Shown)
+	assert.Equal(t, "complete", synced.Plugin.Sidecars["long.epub"].Status)
+}

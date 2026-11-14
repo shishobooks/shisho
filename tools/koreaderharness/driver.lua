@@ -43,6 +43,11 @@ Device.input.dummy = true
 local JSON = require("json")
 local args = JSON.decode(arg[1])
 
+-- KOReader's home folder, and the folder its OPDS catalogs download to, when
+-- a command moves them, set before KOReader starts.
+if args.home_dir then G_reader_settings:saveSetting("home_dir", args.home_dir) end
+if args.download_dir then G_reader_settings:saveSetting("download_dir", args.download_dir) end
+
 local function respond(result)
     real_stdout:write("\n@@RESULT@@", JSON.encode(result), "\n")
     real_stdout:flush()

@@ -752,15 +752,20 @@ local function hashOf(path)
     return util.partialMD5(path)
 end
 
--- refreshHashes brings the index of book files under KOReader's home folder
--- up to date when it's due (HashIndex.due), and reports whether it scanned.
+-- refreshHashes brings the index of book files on the device up to date
+-- when it's due (HashIndex.due), and reports whether it scanned.
 function Shisho:refreshHashes(interactive)
     local now = os.time()
     if not HashIndex.due(self.hashes:scannedAt(), now, interactive) then return false end
-    local root = G_reader_settings:readSetting("home_dir") or Device.home_dir
-    if not root then return false end
+    local roots = HashIndex.roots{
+        storage = Device.home_dir,
+        home = G_reader_settings:readSetting("home_dir"),
+        download = G_reader_settings:readSetting("download_dir"),
+        ereader = Device:isKobo() or Device:isKindle() or Device:isPocketBook() or Device:isCervantes() or Device:isRemarkable(),
+    }
+    if #roots == 0 then return false end
     local ok, err = pcall(function()
-        self.hashes:refresh(HashIndex.scan(root), hashOf, now)
+        self.hashes:refresh(HashIndex.scan(roots), hashOf, now)
     end)
     if not ok then
         logger.warn("Shisho: indexing books failed:", err)
@@ -1103,7 +1108,7 @@ end
 function Shisho:syncServers(interactive, skip_failing)
     self:observeStatus()
     self:recordPosition(false)
-    -- A sync while reading doesn't walk the home folder, or read the sidecars
+    -- A sync while reading doesn't walk the device's folders, or read the sidecars
     -- of books only it found.
     local scanned = not skip_failing and self:refreshHashes(interactive)
     local books = self:localBooks(scanned)
