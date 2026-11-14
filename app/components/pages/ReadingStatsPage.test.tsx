@@ -1293,7 +1293,12 @@ describe("ReadingStatsPage", () => {
       ]);
       const morning =
         lanes[0].querySelector<HTMLElement>('[data-session="1"]')!;
-      expect(morning.style.left).toBe(`${((7 * 60) / 1440) * 100}%`);
+      // CSS serializes the percentage to six significant digits.
+      expect(morning.style.left).toMatch(/%$/);
+      expect(parseFloat(morning.style.left)).toBeCloseTo(
+        ((7 * 60) / 1440) * 100,
+        3,
+      );
       await user.hover(morning);
       expect(screen.getByRole("tooltip")).toHaveTextContent(
         "Dune7:00 AM to 7:30 AM · 30m",

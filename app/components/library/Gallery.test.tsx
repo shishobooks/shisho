@@ -69,7 +69,7 @@ describe("Gallery", () => {
     renderGallery({ data: { items: [], total: 2 } }, ["Dune", "Emma"]);
 
     const grid = screen.getByText("Dune").parentElement!;
-    expect(grid.style.gridTemplateColumns).toBe("repeat(4, minmax(0, 1fr))");
+    expect(grid.style.gridTemplateColumns).toBe("repeat(4, minmax(0px, 1fr))");
   });
 
   it("shows a spinner, not an error, while its query waits on its gate", () => {
