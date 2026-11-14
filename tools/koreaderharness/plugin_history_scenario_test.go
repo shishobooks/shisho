@@ -3,6 +3,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -151,4 +153,21 @@ func TestPluginDecliningHistorySendsOnlyNewReading(t *testing.T) {
 	require.Len(t, sessions, 1, "shown: %v", read.Shown)
 	assert.Equal(t, now.Unix(), sessions[0].StartedAt.Unix())
 	assert.Equal(t, "complete", read.Plugin.Sidecars["comic.cbz"].Status, "KOReader keeps its own record")
+}
+
+// With the setting to send history, a first sign-in asks nothing and sends
+// it at once, as answering the question does.
+func TestPluginSettingSendsHistoryAtSignIn(t *testing.T) {
+	s := newScenario(t)
+	y := s.recordPastYear()
+	state := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
+	require.NoError(t, os.WriteFile(state, []byte(`return { settings = { send_history = "send" } }`), 0o644))
+
+	short, err := s.devices.GenerateShortURL(s.ctx, s.user.ID, s.device.ID)
+	require.NoError(t, err)
+	signedIn := s.run(Args{Command: "plugin-signin", Server: s.url, Code: strings.ToUpper(short.ShortCode), Online: true})
+	require.True(t, signedIn.Plugin.SignedIn, signedIn.Plugin.Message)
+	assert.NotContains(t, strings.Join(signedIn.Shown, " "), "Send your existing", "nothing asks")
+	assert.Len(t, s.pluginSessions(), len(y.sittings), "shown: %v", signedIn.Shown)
+	assert.Len(t, s.readThroughs(y.cbz), 1)
 }

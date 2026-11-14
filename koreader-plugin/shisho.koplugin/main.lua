@@ -179,25 +179,34 @@ function Shisho:signedIn(url, answer, username, credential)
     self:notify(T(_("Signed in to %1 as %2."), Urls.label(server.url), server.device_name or username), 3)
     if server.asking_history then
         self:askHistory(server)
+    elseif first then
+        -- The setting answered, as the person would have.
+        self:historyDecided()
     end
     return server
 end
 
+-- historyDecided follows a decision about sending history: it asks about the
+-- next server still waiting, if any, and once none is, syncs when online, so
+-- history the person chose to send goes at once.
+function Shisho:historyDecided()
+    local waiting = History.waiting(self.state:servers())
+    if waiting then
+        UIManager:nextTick(function() self:askHistory(waiting) end)
+    elseif NetworkMgr:isOnline() then
+        UIManager:nextTick(function() self:syncAll(true) end)
+    end
+end
+
 -- askHistory asks whether to send server the reading history KOReader
 -- recorded before signing in to it (shisho/history). Saying no sends only
--- reading from sign-in on. Then it asks about the next server still
--- waiting, if any, and once none is, a sync follows when online.
+-- reading from sign-in on (historyDecided follows).
 function Shisho:askHistory(server)
     local function answer(send)
         if not self.state:find(server.url) then return end
         History.answer(server, send)
         self.state:flush()
-        local waiting = History.waiting(self.state:servers())
-        if waiting then
-            UIManager:nextTick(function() self:askHistory(waiting) end)
-        elseif NetworkMgr:isOnline() then
-            UIManager:nextTick(function() self:syncAll(true) end)
-        end
+        self:historyDecided()
     end
     UIManager:show(ConfirmBox:new{
         text = T(_("Send your existing KOReader reading history to %1?\n\nShisho then shows the reading time KOReader recorded, on the days it happened, and your books' statuses and stars from KOReader. Otherwise only reading from now on is sent."), Urls.label(server.url)),
