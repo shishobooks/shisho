@@ -149,6 +149,18 @@ func (h *handler) unlinkUnrecognized(c echo.Context) error {
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
+// dismissAllUnrecognized dismisses every copy on the Device still to link.
+func (h *handler) dismissAllUnrecognized(c echo.Context) error {
+	user, device, err := h.ownDevice(c)
+	if err != nil {
+		return err
+	}
+	if err := h.dismissAll(c.Request().Context(), user, device); err != nil {
+		return err
+	}
+	return errors.WithStack(c.NoContent(http.StatusNoContent))
+}
+
 // dismissUnrecognized dismisses an unrecognized copy, deleting what was
 // held for it.
 func (h *handler) dismissUnrecognized(c echo.Context) error {

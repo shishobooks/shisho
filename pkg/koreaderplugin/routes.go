@@ -41,6 +41,7 @@ func RegisterUserRoutes(api *echo.Group, db *bun.DB, bundle *Bundle, bookService
 		authMiddleware.Authenticate, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	g.GET("", h.unrecognized)
 	g.GET("/candidates", h.linkCandidates)
+	g.POST("/dismiss-all", h.dismissAllUnrecognized)
 	g.POST("/:document/link", h.linkUnrecognized)
 	g.POST("/:document/unlink", h.unlinkUnrecognized)
 	g.POST("/:document/dismiss", h.dismissUnrecognized)

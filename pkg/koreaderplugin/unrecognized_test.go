@@ -735,3 +735,65 @@ func TestUpload_DetailsAloneListNothingNew(t *testing.T) {
 	assert.Empty(t, f.listUnrecognized(), "neither a copy with no data nor a dismissed one is listed")
 	assert.Equal(t, DocumentUnknown, f.lookupAs(f.device, other.Document)[other.Document])
 }
+
+func (f *syncFixture) dismissAllAs(user *models.User, device *devices.Device) error {
+	f.t.Helper()
+	_, err := f.web(f.h.dismissAllUnrecognized, http.MethodPost, "/", user, "", "id", device.ID)
+	return err
+}
+
+func TestDismissAll_DismissesEveryBookStillToLink(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	another := unrecognizedAbout()
+	another.Document = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	f.upload(UploadPayload{Pages: pages(another.Document, 1, 3, f.day1), Unrecognized: []UnrecognizedPayload{another}})
+	linked := unrecognizedAbout()
+	linked.Document = "dddddddddddddddddddddddddddddddd"
+	f.upload(UploadPayload{Pages: pages(linked.Document, 1, 3, f.day1.Add(time.Hour)), Unrecognized: []UnrecognizedPayload{linked}})
+	file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	body, err := json.Marshal(LinkPayload{FileID: file.ID})
+	require.NoError(t, err)
+	_, err = f.web(f.h.linkUnrecognized, http.MethodPost, "/", f.user, string(body), "id", f.device.ID, "document", linked.Document)
+	require.NoError(t, err)
+	// Another Device's books are its own.
+	other := f.addDevice(f.user, devices.DeviceTypeKOReader)
+	f.backdate(other, time.Now().AddDate(0, -1, 0))
+	rec := f.uploadAs(other, UploadPayload{Pages: pages(oldCopy, 50, 52, f.day1), Unrecognized: []UnrecognizedPayload{unrecognizedAbout()}})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	require.NoError(t, f.dismissAllAs(f.user, f.device))
+
+	books := f.listUnrecognized()
+	require.Len(t, books, 1, "only the linked book stays")
+	assert.Equal(t, linked.Document, books[0].Document)
+	states := f.lookupAs(f.device, oldCopy, another.Document)
+	assert.Equal(t, DocumentDismissed, states[oldCopy])
+	assert.Equal(t, DocumentDismissed, states[another.Document])
+	held, err := f.db.NewSelect().Model((*models.KOReaderPageRow)(nil)).
+		Where("device_id = ? AND file_id IS NULL", f.device.ID).Count(f.ctx)
+	require.NoError(t, err)
+	assert.Zero(t, held, "what was held for them is deleted")
+	assert.Zero(t, f.heldEventsOn(f.device))
+	otherBooks, err := f.listUnrecognizedAs(f.user, other)
+	require.NoError(t, err)
+	assert.Len(t, otherBooks, 1)
+}
+
+func TestDismissAll_RefusesAnotherUsersDevice(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	other := f.addUser("other", true)
+
+	requireStatus(t, f.dismissAllAs(other, f.device), http.StatusNotFound)
+	assert.Len(t, f.listUnrecognized(), 1)
+}
+
+func (f *syncFixture) heldEventsOn(device *devices.Device) int {
+	f.t.Helper()
+	n, err := f.db.NewSelect().Model((*models.KOReaderHeldEvent)(nil)).Where("device_id = ?", device.ID).Count(f.ctx)
+	require.NoError(f.t, err)
+	return int(n)
+}

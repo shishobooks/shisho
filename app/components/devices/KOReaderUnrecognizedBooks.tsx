@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import {
+  useDismissAllKOReaderUnrecognized,
   useDismissKOReaderUnrecognized,
   useKOReaderLinkCandidates,
   useKOReaderUnrecognizedBooks,
@@ -400,7 +401,21 @@ const LinkedRow = ({
 const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
   const query = useKOReaderUnrecognizedBooks(device.id);
   const [showAll, setShowAll] = useState(false);
+  const dismissAll = useDismissAllKOReaderUnrecognized();
+  const [confirmDismissAll, setConfirmDismissAll] = useState(false);
   const books = query.data ?? [];
+
+  const handleDismissAll = async () => {
+    try {
+      await dismissAll.mutateAsync({ deviceId: device.id });
+      setConfirmDismissAll(false);
+    } catch (error) {
+      // Demo Mode already toasted the rejection; nothing will change, so
+      // there is nothing left to confirm.
+      if (isDemoModeError(error)) setConfirmDismissAll(false);
+      toastRequestError(error, "Failed to dismiss the books");
+    }
+  };
 
   if (query.error && !query.data) {
     return (
@@ -426,7 +441,27 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
     >
       {toLink.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm font-medium">{toLink.length} to link</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-medium">{toLink.length} to link</p>
+            {toLink.length > 1 && (
+              <Button
+                onClick={() => setConfirmDismissAll(true)}
+                size="sm"
+                variant="ghost"
+              >
+                Dismiss all
+              </Button>
+            )}
+          </div>
+          <ConfirmDialog
+            confirmLabel="Dismiss all"
+            description={`All ${toLink.length} books still to link are dismissed: the reading held for them is deleted, they stop appearing here, and later reading in them is dropped. Linked books stay. KOReader keeps its own record on the e-reader.`}
+            isPending={dismissAll.isPending}
+            onConfirm={handleDismissAll}
+            onOpenChange={setConfirmDismissAll}
+            open={confirmDismissAll}
+            title="Dismiss All Books"
+          />
           <ul
             aria-label="Unrecognized books"
             className="divide-y divide-border"
@@ -449,6 +484,8 @@ const KOReaderUnrecognizedBooks = ({ device }: { device: DeviceResponse }) => {
       {linked.length > 0 && (
         <Disclosure
           defaultOpen={toLink.length === 0}
+          // Opens once nothing is left to link, as after Dismiss all.
+          key={toLink.length === 0 ? "open" : "folded"}
           size="sm"
           title={`Linked (${linked.length})`}
         >

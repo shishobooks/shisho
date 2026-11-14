@@ -382,6 +382,11 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error",
 		},
 		{
+			name:   "dismissal of every unrecognized book of a device that does not exist",
+			method: http.MethodPost, path: "/api/user/devices/missing/koreader-unrecognized/dismiss-all",
+			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
 			name:   "unlink of a book that isn't linked",
 			method: http.MethodPost, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/0ddc0b7a11c0b7a11c0b7a11c0b7a11c/unlink",
 			status: http.StatusNotFound, code: "not_found", message: "Linked book not found.",

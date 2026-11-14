@@ -393,3 +393,21 @@ export const useUnlinkKOReaderUnrecognized = () => {
     },
   });
 };
+
+// Dismisses every book on a Device still to link, deleting the reading data
+// held for them. Linked books stay.
+export const useDismissAllKOReaderUnrecognized = () => {
+  const queryClient = useQueryClient();
+  return useMutation<void, ShishoAPIError, { deviceId: string }>({
+    mutationFn: ({ deviceId }) =>
+      API.request(
+        "POST",
+        `/user/devices/${deviceId}/koreader-unrecognized/dismiss-all`,
+      ),
+    onSuccess: (_data, { deviceId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.KOReaderUnrecognizedBooks, deviceId],
+      });
+    },
+  });
+};

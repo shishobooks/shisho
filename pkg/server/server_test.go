@@ -213,6 +213,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/user/devices/:id/koreader-unrecognized", "GET /api/user/devices/:id/koreader-unrecognized/candidates",
 				"POST /api/user/devices/:id/koreader-unrecognized/:document/link",
 				"POST /api/user/devices/:id/koreader-unrecognized/:document/unlink",
+				"POST /api/user/devices/:id/koreader-unrecognized/dismiss-all",
 				"POST /api/user/devices/:id/koreader-unrecognized/:document/dismiss",
 				// Delivery Rules can be viewed in Demo Mode; the middleware
 				// rejects every change to them.
@@ -272,6 +273,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodPost, "/api/user/devices/abc/koreader-plugin"},
 				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/0ddc/link"},
 				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/0ddc/unlink"},
+				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/dismiss-all"},
 				{http.MethodPost, "/api/user/devices/abc/koreader-unrecognized/0ddc/dismiss"},
 				{http.MethodDelete, "/api/devices/abc"},
 				{http.MethodPut, "/api/user/delivery-rules"},

@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/koreader"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/reading"
+	"github.com/uptrace/bun"
 )
 
 // Copies no server the plugin signed in to recognizes (ADR 0017). The
@@ -514,6 +515,44 @@ func (h *handler) dismiss(ctx context.Context, user *models.User, device *device
 		Where("device_id = ? AND document = ?", device.ID, document).
 		Exec(ctx)
 	return errors.WithStack(err)
+}
+
+// dismissAll dismisses every copy on device still to link, as dismiss does
+// one: what was held for them is deleted, and their data is dropped from then
+// on. Linked copies stay.
+func (h *handler) dismissAll(ctx context.Context, user *models.User, device *devices.Device) error {
+	return h.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		pending := tx.NewSelect().
+			Model((*models.KOReaderUnrecognizedBook)(nil)).
+			Column("kub.document").
+			Where("kub.device_id = ? AND kub.user_id = ?", device.ID, user.ID).
+			Where("kub.dismissed_at IS NULL AND kub.linked_at IS NULL")
+		_, err := tx.NewDelete().
+			Model((*models.KOReaderPageRow)(nil)).
+			Where("device_id = ? AND file_id IS NULL AND NOT grouped", device.ID).
+			Where("document IN (?)", pending).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = tx.NewDelete().
+			Model((*models.KOReaderHeldEvent)(nil)).
+			Where("device_id = ?", device.ID).
+			Where("document IN (?)", pending).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		now := time.Now()
+		_, err = tx.NewUpdate().
+			Model((*models.KOReaderUnrecognizedBook)(nil)).
+			Set("dismissed_at = ?", now).
+			Set("updated_at = ?", now).
+			Where("device_id = ? AND user_id = ?", device.ID, user.ID).
+			Where("dismissed_at IS NULL AND linked_at IS NULL").
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
 }
 
 // listUnrecognized lists device's unrecognized copies: the ones to link,

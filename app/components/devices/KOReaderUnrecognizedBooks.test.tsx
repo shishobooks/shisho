@@ -102,6 +102,10 @@ const stubAPI = (
         );
         return undefined;
       }
+      if (method === "POST" && path === `${LIST}/dismiss-all`) {
+        books = books.filter((b) => b.linked_at);
+        return undefined;
+      }
       const dismiss = path.match(/\/koreader-unrecognized\/(\w+)\/dismiss$/);
       if (method === "POST" && dismiss) {
         books = books.filter((b) => b.document !== dismiss[1]);
@@ -440,6 +444,56 @@ describe("KOReaderUnrecognizedBooks", () => {
         { name: "Linked Copy" },
       ),
     ).toHaveTextContent("Linked to The Left Hand of Darkness · EPUB · Fiction");
+  });
+
+  it("dismisses every book still to link only once confirmed, leaving the linked ones", async () => {
+    const linked = unrecognized({
+      document: "f".repeat(32),
+      title: "Linked Copy",
+      suggestions: [],
+      linked_at: "2026-11-01T00:00:00Z",
+      linked: candidate({ match: undefined }),
+    });
+    const request = stubAPI([
+      unrecognized(),
+      unrecognized({ document: "e".repeat(32), title: "Another Copy" }),
+      linked,
+    ]);
+    const user = setupUser();
+    renderSection();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dismiss all" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("All 2 books still to link are dismissed");
+    expect(dialog).toHaveTextContent("Linked books stay.");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(posts(request)).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Dismiss all" }));
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Dismiss all",
+      }),
+    );
+    expect(posts(request)).toEqual([["POST", `${LIST}/dismiss-all`]]);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("list", { name: "Unrecognized books" }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByRole("list", { name: "Linked books" }),
+    ).toHaveTextContent("Linked Copy");
+  });
+
+  it("offers Dismiss all only with more than one book to link", async () => {
+    stubAPI([unrecognized()]);
+    renderSection();
+
+    await screen.findByRole("listitem", { name: "Left Hand of Darkness" });
+    expect(screen.queryByRole("button", { name: "Dismiss all" })).toBeNull();
   });
 
   it("shows nothing when there are no unrecognized books", async () => {
