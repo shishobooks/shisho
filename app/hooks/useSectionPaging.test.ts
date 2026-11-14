@@ -7,6 +7,8 @@ const sectionAt = (top: number) => {
   const section = document.createElement("section");
   section.getBoundingClientRect = () => ({ top }) as DOMRect;
   section.scrollIntoView = vi.fn();
+  // Computed styles only apply to an element in the document.
+  document.body.append(section);
   return section;
 };
 
@@ -25,6 +27,7 @@ const page = (top: number) => {
 };
 
 afterEach(() => {
+  document.body.replaceChildren();
   vi.restoreAllMocks();
 });
 
