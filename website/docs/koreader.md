@@ -147,7 +147,7 @@ When a book's status changed in KOReader and in Shisho since the last sync, the 
 
 The first time the plugin signs in to a server, it asks whether to send the history KOReader recorded before: your reading time, and your books' statuses and stars. Choose **Send history** to have [Reading Stats](./reading-stats.md) cover the years you've already read in KOReader, or **Don't send** to send only your reading from now on. Nothing goes to that server until you answer, and with Wi-Fi on, a sync starts as soon as you do. **Sign in again** never asks, and **Settings > Reading history on first sign-in** in the plugin's menu can answer for every later first sign-in: **Ask**, the default, **Send**, or **Don't send**. An answer from the setting syncs at once too.
 
-If you chose **Don't send**, you can still send it later: choose **Send reading history** under the server in the plugin's menu, and confirm. It sends the same history, at once, turning Wi-Fi on if needed. Reading that already synced since you signed in isn't added again. The item is gone once history has been sent.
+If you chose **Don't send**, you can still send it later: choose **Send reading history** under the server in the plugin's menu, and confirm. It sends the same history, at once, turning Wi-Fi on if needed. Reading history that already synced since you signed in isn't added again. The item is gone once history has been sent.
 
 For each book the server [recognizes](#which-books-sync), history sends:
 
