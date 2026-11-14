@@ -30,10 +30,11 @@ local Summaries = require("shisho/summaries")
 
 local Sync = {}
 
--- The most rows, events, and claims one upload carries.
+-- The most rows, events, claims, and books' details one upload carries.
 Sync.BATCH = 500
 Sync.EVENT_BATCH = 100
 Sync.CLAIM_BATCH = 500
+Sync.DETAILS_BATCH = 200
 
 -- HISTORY_WHILE_BUSY is how many batches of history rows a sync while
 -- reading or going to sleep sends, so a long history holds up neither.
@@ -236,22 +237,28 @@ local function holdBack(opts)
         return action == "send" and answer ~= nil and answer.state == "held"
     end
 
+    -- about is what KOReader knows of document, as a server takes it.
+    function h.about(document)
+        local about = opts.about and opts.about(document) or nil
+        if type(about) ~= "table" then about = {} end
+        about.document = document
+        -- KOReader's JSON writes an empty list as an object, which the
+        -- server refuses, so a list with nothing in it is left out.
+        for __, key in ipairs({ "authors", "identifiers" }) do
+            if type(about[key]) ~= "table" or #about[key] == 0 then about[key] = nil end
+        end
+        return about
+    end
+
     -- describe adds what KOReader knows of each book payload carries that
-    -- goes as unrecognized.
+    -- goes as unrecognized, unless it already describes them.
     function h.describe(payload)
+        if payload.unrecognized then return end
         local seen, list = {}, {}
         local function add(document)
             if seen[document] or not unrecognized(document) then return end
             seen[document] = true
-            local about = opts.about and opts.about(document) or nil
-            if type(about) ~= "table" then about = {} end
-            about.document = document
-            -- KOReader's JSON writes an empty list as an object, which the
-            -- server refuses, so a list with nothing in it is left out.
-            for __, key in ipairs({ "authors", "identifiers" }) do
-                if type(about[key]) ~= "table" or #about[key] == 0 then about[key] = nil end
-            end
-            table.insert(list, about)
+            table.insert(list, h.about(document))
         end
         for __, row in ipairs(payload.pages or {}) do add(row.document) end
         for __, event in ipairs(payload.events or {}) do add(event.document) end
@@ -447,6 +454,28 @@ function Sync.run(opts)
         end
         if #claims > 0 then changes, never = hold.split(opts.changes or {}) end
     end
+    -- A book this server holds with nothing KOReader knows of it gets what
+    -- KOReader does, even with no reading to send, so the Device's page can
+    -- say what it is.
+    if opts.recognition then
+        -- One KOReader knows nothing of either, such as a book no longer
+        -- on the device, isn't sent.
+        local wanted = {}
+        for __, document in ipairs(opts.recognition:needingDetails(server.url)) do
+            local about = hold.about(document)
+            if about.title or about.file_type then table.insert(wanted, about) end
+        end
+        local first = 1
+        while first <= #wanted do
+            local list = {}
+            for i = first, math.min(first + Sync.DETAILS_BATCH - 1, #wanted) do
+                table.insert(list, wanted[i])
+            end
+            local outcome = send({ unrecognized = list })
+            if outcome ~= "ok" then return outcome, sent.pages, sent.events end
+            first = first + #list
+        end
+    end
     -- What this server never gets is done with for it.
     for __, change in ipairs(never) do Summaries.acknowledge(opts.store, change) end
     local __, journal_never = hold.split(journal:pending(server.url))
@@ -544,7 +573,9 @@ for it.
 function Sync.lookUp(opts)
     local server, documents = opts.server, opts.documents or {}
     local first = 1
-    while first <= #documents do
+    -- At least once, with nothing to ask about, for the books it holds with
+    -- nothing known of them (Recognition:undescribed).
+    repeat
         local batch = {}
         for i = first, math.min(first + Recognition.ASK_BATCH - 1, #documents) do
             table.insert(batch, documents[i])
@@ -556,8 +587,9 @@ function Sync.lookUp(opts)
             return outcome
         end
         opts.recognition:record(server.url, body.documents, opts.recognition:current())
+        opts.recognition:undescribed(server.url, body.undescribed, opts.recognition:current())
         first = first + #batch
-    end
+    until first > #documents
     return "ok"
 end
 

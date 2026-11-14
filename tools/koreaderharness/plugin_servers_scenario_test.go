@@ -171,3 +171,33 @@ func TestPluginLinkOnOneServerIsPassedToTheOther(t *testing.T) {
 	assert.Zero(t, b.held(oldCopy))
 	assert.Empty(t, b.pluginSessions())
 }
+
+// A copy the server holds with nothing KOReader knows of it, as a plugin too
+// old to send that leaves one, is described at the next sync, though nothing
+// more was read in it.
+func TestPluginDescribesACopyHeldWithoutDetails(t *testing.T) {
+	s := newScenario(t)
+	s.signInPlugin(time.Now().Add(-time.Hour))
+	require.NoError(t, os.MkdirAll(s.h.booksDir(), 0o755))
+	writeLongEPUB(t, filepath.Join(s.h.booksDir(), "odd.epub"), "Odd Copy")
+	s.run(Args{Command: "plugin-read", File: "odd.epub", Turns: 2, Close: true})
+	s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	document := s.run(Args{Command: "digest", File: "odd.epub"}).Hash
+	// The copy is held, but with none of what KOReader knows of it.
+	res, err := s.db.NewUpdate().Model((*models.KOReaderUnrecognizedBook)(nil)).
+		Set("title = NULL").Set("file_type = NULL").Set("authors = '[]'").
+		Where("document = ?", document).Exec(s.ctx)
+	require.NoError(t, err)
+	n, err := res.RowsAffected()
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n, "the copy is held")
+
+	s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+
+	listed := &models.KOReaderUnrecognizedBook{}
+	require.NoError(t, s.db.NewSelect().Model(listed).Where("kub.document = ?", document).Scan(s.ctx))
+	require.NotNil(t, listed.Title)
+	assert.Equal(t, "Odd Copy", *listed.Title)
+	require.NotNil(t, listed.FileType)
+	assert.Equal(t, "epub", *listed.FileType)
+}

@@ -278,6 +278,32 @@ function Recognition.about(stats, path, props)
     }
 end
 
+-- undescribed notes the documents the server at url says it holds with
+-- nothing KOReader knows of them, in round now, so the next upload sends
+-- what KOReader does (needingDetails).
+function Recognition:undescribed(url, documents, now)
+    local known = self:server(url).known
+    for __, document in ipairs(type(documents) == "table" and documents or {}) do
+        if type(document) == "string" then
+            known[document] = { state = "held", at = now, needs_details = true }
+        end
+    end
+end
+
+-- needingDetails is the documents the server at url holds with nothing
+-- KOReader knows of them, in order. Sending them what KOReader knows marks
+-- them held as usual, which clears it.
+function Recognition:needingDetails(url)
+    local out = {}
+    for document, answer in pairs(self:server(url).known) do
+        if type(answer) == "table" and answer.state == "held" and answer.needs_details then
+            table.insert(out, document)
+        end
+    end
+    table.sort(out)
+    return out
+end
+
 -- defer notes that document's rows wait for the server at url.
 function Recognition:defer(url, document)
     self:server(url).deferred[document] = true

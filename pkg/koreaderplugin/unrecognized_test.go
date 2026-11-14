@@ -687,3 +687,51 @@ func TestUnlink_RefusesACopyThatIsntLinked(t *testing.T) {
 	requireStatus(t, f.unlinkAs(other, f.device), http.StatusNotFound)
 	assert.Equal(t, DocumentRecognized, f.lookupAs(f.device, oldCopy)[oldCopy])
 }
+
+// undescribedNow is what a lookup about nothing says the Device's plugin
+// should describe, sent as the plugin sends it, with no list.
+func (f *syncFixture) undescribedNow() []string {
+	f.t.Helper()
+	rec := f.do(request{path: "/koreader/plugin/lookup", body: `{}`, username: f.user.Username, credential: f.device.Credential})
+	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
+	var resp LookupResponse
+	require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp.Undescribed
+}
+
+func TestLookup_AsksForTheDetailsOfACopyHeldWithoutThem(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	// A rating alone, from a plugin that sent nothing of the book.
+	f.upload(UploadPayload{Events: []EventPayload{
+		{ID: "bare", Type: PluginEventRating, Document: oldCopy, Day: day(f.day1), Rating: 2},
+	}})
+	require.Len(t, f.listUnrecognized(), 1)
+
+	// Asked about or not.
+	assert.Equal(t, []string{oldCopy}, f.undescribedNow())
+
+	// The details alone, with nothing else of the book, fill it in.
+	f.upload(UploadPayload{Unrecognized: []UnrecognizedPayload{unrecognizedAbout()}})
+	books := f.listUnrecognized()
+	require.Len(t, books, 1)
+	require.NotNil(t, books[0].Title)
+	assert.Equal(t, "The Left Hand of Darkness", *books[0].Title)
+	assert.Equal(t, 7200, books[0].ReadingSeconds)
+	assert.Empty(t, f.undescribedNow())
+}
+
+func TestUpload_DetailsAloneListNothingNew(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	require.NoError(t, f.dismissAs(f.user, f.device))
+	other := unrecognizedAbout()
+	other.Document = "ffffffffffffffffffffffffffffffff"
+
+	resp := f.upload(UploadPayload{Unrecognized: []UnrecognizedPayload{other, unrecognizedAbout()}})
+
+	assert.NotNil(t, resp)
+	assert.Empty(t, f.listUnrecognized(), "neither a copy with no data nor a dismissed one is listed")
+	assert.Equal(t, DocumentUnknown, f.lookupAs(f.device, other.Document)[other.Document])
+}

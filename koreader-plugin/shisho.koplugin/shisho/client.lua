@@ -80,8 +80,10 @@ function Client:status()
 end
 
 -- lookup asks what the server knows of each of documents (shisho/recognition).
+-- KOReader's JSON writes an empty list as an object, which the server
+-- refuses, so asking about nothing sends no list.
 function Client:lookup(documents)
-    return self:post("/koreader/plugin/lookup", { documents = documents })
+    return self:post("/koreader/plugin/lookup", { documents = #documents > 0 and documents or nil })
 end
 
 -- upload sends one batch of page rows and journal entries (shisho/sync).

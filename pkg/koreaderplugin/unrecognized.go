@@ -61,8 +61,15 @@ func (h *handler) noteUnrecognized(ctx context.Context, user *models.User, devic
 	if about == nil {
 		return nil
 	}
+	return h.describeUnrecognized(ctx, device, clock, about)
+}
+
+// describeUnrecognized records what KOReader knows of a copy device holds
+// data for, as about says. A copy the server doesn't hold, or that the user
+// dismissed, is left alone.
+func (h *handler) describeUnrecognized(ctx context.Context, device *devices.Device, clock deviceClock, about *UnrecognizedPayload) error {
 	book := &models.KOReaderUnrecognizedBook{
-		UpdatedAt:      now,
+		UpdatedAt:      time.Now(),
 		Title:          nonEmpty(about.Title),
 		Authors:        trimmed(about.Authors),
 		Identifiers:    trimmed(about.Identifiers),
@@ -72,10 +79,10 @@ func (h *handler) noteUnrecognized(ctx context.Context, user *models.User, devic
 		FirstReadAt:    clock.reported(about.FirstRead),
 		LastReadAt:     clock.reported(about.LastRead),
 	}
-	_, err = h.db.NewUpdate().
+	_, err := h.db.NewUpdate().
 		Model(book).
 		Column("updated_at", "title", "authors", "identifiers", "language", "file_type", "reading_seconds", "first_read_at", "last_read_at").
-		Where("device_id = ? AND document = ? AND dismissed_at IS NULL", device.ID, document).
+		Where("device_id = ? AND document = ? AND dismissed_at IS NULL", device.ID, about.Document).
 		Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -223,6 +230,25 @@ func (h *handler) lookUp(ctx context.Context, user *models.User, device *devices
 	default:
 		return DocumentHeld, nil
 	}
+}
+
+// maxUndescribed bounds the copies one lookup asks the plugin to describe.
+const maxUndescribed = 500
+
+// undescribed is the copies device holds as unrecognized with nothing
+// KOReader knows of them, no title or file type, which the plugin is asked
+// to describe.
+func (h *handler) undescribed(ctx context.Context, device *devices.Device) ([]string, error) {
+	documents := []string{}
+	err := h.db.NewSelect().
+		Model((*models.KOReaderUnrecognizedBook)(nil)).
+		Column("kub.document").
+		Where("kub.device_id = ? AND kub.dismissed_at IS NULL AND kub.linked_at IS NULL", device.ID).
+		Where("kub.title IS NULL AND kub.file_type IS NULL").
+		OrderExpr("kub.document").
+		Limit(maxUndescribed).
+		Scan(ctx, &documents)
+	return documents, errors.WithStack(err)
 }
 
 // currentBook is the record of document on device, as unrecognized

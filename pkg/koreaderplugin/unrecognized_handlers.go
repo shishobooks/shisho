@@ -36,10 +36,14 @@ func (h *handler) lookup(c echo.Context) error {
 		}
 		documents = append(documents, DocumentLookedUp{Document: document, State: state})
 	}
+	undescribed, err := h.undescribed(ctx, device)
+	if err != nil {
+		return err
+	}
 	if err := h.devices.RecordPluginConnection(ctx, device.ID, reportedVersion(c)); err != nil {
 		return errors.WithStack(err)
 	}
-	return errors.WithStack(c.JSON(http.StatusOK, LookupResponse{Server: h.serverInfo(), Documents: documents}))
+	return errors.WithStack(c.JSON(http.StatusOK, LookupResponse{Server: h.serverInfo(), Documents: documents, Undescribed: undescribed}))
 }
 
 // ownDevice is the signed-in user and their Device the request's :id

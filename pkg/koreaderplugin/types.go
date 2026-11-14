@@ -53,7 +53,9 @@ type UploadPayload struct {
 	Events []EventPayload `json:"events" validate:"max=200,dive"`
 	// Unrecognized describes copies the batch has data for that no server
 	// the plugin signed in to recognizes or has linked (ADR 0017). The
-	// server holds their data and lists them on the Device's page.
+	// server holds their data and lists them on the Device's page. It can
+	// also describe a copy the server already holds with nothing else of it,
+	// as lookup asks (Undescribed).
 	// It can describe every book in the batch's pages and events.
 	Unrecognized []UnrecognizedPayload `json:"unrecognized,omitempty" validate:"max=1200,dive"`
 	// Claimed names copies another server the plugin signed in to now
@@ -184,6 +186,11 @@ const (
 type LookupResponse struct {
 	Server    ServerInfo         `json:"server"`
 	Documents []DocumentLookedUp `json:"documents"`
+	// Undescribed names copies the server holds for this Device with
+	// nothing KOReader knows of them, no title or file type, asked about or
+	// not. The plugin sends what it knows of each at its next upload
+	// (Unrecognized), so the Device's page can say what they are.
+	Undescribed []string `json:"undescribed"`
 }
 
 // DocumentLookedUp is what the server knows of one copy.

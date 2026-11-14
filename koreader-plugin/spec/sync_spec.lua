@@ -639,4 +639,42 @@ return {
         assert_eq(starts(sent[1]), { 200 })
         assert_eq(recognition:deferred(a.url), {})
     end,
+
+    ["a book a server holds with nothing known of it gets its details, once, with nothing else to send"] = function()
+        local state, journal = setup("https://a.example")
+        local a = state:find("https://a.example")
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        -- A lookup asking about nothing still says which it holds bare.
+        local asked = {}
+        assert_eq(Sync.lookUp{ server = a, recognition = recognition, documents = {},
+            post = function(documents)
+                table.insert(asked, documents)
+                return 200, { documents = {}, undescribed = { "bare" } }
+            end }, "ok")
+        assert_eq(asked, { {} })
+        recognition:record(a.url, { { document = "known", state = "held" } }, recognition:current())
+        recognition:undescribed(a.url, { "gone" }, recognition:current())
+        assert_eq(recognition:needingDetails(a.url), { "bare", "gone" })
+        local opts = function(post)
+            return { state = state, journal = journal, server = a, post = post, read_pages = rowsFrom({}),
+                recognition = recognition, servers = state:enabledServers(), documents = {},
+                about = function(document)
+                    -- KOReader knows nothing of a book no longer on the device.
+                    if document == "gone" then return {} end
+                    return { title = "Title of " .. document, authors = {} }
+                end }
+        end
+
+        local post, sent = server()
+        assert_eq(Sync.run(opts(post)), "ok")
+        assert_eq(#sent, 1)
+        assert_eq(sent[1].unrecognized, { { document = "bare", title = "Title of bare" } })
+        assert_eq(sent[1].pages, nil)
+        assert_eq(sent[1].events, nil)
+        assert_eq(recognition:answer(a.url, "bare").needs_details, nil, "described")
+
+        local post2, sent2 = server()
+        Sync.run(opts(post2))
+        assert_eq(#sent2, 0, "sent once")
+    end,
 }

@@ -192,6 +192,25 @@ func (h *handler) upload(c echo.Context) error {
 		}
 	}
 
+	// Details of a copy the batch carries nothing else of fill in one the
+	// server already holds (NeedsDetails).
+	for i := range payload.Unrecognized {
+		about := &payload.Unrecognized[i]
+		if _, done := held[about.Document]; done {
+			continue
+		}
+		file, err := resolve(about.Document)
+		if err != nil {
+			return err
+		}
+		if file != nil {
+			continue
+		}
+		if err := h.describeUnrecognized(ctx, device, clock, about); err != nil {
+			return err
+		}
+	}
+
 	acknowledged := make([]string, 0, len(payload.Events))
 	for _, event := range payload.Events {
 		ok, err := h.applyEvent(ctx, user, device, clock, event, payload.Backfill, resolve, hold, before)
