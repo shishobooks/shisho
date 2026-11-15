@@ -73,11 +73,18 @@ UIManager.show = function(ui, widget, ...)
     return real_show(ui, widget, ...)
 end
 
--- Runs what KOReader has scheduled and repaints, as its event loop would.
--- Timeouts shift back so scheduled work runs now, and dismissing is left to
--- the caller, so a pop-up is still on screen for a screenshot.
+-- STEP_AHEAD is how far ahead stepUI runs scheduled work: past the short
+-- delays KOReader and the plugin wait before acting, but short of daily
+-- sync's timer, which a scenario sets well away from now. KOReader counts
+-- task times in microseconds, so it goes through time.s.
+local STEP_AHEAD = require("ui/time").s(60)
+
+-- Runs what KOReader has scheduled within STEP_AHEAD and repaints, as its
+-- event loop would. Timeouts shift back so that work runs now, and
+-- dismissing is left to the caller, so a pop-up is still on screen for a
+-- screenshot.
 local function stepUI()
-    UIManager:shiftScheduledTasksBy(-1e9)
+    UIManager:shiftScheduledTasksBy(-STEP_AHEAD)
     UIManager:setInputTimeout(0)
     pcall(function() UIManager:handleInput() end)
     UIManager:forceRePaint()
@@ -672,16 +679,17 @@ commands["plugin-sleep"] = function()
     end)
 end
 
--- plugin-daily turns on daily sync, puts the device to sleep, and reports the
--- wake-up alarm the plugin set. With fire, the alarm then goes off as a Kobo's
--- does: the plugin's task runs, KOReader removes it, and the device stays
--- awake a while before sleeping again. Wi-Fi comes on when asked to.
+-- plugin-daily turns on daily sync, at daily_hour:daily_min when given, puts
+-- the device to sleep, and reports the wake-up alarm the plugin set. With
+-- fire, the alarm then goes off as a Kobo's does: the plugin's task runs,
+-- KOReader removes it, and the device stays awake a while before sleeping
+-- again. Wi-Fi comes on when asked to.
 commands["plugin-daily"] = function()
     withPlugin(function(plugin)
         seedStatistics()
         -- KOReader turns Wi-Fi on by itself only when told to; it asks by default.
         G_reader_settings:saveSetting("wifi_enable_action", args.wifi_prompt and "prompt" or "turn_on")
-        plugin:saveSetting("daily_sync", true)
+        plugin:saveSettings{ daily_sync = true, daily_sync_hour = args.daily_hour, daily_sync_min = args.daily_min }
         local NetworkMgr = require("ui/network/manager")
         local turned_on = false
         local function setOnline(online)

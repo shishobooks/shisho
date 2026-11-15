@@ -174,8 +174,8 @@ func TestPluginSyncsOnSleepAtMostHourly(t *testing.T) {
 	assert.Len(t, s.pluginSessions(), 1)
 }
 
-// Daily sync wakes a sleeping device at its time, 4:00 by default, syncs
-// with Wi-Fi it turns off again, and sets the next day's alarm.
+// Daily sync wakes a sleeping device at its time, syncs with Wi-Fi it turns
+// off again, and sets the next day's alarm.
 func TestPluginDailySyncWakesTheDevice(t *testing.T) {
 	s := newScenario(t)
 	epub := s.file(models.FileTypeEPUB)
@@ -187,21 +187,19 @@ func TestPluginDailySyncWakesTheDevice(t *testing.T) {
 		{Document: document, Page: 3, TotalPages: 100, StartTime: start.Add(time.Minute).Unix(), Duration: 60},
 	}
 
-	asleep := s.run(Args{Command: "plugin-daily", Stats: stats})
+	at := time.Now().Add(12 * time.Hour).Truncate(time.Minute)
+	asleep := s.run(Args{Command: "plugin-daily", Stats: stats, DailyAt: at})
 	require.Len(t, asleep.Plugin.AlarmsArmed, 1, "going to sleep sets the alarm")
-	alarm := time.Unix(asleep.Plugin.AlarmsArmed[0], 0).UTC()
-	// The container's KOReader runs on UTC.
-	assert.Equal(t, 4, alarm.Hour())
-	assert.Equal(t, 0, alarm.Minute())
-	assert.True(t, alarm.After(time.Now()) && alarm.Before(time.Now().Add(24*time.Hour)), "the next 4:00: %s", alarm)
+	// A second can tick between the plugin's clock reading and KOReader's.
+	assert.InDelta(t, at.Unix(), asleep.Plugin.AlarmsArmed[0], 1, "the alarm is for the daily time")
 	assert.Empty(t, s.pluginSessions(), "nothing until the alarm")
 
-	woken := s.run(Args{Command: "plugin-daily", Fire: true})
+	woken := s.run(Args{Command: "plugin-daily", Fire: true, DailyAt: at})
 	assert.True(t, woken.Plugin.WifiTurnedOn)
 	assert.False(t, woken.Plugin.WifiLeftOn, "Wi-Fi is off again before the device goes back to sleep")
 	require.Len(t, s.pluginSessions(), 1)
 	require.Len(t, woken.Plugin.AlarmsAfter, 1, "the next day's alarm is set")
-	assert.Equal(t, int64(24*60*60), woken.Plugin.AlarmsAfter[0]-woken.Plugin.AlarmsArmed[0])
+	assert.InDelta(t, 24*60*60, woken.Plugin.AlarmsAfter[0]-woken.Plugin.AlarmsArmed[0], 1)
 }
 
 // KOReader asks before turning Wi-Fi on unless told to turn it on by itself,
