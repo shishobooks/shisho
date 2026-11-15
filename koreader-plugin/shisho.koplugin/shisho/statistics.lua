@@ -292,8 +292,8 @@ rowids can change under them, and moves each that no longer names its row:
   own row, when that isn't known), so a server not sent history is never
   sent reading from before sign-in
 - a cursor that no longer names its row goes back to where syncing started,
-  so everything since is sent again; the server takes in only what it
-  doesn't have, and keeps what the person deleted deleted
+  keeping its latest, so everything since is sent again; the server takes in
+  only what it doesn't have, and keeps what the person deleted deleted
 
 A place saved before places named their row takes the row it's at. Returns
 whether anything moved, so the state needs saving. A missing database, or
@@ -317,7 +317,7 @@ function Statistics.repair(path, server)
         end
         local from = boundary(Statistics.place(server.stats_from, server.stats_from_row))
         local through = history and boundary(Statistics.place(history.through, history.through_row))
-        return { cursor = cursor or Statistics.cursorAfter(from), from = from, through = through }
+        return { cursor = cursor or Statistics.place(from.rowid, from), from = from, through = through }
     end)
     if not found then return false end
 

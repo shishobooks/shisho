@@ -222,6 +222,7 @@ return {
         assert_eq(server.stats_from, 1, "the reading from before sign-in stays unsent")
         assert_eq(server.stats_from_row, { id_book = 1, page = 1, start_time = 1000, latest = 2000 },
             "still knowing the latest reading from before sign-in")
+        assert_eq(server.stats_cursor.latest, 2000, "as does the cursor gone back, should history be sent later")
         assert_eq(keys(readAll(path, server)), { "bbb:3@4000" })
     end,
 
@@ -295,7 +296,7 @@ return {
         local moved = Sync.checkStatistics(state, path)
         assert_eq(#moved, 1)
         assert_eq(moved[1].url, "https://a.example")
-        assert_eq(State.open(state.path):find("https://a.example").stats_cursor, { rowid = 0 }, "saved")
+        assert_eq(State.open(state.path):find("https://a.example").stats_cursor.rowid, 0, "saved")
         assert_eq(state:find("https://b.example").stats_cursor.rowid, 2, "a disabled server waits")
         assert_eq(#Sync.checkStatistics(state, path), 0)
     end,

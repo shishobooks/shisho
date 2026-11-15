@@ -154,8 +154,10 @@ end
 -- signedIn records a sign-in, adds the server's catalog to KOReader's OPDS
 -- list, and tells the user.
 function Shisho:signedIn(url, answer, username, credential)
+    -- A server signed in to for the first time takes reading from now on,
+    -- so the pages of a book open now count as before it.
+    if self:statisticsEnabled() then self:flushStatistics() end
     local server, other_device, first = self.state:signIn{
-        -- A server signed in to for the first time takes reading from now on.
         stats_cursor = Statistics.currentCursor(self:statisticsPath()),
         url = url,
         username = username,
