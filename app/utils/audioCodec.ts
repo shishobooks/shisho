@@ -6,14 +6,16 @@
 // unit-testable in complete isolation; the audio-element wiring (error and
 // stalled events, the seek timeout guard) stays thin in the React shell.
 //
-// The one codec we detect up-front is xHE-AAC (USAC). It plays in WebKit
-// (Safari, and every iOS browser since they all use WebKit), but Firefox does
-// not support it at all and Chromium only supports it through HLS, so the
-// player's plain progressive stream fails there. AAC-LC and HE-AAC, which
-// cover the overwhelming majority of M4B files, play everywhere. Anything
-// else (or a misdetected file) is caught at runtime by the audio element's
-// error/stalled events and the seek timeout guard, which surface the same
-// hedged recommendation.
+// The codecs we detect up-front are the ones only WebKit plays (Safari, and
+// every iOS browser since they all use WebKit):
+//   - xHE-AAC (USAC): Firefox does not support it at all and Chromium only
+//     supports it through HLS, so the player's plain progressive stream fails.
+//   - ALAC (Apple Lossless): Chrome, Chromium, and Firefox refuse it outright
+//     (no canPlayType support, media error 4, and Web Audio can't decode it).
+// AAC-LC and HE-AAC, which cover the overwhelming majority of M4B files, play
+// everywhere. Anything else (or a misdetected file) is caught at runtime by
+// the audio element's error/stalled events and the seek timeout guard, which
+// surface the same hedged recommendation.
 //
 // Outside WebKit the browser answers canPlayType for xHE-AAC with "probably"
 // and then hangs on any seek: nothing throws and canplay never fires. So any
@@ -22,7 +24,7 @@
 // or canplay, and on timeout removes its listeners, resets the playing state,
 // and tells the user the codec may be unsupported. Check a file's profile with
 // `ffprobe -v error -show_streams <file.m4b> | grep profile`. The user-facing
-// caveat is the xHE-AAC note in website/docs/supported-formats.md; keep it in
+// caveat is the codec note in website/docs/supported-formats.md; keep it in
 // sync with player behavior.
 
 /**
@@ -53,16 +55,33 @@ export interface CodecSupport {
   message: string | null;
 }
 
-/** Matches the stored codec strings that denote xHE-AAC (USAC, AOT 42). */
-const XHE_AAC_PATTERN = /xhe-aac|usac/i;
+/**
+ * Codecs that play only in WebKit, each matched against the File's stored
+ * codec string and paired with the message shown everywhere else.
+ */
+const WEBKIT_ONLY_CODECS: ReadonlyArray<{ pattern: RegExp; message: string }> =
+  [
+    {
+      // xHE-AAC (USAC, AOT 42).
+      pattern: /xhe-aac|usac/i,
+      message:
+        "This audiobook is encoded with xHE-AAC, which this browser cannot play. Try Safari, which supports xHE-AAC playback.",
+    },
+    {
+      // Apple Lossless. The parser stores it as "ALAC".
+      pattern: /^alac$/i,
+      message:
+        "This audiobook is encoded with ALAC (Apple Lossless), which this browser cannot play. Try Safari, which supports ALAC playback.",
+    },
+  ];
 
 /**
- * Whether this browser can play a plain progressive xHE-AAC stream. True for
- * WebKit: desktop/mobile Safari, plus any iOS browser (Chrome, Firefox, etc.
- * on iOS are WebKit underneath). False for Firefox and for Chromium, which
- * only plays xHE-AAC through HLS.
+ * Whether this browser is WebKit, the only engine that plays the codecs in
+ * WEBKIT_ONLY_CODECS as a plain progressive stream. True for desktop/mobile
+ * Safari, plus any iOS browser (Chrome, Firefox, etc. on iOS are WebKit
+ * underneath). False for Firefox and Chromium.
  */
-export function canBrowserPlayXheAac(userAgent: string): boolean {
+function isWebKitBrowser(userAgent: string): boolean {
   // Every iOS browser is WebKit, regardless of its brand token.
   if (/iPhone|iPad|iPod/.test(userAgent)) return true;
   // Genuine Safari: a WebKit UA without another browser's brand token.
@@ -75,23 +94,21 @@ export function canBrowserPlayXheAac(userAgent: string): boolean {
 
 /**
  * Resolves whether the File's stored audiobook codec is expected to play in
- * the current browser. Only xHE-AAC is flagged; unknown or absent codecs are
- * assumed playable and left to the runtime backstop.
+ * the current browser. Only the WebKit-only codecs are flagged; unknown or
+ * absent codecs are assumed playable and left to the runtime backstop.
  */
 export function resolveCodecSupport(
   codec: string | null | undefined,
   userAgent: string,
 ): CodecSupport {
-  if (
-    codec &&
-    XHE_AAC_PATTERN.test(codec) &&
-    !canBrowserPlayXheAac(userAgent)
-  ) {
-    return {
-      playable: false,
-      message:
-        "This audiobook is encoded with xHE-AAC, which this browser cannot play. Try Safari, which supports xHE-AAC playback.",
-    };
+  if (!codec || isWebKitBrowser(userAgent)) {
+    return { playable: true, message: null };
+  }
+  const webKitOnly = WEBKIT_ONLY_CODECS.find(({ pattern }) =>
+    pattern.test(codec),
+  );
+  if (webKitOnly) {
+    return { playable: false, message: webKitOnly.message };
   }
   return { playable: true, message: null };
 }

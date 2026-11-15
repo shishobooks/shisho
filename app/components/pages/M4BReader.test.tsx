@@ -629,6 +629,14 @@ describe("M4BReader", () => {
       expect(alert).toHaveTextContent(/Safari/);
     });
 
+    it("shows a message recommending Safari when the stored codec is ALAC and the browser cannot play it", () => {
+      setUserAgent(CHROME_UA);
+      renderReader({ file: fileWithCodec("ALAC") });
+      const alert = screen.getByRole("alert");
+      expect(alert).toHaveTextContent(/ALAC/);
+      expect(alert).toHaveTextContent(/Safari/);
+    });
+
     it("shows no message for supported codecs", () => {
       setUserAgent(CHROME_UA);
       for (const codec of ["AAC-LC", "HE-AAC"]) {

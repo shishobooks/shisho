@@ -122,8 +122,9 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const [coverError, setCoverError] = useState(false);
 
   // Codec compatibility. The File's stored audiobook codec is checked against
-  // the browser up-front (xHE-AAC does not play as a plain progressive stream
-  // outside WebKit); the audio element's error/stalled events and the seek
+  // the browser up-front (xHE-AAC and ALAC do not play as a plain progressive
+  // stream outside WebKit; see audioCodec.ts); the audio element's
+  // error/stalled events and the seek
   // timeout guard set the runtime flag as a backstop for anything the static
   // check misses. The static message wins when both apply.
   const codecSupport = useMemo(
