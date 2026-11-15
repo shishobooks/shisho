@@ -7,8 +7,9 @@ import {
 } from "./audioCodec";
 
 // Representative user agent strings for the browsers we care about. xHE-AAC
-// plays in WebKit (Safari and every iOS browser, which all use WebKit), but a
-// plain progressive stream fails in Firefox and desktop/Android Chromium.
+// and ALAC play in WebKit (Safari and every iOS browser, which all use
+// WebKit), but a plain progressive stream fails in Firefox and desktop/Android
+// Chromium.
 const UA = {
   chromeMac:
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
@@ -24,6 +25,9 @@ const UA = {
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/125.0.0.0 Mobile/15E148 Safari/604.1",
   chromeAndroid:
     "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Mobile Safari/537.36",
+  // iPadOS Safari in its default desktop mode reports a Macintosh UA.
+  safariIPadDesktopMode:
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
 };
 
 describe("resolveCodecSupport", () => {
@@ -83,6 +87,38 @@ describe("resolveCodecSupport", () => {
   it("matches the xHE-AAC codec case-insensitively", () => {
     expect(resolveCodecSupport("xhe-aac", UA.chromeMac).playable).toBe(false);
     expect(resolveCodecSupport("XHE-AAC", UA.firefoxMac).playable).toBe(false);
+  });
+
+  it("flags ALAC as unplayable outside WebKit with a message naming ALAC and recommending Safari", () => {
+    for (const ua of [
+      UA.chromeMac,
+      UA.firefoxMac,
+      UA.edgeWindows,
+      UA.chromeAndroid,
+    ]) {
+      const support = resolveCodecSupport("ALAC", ua);
+      expect(support.playable).toBe(false);
+      expect(support.message).toMatch(/ALAC/);
+      expect(support.message).toMatch(/Safari/);
+      expect(support.message).not.toMatch(/xHE-AAC/);
+    }
+  });
+
+  it("treats ALAC as playable in Safari and any iOS or iPadOS browser", () => {
+    for (const ua of [
+      UA.safariMac,
+      UA.safariIPhone,
+      UA.chromeIPhone,
+      UA.safariIPadDesktopMode,
+    ]) {
+      const support = resolveCodecSupport("ALAC", ua);
+      expect(support.playable).toBe(true);
+      expect(support.message).toBeNull();
+    }
+  });
+
+  it("matches the ALAC codec case-insensitively", () => {
+    expect(resolveCodecSupport("alac", UA.chromeMac).playable).toBe(false);
   });
 });
 
