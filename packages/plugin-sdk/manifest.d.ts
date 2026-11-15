@@ -12,9 +12,13 @@ export interface InputConverterCap {
 /** File parser capability declaration. */
 export interface FileParserCap {
   description?: string;
-  /** File extensions this parser handles (e.g., ["pdf"]). */
+  /**
+   * File extensions this parser handles (e.g., ["cbr"]). A parser is not used
+   * for an extension Shisho parses itself, and that set can grow in any
+   * release.
+   */
   types: string[];
-  /** MIME types this parser handles (e.g., ["application/pdf"]). */
+  /** MIME types this parser handles (e.g., ["application/vnd.comicbook-rar"]). */
   mimeTypes?: string[];
 }
 

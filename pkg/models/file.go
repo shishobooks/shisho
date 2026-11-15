@@ -33,7 +33,9 @@ const kepubExtension = ".kepub.epub"
 
 // builtInFileTypesByExtension maps every extension Shisho parses itself
 // (lowercase, no dot) to its file type. A file type is not always its
-// extension: .azw and .prc files are MOBI. A .kepub.epub, whose last
+// extension: .azw and .prc files are MOBI, and .m4a files are M4B (ADR
+// 0018). This set can grow in any release (ADR 0019); a plugin file parser
+// that declares an extension here is not used for it. A .kepub.epub, whose last
 // extension is an EPUB's, is matched by isKePubPath instead.
 var builtInFileTypesByExtension = map[string]string{
 	"azw3":  FileTypeAZW3,
@@ -41,6 +43,7 @@ var builtInFileTypesByExtension = map[string]string{
 	"epub":  FileTypeEPUB,
 	"kepub": FileTypeKePub,
 	"m4b":   FileTypeM4B,
+	"m4a":   FileTypeM4B,
 	"mobi":  FileTypeMOBI,
 	"azw":   FileTypeMOBI,
 	"prc":   FileTypeMOBI,
@@ -77,7 +80,8 @@ func isKePubPath(path string) bool {
 }
 
 // IsBuiltInFileExtension reports whether an extension (lowercase, no dot)
-// belongs to a built-in file type. Plugin file parsers cannot claim these.
+// belongs to a built-in file type. Plugin file parsers are not used for
+// these, and the set can grow in any release (ADR 0019).
 func IsBuiltInFileExtension(ext string) bool {
 	_, ok := builtInFileTypesByExtension[ext]
 	return ok

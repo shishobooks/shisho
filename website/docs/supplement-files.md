@@ -4,7 +4,7 @@ Supplement files are additional files associated with a book, such as companion 
 
 ## Main Files and Supplements
 
-Shisho's native main-file formats are EPUB, KePub, AZW3, MOBI, CBZ, M4B, and PDF. CBR is not native unless a [plugin](./plugins/overview.md) adds support. Files that are not recognized as main files can be linked to a nearby book as supplements.
+Shisho's native main-file formats are EPUB, KePub, AZW3, MOBI, CBZ, M4B (`.m4b` and `.m4a`), and PDF. CBR is not native unless a [plugin](./plugins/overview.md) adds support. Files that are not recognized as main files can be linked to a nearby book as supplements.
 
 A supplement is labeled with its current filename, including the extension, so the label follows the file when the book is renamed or reorganized. A name you set yourself in the file's edit dialog replaces the filename. Shisho does not extract embedded book or file metadata from supplements.
 

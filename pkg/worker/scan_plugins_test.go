@@ -1441,9 +1441,9 @@ func TestScanWithPluginMetadataEnricher_AllSourcesSet(t *testing.T) {
 	assert.Equal(t, enricherSource, *file.IdentifierSource, "IdentifierSource should be enricher plugin source")
 }
 
-// TestScanWithPluginFileParser_ReservedExtensions verifies that plugins cannot
-// override built-in parsers for reserved extensions (epub, cbz, m4b, pdf).
-func TestScanWithPluginFileParser_ReservedExtensions(t *testing.T) {
+// TestScanWithPluginFileParser_BuiltInExtensions verifies that a plugin file
+// parser is not used for an extension Shisho parses itself.
+func TestScanWithPluginFileParser_BuiltInExtensions(t *testing.T) {
 	t.Parallel()
 	pluginDir := t.TempDir()
 	tc := newTestContextWithPlugins(t, pluginDir)

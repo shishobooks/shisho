@@ -36,7 +36,8 @@ export interface SearchContext {
   file?: {
     /**
      * File type (e.g., "epub", "cbz", "m4b", "pdf"): the extension, except
-     * "kepub" for a .kepub.epub and "mobi" for .azw and .prc files.
+     * "kepub" for a .kepub.epub, "mobi" for .azw and .prc files, and "m4b"
+     * for .m4a files.
      */
     fileType?: string;
     /**

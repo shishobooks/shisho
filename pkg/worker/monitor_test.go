@@ -84,6 +84,7 @@ func TestMonitor_IsScannable(t *testing.T) {
 	}{
 		{"epub file", "/lib/book.epub", true},
 		{"m4b file", "/lib/book.m4b", true},
+		{"m4a file", "/lib/book.m4a", true},
 		{"cbz file", "/lib/comic.cbz", true},
 		{"mobi file", "/lib/book.mobi", true},
 		{"azw file", "/lib/book.azw", true},
