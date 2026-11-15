@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-14
+
+### Breaking Changes
+- **Remove Libraries Read from the built-in viewer role (#867)**
+  - The built-in viewer role no longer has Libraries Read, so viewers no
+    longer see Administration > Libraries or library folder paths. To keep
+    them, grant Libraries Read to the viewer role in Administration > Users.
+
+### Features
+- KOReader plugin: several servers and unrecognized books (#882)
+- Cap reading time per page in the web reader, as KOReader does (#881)
+- KOReader plugin: send existing KOReader history on first sign-in (#880)
+- KOReader plugin: status and Ratings both ways (#879)
+- Keep the Public Demo current with a daily date shift (#878)
+- KOReader plugin: reading time and positions sync, offline first (#874)
+- Add the Reading Stats heatmap, month calendar, and session delete (#873)
+- Add Reading Stats (#870)
+- Add Server Stats admin page (#869)
+- KOReader plugin: install, sign in, and self-update (#866)
+- Keep Read-throughs when their Book is deleted, and add Reading History (#865)
+
+### Bug Fixes
+- Keep syncing KOReader reading after its statistics are reset (#883)
+- Keep page reader swipes, settings, focus, and scroll steady while pages load (#872)
+- Stop the web reader reopening books on tab return and quick reopen (#868)
+- Remove Libraries Read from the built-in viewer role (#867)
+
+### Documentation
+- Add KOReader plugin glossary term and ADRs 0016 and 0017 (#863)
+- Add Reading Stats and Server Stats glossary terms and ADR 0015 (#856)
+
+### Testing
+- Fix wall-clock flakes, check:quiet races, and test order dependence (#871)
+
+### Other
+- Bump jsdom from 30.1.3 to 31.0.0 (#877)
+- Bump the minor-and-patch group with 9 updates (#876)
+- Bump the minor-and-patch group with 5 updates (#875)
+
 ## [0.7.0] - 2026-11-10
 
 ### Features
