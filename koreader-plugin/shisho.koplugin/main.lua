@@ -1542,7 +1542,7 @@ function Shisho:settingsMenu()
             text_func = function()
                 return T(_("Plugin version %1"), self.stamps.version)
             end,
-            help_text = _("The version of the Shisho plugin installed. Tap it to see its build."),
+            help_text = _("The version of the Shisho KOReader plugin installed. Tap it to see its build."),
             keep_menu_open = true,
             callback = function()
                 self:notify(T(_("Shisho KOReader plugin %1\nBuild %2"), self.stamps.version, self.stamps.hash:sub(1, 12)))

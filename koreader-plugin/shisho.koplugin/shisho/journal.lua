@@ -1,6 +1,6 @@
 --[[--
-The journal of what KOReader doesn't record itself (ADR 0016): for now, each
-book's latest position, with when the reader was there. An entry waits until
+The journal of what KOReader doesn't record itself (ADR 0016): each book's
+latest position, with when the reader was there. An entry waits until
 every enabled server has acknowledged it, so a server that needs a new
 sign-in, or that's offline, keeps it queued. A newer position replaces the
 one waiting for its book, under a new id, since only the latest place
