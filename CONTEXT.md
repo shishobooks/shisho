@@ -15,8 +15,8 @@ A single media file (EPUB, KePub, MOBI, AZW3, M4B, CBZ, PDF, etc.) belonging to 
 _Avoid_: asset, media
 
 **File Type**:
-The kind of a **File** (EPUB, KePub, MOBI, AZW3, CBZ, PDF, M4B, and so on), and equally the kind delivered after any **Conversion**. A KePub is a File named `.kepub.epub`, or `.kepub` as Calibre stores one; one converted from an EPUB or CBZ exists only as a delivery.
-_Avoid_: format, file format
+The kind of a **File** (EPUB, KePub, MOBI, AZW3, CBZ, PDF, M4B, and so on), and equally the kind delivered after any **Conversion**. A KePub is a File named `.kepub.epub`, or `.kepub` as Calibre stores one; one converted from an EPUB or CBZ exists only as a delivery. An M4B is an audiobook File named `.m4b` or `.m4a` (ADR 0018). There is no File Type for an audiobook split across several files: each part is its own M4B.
+_Avoid_: format, file format, M4A (as a separate File Type)
 
 **Reflowable**:
 An ebook **File** whose text re-wraps to fit the screen (EPUB, KePub, MOBI, AZW3). Classified by **File Type**, so a fixed-layout EPUB is still reflowable. Positions within it are locations in the text, not page numbers.
