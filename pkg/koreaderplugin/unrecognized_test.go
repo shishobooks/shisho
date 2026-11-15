@@ -435,6 +435,41 @@ func TestLinkedCopy_SyncsPercentageOnlyPositions(t *testing.T) {
 	assert.True(t, own.Positions[0].Own)
 }
 
+func TestLinkedCopy_SyncsSessionsStatusAndRatingLikeAnyBook(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	// Only pages are held, so the status and Rating can come only from later.
+	f.upload(UploadPayload{Pages: pages(oldCopy, 1, 30, f.day1), Unrecognized: []UnrecognizedPayload{unrecognizedAbout()}})
+	file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	require.NoError(t, f.linkAs(f.user, f.device, file.ID))
+	require.Len(t, f.sessionsOf(file), 1)
+
+	later := f.day1.Add(2 * time.Hour)
+	f.upload(UploadPayload{
+		Pages: pages(oldCopy, 31, 40, later),
+		Events: []EventPayload{
+			{ID: "later-status", Type: PluginEventStatus, Document: oldCopy, At: later.Add(time.Hour).Unix(), Status: KOReaderStatusFinished},
+			{ID: "later-rating", Type: PluginEventRating, Document: oldCopy, At: later.Add(time.Hour).Unix(), Rating: 3},
+		},
+	})
+
+	rts := f.readThroughs(file)
+	require.Len(t, rts, 1)
+	assert.Equal(t, models.ReadThroughOutcomeFinished, rts[0].Outcome)
+	assert.Equal(t, models.ReadingStatusRead, f.status(file))
+	assert.Equal(t, ptr(12), f.ratingUnits(file))
+	sessions := f.sessionsOf(file)
+	require.Len(t, sessions, 2)
+	measured := sessions[1]
+	assert.True(t, measured.Measured)
+	assert.True(t, measured.StartedAt.Equal(later))
+	assert.Equal(t, 10*60, measured.Duration)
+	require.NotNil(t, measured.ReadThroughID)
+	assert.Equal(t, rts[0].ID, *measured.ReadThroughID)
+	assert.Zero(t, f.heldRows())
+	assert.Zero(t, f.heldEvents())
+}
+
 func TestLink_ThePullAfterwardCarriesTheBooksState(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)

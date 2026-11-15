@@ -157,6 +157,12 @@ type PluginServer struct {
 		Through int64 `json:"through"`
 	} `json:"history"`
 	AskingHistory bool `json:"asking_history"`
+	// Info is what the server last answered about itself, such as the
+	// plugin build it serves.
+	Info *struct {
+		PluginVersion string `json:"plugin_version"`
+		PluginHash    string `json:"plugin_hash"`
+	} `json:"info"`
 }
 
 // SidecarSummary is a book's status and Rating as its sidecar holds them,
@@ -211,16 +217,22 @@ type Args struct {
 	Online bool
 	Code   string
 	From   string
-	// Stats seeds KOReader's statistics before a plugin-sync, StatisticsOff
-	// turns statistics off, and SyncNow taps Sync now.
-	Stats         []StatRow
-	StatisticsOff bool
-	SyncNow       bool
+	// Stats seeds KOReader's statistics before a plugin-sync, after
+	// ResetDocuments resets each book's statistics as KOReader's Reset
+	// statistics for the current book does. StatisticsOff turns statistics
+	// off, and SyncNow taps Sync now.
+	Stats          []StatRow
+	ResetDocuments []string
+	StatisticsOff  bool
+	SyncNow        bool
 	// Turns is how many pages plugin-read turns, and Close and Sleep close the
 	// book or put the device to sleep afterwards. Before that, MarkFinished
 	// marks the book finished as the end-of-book prompt does, and Stars rates
-	// it as Book status does.
+	// it as Book status does. Pause is how many seconds the reader stays on
+	// each page before turning it; KOReader's statistics count a page read
+	// once it stays at least that long, so give one for reading time.
 	Turns        int
+	Pause        int
 	Close        bool
 	Sleep        bool
 	MarkFinished bool
@@ -323,6 +335,9 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	if len(a.Stats) > 0 {
 		payload["stats"] = a.Stats
 	}
+	if len(a.ResetDocuments) > 0 {
+		payload["reset_documents"] = a.ResetDocuments
+	}
 	if a.StatisticsOff {
 		payload["statistics_off"] = true
 	}
@@ -331,6 +346,9 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.Turns > 0 {
 		payload["turns"] = a.Turns
+	}
+	if a.Pause > 0 {
+		payload["pause"] = a.Pause
 	}
 	if a.Close {
 		payload["close"] = true

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -312,6 +313,43 @@ func TestUpload_RefusesImpossibleTimesAndClampsFutureOnes(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), sessions[0].StartedAt, time.Minute)
 }
 
+// setTimeZone saves zone as the user's time zone.
+func (f *syncFixture) setTimeZone(zone string) {
+	f.t.Helper()
+	_, err := f.db.NewInsert().Model(&models.UserSettings{
+		UserID: f.user.ID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+		ViewerFitMode: models.FitModeHeight, ReflowableTheme: models.ReflowableThemeLight,
+		ReflowableFlow: models.ReflowableFlowPaginated, GallerySize: models.GallerySizeMedium,
+		PlaybackSpeed: 1, ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
+	}).Exec(f.ctx)
+	require.NoError(f.t, err)
+}
+
+func TestUpload_DaysAreInTheUsersTimeZone(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	// UTC+14: noon in UTC is 2am the next day there.
+	f.setTimeZone("Pacific/Kiritimati")
+	read := f.day1.Add(2 * time.Hour)
+	finished := read.Add(24 * time.Hour)
+
+	f.upload(UploadPayload{
+		Pages:  pages(syncHash, 2, 11, read),
+		Events: []EventPayload{statusEvent("finished", KOReaderStatusFinished, "", finished)},
+	})
+
+	rts := f.readThroughs(f.file)
+	require.Len(t, rts, 1)
+	require.NotNil(t, rts[0].BeginDay)
+	assert.Equal(t, day(read.AddDate(0, 0, 1)), *rts[0].BeginDay, "begun on the day it was there, not in UTC")
+	require.NotNil(t, rts[0].EndDay)
+	assert.Equal(t, day(finished.AddDate(0, 0, 1)), *rts[0].EndDay)
+	sessions := f.sessions(f.user)
+	require.Len(t, sessions, 1)
+	require.NotNil(t, sessions[0].ReadThroughID)
+	assert.Equal(t, rts[0].ID, *sessions[0].ReadThroughID)
+}
+
 func TestUpload_PlacesASessionByItsTime(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
@@ -373,6 +411,49 @@ func TestUpload_PositionsTakeTheirOwnTime(t *testing.T) {
 	assert.True(t, stored.OccurredAt.Equal(at), "occurred %s", stored.OccurredAt)
 	assert.Equal(t, f.device.ID, *stored.SourceDeviceID)
 	require.Len(t, f.readThroughs(f.file), 1, "the session started it; the position doesn't start another")
+}
+
+// The start of "Beta" in the handoff EPUB (internal/testgen), as KOReader
+// writes it in the EPUB and in its KePub (see pkg/reflowable's tests).
+const (
+	betaXPointer     = "/body/DocFragment[2]/body/section/p[1]/text().58"
+	betaKePubPointer = "/body/DocFragment[2]/body/div/div/section/p[1]/span[3]/text().0"
+)
+
+func TestUpload_AKePubsPositionReachesADeviceHoldingTheEPUB(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	path := testgen.GenerateHandoffEPUB(t, t.TempDir(), "handoff.epub")
+	_, err := f.db.NewUpdate().Model(f.file).Set("filepath = ?", path).WherePK().Exec(f.ctx)
+	require.NoError(t, err)
+	// The device holds the KePub Shisho made of the EPUB.
+	require.NoError(t, f.hashes.RecordDocumentHash(f.ctx, f.file.ID, models.FileTypeKePub, kepubHash))
+	at := time.Now().Add(-10 * time.Minute)
+
+	f.upload(UploadPayload{Events: []EventPayload{
+		{ID: "kepub", Type: PluginEventPosition, Document: kepubHash, At: at.Unix(), Progress: betaKePubPointer, Percentage: ptr(0.12)},
+	}})
+
+	// Kept as the KePub's, which is translated when another copy reads it.
+	stored, err := f.reading.RetrievePosition(f.ctx, f.user.ID, f.file.ID)
+	require.NoError(t, err)
+	require.NotNil(t, stored)
+	assert.Equal(t, betaKePubPointer, *stored.XPointer)
+	require.NotNil(t, stored.LocatorFileType)
+	assert.Equal(t, models.FileTypeKePub, *stored.LocatorFileType)
+
+	epub := f.addDevice(f.user, devices.DeviceTypeKOReader)
+	f.backdate(epub, time.Now().AddDate(0, -1, 0))
+	pulled := f.pullAs(epub, time.Now().Unix(), syncHash)
+	require.Len(t, pulled.Positions, 1)
+	assert.Equal(t, betaXPointer, pulled.Positions[0].Progress)
+	assert.Equal(t, f.device.Name, pulled.Positions[0].Source)
+
+	// The Device that sent it gets it back as it was.
+	own := f.pullAs(f.device, time.Now().Unix(), kepubHash)
+	require.Len(t, own.Positions, 1)
+	assert.Equal(t, betaKePubPointer, own.Positions[0].Progress)
+	assert.True(t, own.Positions[0].Own)
 }
 
 func TestUpload_AnOlderOfflinePositionKeepsItsSessionButNotThePlace(t *testing.T) {

@@ -119,6 +119,37 @@ func TestPluginSyncsReadingTimeAfterOfflineDays(t *testing.T) {
 	assert.Len(t, s.pluginSessions(), 3)
 }
 
+// Resetting a book's statistics in KOReader deletes its rows, so the rows
+// KOReader records next can take the numbers of rows already sent. Reading
+// after the reset still reaches Shisho, and the reading sent before it stays.
+func TestPluginKeepsSyncingAfterABooksStatisticsAreReset(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	before := time.Now().UTC().Truncate(time.Hour).Add(-6 * time.Hour)
+	after := before.Add(2 * time.Hour)
+	s.signInPlugin(before.Add(-24 * time.Hour))
+
+	row := func(page int, at time.Time) StatRow {
+		return StatRow{Document: document, Page: page, TotalPages: 100, StartTime: at.Unix(), Duration: 60}
+	}
+	s.run(Args{Command: "plugin-sync", Stats: []StatRow{
+		row(1, before), row(2, before.Add(time.Minute)), row(3, before.Add(2*time.Minute)),
+	}})
+	s.run(Args{Command: "plugin-sync", Online: true})
+	require.Len(t, s.pluginSessions(), 1)
+
+	synced := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, ResetDocuments: []string{document}, Stats: []StatRow{
+		row(4, after), row(5, after.Add(time.Minute)),
+	}})
+	sessions := s.pluginSessions()
+	require.Len(t, sessions, 2, "the reading after the reset arrives; shown: %v", synced.Shown)
+	assert.Equal(t, before.Unix(), sessions[0].StartedAt.Unix(), "the reading sent before the reset stays")
+	assert.Equal(t, 180, sessions[0].Duration)
+	assert.Equal(t, after.Unix(), sessions[1].StartedAt.Unix())
+	assert.Equal(t, 120, sessions[1].Duration)
+}
+
 // Sync on sleep turns Wi-Fi on to sync and off again, since a Kobo can't
 // sleep with Wi-Fi on, and waits an hour after a sync before doing it again.
 func TestPluginSyncsOnSleepAtMostHourly(t *testing.T) {
@@ -245,6 +276,20 @@ func TestPluginSyncsOnSleepWhileOnline(t *testing.T) {
 	s, sent := readingScenario(t)
 	s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 3, Sleep: true})
 	assert.NotNil(t, sent())
+}
+
+// KOReader's statistics hold the open book's pages in memory, writing them
+// every 50 page turns, or as the book closes or the device sleeps, which can
+// come after the plugin's own sleep handler. Going to sleep mid-book sends
+// the pages just read anyway.
+func TestPluginSendsPagesStatisticsStillHold(t *testing.T) {
+	s, _ := readingScenario(t)
+
+	s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 3, Pause: 1, Sleep: true})
+
+	sessions := s.pluginSessions()
+	require.Len(t, sessions, 1)
+	assert.Positive(t, sessions[0].Duration)
 }
 
 // A daily sync that can't connect, behind the sleep screen, leaves no message

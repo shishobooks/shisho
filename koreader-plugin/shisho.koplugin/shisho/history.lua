@@ -6,13 +6,15 @@ book's status and stars KOReader recorded before signing in (the books
 shisho/summaries notes as before). The server fills in only what Shisho has
 none of from it, so sending it again changes nothing.
 
-A server that was sent history has server.history = { through }, where
-through is the last statistics row recorded by sign-in. Its statistics
+A server that was sent history has server.history = { through, through_row },
+where through is the last statistics row recorded by sign-in, and
+through_row names that row (shisho/statistics). Its statistics
 cursor starts at the first row, and rows after through are reading like any
 other. A server whose sign-in is asking whether to send it has
 server.asking_history, and nothing goes to it until the person answers. No
 UI.
 ]]
+local Statistics = require("shisho/statistics")
 local random = require("frontend/random")
 
 local History = {}
@@ -76,13 +78,25 @@ function History.unsent(server)
 end
 
 -- accept sends server history from the first statistics row up to where
--- sign-in left off. Accepted again, it keeps its place.
+-- sign-in left off, or up to its cursor, when sent later. Where history ends
+-- knows the latest start of any row up to it (Statistics.repair), as far as
+-- the plugin knows it. Accepted again, it keeps its place.
 function History.accept(server)
     if type(server.history) == "table" then return end
     local cursor = server.stats_cursor
-    server.history = { through = type(cursor) == "table" and tonumber(cursor.rowid) or 0 }
+    local through_row = Statistics.key(cursor)
+    if through_row then
+        local from = server.stats_from_row
+        through_row.latest = math.max(type(from) == "table" and tonumber(from.latest) or 0,
+            tonumber(cursor.latest) or 0, tonumber(cursor.start_time) or 0)
+    end
+    server.history = {
+        through = type(cursor) == "table" and tonumber(cursor.rowid) or 0,
+        through_row = through_row,
+    }
     server.stats_cursor = { rowid = 0 }
     server.stats_from = 0
+    server.stats_from_row = nil
 end
 
 -- rowsPending reports whether rows of server's history are still to go.

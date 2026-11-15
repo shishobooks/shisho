@@ -579,6 +579,28 @@ local function seedStatistics()
     conn:close()
 end
 
+-- resetStatistics resets the statistics of each book in
+-- args.reset_documents, by document hash, as KOReader's Reset statistics for
+-- the current book does: it deletes the book and its rows, and the book's
+-- next rows go under a new book.
+local function resetStatistics()
+    if type(args.reset_documents) ~= "table" then return end
+    local SQ3 = require("lua-ljsqlite3/init")
+    local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+    local find = conn:prepare("SELECT id FROM book WHERE md5 = ?;")
+    local delete_book = conn:prepare("DELETE FROM book WHERE id = ?;")
+    local delete_rows = conn:prepare("DELETE FROM page_stat_data WHERE id_book = ?;")
+    for __, document in ipairs(args.reset_documents) do
+        local found = find:reset():bind(document):step()
+        if found then
+            local id = tonumber(found[1])
+            delete_book:reset():bind(id):step()
+            delete_rows:reset():bind(id):step()
+        end
+    end
+    conn:close()
+end
+
 -- seedSummaries writes books' sidecar statuses and stars: args.summaries is
 -- { [file name] = { status, rating, modified } }, with the book's hash, as
 -- KOReader records them when it opens a book and a person marks it.
@@ -605,6 +627,7 @@ commands["plugin-sync"] = function()
         if args.statistics_off then
             G_reader_settings:saveSetting("statistics", { is_enabled = false })
         end
+        resetStatistics()
         seedStatistics()
         seedSummaries()
         if args.sync_now then
@@ -727,7 +750,12 @@ commands["plugin-read"] = function()
         if not plugin then fail("the KOReader plugin didn't load") end
         stepUI()
         local Event = require("ui/event")
+        -- With pause, the reader stays that many seconds on each page, and
+        -- KOReader's statistics, set to count a page read after that long,
+        -- record the time. They hold it in memory until they write it.
+        if args.pause and ui.statistics then ui.statistics.settings.min_sec = args.pause end
         for __ = 1, args.turns or 0 do
+            if args.pause then require("ffi/util").sleep(args.pause) end
             ui:handleEvent(Event:new("GotoViewRel", 1))
             stepUI()
         end

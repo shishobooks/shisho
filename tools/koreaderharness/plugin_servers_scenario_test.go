@@ -3,12 +3,18 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -200,4 +206,105 @@ func TestPluginDescribesACopyHeldWithoutDetails(t *testing.T) {
 	assert.Equal(t, "Odd Copy", *listed.Title)
 	require.NotNil(t, listed.FileType)
 	assert.Equal(t, "epub", *listed.FileType)
+}
+
+// serveBuild puts a proxy in front of s's server that serves the build it
+// holds in place of the server's own plugin, as a server running another
+// build of the same version does: every plugin answer names that build's
+// hash, and the plugin's download is its zip. Holding nil, the server's own
+// plugin is served. s's URL becomes the proxy's.
+func (s *scenario) serveBuild(build *koreaderplugin.Bundle) *atomic.Pointer[koreaderplugin.Bundle] {
+	s.t.Helper()
+	own, err := koreaderplugin.DefaultBundle()
+	require.NoError(s.t, err)
+	served := &atomic.Pointer[koreaderplugin.Bundle]{}
+	served.Store(build)
+	target, err := url.Parse(s.url)
+	require.NoError(s.t, err)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	direct := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		direct(r)
+		// Left to the transport, which then hands back the body unzipped.
+		r.Header.Del("Accept-Encoding")
+	}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		build := served.Load()
+		if build == nil || !strings.HasPrefix(resp.Request.URL.Path, "/koreader/plugin/") {
+			return nil
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		if resp.Request.URL.Path == "/koreader/plugin/download" && resp.StatusCode == http.StatusOK {
+			body = build.Zip()
+		} else {
+			body = bytes.ReplaceAll(body, []byte(own.Hash), []byte(build.Hash))
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		resp.ContentLength = int64(len(body))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+		return nil
+	}
+	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", "0.0.0.0:0")
+	require.NoError(s.t, err)
+	srv := &http.Server{Handler: proxy, ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(listener) }()
+	s.t.Cleanup(func() { _ = srv.Close() })
+	s.url = fmt.Sprintf("http://localhost:%d", listener.Addr().(*net.TCPAddr).Port)
+	return served
+}
+
+// setInstalledFrom records in s's KOReader that the plugin was last
+// installed from serverURL.
+func (s *scenario) setInstalledFrom(serverURL string) {
+	s.t.Helper()
+	path := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
+	data, err := os.ReadFile(path)
+	require.NoError(s.t, err)
+	require.True(s.t, bytes.HasPrefix(data, []byte("return { ")), "%s", data)
+	data = append([]byte(fmt.Sprintf("return { installed_from = %q, ", serverURL)), data[len("return { "):]...)
+	require.NoError(s.t, os.WriteFile(path, data, 0o644))
+}
+
+// Two dev servers serving their own builds of one version: only the server
+// the plugin was last installed from offers its build, so the plugin never
+// swaps between them each time Wi-Fi comes on.
+func TestPluginOffersASameVersionBuildOnlyFromItsServer(t *testing.T) {
+	a := newScenario(t)
+	b := newScenario(t)
+	own, err := koreaderplugin.DefaultBundle()
+	require.NoError(t, err)
+	bBuild := anotherBuild(t)
+	served := b.serveBuild(bBuild)
+	a.signInPluginToBoth(b, time.Now().Add(-time.Hour))
+	a.setInstalledFrom(a.containerServer())
+
+	// Installed from A, which serves the build installed: B's build isn't
+	// offered.
+	launched := a.run(Args{Command: "plugin-launch", Online: true})
+	require.Len(t, launched.Plugin.Servers, 2, "shown: %v", launched.Shown)
+	require.NotNil(t, launched.Plugin.Servers[1].Info, "B answered")
+	require.Equal(t, bBuild.Hash, launched.Plugin.Servers[1].Info.PluginHash, "B serves its own build")
+	assert.Equal(t, own.Hash, launched.Plugin.Hash)
+	assert.Nil(t, launched.Plugin.Offer, "shown: %v", launched.Shown)
+
+	// Reinstalled from B, A's build isn't offered either.
+	reinstalled := a.run(Args{Command: "plugin-update", Online: true, From: b.url})
+	require.True(t, reinstalled.Plugin.Installed, reinstalled.Plugin.Message)
+	require.Equal(t, bBuild.Hash, reinstalled.Plugin.Hash)
+	require.Equal(t, b.containerServer(), reinstalled.Plugin.InstalledFrom)
+	launched = a.run(Args{Command: "plugin-launch", Online: true})
+	require.NotNil(t, launched.Plugin.Servers[0].Info, "A answered")
+	require.Equal(t, own.Hash, launched.Plugin.Servers[0].Info.PluginHash, "A serves its own build")
+	assert.Nil(t, launched.Plugin.Offer, "shown: %v", launched.Shown)
+
+	// B rebuilt: B offers its new build, though A serves the same one.
+	served.Store(nil)
+	launched = a.run(Args{Command: "plugin-launch", Online: true})
+	require.NotNil(t, launched.Plugin.Offer, "shown: %v", launched.Shown)
+	assert.Equal(t, b.containerServer(), launched.Plugin.Offer.Server)
+	assert.Equal(t, own.Hash, launched.Plugin.Offer.Hash)
 }

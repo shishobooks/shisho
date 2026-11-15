@@ -154,8 +154,10 @@ end
 -- signedIn records a sign-in, adds the server's catalog to KOReader's OPDS
 -- list, and tells the user.
 function Shisho:signedIn(url, answer, username, credential)
+    -- A server signed in to for the first time takes reading from now on,
+    -- so the pages of a book open now count as before it.
+    if self:statisticsEnabled() then self:flushStatistics() end
     local server, other_device, first = self.state:signIn{
-        -- A server signed in to for the first time takes reading from now on.
         stats_cursor = Statistics.currentCursor(self:statisticsPath()),
         url = url,
         username = username,
@@ -1170,6 +1172,10 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
         self:flushStatistics()
         local path = self:statisticsPath()
         read_pages = function(cursor, limit) return Statistics.read(path, cursor, limit) end
+        for __, server in ipairs(Sync.checkStatistics(self.state, path)) do
+            logger.info("Shisho: statistics rows changed under the places kept for", server.url,
+                "; reading on after row", server.stats_cursor.rowid)
+        end
     end
     local problems = {}
     local plans = {}
@@ -1542,7 +1548,7 @@ function Shisho:settingsMenu()
             text_func = function()
                 return T(_("Plugin version %1"), self.stamps.version)
             end,
-            help_text = _("The version of the Shisho plugin installed. Tap it to see its build."),
+            help_text = _("The version of the Shisho KOReader plugin installed. Tap it to see its build."),
             keep_menu_open = true,
             callback = function()
                 self:notify(T(_("Shisho KOReader plugin %1\nBuild %2"), self.stamps.version, self.stamps.hash:sub(1, 12)))

@@ -223,10 +223,10 @@ func TestPluginBeforeAnySignInChecksForNoUpdate(t *testing.T) {
 	assert.Empty(t, *checked.Plugin.SignInURL, "a release zip knows no server")
 }
 
-// olderBuild is the embedded plugin with one more file, zipped as another
-// build of the server's own version and paired with the scenario's server.
-func (s *scenario) olderBuild() []byte {
-	s.t.Helper()
+// anotherBuild is the embedded plugin with one more file, built as another
+// build of the server's own version.
+func anotherBuild(t *testing.T) *koreaderplugin.Bundle {
+	t.Helper()
 	files := fstest.MapFS{}
 	err := fs.WalkDir(pluginfiles.FS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -236,15 +236,21 @@ func (s *scenario) olderBuild() []byte {
 		files[path] = &fstest.MapFile{Data: data}
 		return err
 	})
-	require.NoError(s.t, err)
+	require.NoError(t, err)
 	files[pluginfiles.Dir+"/stale.lua"] = &fstest.MapFile{Data: []byte("return {}\n")}
 	current, err := koreaderplugin.DefaultBundle()
-	require.NoError(s.t, err)
-	older, err := koreaderplugin.NewBundle(files, "dev")
-	require.NoError(s.t, err)
-	require.Equal(s.t, current.Version, older.Version)
-	require.NotEqual(s.t, current.Hash, older.Hash)
+	require.NoError(t, err)
+	another, err := koreaderplugin.NewBundle(files, "dev")
+	require.NoError(t, err)
+	require.Equal(t, current.Version, another.Version)
+	require.NotEqual(t, current.Hash, another.Hash)
+	return another
+}
 
+// olderBuild is anotherBuild zipped paired with the scenario's server.
+func (s *scenario) olderBuild() []byte {
+	s.t.Helper()
+	older := anotherBuild(s.t)
 	short, err := s.devices.GenerateShortURL(s.ctx, s.user.ID, s.device.ID)
 	require.NoError(s.t, err)
 	data, err := older.PairedZip(s.containerServer(), short.ShortCode, short.ExpiresAt)
