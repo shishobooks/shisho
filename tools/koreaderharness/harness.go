@@ -211,11 +211,14 @@ type Args struct {
 	Online bool
 	Code   string
 	From   string
-	// Stats seeds KOReader's statistics before a plugin-sync, StatisticsOff
-	// turns statistics off, and SyncNow taps Sync now.
-	Stats         []StatRow
-	StatisticsOff bool
-	SyncNow       bool
+	// Stats seeds KOReader's statistics before a plugin-sync, after
+	// ResetDocuments resets each book's statistics as KOReader's Reset
+	// statistics for the current book does. StatisticsOff turns statistics
+	// off, and SyncNow taps Sync now.
+	Stats          []StatRow
+	ResetDocuments []string
+	StatisticsOff  bool
+	SyncNow        bool
 	// Turns is how many pages plugin-read turns, and Close and Sleep close the
 	// book or put the device to sleep afterwards. Before that, MarkFinished
 	// marks the book finished as the end-of-book prompt does, and Stars rates
@@ -322,6 +325,9 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if len(a.Stats) > 0 {
 		payload["stats"] = a.Stats
+	}
+	if len(a.ResetDocuments) > 0 {
+		payload["reset_documents"] = a.ResetDocuments
 	}
 	if a.StatisticsOff {
 		payload["statistics_off"] = true

@@ -2,9 +2,16 @@
 Reads KOReader's statistics database (ADR 0016): its page_stat_data rows,
 each one visit to a page, with the document hash of the book they belong
 to. Rows are read in the order they were recorded, by rowid, after a
-per-server cursor, a bounded batch at a time. The statistics plugin only
-ever inserts rows (INSERT OR IGNORE), so the order holds even when the
-device's clock is set back and a later row starts earlier. The plugin
+per-server cursor, a bounded batch at a time, so a row recorded after the
+device's clock was set back, which starts earlier, is still read.
+
+Rowids aren't stable, though. KOReader deletes rows when a book's
+statistics are reset or books are deleted, then vacuums, and a deleted or
+restored database starts again, so later rows can take numbers a cursor is
+already past. So each place the plugin keeps (a server's cursor, the row
+its syncing started after, the last row of its history) names the row it
+was taken from by KOReader's own key for it, { id_book, page, start_time },
+and repair checks each against the database before a sync. The plugin
 opens this database read-only, and never holds it open between calls.
 No UI.
 ]]
@@ -198,21 +205,138 @@ function Statistics.count(path, cursor, through)
     return count or 0
 end
 
+-- cursorAfter is the cursor that reads on after row, naming row.
+function Statistics.cursorAfter(row)
+    return { rowid = row.rowid, id_book = row.id_book, page = row.page, start_time = row.start_time }
+end
+
+-- key is the row cursor names, { id_book, page, start_time }, or nil for a
+-- cursor at the start or one that names no row.
+function Statistics.key(cursor)
+    if type(cursor) ~= "table" or cursor.id_book == nil or cursor.page == nil or cursor.start_time == nil then
+        return nil
+    end
+    return { id_book = cursor.id_book, page = cursor.page, start_time = cursor.start_time }
+end
+
+local AT = "SELECT rowid, id_book, page, start_time FROM page_stat_data WHERE rowid <= ? ORDER BY rowid DESC LIMIT 1;"
+local FIRST_AFTER = "SELECT MIN(rowid) FROM page_stat_data WHERE start_time > ?;"
+
+-- rowAtOrBefore is the cursor after the last row numbered rowid or less, or
+-- the cursor at the start when there's none.
+local function rowAtOrBefore(conn, rowid)
+    local stmt = conn:prepare(AT)
+    stmt:bind(rowid)
+    local row = stmt:step()
+    stmt:close()
+    if not row then return { rowid = 0 } end
+    return Statistics.cursorAfter({
+        rowid = tonumber(row[1]), id_book = tonumber(row[2]), page = tonumber(row[3]), start_time = tonumber(row[4]),
+    })
+end
+
+local function sameRow(a, b)
+    return a.rowid == b.rowid and a.id_book == b.id_book and a.page == b.page and a.start_time == b.start_time
+end
+
+--[[--
+check is what the database says of mark, a place the plugin keeps
+({ rowid } with the row it names): the mark itself when its row is still
+there; the row at or just before it when it names no row, for a mark saved
+before marks named their row; or nil when its row is gone or renumbered.
+]]
+local function check(conn, mark, max)
+    local rowid = tonumber(mark.rowid) or 0
+    if rowid == 0 then return { rowid = 0 } end
+    local key = Statistics.key(mark)
+    if not key then
+        if rowid > max then return nil end
+        return rowAtOrBefore(conn, rowid)
+    end
+    local found = rowAtOrBefore(conn, rowid)
+    if sameRow(found, mark) then return mark end
+    return nil
+end
+
+-- byTime is where a mark whose row is gone goes: after the rows recorded
+-- before the first row that started after start_time, when the device's
+-- clock ran forward as usual.
+local function byTime(conn, start_time, max)
+    if not start_time then return rowAtOrBefore(conn, max) end
+    local first = scalar(conn, FIRST_AFTER, start_time)
+    if not first then return rowAtOrBefore(conn, max) end
+    return rowAtOrBefore(conn, first - 1)
+end
+
+--[[--
+repair checks server's places in the statistics database at path, where
+rowids can change under them, and moves each that no longer names its row:
+
+- where syncing started (stats_from, stats_from_at) and the last row of
+  history (history.through, history.through_at) are boundaries, so each
+  goes by time, to the rows recorded before the first that started after
+  its row did
+- the cursor goes back to where syncing started, so everything since is
+  sent again; the server takes in only what it doesn't have, and keeps what
+  the person deleted deleted
+
+A place saved before places named their row takes the row it's at. Returns
+whether anything moved, so the state needs saving. A missing database
+leaves every place alone, as the reading it held is already sent.
+]]
+function Statistics.repair(path, server)
+    if lfs.attributes(path, "mode") ~= "file" then return false end
+    if type(server.stats_cursor) ~= "table" or not server.stats_cursor.rowid then return false end
+    local changed = false
+    local ok = withConnection(path, function(conn)
+        local max = scalar(conn, "SELECT MAX(rowid) FROM page_stat_data;") or 0
+
+        -- boundary checks the place in target[field], with the row it names
+        -- in target[at], and moves it when it no longer names its row.
+        local function boundary(target, field, at)
+            local mark = Statistics.cursorAfter(target[at] or {})
+            mark.rowid = tonumber(target[field]) or 0
+            local found = check(conn, mark, max) or byTime(conn, mark.start_time, max)
+            if not sameRow(found, mark) then
+                target[field] = found.rowid
+                target[at] = Statistics.key(found)
+                changed = true
+            end
+            return found
+        end
+
+        local from = boundary(server, "stats_from", "stats_from_at")
+        if type(server.history) == "table" then
+            boundary(server.history, "through", "through_at")
+        end
+        local cursor = check(conn, server.stats_cursor, max)
+        if not cursor then
+            cursor = from
+        elseif cursor.rowid < from.rowid then
+            -- Syncing never starts after a cursor that still names its row,
+            -- so moving where it started can't skip what's still to go.
+            server.stats_from, server.stats_from_at = cursor.rowid, Statistics.key(cursor)
+            changed = true
+        end
+        if not sameRow(cursor, server.stats_cursor) then
+            server.stats_cursor = cursor
+            changed = true
+        end
+        return true
+    end)
+    return ok and changed or false
+end
+
 -- currentCursor is the cursor past every row recorded so far, where a
 -- server signed in to now starts.
 function Statistics.currentCursor(path)
     if lfs.attributes(path, "mode") ~= "file" then
         return { rowid = 0 }
     end
-    local rowid = withConnection(path, function(conn)
-        return scalar(conn, "SELECT MAX(rowid) FROM page_stat_data;")
+    local cursor = withConnection(path, function(conn)
+        return rowAtOrBefore(conn, scalar(conn, "SELECT MAX(rowid) FROM page_stat_data;") or 0)
     end)
-    return { rowid = rowid or 0 }
-end
-
--- cursorAfter is the cursor that reads on after row.
-function Statistics.cursorAfter(row)
-    return { rowid = row.rowid }
+    return cursor or { rowid = 0 }
 end
 
 --[[--

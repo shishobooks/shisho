@@ -119,6 +119,37 @@ func TestPluginSyncsReadingTimeAfterOfflineDays(t *testing.T) {
 	assert.Len(t, s.pluginSessions(), 3)
 }
 
+// Resetting a book's statistics in KOReader deletes its rows, so the rows
+// KOReader records next can take the numbers of rows already sent. Reading
+// after the reset still reaches Shisho, and the reading sent before it stays.
+func TestPluginKeepsSyncingAfterABooksStatisticsAreReset(t *testing.T) {
+	s := newScenario(t)
+	epub := s.file(models.FileTypeEPUB)
+	document := s.documentHash(epub)
+	before := time.Now().UTC().Truncate(time.Hour).Add(-6 * time.Hour)
+	after := before.Add(2 * time.Hour)
+	s.signInPlugin(before.Add(-24 * time.Hour))
+
+	row := func(page int, at time.Time) StatRow {
+		return StatRow{Document: document, Page: page, TotalPages: 100, StartTime: at.Unix(), Duration: 60}
+	}
+	s.run(Args{Command: "plugin-sync", Stats: []StatRow{
+		row(1, before), row(2, before.Add(time.Minute)), row(3, before.Add(2*time.Minute)),
+	}})
+	s.run(Args{Command: "plugin-sync", Online: true})
+	require.Len(t, s.pluginSessions(), 1)
+
+	synced := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, ResetDocuments: []string{document}, Stats: []StatRow{
+		row(4, after), row(5, after.Add(time.Minute)),
+	}})
+	sessions := s.pluginSessions()
+	require.Len(t, sessions, 2, "the reading after the reset arrives; shown: %v", synced.Shown)
+	assert.Equal(t, before.Unix(), sessions[0].StartedAt.Unix(), "the reading sent before the reset stays")
+	assert.Equal(t, 180, sessions[0].Duration)
+	assert.Equal(t, after.Unix(), sessions[1].StartedAt.Unix())
+	assert.Equal(t, 120, sessions[1].Duration)
+}
+
 // Sync on sleep turns Wi-Fi on to sync and off again, since a Kobo can't
 // sleep with Wi-Fi on, and waits an hour after a sync before doing it again.
 func TestPluginSyncsOnSleepAtMostHourly(t *testing.T) {

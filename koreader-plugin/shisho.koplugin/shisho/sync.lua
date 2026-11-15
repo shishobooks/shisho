@@ -298,7 +298,9 @@ local function sendHistory(opts, send, sent, hold)
         local rows = History.rows(server.history, read)
         if #rows == 0 then
             -- Rows statistics leaves out, such as ones with no time, end it.
-            server.stats_cursor = { rowid = server.history.through }
+            local through = Statistics.cursorAfter(server.history.through_at or {})
+            through.rowid = server.history.through
+            server.stats_cursor = through
             state:flush()
             break
         end

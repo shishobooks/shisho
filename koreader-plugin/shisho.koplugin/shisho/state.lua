@@ -3,12 +3,13 @@ The plugin's own state, in its own file in KOReader's settings directory:
 
 - servers: every server signed in to, each { url, username, credential,
   device_id, device_name, needs_login, update_required, info, stats_cursor,
-  stats_from,
+  stats_from, stats_from_at,
   last_synced, disabled, signed_in_day, states_cursor, history,
   asking_history }, where info is what
   the server last answered about itself, stats_cursor is the last statistics
   row it acknowledged, stats_from is the row its syncing started after (the
-  first row when it was sent history), disabled marks one the user turned off: the plugin
+  first row when it was sent history), with stats_from_at naming that row
+  (shisho/statistics), disabled marks one the user turned off: the plugin
   leaves it alone, and nothing waits for it, until it's enabled again,
   signed_in_day is the day it was first signed in to, states_cursor is
   where its next pull of statuses and Ratings starts (shisho/summaries),
@@ -27,6 +28,7 @@ the old state or the new one, never half of either. No UI.
 ]]
 local Files = require("shisho/files")
 local LuaSettings = require("luasettings")
+local Statistics = require("shisho/statistics")
 local Urls = require("shisho/urls")
 
 local State = {}
@@ -106,6 +108,7 @@ function State:signIn(fields)
     if not server.stats_cursor then
         server.stats_cursor = fields.stats_cursor or { rowid = 0 }
         server.stats_from = tonumber(server.stats_cursor.rowid) or 0
+        server.stats_from_at = Statistics.key(server.stats_cursor)
     end
     State.signedInDay(server, fields.signed_in_day or os.date("%Y-%m-%d"))
     return server, other_device, first

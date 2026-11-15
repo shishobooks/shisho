@@ -65,7 +65,7 @@ return {
         assert_eq(starts(sent[2]), { 300 })
         assert_eq(sent[1].clock, 5000)
         assert_eq(sent[1].pages[1], { document = "doc1", page = 1, total_pages = 100, start_time = 100, duration = 30 })
-        assert_eq(s.stats_cursor, { rowid = 3 })
+        assert_eq(s.stats_cursor, { rowid = 3, id_book = 1, page = 1, start_time = 300 }, "naming the row it's past")
         assert_eq(state:flush(), true)
         assert_eq(State.open(state.path):find("https://a.example").stats_cursor.rowid, 3)
     end,
@@ -239,12 +239,12 @@ return {
     ["rows statistics leaves out up to sign-in don't hold history up"] = function()
         local state, journal = setup("https://a.example")
         local s = state:find("https://a.example")
-        s.history = { through = 5 }
+        s.history = { through = 5, through_at = { id_book = 1, page = 9, start_time = 500 } }
         local post, sent = server()
         assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post, batch = 2,
             read_pages = rowsFrom({ row(100), row(200) }) }, "ok")
         assert_eq(#sent, 1)
-        assert_eq(s.stats_cursor.rowid, 5)
+        assert_eq(s.stats_cursor, { rowid = 5, id_book = 1, page = 9, start_time = 500 }, "naming history's last row")
     end,
 
     ["positions go only with the last batch, after every page row"] = function()

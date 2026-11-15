@@ -579,6 +579,28 @@ local function seedStatistics()
     conn:close()
 end
 
+-- resetStatistics resets the statistics of each book in
+-- args.reset_documents, by document hash, as KOReader's Reset statistics for
+-- the current book does: it deletes the book and its rows, and the book's
+-- next rows go under a new book.
+local function resetStatistics()
+    if type(args.reset_documents) ~= "table" then return end
+    local SQ3 = require("lua-ljsqlite3/init")
+    local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+    local find = conn:prepare("SELECT id FROM book WHERE md5 = ?;")
+    local delete_book = conn:prepare("DELETE FROM book WHERE id = ?;")
+    local delete_rows = conn:prepare("DELETE FROM page_stat_data WHERE id_book = ?;")
+    for __, document in ipairs(args.reset_documents) do
+        local found = find:reset():bind(document):step()
+        if found then
+            local id = tonumber(found[1])
+            delete_book:reset():bind(id):step()
+            delete_rows:reset():bind(id):step()
+        end
+    end
+    conn:close()
+end
+
 -- seedSummaries writes books' sidecar statuses and stars: args.summaries is
 -- { [file name] = { status, rating, modified } }, with the book's hash, as
 -- KOReader records them when it opens a book and a person marks it.
@@ -605,6 +627,7 @@ commands["plugin-sync"] = function()
         if args.statistics_off then
             G_reader_settings:saveSetting("statistics", { is_enabled = false })
         end
+        resetStatistics()
         seedStatistics()
         seedSummaries()
         if args.sync_now then

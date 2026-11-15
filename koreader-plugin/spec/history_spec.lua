@@ -58,10 +58,14 @@ return {
 
     ["sending history reads from the first row up to where sign-in left off"] = function()
         local state = State.open(scratch_dir() .. "/shisho.lua")
-        local server, _other, first = state:signIn{ url = "https://a.example", username = "r", credential = "C", stats_cursor = { rowid = 42 } }
+        local server, _other, first = state:signIn{ url = "https://a.example", username = "r", credential = "C",
+            stats_cursor = { rowid = 42, id_book = 3, page = 7, start_time = 900 } }
         assert_eq(first, true)
+        assert_eq(server.stats_from, 42)
+        assert_eq(server.stats_from_at, { id_book = 3, page = 7, start_time = 900 }, "naming the row syncing starts after")
         History.accept(server)
-        assert_eq(server.history, { through = 42 })
+        assert_eq(server.history, { through = 42, through_at = { id_book = 3, page = 7, start_time = 900 } })
+        assert_eq(server.stats_from_at, nil)
         assert_eq(server.stats_cursor, { rowid = 0 })
         assert_eq(History.rowsPending(server), true)
 
