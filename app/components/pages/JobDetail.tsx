@@ -78,19 +78,12 @@ const JobDetail = () => {
   const isLoading = jobQuery.isLoading || logsQuery.isLoading;
   const logs = useMemo(() => logsData?.items ?? [], [logsData?.items]);
 
-  // Extract unique plugin names from log data
+  // A log line's plugin is its own field, not part of its data.
   const pluginNames = useMemo(() => {
     const names = new Set<string>();
     for (const log of logs) {
-      if (log.data) {
-        try {
-          const parsed = JSON.parse(log.data);
-          if (parsed.plugin) {
-            names.add(parsed.plugin);
-          }
-        } catch {
-          /* ignore parse errors */
-        }
+      if (log.plugin) {
+        names.add(log.plugin);
       }
     }
     return Array.from(names).sort();
@@ -120,6 +113,10 @@ const JobDetail = () => {
           } catch {
             parsedData = null;
           }
+        }
+        // Show the plugin among the line's data.
+        if (log.plugin) {
+          parsedData = { plugin: log.plugin, ...parsedData };
         }
         return {
           id: log.id,
