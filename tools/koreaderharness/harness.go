@@ -239,6 +239,10 @@ type Args struct {
 	Stars        int
 	// Fire sets off the wake-up alarm plugin-daily set.
 	Fire bool
+	// DailyAt is the time of day plugin-daily sets daily sync to, to the
+	// minute. Unset, it's half a day from now, so daily sync's timer never
+	// comes due while a scenario runs, whatever the hour.
+	DailyAt time.Time
 	// WifiFails makes connecting fail, as with a router that's off, for
 	// plugin-daily.
 	WifiFails bool
@@ -379,6 +383,16 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.Fire {
 		payload["fire"] = true
+	}
+	if a.Command == "plugin-daily" {
+		at := a.DailyAt
+		if at.IsZero() {
+			at = time.Now().Add(12 * time.Hour)
+		}
+		// The container's KOReader runs on UTC.
+		at = at.UTC()
+		payload["daily_hour"] = at.Hour()
+		payload["daily_min"] = at.Minute()
 	}
 	if a.SyncNow {
 		payload["sync_now"] = true
