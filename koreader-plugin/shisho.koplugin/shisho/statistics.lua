@@ -210,22 +210,36 @@ function Statistics.cursorAfter(row)
     return { rowid = row.rowid, id_book = row.id_book, page = row.page, start_time = row.start_time }
 end
 
--- key is the row cursor names, { id_book, page, start_time }, or nil for a
--- cursor at the start or one that names no row.
+--[[--
+key is the row cursor names, { id_book, page, start_time }, or nil for a
+cursor at the start or one that names no row. A cursor taken at sign-in
+also carries latest, the latest start of any row up to it, which key keeps.
+]]
 function Statistics.key(cursor)
     if type(cursor) ~= "table" or cursor.id_book == nil or cursor.page == nil or cursor.start_time == nil then
         return nil
     end
-    return { id_book = cursor.id_book, page = cursor.page, start_time = cursor.start_time }
+    return { id_book = cursor.id_book, page = cursor.page, start_time = cursor.start_time, latest = cursor.latest }
 end
 
-local AT = "SELECT rowid, id_book, page, start_time FROM page_stat_data WHERE rowid <= ? ORDER BY rowid DESC LIMIT 1;"
+-- place is the cursor at rowid naming row (key), as the plugin's state keeps
+-- them apart for where syncing started and where history ends.
+function Statistics.place(rowid, row)
+    local place = Statistics.cursorAfter(type(row) == "table" and row or {})
+    place.rowid = tonumber(rowid) or 0
+    place.latest = type(row) == "table" and row.latest or nil
+    return place
+end
+
+local MAX_ROWID = "SELECT MAX(rowid) FROM page_stat_data;"
+local ROW_AT_OR_BEFORE =
+    "SELECT rowid, id_book, page, start_time FROM page_stat_data WHERE rowid <= ? ORDER BY rowid DESC LIMIT 1;"
 local FIRST_AFTER = "SELECT MIN(rowid) FROM page_stat_data WHERE start_time > ?;"
 
 -- rowAtOrBefore is the cursor after the last row numbered rowid or less, or
 -- the cursor at the start when there's none.
 local function rowAtOrBefore(conn, rowid)
-    local stmt = conn:prepare(AT)
+    local stmt = conn:prepare(ROW_AT_OR_BEFORE)
     stmt:bind(rowid)
     local row = stmt:step()
     stmt:close()
@@ -240,30 +254,27 @@ local function sameRow(a, b)
 end
 
 --[[--
-check is what the database says of mark, a place the plugin keeps
-({ rowid } with the row it names): the mark itself when its row is still
-there; the row at or just before it when it names no row, for a mark saved
-before marks named their row; or nil when its row is gone or renumbered.
+check is what the database says of place: the place itself when its row
+is still there; the row at or just before it when it names no row, for a
+place saved before places named their row; or nil when its row is gone or
+renumbered.
 ]]
-local function check(conn, mark, max)
-    local rowid = tonumber(mark.rowid) or 0
+local function check(conn, place, max)
+    local rowid = tonumber(place.rowid) or 0
     if rowid == 0 then return { rowid = 0 } end
-    local key = Statistics.key(mark)
-    if not key then
+    if not Statistics.key(place) then
         if rowid > max then return nil end
         return rowAtOrBefore(conn, rowid)
     end
-    local found = rowAtOrBefore(conn, rowid)
-    if sameRow(found, mark) then return mark end
+    if sameRow(rowAtOrBefore(conn, rowid), place) then return place end
     return nil
 end
 
--- byTime is where a mark whose row is gone goes: after the rows recorded
--- before the first row that started after start_time, when the device's
--- clock ran forward as usual.
-local function byTime(conn, start_time, max)
-    if not start_time then return rowAtOrBefore(conn, max) end
-    local first = scalar(conn, FIRST_AFTER, start_time)
+-- byTime is where a boundary whose row is gone goes once rows may have
+-- been renumbered: after the rows recorded before the first row that started
+-- after after, so a row from before it stays before it.
+local function byTime(conn, after, max)
+    local first = after and scalar(conn, FIRST_AFTER, after)
     if not first then return rowAtOrBefore(conn, max) end
     return rowAtOrBefore(conn, first - 1)
 end
@@ -272,69 +283,70 @@ end
 repair checks server's places in the statistics database at path, where
 rowids can change under them, and moves each that no longer names its row:
 
-- where syncing started (stats_from, stats_from_at) and the last row of
-  history (history.through, history.through_at) are boundaries, so each
-  goes by time, to the rows recorded before the first that started after
-  its row did
-- the cursor goes back to where syncing started, so everything since is
-  sent again; the server takes in only what it doesn't have, and keeps what
-  the person deleted deleted
+- while the cursor still names its row, no row up to it was renumbered,
+  only deleted, so where syncing started (stats_from, stats_from_row) and
+  the last row of history (history.through, history.through_row) up to it
+  keep their number, naming the row now at or before it
+- otherwise each goes by time, to the rows recorded before the first that
+  started after the latest row up to it did when it was taken (or after its
+  own row, when that isn't known), so a server not sent history is never
+  sent reading from before sign-in
+- a cursor that no longer names its row goes back to where syncing started,
+  so everything since is sent again; the server takes in only what it
+  doesn't have, and keeps what the person deleted deleted
 
 A place saved before places named their row takes the row it's at. Returns
-whether anything moved, so the state needs saving. A missing database
-leaves every place alone, as the reading it held is already sent.
+whether anything moved, so the state needs saving. A missing database, or
+one that can't be read, leaves every place alone.
 ]]
 function Statistics.repair(path, server)
     if lfs.attributes(path, "mode") ~= "file" then return false end
     if type(server.stats_cursor) ~= "table" or not server.stats_cursor.rowid then return false end
-    local changed = false
-    local ok = withConnection(path, function(conn)
-        local max = scalar(conn, "SELECT MAX(rowid) FROM page_stat_data;") or 0
-
-        -- boundary checks the place in target[field], with the row it names
-        -- in target[at], and moves it when it no longer names its row.
-        local function boundary(target, field, at)
-            local mark = Statistics.cursorAfter(target[at] or {})
-            mark.rowid = tonumber(target[field]) or 0
-            local found = check(conn, mark, max) or byTime(conn, mark.start_time, max)
-            if not sameRow(found, mark) then
-                target[field] = found.rowid
-                target[at] = Statistics.key(found)
-                changed = true
-            end
-            return found
-        end
-
-        local from = boundary(server, "stats_from", "stats_from_at")
-        if type(server.history) == "table" then
-            boundary(server.history, "through", "through_at")
-        end
+    local history = type(server.history) == "table" and server.history or nil
+    local found = withConnection(path, function(conn)
+        local max = scalar(conn, MAX_ROWID) or 0
         local cursor = check(conn, server.stats_cursor, max)
-        if not cursor then
-            cursor = from
-        elseif cursor.rowid < from.rowid then
-            -- Syncing never starts after a cursor that still names its row,
-            -- so moving where it started can't skip what's still to go.
-            server.stats_from, server.stats_from_at = cursor.rowid, Statistics.key(cursor)
-            changed = true
+        local function boundary(place)
+            local kept = check(conn, place, max)
+            if not kept and cursor and place.rowid <= cursor.rowid then
+                kept = rowAtOrBefore(conn, place.rowid)
+            end
+            kept = kept or byTime(conn, place.latest or place.start_time, max)
+            kept.latest = place.latest
+            return kept
         end
-        if not sameRow(cursor, server.stats_cursor) then
-            server.stats_cursor = cursor
-            changed = true
-        end
-        return true
+        local from = boundary(Statistics.place(server.stats_from, server.stats_from_row))
+        local through = history and boundary(Statistics.place(history.through, history.through_row))
+        return { cursor = cursor or Statistics.cursorAfter(from), from = from, through = through }
     end)
-    return ok and changed or false
+    if not found then return false end
+
+    local changed = false
+    if not sameRow(found.cursor, server.stats_cursor) then
+        server.stats_cursor = found.cursor
+        changed = true
+    end
+    if not sameRow(found.from, Statistics.place(server.stats_from, server.stats_from_row)) then
+        server.stats_from, server.stats_from_row = found.from.rowid, Statistics.key(found.from)
+        changed = true
+    end
+    if history and not sameRow(found.through, Statistics.place(history.through, history.through_row)) then
+        history.through, history.through_row = found.through.rowid, Statistics.key(found.through)
+        changed = true
+    end
+    return changed
 end
 
 -- currentCursor is the cursor past every row recorded so far, where a
--- server signed in to now starts.
+-- server signed in to now starts, with latest, the latest start of any row.
 function Statistics.currentCursor(path)
     if lfs.attributes(path, "mode") ~= "file" then
         return { rowid = 0 }
     end
     local cursor = withConnection(path, function(conn)
-        return rowAtOrBefore(conn, scalar(conn, "SELECT MAX(rowid) FROM page_stat_data;") or 0)
+        local cursor = rowAtOrBefore(conn, scalar(conn, MAX_ROWID) or 0)
+        cursor.latest = scalar(conn, "SELECT MAX(start_time) FROM page_stat_data;")
+        return cursor
     end)
     return cursor or { rowid = 0 }
 end

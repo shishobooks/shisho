@@ -298,9 +298,7 @@ local function sendHistory(opts, send, sent, hold)
         local rows = History.rows(server.history, read)
         if #rows == 0 then
             -- Rows statistics leaves out, such as ones with no time, end it.
-            local through = Statistics.cursorAfter(server.history.through_at or {})
-            through.rowid = server.history.through
-            server.stats_cursor = through
+            server.stats_cursor = Statistics.place(server.history.through, server.history.through_row)
             state:flush()
             break
         end
@@ -549,6 +547,20 @@ function Sync.run(opts)
     journal:prune()
     state:flush()
     return "ok", sent.pages, sent.events
+end
+
+-- checkStatistics checks the places each enabled server keeps in the
+-- statistics database at path (Statistics.repair), where KOReader's deletes
+-- can renumber rows, and saves state when any moved. A disabled server is
+-- checked once it's enabled, before its next read. Returns the servers whose
+-- places moved.
+function Sync.checkStatistics(state, path)
+    local moved = {}
+    for __, server in ipairs(state:enabledServers()) do
+        if Statistics.repair(path, server) then table.insert(moved, server) end
+    end
+    if #moved > 0 then state:flush() end
+    return moved
 end
 
 --[[--

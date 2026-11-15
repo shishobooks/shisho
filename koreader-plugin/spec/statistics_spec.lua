@@ -1,6 +1,10 @@
 -- Reading KOReader's statistics database.
+local History = require("shisho/history")
+local Journal = require("shisho/journal")
 local SQ3 = require("lua-ljsqlite3/init")
+local State = require("shisho/state")
 local Statistics = require("shisho/statistics")
+local Sync = require("shisho/sync")
 local lfs = require("libs/libkoreader-lfs")
 
 -- statsDB makes a statistics database with KOReader's own tables, holding
@@ -56,7 +60,7 @@ local function serverFrom(path)
     return {
         stats_cursor = cursor,
         stats_from = cursor.rowid,
-        stats_from_at = Statistics.key(cursor),
+        stats_from_row = Statistics.key(cursor),
     }
 end
 
@@ -112,7 +116,7 @@ return {
     ["the cursor at sign-in is past every row recorded so far"] = function()
         local path = statsDB({ [1] = "aaa" }, { { 1, 1, 5000, 20 }, { 1, 2, 5100, 20 } })
         local cursor = Statistics.currentCursor(path)
-        assert_eq(cursor, { rowid = 2, id_book = 1, page = 2, start_time = 5100 })
+        assert_eq(cursor, { rowid = 2, id_book = 1, page = 2, start_time = 5100, latest = 5100 })
         addRows(path, { { 1, 3, 1000, 20 } })
         assert_eq(keys(Statistics.read(path, cursor, 10)), { "aaa:3@1000" })
         assert_eq(Statistics.currentCursor(scratch_dir() .. "/none.sqlite3"), { rowid = 0 })
@@ -180,6 +184,7 @@ return {
         })
         assert_eq(Statistics.book(path, "zzz"), nil)
     end,
+
     ["a cursor names the row it was taken from"] = function()
         local path = statsDB({ [1] = "aaa" }, { { 1, 1, 1000, 20 }, { 1, 2, 1100, 20 } })
         local rows = Statistics.read(path, nil, 10)
@@ -215,7 +220,8 @@ return {
         addRows(path, { { 2, 3, 4000, 20 } })
         assert_eq(Statistics.repair(path, server), true)
         assert_eq(server.stats_from, 1, "the reading from before sign-in stays unsent")
-        assert_eq(server.stats_from_at, { id_book = 1, page = 1, start_time = 1000 })
+        assert_eq(server.stats_from_row, { id_book = 1, page = 1, start_time = 1000, latest = 2000 },
+            "still knowing the latest reading from before sign-in")
         assert_eq(keys(readAll(path, server)), { "bbb:3@4000" })
     end,
 
@@ -225,7 +231,7 @@ return {
         local server = {
             stats_cursor = Statistics.cursorAfter(Statistics.read(path, nil, 1)[1]),
             stats_from = 0,
-            history = { through = 2, through_at = { id_book = 1, page = 2, start_time = 2000 } },
+            history = { through = 2, through_row = { id_book = 1, page = 2, start_time = 2000 } },
         }
         os.remove(path)
         path = statsDB({ [1] = "ccc" }, { { 1, 1, 5000, 20 }, { 1, 2, 5100, 20 }, { 1, 3, 5200, 20 } })
@@ -244,17 +250,83 @@ return {
         assert_eq(keys(readAll(path, server)), { "aaa:1@1000", "aaa:2@1100", "aaa:3@1300" })
     end,
 
-    ["where syncing started never moves past a cursor that still names its row"] = function()
+    ["where syncing started keeps its place while the cursor names its row"] = function()
         local path = statsDB({ [1] = "aaa", [2] = "bbb" }, { { 1, 1, 1000, 20 }, { 2, 1, 2000, 20 } })
         local server = serverFrom(path)
         -- The clock was set back after sign-in, so nothing since started
         -- after the row syncing started after.
         addRows(path, { { 1, 2, 500, 20 }, { 1, 3, 600, 20 } })
-        server.stats_cursor = Statistics.cursorAfter(Statistics.read(path, server.stats_cursor, 1)[1])
+        readAll(path, server)
         exec(path, "DELETE FROM page_stat_data WHERE id_book = 2;")
         assert_eq(Statistics.repair(path, server), true)
-        assert_eq(server.stats_from, 3)
-        assert_eq(keys(readAll(path, server)), { "aaa:3@600" }, "what was still to go goes")
+        assert_eq(server.stats_from, 1)
+        assert_eq(server.stats_cursor.rowid, 4)
+        assert_eq(keys(Statistics.readDocument(path, "aaa", server.stats_from, server.stats_cursor.rowid)),
+            { "aaa:2@500", "aaa:3@600" }, "a book that waited still sends the reading after sign-in")
+    end,
+
+    ["a server not sent history never goes back past reading from before sign-in out of time order"] = function()
+        -- KOReader's statistics cloud sync merges in another device's rows,
+        -- and a clock that ran fast dates rows late, so the rows from before
+        -- sign-in needn't be in time order.
+        local path = statsDB({ [1] = "aaa", [2] = "bbb" }, { { 1, 1, 1000, 20 }, { 1, 2, 5000, 20 }, { 2, 1, 2000, 20 } })
+        local server = serverFrom(path)
+        addRows(path, { { 2, 2, 6000, 20 } })
+        assert_eq(keys(readAll(path, server)), { "bbb:2@6000" })
+        exec(path, "DELETE FROM page_stat_data WHERE id_book = 2;")
+        addRows(path, { { 2, 3, 7000, 20 } })
+        assert_eq(Statistics.repair(path, server), true)
+        assert_eq(server.stats_from, 2)
+        assert_eq(keys(readAll(path, server)), { "bbb:3@7000" })
+    end,
+
+    ["a sync checks each enabled server's places and saves the ones that moved"] = function()
+        local path = statsDB({ [1] = "aaa" }, { { 1, 1, 1000, 20 }, { 1, 2, 1100, 20 } })
+        local state = State.open(scratch_dir() .. "/shisho.lua")
+        for __, url in ipairs({ "https://a.example", "https://b.example" }) do
+            state:signIn{ url = url, username = "r", credential = "C", stats_cursor = Statistics.currentCursor(path) }
+        end
+        state:setEnabled("https://b.example", false)
+        state:flush()
+        exec(path, "DELETE FROM book WHERE id = 1; DELETE FROM page_stat_data WHERE id_book = 1;"
+            .. "INSERT INTO book (id, title, md5) VALUES (2, 'Book 2', 'aaa');")
+        addRows(path, { { 2, 3, 3000, 20 } })
+
+        local moved = Sync.checkStatistics(state, path)
+        assert_eq(#moved, 1)
+        assert_eq(moved[1].url, "https://a.example")
+        assert_eq(State.open(state.path):find("https://a.example").stats_cursor, { rowid = 0 }, "saved")
+        assert_eq(state:find("https://b.example").stats_cursor.rowid, 2, "a disabled server waits")
+        assert_eq(#Sync.checkStatistics(state, path), 0)
+    end,
+
+    ["a server sent history that goes back sends its history as history again"] = function()
+        local path = statsDB({ [1] = "aaa", [2] = "bbb" }, { { 1, 1, 1000, 20 }, { 2, 1, 2000, 20 } })
+        local state = State.open(scratch_dir() .. "/shisho.lua")
+        local server = state:signIn{ url = "https://a.example", username = "r", credential = "C",
+            stats_cursor = Statistics.currentCursor(path) }
+        History.accept(server)
+        addRows(path, { { 2, 2, 3000, 20 } })
+        server.stats_cursor = Statistics.currentCursor(path)
+        exec(path, "DELETE FROM page_stat_data WHERE id_book = 2;")
+        addRows(path, { { 2, 3, 4000, 20 } })
+        assert_eq(Statistics.repair(path, server), true)
+
+        local sent = {}
+        local outcome = Sync.run{
+            state = state, journal = Journal.new(state), server = server,
+            read_pages = function(cursor, limit) return Statistics.read(path, cursor, limit) end,
+            post = function(payload)
+                table.insert(sent, payload)
+                return 200, { pages = #(payload.pages or {}), events = {} }
+            end,
+        }
+        assert_eq(outcome, "ok")
+        assert_eq(#sent, 2)
+        assert_eq(sent[1].backfill, true)
+        assert_eq(keys(sent[1].pages), { "aaa:1@1000" }, "what was history goes as history")
+        assert_eq(sent[2].backfill, nil)
+        assert_eq(keys(sent[2].pages), { "bbb:3@4000" })
     end,
 
     ["deleting rows the cursor is past leaves it alone"] = function()
@@ -273,8 +345,8 @@ return {
         local server = { stats_cursor = { rowid = 2 }, stats_from = 1, history = { through = 3 } }
         assert_eq(Statistics.repair(path, server), true)
         assert_eq(server.stats_cursor, { rowid = 2, id_book = 1, page = 2, start_time = 1100 })
-        assert_eq(server.stats_from_at, { id_book = 1, page = 1, start_time = 1000 })
-        assert_eq(server.history.through_at, { id_book = 1, page = 3, start_time = 1200 })
+        assert_eq(server.stats_from_row, { id_book = 1, page = 1, start_time = 1000 })
+        assert_eq(server.history.through_row, { id_book = 1, page = 3, start_time = 1200 })
         assert_eq(Statistics.repair(path, server), false)
 
         local past = { stats_cursor = { rowid = 9 }, stats_from = 1 }

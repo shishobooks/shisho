@@ -239,7 +239,7 @@ return {
     ["rows statistics leaves out up to sign-in don't hold history up"] = function()
         local state, journal = setup("https://a.example")
         local s = state:find("https://a.example")
-        s.history = { through = 5, through_at = { id_book = 1, page = 9, start_time = 500 } }
+        s.history = { through = 5, through_row = { id_book = 1, page = 9, start_time = 500 } }
         local post, sent = server()
         assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post, batch = 2,
             read_pages = rowsFrom({ row(100), row(200) }) }, "ok")

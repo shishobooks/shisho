@@ -1170,15 +1170,10 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
         self:flushStatistics()
         local path = self:statisticsPath()
         read_pages = function(cursor, limit) return Statistics.read(path, cursor, limit) end
-        -- KOReader's deletes can renumber rows under each server's place.
-        local moved = false
-        for __, server in ipairs(self.state:enabledServers()) do
-            if Statistics.repair(path, server) then
-                logger.info("Shisho: statistics rows changed; reading again from row", server.stats_cursor.rowid, server.url)
-                moved = true
-            end
+        for __, server in ipairs(Sync.checkStatistics(self.state, path)) do
+            logger.info("Shisho: statistics rows changed under the places kept for", server.url,
+                "; reading on after row", server.stats_cursor.rowid)
         end
-        if moved then self.state:flush() end
     end
     local problems = {}
     local plans = {}

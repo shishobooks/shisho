@@ -6,9 +6,9 @@ book's status and stars KOReader recorded before signing in (the books
 shisho/summaries notes as before). The server fills in only what Shisho has
 none of from it, so sending it again changes nothing.
 
-A server that was sent history has server.history = { through, through_at },
+A server that was sent history has server.history = { through, through_row },
 where through is the last statistics row recorded by sign-in, and
-through_at names that row (shisho/statistics). Its statistics
+through_row names that row (shisho/statistics). Its statistics
 cursor starts at the first row, and rows after through are reading like any
 other. A server whose sign-in is asking whether to send it has
 server.asking_history, and nothing goes to it until the person answers. No
@@ -84,11 +84,11 @@ function History.accept(server)
     local cursor = server.stats_cursor
     server.history = {
         through = type(cursor) == "table" and tonumber(cursor.rowid) or 0,
-        through_at = Statistics.key(cursor),
+        through_row = Statistics.key(cursor),
     }
     server.stats_cursor = { rowid = 0 }
     server.stats_from = 0
-    server.stats_from_at = nil
+    server.stats_from_row = nil
 end
 
 -- rowsPending reports whether rows of server's history are still to go.

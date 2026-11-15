@@ -258,14 +258,14 @@ func (s *scenario) serveBuild(build *koreaderplugin.Bundle) *atomic.Pointer[kore
 }
 
 // setInstalledFrom records in s's KOReader that the plugin was last
-// installed from url.
-func (s *scenario) setInstalledFrom(url string) {
+// installed from serverURL.
+func (s *scenario) setInstalledFrom(serverURL string) {
 	s.t.Helper()
 	path := filepath.Join(s.h.Dir, "home", ".config", "koreader", "settings", "shisho.lua")
 	data, err := os.ReadFile(path)
 	require.NoError(s.t, err)
 	require.True(s.t, bytes.HasPrefix(data, []byte("return { ")), "%s", data)
-	data = append([]byte(fmt.Sprintf("return { installed_from = %q, ", url)), data[len("return { "):]...)
+	data = append([]byte(fmt.Sprintf("return { installed_from = %q, ", serverURL)), data[len("return { "):]...)
 	require.NoError(s.t, os.WriteFile(path, data, 0o644))
 }
 
