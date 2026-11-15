@@ -750,7 +750,12 @@ commands["plugin-read"] = function()
         if not plugin then fail("the KOReader plugin didn't load") end
         stepUI()
         local Event = require("ui/event")
+        -- With pause, the reader stays that many seconds on each page, and
+        -- KOReader's statistics, set to count a page read after that long,
+        -- record the time. They hold it in memory until they write it.
+        if args.pause and ui.statistics then ui.statistics.settings.min_sec = args.pause end
         for __ = 1, args.turns or 0 do
+            if args.pause then require("ffi/util").sleep(args.pause) end
             ui:handleEvent(Event:new("GotoViewRel", 1))
             stepUI()
         end

@@ -497,6 +497,42 @@ return {
         assert_eq(#journal:pending(a.url), 0)
     end,
 
+    ["a status or Rating change for a book no server recognizes waits for every server, as positions do"] = function()
+        local state, journal = setup("https://a.example", "https://b.example")
+        local a, b = state:find("https://a.example"), state:find("https://b.example")
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        recognition:noteSeen({ "old" }, 50)
+        -- B is down: only A answered, and it doesn't know the book.
+        recognition:record(a.url, { { document = "old", state = "unknown" } }, 50)
+        local changes = {
+            { id = "c1", type = "status", document = "old", status = "complete", day = "2026-11-12" },
+            { id = "c2", type = "rating", document = "old", rating = 4, previous_rating = 0, at = 950 },
+        }
+        local store = { synced = {}, asked = {} }
+        local opts = function(post)
+            return {
+                state = state, journal = journal, server = a, post = post, changes = changes, store = store,
+                recognition = recognition, servers = state:enabledServers(), documents = { "old" },
+                about = function(document) return { title = "Title of " .. document } end,
+            }
+        end
+
+        local post, sent = server()
+        assert_eq(Sync.run(opts(post)), "ok")
+        assert_eq(#sent, 0, "neither goes")
+        assert_eq(store.synced, {}, "nor is either taken as synced")
+
+        -- B comes back, and doesn't know it either: both go to A, with the
+        -- book as unrecognized.
+        recognition:record(b.url, { { document = "old", state = "unknown" } }, 60)
+        local post2, sent2 = server()
+        assert_eq(Sync.run(opts(post2)), "ok")
+        assert_eq(#sent2, 1)
+        assert_eq(sent2[1].events, changes)
+        assert_eq(sent2[1].unrecognized, { { document = "old", title = "Title of old" } })
+        assert_eq(store.synced, { old = { status = "complete", rating = 4 } })
+    end,
+
     ["a server holding a book another now recognizes is told to drop it"] = function()
         local state, journal = setup("https://a.example", "https://b.example")
         local a, b = state:find("https://a.example"), state:find("https://b.example")

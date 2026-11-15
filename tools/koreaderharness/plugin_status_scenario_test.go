@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -101,6 +102,33 @@ func TestPluginWritesToABookNeverOpened(t *testing.T) {
 	require.NotNil(t, s.ratingUnits(epub))
 	assert.Equal(t, 15, *s.ratingUnits(epub), "the rounded copy isn't sent back")
 	assert.Len(t, s.readThroughs(epub), 1)
+}
+
+// Marking a book finished from KOReader's file manager, without ever opening
+// it, marks it Read in Shisho at the next sync that looks through the
+// device's books, which reads the book's sidecar. It was marked after signing
+// in, so it isn't taken as history.
+func TestPluginSyncsAFinishFromTheFileManager(t *testing.T) {
+	s := newScenario(t)
+	today := time.Now().UTC().Format(time.DateOnly)
+	// Signed in today, as the plugin's own sign-in records it, and synced.
+	s.signInPluginWith(time.Now().Add(-time.Hour), fmt.Sprintf("signed_in_day = %q", today))
+	s.run(Args{Command: "plugin-sync", Online: true})
+
+	// A book arrives and is marked finished in the file manager. Sync now
+	// looks through the device's books again; a sync so soon after the last
+	// look wouldn't.
+	s.downloadOPDS("Long Book", "long.epub")
+	epub := s.file(models.FileTypeEPUB)
+	synced := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, Summaries: map[string]SidecarSummary{
+		"long.epub": {Status: "complete", Modified: today},
+	}})
+
+	rts := s.readThroughs(epub)
+	require.Len(t, rts, 1, "shown: %v", synced.Shown)
+	assert.Equal(t, models.ReadThroughOutcomeFinished, rts[0].Outcome)
+	require.NotNil(t, rts[0].EndDay)
+	assert.Equal(t, today, *rts[0].EndDay)
 }
 
 // A book saved outside KOReader's home folder, as KOReader's OPDS catalog

@@ -278,6 +278,20 @@ func TestPluginSyncsOnSleepWhileOnline(t *testing.T) {
 	assert.NotNil(t, sent())
 }
 
+// KOReader's statistics hold the open book's pages in memory, writing them
+// every 50 page turns, or as the book closes or the device sleeps, which can
+// come after the plugin's own sleep handler. Going to sleep mid-book sends
+// the pages just read anyway.
+func TestPluginSendsPagesStatisticsStillHold(t *testing.T) {
+	s, _ := readingScenario(t)
+
+	s.run(Args{Command: "plugin-read", File: "comic.cbz", Online: true, Turns: 3, Pause: 1, Sleep: true})
+
+	sessions := s.pluginSessions()
+	require.Len(t, sessions, 1)
+	assert.Positive(t, sessions[0].Duration)
+}
+
 // A daily sync that can't connect, behind the sleep screen, leaves no message
 // there for the morning, and Wi-Fi off.
 func TestPluginDailySyncLeavesNothingOnTheSleepScreen(t *testing.T) {
