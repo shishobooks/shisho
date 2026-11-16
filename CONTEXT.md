@@ -151,6 +151,16 @@ _Avoid_: public link, guest link, share (alone, which is ambiguous with list sha
 A grant of a **List** to a named user at a permission level (viewer, editor, manager). It never grants library access and requires the recipient to log in.
 _Avoid_: share (alone)
 
+### Accounts
+
+**Invite Link**:
+A single-use link an admin creates to add one user to the server. The admin fixes the new user's role and library access; whoever opens it chooses their own username, password, and email. It is pending until used, expires after a set time, and can be revoked while pending. It stops working if its creator is deleted, deactivated, or can no longer add users. Shisho never sends it; the admin passes it on however they like. It is distinct from a **Share Link**, which grants access to one Book without an account.
+_Avoid_: invitation, signup link, registration link
+
+**Getting Started**:
+One user's short list of first steps in Shisho, shown until each is done or the user dismisses it. Which steps appear depends on what the user is allowed to do: an admin also sees setting up the server. A step counts as done when the thing it asks for exists, not when the user ticks it. A dismissed list can be brought back by the user, or by an admin for that user, though an admin never sees which steps are done.
+_Avoid_: onboarding (as a term), checklist (alone), tour
+
 ### Reading
 
 **Reading Status**:
@@ -214,6 +224,7 @@ _Avoid_: sample library, fixtures (those are test data)
 - A **Publisher** has at most one parent **Publisher** and many child **Publishers** (self-referential hierarchy)
 - A user has many **Devices**; a **Device** belongs to exactly one user and may connect several ways
 - A user has one set of default **Delivery Rules**, which follow Shisho's built-in rules until edited; a **Device** follows them, follows its Device type's preset, or has its own
+- An admin creates many **Invite Links**; an **Invite Link** adds at most one user
 - A **Book** has many **Share Links**; a **Share Link** belongs to exactly one **Book** and is created by one user
 - A user has at most one **Reading Status** and one **Rating** per **Book**, many **Read-throughs** per Book (at most one underway), and one **To Read** queue
 - A user has at most one **Reading Position** per **File**
