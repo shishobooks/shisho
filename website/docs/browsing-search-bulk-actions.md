@@ -83,6 +83,7 @@ Shift-click selects a range only within the current page. It cannot create a ran
 The selection toolbar provides these actions:
 
 - **Add** opens **Add to List**.
+- **Reading** marks the selected books read or not started for you. See [Changing Many Books at Once](./reading-tracking.md#changing-many-books-at-once).
 - **More** includes **Mark reviewed** and **Mark needs review**.
 - **Merge** combines two or more selected books in the same library.
 - **Delete** deletes the selected books and their disk content.

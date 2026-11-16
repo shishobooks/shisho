@@ -23,8 +23,8 @@ func newHandler(service *Service, listService *lists.Service) *handler {
 }
 
 // buildDeviceResponse returns device as its owner sees it, with rules, the
-// Delivery Rules it follows.
-func buildDeviceResponse(device *Device, rules []delivery.Rule) DeviceResponse {
+// Delivery Rules it follows, and unlinked, its books waiting to be linked.
+func buildDeviceResponse(device *Device, rules []delivery.Rule, unlinked int) DeviceResponse {
 	resp := DeviceResponse{
 		Device:              *device,
 		Credential:          device.Credential,
@@ -32,6 +32,7 @@ func buildDeviceResponse(device *Device, rules []delivery.Rule) DeviceResponse {
 		DeliveryRules:       rules,
 		DeliveryRuleOptions: RuleOptions(device.DeviceType),
 		HasPreset:           PresetRules(device.DeviceType) != nil,
+		UnlinkedBooks:       unlinked,
 	}
 	switch {
 	case device.ScopeType == ScopeLibrary && device.ScopeLibrary != nil:
@@ -44,11 +45,16 @@ func buildDeviceResponse(device *Device, rules []delivery.Rule) DeviceResponse {
 
 // respondDevice sends device as its owner sees it.
 func (h *handler) respondDevice(c echo.Context, status int, device *Device) error {
-	rules, err := h.service.Rules(c.Request().Context(), device)
+	ctx := c.Request().Context()
+	rules, err := h.service.Rules(ctx, device)
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	return c.JSON(status, buildDeviceResponse(device, rules))
+	unlinked, err := h.service.UnlinkedBooks(ctx, []string{device.ID})
+	if err != nil {
+		return err
+	}
+	return c.JSON(status, buildDeviceResponse(device, rules, unlinked[device.ID]))
 }
 
 func buildAdminDeviceResponse(device *Device) AdminDeviceResponse {
@@ -85,9 +91,17 @@ func (h *handler) List(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	ids := make([]string, len(devices))
+	for i, device := range devices {
+		ids[i] = device.ID
+	}
+	unlinked, err := h.service.UnlinkedBooks(c.Request().Context(), ids)
+	if err != nil {
+		return err
+	}
 	resp := make([]DeviceResponse, len(devices))
 	for i, device := range devices {
-		resp[i] = buildDeviceResponse(device, rules[device.ID])
+		resp[i] = buildDeviceResponse(device, rules[device.ID], unlinked[device.ID])
 	}
 	return c.JSON(http.StatusOK, resp)
 }

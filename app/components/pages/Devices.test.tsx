@@ -48,6 +48,7 @@ const kobo = (overrides: Partial<DeviceResponse> = {}): DeviceResponse => ({
     { source_file_type: "cbz", delivered_file_types: ["kepub", "epub"] },
   ],
   has_preset: true,
+  unlinked_books: 0,
   credential: "abcdefghjkmnpqrs",
   connections: ["kobo_sync", "ereader_browser"],
   created_at: "2026-01-01T00:00:00Z",
@@ -215,6 +216,22 @@ describe("Devices", () => {
     expect(link).toHaveTextContent("All books · Kobo sync · eReader browser");
   });
 
+  it("says how many books a KOReader Device has waiting to be linked", async () => {
+    stubAPI(koreader({ unlinked_books: 3 }));
+    renderAt("/user/devices");
+
+    const link = await screen.findByRole("link", { name: /Libra KOReader/ });
+    expect(link).toHaveTextContent("3 books to link");
+  });
+
+  it("says nothing of books to link when none are waiting", async () => {
+    stubAPI(koreader());
+    renderAt("/user/devices");
+
+    const link = await screen.findByRole("link", { name: /Libra KOReader/ });
+    expect(link).not.toHaveTextContent("to link");
+  });
+
   it("offers KOReader as a Device type", async () => {
     stubAPI(kobo());
     const user = setupUser();
@@ -353,7 +370,15 @@ describe("DeviceDetail", () => {
     expect(
       screen.getByRole("button", { name: "Download Plugin" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pair" })).toBeInTheDocument();
+    // The download signs itself in, so pairing waits behind a question.
+    expect(
+      screen.getByRole("button", {
+        name: "KOReader asking for a pairing code?",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("button", { name: "Pair" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText("Not connected through the plugin yet."),
     ).toBeInTheDocument();
@@ -365,6 +390,10 @@ describe("DeviceDetail", () => {
     expect(folders.nextElementSibling).toHaveTextContent(
       ".adds/koreader/plugins",
     );
+    // Kobo's folder starts with a dot, which computers hide.
+    expect(
+      screen.getByText(/Folders whose names start with a dot are hidden/),
+    ).toHaveTextContent(/Cmd\+Shift\+\..*View > Show > Hidden items/);
 
     // Why the plugin beats progress sync is there for anyone who asks.
     const why = screen.getByRole("button", { name: "Why use the plugin?" });
@@ -400,14 +429,19 @@ describe("DeviceDetail", () => {
   it("hides the KOReader plugin download in Demo Mode", async () => {
     setAuth({ demoMode: true });
     stubAPI(koreader());
+    const user = setupUser();
     renderAt("/user/devices/koreader-1");
 
     expect(
-      await screen.findByRole("button", { name: "Pair" }),
-    ).toBeInTheDocument();
-    expect(
       screen.queryByRole("button", { name: "Download Plugin" }),
     ).not.toBeInTheDocument();
+    // Pairing stays reachable without the download.
+    await user.click(
+      await screen.findByRole("button", {
+        name: "KOReader asking for a pairing code?",
+      }),
+    );
+    expect(screen.getByRole("button", { name: "Pair" })).toBeInTheDocument();
   });
 
   it("shows when a KOReader Device last connected through the plugin, before it syncs", async () => {
@@ -460,7 +494,15 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/koreader-1");
 
-    await user.click(await screen.findByRole("button", { name: "Pair" }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: "KOReader asking for a pairing code?",
+      }),
+    );
+    expect(
+      screen.getByText(/a code is only for signing in later/i),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Pair" }));
 
     expect(calls(request, "POST")).toContainEqual([
       "POST",
@@ -485,7 +527,16 @@ describe("DeviceDetail", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(new Blob(["zip"]), {
         status: 200,
-        headers: { "content-type": "application/zip" },
+        headers: {
+          "content-type": "application/zip",
+          "x-shisho-sign-in-expires": new Date(
+            2026,
+            10,
+            15,
+            15,
+            47,
+          ).toISOString(),
+        },
       }),
     );
     // jsdom has no object URLs.
@@ -502,6 +553,10 @@ describe("DeviceDetail", () => {
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => {});
+    vi.setSystemTime(new Date(2026, 10, 15, 15, 12));
+    onTestFinished(() => {
+      vi.setSystemTime(vi.getRealSystemTime());
+    });
     const user = setupUser();
     renderAt("/user/devices/koreader-1");
 
@@ -517,6 +572,25 @@ describe("DeviceDetail", () => {
     expect(createObjectURL).toHaveBeenCalled();
     const link = click.mock.contexts[0] as HTMLAnchorElement;
     expect(link.download).toBe("shisho.koplugin.zip");
+
+    // It says until when the download signs itself in, as the server says.
+    expect(
+      await screen.findByText(
+        "This download signs itself in until 3:47 PM, no pairing code needed.",
+      ),
+    ).toBeInTheDocument();
+
+    // A pairing code replaces the download's, so the note goes.
+    await user.click(
+      screen.getByRole("button", {
+        name: "KOReader asking for a pairing code?",
+      }),
+    );
+    await user.click(screen.getByRole("button", { name: "Pair" }));
+    expect(await screen.findByLabelText("Pairing code")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/This download signs itself in/),
+    ).not.toBeInTheDocument();
   });
 
   it("lists a KOReader Device's unrecognized books", async () => {
@@ -530,6 +604,32 @@ describe("DeviceDetail", () => {
     expect(
       screen.getByRole("listitem", { name: "Left Hand of Darkness" }),
     ).toBeInTheDocument();
+  });
+
+  it("puts unrecognized books first while some wait to be linked", async () => {
+    setAuth({ permissions: ["books:read"] });
+    const before = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    stubAPI(koreader({ unlinked_books: 1 }));
+    const waiting = renderAt("/user/devices/koreader-1");
+    expect(
+      before(
+        await screen.findByRole("heading", { name: "Unrecognized Books" }),
+        screen.getByRole("heading", { name: "Credential" }),
+      ),
+    ).toBe(true);
+    waiting.unmount();
+    vi.restoreAllMocks();
+
+    stubAPI(koreader({ unlinked_books: 0 }));
+    renderAt("/user/devices/koreader-1");
+    expect(
+      before(
+        await screen.findByRole("heading", { name: "Unrecognized Books" }),
+        screen.getByRole("heading", { name: "Credential" }),
+      ),
+    ).toBe(false);
   });
 
   it("never asks for unrecognized books on a Device without the KOReader plugin", async () => {

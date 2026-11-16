@@ -21,6 +21,8 @@ interface ConfirmDialogProps {
   isPending?: boolean;
   onConfirm: () => void;
   variant?: "destructive" | "default";
+  // children go under the description, as for an option on the action.
+  children?: React.ReactNode;
 }
 
 export const ConfirmDialog = ({
@@ -33,6 +35,7 @@ export const ConfirmDialog = ({
   isPending = false,
   onConfirm,
   variant = "destructive",
+  children,
 }: ConfirmDialogProps) => {
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
@@ -44,6 +47,7 @@ export const ConfirmDialog = ({
           <DialogDescription className="text-sm">
             {description}
           </DialogDescription>
+          {children}
         </DialogBody>
         <DialogFooter>
           <Button

@@ -209,12 +209,15 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"POST /koreader/plugin/pair", "POST /koreader/plugin/status", "POST /koreader/plugin/download",
 				"POST /koreader/plugin/lookup", "POST /koreader/plugin/upload", "POST /koreader/plugin/pull",
 				// A KOReader Device's unrecognized books can be viewed in
-				// Demo Mode; linking and dismissing are refused.
+				// Demo Mode; linking, dismissing, restoring, and deleting
+				// their reading history are refused.
 				"GET /api/user/devices/:id/koreader-unrecognized", "GET /api/user/devices/:id/koreader-unrecognized/candidates",
 				"POST /api/user/devices/:id/koreader-unrecognized/:document/link",
 				"POST /api/user/devices/:id/koreader-unrecognized/:document/unlink",
 				"POST /api/user/devices/:id/koreader-unrecognized/dismiss-all",
 				"POST /api/user/devices/:id/koreader-unrecognized/:document/dismiss",
+				"POST /api/user/devices/:id/koreader-unrecognized/:document/restore",
+				"POST /api/user/devices/:id/koreader-unrecognized/:document/delete-reading",
 				// Delivery Rules can be viewed in Demo Mode; the middleware
 				// rejects every change to them.
 				"GET /api/user/delivery-rules", "PUT /api/user/delivery-rules", "DELETE /api/user/delivery-rules",
@@ -225,6 +228,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/reading/books/:id", "POST /api/reading/books/:id/start",
 				"POST /api/reading/books/:id/pause", "POST /api/reading/books/:id/resume",
 				"POST /api/reading/books/:id/finish", "POST /api/reading/books/:id/abandon",
+				"POST /api/reading/books/bulk/finish", "POST /api/reading/books/bulk/not-started",
 				"PUT /api/reading/books/:id/rating", "PUT /api/reading/books/:id/page-flow",
 				"PATCH /api/reading/read-throughs/:id",
 				"DELETE /api/reading/read-throughs/:id",
@@ -278,6 +282,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodDelete, "/api/devices/abc"},
 				{http.MethodPut, "/api/user/delivery-rules"},
 				{http.MethodDelete, "/api/user/delivery-rules"},
+				{http.MethodPost, "/api/reading/books/bulk/finish"},
+				{http.MethodPost, "/api/reading/books/bulk/not-started"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

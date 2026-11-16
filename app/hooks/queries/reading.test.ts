@@ -7,7 +7,12 @@ import { API } from "@/libraries/api";
 import type { BookReadingResponse } from "@/types";
 
 import { useDeleteBook, useDeleteBooks } from "./books";
-import { QueryKey, useReorderToRead, useSetOnToRead } from "./reading";
+import {
+  QueryKey,
+  useBulkReadingChange,
+  useReorderToRead,
+  useSetOnToRead,
+} from "./reading";
 
 const reading = (
   bookId: number,
@@ -95,5 +100,57 @@ describe("To Read places stay current", () => {
     await act(() => result.current.mutateAsync({ book_ids: [1] }));
 
     expect(invalidated(2)).toBe(true);
+  });
+});
+
+// A bulk change can touch any Book, so every reading record and the reading
+// summaries refetch.
+describe("bulk reading changes", () => {
+  it("sends today with marking read and refetches what it changed", async () => {
+    const { client, wrapper, invalidated } = setup();
+    client.setQueryData([QueryKey.ReadingHistory, {}], { items: [] });
+    client.setQueryData([QueryKey.ReadingStats, {}], {});
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ changed: 2, skipped: 0 });
+    const { result } = renderHook(() => useBulkReadingChange(), { wrapper });
+
+    await act(() =>
+      result.current.mutateAsync({ action: "finish", bookIds: [1, 2] }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "POST",
+      "/reading/books/bulk/finish",
+      { book_ids: [1, 2], today: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
+      null,
+    );
+    expect(invalidated(1)).toBe(true);
+    expect(invalidated(2)).toBe(true);
+    expect(
+      client.getQueryState([QueryKey.ReadingHistory, {}])?.isInvalidated,
+    ).toBe(true);
+    expect(
+      client.getQueryState([QueryKey.ReadingStats, {}])?.isInvalidated,
+    ).toBe(true);
+  });
+
+  it("marks not started with the books alone", async () => {
+    const { wrapper } = setup();
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ changed: 1, skipped: 0 });
+    const { result } = renderHook(() => useBulkReadingChange(), { wrapper });
+
+    await act(() =>
+      result.current.mutateAsync({ action: "not-started", bookIds: [1] }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "POST",
+      "/reading/books/bulk/not-started",
+      { book_ids: [1] },
+      null,
+    );
   });
 });

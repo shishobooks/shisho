@@ -45,4 +45,6 @@ func RegisterUserRoutes(api *echo.Group, db *bun.DB, bundle *Bundle, bookService
 	g.POST("/:document/link", h.linkUnrecognized)
 	g.POST("/:document/unlink", h.unlinkUnrecognized)
 	g.POST("/:document/dismiss", h.dismissUnrecognized)
+	g.POST("/:document/restore", h.restoreUnrecognized)
+	g.POST("/:document/delete-reading", h.deleteUnrecognizedReading)
 }

@@ -84,6 +84,18 @@ func (f *syncFixture) dismissAs(user *models.User, device *devices.Device) error
 	return err
 }
 
+func (f *syncFixture) restoreAs(user *models.User, device *devices.Device) error {
+	f.t.Helper()
+	_, err := f.web(f.h.restoreUnrecognized, http.MethodPost, "/", user, "", "id", device.ID, "document", oldCopy)
+	return err
+}
+
+func (f *syncFixture) deleteReadingAs(user *models.User, device *devices.Device) error {
+	f.t.Helper()
+	_, err := f.web(f.h.deleteUnrecognizedReading, http.MethodPost, "/", user, "", "id", device.ID, "document", oldCopy)
+	return err
+}
+
 func (f *syncFixture) searchCandidates(query string) []LinkCandidate {
 	f.t.Helper()
 	rec, err := f.web(f.h.linkCandidates, http.MethodGet, "/?q="+query, f.user, "", "id", f.device.ID)
@@ -273,16 +285,79 @@ func TestLink_AppliesHeldHistoryByHistorysRules(t *testing.T) {
 	assert.Len(t, f.sessionsOf(file), 3)
 }
 
-func TestDismiss_DeletesHeldDataAndDropsMore(t *testing.T) {
+func TestDismiss_SetsTheCopyAsideAndKeepsHoldingItsReading(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
 	f.heldOldCopy()
 
 	require.NoError(t, f.dismissAs(f.user, f.device))
 
+	assert.Equal(t, 30, f.heldRows())
+	assert.Equal(t, 3, f.heldEvents())
+	books := f.listUnrecognized()
+	require.Len(t, books, 1)
+	assert.NotNil(t, books[0].DismissedAt)
+	assert.False(t, books[0].ReadingDeleted)
+	assert.Empty(t, books[0].Suggestions, "a dismissed copy isn't matched")
+	assert.Equal(t, DocumentHeld, f.lookupAs(f.device, oldCopy)[oldCopy])
+
+	// Its later reading is held too.
+	f.upload(UploadPayload{
+		Pages:        pages(oldCopy, 31, 40, f.day1.Add(time.Hour)),
+		Unrecognized: []UnrecognizedPayload{unrecognizedAbout()},
+	})
+	assert.Equal(t, 40, f.heldRows())
+	requireStatus(t, f.dismissAs(f.user, f.device), http.StatusNotFound)
+}
+
+func TestDismiss_ADismissedCopyLinksWithEverythingHeld(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	require.NoError(t, f.dismissAs(f.user, f.device))
+
+	require.NoError(t, f.linkAs(f.user, f.device, file.ID))
+
+	assert.Zero(t, f.heldRows())
+	assert.Len(t, f.sessionsOf(file), 1)
+	books := f.listUnrecognized()
+	require.Len(t, books, 1)
+	assert.NotNil(t, books[0].LinkedAt)
+	assert.Nil(t, books[0].DismissedAt, "linking takes it out of the dismissed ones")
+}
+
+func TestRestore_PutsADismissedCopyBackToLink(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	requireStatus(t, f.restoreAs(f.user, f.device), http.StatusNotFound)
+	require.NoError(t, f.dismissAs(f.user, f.device))
+
+	require.NoError(t, f.restoreAs(f.user, f.device))
+
+	books := f.listUnrecognized()
+	require.Len(t, books, 1)
+	assert.Nil(t, books[0].DismissedAt)
+	assert.NotEmpty(t, books[0].Suggestions)
+	assert.Equal(t, 30, f.heldRows())
+}
+
+func TestDeleteReading_DeletesHeldDataAndDropsMore(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	require.NoError(t, f.dismissAs(f.user, f.device))
+
+	require.NoError(t, f.deleteReadingAs(f.user, f.device))
+
 	assert.Zero(t, f.heldRows())
 	assert.Zero(t, f.heldEvents())
-	assert.Empty(t, f.listUnrecognized())
+	books := f.listUnrecognized()
+	require.Len(t, books, 1, "it stays listed with the dismissed ones")
+	assert.NotNil(t, books[0].DismissedAt)
+	assert.True(t, books[0].ReadingDeleted)
 	assert.Equal(t, DocumentDismissed, f.lookupAs(f.device, oldCopy)[oldCopy])
 
 	// It stays gone after the next sync.
@@ -293,7 +368,58 @@ func TestDismiss_DeletesHeldDataAndDropsMore(t *testing.T) {
 	})
 	assert.Zero(t, f.heldRows())
 	assert.Zero(t, f.heldEvents())
-	assert.Empty(t, f.listUnrecognized())
+	file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	requireStatus(t, f.linkAs(f.user, f.device, file.ID), http.StatusNotFound)
+	requireStatus(t, f.deleteReadingAs(f.user, f.device), http.StatusNotFound)
+}
+
+func TestDeleteReading_OnlyADismissedCopy(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+
+	requireStatus(t, f.deleteReadingAs(f.user, f.device), http.StatusNotFound)
+
+	assert.Equal(t, 30, f.heldRows(), "a copy still to link keeps its reading history")
+}
+
+func TestRestore_ADeletedCopyHoldsItsReadingWhenSentAgain(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	require.NoError(t, f.dismissAs(f.user, f.device))
+	require.NoError(t, f.deleteReadingAs(f.user, f.device))
+
+	require.NoError(t, f.restoreAs(f.user, f.device))
+	assert.Equal(t, DocumentHeld, f.lookupAs(f.device, oldCopy)[oldCopy])
+	books := f.listUnrecognized()
+	require.Len(t, books, 1)
+	assert.Nil(t, books[0].DismissedAt)
+	assert.False(t, books[0].ReadingDeleted)
+
+	// The plugin sends its reading history again, which holds the rows
+	// that were deleted, and its status, as history.
+	again := UploadPayload{
+		Backfill: true,
+		Pages:    pages(oldCopy, 1, 30, f.day1),
+		Events: []EventPayload{
+			{ID: "again-status", Type: PluginEventStatus, Document: oldCopy, Day: day(f.day1), Status: KOReaderStatusFinished},
+		},
+		Unrecognized: []UnrecognizedPayload{unrecognizedAbout()},
+	}
+	f.upload(again)
+	assert.Equal(t, 30, f.heldRows())
+	file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+	require.NoError(t, f.linkAs(f.user, f.device, file.ID))
+	assert.Len(t, f.sessionsOf(file), 1)
+	assert.Equal(t, models.ReadingStatusRead, f.status(file))
+
+	// Sending it yet again adds nothing, and the link stays.
+	again.Events[0].ID = "again-status-2"
+	f.upload(again)
+	assert.Zero(t, f.heldRows())
+	assert.Len(t, f.sessionsOf(file), 1)
+	assert.Equal(t, DocumentRecognized, f.lookupAs(f.device, oldCopy)[oldCopy])
 }
 
 func TestClaimed_DropsWhatWasHeld(t *testing.T) {
@@ -507,6 +633,8 @@ func TestUnrecognized_AnotherUsersAreNeverVisible(t *testing.T) {
 		f.linkAs(other, otherDevice, file.ID),
 		f.dismissAs(other, f.device),
 		f.dismissAs(other, otherDevice),
+		f.restoreAs(other, f.device),
+		f.deleteReadingAs(other, f.device),
 	} {
 		require.ErrorAs(t, err, &codeErr)
 		assert.Equal(t, http.StatusNotFound, codeErr.HTTPCode)
@@ -610,7 +738,20 @@ func TestLink_RefusesWhatCantBeLinked(t *testing.T) {
 	assert.Equal(t, 30, f.heldRows(), "nothing was applied")
 }
 
-func TestClaimed_KeepsADismissal(t *testing.T) {
+func TestClaimed_KeepsADeletion(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	f.heldOldCopy()
+	require.NoError(t, f.dismissAs(f.user, f.device))
+	require.NoError(t, f.deleteReadingAs(f.user, f.device))
+
+	f.upload(UploadPayload{Claimed: []string{oldCopy}})
+
+	assert.Equal(t, DocumentDismissed, f.lookupAs(f.device, oldCopy)[oldCopy],
+		"dropped here even if the other server stops recognizing it")
+}
+
+func TestClaimed_ForgetsADismissedCopy(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
 	f.heldOldCopy()
@@ -618,8 +759,9 @@ func TestClaimed_KeepsADismissal(t *testing.T) {
 
 	f.upload(UploadPayload{Claimed: []string{oldCopy}})
 
-	assert.Equal(t, DocumentDismissed, f.lookupAs(f.device, oldCopy)[oldCopy],
-		"dismissed here even if the other server stops recognizing it")
+	assert.Zero(t, f.heldRows())
+	assert.Empty(t, f.listUnrecognized())
+	assert.Equal(t, DocumentUnknown, f.lookupAs(f.device, oldCopy)[oldCopy])
 }
 
 func TestUnrecognized_ALookupFailureIsAServerError(t *testing.T) {
@@ -634,6 +776,8 @@ func TestUnrecognized_ALookupFailureIsAServerError(t *testing.T) {
 		f.linkAs(f.user, f.device, file.ID),
 		f.unlinkAs(f.user, f.device),
 		f.dismissAs(f.user, f.device),
+		f.restoreAs(f.user, f.device),
+		f.deleteReadingAs(f.user, f.device),
 	} {
 		require.Error(t, err)
 		var codeErr *errcodes.Error
@@ -761,12 +905,15 @@ func TestUpload_DetailsAloneListNothingNew(t *testing.T) {
 	f := newSyncFixture(t)
 	f.heldOldCopy()
 	require.NoError(t, f.dismissAs(f.user, f.device))
+	require.NoError(t, f.deleteReadingAs(f.user, f.device))
 	other := unrecognizedAbout()
 	other.Document = "ffffffffffffffffffffffffffffffff"
 
 	f.upload(UploadPayload{Unrecognized: []UnrecognizedPayload{other, unrecognizedAbout()}})
 
-	assert.Empty(t, f.listUnrecognized(), "neither a copy with no data nor a dismissed one is listed")
+	books := f.listUnrecognized()
+	require.Len(t, books, 1, "a copy with no data isn't listed")
+	assert.True(t, books[0].ReadingDeleted)
 	assert.Equal(t, DocumentUnknown, f.lookupAs(f.device, other.Document)[other.Document])
 }
 
@@ -809,18 +956,23 @@ func TestDismissAll_DismissesEveryBookStillToLink(t *testing.T) {
 	require.NoError(t, f.dismissAllAs(f.user, f.device, oldCopy, another.Document, linked.Document))
 
 	books := f.listUnrecognized()
-	require.Len(t, books, 2, "the linked book, and the one that arrived since, stay")
-	assert.Equal(t, later.Document, books[0].Document)
-	books = books[1:]
-	assert.Equal(t, linked.Document, books[0].Document)
+	require.Len(t, books, 4)
+	assert.Equal(t, later.Document, books[0].Document, "the one that arrived since is still to link")
+	assert.Nil(t, books[0].DismissedAt)
+	assert.Equal(t, linked.Document, books[1].Document, "the linked book stays linked")
+	assert.Nil(t, books[1].DismissedAt)
+	for _, book := range books[2:] {
+		assert.NotNil(t, book.DismissedAt, book.Document)
+		assert.False(t, book.ReadingDeleted, book.Document)
+	}
 	states := f.lookupAs(f.device, oldCopy, another.Document)
-	assert.Equal(t, DocumentDismissed, states[oldCopy])
-	assert.Equal(t, DocumentDismissed, states[another.Document])
+	assert.Equal(t, DocumentHeld, states[oldCopy])
+	assert.Equal(t, DocumentHeld, states[another.Document])
 	held, err := f.db.NewSelect().Model((*models.KOReaderPageRow)(nil)).
 		Where("device_id = ? AND file_id IS NULL AND document != ?", f.device.ID, later.Document).Count(f.ctx)
 	require.NoError(t, err)
-	assert.Zero(t, held, "what was held for them is deleted")
-	assert.Zero(t, f.heldEventsOn(f.device))
+	assert.EqualValues(t, 33, held, "what was held for them stays held")
+	assert.Equal(t, 3, f.heldEventsOn(f.device))
 	otherBooks, err := f.listUnrecognizedAs(f.user, other)
 	require.NoError(t, err)
 	assert.Len(t, otherBooks, 1)
@@ -852,9 +1004,16 @@ func TestLookup_AsksOnlyForTheDetailsOfThisDevicesCopiesStillToLink(t *testing.T
 		}})
 	}
 	bare(oldCopy)
-	dismissed := "dddddddddddddddddddddddddddddddd"
+	deleted := "dddddddddddddddddddddddddddddddd"
+	bare(deleted)
+	_, err := f.web(f.h.dismissUnrecognized, http.MethodPost, "/", f.user, "", "id", f.device.ID, "document", deleted)
+	require.NoError(t, err)
+	_, err = f.web(f.h.deleteUnrecognizedReading, http.MethodPost, "/", f.user, "", "id", f.device.ID, "document", deleted)
+	require.NoError(t, err)
+	// A dismissed copy is still held, and listed.
+	dismissed := "cccccccccccccccccccccccccccccccc"
 	bare(dismissed)
-	_, err := f.web(f.h.dismissUnrecognized, http.MethodPost, "/", f.user, "", "id", f.device.ID, "document", dismissed)
+	_, err = f.web(f.h.dismissUnrecognized, http.MethodPost, "/", f.user, "", "id", f.device.ID, "document", dismissed)
 	require.NoError(t, err)
 	// A bare copy that resolves now, as one Shisho has produced since.
 	produced := "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
@@ -868,7 +1027,7 @@ func TestLookup_AsksOnlyForTheDetailsOfThisDevicesCopiesStillToLink(t *testing.T
 	}})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
-	assert.Equal(t, []string{oldCopy}, f.undescribedNow())
+	assert.Equal(t, []string{oldCopy, dismissed}, f.undescribedNow())
 
 	// Details for a copy that resolves change nothing of it.
 	about := unrecognizedAbout()
@@ -878,4 +1037,92 @@ func TestLookup_AsksOnlyForTheDetailsOfThisDevicesCopiesStillToLink(t *testing.T
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	assert.Nil(t, record.Title)
+}
+
+func TestPull_CountsTheCopiesStillToLink(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	assert.Zero(t, f.pullStates(0).Unlinked)
+	f.heldOldCopy()
+	for _, document := range []string{"cccccccccccccccccccccccccccccccc", "dddddddddddddddddddddddddddddddd"} {
+		about := unrecognizedAbout()
+		about.Document = document
+		f.upload(UploadPayload{Pages: pages(document, 1, 3, f.day1), Unrecognized: []UnrecognizedPayload{about}})
+	}
+	// Another Device's copies are its own.
+	other := f.addDevice(f.user, devices.DeviceTypeKOReader)
+	f.backdate(other, time.Now().AddDate(0, -1, 0))
+	rec := f.uploadAs(other, UploadPayload{Pages: pages("eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", 1, 3, f.day1)})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, 3, f.pullStates(0).Unlinked)
+
+	require.NoError(t, f.dismissAs(f.user, f.device))
+	for _, handler := range []echo.HandlerFunc{f.h.dismissUnrecognized, f.h.deleteUnrecognizedReading} {
+		_, err := f.web(handler, http.MethodPost, "/", f.user, "", "id", f.device.ID, "document", "cccccccccccccccccccccccccccccccc")
+		require.NoError(t, err)
+	}
+	file := f.addBook(f.lib, "Linked", "Someone", models.FileTypeEPUB)
+	body, err := json.Marshal(LinkPayload{FileID: file.ID})
+	require.NoError(t, err)
+	_, err = f.web(f.h.linkUnrecognized, http.MethodPost, "/", f.user, string(body), "id", f.device.ID, "document", "dddddddddddddddddddddddddddddddd")
+	require.NoError(t, err)
+
+	assert.Zero(t, f.pullStates(0).Unlinked, "dismissed, deleted, and linked copies don't count")
+}
+
+// History sent again carries the status of every copy the server holds, but
+// a copy that already holds a status keeps it: a status as history would be
+// applied ahead of the reading it already holds when linked, and start the
+// read on the wrong day.
+func TestUnrecognized_HistorySentAgainKeepsAHeldCopysOwnStatusAndRating(t *testing.T) {
+	t.Parallel()
+	outcome := func(sendAgain bool) (string, int, []*int) {
+		f := newSyncFixture(t)
+		day2 := f.day1.Add(24 * time.Hour)
+		live := UploadPayload{
+			Pages: append(pages(oldCopy, 1, 30, f.day1), pages(oldCopy, 31, 60, day2)...),
+			Events: []EventPayload{
+				{ID: "s1", Type: PluginEventStatus, Document: oldCopy, At: f.day1.Unix(), Status: KOReaderStatusReading},
+				{ID: "s2", Type: PluginEventStatus, Document: oldCopy, At: day2.Add(time.Hour).Unix(), Status: KOReaderStatusFinished, PreviousStatus: KOReaderStatusReading},
+				{ID: "r1", Type: PluginEventRating, Document: oldCopy, At: day2.Add(time.Hour).Unix(), Rating: 4},
+			},
+			Unrecognized: []UnrecognizedPayload{unrecognizedAbout()},
+		}
+		f.upload(live)
+		if sendAgain {
+			f.upload(UploadPayload{
+				Backfill: true,
+				Pages:    live.Pages,
+				Events: []EventPayload{
+					{ID: "again-status", Type: PluginEventStatus, Document: oldCopy, Day: day(day2), Status: KOReaderStatusFinished},
+					{ID: "again-rating", Type: PluginEventRating, Document: oldCopy, Day: day(day2), Rating: 2},
+				},
+				Unrecognized: []UnrecognizedPayload{unrecognizedAbout()},
+			})
+		}
+		file := f.addBook(f.lib, "The Left Hand of Darkness", "Ursula K. Le Guin", models.FileTypeEPUB)
+		require.NoError(t, f.linkAs(f.user, f.device, file.ID))
+		rts := f.readThroughs(file)
+		require.Len(t, rts, 1)
+		require.NotNil(t, rts[0].BeginDay)
+		var sessionRTs []*int
+		for _, s := range f.sessionsOf(file) {
+			sessionRTs = append(sessionRTs, s.ReadThroughID)
+		}
+		rating := 0
+		if units := f.ratingUnits(file); units != nil {
+			rating = *units
+		}
+		return *rts[0].BeginDay, rating, sessionRTs
+	}
+
+	begin, rating, sessions := outcome(false)
+	againBegin, againRating, againSessions := outcome(true)
+
+	assert.Equal(t, begin, againBegin, "the read begins on the day reading began")
+	assert.Equal(t, rating, againRating, "the copy's own stars stay")
+	require.Len(t, againSessions, len(sessions))
+	for _, rt := range againSessions {
+		assert.NotNil(t, rt, "every session is on the read")
+	}
 }

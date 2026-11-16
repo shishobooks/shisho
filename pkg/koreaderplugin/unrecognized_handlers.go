@@ -1,6 +1,7 @@
 package koreaderplugin
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -166,14 +167,14 @@ func (h *handler) dismissAllUnrecognized(c echo.Context) error {
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
 }
 
-// dismissUnrecognized dismisses an unrecognized copy, deleting what was
-// held for it.
-func (h *handler) dismissUnrecognized(c echo.Context) error {
+// copyAction runs action on the copy the request's :document names, on the
+// user's own Device, answering not found for a copy it doesn't apply to.
+func (h *handler) copyAction(c echo.Context, action func(context.Context, *models.User, *devices.Device, string) error) error {
 	user, device, err := h.ownDevice(c)
 	if err != nil {
 		return err
 	}
-	err = h.dismiss(c.Request().Context(), user, device, c.Param("document"))
+	err = action(c.Request().Context(), user, device, c.Param("document"))
 	if errors.Is(err, errCopyNotFound) {
 		return errcodes.NotFound("Unrecognized book")
 	}
@@ -181,4 +182,20 @@ func (h *handler) dismissUnrecognized(c echo.Context) error {
 		return err
 	}
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
+}
+
+// dismissUnrecognized sets an unrecognized copy aside, still held.
+func (h *handler) dismissUnrecognized(c echo.Context) error {
+	return h.copyAction(c, h.dismiss)
+}
+
+// restoreUnrecognized puts a dismissed copy back to link.
+func (h *handler) restoreUnrecognized(c echo.Context) error {
+	return h.copyAction(c, h.restore)
+}
+
+// deleteUnrecognizedReading deletes what was held for an unrecognized copy
+// and drops its data from then on.
+func (h *handler) deleteUnrecognizedReading(c echo.Context) error {
+	return h.copyAction(c, h.deleteReading)
 }

@@ -726,6 +726,16 @@ const DeviceDetail = () => {
   const [changeTypeOpen, setChangeTypeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [rulesHaveChanges, setRulesHaveChanges] = useState(false);
+  // Unrecognized Books goes at the top when books are waiting to be linked
+  // as the page loads, since they're the one thing on it to act on, and
+  // stays there for the visit, so linking the last one doesn't move the
+  // section out from under the user.
+  const [unrecognizedAtTop, setUnrecognizedAtTop] = useState<boolean | null>(
+    null,
+  );
+  if (device && unrecognizedAtTop === null) {
+    setUnrecognizedAtTop(device.unlinked_books > 0);
+  }
   const { showBlockerDialog, proceedNavigation, cancelNavigation } =
     useUnsavedChanges(rulesHaveChanges);
 
@@ -757,6 +767,7 @@ const DeviceDetail = () => {
       </div>
     );
   } else {
+    const hasPlugin = device.connections.includes(ConnectionKOReaderPlugin);
     body = (
       <>
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between md:mb-8">
@@ -806,26 +817,31 @@ const DeviceDetail = () => {
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-          <div className="min-w-0 space-y-6">
-            <CredentialSection device={device} />
-            <ScopeSection device={device} />
-            <DeviceSection
-              description="Which File Types this Device receives, and as what. For each book, the earliest rule matching one of its files decides what goes."
-              id="delivery-rules-heading"
-              title="Delivery Rules"
-            >
-              <DeviceRulesSection
-                device={device}
-                onHasChangesChange={setRulesHaveChanges}
-              />
-            </DeviceSection>
-          </div>
-          <div className="min-w-0 space-y-6">
-            <ConnectionsSection device={device} />
-            {device.connections.includes(ConnectionKOReaderPlugin) && (
-              <KOReaderUnrecognizedBooks device={device} />
-            )}
+        <div className="space-y-6">
+          {hasPlugin && unrecognizedAtTop && (
+            <KOReaderUnrecognizedBooks device={device} />
+          )}
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+            <div className="min-w-0 space-y-6">
+              <CredentialSection device={device} />
+              <ScopeSection device={device} />
+              <DeviceSection
+                description="Which File Types this Device receives, and as what. For each book, the earliest rule matching one of its files decides what goes."
+                id="delivery-rules-heading"
+                title="Delivery Rules"
+              >
+                <DeviceRulesSection
+                  device={device}
+                  onHasChangesChange={setRulesHaveChanges}
+                />
+              </DeviceSection>
+            </div>
+            <div className="min-w-0 space-y-6">
+              <ConnectionsSection device={device} />
+              {hasPlugin && !unrecognizedAtTop && (
+                <KOReaderUnrecognizedBooks device={device} />
+              )}
+            </div>
           </div>
         </div>
 

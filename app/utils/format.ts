@@ -316,6 +316,14 @@ export const formatYear = (dateString: string): string =>
   String(new Date(dateString).getUTCFullYear());
 
 /**
+ * An instant's time of day, as the user's browser shows it, for a time
+ * minutes away that needs no date.
+ * @example formatTimeOfDay(new Date(2026, 10, 15, 15, 47)) // "3:47 PM" (locale-dependent)
+ */
+export const formatTimeOfDay = (date: Date): string =>
+  date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+/**
  * Formats an ISO datetime string into a localized date+time string in the user's timezone.
  * Includes the short timezone name so it's clear the time is local.
  * @example formatDateTime("2024-01-15T18:30:00Z") // "1/15/2024, 12:30 PM CST" (locale-dependent)

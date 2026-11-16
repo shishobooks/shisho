@@ -128,8 +128,9 @@ type KOReaderPluginEvent struct {
 // KOReaderUnrecognizedBook is a copy a KOReader Device holds data for that no
 // server the KOReader plugin signed in to recognized (ADR 0017), with what
 // KOReader knows about it. Its data is held until the user links it to a
-// File or dismisses it. A dismissed copy stays, so the Device's data for it
-// keeps being dropped.
+// File. Dismissing it (DismissedAt) only sets it aside, still held. Deleting
+// its reading history (ReadingDeletedAt) drops what was held, and the record
+// stays, so the Device's data for it keeps being dropped.
 type KOReaderUnrecognizedBook struct {
 	bun.BaseModel `bun:"table:koreader_unrecognized_books,alias:kub" tstype:"-"`
 
@@ -143,13 +144,14 @@ type KOReaderUnrecognizedBook struct {
 	Identifiers []string `bun:",type:json,notnull"`
 	Language    *string
 	// FileType is the copy's File Type, from its file's extension.
-	FileType       *string
-	ReadingSeconds int `bun:",notnull"`
-	FirstReadAt    *time.Time
-	LastReadAt     *time.Time
-	DismissedAt    *time.Time
-	LinkedAt       *time.Time
-	LinkedFileID   *int
+	FileType         *string
+	ReadingSeconds   int `bun:",notnull"`
+	FirstReadAt      *time.Time
+	LastReadAt       *time.Time
+	DismissedAt      *time.Time
+	ReadingDeletedAt *time.Time
+	LinkedAt         *time.Time
+	LinkedFileID     *int
 
 	LinkedFile *File `bun:"rel:belongs-to,join:linked_file_id=id"`
 }

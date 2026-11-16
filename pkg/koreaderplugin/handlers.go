@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -31,6 +32,10 @@ const (
 	HeaderServerPluginVersion  = "X-Shisho-Server-Plugin-Version"
 	HeaderServerPluginHash     = "X-Shisho-Server-Plugin-Hash"
 	HeaderServerPluginProtocol = "X-Shisho-Server-Plugin-Protocol"
+
+	// HeaderSignInExpires is when a plugin downloaded from a Device's page
+	// stops signing itself in, RFC 3339, so the page can say until when.
+	HeaderSignInExpires = "X-Shisho-Sign-In-Expires"
 
 	// Protocol is the protocol the plugin this server serves speaks, and
 	// ProtocolMin and ProtocolMax the protocols the server accepts. Raise
@@ -204,6 +209,7 @@ func (h *handler) ownerDownload(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	c.Response().Header().Set(HeaderSignInExpires, short.ExpiresAt.UTC().Format(time.RFC3339))
 	return sendZip(c, data)
 }
 

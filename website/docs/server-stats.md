@@ -16,7 +16,7 @@ Reading totals across every user for one year, the current year unless you pick 
 
 Years are counted in the server's time zone, not each reader's: the `TZ` environment variable, or the host's time zone when it isn't set. The Docker image uses UTC unless you set `TZ`.
 
-Server Stats never shows reading by user or by book. Admins can't see who read what here; each user's reading stays on their own pages.
+Server Stats never breaks its totals down by user or by book. Admins can't see who read what here; each user's own figures stay on their own pages.
 
 Read-throughs of a book that was later deleted still count until their user deletes them from [Reading History](./reading-tracking.md#reading-history-page). See [Merging and Deleting Books](./reading-tracking.md#merging-and-deleting-books).
 

@@ -18,8 +18,10 @@ import (
 // plugin reports one only once every server has said it doesn't recognize
 // it. The server holds its page rows and events against its hash, treats
 // them as taken in, and lists the copy on the Device's page, where the
-// user links it to a File, which applies what was held, or dismisses it,
-// which deletes it and drops the copy's data from then on.
+// user links it to a File, which applies what was held. Dismissing it only
+// sets it aside, still held, to restore or link later. Deleting its reading
+// deletes what was held and drops the copy's data from then on, until the
+// user restores it.
 
 // unrecognizedBook is the record of document on device, or nil for none.
 func (h *handler) unrecognizedBook(ctx context.Context, deviceID, document string) (*models.KOReaderUnrecognizedBook, error) {
@@ -34,19 +36,19 @@ func (h *handler) unrecognizedBook(ctx context.Context, deviceID, document strin
 	return book, errors.WithStack(err)
 }
 
-// dismissed reports whether the user dismissed document on device, so its
-// data is dropped.
-func (h *handler) dismissed(ctx context.Context, deviceID, document string) (bool, error) {
+// dropped reports whether the user deleted the reading of document on
+// device, so its data is dropped.
+func (h *handler) dropped(ctx context.Context, deviceID, document string) (bool, error) {
 	exists, err := h.db.NewSelect().
 		Model((*models.KOReaderUnrecognizedBook)(nil)).
-		Where("kub.device_id = ? AND kub.document = ? AND kub.dismissed_at IS NOT NULL", deviceID, document).
+		Where("kub.device_id = ? AND kub.document = ? AND kub.reading_deleted_at IS NOT NULL", deviceID, document).
 		Exists(ctx)
 	return exists, errors.WithStack(err)
 }
 
 // noteUnrecognized records that device holds data for document, which no
 // server recognizes, with what KOReader knows of it when the plugin sent
-// that (about). A dismissed copy is left alone.
+// that (about). A copy whose reading was deleted is left alone.
 func (h *handler) noteUnrecognized(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock, document string, about *UnrecognizedPayload) error {
 	now := time.Now()
 	_, err := h.db.NewInsert().
@@ -66,8 +68,8 @@ func (h *handler) noteUnrecognized(ctx context.Context, user *models.User, devic
 }
 
 // describeUnrecognized records what KOReader knows of a copy device holds
-// data for, as about says. A copy the server doesn't hold, or that the user
-// dismissed, is left alone.
+// data for, as about says. A copy the server doesn't hold, or whose reading
+// the user deleted, is left alone.
 func (h *handler) describeUnrecognized(ctx context.Context, device *devices.Device, clock deviceClock, about *UnrecognizedPayload) error {
 	book := &models.KOReaderUnrecognizedBook{
 		UpdatedAt:      time.Now(),
@@ -83,7 +85,7 @@ func (h *handler) describeUnrecognized(ctx context.Context, device *devices.Devi
 	_, err := h.db.NewUpdate().
 		Model(book).
 		Column("updated_at", "title", "authors", "identifiers", "language", "file_type", "reading_seconds", "first_read_at", "last_read_at").
-		Where("device_id = ? AND document = ? AND dismissed_at IS NULL", device.ID, about.Document).
+		Where("device_id = ? AND document = ? AND reading_deleted_at IS NULL", device.ID, about.Document).
 		Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -125,8 +127,23 @@ func trimmed(values []string) []string {
 
 // holdEvent holds event, about a copy no server recognizes, until the copy
 // is linked, with its time corrected now, by this request's clock. It
-// returns false for one refused for its time.
+// returns false for one refused for its time. A status or Rating from
+// history is dropped when the copy already holds one: history fills in only
+// what's missing, and history sent again (ADR 0017) would otherwise be
+// applied ahead of the copy's own reading when it's linked.
 func (h *handler) holdEvent(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock, event EventPayload, history bool) (bool, error) {
+	if history && (event.Type == PluginEventStatus || event.Type == PluginEventRating) {
+		holds, err := h.db.NewSelect().
+			Model((*models.KOReaderHeldEvent)(nil)).
+			Where("khe.device_id = ? AND khe.document = ? AND khe.type = ?", device.ID, event.Document, event.Type).
+			Exists(ctx)
+		if err != nil {
+			return false, errors.WithStack(err)
+		}
+		if holds {
+			return true, nil
+		}
+	}
 	held := &models.KOReaderHeldEvent{
 		CreatedAt:      time.Now(),
 		DeviceID:       device.ID,
@@ -165,8 +182,8 @@ func (h *handler) holdEvent(ctx context.Context, user *models.User, device *devi
 }
 
 // dropHeld deletes what device held for each of documents: its ungrouped
-// page rows and its events. Dismissing one copy or many, and a claim, all
-// drop held data through it.
+// page rows and its events. Deleting a copy's reading, and a claim, drop
+// held data through it.
 func dropHeld(ctx context.Context, db bun.IDB, deviceID string, documents []string) error {
 	_, err := db.NewDelete().
 		Model((*models.KOReaderPageRow)(nil)).
@@ -184,8 +201,8 @@ func dropHeld(ctx context.Context, db bun.IDB, deviceID string, documents []stri
 
 // dropClaimed forgets each of documents that another server the plugin
 // signed in to now recognizes: what device held for it and its record,
-// unless the user linked it here. A dismissal stays, so the copy stays
-// dismissed here if the other server stops recognizing it.
+// unless the user linked it here. A deletion stays, so the copy's data stays
+// dropped here if the other server stops recognizing it.
 func (h *handler) dropClaimed(ctx context.Context, deviceID string, documents []string) error {
 	for _, document := range documents {
 		book, err := h.unrecognizedBook(ctx, deviceID, document)
@@ -198,7 +215,7 @@ func (h *handler) dropClaimed(ctx context.Context, deviceID string, documents []
 		if err := dropHeld(ctx, h.db, deviceID, []string{document}); err != nil {
 			return err
 		}
-		if book != nil && book.DismissedAt != nil {
+		if book != nil && book.ReadingDeletedAt != nil {
 			continue
 		}
 		_, err = h.db.NewDelete().
@@ -227,7 +244,7 @@ func (h *handler) lookUp(ctx context.Context, user *models.User, device *devices
 		return "", err
 	case book == nil:
 		return DocumentUnknown, nil
-	case book.DismissedAt != nil:
+	case book.ReadingDeletedAt != nil:
 		return DocumentDismissed, nil
 	default:
 		return DocumentHeld, nil
@@ -237,16 +254,16 @@ func (h *handler) lookUp(ctx context.Context, user *models.User, device *devices
 // maxUndescribed bounds the copies one lookup asks the plugin to describe.
 const maxUndescribed = 500
 
-// undescribed is the copies device holds as unrecognized with nothing
-// KOReader knows of them, no title or file type, which the plugin is asked
-// to describe. A copy that resolves to a File now, as one Shisho has since
+// undescribed is the copies device holds as unrecognized, dismissed or
+// not, with nothing KOReader knows of them, no title or file type, which the
+// plugin is asked to describe. A copy that resolves to a File now, as one Shisho has since
 // produced, isn't unrecognized any more, so it isn't asked about.
 func (h *handler) undescribed(ctx context.Context, user *models.User, device *devices.Device) ([]string, error) {
 	var candidates []string
 	err := h.db.NewSelect().
 		Model((*models.KOReaderUnrecognizedBook)(nil)).
 		Column("kub.document").
-		Where("kub.device_id = ? AND kub.dismissed_at IS NULL AND kub.linked_at IS NULL", device.ID).
+		Where("kub.device_id = ? AND kub.reading_deleted_at IS NULL AND kub.linked_at IS NULL", device.ID).
 		Where("kub.title IS NULL AND kub.file_type IS NULL").
 		OrderExpr("kub.document").
 		Limit(maxUndescribed).
@@ -350,13 +367,14 @@ var (
 // sync. What was held is applied before the copy resolves to the File, so a
 // sync during it holds what it sends rather than applying it ahead of older
 // held data, and a link that fails partway is finished by trying again.
-// Whatever a sync held while it ran is applied once more after.
+// Whatever a sync held while it ran is applied once more after. A dismissed
+// copy links like any other, and is no longer dismissed.
 func (h *handler) link(ctx context.Context, user *models.User, device *devices.Device, document string, fileID int) error {
 	book, err := h.currentBook(ctx, user, device, document)
 	if err != nil {
 		return err
 	}
-	if book == nil || book.UserID != user.ID || book.DismissedAt != nil || book.LinkedAt != nil {
+	if book == nil || book.UserID != user.ID || book.ReadingDeletedAt != nil || book.LinkedAt != nil {
 		return errCopyNotFound
 	}
 	file, err := h.reachableFile(ctx, user, device, fileID)
@@ -370,7 +388,7 @@ func (h *handler) link(ctx context.Context, user *models.User, device *devices.D
 	err = h.db.NewSelect().
 		Model(&records).
 		Where("kub.user_id = ? AND kub.document = ?", user.ID, document).
-		Where("kub.dismissed_at IS NULL AND kub.linked_at IS NULL").
+		Where("kub.reading_deleted_at IS NULL AND kub.linked_at IS NULL").
 		OrderExpr("kub.device_id = ? DESC, kub.device_id", device.ID).
 		Scan(ctx)
 	if err != nil {
@@ -406,6 +424,7 @@ func (h *handler) link(ctx context.Context, user *models.User, device *devices.D
 			Model((*models.KOReaderUnrecognizedBook)(nil)).
 			Set("linked_at = ?", now).
 			Set("linked_file_id = ?", file.ID).
+			Set("dismissed_at = NULL").
 			Set("updated_at = ?", now).
 			Where("device_id = ? AND document = ?", holder.ID, document).
 			Exec(ctx)
@@ -515,18 +534,29 @@ func (h *handler) unlink(ctx context.Context, user *models.User, device *devices
 	})
 }
 
-// dismiss dismisses document on device: what was held for it is deleted,
-// and its data is dropped from then on.
-func (h *handler) dismiss(ctx context.Context, user *models.User, device *devices.Device, document string) error {
+// pendingBook is the user's record of document on device, when it's one
+// still to link or dismissed, not linked and with its reading not deleted.
+func (h *handler) pendingBook(ctx context.Context, user *models.User, device *devices.Device, document string) (*models.KOReaderUnrecognizedBook, error) {
 	book, err := h.currentBook(ctx, user, device, document)
+	if err != nil {
+		return nil, err
+	}
+	if book == nil || book.UserID != user.ID || book.ReadingDeletedAt != nil || book.LinkedAt != nil {
+		return nil, errCopyNotFound
+	}
+	return book, nil
+}
+
+// dismiss sets document on device aside: it's no longer listed to link,
+// and what was held for it, and the copy's data from then on, stay held to
+// link later.
+func (h *handler) dismiss(ctx context.Context, user *models.User, device *devices.Device, document string) error {
+	book, err := h.pendingBook(ctx, user, device, document)
 	if err != nil {
 		return err
 	}
-	if book == nil || book.UserID != user.ID || book.DismissedAt != nil || book.LinkedAt != nil {
+	if book.DismissedAt != nil {
 		return errCopyNotFound
-	}
-	if err := dropHeld(ctx, h.db, device.ID, []string{document}); err != nil {
-		return err
 	}
 	now := time.Now()
 	_, err = h.db.NewUpdate().
@@ -539,53 +569,97 @@ func (h *handler) dismiss(ctx context.Context, user *models.User, device *device
 }
 
 // dismissAll dismisses each of documents on device still to link, as
-// dismiss does one: what was held for it is deleted, and its data is
-// dropped from then on. Linked copies, and copies the page didn't list,
-// stay. It runs in batches, under SQLite's limit on bound values.
+// dismiss does one. Linked and dismissed copies, and copies the page didn't
+// list, stay as they are. It runs in batches, under SQLite's limit on bound
+// values.
 func (h *handler) dismissAll(ctx context.Context, user *models.User, device *devices.Device, documents []string) error {
 	const batch = 500
 	for start := 0; start < len(documents); start += batch {
 		chunk := documents[start:min(start+batch, len(documents))]
-		err := h.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-			var pending []string
-			err := tx.NewSelect().
-				Model((*models.KOReaderUnrecognizedBook)(nil)).
-				Column("kub.document").
-				Where("kub.device_id = ? AND kub.user_id = ? AND kub.document IN (?)", device.ID, user.ID, bun.List(chunk)).
-				Where("kub.dismissed_at IS NULL AND kub.linked_at IS NULL").
-				Scan(ctx, &pending)
-			if err != nil || len(pending) == 0 {
-				return errors.WithStack(err)
-			}
-			if err := dropHeld(ctx, tx, device.ID, pending); err != nil {
-				return err
-			}
-			now := time.Now()
-			_, err = tx.NewUpdate().
-				Model((*models.KOReaderUnrecognizedBook)(nil)).
-				Set("dismissed_at = ?", now).
-				Set("updated_at = ?", now).
-				Where("device_id = ? AND document IN (?)", device.ID, bun.List(pending)).
-				Exec(ctx)
-			return errors.WithStack(err)
-		})
+		now := time.Now()
+		_, err := h.db.NewUpdate().
+			Model((*models.KOReaderUnrecognizedBook)(nil)).
+			Set("dismissed_at = ?", now).
+			Set("updated_at = ?", now).
+			Where("device_id = ? AND user_id = ? AND document IN (?)", device.ID, user.ID, bun.List(chunk)).
+			Where("dismissed_at IS NULL AND reading_deleted_at IS NULL AND linked_at IS NULL").
+			Exec(ctx)
 		if err != nil {
-			return err
+			return errors.WithStack(err)
 		}
 	}
 	return nil
 }
 
+// restore puts document on device, dismissed or with its reading deleted,
+// back to link. A copy whose reading was deleted holds its data again from
+// then on, including what the plugin sends again (ADR 0017).
+func (h *handler) restore(ctx context.Context, user *models.User, device *devices.Device, document string) error {
+	book, err := h.currentBook(ctx, user, device, document)
+	if err != nil {
+		return err
+	}
+	if book == nil || book.UserID != user.ID || book.LinkedAt != nil || book.DismissedAt == nil && book.ReadingDeletedAt == nil {
+		return errCopyNotFound
+	}
+	_, err = h.db.NewUpdate().
+		Model((*models.KOReaderUnrecognizedBook)(nil)).
+		Set("dismissed_at = NULL").
+		Set("reading_deleted_at = NULL").
+		Set("updated_at = ?", time.Now()).
+		Where("device_id = ? AND document = ?", device.ID, document).
+		Exec(ctx)
+	return errors.WithStack(err)
+}
+
+// deleteReading deletes the reading history held for document on device, a
+// dismissed copy, and drops the copy's data from then on, as for a copy from
+// another server's library that this one should never hold. The copy stays
+// listed as dismissed, so it can be restored.
+func (h *handler) deleteReading(ctx context.Context, user *models.User, device *devices.Device, document string) error {
+	book, err := h.pendingBook(ctx, user, device, document)
+	if err != nil {
+		return err
+	}
+	if book.DismissedAt == nil {
+		return errCopyNotFound
+	}
+	return h.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if err := dropHeld(ctx, tx, device.ID, []string{document}); err != nil {
+			return err
+		}
+		now := time.Now()
+		_, err := tx.NewUpdate().
+			Model((*models.KOReaderUnrecognizedBook)(nil)).
+			Set("reading_deleted_at = ?", now).
+			Set("updated_at = ?", now).
+			Where("device_id = ? AND document = ?", device.ID, document).
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+}
+
+// unlinkedCount is how many copies device holds as unrecognized that are
+// still to link, as the Device's page counts them (devices.UnlinkedBooks).
+func (h *handler) unlinkedCount(ctx context.Context, deviceID string) (int, error) {
+	counts, err := h.devices.UnlinkedBooks(ctx, []string{deviceID})
+	if err != nil {
+		return 0, errors.WithStack(err)
+	}
+	return counts[deviceID], nil
+}
+
 // listUnrecognized lists device's unrecognized copies: the ones to link,
 // with suggestions, most recently read first, then the linked ones, most
-// recently linked first. A linked copy whose File is gone or out of reach
-// is one to link again.
+// recently linked first, then the dismissed ones, most recently dismissed
+// first. A linked copy whose File is gone or out of reach is one to link
+// again.
 func (h *handler) listUnrecognized(ctx context.Context, user *models.User, device *devices.Device) ([]UnrecognizedBook, error) {
 	var records []*models.KOReaderUnrecognizedBook
 	err := h.db.NewSelect().
 		Model((*models.KOReaderUnrecognizedBook)(nil)).
 		Column("kub.document").
-		Where("kub.device_id = ? AND kub.user_id = ? AND kub.dismissed_at IS NULL AND kub.linked_at IS NOT NULL", device.ID, user.ID).
+		Where("kub.device_id = ? AND kub.user_id = ? AND kub.linked_at IS NOT NULL", device.ID, user.ID).
 		Scan(ctx, &records)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -600,8 +674,8 @@ func (h *handler) listUnrecognized(ctx context.Context, user *models.User, devic
 	err = h.db.NewSelect().
 		Model(&records).
 		Relation("LinkedFile").
-		Where("kub.device_id = ? AND kub.user_id = ? AND kub.dismissed_at IS NULL", device.ID, user.ID).
-		OrderExpr("kub.linked_at IS NOT NULL, kub.linked_at DESC, COALESCE(kub.last_read_at, kub.created_at) DESC, kub.document").
+		Where("kub.device_id = ? AND kub.user_id = ?", device.ID, user.ID).
+		OrderExpr("kub.dismissed_at IS NOT NULL, kub.linked_at IS NOT NULL, kub.linked_at DESC, kub.dismissed_at DESC, COALESCE(kub.last_read_at, kub.created_at) DESC, kub.document").
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -616,6 +690,7 @@ func (h *handler) listUnrecognized(ctx context.Context, user *models.User, devic
 			Document: record.Document, Title: record.Title, Authors: record.Authors, Identifiers: record.Identifiers,
 			Language: record.Language, FileType: record.FileType, ReadingSeconds: record.ReadingSeconds,
 			FirstReadAt: record.FirstReadAt, LastReadAt: record.LastReadAt, LinkedAt: record.LinkedAt,
+			DismissedAt: record.DismissedAt, ReadingDeleted: record.ReadingDeletedAt != nil,
 			Suggestions: []LinkCandidate{},
 		}
 		if book.Authors == nil {
@@ -625,7 +700,7 @@ func (h *handler) listUnrecognized(ctx context.Context, user *models.User, devic
 			book.Identifiers = []string{}
 		}
 		switch {
-		case record.LinkedAt == nil:
+		case record.LinkedAt == nil && record.DismissedAt == nil:
 			book.Suggestions, err = h.suggest(ctx, scope, record)
 			if err != nil {
 				return nil, err

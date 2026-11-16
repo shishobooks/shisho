@@ -68,6 +68,28 @@ type ReorderToReadPayload struct {
 	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
 }
 
+// BulkFinishPayload marks each of the named Books read, as marking one
+// read does. Today is the user's local date, for a Book with nothing
+// underway.
+type BulkFinishPayload struct {
+	BookIDs []int  `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+	Today   string `json:"today" validate:"required,date"`
+}
+
+// BulkNotStartedPayload marks each of the named Books not started, as
+// marking one does: its Read-through underway is deleted.
+type BulkNotStartedPayload struct {
+	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+}
+
+// BulkReadingResponse says how many of the named Books a bulk reading
+// change changed and how many it skipped because they were already in the
+// state it sets. A Book named twice counts once.
+type BulkReadingResponse struct {
+	Changed int `json:"changed"`
+	Skipped int `json:"skipped"`
+}
+
 // SetPageFlowPayload saves the flow the Page-based reader uses for the
 // Book. Null clears it, so the reader picks one from the page shapes again.
 type SetPageFlowPayload struct {

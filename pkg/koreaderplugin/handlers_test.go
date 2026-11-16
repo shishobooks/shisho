@@ -374,6 +374,10 @@ func TestOwnerDownload_CarriesTheServerAndAFreshShortCode(t *testing.T) {
 	require.NoError(t, f.db.NewSelect().Model(&short).Where("device_id = ?", f.device.ID).Scan(f.ctx))
 	assert.Contains(t, pairing, `short_code = "`+short.ShortCode+`"`)
 	assert.Contains(t, pairing, "expires_at = "+strconv.FormatInt(short.ExpiresAt.Unix(), 10))
+	// The Device's page says until when, from the same expiry.
+	expires, err := time.Parse(time.RFC3339, rec.Header().Get(HeaderSignInExpires))
+	require.NoError(t, err)
+	assert.Equal(t, short.ExpiresAt.Unix(), expires.Unix())
 
 	// The code in the zip signs in.
 	assert.Equal(t, http.StatusOK, f.pair(short.ShortCode).Code)

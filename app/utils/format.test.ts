@@ -19,6 +19,7 @@ import {
   formatPlayerTime,
   formatShortDay,
   formatShowingRange,
+  formatTimeOfDay,
   formatYear,
 } from "./format";
 
@@ -50,6 +51,12 @@ describe("formatDate", () => {
     const result = formatDate("2024-03-15T00:00:00Z");
     expect(result).toContain("Mar");
     expect(result).toContain("15");
+  });
+});
+
+describe("formatTimeOfDay", () => {
+  it("gives the hour and minute, in the browser's time zone", () => {
+    expect(formatTimeOfDay(new Date(2026, 10, 15, 15, 47))).toBe("3:47 PM");
   });
 });
 

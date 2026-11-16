@@ -164,5 +164,62 @@ return {
         assert_eq(History.unsent({ history = { through = 5 }, stats_cursor = { rowid = 2 } }), true, "still going")
         assert_eq(History.unsent({ history = { through = 5 }, stats_cursor = { rowid = 5 } }), false, "sent")
     end,
-}
 
+    ["every row can be sent again, from the first, once history has gone"] = function()
+        local state = State.open(scratch_dir() .. "/shisho.lua")
+        local server = state:signIn{ url = "https://a.example", username = "r", credential = "C", stats_cursor = { rowid = 42 } }
+        History.answer(server, false)
+        assert_eq(History.resendable(server), false, "never sent: Send reading history sends it")
+        History.accept(server)
+        assert_eq(History.resendable(server), false, "not while it's still going")
+        server.stats_cursor = { rowid = 60, id_book = 2, page = 3, start_time = 1800 }
+        assert_eq(History.resendable(server), true)
+
+        History.resend(server)
+
+        assert_eq(server.history.through, 42, "where history ends stays, so later rows go as reading again")
+        assert_eq(server.history.resend, true)
+        assert_eq(server.stats_cursor, { rowid = 0 })
+        assert_eq(History.rowsPending(server), true)
+        assert_eq(History.resendable(server), false, "not again while it's going")
+        server.stats_cursor = { rowid = 60 }
+        assert_eq(History.resendable(server), false, "nor while its statuses are still to go")
+        History.resent(server)
+        assert_eq(server.history.resend, nil)
+        assert_eq(History.resendable(server), true)
+    end,
+
+    ["history sent again carries the statuses and stars of the books the server holds as unrecognized"] = function()
+        local store = { synced = { held = { status = "complete" } }, asked = {} }
+        local books = {
+            held = { current = Summaries.read({ status = "complete", rating = 4, modified = "2026-11-03" }) },
+            recognized = { current = Summaries.read({ status = "reading", modified = "2026-11-12" }) },
+            nodate = { current = { status = "reading" } },
+            unread = { unread = true },
+        }
+        local states = { held = "held", recognized = "recognized", nodate = "held", unread = "held" }
+        local events = History.resendEvents(books, function(document) return states[document] end)
+        assert_eq(strip(events), {
+            { type = "status", document = "held", status = "complete", day = "2026-11-03" },
+            { type = "rating", document = "held", rating = 4, day = "2026-11-03" },
+        })
+    end,
+
+    ["history sent again adds the statuses of the books the server holds, only while it's going"] = function()
+        local books = {
+            held = { current = Summaries.read({ status = "complete", modified = "2026-11-03" }) },
+            recognized = { current = Summaries.read({ status = "reading", modified = "2026-11-12" }) },
+        }
+        local recognition = { answer = function(_self, url, document)
+            assert_eq(url, "https://a.example")
+            return { state = document }
+        end }
+        local first = { { document = "before", type = "status" } }
+        local server = { url = "https://a.example", history = { through = 5 } }
+        assert_eq(History.withResent(first, server, books, recognition), { { document = "before", type = "status" } })
+
+        server.history.resend = true
+        local events = strip(History.withResent({}, server, books, recognition))
+        assert_eq(events, { { type = "status", document = "held", status = "complete", day = "2026-11-03" } })
+    end,
+}

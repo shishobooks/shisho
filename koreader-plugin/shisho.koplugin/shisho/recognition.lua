@@ -222,6 +222,15 @@ function Recognition:waiting(plans, sources)
         for __, entry in ipairs(sources.journal and sources.journal(url) or {}) do add(entry.document) end
         for __, change in ipairs(plan.changes or {}) do add(change.document) end
         for __, event in ipairs(plan.history or {}) do add(event.document) end
+        -- History sent again asks about the books whose reading history was
+        -- deleted there, so one restored since, with no statistics rows to
+        -- bring it up, counts as held and gets its status and stars back.
+        local history = plan.server.history
+        if type(history) == "table" and history.resend then
+            for document, answer in pairs(self:server(url).known) do
+                if type(answer) == "table" and answer.state == "dismissed" then add(document) end
+            end
+        end
     end
     for __, document in ipairs(self:held()) do add(document) end
     table.sort(documents)

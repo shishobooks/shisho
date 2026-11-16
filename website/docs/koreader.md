@@ -26,7 +26,7 @@ The Device's page shows everything to enter below. A new KOReader Device follows
 
 KOReader can't install a plugin by itself, so the first install is by hand. Every later update comes from Shisho.
 
-1. On the Device's page, click **Download Plugin**. The zip it downloads signs itself in to this server for the next 30 minutes.
+1. On the Device's page, click **Download Plugin**. The zip it downloads signs itself in to this server for the next 30 minutes, with no pairing code, and the page shows until when.
 2. Connect the e-reader to your computer with USB, or on Android open a file manager.
 3. Unzip the download into KOReader's plugins folder, so a `shisho.koplugin` folder sits inside it. The folder is:
 
@@ -39,6 +39,8 @@ KOReader can't install a plugin by itself, so the first install is by hand. Ever
    | Linux      | `~/.config/koreader/plugins`                     |
    | macOS      | `~/Library/Application Support/koreader/plugins` |
 
+   Folders whose names start with a dot, such as Kobo's `.adds`, are hidden. To show them, press `Cmd+Shift+.` in Finder on a Mac, or choose **View > Show > Hidden items** in File Explorer on Windows.
+
 4. Eject the e-reader and restart KOReader.
 
 Each Shisho release also attaches the plugin as `shisho.koplugin.zip` on its [GitHub release](https://github.com/shishobooks/shisho/releases). That zip knows no server, so after installing it, sign in with **Add a server** in the [plugin's menu](#sign-in-with-the-plugin).
@@ -47,7 +49,7 @@ Each Shisho release also attaches the plugin as `shisho.koplugin.zip` on its [Gi
 
 With Wi-Fi on, a plugin downloaded from the Device's page signs itself in on its first launch, as long as that's within 30 minutes of the download. If Wi-Fi is off, it signs in the next time Wi-Fi comes on.
 
-Later than that, KOReader opens **Sign in to Shisho** with the server's URL filled in. On the Device's page, click **Pair** and enter the code it shows as the **Pairing code**. A pairing code lasts 30 minutes, and clicking **Pair** or **Download Plugin** again replaces it. To sign in without the Device's page, choose **Use password** and enter your Shisho username and the Device's password. A server URL typed without `http://` or `https://` is tried with `https://` first.
+A pairing code is only for signing in later than that, for the plugin from the GitHub release, and for **Add a server**. When KOReader opens **Sign in to Shisho** with the server's URL filled in, click **KOReader asking for a pairing code?** on the Device's page, then **Pair**, and enter the code it shows as the **Pairing code**. A pairing code lasts 30 minutes, and clicking **Pair** or **Download Plugin** again replaces it, along with the sign-in of a download KOReader hasn't used yet. To sign in without the Device's page, choose **Use password** and enter your Shisho username and the Device's password. A server URL typed without `http://` or `https://` is tried with `https://` first.
 
 The plugin's menu is **Shisho** in the top menu's tools tab, in the file browser and in an open book. Hold any item in it to see what it does. It lists each server you're signed in to; holding one shows when it last synced and whether it needs attention. **Add a server** signs in to another Shisho server, each as a Device of its own on that server; [Several Servers](#several-servers) covers how they sync. Under each server, **Enabled** turns syncing with it on or off, **Sign in again** signs in afresh, and **Remove server** removes the plugin's sign-in for it after you confirm.
 
@@ -78,7 +80,7 @@ Once signed in, the plugin syncs on its own whenever Wi-Fi comes on, for any rea
 
 Both turn Wi-Fi on only when KOReader is set to do that without asking: **Settings > Network > Action when Wi-Fi is off** set to **Turn on**. Otherwise they sync only when Wi-Fi is already on, so no question is left waiting on the sleep screen.
 
-A sync sends your reading time, your place in each book you read since the last one, and the [statuses and Ratings](#statuses-and-ratings) you changed, and brings back the ones changed in Shisho. Everything waits on the e-reader while it's offline, for days, weeks, or months, and a restart or a flat battery loses nothing that KOReader had already saved. A sync cut off halfway picks up where it stopped without sending anything twice. **Sync now** says when it finishes or fails; a sync that runs on its own stays quiet.
+A sync sends your reading time, your place in each book you read since the last one, and the [statuses and Ratings](#statuses-and-ratings) you changed, and brings back the ones changed in Shisho. Everything waits on the e-reader while it's offline, for days, weeks, or months, and a restart or a flat battery loses nothing that KOReader had already saved. A sync cut off halfway picks up where it stopped without sending anything twice. **Sync now** says when it finishes or fails, and how many [books Shisho doesn't recognize](#books-shisho-doesnt-recognize) are waiting to be linked on each server; a sync that runs on its own stays quiet.
 
 ### Several Servers
 
@@ -93,15 +95,15 @@ The plugin can sign in to several Shisho servers at once, such as your own and a
 
 ### Reading Time
 
-The plugin sends the time KOReader's statistics recorded on each page, so your reading time in Shisho is measured, not estimated. [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) covers how it becomes reading sessions and which Read-through each belongs to. Reading a book you've never read, or one on To Read, starts its Read-through on the day you read it, even when that reading reaches Shisho days later.
+The plugin sends the time KOReader's statistics recorded on each page, so your reading time in Shisho is measured, not estimated. [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) covers how it becomes reading sessions and which Read-through each belongs to. Reading a book you've never read, or one on To Read, starts its Read-through on the day you read it, even when its reading sessions reach Shisho days later.
 
-Deleting a [reading session](./reading-stats.md#calendar) or a Read-through in Shisho stays deleted: the plugin's next sync doesn't bring back its reading, even though KOReader still has it, and reading within ten minutes of a deleted session is left out too. Deleting or resetting statistics in KOReader changes nothing in Shisho.
+Deleting a [reading session](./reading-stats.md#calendar) or a Read-through in Shisho stays deleted: the plugin's next sync doesn't bring back its reading sessions, even though KOReader's statistics still have them, and pages KOReader timed within ten minutes of a deleted session are left out too. Deleting or resetting statistics in KOReader changes nothing in Shisho.
 
 Reading time needs KOReader's statistics, which are on by default: **Enabled** under **Tools > Reading statistics**. With statistics turned off, the plugin's menu and **Sync now** say that reading time won't sync, and your place still does.
 
 ### The E-Reader's Clock
 
-Shisho dates your reading by the e-reader's clock, corrected when it syncs: if the clock is more than five minutes off, Shisho shifts everything in that sync by the difference. Times before the Device was added to Shisho, or before 2000, as after a clock resets when the battery runs flat, are ignored and logged. [History you send](#send-your-existing-reading-history) is the exception: it predates the Device, so only times before 2000 are ignored in it, and it isn't shifted, since how far off the clock is now says nothing about how it was when you read. A time later than when the sync arrived is taken as the time it arrived. Days follow [your time zone](./reading-tracking.md#your-time-zone) in Shisho, not the e-reader's.
+Shisho dates your reading sessions and status changes by the e-reader's clock, corrected when it syncs: if the clock is more than five minutes off, Shisho shifts everything in that sync by the difference. Times before the Device was added to Shisho, or before 2000, as after a clock resets when the battery runs flat, are ignored and logged. [History you send](#send-your-existing-reading-history) is the exception: it predates the Device, so only times before 2000 are ignored in it, and it isn't shifted, since how far off the clock is now says nothing about how it was when you read. A time later than when the sync arrived is taken as the time it arrived. Days follow [your time zone](./reading-tracking.md#your-time-zone) in Shisho, not the e-reader's.
 
 ### Your Place
 
@@ -145,9 +147,11 @@ When a book's status changed in KOReader and in Shisho since the last sync, the 
 
 ### Send Your Existing Reading History
 
-The first time the plugin signs in to a server, it asks whether to send the history KOReader recorded before: your reading time, and your books' statuses and stars. Choose **Send history** to have [Reading Stats](./reading-stats.md) cover the years you've already read in KOReader, or **Don't send** to send only your reading from now on. Nothing goes to that server until you answer, and with Wi-Fi on, a sync starts as soon as you do. **Sign in again** never asks, and **Settings > Reading history on first sign-in** in the plugin's menu can answer for every later first sign-in: **Ask**, the default, **Send**, or **Don't send**. An answer from the setting syncs at once too.
+The first time the plugin signs in to a server, it asks whether to send the history KOReader recorded before: your reading time, and your books' statuses and stars. Choose **Send history** to have [Reading Stats](./reading-stats.md) cover the years you've already read in KOReader, or **Don't send** to send only what you read from now on. Nothing goes to that server until you answer, and with Wi-Fi on, a sync starts as soon as you do. **Sign in again** never asks, and **Settings > Reading history on first sign-in** in the plugin's menu can answer for every later first sign-in: **Ask**, the default, **Send**, or **Don't send**. An answer from the setting syncs at once too.
 
 If you chose **Don't send**, you can still send it later: choose **Send reading history** under the server in the plugin's menu, and confirm. It sends the same history, at once, turning Wi-Fi on if needed. Reading time that already synced since you signed in isn't added again. The item is gone once history has been sent.
+
+Once history has been sent, **Send reading history again** under the server sends every reading session KOReader recorded once more, with the statuses and stars of the books the server lists as [unrecognized](#books-shisho-doesnt-recognize). Shisho takes in only what it doesn't already have, so nothing is counted twice, nothing you deleted in Shisho comes back, and books you linked stay linked. Use it to bring back the reading history of a book you [restored](#books-shisho-doesnt-recognize) after deleting it.
 
 For each book the server [recognizes](#which-books-sync), history sends:
 
@@ -171,19 +175,19 @@ History can't know everything:
 
 A large history goes in batches, and the plugin shows how many pages have gone. If Wi-Fi drops partway, the next sync carries on where it stopped without sending anything twice, and holding the server in the plugin's menu shows how many pages are still to go. The syncs while you read and as the e-reader sleeps send only a little of it each time, so they don't hold you up. Statuses and stars go once every page has, so with KOReader's statistics turned off, they wait until you turn statistics on again.
 
-If you used [progress sync](#turn-off-progress-sync) on this Device before the plugin, its estimated time for the same reading is replaced, as below.
+If you used [progress sync](#turn-off-progress-sync) on this Device before the plugin, its estimated reading sessions for the same time are replaced, as below.
 
 ### Switching Between Two KOReader Devices
 
 Sign in to Shisho with the plugin on both, each as its own KOReader Device. Before you put one down, choose **Sync now** on it. Then open the book on the other with Wi-Fi on, and it offers to jump to where you stopped. A book you finish on one shows finished on the other once both have synced.
 
-Leave KOReader's own statistics cloud sync (**Cloud sync** under **Reading statistics**) unset on both. It copies one device's statistics into the other's, and the plugin would then send that reading again as the other device's, counting it twice.
+Leave KOReader's own statistics cloud sync (**Cloud sync** under **Reading statistics**) unset on both. It copies one device's statistics into the other's, and the plugin would then send those reading sessions again as the other device's, counting them twice.
 
 ### Turn Off Progress Sync
 
-Once a Device syncs through the plugin, Shisho ignores KOReader's progress sync from it, since the plugin reports the same reading with its real time, and the Device's page says to turn progress sync off. In KOReader, open a book, open **Progress sync** from the tools menu, and turn off **Automatically keep documents in sync**.
+Once a Device syncs through the plugin, Shisho ignores KOReader's progress sync from it, since the plugin reports the same reading sessions with their real time, and the Device's page says to turn progress sync off. In KOReader, open a book, open **Progress sync** from the tools menu, and turn off **Automatically keep documents in sync**.
 
-Shisho estimated the reading time progress sync reported. Wherever the plugin's measured time covers the same reading on the same Device in the same file, as when you [send your history](#send-your-existing-reading-history), the estimate is deleted, so the time isn't counted twice.
+Shisho estimated the reading time progress sync reported. Wherever the plugin's measured sessions cover the same time on the same Device in the same file, as when you [send your history](#send-your-existing-reading-history), the estimate is deleted, so the time isn't counted twice.
 
 ### Needs Login
 
@@ -191,24 +195,26 @@ Regenerating the Device's credential, or deleting the Device, marks the server *
 
 ## Books Shisho Doesn't Recognize
 
-The plugin can bring in a copy Shisho doesn't [recognize](#which-books-sync), such as one downloaded before v0.7.0 or edited elsewhere. When no server you're signed in to recognizes a book you read, the plugin sends its reading to each of them anyway, with what KOReader knows of it: its title, authors, identifiers, language, and reading time. Each server holds that reading, counting it toward nothing yet, and lists the book under **Unrecognized Books** on the KOReader Device's page.
+The plugin can bring in a copy Shisho doesn't [recognize](#which-books-sync), such as one downloaded before v0.7.0 or edited elsewhere. When no server you're signed in to recognizes a book you read, the plugin sends each of them its reading history anyway: its reading sessions, status, Rating, and place, with what KOReader knows of it, such as its title, authors, identifiers, and language. Each server holds that history, counting it toward nothing yet, and lists the book under **Unrecognized Books** on the KOReader Device's page, at the top of the page while any are waiting to be linked. The **Devices** page shows how many are waiting on each Device.
 
-For each book, the page suggests books from your libraries: ones with a matching identifier, such as an ISBN, first, and then ones whose title and author match. Each book shows its best match, to link in one click; **More**, beside its title, shows the other suggestions, a search, and **Dismiss**. The books you've linked fold away under **Linked**. Suggestions and search cover only the libraries you can access and the Device's [scope](./users-and-permissions.md#scope), and never audiobooks. Only you see your Devices' unrecognized books, and a link is yours alone: another user with an identical copy links their own.
+For each book, the page suggests books from your libraries: ones with a matching identifier, such as an ISBN, first, and then ones whose title and author match. Each book shows its best match, to link in one click, and **Dismiss**; **More**, beside its title, shows the other suggestions and a search. The books you've linked fold away under **Linked**, and the ones you've dismissed under **Dismissed**. Suggestions and search cover only the libraries you can access and the Device's [scope](./users-and-permissions.md#scope), and never audiobooks. Only you see your Devices' unrecognized books, and a link is yours alone: another user with an identical copy links their own.
 
 - **Link** links the copy to the file you choose, from a suggestion or a search. Everything held for it is added at once, without waiting for the e-reader to sync: its reading sessions, its status, its Rating, and its place. [History](#send-your-existing-reading-history) you sent for it follows history's rules, so it fills in only what Shisho has none of. From then on, the copy syncs like any other book.
-- **Unlink**, on a book under **Linked**, undoes a link made to the wrong book, after you confirm. The copy stops syncing with that book on all your Devices and is listed to link again, and its reading from then on is held until you do. What the link already added stays, so delete any wrong [reading sessions](./reading-stats.md#calendar) or Read-throughs, and change the book's status, Rating, or place, by hand.
-- **Dismiss** deletes the reading held for the copy, after you confirm, and it stops appearing. Later reading in it is dropped too. Dismissing can't be undone on that server; KOReader keeps its own record on the e-reader. **Dismiss all**, above the list, does the same for every book still to link at once, such as the books KOReader's history still remembers after you deleted them from the e-reader. Linked books stay.
+- **Unlink**, on a book under **Linked**, undoes a link made to the wrong book, after you confirm. The copy stops syncing with that book on all your Devices and is listed to link again, and its reading sessions from then on are held until you do. What the link already added stays, so delete any wrong [reading sessions](./reading-stats.md#calendar) or Read-throughs, and change the book's status, Rating, or place, by hand.
+- **Dismiss** sets the copy aside under **Dismissed**, such as a book you haven't added to your library yet. Its reading history stays held, and so do the reading sessions KOReader sends for it later, so nothing is lost. The message that follows offers **Undo**. **Dismiss all**, above the list, does the same for every book still to link, after you confirm. Linked books stay.
+- **Restore**, on a book under **Dismissed**, lists it to link again, with suggestions, such as once you've added the book.
+- **Delete history**, on a book under **Dismissed**, deletes the reading history held for the copy, and the reading sessions KOReader sends for it later are dropped. Use it for a book from another server's library that shouldn't be kept on this one. It asks first, unless you checked **Don't ask again**, which this browser remembers, so deleting several takes one click each. The book stays under **Dismissed**, marked **Reading history deleted**. KOReader keeps its own record on the e-reader: to bring the history back, **Restore** the book, then choose [Send reading history again](#send-your-existing-reading-history) in the plugin's menu.
 
 A linked copy keeps the reading sessions, status, and Rating of any other book, but its place syncs as a percentage only: its file isn't the one in your library, so an exact spot in it may not line up. The Shisho reader, a Kobo, and KOReader with the plugin open the book at that percentage, and KOReader goes to the same percentage of the copy. KOReader's built-in progress sync gets no place for it. Under **Linked**, the Device's page suggests downloading the book again from Shisho to sync your exact place.
 
-If the file a copy is linked to is later deleted, or falls outside your libraries or the Device's scope, the copy is listed to link again, and its reading from then on is held for it.
+If the file a copy is linked to is later deleted, or falls outside your libraries or the Device's scope, the copy is listed to link again, and its reading sessions from then on are held for it.
 
 With [several servers](#several-servers):
 
 - A book is listed only when none of your servers recognizes it, and only once every enabled server has answered.
-- Linking a book on one server removes it from the others' lists at the plugin's next sync, along with the reading they held for it, so you link it once. To link the same copy on a second server, download the book from that server instead.
-- Dismissing a book on one server leaves the others' lists alone.
-- Unlinking a book lists it again on your other servers once you read more of it, with only the reading after the unlink, because none of them recognizes it now.
+- Linking a book on one server removes it from the others' lists at the plugin's next sync, along with the reading history they held for it, so you link it once. To link the same copy on a second server, download the book from that server instead.
+- Dismissing a book, or deleting its history, on one server leaves the others' lists alone.
+- Unlinking a book lists it again on your other servers once you read more of it, with only the reading sessions after the unlink, because none of them recognizes it now.
 
 ## Browse Over OPDS
 
@@ -269,7 +275,7 @@ KOReader shows the message from Shisho. Check that the username is your Shisho u
 
 ### The Plugin Says the Pairing Code Is Wrong or Has Expired
 
-The code was mistyped, has expired, or was replaced. A code lasts 30 minutes, and clicking **Pair** or **Download Plugin** on the Device's page replaces the code before it. Check that the code you entered is the one the Device's page shows now, without the countdown having run out. If it isn't, click **Pair** and enter the new code. Only a KOReader Device's code signs the plugin in.
+The code was mistyped, has expired, or was replaced. A code lasts 30 minutes, and clicking **Pair** or **Download Plugin** on the Device's page replaces the code before it. Check that the code you entered is the one the Device's page shows now, without the countdown having run out. If it isn't, click **KOReader asking for a pairing code?** on the Device's page, then **Pair**, and enter the new code. Only a KOReader Device's code signs the plugin in.
 
 ### Reading Time Doesn't Sync
 

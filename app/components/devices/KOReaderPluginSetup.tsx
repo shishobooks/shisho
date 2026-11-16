@@ -1,5 +1,5 @@
 import { Download, KeyRound } from "lucide-react";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 
 import Disclosure from "@/components/devices/Disclosure";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
 import type { DeviceResponse, DeviceShortURL } from "@/types/generated/devices";
 import { KOREADER_PLUGIN_FOLDERS } from "@/utils/devices";
-import { formatDateTime, formatPlayerTime } from "@/utils/format";
+import {
+  formatDateTime,
+  formatPlayerTime,
+  formatTimeOfDay,
+} from "@/utils/format";
 
 // The zip's name, which matches what the server sends.
 const PLUGIN_ZIP_NAME = "shisho.koplugin.zip";
@@ -77,13 +81,17 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
   const download = useDownloadKOReaderPlugin();
   const pair = useGenerateDeviceShortUrl();
   const [short, setShort] = useState<DeviceShortURL | null>(null);
+  const [signsInUntil, setSignsInUntil] = useState<Date | null>(null);
+  const [pairingOpen, setPairingOpen] = useState(false);
+  const pairingId = useId();
 
   const handleDownload = async () => {
     try {
-      const blob = await download.mutateAsync(device.id);
+      const { blob, signsInUntil } = await download.mutateAsync(device.id);
       saveBlob(blob, PLUGIN_ZIP_NAME);
       // The download replaced any code shown here.
       setShort(null);
+      setSignsInUntil(signsInUntil);
     } catch (error) {
       toastRequestError(error, "Failed to download the KOReader plugin");
     }
@@ -92,6 +100,8 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
   const handlePair = async () => {
     try {
       setShort(await pair.mutateAsync(device.id));
+      // The new code replaced the download's.
+      setSignsInUntil(null);
     } catch (error) {
       toastRequestError(error, "Failed to get a pairing code");
     }
@@ -105,9 +115,9 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
         keeps itself up to date.
       </p>
       <PluginStatus device={device} />
-      <div className="flex flex-wrap gap-2">
-        {/* Demo Mode hides downloads. */}
-        {!demoMode && (
+      {/* Demo Mode hides downloads. */}
+      {!demoMode && (
+        <div className="space-y-1">
           <Button
             disabled={download.isPending}
             onClick={handleDownload}
@@ -116,18 +126,46 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
             <Download className="mr-2 h-4 w-4" />
             {download.isPending ? "Downloading..." : "Download Plugin"}
           </Button>
-        )}
+          {signsInUntil && (
+            <p className="text-sm text-muted-foreground" role="status">
+              This download signs itself in until{" "}
+              {formatTimeOfDay(signsInUntil)}, no pairing code needed.
+            </p>
+          )}
+        </div>
+      )}
+      {/* A download signs itself in, so pairing is for later sign-ins and
+          stays out of the way until KOReader asks for a code. */}
+      <div className="space-y-2">
         <Button
-          disabled={pair.isPending}
-          onClick={handlePair}
-          size="sm"
-          variant="outline"
+          aria-controls={pairingId}
+          aria-expanded={pairingOpen}
+          onClick={() => setPairingOpen(!pairingOpen)}
+          variant="link"
         >
-          <KeyRound className="mr-2 h-4 w-4" />
-          {pair.isPending ? "Pairing..." : "Pair"}
+          KOReader asking for a pairing code?
         </Button>
+        {pairingOpen && (
+          <div className="space-y-3" id={pairingId}>
+            <p className="text-sm text-muted-foreground">
+              A code is only for signing in later than 30 minutes after
+              downloading, for the plugin from Shisho's GitHub release, or for
+              Add a server in KOReader. A new code also replaces the sign-in of
+              a download KOReader hasn't used yet.
+            </p>
+            <Button
+              disabled={pair.isPending}
+              onClick={handlePair}
+              size="sm"
+              variant="outline"
+            >
+              <KeyRound className="mr-2 h-4 w-4" />
+              {pair.isPending ? "Pairing..." : "Pair"}
+            </Button>
+            {short && <PairingCode key={short.short_code} short={short} />}
+          </div>
+        )}
       </div>
-      {short && <PairingCode key={short.short_code} short={short} />}
       {/* Once the plugin has connected, it's installed: the steps are there
           for a reinstall, out of the way. */}
       <Disclosure
@@ -150,11 +188,12 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
           </li>
           <li>
             Eject the e-reader and restart KOReader with Wi-Fi on, within 30
-            minutes of downloading. The plugin signs itself in.
+            minutes of downloading. The plugin signs itself in, with no pairing
+            code.
           </li>
           <li>
-            Later than that, KOReader asks for a pairing code: press Pair and
-            enter it.
+            Later than that, KOReader asks for a pairing code: get one under
+            &quot;KOReader asking for a pairing code?&quot; above and enter it.
           </li>
         </ol>
         <dl
@@ -172,6 +211,11 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
             </div>
           ))}
         </dl>
+        <p className="text-sm text-muted-foreground">
+          Folders whose names start with a dot are hidden. To show them, press
+          Cmd+Shift+. in Finder on a Mac, or choose View &gt; Show &gt; Hidden
+          items in File Explorer on Windows.
+        </p>
       </Disclosure>
       <Disclosure size="sm" title="Why use the plugin?">
         <p className="text-sm text-muted-foreground">
@@ -225,7 +269,7 @@ const PluginStatus = ({ device }: { device: DeviceResponse }) => {
         <p className="text-muted-foreground">
           Turn off progress sync in KOReader (Tools &gt; Progress sync). Shisho
           now ignores it from this Device, since the plugin reports the same
-          reading with its real time.
+          reading sessions with their real time.
         </p>
       </div>
     );

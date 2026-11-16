@@ -314,6 +314,42 @@ return {
         assert_eq(payloads[2], { since = 7000 }, "only what changed")
     end,
 
+    ["pulling states notes how many books wait to be linked there"] = function()
+        local state = setup("https://a.example")
+        local s = state:find("https://a.example")
+        local store = { synced = {}, asked = {} }
+        local function pull(body)
+            return Sync.pullStates{ server = s, store = store, documents = {},
+                post = function() return 200, body end, write = function() end }
+        end
+        assert_eq(pull({ states = {}, cursor = 1, unlinked = 4 }), "ok")
+        assert_eq(s.unlinked, 4)
+        pull({ states = {}, cursor = 2, unlinked = 0 })
+        assert_eq(s.unlinked, 0)
+        pull({ states = {}, cursor = 3 })
+        assert_eq(s.unlinked, nil, "a server that doesn't say leaves nothing to show")
+    end,
+
+    ["history sent again goes like history, and then is done"] = function()
+        local state, journal = setup("https://a.example")
+        local s = state:find("https://a.example")
+        s.history = { through = 3, resend = true }
+        local history = { { id = "h1", type = "status", document = "doc1", status = "complete", day = "2025-01-01" } }
+        local store = { synced = {}, asked = {} }
+        local rows = rowsFrom({ row(100), row(200), row(300) })
+        local post, sent = server({ 200, "down" })
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post, batch = 2, read_pages = rows,
+            history = history, store = store }, "unreachable")
+        assert_eq(s.history.resend, true, "cut off partway, it's still to finish")
+
+        local post2, sent2 = server()
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, post = post2, batch = 2, read_pages = rows,
+            history = history, store = store }, "ok")
+        assert_eq(sent2[1].backfill, true)
+        assert_eq(sent2[#sent2].events, history)
+        assert_eq(s.history.resend, nil, "its statuses went, so it's done")
+    end,
+
     ["pulling states asks about a large library in batches"] = function()
         local state = setup("https://a.example")
         local s = state:find("https://a.example")

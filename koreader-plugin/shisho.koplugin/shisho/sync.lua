@@ -327,6 +327,10 @@ local function sendHistory(opts, send, sent, hold)
         first = first + #chunk
         state:flush()
     end
+    if server.history.resend then
+        History.resent(server)
+        state:flush()
+    end
     return "ok"
 end
 
@@ -617,7 +621,9 @@ hold, and passes each state to opts.write(state, outright): every book whose
 status or Rating changed since its last pull, and, outright, the books in
 opts.documents it hasn't been asked about (Summaries.toAsk). opts.store is
 what was synced with the server (Summaries:server), opts.post(payload) sends
-a pull, and opts.clock() is the device's clock. Returns the outcome.
+a pull, and opts.clock() is the device's clock. It notes in server.unlinked
+how many books the server says wait to be linked on the Device's page.
+Returns the outcome.
 ]]
 function Sync.pullStates(opts)
     local server, store = opts.server, opts.store
@@ -650,6 +656,11 @@ function Sync.pullStates(opts)
         end
         if first and tonumber(body.cursor) then
             server.states_cursor = tonumber(body.cursor)
+        end
+        if first then
+            -- How many books wait to be linked on the Device's page, for
+            -- Sync now to say. An older server doesn't say.
+            server.unlinked = tonumber(body.unlinked)
         end
         first = false
         if #ask < Summaries.ASK_BATCH then break end

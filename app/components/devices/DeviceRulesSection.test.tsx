@@ -44,6 +44,7 @@ const kobo = (overrides: Partial<DeviceResponse> = {}): DeviceResponse => ({
     { source_file_type: "cbz", delivered_file_types: ["kepub", "epub"] },
   ],
   has_preset: true,
+  unlinked_books: 0,
   credential: "abcdefghjkmnpqrs",
   connections: ["kobo_sync", "ereader_browser"],
   created_at: "2026-01-01T00:00:00Z",

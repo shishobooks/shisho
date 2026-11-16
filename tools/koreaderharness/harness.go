@@ -251,6 +251,9 @@ type Args struct {
 	// SendHistory taps Send reading history under the first server in
 	// plugin-menu, and confirms.
 	SendHistory bool
+	// SendHistoryAgain taps Send reading history again under the first
+	// server in plugin-menu, and confirms.
+	SendHistoryAgain bool
 	// HomeDir and DownloadDir set KOReader's home folder and the folder its
 	// OPDS catalogs download to, inside the books directory, before KOReader
 	// starts.
@@ -380,6 +383,9 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.SendHistory {
 		payload["send_history"] = true
+	}
+	if a.SendHistoryAgain {
+		payload["send_history_again"] = true
 	}
 	if a.Fire {
 		payload["fire"] = true

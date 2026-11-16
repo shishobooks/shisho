@@ -438,37 +438,41 @@ func (svc *Service) SetPaused(ctx context.Context, userID, bookID int, paused bo
 // reread.
 func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today string) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		now := time.Now()
-		underway, err := retrieveUnderway(ctx, tx, userID, bookID)
-		if err != nil {
-			return err
-		}
-		if underway == nil {
-			if outcome != models.ReadThroughOutcomeFinished {
-				return ErrNothingUnderway
-			}
-			_, err := insertFinishedReadThrough(ctx, tx, userID, bookID, today, now)
-			return err
-		}
-
-		endDay, err := manualEndDay(ctx, tx, underway, today)
-		if err != nil {
-			return err
-		}
-		underway.Outcome = outcome
-		underway.Paused = false
-		underway.EndDay = &endDay
-		underway.UpdatedAt = now
-		_, err = tx.NewUpdate().
-			Model(underway).
-			Column("outcome", "paused", "end_day", "updated_at").
-			WherePK().
-			Exec(ctx)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		return leaveToRead(ctx, tx, userID, bookID, now)
+		return end(ctx, tx, userID, bookID, outcome, today, time.Now())
 	})
+}
+
+// end is End inside the caller's transaction.
+func end(ctx context.Context, tx bun.Tx, userID, bookID int, outcome, today string, now time.Time) error {
+	underway, err := retrieveUnderway(ctx, tx, userID, bookID)
+	if err != nil {
+		return err
+	}
+	if underway == nil {
+		if outcome != models.ReadThroughOutcomeFinished {
+			return ErrNothingUnderway
+		}
+		_, err := insertFinishedReadThrough(ctx, tx, userID, bookID, today, now)
+		return err
+	}
+
+	endDay, err := manualEndDay(ctx, tx, underway, today)
+	if err != nil {
+		return err
+	}
+	underway.Outcome = outcome
+	underway.Paused = false
+	underway.EndDay = &endDay
+	underway.UpdatedAt = now
+	_, err = tx.NewUpdate().
+		Model(underway).
+		Column("outcome", "paused", "end_day", "updated_at").
+		WherePK().
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	return leaveToRead(ctx, tx, userID, bookID, now)
 }
 
 // insertFinishedReadThrough records a finished Read-through of bookID ending
@@ -582,20 +586,25 @@ func (svc *Service) UpdateReadThroughDays(ctx context.Context, rt *models.ReadTh
 // detached Read-through has no Book to take back.
 func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThrough) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		if _, err := tx.NewDelete().Model(rt).WherePK().Exec(ctx); err != nil {
-			return errors.WithStack(err)
-		}
-		if rt.Outcome != models.ReadThroughOutcomeUnderway || rt.BookID == nil {
-			return nil
-		}
-		if err := resetPositions(ctx, tx, rt.UserID, *rt.BookID, 0); err != nil {
-			return err
-		}
-		if rt.LeftToReadPosition == nil {
-			return nil
-		}
-		return returnToRead(ctx, tx, rt.UserID, *rt.BookID, *rt.LeftToReadPosition, svc.now())
+		return deleteReadThrough(ctx, tx, rt, svc.now())
 	})
+}
+
+// deleteReadThrough is DeleteReadThrough inside the caller's transaction.
+func deleteReadThrough(ctx context.Context, tx bun.Tx, rt *models.ReadThrough, now time.Time) error {
+	if _, err := tx.NewDelete().Model(rt).WherePK().Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+	if rt.Outcome != models.ReadThroughOutcomeUnderway || rt.BookID == nil {
+		return nil
+	}
+	if err := resetPositions(ctx, tx, rt.UserID, *rt.BookID, 0); err != nil {
+		return err
+	}
+	if rt.LeftToReadPosition == nil {
+		return nil
+	}
+	return returnToRead(ctx, tx, rt.UserID, *rt.BookID, *rt.LeftToReadPosition, now)
 }
 
 // EndReadThrough ends rt, which must be underway, with outcome, by the
