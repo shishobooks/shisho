@@ -79,12 +79,20 @@ _Avoid_: primary cover, default cover, canonical cover
 ### Delivery
 
 **Device**:
-One reading app on one piece of hardware, however it connects to Shisho. A Kobo running both Kobo's own reader and KOReader is two Devices, while Kobo's reader syncing and also using the eReader browser is one Device with two connections. A Device belongs to one user, and its Device type (such as Kobo or Kindle) limits the File Types it can receive and supplies preset **Delivery Rules**.
+One reading app on one piece of hardware, however it connects to Shisho. A Kobo running both Kobo's own reader and KOReader is two Devices, while Kobo's reader syncing and also using the eReader browser is one Device with two connections. A Device belongs to one user, and its Device type (such as Kobo or Kindle) limits the File Types it can receive and supplies preset **Delivery Rules**. A **Shisho app** Device is the exception: its Device type sets no limit on File Types, it has no Delivery Rules, and it always covers every Library its user can access.
 _Avoid_: client, connection, API key (the credential is part of the Device, not the Device itself)
 
 **KOReader plugin**:
 Shisho's add-on for KOReader. It signs into a Shisho server as a KOReader **Device**, and into several servers at once as a separate Device on each. It keeps that server's reading record: **Reading Positions**, **Reading Sessions** as KOReader timed them, Read-through outcomes, and **Ratings**. It holds them on the device while offline and sends them when it next connects. It replaces KOReader's built-in progress sync, which Shisho still accepts from a KOReader Device without the plugin.
 _Avoid_: Shisho plugin, sync plugin (a plugin in Shisho runs on the server)
+
+**Shisho app**:
+Shisho's own app for phones and tablets. A user signs in with the same username and password as on the web, and each sign-in on an installation creates a **Device** of that user on that server. One installation can be signed into several servers and accounts at once and switches between them, but never shows them as one combined library.
+_Avoid_: mobile app, client, companion app
+
+**Download**:
+A copy of a **File** kept on a **Shisho app** installation so it can be read or listened to offline, kept until the user removes it, a rule they turned on removes it, or the File leaves the Libraries the user can access. A File opened without being downloaded may also be kept for a while, but that copy can be cleared at any time and is not a Download.
+_Avoid_: offline copy
 
 **Unrecognized book**:
 A copy on a KOReader **Device** that no server the **KOReader plugin** signs into recognizes, such as one downloaded before Shisho recorded the hashes of what it delivers. Each server holds its reading history against the copy and lists it on the Device's page until the user links it to a **File**, which applies what was held. Dismissing it sets it aside, still held, to restore or link later; deleting a dismissed copy's reading history drops what was held and what comes later (ADR 0017).
@@ -183,9 +191,17 @@ _Avoid_: review, score, favorite
 How the reader lays out a **Page-based** File's pages: paginated, one page at a time, or scrolled, every page in one continuous column for comics made for vertical scrolling. One user chooses it per **Book**; until they do, the reader picks it from the shape of the pages.
 _Avoid_: scroll mode, webtoon mode, layout
 
+**Reading Direction**:
+The order a **Page-based** File's pages run in: left to right, or right to left as most manga do. It belongs to the File. A reader may be set to ignore it, in which case every File's pages run left to right.
+_Avoid_: manga mode, RTL mode
+
 **Reading Position**:
 Where one user is within one **File**: a location in the text for a **Reflowable** File, a page for a **Page-based** one, a time for an audiobook, along with how far through the File that is. It belongs to the File, so a Book's ebook and audiobook each keep their own. One from a linked **Unrecognized book** is only how far through, with no location (ADR 0017).
 _Avoid_: progress (alone), bookmark, location
+
+**Bookmark**:
+A moment in one audiobook **File** that one user marked to come back to, with an optional note. Private to the user, and kept until they delete it. A File can have many, unlike its single **Reading Position**.
+_Avoid_: clip, marker, highlight (a highlight marks text, not a moment)
 
 **Reading Session**:
 One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. Its time is how long the user actually spent, which can be less than the span when they paused within it or when the reader caps the time counted on one page. It belongs to the **Read-through** underway at the time, if there is one; time spent in a Book with none underway, such as looking something up in a finished one, still counts toward reading time.
@@ -223,11 +239,11 @@ _Avoid_: sample library, fixtures (those are test data)
 - A **File** has at most one **Publisher** and many **Narrators** (persons)
 - A **Publisher** has at most one parent **Publisher** and many child **Publishers** (self-referential hierarchy)
 - A user has many **Devices**; a **Device** belongs to exactly one user and may connect several ways
-- A user has one set of default **Delivery Rules**, which follow Shisho's built-in rules until edited; a **Device** follows them, follows its Device type's preset, or has its own
+- A user has one set of default **Delivery Rules**, which follow Shisho's built-in rules until edited; a **Device** follows them, follows its Device type's preset, or has its own, except a **Shisho app** Device, which has none
 - An admin creates many **Invite Links**; an **Invite Link** adds at most one user
 - A **Book** has many **Share Links**; a **Share Link** belongs to exactly one **Book** and is created by one user
 - A user has at most one **Reading Status** and one **Rating** per **Book**, many **Read-throughs** per Book (at most one underway), and one **To Read** queue
-- A user has at most one **Reading Position** per **File**
+- A user has at most one **Reading Position** per **File**, and many **Bookmarks** per audiobook File
 - A **Read-through** has many **Reading Sessions**, each on one **File**
 - A **Resource** (series, person, genre, tag, publisher) has many **Aliases**
 - An **Alias** belongs to exactly one resource and is unique within its resource type and library
