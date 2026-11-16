@@ -28,6 +28,12 @@ import (
 // which is either the account password or a Device credential.
 func serveOPDSAs(t *testing.T, db *bun.DB, username, password, path string) *httptest.ResponseRecorder {
 	t.Helper()
+	return serveOPDSFrom(t, db, "", username, password, path)
+}
+
+// serveOPDSFrom is serveOPDSAs from a client sending userAgent.
+func serveOPDSFrom(t *testing.T, db *bun.DB, userAgent, username, password, path string) *httptest.ResponseRecorder {
+	t.Helper()
 	e := echo.New()
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	authMw := auth.NewMiddleware(auth.NewService(db, "test-secret", time.Hour))
@@ -35,6 +41,9 @@ func serveOPDSAs(t *testing.T, db *bun.DB, username, password, path string) *htt
 
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(username+":"+password)))
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec

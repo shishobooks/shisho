@@ -147,7 +147,7 @@ Choose the type when adding a Device. It decides which connections the Device ca
 |------|-------------|-------------|-------------|
 | **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: KePub as KePub, then EPUB as KePub, then CBZ as KePub, then AZW3 as KePub, then MOBI as KePub |
 | **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI, then EPUB as AZW3, then KePub as AZW3, then CBZ as AZW3 |
-| **KOReader** | The [KOReader plugin](./koreader.md#install-the-koreader-plugin), OPDS, and KOReader's progress sync | Any file type | Your default Delivery Rules |
+| **KOReader** | The [KOReader plugin](./koreader.md#install-the-koreader-plugin), OPDS, and KOReader's progress sync | Any file type except M4B, since KOReader can't play audiobooks | Your default Delivery Rules |
 | **OPDS app** | OPDS, for other reading apps such as Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 

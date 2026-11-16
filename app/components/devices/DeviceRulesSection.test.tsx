@@ -336,6 +336,26 @@ describe("DeviceRulesSection", () => {
     );
 
     expect(screen.getByText(/so it receives nothing/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Follow the preset or customize its rules/),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no preset when a type without one follows a default that delivers nothing", () => {
+    renderSection(
+      kobo({
+        device_type: "koreader",
+        has_preset: false,
+        delivery_rules_mode: "default",
+        delivery_rules: [],
+      }),
+    );
+
+    expect(
+      screen.getByText(
+        "Your default has no rule for a File Type a KOReader Device can receive, so it receives nothing. Customize its rules.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("previews what the Device receives", async () => {
