@@ -81,7 +81,7 @@ describe("ListsIndex To Read", () => {
       expect.anything(),
     );
     expect(
-      await screen.findByRole("heading", { name: "Start your first list" }),
+      await screen.findByRole("heading", { name: "No lists of your own yet" }),
     ).toBeInTheDocument();
   });
 
@@ -91,7 +91,7 @@ describe("ListsIndex To Read", () => {
     renderLists();
 
     expect(
-      await screen.findByRole("heading", { name: "Start your first list" }),
+      await screen.findByRole("heading", { name: "No lists of your own yet" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /To Read/ }),

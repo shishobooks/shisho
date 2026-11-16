@@ -1,4 +1,10 @@
-import { BookPlus, Library as LibraryIcon, Plus, Settings } from "lucide-react";
+import {
+  BookPlus,
+  Library as LibraryIcon,
+  LockKeyhole,
+  Plus,
+  Settings,
+} from "lucide-react";
 import { useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -148,7 +154,7 @@ const AdminLibraries = () => {
       ) : libraries.length === 0 && !hasAllLibraryAccess ? (
         <EmptyState
           description="Ask your server admin to give you access."
-          icon={LibraryIcon}
+          icon={LockKeyhole}
           title="You don't have access to any libraries yet"
         />
       ) : libraries.length === 0 ? (

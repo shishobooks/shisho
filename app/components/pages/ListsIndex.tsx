@@ -169,8 +169,8 @@ const ListsIndex = () => {
 
         {listsQuery.data && !hasLists && (
           <div className="space-y-6">
-            {/* To Read reads as a list, so claiming there are none would
-                contradict the card pinned above. */}
+            {/* To Read reads as a list, so the headline counts only the
+                user's own lists, not the card pinned above. */}
             <EmptyState
               action={
                 <Button onClick={() => setCreateDialogOpen(true)} size="sm">
@@ -184,7 +184,7 @@ const ListsIndex = () => {
                   : "Lists collect books from any library, for yourself or to share with others."
               }
               icon={List}
-              title="Start your first list"
+              title="No lists of your own yet"
             />
 
             {templatesQuery.isSuccess && templates.length > 0 && (
