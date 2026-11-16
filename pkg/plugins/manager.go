@@ -1,11 +1,13 @@
 package plugins
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	stderrors "errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
 	"github.com/pkg/errors"
@@ -331,7 +333,7 @@ func (m *Manager) GetManualRuntimes(ctx context.Context, hookType string, librar
 
 // GetParserForType returns the first loaded runtime that has a fileParser for the given type.
 func (m *Manager) GetParserForType(fileType string) *Runtime {
-	// Built-in file types are reserved
+	// Shisho parses built-in extensions itself.
 	if models.IsBuiltInFileExtension(fileType) {
 		return nil
 	}
@@ -353,7 +355,7 @@ func (m *Manager) GetParserForType(fileType string) *Runtime {
 }
 
 // RegisteredFileExtensions returns all file extensions registered by plugin fileParsers,
-// excluding the extensions of built-in file types, which plugins cannot claim.
+// excluding the extensions of built-in file types, which Shisho parses itself.
 func (m *Manager) RegisteredFileExtensions() map[string]struct{} {
 	result := make(map[string]struct{})
 
@@ -370,6 +372,44 @@ func (m *Manager) RegisteredFileExtensions() map[string]struct{} {
 			}
 		}
 	}
+	return result
+}
+
+// SkippedFileParser is a loaded plugin whose file parser declares extensions
+// Shisho parses itself, so it is not used for them.
+type SkippedFileParser struct {
+	Scope      string
+	PluginID   string
+	Extensions []string
+}
+
+// SkippedFileParsers returns each loaded plugin whose file parser declares
+// a built-in extension, with those extensions, sorted by plugin.
+func (m *Manager) SkippedFileParsers() []SkippedFileParser {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var result []SkippedFileParser
+	for _, rt := range m.plugins {
+		if rt.manifest.Capabilities.FileParser == nil {
+			continue
+		}
+		var exts []string
+		for _, t := range rt.manifest.Capabilities.FileParser.Types {
+			if models.IsBuiltInFileExtension(t) {
+				exts = append(exts, t)
+			}
+		}
+		if len(exts) == 0 {
+			continue
+		}
+		slices.Sort(exts)
+		exts = slices.Compact(exts)
+		result = append(result, SkippedFileParser{Scope: rt.scope, PluginID: rt.pluginID, Extensions: exts})
+	}
+	slices.SortFunc(result, func(a, b SkippedFileParser) int {
+		return cmp.Or(cmp.Compare(a.Scope, b.Scope), cmp.Compare(a.PluginID, b.PluginID))
+	})
 	return result
 }
 

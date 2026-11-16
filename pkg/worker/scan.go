@@ -24,10 +24,11 @@ import (
 )
 
 // extensionsToScan maps each built-in extension to the mime types the detector
-// may report for a genuine file of that format. M4B containers vary by the tool
-// that wrote them: the "M4A " brand detects as audio/x-m4a, the "M4B " brand as
-// audio/mp4, and generic "isom"/"mp42" brands as video/mp4. All three are real
-// audiobooks and must be accepted. An EPUB detects as application/epub+zip
+// may report for a genuine file of that format. An .m4a is the same format as
+// an .m4b (ADR 0018), and both containers vary by the tool that wrote them:
+// the "M4A " brand detects as audio/x-m4a, the "M4B " brand as audio/mp4, and
+// generic "isom"/"mp42" brands as video/mp4. All three are real audiobooks
+// and must be accepted. An EPUB detects as application/epub+zip
 // only when a stored mimetype entry comes first. Hand-zipped EPUBs and some
 // older tools put it elsewhere or leave it out and detect as application/zip,
 // so the parser, which needs an OPF, decides. MOBI6, KF8, and combo files all
@@ -37,7 +38,8 @@ import (
 var extensionsToScan = map[string]map[string]struct{}{
 	".epub":  {"application/epub+zip": {}, "application/zip": {}},
 	".kepub": {"application/epub+zip": {}, "application/zip": {}},
-	".m4b":   {"audio/x-m4a": {}, "audio/mp4": {}, "video/mp4": {}},
+	".m4b":   mp4MimeTypes,
+	".m4a":   mp4MimeTypes,
 	".cbz":   {"application/zip": {}},
 	".pdf":   {"application/pdf": {}},
 	".mobi":  {mobiMimeType: {}},
@@ -47,6 +49,8 @@ var extensionsToScan = map[string]map[string]struct{}{
 }
 
 const mobiMimeType = "application/x-mobipocket-ebook"
+
+var mp4MimeTypes = map[string]struct{}{"audio/x-m4a": {}, "audio/mp4": {}, "video/mp4": {}}
 
 // checkExpectedMimeType detects the mime type of a file with a built-in
 // extension and reports whether it is one the format's parser can handle.
@@ -409,6 +413,7 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 	}
 
 	jobLog.Info("processing libraries", logger.Data{"count": len(allLibraries)})
+	w.logSkippedFileParsers(jobLog)
 
 	// A library with a path that can't be read is skipped whole: scanning
 	// only its other paths would let orphan cleanup treat every file under
@@ -744,6 +749,22 @@ func (w *Worker) rebuildSearchIndexes(ctx context.Context, jobLog *joblogs.JobLo
 		return
 	}
 	jobLog.Info("search indexes rebuilt successfully", nil)
+}
+
+// logSkippedFileParsers names, once per scan, each plugin whose file parser
+// declares an extension Shisho parses itself and so is not used for it, so a
+// plugin losing a type to a new built-in extension (ADR 0019) is visible.
+func (w *Worker) logSkippedFileParsers(jobLog *joblogs.JobLogger) {
+	if w.pluginManager == nil {
+		return
+	}
+	for _, p := range w.pluginManager.SkippedFileParsers() {
+		jobLog.Warn("plugin file parser not used for extensions Shisho parses itself", logger.Data{
+			"plugin":     p.PluginID,
+			"scope":      p.Scope,
+			"extensions": p.Extensions,
+		})
+	}
 }
 
 // runInputConverters runs input converter plugins on discovered files.

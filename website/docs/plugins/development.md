@@ -51,7 +51,7 @@ Create `manifest.json` in the project root:
 }
 ```
 
-The built-in `epub`, `cbz`, `m4b`, and `pdf` extensions are reserved and cannot be claimed by a file parser. See [Manifest Fields](./manifest-hooks-reference.md#manifest-fields) for the complete schema.
+A file parser is not used for extensions Shisho parses itself; [Built-in Extensions](./manifest-hooks-reference.md#built-in-extensions) lists them. See [Manifest Fields](./manifest-hooks-reference.md#manifest-fields) for the complete schema.
 
 ## Implement a Hook
 

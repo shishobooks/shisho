@@ -88,7 +88,7 @@ func compressionMiddleware() echo.MiddlewareFunc {
 				}
 			}
 			switch strings.ToLower(path.Ext(c.Request().URL.Path)) {
-			case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".woff", ".woff2", ".zip", ".epub", ".mobi", ".azw", ".azw3", ".prc", ".cbz", ".mp3", ".mp4", ".m4b", ".pdf", ".gz":
+			case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".ico", ".woff", ".woff2", ".zip", ".epub", ".mobi", ".azw", ".azw3", ".prc", ".cbz", ".mp3", ".mp4", ".m4b", ".m4a", ".pdf", ".gz":
 				return true
 			}
 			// Echo checks only for the substring "gzip", ignoring q=0. Keep Vary

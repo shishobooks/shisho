@@ -94,9 +94,14 @@ Input converters also receive files of built-in types. Shisho does not import DR
 
 - `types` is required and lists extensions without a leading dot.
 - `mimeTypes` and `description` are optional.
-- `epub`, `kepub`, `cbz`, `m4b`, `pdf`, `mobi`, `azw`, `prc`, and `azw3` are reserved built-in extensions and cannot be claimed by a file parser. A file parser that declares one is ignored for it, and Shisho's own parser reads those files.
 
 When MIME types are present, Shisho compares compatible MIME values rather than requiring byte-for-byte string equality, so registered aliases and MIME parameters can match.
+
+#### Built-in Extensions
+
+Shisho parses these extensions itself: `epub`, `kepub`, `cbz`, `m4b`, `m4a`, `pdf`, `mobi`, `azw`, `prc`, and `azw3`. A file parser that declares one of them is not used for it, and Shisho's own parser reads those files. The parser's other types keep working. Each scan names every such plugin and extension once in its job log.
+
+The set of built-in extensions can grow in any Shisho release, and adding one is not a breaking change. From the release where Shisho starts parsing an extension, a file parser that declares it stops being used for it. Input converters are not affected, so a converter that turns one built-in type into another, such as `m4a` into `m4b`, leaves both files as main files of the book.
 
 ### Metadata Enricher Capability
 
@@ -115,6 +120,7 @@ When MIME types are present, Shisho compares compatible MIME values rather than 
 - `fields` is required. Missing or empty fields disable only the enricher hook and produce a load warning.
 - `fileTypes` is optional. Omit it to allow every file type.
 - A `.kepub.epub` or `.kepub` file has the file type `kepub`, which is also the `fileType` its search context reports. An enricher that declares `epub` also runs on KePub files; declare `kepub` alone to run only on them.
+- An `.m4a` audiobook has the file type `m4b`, which is also the `fileType` its search context reports, so an enricher that declares `m4b` runs on it. Declaring `m4a` matches no file.
 - Invalid field names cause plugin loading to fail.
 
 Valid declarations are:
