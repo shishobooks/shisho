@@ -78,23 +78,18 @@ const JobDetail = () => {
   const isLoading = jobQuery.isLoading || logsQuery.isLoading;
   const logs = useMemo(() => logsData?.items ?? [], [logsData?.items]);
 
-  // Extract unique plugin names from log data
+  // A log line's plugin is its own field, not part of its data. The chosen
+  // plugin stays listed even when other filters leave none of its lines, so
+  // the filter can still be cleared.
   const pluginNames = useMemo(() => {
-    const names = new Set<string>();
+    const names = new Set<string>(pluginFilter ? [pluginFilter] : []);
     for (const log of logs) {
-      if (log.data) {
-        try {
-          const parsed = JSON.parse(log.data);
-          if (parsed.plugin) {
-            names.add(parsed.plugin);
-          }
-        } catch {
-          /* ignore parse errors */
-        }
+      if (log.plugin) {
+        names.add(log.plugin);
       }
     }
     return Array.from(names).sort();
-  }, [logs]);
+  }, [logs, pluginFilter]);
 
   // Filter and map logs to LogViewerEntry format (memoized to avoid
   // re-parsing JSON on every render).
@@ -105,7 +100,8 @@ const JobDetail = () => {
         if (searchTerm) {
           if (
             !log.message.toLowerCase().includes(searchLower) &&
-            !log.data?.toLowerCase().includes(searchLower)
+            !log.data?.toLowerCase().includes(searchLower) &&
+            !log.plugin?.toLowerCase().includes(searchLower)
           ) {
             return false;
           }
@@ -120,6 +116,11 @@ const JobDetail = () => {
           } catch {
             parsedData = null;
           }
+        }
+        // Merged into the data so LogViewer shows the plugin in the row and
+        // in the expanded details.
+        if (log.plugin) {
+          parsedData = { plugin: log.plugin, ...parsedData };
         }
         return {
           id: log.id,
