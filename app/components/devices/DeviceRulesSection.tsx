@@ -286,8 +286,10 @@ const DeviceRulesBody = ({
           {device.delivery_rules.length === 0 ? (
             <p className="text-sm text-destructive">
               Your default has no rule for a File Type a {typeLabel} Device can
-              receive, so it receives nothing. Follow the preset or customize
-              its rules.
+              receive, so it receives nothing.{" "}
+              {device.has_preset
+                ? "Follow the preset or customize its rules."
+                : "Customize its rules."}
             </p>
           ) : (
             <ReadOnlyRules rules={device.delivery_rules} />

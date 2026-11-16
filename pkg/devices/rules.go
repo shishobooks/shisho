@@ -52,7 +52,10 @@ var typeRules = map[string]deviceTypeRules{
 			{SourceFileType: models.FileTypeCBZ, DeliveredFileType: models.FileTypeAZW3},
 		},
 	},
-	DeviceTypeKOReader: {},
+	// KOReader plays no audiobook, and its OPDS browser offers no download
+	// for an acquisition it can't open, so an audiobook would list with
+	// nothing to download.
+	DeviceTypeKOReader: {allowed: models.EbookFileTypes},
 	DeviceTypeOPDS:     {},
 	DeviceTypeBrowser:  {},
 }
@@ -98,8 +101,9 @@ func startingRulesMode(deviceType string) string {
 }
 
 // allowedRules returns the rules that deliver a File Type deviceType can
-// receive, so a Device following the owner's default skips the rest rather
-// than receiving a File it can't open.
+// receive, so a Device following the owner's default, or keeping a custom
+// list saved before its type stopped allowing a File Type, skips the rest
+// rather than receiving a File it can't open.
 func allowedRules(deviceType string, rules []delivery.Rule) []delivery.Rule {
 	kept := []delivery.Rule{}
 	for _, rule := range rules {
@@ -227,6 +231,14 @@ func (s *Service) RulesFor(ctx context.Context, devices []*Device) (map[string][
 	}
 	for _, row := range rows {
 		rules[row.DeviceID] = append(rules[row.DeviceID], delivery.Rule{SourceFileType: row.SourceFileType, DeliveredFileType: row.DeliveredFileType})
+	}
+	// A list saved before its type stopped allowing a File Type keeps that
+	// rule in storage; leave it out rather than deliver what the Device
+	// can't open.
+	for _, device := range devices {
+		if device.DeliveryRulesMode == RulesModeCustom {
+			rules[device.ID] = allowedRules(device.DeviceType, rules[device.ID])
+		}
 	}
 	return rules, nil
 }

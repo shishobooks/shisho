@@ -16,6 +16,17 @@ func rule(source, delivered string) delivery.Rule {
 	return delivery.Rule{SourceFileType: source, DeliveredFileType: delivered}
 }
 
+// withoutAudiobooks returns rules without the ones delivering an audiobook.
+func withoutAudiobooks(rules []delivery.Rule) []delivery.Rule {
+	kept := []delivery.Rule{}
+	for _, r := range rules {
+		if !models.IsAudiobookFileType(r.DeliveredFileType) {
+			kept = append(kept, r)
+		}
+	}
+	return kept
+}
+
 // TestService_Rules resolves the Delivery Rules a Device follows, for each
 // way a Device can follow them. userDefault is saved as the owner's default
 // first (nil leaves it following the built-in rules), and custom is saved as
@@ -84,6 +95,12 @@ func TestService_Rules(t *testing.T) {
 			userDefault: []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeEPUB)},
 			wantMode:    RulesModeDefault,
 			want:        []delivery.Rule{},
+		},
+		{
+			name:       "a KOReader following the default drops audiobooks, which it can't play",
+			deviceType: DeviceTypeKOReader,
+			wantMode:   RulesModeDefault,
+			want:       withoutAudiobooks(builtIn),
 		},
 		{
 			name:        "a custom list ignores the default",
@@ -222,6 +239,14 @@ func TestRuleOptions_KoboOffersKindleConversions(t *testing.T) {
 	assert.Equal(t, []string{models.FileTypeEPUB, models.FileTypeKePub}, offered[models.FileTypeMOBI])
 }
 
+// KOReader opens no audiobook, so its rules editor offers no rule for one.
+func TestRuleOptions_KOReaderOffersNoAudiobook(t *testing.T) {
+	t.Parallel()
+	for _, option := range RuleOptions(DeviceTypeKOReader) {
+		assert.False(t, models.IsAudiobookFileType(option.SourceFileType), option.SourceFileType)
+	}
+}
+
 // A Device following the default follows later edits to it, and stops once
 // it is customized.
 func TestService_Rules_FollowingTracksTheDefault(t *testing.T) {
@@ -272,6 +297,7 @@ func TestService_SetRules_Refuses(t *testing.T) {
 	}{
 		{name: "an empty custom list", deviceType: DeviceTypeOPDS, mode: RulesModeCustom, rules: []delivery.Rule{}},
 		{name: "a Kindle rule delivering EPUB", deviceType: DeviceTypeKindle, mode: RulesModeCustom, rules: []delivery.Rule{rule(models.FileTypeAZW3, models.FileTypeAZW3), rule(models.FileTypeEPUB, models.FileTypeEPUB)}},
+		{name: "a KOReader rule delivering M4B", deviceType: DeviceTypeKOReader, mode: RulesModeCustom, rules: []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeEPUB), rule(models.FileTypeM4B, models.FileTypeM4B)}},
 		{name: "a Kobo rule delivering CBZ", deviceType: DeviceTypeKobo, mode: RulesModeCustom, rules: []delivery.Rule{rule(models.FileTypeCBZ, models.FileTypeCBZ)}},
 		{name: "two rules for one source", deviceType: DeviceTypeBrowser, mode: RulesModeCustom, rules: []delivery.Rule{rule(models.FileTypeCBZ, models.FileTypeCBZ), rule(models.FileTypeCBZ, models.FileTypeEPUB)}},
 		{name: "a preset for a type with none", deviceType: DeviceTypeOPDS, mode: RulesModePreset},
@@ -309,10 +335,11 @@ func TestService_SetRules_AcceptsAllowedTypes(t *testing.T) {
 	ctx := context.Background()
 
 	for deviceType, rules := range map[string][]delivery.Rule{
-		DeviceTypeKobo:    {rule(models.FileTypeEPUB, models.FileTypeEPUB), rule(models.FileTypeCBZ, models.FileTypeKePub)},
-		DeviceTypeKindle:  {rule(models.FileTypeMOBI, models.FileTypeMOBI)},
-		DeviceTypeOPDS:    {rule(models.FileTypeCBZ, models.FileTypeEPUB), rule(models.FileTypeM4B, models.FileTypeM4B)},
-		DeviceTypeBrowser: {rule(models.FileTypePDF, models.FileTypePDF)},
+		DeviceTypeKobo:     {rule(models.FileTypeEPUB, models.FileTypeEPUB), rule(models.FileTypeCBZ, models.FileTypeKePub)},
+		DeviceTypeKindle:   {rule(models.FileTypeMOBI, models.FileTypeMOBI)},
+		DeviceTypeKOReader: {rule(models.FileTypeCBZ, models.FileTypeEPUB), rule(models.FileTypePDF, models.FileTypePDF)},
+		DeviceTypeOPDS:     {rule(models.FileTypeCBZ, models.FileTypeEPUB), rule(models.FileTypeM4B, models.FileTypeM4B)},
+		DeviceTypeBrowser:  {rule(models.FileTypePDF, models.FileTypePDF)},
 	} {
 		device, err := service.Create(ctx, 1, "Device", deviceType)
 		require.NoError(t, err)
@@ -348,4 +375,27 @@ func TestService_Update_TypeChangeResetsRules(t *testing.T) {
 	device, err = service.Update(ctx, 1, device.ID, UpdateDeviceOptions{DeviceType: &browser})
 	require.NoError(t, err)
 	assert.Equal(t, RulesModeDefault, device.DeliveryRulesMode)
+}
+
+// A custom list saved before its type stopped allowing a File Type, such as
+// a KOReader list with an M4B rule, loads without that rule, so the Device
+// stops receiving what it can't open without anyone editing the list.
+func TestService_Rules_CustomListDropsRulesTheTypeNoLongerAllows(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	service := NewService(db)
+	insertTestUser(t, db, 1, "reader")
+	ctx := context.Background()
+	device, err := service.Create(ctx, 1, "Device", DeviceTypeKOReader)
+	require.NoError(t, err)
+	device, err = service.SetRules(ctx, 1, device.ID, RulesModeCustom, []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeEPUB)})
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&DeviceDeliveryRule{
+		DeviceID: device.ID, SourceFileType: models.FileTypeM4B, DeliveredFileType: models.FileTypeM4B, Position: 1,
+	}).Exec(ctx)
+	require.NoError(t, err)
+
+	rules, err := service.Rules(ctx, device)
+	require.NoError(t, err)
+	assert.Equal(t, []delivery.Rule{rule(models.FileTypeEPUB, models.FileTypeEPUB)}, rules)
 }

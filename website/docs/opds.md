@@ -76,6 +76,8 @@ Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clien
 
 Add a **KOReader** Device and follow the [KOReader](./koreader.md) page, which covers the catalog and syncing your reading position.
 
+KOReader can't play audiobooks, so a [KOReader Device](./users-and-permissions.md#device-types) never receives them. Signed in with your account password or an OPDS app Device's credential instead, KOReader gets the M4B files the rules deliver and lists those books with nothing to download.
+
 ## Troubleshooting
 
 ### Repeated Login Prompts or 401 Responses
@@ -92,7 +94,7 @@ Add a **KOReader** Device and follow the [KOReader](./koreader.md) page, which c
 
 **Symptom:** A library or expected book is absent from the catalog.
 
-**Likely cause:** The account lacks library access, the [Delivery Rules](./supported-formats.md#delivery-rules) the catalog follows have no rule for the book's main file types, a Device's scope leaves the book out, or the file is a supplement. A file can also be absent while its book is listed: only the files on a book's first matching rule are offered.
+**Likely cause:** The account lacks library access, the [Delivery Rules](./supported-formats.md#delivery-rules) the catalog follows have no rule for the book's main file types, a Device's scope leaves the book out, the file is a supplement, or the book is an audiobook and the reading app signs in as a [KOReader Device](#koreader). A file can also be absent while its book is listed: only the files on a book's first matching rule are offered.
 
 **Verify:** Check the user's library access. Signed in with the account password, compare the book's main-file types with the rules under **Preferences > Delivery Rules**; signed in as a Device, check **Delivery Rules** and **Scope** on the Device's page.
 
