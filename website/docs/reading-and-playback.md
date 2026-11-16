@@ -2,7 +2,7 @@
 
 Users with Books Read permission and access to a book's library can open supported files directly in Shisho. Select **Read** for EPUB, KePub, MOBI, AZW3, CBZ, and PDF files or **Listen** for M4B files.
 
-Reader preferences are saved to your Shisho account and follow you between browsers, except **Follow Reading Direction**, which each browser keeps on its own. Every reader also remembers your place and keeps your reading history current, as described in [Reading in Shisho](./reading-tracking.md#reading-in-shisho).
+Reader preferences are saved to your Shisho account and follow you between browsers, except **Follow Reading Direction** and the ebook reader's [display settings](#display-settings), which each browser keeps on its own. Every reader also remembers your place and keeps your reading history current, as described in [Reading in Shisho](./reading-tracking.md#reading-in-shisho).
 
 ## EPUB, MOBI, and AZW3 Reader
 
@@ -11,14 +11,33 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 - Table-of-contents navigation
 - Previous and next page controls
 - A progress bar that can jump within the book
-- **Paginated** and **Scrolled** flow modes
-- **Light**, **Dark**, and **Sepia** themes. Light keeps the book's own text and background colors; Dark and Sepia replace them.
-- Font sizes from 50% to 200%
+- [Display settings](#display-settings) for the font, size, spacing, margins, theme, and layout
+- Footnotes that open in a popover beside the text. Select **Go to note** in the popover to jump to the full note.
 - Optional automatic hiding of the header and footer
 
-Use the **Settings** button inside the reader to change font size, theme, flow, and control visibility. These settings apply to all of these formats, so a theme chosen while reading a MOBI also applies to EPUBs. In paginated mode, click or tap the left and right sides to change pages, or swipe from anywhere on the page. Fixed-layout books always turn this way, whatever the flow setting. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. In a book that reads right to left, such as many Arabic, Hebrew, and Japanese books, the sides swap: the left side, the Left Arrow, and the left footer button move forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page or its top or bottom edge (paginated) or the text (scrolled).
+In paginated mode, click or tap the left and right sides to change pages, or swipe from anywhere on the page. Fixed-layout books always turn this way, whatever the layout setting. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. In a book that reads right to left, such as many Arabic, Hebrew, and Japanese books, the sides swap: the left side, the Left Arrow, and the left footer button move forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page or its top or bottom edge (paginated) or the text (scrolled).
 
 Reopening a book returns to where you left off. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
+
+### Display Settings
+
+Use the **Settings** button inside the reader to change how books look:
+
+| Setting | Options |
+| --- | --- |
+| **Font** | **Book's font** keeps the fonts the book sets. The included fonts are Libron, Literata, Atkinson Hyperlegible, Noto Serif, Noto Sans, and OpenDyslexic. You can also [import your own](#imported-fonts). |
+| **Font size** | 50% to 200% of the book's own size, in steps of 5% |
+| **Line spacing** | **Compact**, **Normal**, or **Relaxed** |
+| **Margins** | **Small**, **Medium**, or **Large**. Larger margins also shorten the lines on a wide screen. |
+| **Justify text** | On justifies and hyphenates paragraphs; off aligns them to the start of the line. |
+| **Theme** | **Light**, **Sepia**, **Dark**, or **Black**. Light keeps the book's own text and background colors; the others replace them. In Dark and Black, images get a white background so transparent images stay visible. |
+| **Layout** | **Paginated** or **Scrolled** |
+
+A change applies right away and keeps your place in the book. Display settings are kept in your browser rather than your account, so each browser or device can have its own. They apply to every book you open in that browser, in all of these formats.
+
+#### Imported Fonts
+
+Select **Import font** to add a TTF, OTF, or WOFF2 font file you have. The font is stored in that browser and is never uploaded to Shisho, so import it again in each browser where you want it. Clearing the browser's data for Shisho also removes it. To remove a font, select the remove button next to its name, below the font list.
 
 ## CBZ and PDF Readers
 

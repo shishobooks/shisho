@@ -15,8 +15,11 @@ import (
 // chapters, so the reader e2e tests can turn pages and reach the end. The
 // first is styled with a white body and black text the way Project Gutenberg
 // EPUBs are, so the reader e2e test can check that themes override book
-// colors. extraParagraphs adds filler text to the first chapter, so a test
-// can turn pages within a chapter as well as across chapters.
+// colors, and has a scene break the book centers by class, which
+// justification leaves alone. The second refers to a note the book marks as
+// one, kept in the third, for the reader's footnote popover. extraParagraphs
+// adds filler text to the first chapter, so a test can turn pages within a
+// chapter as well as across chapters.
 func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 	escaped := html.EscapeString(title)
 	filler := strings.Repeat("<p>"+strings.Repeat("Filler text to fill a page. ", 10)+"</p>", extraParagraphs)
@@ -46,17 +49,24 @@ func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><title>` + escaped + `</title>
-<style>body { color: black; background-color: white; } a { color: blue; }</style></head>
-<body><p>Test chapter. <a href="#end">A link.</a></p>` + filler + `<p id="end">The end.</p></body>
+<style>body { color: black; background-color: white; } a { color: blue; } .break { text-align: center; }</style></head>
+<body><p>Test chapter. <a href="#end">A link.</a></p><p class="break">* * *</p>` + filler + `<p id="end">The end.</p></body>
 </html>`},
 	}
 	for i, name := range []string{"Two", "Three", "Four"} {
+		body := `<p>Chapter ` + name + ` text.</p>`
+		switch i {
+		case 0:
+			body = `<p>Chapter Two text.<a epub:type="noteref" href="chapter3.xhtml#note1">1</a></p>`
+		case 1:
+			body += `<aside epub:type="endnote" id="note1"><p>The footnote's text.</p></aside>`
+		}
 		entries = append(entries, epubEntry{
 			fmt.Sprintf("OEBPS/chapter%d.xhtml", i+2), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head><title>` + escaped + `</title></head>
-<body><p>Chapter ` + name + ` text.</p></body>
+<body>` + body + `</body>
 </html>`,
 		})
 	}

@@ -19,6 +19,7 @@ let mobiBookId: number;
 let epubBookId: number;
 let resumeBookId: number;
 let finishBookId: number;
+let settingsBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -26,6 +27,18 @@ async function login(page: Page) {
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL(/\/admin\/libraries|\/libraries\//);
+}
+
+// Display settings are kept in the browser. login() lands on the app, so
+// this stores them there before the reader opens.
+async function setDisplaySettings(
+  page: Page,
+  settings: { theme?: string; layout?: string },
+) {
+  await page.evaluate(
+    ([key, value]) => localStorage.setItem(key, value),
+    ["shisho-reader-settings", JSON.stringify(settings)],
+  );
 }
 
 async function openReader(page: Page, bookId: number) {
@@ -118,6 +131,7 @@ test.describe("Reflowable reader", () => {
     epubBookId = await seed("Styled Book", "epub");
     resumeBookId = await seed("Resume Book", "epub");
     finishBookId = await seed("Finish Book", "epub");
+    settingsBookId = await seed("Settings Book", "epub");
     await apiContext.dispose();
   });
 
@@ -148,13 +162,10 @@ test.describe("Reflowable reader", () => {
   test("the Dark theme replaces the book's own colors", async ({ page }) => {
     await login(page);
     const put = await page.request.put("/api/settings/user", {
-      data: {
-        viewer_reflowable_theme: "light",
-        viewer_reflowable_flow: "paginated",
-        viewer_hide_chrome: false,
-      },
+      data: { viewer_hide_chrome: false },
     });
     expect(put.ok()).toBe(true);
+    await setDisplaySettings(page, { theme: "light", layout: "paginated" });
     await openReader(page, epubBookId);
     const frame = await bookFrame(page, "Test chapter.");
 
@@ -178,15 +189,32 @@ test.describe("Reflowable reader", () => {
     });
   });
 
+  test("justification leaves text the book centers alone", async ({ page }) => {
+    await login(page);
+    await setDisplaySettings(page, { layout: "paginated" });
+    await openReader(page, epubBookId);
+    const frame = await bookFrame(page, "Test chapter.");
+
+    const alignments = () =>
+      frame.evaluate(() =>
+        [...document.querySelectorAll("p")]
+          .slice(0, 2)
+          .map((p) => getComputedStyle(p).textAlign),
+      );
+    await expect.poll(alignments).toEqual(["justify", "center"]);
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("switch", { name: "Justify text" }).click();
+    await expect.poll(alignments).toEqual(["start", "center"]);
+  });
+
   // Paginated with the controls showing, so the page buttons are on screen.
   async function setPaginatedReader(page: Page) {
     const put = await page.request.put("/api/settings/user", {
-      data: {
-        viewer_reflowable_flow: "paginated",
-        viewer_hide_chrome: false,
-      },
+      data: { viewer_hide_chrome: false },
     });
     expect(put.ok()).toBe(true);
+    await setDisplaySettings(page, { layout: "paginated" });
   }
 
   test("reopens where you left off", async ({ page }) => {
@@ -244,18 +272,107 @@ test.describe("Reflowable reader", () => {
     ).toBeVisible();
   });
 
+  test("display settings and the place in the book survive a reload, and footnotes open in place", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, settingsBookId);
+    await bookFrame(page, "Test chapter.");
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("combobox", { name: "Font" }).click();
+    await page.getByRole("option", { name: "OpenDyslexic" }).click();
+    await page.getByRole("button", { name: "Black", exact: true }).click();
+    const size = page.getByRole("slider", { name: "Font size" });
+    await size.focus();
+    await size.press("ArrowRight");
+    await size.press("ArrowRight");
+    await expect(size).toHaveAttribute("aria-valuenow", "110");
+    await page.keyboard.press("Escape");
+
+    await turnPageTo(page, "Chapter Two text.");
+    // Moves save a few seconds apart, so wait for this one to be saved.
+    const fileId = page.url().match(/\/files\/(\d+)\/read$/)![1];
+    await expect
+      .poll(
+        async () => {
+          const resp = await page.request.get(
+            `/api/reading/files/${fileId}/position`,
+          );
+          const body = (await resp.json()) as {
+            position: { cfi?: string } | null;
+          };
+          return body.position?.cfi ?? null;
+        },
+        { timeout: 10_000 },
+      )
+      .toMatch(/^epubcfi\(\/6\/4/);
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    const frame = await bookFrame(page, "Chapter Two text.");
+    await expect(page.getByText("Preparing book…")).toBeHidden();
+
+    // The book's frame shows the settings, in the bundled font it loaded.
+    const looks = () =>
+      frame.evaluate(async () => {
+        await document.fonts.ready;
+        const html = getComputedStyle(document.documentElement);
+        return {
+          font: getComputedStyle(document.querySelector("p")!).fontFamily,
+          fontLoaded: [...document.fonts].some(
+            (f) => f.family === "OpenDyslexic" && f.status === "loaded",
+          ),
+          background: html.backgroundColor,
+          fontSize: getComputedStyle(document.querySelector("p")!).fontSize,
+        };
+      });
+    await expect.poll(looks).toEqual({
+      font: "OpenDyslexic, sans-serif",
+      fontLoaded: true,
+      background: "rgb(0, 0, 0)",
+      fontSize: "17.6px",
+    });
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await expect(page.getByRole("combobox", { name: "Font" })).toHaveText(
+      "OpenDyslexic",
+    );
+    await expect(
+      page.getByRole("button", { name: "Black", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.getByRole("slider", { name: "Font size" }),
+    ).toHaveAttribute("aria-valuenow", "110");
+    await page.keyboard.press("Escape");
+
+    const before = await progress(page);
+    const reference = (await frame
+      .locator('a[href="chapter3.xhtml#note1"]')
+      .boundingBox())!;
+    await page.mouse.click(
+      reference.x + reference.width / 2,
+      reference.y + reference.height / 2,
+    );
+    const popover = page.getByRole("dialog", { name: "Footnote" });
+    await expect(popover).toContainText("The footnote's text.");
+    await expect(
+      popover.getByRole("button", { name: "Go to note" }),
+    ).toBeVisible();
+    // The note is in the next chapter, and the reference opened it in place
+    // rather than jumping there.
+    expect(await progress(page)).toBe(before);
+  });
+
   test("moving the pointer over a scrolled book shows hidden controls", async ({
     page,
   }) => {
     await login(page);
     const put = await page.request.put("/api/settings/user", {
-      data: {
-        viewer_reflowable_theme: "light",
-        viewer_reflowable_flow: "scrolled",
-        viewer_hide_chrome: true,
-      },
+      data: { viewer_hide_chrome: true },
     });
     expect(put.ok()).toBe(true);
+    await setDisplaySettings(page, { theme: "light", layout: "scrolled" });
     await openReader(page, epubBookId);
     const frame = await bookFrame(page, "Test chapter.");
 
@@ -277,13 +394,10 @@ test.describe("Reflowable reader", () => {
 
     const setReaderSettings = async (page: Page, hideChrome: boolean) => {
       const put = await page.request.put("/api/settings/user", {
-        data: {
-          viewer_reflowable_theme: "light",
-          viewer_reflowable_flow: "paginated",
-          viewer_hide_chrome: hideChrome,
-        },
+        data: { viewer_hide_chrome: hideChrome },
       });
       expect(put.ok()).toBe(true);
+      await setDisplaySettings(page, { theme: "light", layout: "paginated" });
     };
 
     // Seeds a book for one test, since each book resumes where the last test

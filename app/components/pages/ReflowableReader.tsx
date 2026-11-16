@@ -3,14 +3,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
+import ReaderSettingsPanel from "@/components/library/ReaderSettingsPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
+  PopoverAnchor,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
@@ -18,11 +19,21 @@ import {
   useUserSettings,
 } from "@/hooks/queries/settings";
 import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
+import { useImportedFonts, useImportedFontUrl } from "@/hooks/useImportedFonts";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import { fontFaceFor } from "@/libraries/readerFonts";
+import { footnoteText, isFootnoteReference } from "@/libraries/readerFootnotes";
+import {
+  IMPORTED_FONT_PREFIX,
+  readerCSS,
+  readerLayout,
+  recordBookAlignment,
+} from "@/libraries/readerSettings";
 import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
 import type { File, ReadingPosition, UserSettingsPayload } from "@/types";
@@ -61,10 +72,40 @@ interface RelocateDetail {
 
 type FoliateRenderer = EndRenderer & {
   page?: number;
-  getContents?: () => Array<{ doc: Document }>;
+  getContents?: () => Array<{ doc: Document; index?: number }>;
   setStyles?: (styles: string | [string, string]) => void;
+  getAttribute?: (name: string) => string | null;
   setAttribute?: (name: string, value: string) => void;
+  // Lays the shown section out again, keeping the place.
+  render?: () => void;
 };
+
+// What foliate's resolveHref gives for a link: the section, and a function
+// finding the place in the section's document.
+interface ResolvedHref {
+  index: number;
+  anchor: (doc: Document) => unknown;
+}
+
+type FoliateBookView = HTMLElement & {
+  renderer?: FoliateRenderer;
+  goTo?: (target: string) => unknown;
+  book?: {
+    // Asynchronous in an AZW3 book.
+    resolveHref?: (
+      href: string,
+    ) => ResolvedHref | null | Promise<ResolvedHref | null>;
+    sections?: Array<{ createDocument?: () => Promise<Document> }>;
+  };
+};
+
+// A footnote open in a popover, beside the reference that opened it.
+interface OpenFootnote {
+  href: string;
+  paragraphs: string[];
+  // The reference's box on screen.
+  rect: { left: number; top: number; width: number; height: number };
+}
 
 // Things in a book that a tap operates, which shouldn't also turn the page.
 const BOOK_CONTROLS =
@@ -113,10 +154,35 @@ export default function ReflowableReader({
   const updateSettings = useUpdateUserSettings();
   const settingsReady = !settingsLoading && settings != null;
 
-  const fontSize = settings?.viewer_reflowable_font_size ?? 100;
-  const theme = settings?.viewer_reflowable_theme ?? "light";
-  const flow = settings?.viewer_reflowable_flow ?? "paginated";
+  // Display settings are kept in this browser; only auto-hide is saved to
+  // the account, since the other readers share it.
+  const [readerSettings, updateReaderSettings] = useReaderSettings(settings);
+  const flow = readerSettings.layout;
   const hideChrome = settings?.viewer_hide_chrome ?? false;
+
+  const {
+    fonts: importedFonts,
+    ready: importedFontsReady,
+    add: importFont,
+    remove: removeFont,
+  } = useImportedFonts();
+  const chosenImportedFont = importedFonts.find(
+    (font) => IMPORTED_FONT_PREFIX + font.id === readerSettings.font,
+  );
+  const chosenImportedUrl = useImportedFontUrl(chosenImportedFont);
+  const fontFace = useMemo(
+    () =>
+      fontFaceFor(
+        readerSettings.font,
+        chosenImportedUrl ? [chosenImportedUrl] : [],
+      ),
+    [readerSettings.font, chosenImportedUrl],
+  );
+  // Until an imported font's bytes are ready, the book waits rather than
+  // laying out once in its own font and again in the chosen one.
+  const fontPending =
+    readerSettings.font.startsWith(IMPORTED_FONT_PREFIX) &&
+    (!importedFontsReady || (chosenImportedFont && !chosenImportedUrl));
 
   const { chromeVisible, revealChrome, toggleChrome } =
     useAutoHideChrome(hideChrome);
@@ -138,15 +204,6 @@ export default function ReflowableReader({
   const restoringRef = useRef(true);
   // The section it opened in, whose first screen isn't past the start yet.
   const openedSectionRef = useRef<number | undefined>(undefined);
-
-  // Local draft state lets the slider thumb and label update live while the
-  // user drags, without firing a PUT on every tick. We only commit to the API
-  // on `onValueCommit` (pointer up). The draft is reset to the server value
-  // whenever the canonical `fontSize` changes so outside updates flow in.
-  const [fontSizeDraft, setFontSizeDraft] = useState(fontSize);
-  useEffect(() => {
-    setFontSizeDraft(fontSize);
-  }, [fontSize]);
 
   const commitSettings = useCallback(
     (partial: UserSettingsPayload) => {
@@ -189,6 +246,8 @@ export default function ReflowableReader({
   // buttons, which turn by side, swap labels.
   const [rtl, setRtl] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  const [footnote, setFootnote] = useState<OpenFootnote | null>(null);
+  const closeFootnote = useCallback(() => setFootnote(null), []);
 
   // Load the blob into foliate once both it and the saved location are
   // available.
@@ -391,6 +450,7 @@ export default function ReflowableReader({
     revealChrome,
     toggleChrome,
     recordActivity,
+    closeFootnote,
   });
   useEffect(() => {
     bookEventsRef.current = {
@@ -400,6 +460,7 @@ export default function ReflowableReader({
       revealChrome,
       toggleChrome,
       recordActivity,
+      closeFootnote,
     };
   });
 
@@ -455,6 +516,7 @@ export default function ReflowableReader({
 
     const handleLoad = (evt: Event) => {
       const { doc } = (evt as CustomEvent<{ doc: Document }>).detail;
+      recordBookAlignment(doc);
       listenForSwipes(doc);
       updateTouchAction();
       if (isFixedLayout() && !isZoomed()) {
@@ -479,6 +541,9 @@ export default function ReflowableReader({
       // dismisses one only shows at the press.
       doc.addEventListener("pointerdown", () => {
         selectedAtPress = doc.getSelection()?.isCollapsed === false;
+        // A press in the book is outside an open footnote, which the
+        // popover can't see from here.
+        bookEventsRef.current.closeFootnote();
       });
       // foliate scrolls a paginated book to whatever takes focus, on the next
       // frame. A tap's press and click arrive together, so a focused link would
@@ -539,6 +604,79 @@ export default function ReflowableReader({
     };
   }, [viewElement, goNext, goPrev]);
 
+  // A link to a footnote opens the note in a popover instead of jumping
+  // there. foliate reports every link it's about to follow, and a canceled
+  // event stays put.
+  useEffect(() => {
+    const view = viewElement as FoliateBookView | null;
+    if (!view) return;
+    let latest = 0;
+
+    const showFootnote = async (a: Element, href: string) => {
+      const request = ++latest;
+      const goToNote = () => view.goTo?.(href);
+      const resolved = await view.book?.resolveHref?.(href);
+      if (request !== latest) return;
+      if (!resolved || resolved.index < 0) {
+        goToNote();
+        return;
+      }
+      const shown = view.renderer
+        ?.getContents?.()
+        .find((contents) => contents.index === resolved.index)?.doc;
+      const doc =
+        shown ??
+        (await view.book?.sections?.[resolved.index]?.createDocument?.());
+      if (request !== latest) return;
+      const target = doc ? resolved.anchor(doc) : null;
+      const paragraphs = footnoteText(
+        (target as Node | null)?.nodeType === Node.ELEMENT_NODE
+          ? (target as Element)
+          : null,
+      );
+      if (!paragraphs.length) {
+        goToNote();
+        return;
+      }
+      // The reference's box is in its frame's coordinates, which the frame
+      // may scale (see the click handler above).
+      const frame = a.ownerDocument.defaultView
+        ?.frameElement as HTMLElement | null;
+      const frameRect = frame?.getBoundingClientRect();
+      const scale =
+        frame && frameRect && frame.offsetWidth
+          ? frameRect.width / frame.offsetWidth
+          : 1;
+      const box = a.getBoundingClientRect();
+      setFootnote({
+        href,
+        paragraphs,
+        rect: {
+          left: (frameRect?.left ?? 0) + box.left * scale,
+          top: (frameRect?.top ?? 0) + box.top * scale,
+          width: box.width * scale,
+          height: box.height * scale,
+        },
+      });
+    };
+
+    const handleLink = (evt: Event) => {
+      const { a, href } = (evt as CustomEvent<{ a: Element; href: string }>)
+        .detail;
+      if (!isFootnoteReference(a)) return;
+      evt.preventDefault();
+      showFootnote(a, href).catch((err: unknown) => {
+        console.warn("ReflowableReader: couldn't show the footnote", err);
+        view.goTo?.(href);
+      });
+    };
+    view.addEventListener("link", handleLink);
+    return () => {
+      latest++;
+      view.removeEventListener("link", handleLink);
+    };
+  }, [viewElement]);
+
   // Wire the relocate event for progress tracking.
   useEffect(() => {
     const view = viewRef.current;
@@ -547,6 +685,9 @@ export default function ReflowableReader({
     const handleRelocate = (evt: Event) => {
       const detail = (evt as CustomEvent<RelocateDetail>).detail;
       if (!detail) return;
+      // An open footnote points at a spot on the page it came from, which a
+      // move or a re-layout leaves.
+      setFootnote(null);
       if (typeof detail.fraction === "number") setFraction(detail.fraction);
       setCurrentTocHref(detail.tocItem?.href ?? null);
       setCurrentTocLabel(detail.tocItem?.label ?? null);
@@ -591,68 +732,47 @@ export default function ReflowableReader({
     return () => view.removeEventListener("relocate", handleRelocate);
   }, [bookReady, moved]);
 
-  // Push viewer settings (font size / theme / flow) to the foliate renderer.
+  // Push the display settings to foliate. foliate re-lays out the section
+  // and returns to the same place, which it reports as an "anchor" relocate.
   useEffect(() => {
-    if (!bookReady) return;
+    if (!bookReady || fontPending) return;
     const view = viewRef.current as
       (HTMLElement & { renderer?: FoliateRenderer }) | null;
     const renderer = view?.renderer;
     if (!renderer) return;
 
-    const { fg, bg, link } =
-      theme === "dark"
-        ? { fg: "#e8e8e8", bg: "#1a1a1a", link: "#8ab4f8" }
-        : theme === "sepia"
-          ? { fg: "#5b4636", bg: "#f4ecd8", link: "#8a4b08" }
-          : { fg: "#111111", bg: "#ffffff", link: null };
+    renderer.setStyles?.(readerCSS(readerSettings, fontFace));
+    const layout = readerLayout(readerSettings);
+    // Setting an attribute lays the book out again even when it's unchanged.
+    const set = (name: string, value: string) => {
+      if (renderer.getAttribute?.(name) !== value) {
+        renderer.setAttribute?.(name, value);
+      }
+    };
+    set("gap", layout.gap);
+    set("max-inline-size", layout.maxInlineSize);
+    set("flow", layout.flow);
 
-    // foliate's `setStyles` takes a CSS string (or [beforeStyle, style] tuple).
-    // See app/libraries/foliate/paginator.js `setStyles(styles)`. Books ship
-    // their own stylesheets with more specific selectors, so mark the
-    // user-visible theme properties as `!important` to ensure the selected
-    // theme overrides book-provided styles. This mirrors foliate's own theming
-    // (`setStylesImportant` in paginator.js).
-    //
-    // Many books (Project Gutenberg's among them) set a white background and
-    // black text on <body> or deeper, which would leave a white page inside
-    // a dark reader. Dark and Sepia replace the book's colors below <html>;
-    // Light keeps the book's own colors.
-    const replaceBookColors = link
-      ? `
-      body {
-        color: inherit !important;
-        background: none !important;
-      }
-      body * {
-        color: inherit !important;
-        background-color: transparent !important;
-      }
-      a:any-link, a:any-link * {
-        color: ${link} !important;
-      }
-      ${
-        // Transparent images often hold black line art (diagrams, drop
-        // caps) that would vanish on a dark page.
-        theme === "dark"
-          ? "img, svg { background-color: #fff !important; }"
-          : ""
-      }
-    `
-      : "";
-    const css = `
-      @namespace epub "http://www.idpf.org/2007/ops";
-      html {
-        color: ${fg} !important;
-        background: ${bg} !important;
-      }
-      html, body {
-        font-size: ${fontSize}% !important;
-      }
-      ${replaceBookColors}
-    `;
-    renderer.setStyles?.(css);
-    renderer.setAttribute?.("flow", flow);
-  }, [bookReady, fontSize, theme, flow]);
+    // A section already on screen lays out before a newly chosen font
+    // arrives, and Firefox doesn't notice the text change size (see
+    // paginator.js `load`), so lay it out again once the font is in.
+    let stale = false;
+    const family = fontFace && `1em "${fontFace.family}"`;
+    for (const { doc } of family ? (renderer.getContents?.() ?? []) : []) {
+      if (!family || doc.fonts?.check?.(family) !== false) continue;
+      doc.fonts
+        .load(family)
+        .then(() => {
+          if (!stale) renderer.render?.();
+        })
+        .catch(() => {
+          // The page keeps the fallback font it already shows.
+        });
+    }
+    return () => {
+      stale = true;
+    };
+  }, [bookReady, fontPending, readerSettings, fontFace]);
 
   // The menu value for the current location. Entries are keyed by place in
   // the menu, since a book can list one href twice. foliate reports a heading
@@ -746,76 +866,17 @@ export default function ReflowableReader({
                 <Settings className="h-4 w-4" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="end" className="w-64">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm font-medium">
-                    Font size: {fontSizeDraft}%
-                  </p>
-                  <Slider
-                    className="mt-2"
-                    disabled={!settingsReady}
-                    max={200}
-                    min={50}
-                    onValueChange={([value]) => setFontSizeDraft(value)}
-                    onValueCommit={([value]) =>
-                      commitSettings({ viewer_reflowable_font_size: value })
-                    }
-                    step={10}
-                    thumbLabel="Font size"
-                    value={[fontSizeDraft]}
-                  />
-                </div>
-                <div>
-                  <p className="text-sm font-medium" id="reader-theme-label">
-                    Theme
-                  </p>
-                  <div
-                    aria-labelledby="reader-theme-label"
-                    className="flex gap-2 mt-2"
-                    role="group"
-                  >
-                    {(["light", "dark", "sepia"] as const).map((t) => (
-                      <Button
-                        aria-pressed={theme === t}
-                        disabled={!settingsReady}
-                        key={t}
-                        onClick={() =>
-                          commitSettings({ viewer_reflowable_theme: t })
-                        }
-                        size="sm"
-                        variant={theme === t ? "default" : "outline"}
-                      >
-                        {t.charAt(0).toUpperCase() + t.slice(1)}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm font-medium" id="reader-flow-label">
-                    Flow
-                  </p>
-                  <div
-                    aria-labelledby="reader-flow-label"
-                    className="flex gap-2 mt-2"
-                    role="group"
-                  >
-                    {(["paginated", "scrolled"] as const).map((f) => (
-                      <Button
-                        aria-pressed={flow === f}
-                        disabled={!settingsReady}
-                        key={f}
-                        onClick={() =>
-                          commitSettings({ viewer_reflowable_flow: f })
-                        }
-                        size="sm"
-                        variant={flow === f ? "default" : "outline"}
-                      >
-                        {f.charAt(0).toUpperCase() + f.slice(1)}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
+            <PopoverContent
+              align="end"
+              className="w-80 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+            >
+              <ReaderSettingsPanel
+                importedFonts={importedFonts}
+                onChange={updateReaderSettings}
+                onImportFont={importFont}
+                onRemoveFont={removeFont}
+                settings={readerSettings}
+              >
                 <div className="flex items-center justify-between">
                   <Label htmlFor="hide-chrome">Auto-hide controls</Label>
                   <Switch
@@ -827,7 +888,7 @@ export default function ReflowableReader({
                     }
                   />
                 </div>
-              </div>
+              </ReaderSettingsPanel>
             </PopoverContent>
           </Popover>
         </div>
@@ -873,6 +934,46 @@ export default function ReflowableReader({
             inset: 0,
           }}
         />
+
+        <Popover
+          onOpenChange={(open) => {
+            if (!open) closeFootnote();
+          }}
+          open={footnote !== null}
+        >
+          {footnote && (
+            <PopoverAnchor asChild>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none fixed"
+                style={footnote.rect}
+              />
+            </PopoverAnchor>
+          )}
+          <PopoverContent
+            aria-label="Footnote"
+            className="w-80 max-w-[calc(100vw-2rem)] max-h-[min(50vh,var(--radix-popover-content-available-height))] overflow-y-auto"
+          >
+            <div className="space-y-2 text-sm">
+              {footnote?.paragraphs.map((text, i) => (
+                <p key={i}>{text}</p>
+              ))}
+            </div>
+            <Button
+              className="mt-2"
+              onClick={() => {
+                if (!footnote) return;
+                const view = viewRef.current as FoliateBookView | null;
+                view?.goTo?.(footnote.href);
+                closeFootnote();
+              }}
+              size="inline"
+              variant="link"
+            >
+              Go to note
+            </Button>
+          </PopoverContent>
+        </Popover>
       </main>
 
       <footer
