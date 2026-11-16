@@ -1,13 +1,17 @@
+import { BookmarkCheck } from "lucide-react";
 import { useEffect } from "react";
+import { Link } from "react-router-dom";
 
 import BookItem from "@/components/library/BookItem";
 import { DraggableBookList } from "@/components/library/DraggableBookList";
+import EmptyState from "@/components/library/EmptyState";
 import Gallery from "@/components/library/Gallery";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { SizeButton, SizePopover } from "@/components/library/SizePopover";
 import TopNav from "@/components/library/TopNav";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { GALLERY_MAX_PAGE_SIZE } from "@/constants/gallerySize";
 import { ContentWidth } from "@/contexts/ContentWidth";
 import { useBooks } from "@/hooks/queries/books";
@@ -20,8 +24,18 @@ import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
 import type { Book } from "@/types";
 import { formatCount } from "@/utils/format";
 
-const EMPTY_MESSAGE =
-  "Nothing on To Read yet. Add books from a book's reading status or a book card's menu.";
+const EMPTY_STATE = (
+  <EmptyState
+    action={
+      <Button asChild size="sm" variant="outline">
+        <Link to="/">Browse Books</Link>
+      </Button>
+    }
+    description="To Read is your queue of what to read next, across every library. Add books from a book's page or a book card's menu."
+    icon={BookmarkCheck}
+    title="Nothing on To Read yet"
+  />
+);
 
 // The signed-in user's To Read, across every library they can reach, in
 // queue order. Reordering needs the whole queue on screen, so a queue that
@@ -94,11 +108,7 @@ const ToRead = () => {
       return <LoadingSpinner />;
     }
     if (total === 0) {
-      return (
-        <div className="text-center py-8 text-muted-foreground">
-          {EMPTY_MESSAGE}
-        </div>
-      );
+      return EMPTY_STATE;
     }
     if (canReorder) {
       return (
@@ -114,7 +124,7 @@ const ToRead = () => {
       <Gallery
         columns={columns}
         currentPage={currentPage}
-        emptyMessage={EMPTY_MESSAGE}
+        emptyState={EMPTY_STATE}
         isLoading={pageQuery.isLoading}
         itemLabel="books"
         itemLabelSingular="book"

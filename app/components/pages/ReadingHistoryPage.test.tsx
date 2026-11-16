@@ -358,8 +358,6 @@ describe("ReadingHistoryPage", () => {
   it("says when nothing matches the filters", async () => {
     renderPage({ entries: [], initialEntry: "/reading-history?removed=true" });
 
-    expect(
-      await screen.findByText("No Read-throughs match these filters."),
-    ).toBeVisible();
+    expect(await screen.findByText("No matching Read-throughs")).toBeVisible();
   });
 });

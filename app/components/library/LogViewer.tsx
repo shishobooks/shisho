@@ -1,5 +1,11 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -156,14 +162,15 @@ const LogRow = ({ entry, searchTerm }: LogRowProps) => {
 interface LogViewerProps {
   entries: LogViewerEntry[];
   searchTerm?: string;
-  emptyMessage?: string;
+  /** A bare `EmptyState`, since the viewer draws its own border. */
+  emptyState: ReactNode;
   className?: string;
 }
 
 const LogViewer = ({
   entries,
   searchTerm,
-  emptyMessage = "No logs found.",
+  emptyState,
   className = "max-h-[500px]",
 }: LogViewerProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -203,8 +210,8 @@ const LogViewer = ({
         ref={scrollRef}
       >
         {entries.length === 0 ? (
-          <div className="flex items-center justify-center h-full min-h-[200px] text-muted-foreground text-sm">
-            {emptyMessage}
+          <div className="flex h-full min-h-[200px] items-center justify-center">
+            {emptyState}
           </div>
         ) : (
           entries.map((entry) => (

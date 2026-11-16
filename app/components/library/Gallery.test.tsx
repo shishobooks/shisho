@@ -22,6 +22,7 @@ const renderGallery = (
       <Gallery
         columns={4}
         currentPage={1}
+        emptyState={<p>No books here.</p>}
         isLoading={false}
         itemLabel="books"
         itemLabelSingular="book"
@@ -43,6 +44,7 @@ describe("Gallery", () => {
       <Gallery
         columns={4}
         currentPage={9}
+        emptyState={<p>No books here.</p>}
         isLoading={false}
         itemLabel="books"
         itemLabelSingular="book"
@@ -106,6 +108,7 @@ describe("Gallery", () => {
         <Gallery
           columns={4}
           currentPage={1}
+          emptyState={<p>No books here.</p>}
           isLoading={isLoading}
           itemLabel="books"
           itemLabelSingular="book"
@@ -134,6 +137,6 @@ describe("Gallery", () => {
     expect(region).toHaveTextContent(/^$/);
     rerender(gallery(false, []));
     expect(region).toBeInTheDocument();
-    expect(region).toHaveTextContent("No books found.");
+    expect(region).toHaveTextContent("No books here.");
   });
 });

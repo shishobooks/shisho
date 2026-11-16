@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
@@ -34,7 +35,8 @@ interface FileListSectionProps {
   libraryId: string;
   query: FileListQuery;
   title: string;
-  emptyMessage?: string;
+  /** An `EmptyState` with `headingLevel={3}`, under the section heading. */
+  emptyState: ReactNode;
   /** URL search param name for pagination (defaults to "page") */
   pageParam?: string;
 }
@@ -79,7 +81,7 @@ export function FileListSection({
   libraryId,
   query,
   title,
-  emptyMessage,
+  emptyState,
   pageParam = "page",
 }: FileListSectionProps) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -132,9 +134,7 @@ export function FileListSection({
     return (
       <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
-        <div className="text-center py-8 text-muted-foreground">
-          {emptyMessage ?? "No files found."}
-        </div>
+        {emptyState}
       </section>
     );
   }

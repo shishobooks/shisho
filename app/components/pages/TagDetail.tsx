@@ -1,7 +1,9 @@
+import { Tags } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { BookGallerySection } from "@/components/library/BookGallerySection";
+import EmptyState from "@/components/library/EmptyState";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
 import { useBooks } from "@/hooks/queries/books";
 import { useUserLibrary } from "@/hooks/queries/libraries";
@@ -149,7 +151,14 @@ const TagDetail = () => {
       query={tagQuery}
     >
       <BookGallerySection
-        emptyMessage="This tag has no associated books."
+        emptyState={
+          <EmptyState
+            description="Books get a tag from their file metadata when scanned, or when you add it while editing a book."
+            headingLevel={3}
+            icon={Tags}
+            title="No books with this tag"
+          />
+        }
         libraryId={libraryId!}
         query={tagBooksQuery}
         sort={sort}

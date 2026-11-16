@@ -1,7 +1,9 @@
 import { formatDistanceToNow } from "date-fns";
+import { ScrollText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
+import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import LogViewer from "@/components/library/LogViewer";
 import QueryError from "@/components/library/QueryError";
@@ -242,7 +244,18 @@ const JobDetail = () => {
         <QueryError fallback="Failed to load job logs" query={logsQuery} />
       ) : (
         <LogViewer
-          emptyMessage="No logs found."
+          emptyState={
+            searchTerm || levelFilter.length > 0 || pluginFilter ? (
+              <NoMatchesState bare itemLabel="log messages" />
+            ) : (
+              <EmptyState
+                bare
+                description="Messages this job logs show up here as it runs."
+                icon={ScrollText}
+                title="No log messages yet"
+              />
+            )
+          }
           entries={viewerEntries}
           searchTerm={searchTerm}
         />

@@ -1,9 +1,10 @@
-import { BookmarkCheck, Plus } from "lucide-react";
+import { BookmarkCheck, List, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { CreateListDialog } from "@/components/library/CreateListDialog";
+import EmptyState from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
@@ -168,14 +169,23 @@ const ListsIndex = () => {
 
         {listsQuery.data && !hasLists && (
           <div className="space-y-6">
-            <div className="text-center py-8">
-              {/* To Read reads as a list, so claiming there are none would
-                  contradict the card pinned above. */}
-              <p className="text-muted-foreground mb-4">
-                {!canReadBooks && "You don't have any lists yet. "}
-                Get started with a template or create a custom list.
-              </p>
-            </div>
+            {/* To Read reads as a list, so the headline counts only the
+                user's own lists, not the card pinned above. */}
+            <EmptyState
+              action={
+                <Button onClick={() => setCreateDialogOpen(true)} size="sm">
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  Create List
+                </Button>
+              }
+              description={
+                templatesQuery.isSuccess && templates.length > 0
+                  ? "Lists collect books from any library, for yourself or to share with others. Start from a template below or create your own."
+                  : "Lists collect books from any library, for yourself or to share with others."
+              }
+              icon={List}
+              title="No lists of your own yet"
+            />
 
             {templatesQuery.isSuccess && templates.length > 0 && (
               <div>

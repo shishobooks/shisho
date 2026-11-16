@@ -2,16 +2,18 @@ import {
   BookCheck,
   BookX,
   ChevronDown,
+  History,
   MoreHorizontal,
   Pencil,
   RotateCcw,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { EditReadThroughDialog } from "@/components/library/EditReadThroughDialog";
+import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter, {
   type PageChangeHandler,
@@ -286,12 +288,22 @@ const ReadingHistoryPage = () => {
       return <LoadingSpinner />;
     }
     if (total === 0) {
-      return (
-        <div className="rounded-md border border-border p-8 text-center text-muted-foreground">
-          {filtered
-            ? "No Read-throughs match these filters."
-            : "Nothing here yet. Books you start, finish, or stop reading show up here."}
-        </div>
+      return filtered ? (
+        <NoMatchesState
+          description="Try fewer filters."
+          itemLabel="Read-throughs"
+        />
+      ) : (
+        <EmptyState
+          action={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/">Browse Books</Link>
+            </Button>
+          }
+          description="Your reading history keeps a record of every book you start, finish, or stop, in Shisho's readers and on your synced devices. Start a book and it shows up here."
+          icon={History}
+          title="No reading history yet"
+        />
       );
     }
     const showing = formatShowingRange(

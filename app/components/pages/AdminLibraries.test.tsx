@@ -72,6 +72,59 @@ describe("AdminLibraries", () => {
     });
   });
 
+  describe("with no libraries", () => {
+    it("explains what a Library is and offers to create one", async () => {
+      setAuth({ permissions: ["libraries:read", "libraries:write"] });
+      vi.spyOn(API, "request").mockResolvedValue({ items: [], total: 0 });
+
+      renderPage();
+
+      expect(
+        await screen.findByRole("heading", { name: "No libraries yet" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/A Library is a set of folders/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("link", { name: "Create Library" }),
+      ).toHaveAttribute("href", "/libraries/create");
+    });
+
+    it("says a user limited to some libraries has no access, not that none exist", async () => {
+      setAuth({
+        permissions: ["libraries:read", "libraries:write"],
+        user: { library_access: [] },
+      });
+      vi.spyOn(API, "request").mockResolvedValue({ items: [], total: 0 });
+
+      renderPage();
+
+      expect(
+        await screen.findByRole("heading", {
+          name: "You don't have access to any libraries yet",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: "No libraries yet" }),
+      ).toBeNull();
+    });
+
+    it("leaves out the create action for a role that cannot create libraries", async () => {
+      setAuth({ permissions: ["libraries:read"] });
+      vi.spyOn(API, "request").mockResolvedValue({ items: [], total: 0 });
+
+      renderPage();
+
+      expect(
+        await screen.findByRole("heading", { name: "No libraries yet" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/A Library is a set of folders/),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Create Library" })).toBeNull();
+    });
+  });
+
   describe("links a role cannot follow", () => {
     const fiction = {
       items: [{ id: 1, name: "Fiction", library_paths: [] }],

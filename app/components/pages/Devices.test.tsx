@@ -216,6 +216,29 @@ describe("Devices", () => {
     expect(link).toHaveTextContent("All books · Kobo sync · eReader browser");
   });
 
+  it("explains Devices, KOReader included, when there are none, and offers to add one", async () => {
+    vi.spyOn(API, "request").mockResolvedValue([]);
+    const user = setupUser();
+    renderAt("/user/devices");
+
+    const heading = await screen.findByRole("heading", {
+      name: "No devices yet",
+    });
+    const emptyState = heading.parentElement!;
+    expect(emptyState).toHaveTextContent(/KOReader/);
+    expect(emptyState).toHaveTextContent(/Kobo/);
+    expect(emptyState).toHaveTextContent(/web browser/);
+
+    await user.click(
+      within(emptyState).getByRole("button", { name: "Add Device" }),
+    );
+    expect(
+      within(await screen.findByRole("dialog")).getByRole("heading", {
+        name: "Add Device",
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("says how many books a KOReader Device has waiting to be linked", async () => {
     stubAPI(koreader({ unlinked_books: 3 }));
     renderAt("/user/devices");

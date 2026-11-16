@@ -1,3 +1,6 @@
+import { Bookmark } from "lucide-react";
+
+import EmptyState from "@/components/library/EmptyState";
 import ResourceList from "@/components/library/ResourceList";
 import { useGenresList } from "@/hooks/queries/genres";
 import { useResourceListState } from "@/hooks/useResourceListState";
@@ -11,6 +14,13 @@ const GenresList = () => {
 
   return (
     <ResourceList
+      emptyState={
+        <EmptyState
+          description="Genres show up here as books in this library are scanned with genres in their metadata, or edited to add them."
+          icon={Bookmark}
+          title="No genres yet"
+        />
+      }
       itemConfig={(genre) => {
         const bookCount = genre.book_count ?? 0;
         return {

@@ -1,7 +1,9 @@
-import { BadgeCheck, Check, Download, Loader2, Package } from "lucide-react";
+import { BadgeCheck, Check, Download, Loader2, Puzzle } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
@@ -116,15 +118,20 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
 
   if (available.length === 0) {
     return (
-      <div className="py-8 text-center">
-        <Package
-          aria-hidden="true"
-          className="mx-auto mb-3 h-8 w-8 text-muted-foreground"
-        />
-        <p className="text-sm text-muted-foreground">
-          No plugins available. Add a repository to discover plugins.
-        </p>
-      </div>
+      <EmptyState
+        action={
+          canWrite && (
+            <Button asChild size="sm" variant="outline">
+              <Link to={{ search: "?advanced=repositories" }}>
+                Manage Repositories
+              </Link>
+            </Button>
+          )
+        }
+        description="Plugins come from repositories. The plugins each repository offers show up here; add a repository to see more."
+        icon={Puzzle}
+        title="No plugins available"
+      />
     );
   }
 
@@ -176,15 +183,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
         </div>
 
         {filtered.length === 0 ? (
-          <div className="py-8 text-center">
-            <Package
-              aria-hidden="true"
-              className="mx-auto mb-3 h-8 w-8 text-muted-foreground"
-            />
-            <p className="text-sm text-muted-foreground">
-              No plugins match your filters.
-            </p>
-          </div>
+          <NoMatchesState itemLabel="plugins" />
         ) : (
           <div className="space-y-2">
             {filtered.map((p) => {

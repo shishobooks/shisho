@@ -112,10 +112,14 @@ test.describe("Reading", () => {
       .getByRole("dialog")
       .getByRole("button", { name: "Delete", exact: true })
       .click();
-    await expect(page.getByText("Nothing here yet.")).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "No reading history yet" }),
+    ).toBeVisible();
 
     await page.goBack({ waitUntil: "domcontentloaded" });
-    await expect(page.getByText(/^No reading in \d{4} yet\./)).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /^No reading in \d{4} yet$/ }),
+    ).toBeVisible();
     await expect(
       page.getByRole("group", { name: "Books finished" }),
     ).not.toBeVisible();

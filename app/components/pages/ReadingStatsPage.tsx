@@ -1,4 +1,4 @@
-import { History } from "lucide-react";
+import { ChartColumn, History } from "lucide-react";
 import { useEffect } from "react";
 import {
   Link,
@@ -8,6 +8,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 
+import EmptyState from "@/components/library/EmptyState";
 import {
   FilterChip,
   type FilterChipKind,
@@ -510,11 +511,16 @@ const ReadingStatsPage = () => {
     }
     if (!hasActivity(stats)) {
       return (
-        <div className="rounded-md border border-border p-8 text-center text-muted-foreground">
-          {year === null
-            ? "Nothing here yet. Books you finish and time you spend reading show up here."
-            : `No reading in ${year} yet. Books you finish and time you spend reading show up here.`}
-        </div>
+        <EmptyState
+          action={
+            <Button asChild size="sm" variant="outline">
+              <Link to="/">Browse Books</Link>
+            </Button>
+          }
+          description="Reading Stats chart the books you finish and the time you spend reading, in Shisho's readers and on your synced devices. They fill in as you read."
+          icon={ChartColumn}
+          title={year === null ? "No stats yet" : `No reading in ${year} yet`}
+        />
       );
     }
     return (

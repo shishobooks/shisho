@@ -1,6 +1,8 @@
-import { Download, FolderSearch, Loader2, Package } from "lucide-react";
+import { Compass, Download, FolderSearch, Loader2, Puzzle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import EmptyState from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
@@ -125,37 +127,39 @@ export const InstalledTab = () => {
 
   if (!plugins || plugins.length === 0) {
     return (
-      <div className="space-y-4">
-        <div className="py-8 text-center">
-          <Package
-            aria-hidden="true"
-            className="mx-auto mb-3 h-8 w-8 text-muted-foreground"
-          />
-          <p className="text-sm text-muted-foreground">
-            No plugins installed yet. Browse available plugins to get started.
-          </p>
-        </div>
-        {canWrite && (
-          <div className="flex justify-end">
-            <Button
-              disabled={scanPlugins.isPending}
-              onClick={handleScan}
-              size="sm"
-              variant="outline"
-            >
-              {scanPlugins.isPending ? (
-                <Loader2
-                  aria-hidden="true"
-                  className="mr-2 h-4 w-4 animate-spin"
-                />
-              ) : (
-                <FolderSearch aria-hidden="true" className="mr-2 h-4 w-4" />
-              )}
-              Scan for Local Plugins
+      <EmptyState
+        action={
+          <>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/admin/plugins/discover">
+                <Compass aria-hidden="true" className="h-4 w-4" />
+                Discover Plugins
+              </Link>
             </Button>
-          </div>
-        )}
-      </div>
+            {canWrite && (
+              <Button
+                disabled={scanPlugins.isPending}
+                onClick={handleScan}
+                size="sm"
+                variant="outline"
+              >
+                {scanPlugins.isPending ? (
+                  <Loader2
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin"
+                  />
+                ) : (
+                  <FolderSearch aria-hidden="true" className="h-4 w-4" />
+                )}
+                Scan for Local Plugins
+              </Button>
+            )}
+          </>
+        }
+        description="Plugins fetch metadata from online sources, convert files, and read new formats. Installed plugins show up here; find them on the Discover tab."
+        icon={Puzzle}
+        title="No plugins installed"
+      />
     );
   }
 

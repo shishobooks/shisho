@@ -1,8 +1,14 @@
-import { CheckSquare } from "lucide-react";
+import {
+  Book as BookIcon,
+  BookOpen,
+  CheckSquare,
+  Settings,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
+import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import type { SelectedFilter } from "@/components/library/FilterChip";
 import { FilterSheet } from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
@@ -28,6 +34,7 @@ import {
 import { useSeries } from "@/hooks/queries/series";
 import { useTagsByIds, useTagsList } from "@/hooks/queries/tags";
 import { useBulkSelection } from "@/hooks/useBulkSelection";
+import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -60,6 +67,7 @@ import type {
   ReviewedFilter,
   Tag,
 } from "@/types";
+import { ROUTE_PERMISSIONS } from "@/utils/permissions";
 import {
   ALL_TAGS_SCOPE,
   tagScopeParams,
@@ -103,6 +111,8 @@ const HomeContent = ({ currentlyReading = false }: HomeProps) => {
   const [searchParams] = useSearchParams();
   const updateSearchParams = useUpdateSearchParams();
   const libraryQuery = useUserLibrary(libraryId);
+  // An empty library's next step is checking its folders in its settings.
+  const canConfigureLibrary = useCan(ROUTE_PERMISSIONS.librarySettings);
 
   usePageTitle(
     currentlyReading
@@ -673,12 +683,37 @@ const HomeContent = ({ currentlyReading = false }: HomeProps) => {
         <Gallery
           columns={columns}
           currentPage={currentPage}
-          emptyMessage={
-            confirmedHasFilters
-              ? "No books found matching your search or filters."
-              : currentlyReading
-                ? "You aren't reading any books in this library."
-                : "No books in this library yet."
+          emptyState={
+            confirmedHasFilters ? (
+              <NoMatchesState itemLabel="books" />
+            ) : currentlyReading ? (
+              <EmptyState
+                action={
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={`/libraries/${libraryId}`}>Browse Books</Link>
+                  </Button>
+                }
+                description="Books you've started and haven't finished show up here, so you can pick up where you left off."
+                icon={BookOpen}
+                title="Nothing in progress"
+              />
+            ) : (
+              <EmptyState
+                action={
+                  canConfigureLibrary && (
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={`/libraries/${libraryId}/settings`}>
+                        <Settings aria-hidden="true" className="h-4 w-4" />
+                        Library Settings
+                      </Link>
+                    </Button>
+                  )
+                }
+                description="Books show up here as Shisho finds them in this library's folders. New files are picked up on the next scan."
+                icon={BookIcon}
+                title="No books yet"
+              />
+            )
           }
           // A background refetch (a reading change, an SSE event) keeps the
           // loaded items on screen. A new page or filter shows the spinner,

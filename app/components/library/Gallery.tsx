@@ -28,7 +28,8 @@ interface GalleryProps<T> {
   itemLabel: string;
   /** The noun for one item, for a total of one. */
   itemLabelSingular: string;
-  emptyMessage?: string;
+  /** An `EmptyState` (or `NoMatchesState`) for a total of zero. */
+  emptyState: ReactNode;
 }
 
 const Gallery = <T,>({
@@ -44,7 +45,7 @@ const Gallery = <T,>({
   renderItem,
   itemLabel,
   itemLabelSingular,
-  emptyMessage,
+  emptyState,
 }: GalleryProps<T>) => {
   const totalPages = Math.ceil(total / itemsPerPage);
   const showing = formatShowingRange(
@@ -66,11 +67,7 @@ const Gallery = <T,>({
       {showsItems && showing && (
         <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
       )}
-      {showsItems && total === 0 && (
-        <div className="text-center py-8 text-muted-foreground">
-          {emptyMessage ?? `No ${itemLabel} found.`}
-        </div>
-      )}
+      {showsItems && total === 0 && emptyState}
     </div>
   );
 

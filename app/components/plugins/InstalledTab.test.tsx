@@ -157,7 +157,7 @@ describe("loading the installed plugins", () => {
       await user.click(screen.getByRole("button", { name: "Retry" }));
 
       expect(
-        await screen.findByText(/No plugins installed yet/),
+        await screen.findByRole("heading", { name: "No plugins installed" }),
       ).toBeInTheDocument();
       expect(installedCalls).toBe(2);
     } finally {

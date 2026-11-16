@@ -50,7 +50,9 @@ test.describe("Plugins UI (redesigned)", () => {
     await loginAsAdmin(page);
     await page.goto("/admin/plugins");
 
-    await expect(page.getByRole("heading", { name: "Plugins" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Plugins", exact: true }),
+    ).toBeVisible();
 
     const installedTrigger = page.getByRole("tab", { name: /Installed/ });
     const discoverTrigger = page.getByRole("tab", { name: "Discover" });
@@ -168,9 +170,7 @@ test.describe("Plugins UI (redesigned)", () => {
     await page.goto("/admin/plugins");
 
     await expect(
-      page.getByText(
-        "No plugins installed yet. Browse available plugins to get started.",
-      ),
+      page.getByRole("heading", { name: "No plugins installed" }),
     ).toBeVisible();
   });
 });

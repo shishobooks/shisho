@@ -1,8 +1,9 @@
-import { Edit, GitMerge, Trash2 } from "lucide-react";
+import { Edit, GitMerge, Layers, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { BookGallerySection } from "@/components/library/BookGallerySection";
+import EmptyState from "@/components/library/EmptyState";
 import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -224,7 +225,14 @@ const SeriesDetail = () => {
 
       {/* Books in Series */}
       <BookGallerySection
-        emptyMessage="This series has no associated books."
+        emptyState={
+          <EmptyState
+            description="Books join a series from their file metadata when scanned, or when you add the series while editing a book."
+            headingLevel={3}
+            icon={Layers}
+            title="No books in this series"
+          />
+        }
         libraryId={libraryId!}
         query={seriesBooksQuery}
         seriesId={seriesId}

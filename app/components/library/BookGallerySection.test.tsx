@@ -112,6 +112,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult([makeBook(1)], 1)}
           title="Books"
@@ -135,6 +136,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(books, 3)}
           title="Books"
@@ -151,6 +153,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(books, 1)}
           title="Books"
@@ -166,7 +169,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
-          emptyMessage="No books here."
+          emptyState={<p>No books here.</p>}
           libraryId="1"
           query={makeQueryResult([], 0)}
           title="Books"
@@ -184,6 +187,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(books, 1)}
           title="Books"
@@ -201,6 +205,7 @@ describe("BookGallerySection", () => {
           path: "/",
           element: (
             <BookGallerySection
+              emptyState={null}
               libraryId="1"
               query={makeQueryResult([], 100)}
               title="Books"
@@ -228,6 +233,7 @@ describe("BookGallerySection", () => {
           path: "/",
           element: (
             <BookGallerySection
+              emptyState={null}
               libraryId="1"
               query={{ ...makeQueryResult([], 10), isPlaceholderData: true }}
               title="Books"
@@ -259,6 +265,7 @@ describe("BookGallerySection", () => {
           path: "/",
           element: (
             <BookGallerySection
+              emptyState={null}
               libraryId="1"
               query={makeQueryResult(books, 100)}
               title="Books"
@@ -288,6 +295,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
+          emptyState={null}
           libraryId="1"
           query={{
             ...QUERY_STATE,
@@ -309,7 +317,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
-          emptyMessage="No books here."
+          emptyState={<p>No books here.</p>}
           libraryId="1"
           query={{
             ...QUERY_STATE,
@@ -330,7 +338,7 @@ describe("BookGallerySection", () => {
     render(
       wrap(
         <BookGallerySection
-          emptyMessage="No books here."
+          emptyState={<p>No books here.</p>}
           libraryId="1"
           query={{
             ...QUERY_STATE,
@@ -368,6 +376,7 @@ describe("BookGallerySection", () => {
       return (
         <>
           <BookGallerySection
+            emptyState={null}
             libraryId="1"
             query={makeQueryResult([makeBook(1)], 1)}
             sort={sort}
@@ -382,6 +391,7 @@ describe("BookGallerySection", () => {
       render(
         wrap(
           <BookGallerySection
+            emptyState={null}
             libraryId="1"
             query={makeQueryResult([makeBook(1)], 1)}
             title="Books"
@@ -431,6 +441,7 @@ describe("BookGallerySection", () => {
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
           <BookGallerySection
+            emptyState={null}
             libraryId="1"
             query={makeQueryResult([makeBook(1)], 1)}
             title="Books"
@@ -458,6 +469,7 @@ describe("BookGallerySection", () => {
             <>
               <ScrollRestoration />
               <BookGallerySection
+                emptyState={null}
                 libraryId="1"
                 query={makeQueryResult([makeBook(1)], 100)}
                 title="Books"

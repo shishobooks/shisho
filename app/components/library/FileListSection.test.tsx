@@ -96,6 +96,7 @@ describe("FileListSection", () => {
           path: "/",
           element: (
             <FileListSection
+              emptyState={null}
               libraryId="1"
               query={makeQueryResult([], 2)}
               title="Files"
@@ -119,6 +120,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(
             [
@@ -139,6 +141,7 @@ describe("FileListSection", () => {
     const { container } = render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult([makeFile(1)], 1)}
           title="Files"
@@ -156,6 +159,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -210,6 +214,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -226,6 +231,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 2)}
           title="Files"
@@ -243,6 +249,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -262,6 +269,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -276,6 +284,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -290,6 +299,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -303,7 +313,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
-          emptyMessage="No files here."
+          emptyState={<p>No files here.</p>}
           libraryId="1"
           query={makeQueryResult([], 0)}
           title="Files"
@@ -317,6 +327,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={{
             ...makeQueryResult([], 0),
@@ -335,6 +346,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 2)}
           title="Files"
@@ -349,6 +361,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -373,6 +386,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
+          emptyState={null}
           libraryId="1"
           query={makeQueryResult(files, 1)}
           title="Files"
@@ -396,7 +410,7 @@ describe("FileListSection", () => {
     render(
       wrap(
         <FileListSection
-          emptyMessage="No files here."
+          emptyState={<p>No files here.</p>}
           libraryId="1"
           query={query}
           title="Files"

@@ -1,13 +1,21 @@
-import { BookPlus, Plus, Settings } from "lucide-react";
+import {
+  BookPlus,
+  Library as LibraryIcon,
+  LockKeyhole,
+  Plus,
+  Settings,
+} from "lucide-react";
 import { useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import EmptyState from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
 import { useConfig } from "@/hooks/queries/config";
 import { useCreateLibrary, useLibraries } from "@/hooks/queries/libraries";
+import { useAuth } from "@/hooks/useAuth";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { toastRequestError } from "@/libraries/api";
@@ -70,6 +78,10 @@ const AdminLibraries = () => {
   // and its settings need Libraries Read and Write.
   const canOpenLibraries = useCan(ROUTE_PERMISSIONS.libraryBooks);
   const canConfigureLibraries = useCan(ROUTE_PERMISSIONS.librarySettings);
+  // A user limited to some libraries is listed only those, so an empty list
+  // means no access, not that none exist.
+  const { user } = useAuth();
+  const hasAllLibraryAccess = !user?.library_access;
 
   const handleCreateDefaultLibrary = useCallback(async () => {
     if (!devLibraryPath) {
@@ -139,18 +151,32 @@ const AdminLibraries = () => {
           fallback="Failed to load libraries"
           query={librariesQuery}
         />
+      ) : libraries.length === 0 && !hasAllLibraryAccess ? (
+        <EmptyState
+          description="Ask your server admin to give you access."
+          icon={LockKeyhole}
+          title="You don't have access to any libraries yet"
+        />
       ) : libraries.length === 0 ? (
-        <div className="border border-border rounded-md p-8 text-center">
-          <p className="text-muted-foreground mb-4">No libraries found.</p>
-          {canCreateLibraries && (
-            <Button asChild size="sm">
-              <Link to="/libraries/create">
-                <Plus className="h-4 w-4 mr-2" />
-                Create your first library
-              </Link>
-            </Button>
-          )}
-        </div>
+        <EmptyState
+          action={
+            canCreateLibraries && (
+              <Button asChild size="sm">
+                <Link to="/libraries/create">
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  Create Library
+                </Link>
+              </Button>
+            )
+          }
+          description={
+            canCreateLibraries
+              ? "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Create one and point it at your books to get started."
+              : "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Libraries show up here once one is created."
+          }
+          icon={LibraryIcon}
+          title="No libraries yet"
+        />
       ) : (
         <div className="border border-border rounded-md divide-y divide-border">
           {libraries.map((library) => (

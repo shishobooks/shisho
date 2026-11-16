@@ -110,6 +110,28 @@ const wrap = (ui: React.ReactNode) => (
 );
 
 describe("DiscoverTab", () => {
+  it("explains where plugins come from and links to repositories for a role that can manage them", () => {
+    mockAvailable = [];
+    mockInstalled = [];
+    const { unmount } = render(wrap(<DiscoverTab canWrite />));
+
+    expect(
+      screen.getByRole("heading", { name: "No plugins available" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Manage Repositories" }),
+    ).toHaveAttribute("href", "/?advanced=repositories");
+    unmount();
+
+    render(wrap(<DiscoverTab canWrite={false} />));
+    expect(
+      screen.getByRole("heading", { name: "No plugins available" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Manage Repositories" }),
+    ).toBeNull();
+  });
+
   it("renders Install button for compatible, uninstalled plugin when canWrite=true", () => {
     mockAvailable = [makePlugin()];
     mockInstalled = [];

@@ -1,3 +1,6 @@
+import { Building2 } from "lucide-react";
+
+import EmptyState from "@/components/library/EmptyState";
 import ResourceList from "@/components/library/ResourceList";
 import { usePublishersList } from "@/hooks/queries/publishers";
 import { useResourceListState } from "@/hooks/useResourceListState";
@@ -11,6 +14,13 @@ const PublishersList = () => {
 
   return (
     <ResourceList
+      emptyState={
+        <EmptyState
+          description="Publishers show up here as files in this library are scanned with a publisher in their metadata, or edited to add one."
+          icon={Building2}
+          title="No publishers yet"
+        />
+      }
       itemConfig={(publisher) => {
         const fileCount = publisher.file_count ?? 0;
         const descendantFileCount = publisher.descendant_file_count ?? 0;

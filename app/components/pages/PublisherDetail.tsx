@@ -1,3 +1,4 @@
+import { Building2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import {
   Link,
@@ -6,6 +7,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 
+import EmptyState from "@/components/library/EmptyState";
 import {
   FILE_LIST_ITEMS_PER_PAGE,
   FileListSection,
@@ -259,7 +261,14 @@ const PublisherDetail = () => {
         )}
 
         <FileListSection
-          emptyMessage="This publisher has no associated files."
+          emptyState={
+            <EmptyState
+              description="Files get a publisher from their metadata when scanned, or when you add it while editing a file."
+              headingLevel={3}
+              icon={Building2}
+              title="No files from this publisher"
+            />
+          }
           libraryId={libraryId!}
           query={publisherFilesQuery}
           title="Files"

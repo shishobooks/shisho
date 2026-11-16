@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import BookItem from "@/components/library/BookItem";
 import GalleryGrid from "@/components/library/GalleryGrid";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -27,7 +29,8 @@ interface BookGallerySectionProps<F extends string> {
   libraryId: string;
   query: BookGalleryQuery;
   title: string;
-  emptyMessage?: string;
+  /** An `EmptyState` with `headingLevel={3}`, under the section heading. */
+  emptyState: ReactNode;
   /** Series context forwarded to BookItem so it shows the series number */
   seriesId?: number;
   /** Adds the Sort control; the page passes its param to the query. */
@@ -38,7 +41,7 @@ export function BookGallerySection<F extends string>({
   libraryId,
   query,
   title,
-  emptyMessage,
+  emptyState,
   seriesId,
   sort,
 }: BookGallerySectionProps<F>) {
@@ -97,9 +100,7 @@ export function BookGallerySection<F extends string>({
     return (
       <section className={SECTION_CLASS} ref={sectionRef}>
         <h2 className="text-xl font-semibold mb-4">{title}</h2>
-        <div className="text-center py-8 text-muted-foreground">
-          {emptyMessage ?? "No books found."}
-        </div>
+        {emptyState}
       </section>
     );
   }

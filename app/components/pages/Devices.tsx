@@ -1,8 +1,9 @@
-import { Plus } from "lucide-react";
+import { Plus, TabletSmartphone } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import CreateDeviceDialog from "@/components/devices/CreateDeviceDialog";
+import EmptyState from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
@@ -92,12 +93,17 @@ const Devices = () => {
               query={devicesQuery}
             />
           ) : !devices?.length ? (
-            <div className="rounded-md border border-border p-8 text-center">
-              <p className="text-muted-foreground">
-                No devices yet. Add one to sync a Kobo or browse your library
-                from an e-reader.
-              </p>
-            </div>
+            <EmptyState
+              action={
+                <Button onClick={() => setCreateOpen(true)} size="sm">
+                  <Plus aria-hidden="true" className="h-4 w-4" />
+                  Add Device
+                </Button>
+              }
+              description="Add a Device for each e-reader or reading app you use: a Kobo, KOReader on any device, or an e-reader's web browser. Your books then sync to it or download right on it."
+              icon={TabletSmartphone}
+              title="No devices yet"
+            />
           ) : (
             <div className="divide-y divide-border rounded-md border border-border">
               {devices.map((device) => (
