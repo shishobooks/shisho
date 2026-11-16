@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/audnexus"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/bookmarks"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/cache"
 	"github.com/shishobooks/shisho/pkg/cbzpages"
@@ -402,6 +403,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	readingGroup.Use(authMiddleware.Authenticate)
 	readingGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
 	reading.RegisterRoutes(readingGroup, db)
+	bookmarks.RegisterRoutes(readingGroup, db)
 
 	// Genres routes
 	genresGroup := e.Group("/genres")

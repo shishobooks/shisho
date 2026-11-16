@@ -162,6 +162,18 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book is already being read.",
 		},
 		{
+			name:   "bookmarking an ebook",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/bookmarks", emptyEPUBFile.ID),
+			body:   `{"seconds":83}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "Only audiobooks have bookmarks.",
+		},
+		{
+			name:   "editing a bookmark that doesn't exist",
+			method: http.MethodPatch, path: "/api/reading/bookmarks/999999",
+			body:   `{"note":"x"}`,
+			status: http.StatusNotFound, code: "not_found", message: "Bookmark not found.",
+		},
+		{
 			name:   "position update with no position",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/files/%d/position", emptyEPUBFile.ID),
 			body:   `{"percentage":0.5}`,

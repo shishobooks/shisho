@@ -1,6 +1,8 @@
 import {
   AlertTriangle,
   ArrowLeft,
+  Bookmark as BookmarkIcon,
+  BookmarkPlus,
   Pause,
   Play,
   RotateCcw,
@@ -13,6 +15,9 @@ import { useNavigate } from "react-router-dom";
 
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import BookmarkNoteDialog from "@/components/player/BookmarkNoteDialog";
+import BookmarksSheet from "@/components/player/BookmarksSheet";
+import PlaybackSpeedControl from "@/components/player/PlaybackSpeedControl";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -22,21 +27,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
+import { useCreateBookmark } from "@/hooks/queries/bookmarks";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import {
-  PlaybackSpeeds,
-  type Book,
-  type File,
-  type PlaybackSpeed,
-} from "@/types";
+import type { Book, File } from "@/types";
 import {
   AUTOPLAY_TIMEOUT_MS,
   resolveCodecSupport,
@@ -54,6 +51,7 @@ import {
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { fileStreamUrl } from "@/utils/downloadUrl";
 import { fileTitle, formatPlayerTime } from "@/utils/format";
+import { loadBookSpeed, saveBookSpeed } from "@/utils/playbackSpeed";
 import { savedSeconds } from "@/utils/readingPosition";
 
 // How often the place saves while playing. Pausing and seeking save at once.
@@ -138,19 +136,18 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       ? resolveRuntimeFailureMessage(file.audiobook_codec)
       : null;
 
-  // Playback speed is a per-user setting so the chosen rate follows the
-  // listener across sessions and devices. Local state applies the rate
-  // immediately on change; the mutation persists it through the standard
-  // user-settings endpoint, and the effect below re-syncs if the server
-  // value changes from elsewhere.
-  const { data: settings } = useUserSettings();
-  const updateSettings = useUpdateUserSettings();
-  const persistedSpeed = settings?.viewer_playback_speed ?? 1;
-  const [playbackSpeed, setPlaybackSpeed] =
-    useState<PlaybackSpeed>(persistedSpeed);
-  useEffect(() => {
-    setPlaybackSpeed(persistedSpeed);
-  }, [persistedSpeed]);
+  // Playback speed is remembered per Book in this browser, so each
+  // narrator keeps its own and a Book with none saved starts at 1x. A move to
+  // another Book loads that Book's speed.
+  const bookId = book?.id ?? file.book_id;
+  const [speedBookId, setSpeedBookId] = useState(bookId);
+  const [playbackSpeed, setPlaybackSpeed] = useState(() =>
+    loadBookSpeed(bookId),
+  );
+  if (speedBookId !== bookId) {
+    setSpeedBookId(bookId);
+    setPlaybackSpeed(loadBookSpeed(bookId));
+  }
 
   // Apply the rate to the audio element whenever it changes (including the
   // initial render, restoring the persisted speed).
@@ -162,19 +159,11 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   }, [playbackSpeed]);
 
   const handleSpeedChange = useCallback(
-    (value: string) => {
-      // Values come from the PlaybackSpeeds list, so the cast is safe.
-      const speed = Number(value) as PlaybackSpeed;
+    (speed: number) => {
       setPlaybackSpeed(speed);
-      updateSettings.mutate(
-        { viewer_playback_speed: speed },
-        {
-          onError: (error) =>
-            toastRequestError(error, "Failed to save playback speed"),
-        },
-      );
+      saveBookSpeed(bookId, speed);
     },
-    [updateSettings],
+    [bookId],
   );
 
   // Resolve the file's chapters into absolute second boundaries once. The pure
@@ -369,9 +358,21 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // A control that handled the key itself, such as the focused seek bar
+      // stepping by its arrows, already moved; skipping too would move twice.
+      if (e.defaultPrevented) return;
       const target = e.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+      // A dialog, the Bookmarks panel, or an open menu has its own keys:
+      // Space presses a focused button and the arrows move through a menu.
+      if (
+        target?.closest?.(
+          '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]',
+        )
+      ) {
         return;
       }
 
@@ -420,6 +421,27 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     [seekTo],
   );
 
+  // Bookmarks. Adding one marks the moment the button was pressed, while
+  // playback carries on as the note is written.
+  const createBookmark = useCreateBookmark(file.id);
+  const [addingAt, setAddingAt] = useState(0);
+  const [addOpen, setAddOpen] = useState(false);
+  const [bookmarksOpen, setBookmarksOpen] = useState(false);
+  const handleAddBookmark = useCallback(
+    async (note: string) => {
+      try {
+        await createBookmark.mutateAsync({
+          seconds: addingAt,
+          note: note || null,
+        });
+      } catch (error) {
+        toastRequestError(error, "Failed to add bookmark");
+        throw error;
+      }
+    },
+    [addingAt, createBookmark],
+  );
+
   const authorNames = joinNames(book?.authors);
   const narratorNames = joinNames(file.narrators);
 
@@ -445,9 +467,33 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
         >
           <ArrowLeft className="h-5 w-5" />
         </Button>
-        <span className="truncate text-sm font-medium">
+        <span
+          className="min-w-0 flex-1 truncate text-sm font-medium"
+          title={title || "Audiobook"}
+        >
           {title || "Audiobook"}
         </span>
+        <Button
+          aria-label="Add Bookmark"
+          onClick={() => {
+            setAddingAt(currentTimeRef.current);
+            setAddOpen(true);
+          }}
+          size="sm"
+          variant="ghost"
+        >
+          <BookmarkPlus className="h-4 w-4" />
+          <span className="hidden sm:inline">Add Bookmark</span>
+        </Button>
+        <Button
+          aria-label="Bookmarks"
+          onClick={() => setBookmarksOpen(true)}
+          size="sm"
+          variant="ghost"
+        >
+          <BookmarkIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">Bookmarks</span>
+        </Button>
       </header>
 
       {/* Main content: cover + metadata, stacks on small screens */}
@@ -562,25 +608,11 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">
             <span>{formatPlayerTime(displayTime)}</span>
             {/* Speed control sits between the time labels; it applies the
-                rate immediately and persists it as a per-user setting. */}
-            <Select
-              onValueChange={handleSpeedChange}
-              value={String(playbackSpeed)}
-            >
-              <SelectTrigger
-                aria-label="Playback speed"
-                className="h-7 w-auto min-w-0 gap-1 px-2 text-xs"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PlaybackSpeeds.map((speed) => (
-                  <SelectItem key={speed} value={String(speed)}>
-                    {speed}x
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                rate immediately and remembers it for this Book. */}
+            <PlaybackSpeedControl
+              onChange={handleSpeedChange}
+              speed={playbackSpeed}
+            />
             <span>{formatPlayerTime(duration)}</span>
           </div>
 
@@ -646,6 +678,21 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
           </div>
         </div>
       </footer>
+
+      <BookmarkNoteDialog
+        isPending={createBookmark.isPending}
+        mode="add"
+        onOpenChange={setAddOpen}
+        onSave={handleAddBookmark}
+        open={addOpen}
+        seconds={addingAt}
+      />
+      <BookmarksSheet
+        fileId={file.id}
+        onJump={seekTo}
+        onOpenChange={setBookmarksOpen}
+        open={bookmarksOpen}
+      />
 
       <audio
         onCanPlay={() => {

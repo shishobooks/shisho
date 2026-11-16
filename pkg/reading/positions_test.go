@@ -120,7 +120,7 @@ func (f *positionsFixture) setTimeZone(zone string) {
 		UserID: f.user.ID, CreatedAt: f.clock.now, UpdatedAt: f.clock.now,
 		ViewerFitMode: models.FitModeHeight, ReflowableTheme: models.ReflowableThemeLight,
 		ReflowableFlow: models.ReflowableFlowPaginated, GallerySize: models.GallerySizeMedium,
-		PlaybackSpeed: 1, ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
+		ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
 	}).Exec(f.ctx)
 	require.NoError(f.t, err)
 }

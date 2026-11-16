@@ -251,6 +251,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/reading/stats/heatmap", "GET /api/reading/read-throughs/:id/sessions", "GET /api/reading/stats/calendar", "GET /api/reading/stats/day", "DELETE /api/reading/sessions/:id",
 				"POST /api/reading/books/:id/to-read", "DELETE /api/reading/books/:id/to-read",
 				"PUT /api/reading/to-read/order", "POST /api/lists/:id/copy-to-to-read",
+				"GET /api/reading/files/:id/bookmarks", "POST /api/reading/files/:id/bookmarks",
+				"PATCH /api/reading/bookmarks/:id", "DELETE /api/reading/bookmarks/:id",
 				// Server Stats is an admin read.
 				"GET /api/server-stats", "GET /api/server-stats/reading",
 			} {
@@ -298,6 +300,9 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodDelete, "/api/user/delivery-rules"},
 				{http.MethodPost, "/api/reading/books/bulk/finish"},
 				{http.MethodPost, "/api/reading/books/bulk/not-started"},
+				{http.MethodPost, "/api/reading/files/42/bookmarks"},
+				{http.MethodPatch, "/api/reading/bookmarks/42"},
+				{http.MethodDelete, "/api/reading/bookmarks/42"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

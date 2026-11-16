@@ -38,6 +38,7 @@ export * from "./generated/auth";
 export * from "./generated/users";
 export * from "./generated/roles";
 export * from "./generated/reading";
+export * from "./generated/bookmarks";
 export * from "./generated/search";
 export * from "./generated/bookpreviews";
 export {

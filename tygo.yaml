@@ -180,10 +180,14 @@ packages:
       import { PageFlow, ReadThrough, ReadThroughOutcome, ReadingKind, ReadingPosition, ReadingSource, ReadingStatus } from "@/types";
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/bookmarks"
+    output_path: "app/types/generated/bookmarks.ts"
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/settings"
     output_path: "app/types/generated/settings.ts"
     frontmatter: |
-      import { ReflowableFlow, ReflowableTheme, FitMode, GallerySize, PlaybackSpeed } from "@/types";
+      import { ReflowableFlow, ReflowableTheme, FitMode, GallerySize } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/sharelinks"

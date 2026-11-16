@@ -42,7 +42,6 @@ const userDefaults: UserSettingsResponse = {
   viewer_reflowable_font_size: 100,
   viewer_reflowable_theme: "light",
   viewer_hide_chrome: false,
-  viewer_playback_speed: 1,
 };
 
 const createWrapper = (queryClient: QueryClient) =>
