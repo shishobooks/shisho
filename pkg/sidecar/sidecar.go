@@ -290,13 +290,14 @@ func asciiLower(s string) string {
 // FileSidecarFromModel creates a FileSidecar from a File model.
 func FileSidecarFromModel(file *models.File) *FileSidecar {
 	s := &FileSidecar{
-		Version:   CurrentVersion,
-		URL:       file.URL,
-		Publisher: nil,
-		Name:      file.Name,
-		CoverPage: file.CoverPage,
-		Language:  file.Language,
-		Abridged:  file.Abridged,
+		Version:          CurrentVersion,
+		URL:              file.URL,
+		Publisher:        nil,
+		Name:             file.Name,
+		CoverPage:        file.CoverPage,
+		Language:         file.Language,
+		Abridged:         file.Abridged,
+		ReadingDirection: file.ReadingDirection,
 	}
 
 	// Set publisher name if available

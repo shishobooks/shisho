@@ -240,6 +240,11 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		language = mediafile.NormalizeLanguage(comicInfo.LanguageISO)
 	}
 
+	var readingDirection *string
+	if comicInfo != nil {
+		readingDirection = ReadingDirectionFromManga(comicInfo.Manga)
+	}
+
 	// Parse GTIN as identifier
 	var identifiersList []mediafile.ParsedIdentifier
 	if comicInfo != nil && comicInfo.GTIN != "" {
@@ -269,6 +274,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		URL:              url,
 		ReleaseDate:      releaseDate,
 		Language:         language,
+		ReadingDirection: readingDirection,
 		CoverMimeType:    coverMimeType,
 		CoverData:        coverData,
 		CoverPage:        coverPage,
@@ -277,6 +283,30 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		Identifiers:      identifiersList,
 		Chapters:         chapters,
 	}, nil
+}
+
+// ComicInfo's Manga values: Yes is manga that reads left to right, and
+// YesAndRightToLeft is manga that reads right to left.
+const (
+	MangaYes               = "Yes"
+	MangaNo                = "No"
+	MangaYesAndRightToLeft = "YesAndRightToLeft"
+)
+
+// ReadingDirectionFromManga is the Reading Direction a ComicInfo Manga value
+// states: right to left for YesAndRightToLeft, left to right for Yes and No,
+// and nil for Unknown, an empty value, or anything else.
+func ReadingDirectionFromManga(manga string) *string {
+	var direction string
+	switch strings.ToLower(strings.TrimSpace(manga)) {
+	case strings.ToLower(MangaYesAndRightToLeft):
+		direction = models.ReadingDirectionRTL
+	case strings.ToLower(MangaYes), strings.ToLower(MangaNo):
+		direction = models.ReadingDirectionLTR
+	default:
+		return nil
+	}
+	return &direction
 }
 
 func ParseComicInfo(r io.ReadCloser) (*ComicInfo, error) {

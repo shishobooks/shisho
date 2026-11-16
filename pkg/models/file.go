@@ -137,6 +137,19 @@ func EbookCoverRank(fileType string) int {
 	return 4
 }
 
+// Reading Directions: the order a Page-based File's pages run in. A File
+// with none runs left to right.
+const (
+	//tygo:emit export type ReadingDirection = typeof ReadingDirectionLTR | typeof ReadingDirectionRTL;
+	ReadingDirectionLTR = "ltr"
+	ReadingDirectionRTL = "rtl"
+)
+
+// IsReadingDirection reports whether s is a Reading Direction.
+func IsReadingDirection(s string) bool {
+	return s == ReadingDirectionLTR || s == ReadingDirectionRTL
+}
+
 const (
 	//tygo:emit export type FileRole = typeof FileRoleMain | typeof FileRoleSupplement;
 	FileRoleMain       = "main"
@@ -201,6 +214,8 @@ type File struct {
 	LanguageSource           *string           `json:"language_source" tstype:"DataSource"`
 	Abridged                 *bool             `json:"abridged"`
 	AbridgedSource           *string           `json:"abridged_source" tstype:"DataSource"`
+	ReadingDirection         *string           `json:"reading_direction" tstype:"ReadingDirection | null"` // Page-based Files only; nil runs left to right
+	ReadingDirectionSource   *string           `json:"reading_direction_source" tstype:"DataSource"`
 	ReviewOverride           *string           `json:"review_override" tstype:"ReviewOverride"`
 	ReviewOverriddenAt       *time.Time        `json:"review_overridden_at"`
 	Reviewed                 *bool             `json:"reviewed"`

@@ -2,7 +2,7 @@
 
 Users with Books Read permission and access to a book's library can open supported files directly in Shisho. Select **Read** for EPUB, KePub, MOBI, AZW3, CBZ, and PDF files or **Listen** for M4B files.
 
-Reader preferences are saved to your Shisho account and follow you between browsers. Every reader also remembers your place and keeps your reading history current, as described in [Reading in Shisho](./reading-tracking.md#reading-in-shisho).
+Reader preferences are saved to your Shisho account and follow you between browsers, except **Follow Reading Direction**, which each browser keeps on its own. Every reader also remembers your place and keeps your reading history current, as described in [Reading in Shisho](./reading-tracking.md#reading-in-shisho).
 
 ## EPUB, MOBI, and AZW3 Reader
 
@@ -30,12 +30,15 @@ CBZ and PDF use the same page-based reader. It provides:
 - Configurable preloading of nearby pages
 - Optional automatic hiding of controls
 - **Paginated** and **Scrolled** flow modes
+- Right to left page turns for files that read that way, such as manga
 
 A CBZ or PDF file's page shows its pages as a grid; select one to open the reader on that page.
 
 Reopening a comic or PDF returns to the page you left. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off). The current page is also in the URL as `?page=`, so you can bookmark or share a link to a page.
 
 Use the Left Arrow or `A` for the previous page and the Right Arrow or `D` for the next page. In the **Paginated** flow, you can also tap the left and right sides or swipe from anywhere on the page. In the **Scrolled** flow, the Up and Down Arrows, Space, and Page Up and Page Down scroll the pages.
+
+A file whose [Reading Direction](./metadata.md#reading-direction) is right to left turns the other way: the left side, a swipe to the right, the Left Arrow or `A`, and the left footer button move forward, the next page slides in from the left, and the progress bar fills from the right. The **Scrolled** flow runs top to bottom either way. To have every file turn left to right, turn off **Follow Reading Direction** in the reader settings. It is on until you turn it off, and the browser remembers your choice.
 
 ### Scrolled Flow for Webtoons
 

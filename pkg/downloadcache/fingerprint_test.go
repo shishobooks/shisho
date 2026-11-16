@@ -1176,3 +1176,23 @@ func strPtr(s string) *string {
 func int64Ptr(i int64) *int64 {
 	return &i
 }
+
+func TestComputeFingerprint_ReadingDirectionChangesHash(t *testing.T) {
+	t.Parallel()
+
+	book := &models.Book{Title: "Manga"}
+	file := &models.File{FileType: models.FileTypeCBZ}
+	first, err := ComputeFingerprint(book, file)
+	require.NoError(t, err)
+	firstHash, err := first.Hash()
+	require.NoError(t, err)
+
+	rtl := models.ReadingDirectionRTL
+	file.ReadingDirection = &rtl
+	second, err := ComputeFingerprint(book, file)
+	require.NoError(t, err)
+	secondHash, err := second.Hash()
+	require.NoError(t, err)
+
+	assert.NotEqual(t, firstHash, secondHash)
+}

@@ -59,6 +59,7 @@ type CBZOptions struct {
 	CoverArtist     string
 	Editor          string
 	Translator      string
+	Manga           string // ComicInfo Manga value, such as "YesAndRightToLeft"
 	PageCount       int    // defaults to 3
 	HasComicInfo    bool   // whether to include ComicInfo.xml
 	CoverPageType   string // "FrontCover", "InnerCover", or "" (none specified)

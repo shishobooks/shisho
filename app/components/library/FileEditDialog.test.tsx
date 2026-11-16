@@ -19,6 +19,7 @@ import {
   FileRoleMain,
   FileTypeCBZ,
   FileTypeEPUB,
+  ReadingDirectionRTL,
   ReviewOverrideReviewed,
   type Book,
   type File,
@@ -620,6 +621,61 @@ describe("FileEditDialog", () => {
       });
       const call = mockUpdateFile.mock.calls[0][0];
       expect(call.payload.release_date).toBe("");
+    });
+  });
+
+  describe("reading direction", () => {
+    it("shows a Page-based File with no direction as left to right", () => {
+      renderDialog();
+      expect(
+        screen.getByRole("combobox", { name: "Reading Direction" }),
+      ).toHaveTextContent("Left to right");
+    });
+
+    it("sends the new direction and nothing else when it changes", async () => {
+      const user = createUser();
+      renderDialog();
+
+      await user.click(
+        screen.getByRole("combobox", { name: "Reading Direction" }),
+      );
+      await user.click(
+        await screen.findByRole("option", { name: "Right to left" }),
+      );
+      await user.click(screen.getByRole("button", { name: /save/i }));
+
+      await waitFor(() => expect(mockUpdateFile).toHaveBeenCalled());
+      expect(mockUpdateFile.mock.calls[0][0].payload).toEqual({
+        reading_direction: ReadingDirectionRTL,
+      });
+    });
+
+    it("sends no direction when it wasn't changed", async () => {
+      const user = createUser();
+      renderDialog({
+        file: { ...mockFile, reading_direction: ReadingDirectionRTL },
+      });
+      expect(
+        screen.getByRole("combobox", { name: "Reading Direction" }),
+      ).toHaveTextContent("Right to left");
+
+      await user.clear(screen.getByPlaceholderText("YYYY-MM-DD"));
+      await user.type(screen.getByPlaceholderText("YYYY-MM-DD"), "2020-01-02");
+      await user.click(screen.getByRole("button", { name: /save/i }));
+
+      await waitFor(() => expect(mockUpdateFile).toHaveBeenCalled());
+      expect(mockUpdateFile.mock.calls[0][0].payload).not.toHaveProperty(
+        "reading_direction",
+      );
+    });
+
+    it("isn't offered for a File that isn't Page-based", () => {
+      renderDialog({
+        file: { ...mockFile, file_type: FileTypeEPUB, filepath: "/b.epub" },
+      });
+      expect(
+        screen.queryByRole("combobox", { name: "Reading Direction" }),
+      ).not.toBeInTheDocument();
     });
   });
 

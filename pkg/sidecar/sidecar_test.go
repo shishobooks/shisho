@@ -894,3 +894,26 @@ func TestWriteFileSidecar_EmptyInput_ReturnsError(t *testing.T) {
 	require.Error(t, err, "WriteFileSidecar must reject empty filePath")
 	assert.ErrorIs(t, err, ErrEmptySidecarPath)
 }
+
+func TestWriteFileSidecarFromModel_ReadingDirectionRoundTrip(t *testing.T) {
+	t.Parallel()
+	filePath := filepath.Join(t.TempDir(), "manga.cbz")
+	file := &models.File{
+		Filepath:         filePath,
+		FileType:         models.FileTypeCBZ,
+		ReadingDirection: strPtr(models.ReadingDirectionRTL),
+	}
+
+	require.NoError(t, WriteFileSidecarFromModel(file))
+
+	readBack, err := ReadFileSidecar(filePath)
+	require.NoError(t, err)
+	require.NotNil(t, readBack)
+	require.NotNil(t, readBack.ReadingDirection)
+	assert.Equal(t, models.ReadingDirectionRTL, *readBack.ReadingDirection)
+}
+
+func TestFileSidecarFromModel_NoReadingDirection(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, FileSidecarFromModel(&models.File{FileType: models.FileTypeEPUB}).ReadingDirection)
+}

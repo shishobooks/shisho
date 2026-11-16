@@ -24,6 +24,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/cbz"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // Metadata is the book metadata written into the EPUB.
@@ -41,6 +42,9 @@ type Metadata struct {
 	Chapters    []Chapter
 	CoverPage   *int    // 0-indexed page number for cover (nil = first page)
 	Language    *string // BCP 47 language tag
+	// ReadingDirection is models.ReadingDirectionLTR or
+	// models.ReadingDirectionRTL; nil runs left to right.
+	ReadingDirection *string
 }
 
 // Author represents an author/creator for CBZ metadata.
@@ -485,16 +489,22 @@ func generateFixedLayoutOPF(pages []pageInfo, metadata *Metadata, uid string) []
 `)
 	}
 
+	// A right to left book runs its pages the other way, so each spread's
+	// first page sits on the right.
+	direction, firstSide, secondSide := "ltr", "left", "right"
+	if metadata != nil && metadata.ReadingDirection != nil && *metadata.ReadingDirection == models.ReadingDirectionRTL {
+		direction, firstSide, secondSide = "rtl", "right", "left"
+	}
 	buf.WriteString(`  </manifest>
-  <spine page-progression-direction="ltr" toc="ncx">
+  <spine page-progression-direction="` + direction + `" toc="ncx">
 `)
 
 	// Add spine items with alternating page-spread properties (like KCC)
 	for i := range pages {
 		pageID := fmt.Sprintf("page%04d", i+1)
-		spread := "left"
+		spread := firstSide
 		if i%2 == 1 {
-			spread = "right"
+			spread = secondSide
 		}
 		buf.WriteString(fmt.Sprintf(`    <itemref idref="%s" properties="rendition:page-spread-%s"/>
 `, pageID, spread))

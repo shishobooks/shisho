@@ -32,6 +32,8 @@ type FileSidecar struct {
 	CoverPage   *int                 `json:"cover_page,omitempty"` // 0-indexed page number for page-based formats (CBZ, PDF)
 	Language    *string              `json:"language,omitempty"`
 	Abridged    *bool                `json:"abridged,omitempty"`
+	// ReadingDirection is "ltr" or "rtl", for Page-based Files (CBZ, PDF).
+	ReadingDirection *string `json:"reading_direction,omitempty"`
 }
 
 // AuthorMetadata represents an author in the sidecar file.

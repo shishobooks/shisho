@@ -86,6 +86,8 @@ type UpdateFilePayload struct {
 	Abridged         *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
 	Identifiers      *[]IdentifierPayload `json:"identifiers,omitempty" mod:"dive" validate:"omitempty,dive"`
 	IsPreferredCover *bool                `json:"is_preferred_cover,omitempty"`
+	// ReadingDirection applies only to Page-based Files (CBZ, PDF).
+	ReadingDirection *string `json:"reading_direction,omitempty" validate:"omitempty,oneof=ltr rtl" tstype:"ReadingDirection"`
 }
 
 // ResyncMode is the scan mode for resync operations: "scan" (default),

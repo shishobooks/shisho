@@ -6,11 +6,15 @@ Shisho combines metadata from file paths, embedded file data, plugins, sidecars,
 
 A **book** groups one or more main files. Its shared fields include title, sort title, subtitle, description, authors, series, genres, and tags.
 
-A **file** represents a particular EPUB, KePub, AZW3, MOBI, CBZ, M4B, or PDF edition. File fields include display name, narrators, publisher, release date, language, URL, identifiers, chapters, and abridged status. [Supplements](./supplement-files.md) belong to a book but are excluded from metadata review and most main-file behavior.
+A **file** represents a particular EPUB, KePub, AZW3, MOBI, CBZ, M4B, or PDF edition. File fields include display name, narrators, publisher, release date, language, URL, identifiers, chapters, abridged status, and, for CBZ and PDF files, [Reading Direction](#reading-direction). [Supplements](./supplement-files.md) belong to a book but are excluded from metadata review and most main-file behavior.
 
 ### Preferred Covers
 
 When a book has multiple main files in the same cover category, edit a file and select **Preferred ebook cover** or **Preferred audiobook cover**. Ebook preference covers EPUB, KePub, AZW3, MOBI, CBZ, and PDF files; audiobook preference covers M4B files. The chosen file must have a cover. Choosing one clears the same preference from other files in that category. Without a preferred ebook file, the book's ebook cover comes from an EPUB first, then a KePub, then an AZW3, then a MOBI, then the other ebook files.
+
+### Reading Direction
+
+CBZ and PDF files have a **Reading Direction**: **Left to right**, or **Right to left** as most manga run. A scan sets a CBZ to right to left when its `ComicInfo.xml` has `Manga` set to `YesAndRightToLeft`, and to left to right when `Manga` is `Yes` or `No`. Any other CBZ, and every PDF, reads left to right until you edit the file and choose a **Reading Direction**. A direction you choose is kept through later scans. The [comic and PDF reader](./reading-and-playback.md#cbz-and-pdf-readers) turns pages in this direction, and [CBZ downloads](./supported-formats.md#cbz-downloads) carry it.
 
 ## People and Roles
 

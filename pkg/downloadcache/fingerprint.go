@@ -73,6 +73,7 @@ type Fingerprint struct {
 	Name             *string                 `json:"name,omitempty"`   // File name (edition name)
 	Language         *string                 `json:"language,omitempty"`
 	Abridged         *bool                   `json:"abridged,omitempty"`
+	ReadingDirection *string                 `json:"reading_direction,omitempty"`
 	SourceModTime    time.Time               `json:"source_mod_time"`
 	SourceSize       int64                   `json:"source_size"`
 }
@@ -228,6 +229,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		}
 		fp.Language = file.Language
 		fp.Abridged = file.Abridged
+		fp.ReadingDirection = file.ReadingDirection
 	}
 
 	// Add authors sorted by SortOrder for consistent fingerprinting

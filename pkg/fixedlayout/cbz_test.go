@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -673,6 +674,38 @@ func TestConverter_ConvertCBZWithMetadata(t *testing.T) {
 		opfContent := string(opfData)
 		assert.Contains(t, opfContent, `<dc:title>Comic Book</dc:title>`)
 	})
+}
+
+func TestConvertCBZ_ReadingDirection(t *testing.T) {
+	t.Parallel()
+	rtl := models.ReadingDirectionRTL
+	ltr := models.ReadingDirectionLTR
+	tests := []struct {
+		name          string
+		direction     *string
+		wantSpine     string
+		wantFirstPage string
+	}{
+		{name: "none runs left to right", direction: nil, wantSpine: `page-progression-direction="ltr"`, wantFirstPage: "rendition:page-spread-left"},
+		{name: "left to right", direction: &ltr, wantSpine: `page-progression-direction="ltr"`, wantFirstPage: "rendition:page-spread-left"},
+		{name: "right to left mirrors the spreads", direction: &rtl, wantSpine: `page-progression-direction="rtl"`, wantFirstPage: "rendition:page-spread-right"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tmpDir := t.TempDir()
+			srcPath := filepath.Join(tmpDir, "comic.cbz")
+			createTestCBZ(t, srcPath, testCBZOptions{})
+			destPath := filepath.Join(tmpDir, "comic.epub")
+
+			metadata := &Metadata{Title: "Manga", ReadingDirection: tt.direction}
+			require.NoError(t, ConvertCBZ(context.Background(), srcPath, destPath, metadata))
+
+			opf := string(readFileFromEPUB(t, destPath, "content.opf"))
+			assert.Contains(t, opf, tt.wantSpine)
+			assert.Contains(t, opf, `<itemref idref="page0001" properties="`+tt.wantFirstPage+`"/>`)
+		})
+	}
 }
 
 func TestConverter_ConvertCBZWithMetadata_UsesTitle(t *testing.T) {

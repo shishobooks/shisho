@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pageTurnForKey } from "@/utils/readerKeys";
+import { pageTurnForKey, turnInDirection } from "@/utils/readerKeys";
 
 const keyOn = (key: string, target: Element) => {
   const event = new KeyboardEvent("keydown", { key, bubbles: true });
@@ -65,5 +65,14 @@ describe("pageTurnForKey", () => {
     expect(shortcut({ key: "a", ctrlKey: true })).toBeNull();
     expect(shortcut({ key: "ArrowLeft", altKey: true })).toBeNull();
     expect(shortcut({ key: "D", shiftKey: true })).toBe("next");
+  });
+});
+
+describe("turnInDirection", () => {
+  it("keeps a turn left to right and reverses it right to left", () => {
+    expect(turnInDirection("next", false)).toBe("next");
+    expect(turnInDirection("next", true)).toBe("prev");
+    expect(turnInDirection("prev", true)).toBe("next");
+    expect(turnInDirection(null, true)).toBeNull();
   });
 });
