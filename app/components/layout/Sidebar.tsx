@@ -1,7 +1,12 @@
-import { ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, CircleArrowUp } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import UpdateNotice, { RELEASES_URL } from "@/components/layout/UpdateNotice";
+import {
+  updateLabel,
+  useAvailableUpdate,
+} from "@/components/layout/useAvailableUpdate";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -72,6 +77,7 @@ const Sidebar = ({ items }: SidebarProps) => {
   }, [collapsed]);
 
   const visibleItems = items.filter((item) => item.show !== false);
+  const update = useAvailableUpdate();
 
   // Offsets below the Demo Mode banner and the top nav (TOP_NAV_ROW height
   // plus TOP_NAV_WRAPPER's 1px border); update with topNavClasses.ts.
@@ -118,21 +124,46 @@ const Sidebar = ({ items }: SidebarProps) => {
           </div>
         </div>
       </div>
+      {collapsed && update && (
+        <div className="flex justify-center p-2 pt-0">
+          <Tooltip delayDuration={0}>
+            <TooltipTrigger asChild>
+              <a
+                aria-label={`Update available: ${update.latest_version}, ${updateLabel(update)}`}
+                className="flex h-9 w-9 items-center justify-center rounded-md text-primary transition-colors hover:bg-primary/10"
+                href={RELEASES_URL}
+                rel="noopener noreferrer"
+                target="_blank"
+              >
+                <CircleArrowUp aria-hidden="true" className="h-4 w-4" />
+              </a>
+            </TooltipTrigger>
+            <TooltipContent side="right">
+              Update available: {update.current_version} →{" "}
+              {update.latest_version}, {updateLabel(update)}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      )}
       {!collapsed && (
         <div className="p-4 pt-0">
-          <a
-            className="group flex items-center justify-center gap-1.5 rounded border border-transparent py-1.5 transition-all duration-200 hover:border-border/40 hover:bg-muted/30"
-            href="https://github.com/shishobooks/shisho/releases"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            <span className="text-[10px] text-muted-foreground/40 transition-colors group-hover:text-muted-foreground/70">
-              shisho
-            </span>
-            <span className="font-mono text-[10px] text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
-              {__APP_VERSION__}
-            </span>
-          </a>
+          {update ? (
+            <UpdateNotice update={update} />
+          ) : (
+            <a
+              className="group flex items-center justify-center gap-1.5 rounded border border-transparent py-1.5 transition-all duration-200 hover:border-border/40 hover:bg-muted/30"
+              href={RELEASES_URL}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              <span className="text-[10px] text-muted-foreground/40 transition-colors group-hover:text-muted-foreground/70">
+                shisho
+              </span>
+              <span className="font-mono text-[10px] text-muted-foreground/50 transition-colors group-hover:text-muted-foreground">
+                {__APP_VERSION__}
+              </span>
+            </a>
+          )}
         </div>
       )}
     </aside>

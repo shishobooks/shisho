@@ -132,6 +132,17 @@ func TestNew_DemoModeSession(t *testing.T) {
 	}
 }
 
+// The Public Demo never contacts GitHub, whatever update_check_enabled says.
+func TestUpdateCheckConfig_OffInDemoMode(t *testing.T) {
+	t.Parallel()
+	cfg := config.NewForTest()
+	cfg.UpdateCheckEnabled = true
+	assert.True(t, updateCheckConfig(cfg).Enabled)
+
+	cfg.DemoMode = true
+	assert.False(t, updateCheckConfig(cfg).Enabled)
+}
+
 func TestNew_DemoModeRoutes(t *testing.T) {
 	// Test-mode route registration mutates the shared plugin download hosts.
 	originalHosts := plugins.AllowedDownloadHosts
@@ -197,6 +208,9 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/books/:id/share-links", "POST /api/books/:id/share-links",
 				"POST /api/books/:id/share-links/:linkId/revoke", "DELETE /api/books/:id/share-links/:linkId",
 				"GET /api/user/libraries",
+				// The update check stays registered; Demo Mode turns the
+				// check off, so it never contacts GitHub.
+				"GET /api/update-check",
 				// Devices can be viewed in Demo Mode; the middleware rejects
 				// every change to them.
 				"GET /api/user/devices", "POST /api/user/devices", "GET /api/user/devices/:id",

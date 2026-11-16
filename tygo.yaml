@@ -202,6 +202,10 @@ packages:
       import { FileType } from "@/types";
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/updatecheck"
+    output_path: "app/types/generated/updatecheck.ts"
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/mediafile"
     output_path: "app/types/generated/mediafile.ts"
     frontmatter: |

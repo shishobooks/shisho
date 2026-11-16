@@ -198,6 +198,8 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useTagNamespaceCounts: requires("books:read", [{ library_id: 1 }, on]),
   useTag: requires("books:read", [1, on]),
   useTagsByIds: requires("books:read", [[1, 2]]),
+  // updateCheck
+  useUpdateCheck: requires("config:read", []),
   // users
   useUser: requires("users:read", ["1", on]),
   useUsers: requires("users:read", [{}, on]),

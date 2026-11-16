@@ -60,6 +60,7 @@ Keep `SERVER_HOST=0.0.0.0` inside Docker so published ports can reach the listen
 | `sync_interval_minutes` | `SYNC_INTERVAL_MINUTES` | `60` | How often to scan libraries for new content, in minutes. The first scheduled scan runs one interval after startup. Set to `0` to disable scheduled scans |
 | `worker_processes` | `WORKER_PROCESSES` | `2` | Number of background workers that run jobs at the same time. Minimum `1` |
 | `job_retention_days` | `JOB_RETENTION_DAYS` | `30` | Days to keep completed and failed jobs, with their logs. An hourly cleanup deletes jobs created longer ago than this. Set to `0` to disable cleanup |
+| `update_check_enabled` | `UPDATE_CHECK_ENABLED` | `true` | Check GitHub for a newer Shisho release, about twice a day while a user with Config Read permission uses the web app. When one is out, those users see **Update available** in place of the version at the bottom of the sidebar (the menu on phones), with how many releases behind the server is and a link to the release notes. The request sends only the running Shisho version, nothing about your library. Disable it for servers that should make no outbound requests. Demo Mode never checks |
 
 ### Demo Mode
 

@@ -48,6 +48,11 @@ type Config struct {
 	// Job retention settings
 	JobRetentionDays int `koanf:"job_retention_days" json:"job_retention_days"`
 
+	// UpdateCheckEnabled lets the server ask GitHub whether a newer Shisho
+	// release is published, so the web app can tell admins. Demo Mode never
+	// checks.
+	UpdateCheckEnabled bool `koanf:"update_check_enabled" json:"update_check_enabled"`
+
 	// Cache settings. Cache size limits are admin policy saved under
 	// Administration > Cache, not config.
 	CacheDir string `koanf:"cache_dir" json:"cache_dir"`
@@ -180,6 +185,7 @@ func defaults() *Config {
 		SyncIntervalMinutes:           60,
 		WorkerProcesses:               2,
 		JobRetentionDays:              30,
+		UpdateCheckEnabled:            true,
 		CacheDir:                      "/config/cache",
 		PluginDir:                     "/config/plugins/installed",
 		PluginDataDir:                 "/config/plugins/data",
@@ -280,7 +286,8 @@ func NewForTest() *Config {
 	cfg.ServerPort = 0
 	cfg.WorkerProcesses = 1
 	cfg.LibraryMonitorEnabled = false
-	cfg.CacheDir = "" // Must be set by test
+	cfg.UpdateCheckEnabled = false // Tests never contact GitHub
+	cfg.CacheDir = ""              // Must be set by test
 	cfg.SupplementExcludePatterns = []string{".*", ".DS_Store", "Thumbs.db", "desktop.ini"}
 	cfg.PDFSupplementFilenames = []string{
 		"supplement", "supplemental", "bonus", "bonus material", "bonus content",

@@ -14,6 +14,7 @@ import {
 import { useMobileNav } from "@/contexts/MobileNav";
 import { API } from "@/libraries/api";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
+import type { UpdateCheckResponse } from "@/types/generated/updatecheck";
 
 import MobileDrawer from "./MobileDrawer";
 
@@ -23,8 +24,19 @@ vi.mock("@/contexts/MobileNav", () => ({
   useMobileNav: vi.fn(),
 }));
 
+const upToDate: UpdateCheckResponse = {
+  current_version: "0.8.0",
+  latest_version: "0.8.0",
+  releases_behind: 0,
+  update_available: false,
+};
+
 let isOpen = false;
-const server = { libraries: [] as unknown[], lists: [] as unknown[] };
+const server = {
+  libraries: [] as unknown[],
+  lists: [] as unknown[],
+  updateCheck: upToDate,
+};
 
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
@@ -35,6 +47,7 @@ beforeEach(() => {
   isOpen = false;
   server.libraries = [];
   server.lists = [];
+  server.updateCheck = upToDate;
   setAuth({
     permissions: ALL_PERMISSIONS,
     user: { username: "admin", role_name: "Admin" },
@@ -55,6 +68,7 @@ afterEach(() => vi.restoreAllMocks());
 const stubRequests = () =>
   vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
     if (path === "/user/libraries") return server.libraries;
+    if (path === "/update-check") return server.updateCheck;
     if (path === "/lists") {
       return { items: server.lists, total: server.lists.length };
     }
@@ -125,6 +139,44 @@ describe("MobileDrawer", () => {
     renderDrawer("/lists");
 
     expect(getActiveLabels()).toEqual(["Lists"]);
+  });
+
+  it("shows the version while the server is up to date", async () => {
+    isOpen = true;
+    const request = renderDrawer("/lists");
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "GET",
+        "/update-check",
+        null,
+        null,
+        expect.anything(),
+      ),
+    );
+    expect(within(getDrawer()).getByText("shisho")).toBeInTheDocument();
+  });
+
+  it("replaces the version with a newer release's notes link", async () => {
+    server.updateCheck = {
+      current_version: "0.7.0",
+      latest_version: "0.8.0",
+      releases_behind: 1,
+      update_available: true,
+    };
+    isOpen = true;
+    renderDrawer("/lists");
+
+    const notice = (
+      await within(getDrawer()).findByText("Update available")
+    ).closest("a");
+    expect(notice).toHaveAttribute(
+      "href",
+      "https://github.com/shishobooks/shisho/releases",
+    );
+    expect(notice).toHaveTextContent("0.7.0 → 0.8.0");
+    expect(notice).toHaveTextContent("1 release behind");
+    expect(within(getDrawer()).queryByText("shisho")).not.toBeInTheDocument();
   });
 });
 
