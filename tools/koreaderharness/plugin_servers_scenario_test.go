@@ -308,3 +308,57 @@ func TestPluginOffersASameVersionBuildOnlyFromItsServer(t *testing.T) {
 	assert.Equal(t, b.containerServer(), launched.Plugin.Offer.Server)
 	assert.Equal(t, own.Hash, launched.Plugin.Offer.Hash)
 }
+
+// onCopy posts action for document on s's Device page, as its owner does:
+// dismiss, restore, or delete-reading.
+func (s *scenario) onCopy(document, action string) {
+	s.t.Helper()
+	req, err := http.NewRequestWithContext(s.ctx, http.MethodPost,
+		s.url+"/api/user/devices/"+s.device.ID+"/koreader-unrecognized/"+document+"/"+action, nil)
+	require.NoError(s.t, err)
+	for _, cookie := range s.web() {
+		req.AddCookie(cookie)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(s.t, err)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	require.Equal(s.t, http.StatusNoContent, resp.StatusCode, string(body))
+}
+
+// Sync now says how many books wait to be linked. A copy whose reading was
+// deleted on the Device's page, then restored, gets it back when the plugin
+// sends its history again, and sending it again once linked adds nothing.
+func TestPluginSendsHistoryAgainForARestoredCopy(t *testing.T) {
+	s := newScenario(t)
+	start := time.Now().UTC().Add(-3 * time.Hour)
+	s.signInPluginWith(start.Add(-24*time.Hour), "history = { through = 0 }")
+	synced := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true, Stats: []StatRow{
+		{Document: oldCopy, Page: 2, TotalPages: 100, StartTime: start.Unix(), Duration: 60},
+		{Document: oldCopy, Page: 3, TotalPages: 100, StartTime: start.Add(time.Minute).Unix(), Duration: 60},
+	}})
+	require.Equal(t, []string{oldCopy}, s.unrecognized())
+	require.Equal(t, 2, s.held(oldCopy))
+	assert.Contains(t, strings.Join(synced.Shown, "\n"),
+		"1 book on "+s.containerLabel()+" is waiting to be linked on the Device's page there.")
+
+	s.onCopy(oldCopy, "dismiss")
+	s.onCopy(oldCopy, "delete-reading")
+	require.Zero(t, s.held(oldCopy))
+	quiet := s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+	assert.NotContains(t, strings.Join(quiet.Shown, "\n"), "waiting to be linked")
+	require.Zero(t, s.held(oldCopy), "its reading stays dropped")
+
+	s.onCopy(oldCopy, "restore")
+	menu := s.run(Args{Command: "plugin-menu"})
+	require.Contains(t, menu.Plugin.Menu, s.containerLabel()+" > Send reading history again")
+	sent := s.run(Args{Command: "plugin-menu", Online: true, SendHistoryAgain: true})
+	assert.Equal(t, 2, s.held(oldCopy), "its reading is back: %v", sent.Shown)
+
+	file := s.file(models.FileTypeEPUB)
+	s.link(oldCopy, file)
+	require.Len(t, s.pluginSessions(), 1)
+	s.run(Args{Command: "plugin-menu", Online: true, SendHistoryAgain: true})
+	assert.Len(t, s.pluginSessions(), 1, "nothing is counted twice")
+	assert.Zero(t, s.held(oldCopy))
+}

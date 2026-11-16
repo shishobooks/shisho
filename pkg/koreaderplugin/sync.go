@@ -86,8 +86,9 @@ func (c deviceClock) onDevice(instant time.Time) int64 {
 // repeat, or a time that can't be right. The rows and events of a document
 // Shisho doesn't recognize are held against its hash, counting toward
 // nothing, and the copy is listed on the Device's page, so linking it to a
-// File applies them (ADR 0017). A copy the user dismissed has its data
-// dropped, and one another server now recognizes (Claimed) is forgotten.
+// File applies them (ADR 0017). A copy whose reading the user deleted has
+// its data dropped, and one another server now recognizes (Claimed) is
+// forgotten.
 func (h *handler) upload(c echo.Context) error {
 	ctx := c.Request().Context()
 	user, err := auth.RequireUser(c)
@@ -139,17 +140,17 @@ func (h *handler) upload(c echo.Context) error {
 		if ok, seen := held[document]; seen {
 			return ok, nil
 		}
-		dismissed, err := h.dismissed(ctx, device.ID, document)
+		dropped, err := h.dropped(ctx, device.ID, document)
 		if err != nil {
 			return false, err
 		}
-		if !dismissed {
+		if !dropped {
 			if err := h.noteUnrecognized(ctx, user, device, clock, document, about[document]); err != nil {
 				return false, err
 			}
 		}
-		held[document] = !dismissed
-		return !dismissed, nil
+		held[document] = !dropped
+		return !dropped, nil
 	}
 
 	refused := 0
@@ -404,6 +405,10 @@ func (h *handler) pull(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	unlinked, err := h.unlinkedCount(ctx, device.ID)
+	if err != nil {
+		return err
+	}
 	if err := h.devices.RecordPluginConnection(ctx, device.ID, reportedVersion(c)); err != nil {
 		return errors.WithStack(err)
 	}
@@ -413,5 +418,6 @@ func (h *handler) pull(c echo.Context) error {
 		Positions:   positions,
 		States:      states,
 		Cursor:      cursor,
+		Unlinked:    unlinked,
 	}))
 }

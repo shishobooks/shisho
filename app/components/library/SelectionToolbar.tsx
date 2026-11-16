@@ -1,4 +1,7 @@
 import {
+  BookCheck,
+  BookDashed,
+  BookOpen,
   CheckCircle,
   ChevronUp,
   Circle,
@@ -20,6 +23,7 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MergeBooksDialog } from "@/components/library/MergeBooksDialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -34,6 +38,10 @@ import {
   useCreateList,
   useListLists,
 } from "@/hooks/queries/lists";
+import {
+  useBulkReadingChange,
+  type BulkReadingAction,
+} from "@/hooks/queries/reading";
 import { useBulkSetReview } from "@/hooks/queries/review";
 import { useAuth } from "@/hooks/useAuth";
 import { useBulkDownload } from "@/hooks/useBulkDownload";
@@ -52,6 +60,10 @@ import {
 } from "@/utils/downloadFiles";
 import { formatCount, formatFileSize } from "@/utils/format";
 
+// The most books one list request returns (ListBooksQuery in
+// pkg/books/types.go).
+const MAX_BOOKS_PAGE = 100;
+
 interface SelectionToolbarProps {
   library?: LibrarySummary;
 }
@@ -61,11 +73,16 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   // Merge, delete, and review changes require Books Write. Downloads and
   // list membership are governed separately and stay available.
   const canWriteBooks = useCan("books:write");
+  // Reading Status is the user's own, so the reading routes need only
+  // Books Read.
+  const canTrackReading = useCan("books:read");
   const { selectedBookIds, exitSelectionMode, clearSelection } =
     useBulkSelection();
   const [popoverOpen, setPopoverOpen] = useState(false);
   const fileTypesLabelId = useId();
   const [morePopoverOpen, setMorePopoverOpen] = useState(false);
+  const [readingPopoverOpen, setReadingPopoverOpen] = useState(false);
+  const [confirmingNotStarted, setConfirmingNotStarted] = useState(false);
   const [actionsPopoverOpen, setActionsPopoverOpen] = useState(false);
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
@@ -80,15 +97,20 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const createListMutation = useCreateList();
   const deleteBooksMutation = useDeleteBooks();
   const bulkSetReviewMutation = useBulkSetReview();
+  const bulkReadingMutation = useBulkReadingChange();
 
   const [downloadPopoverOpen, setDownloadPopoverOpen] = useState(false);
   const [selectedDownloadTypes, setSelectedDownloadTypes] = useState<string[]>(
     [],
   );
 
-  // Fetch all selected books (not just current page) for download info and delete dialog
+  // Fetch all selected books (not just current page) for download info and
+  // delete dialog, up to the most one page of books holds.
   const allSelectedBooksQuery = useBooks(
-    { ids: selectedBookIds },
+    {
+      ids: selectedBookIds,
+      limit: Math.min(Math.max(selectedBookIds.length, 1), MAX_BOOKS_PAGE),
+    },
     { enabled: selectedBookIds.length > 0 },
   );
 
@@ -216,6 +238,32 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     }
   };
 
+  const handleBulkReading = async (action: BulkReadingAction) => {
+    try {
+      const result = await bulkReadingMutation.mutateAsync({
+        action,
+        bookIds: selectedBookIds,
+      });
+      const label = action === "finish" ? "read" : "not started";
+      const skipped =
+        result.skipped > 0
+          ? `, ${result.skipped.toLocaleString()} skipped`
+          : "";
+      toast.success(
+        `Marked ${formatCount(result.changed, "book")} as ${label}${skipped}`,
+      );
+      setConfirmingNotStarted(false);
+      exitSelectionMode();
+    } catch (error) {
+      toastRequestError(
+        error,
+        action === "finish"
+          ? "Failed to mark books as read"
+          : "Failed to mark books as not started",
+      );
+    }
+  };
+
   const handleDeleteBooks = async () => {
     try {
       const result = await deleteBooksMutation.mutateAsync({
@@ -234,6 +282,62 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   }
 
   const bookLabel = formatCount(selectedBookIds.length, "book");
+
+  // Marking not started deletes each read underway, so its confirmation
+  // says how many of the selected books have one, once they've loaded.
+  const underwayCount = allBooks.filter(
+    (book) =>
+      selectedBookIds.includes(book.id) &&
+      (book.reading_status === "currently_reading" ||
+        book.reading_status === "paused"),
+  ).length;
+  // Known only when every selected book loaded: a selection can be larger
+  // than one page of books.
+  const underwayKnown =
+    (allSelectedBooksQuery.data?.items.length ?? 0) >= selectedBookIds.length;
+  const readsUnderway =
+    !underwayKnown || underwayCount === 1
+      ? `The read underway on ${underwayKnown ? "1 book" : "each selected book"} is deleted`
+      : `The reads underway on ${formatCount(underwayCount, "book")} are deleted`;
+  const notStartedDescription = `${readsUnderway}, along with the reading time and places recorded during it, and the books' main files open at the start again. A book that left To Read when it was started goes back to its place there. Books that aren't being read are skipped.`;
+
+  // The reading actions, for the phone menu and the desktop popover. onPick
+  // closes whichever holds them.
+  const readingActions = (onPick: () => void) => (
+    <>
+      <Button
+        className="w-full justify-start gap-2 font-normal"
+        disabled={bulkReadingMutation.isPending}
+        onClick={() => {
+          onPick();
+          handleBulkReading("finish");
+        }}
+        size="sm"
+        variant="ghost"
+      >
+        <BookCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="truncate">Mark as read</span>
+      </Button>
+      <Button
+        className="w-full justify-start gap-2 font-normal"
+        disabled={bulkReadingMutation.isPending}
+        onClick={() => {
+          onPick();
+          // With nothing being read, there's nothing to confirm.
+          if (underwayKnown && underwayCount === 0) {
+            toast.info("None of the selected books is being read.");
+            return;
+          }
+          setConfirmingNotStarted(true);
+        }}
+        size="sm"
+        variant="ghost"
+      >
+        <BookDashed className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="truncate">Mark as not started</span>
+      </Button>
+    </>
+  );
 
   const downloadContent = (onDownloadClick: () => void) => (
     <div className="p-3 space-y-3">
@@ -373,6 +477,12 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         >
           {addToListContent}
 
+          {canTrackReading && (
+            <div className="border-t p-1">
+              {readingActions(() => setActionsPopoverOpen(false))}
+            </div>
+          )}
+
           {canWriteBooks && (
             <div className="border-t p-1">
               <Button
@@ -458,6 +568,23 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
             {addToListContent}
           </PopoverContent>
         </Popover>
+
+        {canTrackReading && (
+          <Popover
+            onOpenChange={setReadingPopoverOpen}
+            open={readingPopoverOpen}
+          >
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="default">
+                <BookOpen className="h-4 w-4" />
+                Reading
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="center" className="w-56 p-1" side="top">
+              {readingActions(() => setReadingPopoverOpen(false))}
+            </PopoverContent>
+          </Popover>
+        )}
 
         {!demoMode && (
           <Popover
@@ -577,6 +704,18 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         onOpenChange={setCreateDialogOpen}
         open={createDialogOpen}
       />
+
+      {canTrackReading && (
+        <ConfirmDialog
+          confirmLabel="Mark as not started"
+          description={notStartedDescription}
+          isPending={bulkReadingMutation.isPending}
+          onConfirm={() => handleBulkReading("not-started")}
+          onOpenChange={setConfirmingNotStarted}
+          open={confirmingNotStarted}
+          title={`Mark ${bookLabel} as not started?`}
+        />
+      )}
 
       {canWriteBooks && (
         <DeleteConfirmationDialog

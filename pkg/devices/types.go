@@ -63,6 +63,9 @@ type DeviceResponse struct {
 	DeliveryRuleOptions []delivery.RuleOption `json:"delivery_rule_options" tstype:"RuleOption[]"`
 	// HasPreset is true when the Device's type has a preset to follow.
 	HasPreset bool `json:"has_preset"`
+	// UnlinkedBooks is how many books the KOReader plugin reported that are
+	// waiting to be linked on the Device's page, 0 for other Devices.
+	UnlinkedBooks int `json:"unlinked_books"`
 }
 
 // AdminDeviceResponse is a Device in the admin listing of every user's

@@ -13,6 +13,7 @@ import {
   PageFlowPaginated,
   PageFlowScrolled,
   type BookReadingResponse,
+  type BulkReadingResponse,
   type FilePositionResponse,
   type ListReadingHistoryQuery,
   type ListReadingHistoryResponse,
@@ -443,6 +444,58 @@ export const useDeleteReadThrough = () => {
     onSuccess: (data) => {
       onReadThroughChanged(queryClient, data);
       // Its Sessions go with it, and Server Stats totals everyone's time.
+      queryClient.invalidateQueries({
+        queryKey: [ServerStatsQueryKey.ServerStats],
+      });
+    },
+  });
+};
+
+// A reading change made to many Books at once from the selection toolbar,
+// named by its route (pkg/reading/routes.go): marking each read, or marking
+// each not started, which deletes its Read-through underway.
+export type BulkReadingAction = "finish" | "not-started";
+
+interface BulkReadingChangeVariables {
+  action: BulkReadingAction;
+  bookIds: number[];
+}
+
+// Changes many Books' reading at once. It touches what the one-Book changes
+// do, for every Book: listings and their statuses, each Book's record and
+// positions, Reading History and Stats, and, since marking not started
+// deletes Sessions, Server Stats.
+export const useBulkReadingChange = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    BulkReadingResponse,
+    ShishoAPIError,
+    BulkReadingChangeVariables
+  >({
+    mutationFn: ({ action, bookIds }) => {
+      if (action === "not-started") {
+        return API.request(
+          "POST",
+          "/reading/books/bulk/not-started",
+          { book_ids: bookIds },
+          null,
+        );
+      }
+      const timeZone = queryClient.getQueryData<UserSettingsResponse>([
+        SettingsQueryKey.UserSettings,
+      ])?.time_zone;
+      return API.request(
+        "POST",
+        "/reading/books/bulk/finish",
+        { book_ids: bookIds, today: todayDay(timeZone) },
+        null,
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.BookReading] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.FilePosition] });
+      invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({
         queryKey: [ServerStatsQueryKey.ServerStats],
       });

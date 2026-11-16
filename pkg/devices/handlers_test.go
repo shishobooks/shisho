@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
@@ -382,4 +383,65 @@ func TestHandler_List_RulesQueriesDontGrowWithDevices(t *testing.T) {
 	}
 
 	assert.Equal(t, listQueries(1, 1), listQueries(4, 4))
+}
+
+func TestHandler_ListAndRetrieve_CountKOReaderBooksWaitingToLink(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := newHandlerFixture(t)
+	insertTestUser(t, f.db, 1, "reader")
+	koreader, err := f.h.service.Create(ctx, 1, "Kobo Libra", DeviceTypeKOReader)
+	require.NoError(t, err)
+	kobo, err := f.h.service.Create(ctx, 1, "Kobo", DeviceTypeKobo)
+	require.NoError(t, err)
+	now := time.Now()
+	book := func(document string, set func(*models.KOReaderUnrecognizedBook)) {
+		record := &models.KOReaderUnrecognizedBook{
+			DeviceID: koreader.ID, Document: document, UserID: 1, CreatedAt: now, UpdatedAt: now,
+			Authors: []string{}, Identifiers: []string{},
+		}
+		if set != nil {
+			set(record)
+		}
+		_, err := f.db.NewInsert().Model(record).Exec(ctx)
+		require.NoError(t, err)
+	}
+	book("aa", nil)
+	book("bb", nil)
+	book("cc", func(b *models.KOReaderUnrecognizedBook) { b.DismissedAt = &now })
+	book("dd", func(b *models.KOReaderUnrecognizedBook) { b.DismissedAt, b.ReadingDeletedAt = &now, &now })
+	lib := &models.Library{Name: "Fiction", CoverAspectRatio: "book"}
+	_, err = f.db.NewInsert().Model(lib).Exec(ctx)
+	require.NoError(t, err)
+	b := &models.Book{
+		LibraryID: lib.ID, Title: "Linked", TitleSource: models.DataSourceFilepath, SortTitle: "Linked",
+		SortTitleSource: models.DataSourceFilepath, AuthorSource: models.DataSourceFilepath, Filepath: "/books/linked",
+	}
+	_, err = f.db.NewInsert().Model(b).Exec(ctx)
+	require.NoError(t, err)
+	file := &models.File{
+		LibraryID: lib.ID, BookID: b.ID, FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain,
+		Filepath: "/books/linked/book.epub", FilesizeBytes: 1,
+	}
+	_, err = f.db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+	book("ee", func(b *models.KOReaderUnrecognizedBook) { b.LinkedAt, b.LinkedFileID = &now, &file.ID })
+	// Linked to a File since deleted, so it's one to link again.
+	book("ff", func(b *models.KOReaderUnrecognizedBook) { b.LinkedAt = &now })
+
+	rec, err := f.call(f.h.List, libraryUser(1), "", "")
+	require.NoError(t, err)
+	var list []DeviceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &list))
+	counts := map[string]int{}
+	for _, device := range list {
+		counts[device.ID] = device.UnlinkedBooks
+	}
+	assert.Equal(t, map[string]int{koreader.ID: 3, kobo.ID: 0}, counts, "dismissed, deleted, and linked books don't count")
+
+	rec, err = f.call(f.h.Retrieve, libraryUser(1), "", koreader.ID)
+	require.NoError(t, err)
+	var one DeviceResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &one))
+	assert.Equal(t, 3, one.UnlinkedBooks)
 }

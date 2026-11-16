@@ -160,8 +160,15 @@ export const useGenerateDeviceShortUrl = () => {
  * server's URL and a fresh pairing code, which replaces the Device's earlier
  * one, so the plugin signs itself in if it's installed within 30 minutes.
  */
+export interface KOReaderPluginDownload {
+  blob: Blob;
+  // When the download stops signing itself in, from the server, or null
+  // when it didn't say.
+  signsInUntil: Date | null;
+}
+
 export const useDownloadKOReaderPlugin = () => {
-  return useMutation<Blob, ShishoAPIError, string>({
+  return useMutation<KOReaderPluginDownload, ShishoAPIError, string>({
     mutationFn: async (id) => {
       const response = await fetch(`/api/user/devices/${id}/koreader-plugin`, {
         method: "POST",
@@ -170,7 +177,16 @@ export const useDownloadKOReaderPlugin = () => {
         // Throws the server's error.
         await API.checkStatus(response);
       }
-      return response.blob();
+      // HeaderSignInExpires in pkg/koreaderplugin.
+      const expires = response.headers.get("X-Shisho-Sign-In-Expires");
+      const signsInUntil = expires ? new Date(expires) : null;
+      return {
+        blob: await response.blob(),
+        signsInUntil:
+          signsInUntil && !Number.isNaN(signsInUntil.getTime())
+            ? signsInUntil
+            : null,
+      };
     },
   });
 };
@@ -334,6 +350,9 @@ export const useLinkKOReaderUnrecognized = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.KOReaderUnrecognizedBooks, deviceId],
       });
+      // Devices count the books waiting to be linked.
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListDevices] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveDevice] });
       queryClient.invalidateQueries({
         queryKey: [ReadingQueryKey.BookReading],
       });
@@ -349,27 +368,44 @@ export const useLinkKOReaderUnrecognized = () => {
   });
 };
 
-interface DismissUnrecognizedVariables {
+interface UnrecognizedCopyVariables {
   deviceId: string;
   document: string;
 }
 
-// Dismisses an unrecognized book, deleting the reading data held for it.
-export const useDismissKOReaderUnrecognized = () => {
+// A change to one unrecognized book that only its Device's list shows.
+const useUnrecognizedCopyAction = (action: string) => {
   const queryClient = useQueryClient();
-  return useMutation<void, ShishoAPIError, DismissUnrecognizedVariables>({
+  return useMutation<void, ShishoAPIError, UnrecognizedCopyVariables>({
     mutationFn: ({ deviceId, document }) =>
       API.request(
         "POST",
-        `/user/devices/${deviceId}/koreader-unrecognized/${document}/dismiss`,
+        `/user/devices/${deviceId}/koreader-unrecognized/${document}/${action}`,
       ),
     onSuccess: (_data, { deviceId }) => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.KOReaderUnrecognizedBooks, deviceId],
       });
+      // Devices count the books waiting to be linked.
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListDevices] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveDevice] });
     },
   });
 };
+
+// Dismisses an unrecognized book: it's set aside, and the reading data held
+// for it stays, to link later.
+export const useDismissKOReaderUnrecognized = () =>
+  useUnrecognizedCopyAction("dismiss");
+
+// Puts a dismissed book back on the list to link.
+export const useRestoreKOReaderUnrecognized = () =>
+  useUnrecognizedCopyAction("restore");
+
+// Deletes the reading data held for an unrecognized book, and drops what
+// KOReader sends for it until it's restored.
+export const useDeleteKOReaderUnrecognizedReading = () =>
+  useUnrecognizedCopyAction("delete-reading");
 
 interface UnlinkUnrecognizedVariables {
   deviceId: string;
@@ -391,12 +427,14 @@ export const useUnlinkKOReaderUnrecognized = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.KOReaderUnrecognizedBooks],
       });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListDevices] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveDevice] });
     },
   });
 };
 
-// Dismisses the books on a Device still to link that its page listed,
-// deleting the reading data held for them. Linked books stay.
+// Dismisses the books on a Device still to link that its page listed. The
+// reading data held for them stays. Linked books stay linked.
 export const useDismissAllKOReaderUnrecognized = () => {
   const queryClient = useQueryClient();
   return useMutation<
@@ -414,6 +452,9 @@ export const useDismissAllKOReaderUnrecognized = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.KOReaderUnrecognizedBooks, deviceId],
       });
+      // Devices count the books waiting to be linked.
+      queryClient.invalidateQueries({ queryKey: [QueryKey.ListDevices] });
+      queryClient.invalidateQueries({ queryKey: [QueryKey.RetrieveDevice] });
     },
   });
 };

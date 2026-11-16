@@ -185,6 +185,16 @@ return {
         assert_eq(Recognition.about(nil, nil, nil).title, nil)
     end,
 
+    ["history sent again asks about the books whose reading history a server deleted"] = function()
+        local r = open()
+        r:record(A, { { document = "deleted", state = "dismissed" } }, 1)
+        r:record(B, { { document = "elsewhere", state = "dismissed" } }, 1)
+        local sources = { statistics = function() return {} end }
+        assert_eq(r:waiting({ { server = { url = A, history = { through = 0 } } } }, sources), {})
+        assert_eq(r:waiting({ { server = { url = A, history = { through = 0, resend = true } } } }, sources), { "deleted" },
+            "only the server being sent history again, which may have restored it")
+    end,
+
     ["a copy a server says it holds bare is described, unless this round it recognized it"] = function()
         local r = open()
         local round = r:beginRound()

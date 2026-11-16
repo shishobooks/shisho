@@ -11,8 +11,18 @@ where through is the last statistics row recorded by sign-in, and
 through_row names that row (shisho/statistics). Its statistics
 cursor starts at the first row, and rows after through are reading like any
 other. A server whose sign-in is asking whether to send it has
-server.asking_history, and nothing goes to it until the person answers. No
-UI.
+server.asking_history, and nothing goes to it until the person answers.
+
+Once history has gone, it can be sent again (History.resend): every
+statistics row once more, from the first, with server.history.resend set
+until it has all gone. Rows up to through go as history again, and the rest
+as reading like any other, by the same rules as when they first went. The
+server takes each row once, so this only brings back what it dropped: the
+reading history of a book whose history was deleted on the Device's page
+and has since been restored there (ADR 0017). It also sends the status and
+stars of each book the server holds as unrecognized (History.withResent),
+which the server keeps only for a book that holds none, and applies by
+history's rules once the book is linked. No UI.
 ]]
 local Statistics = require("shisho/statistics")
 local random = require("frontend/random")
@@ -99,6 +109,25 @@ function History.accept(server)
     server.stats_from_row = nil
 end
 
+-- resendable reports whether server's history can be sent again: it has
+-- gone, all of it.
+function History.resendable(server)
+    local history = server.history
+    return type(history) == "table" and not history.resend and not History.rowsPending(server)
+end
+
+-- resend sends server every statistics row again, from the first, keeping
+-- where history ends.
+function History.resend(server)
+    server.history.resend = true
+    server.stats_cursor = { rowid = 0 }
+end
+
+-- resent records that the history server was sent again has all gone.
+function History.resent(server)
+    if type(server.history) == "table" then server.history.resend = nil end
+end
+
 -- rowsPending reports whether rows of server's history are still to go.
 function History.rowsPending(server)
     local history = server.history
@@ -152,6 +181,47 @@ function History.events(store, books)
             end
         end
     end
+    return events
+end
+
+--[[--
+resendEvents is the status and stars of each of books (Summaries.addBook)
+that the server holds as unrecognized, by state(document), the server's
+last answer about it, as events to send with history sent again, dated by
+the day KOReader saved them. A book's events are next to each other.
+]]
+function History.resendEvents(books, state)
+    local events = {}
+    for __, document in ipairs(sortedKeys(books)) do
+        local current = books[document].current
+        if not books[document].unread and current and current.day and state(document) == "held" then
+            if current.status then
+                table.insert(events, {
+                    id = random.uuid(true), type = "status", document = document,
+                    status = current.status, day = current.day,
+                })
+            end
+            if current.rating then
+                table.insert(events, {
+                    id = random.uuid(true), type = "rating", document = document,
+                    rating = current.rating, day = current.day,
+                })
+            end
+        end
+    end
+    return events
+end
+
+-- withResent adds to events, the history events for server, the status and
+-- stars of the books the server holds as unrecognized (resendEvents), by
+-- recognition's last answer from it, while its history is being sent again.
+function History.withResent(events, server, books, recognition)
+    if type(server.history) ~= "table" or not server.history.resend then return events end
+    local resent = History.resendEvents(books, function(document)
+        local answer = recognition:answer(server.url, document)
+        return answer and answer.state
+    end)
+    for __, event in ipairs(resent) do table.insert(events, event) end
     return events
 end
 

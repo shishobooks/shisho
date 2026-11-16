@@ -31,6 +31,15 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 "Today" is the date in [your time zone](#your-time-zone) when you choose the action. To correct a date afterwards, use **Edit dates** in [Reading History](#reading-history).
 
+### Changing Many Books at Once
+
+To fix the status of many books together, such as books a device's reading history marked **Currently Reading** that you finished long ago, select them in a library gallery or on the [Currently Reading page](#currently-reading-page) and open **Reading** on the selection toolbar (in **Actions** on a phone):
+
+- **Mark as read** does what it does on one book for each selected book. Books already **Read** are skipped, so they don't gain a second finished read.
+- **Mark as not started** does what it does on one book for each selected book you're reading or have paused, after you confirm how many reads it deletes. Other books are skipped.
+
+A message says how many books changed and how many were skipped.
+
 ## Reading on Devices
 
 [KOReader](./koreader.md) and a [Kobo](./kobo-sync.md#reading-progress) can sync your reading with Shisho, which starts, resumes, and finishes Read-throughs, with the same [rereading](#starting-and-finishing-automatically) rule as reading in Shisho.
@@ -92,9 +101,9 @@ A supplement keeps your place like any other file, and shows how far through it 
 
 ### Last Read
 
-The page of a book you're reading or have paused shows when you last read it, such as **Last read 4 hours ago** or **Last read 5 days ago**, and so does its card on the [Currently Reading page](#currently-reading-page). Hovering over it shows the exact date and time. Last read is the latest reading on any of the book's main files during the read you're on. Opening a place from a link, such as a page thumbnail or a shared `?page=` link, doesn't count as reading. A book you have read or abandoned shows no last read, even if you open it again to look something up.
+The page of a book you're reading or have paused shows when you last read it, such as **Last read 4 hours ago** or **Last read 5 days ago**, and so does its card on the [Currently Reading page](#currently-reading-page). Hovering over it shows the exact date and time. Last read is the latest time you read any of the book's main files during the read you're on. Opening a place from a link, such as a page thumbnail or a shared `?page=` link, doesn't count as reading. A book you have read or abandoned shows no last read, even if you open it again to look something up.
 
-**Mark as read** and **Mark as Did Not Finish** date the read's end by the day you last read the book, not today, so a book you put down before the epilogue and close out a week later shows when you really stopped. With no reading to go on, such as a book you marked **Start reading** and read elsewhere, they use today.
+**Mark as read** and **Mark as Did Not Finish** date the read's end by the day you last read the book, not today, so a book you put down before the epilogue and close out a week later shows when you really stopped. With no reading sessions to go on, such as a book you marked **Start reading** and read elsewhere, they use today.
 
 ### Currently Reading Page
 
@@ -138,7 +147,7 @@ Your statuses and ratings are ways to browse, in a library's gallery and on any 
 
 Filters apply before the gallery or list pages, so the count and every page hold only matching books. An ordered list can't be dragged into a new order while it's filtered.
 
-A list's saved default sort can be by any of these. Each person viewing the list then sees it in the order of their own reading. A library's saved default sort can be too, and it orders that library in the [OPDS](./opds.md) catalog and [eReader Browser](./ereader-browser.md) by your reading.
+A list's saved default sort can be by any of these. Each person viewing the list then sees it in the order of their own statuses, ratings, and dates. A library's saved default sort can be too, and it orders that library in the [OPDS](./opds.md) catalog and [eReader Browser](./ereader-browser.md) by your own statuses, ratings, and dates.
 
 Reading apps can download the books you're reading, or have paused, through the [OPDS catalog](./opds.md#catalog-structure).
 

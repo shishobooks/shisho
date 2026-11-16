@@ -545,3 +545,35 @@ func (s *Service) RecordPluginSync(ctx context.Context, id string, at time.Time)
 		Exec(ctx)
 	return errors.WithStack(err)
 }
+
+// UnlinkedBooks returns, for each of deviceIDs that has any, how many copies
+// the KOReader plugin reported that no server recognizes are still waiting
+// to be linked on the Device's page (ADR 0017): not dismissed, with their
+// reading history not deleted, and not linked, or linked to a File since
+// deleted, which is one to link again.
+func (s *Service) UnlinkedBooks(ctx context.Context, deviceIDs []string) (map[string]int, error) {
+	counts := map[string]int{}
+	if len(deviceIDs) == 0 {
+		return counts, nil
+	}
+	var rows []struct {
+		DeviceID string `bun:"device_id"`
+		Count    int    `bun:"count"`
+	}
+	err := s.db.NewSelect().
+		Model((*models.KOReaderUnrecognizedBook)(nil)).
+		Column("kub.device_id").
+		ColumnExpr("COUNT(*) AS count").
+		Where("kub.device_id IN (?)", bun.List(deviceIDs)).
+		Where("(kub.linked_at IS NULL OR kub.linked_file_id IS NULL)").
+		Where("kub.dismissed_at IS NULL AND kub.reading_deleted_at IS NULL").
+		Group("kub.device_id").
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range rows {
+		counts[row.DeviceID] = row.Count
+	}
+	return counts, nil
+}

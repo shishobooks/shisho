@@ -270,6 +270,67 @@ func (h *handler) abandon(c echo.Context) error {
 	})
 }
 
+// requireBooks checks that each of bookIDs exists and is in a library the
+// caller can reach, as requireBook does for one, so a bulk change makes
+// nothing unless every Book passes.
+func (h *handler) requireBooks(c echo.Context, user *models.User, bookIDs []int) error {
+	libraryIDs, err := h.readingService.BookLibraryIDs(c.Request().Context(), bookIDs)
+	if err != nil {
+		return err
+	}
+	for _, bookID := range bookIDs {
+		libraryID, ok := libraryIDs[bookID]
+		if !ok {
+			return errcodes.NotFound("Book")
+		}
+		if !user.HasLibraryAccess(libraryID) {
+			return errcodes.LibraryAccessDenied()
+		}
+	}
+	return nil
+}
+
+func (h *handler) bulkFinish(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := BulkFinishPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := checkDays(&params.Today); err != nil {
+		return err
+	}
+	if err := h.requireBooks(c, user, params.BookIDs); err != nil {
+		return err
+	}
+	resp, err := h.readingService.BulkFinish(c.Request().Context(), user.ID, params.BookIDs, params.Today)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+func (h *handler) bulkNotStarted(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := BulkNotStartedPayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := h.requireBooks(c, user, params.BookIDs); err != nil {
+		return err
+	}
+	resp, err := h.readingService.BulkNotStarted(c.Request().Context(), user.ID, params.BookIDs)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
 func (h *handler) setPaused(c echo.Context, paused bool) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {

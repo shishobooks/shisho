@@ -55,7 +55,10 @@ const ReadingCalendarTab = () => {
 
   if (heatmapQuery.error && !heatmap) {
     return (
-      <QueryError fallback="Failed to load your reading" query={heatmapQuery} />
+      <QueryError
+        fallback="Failed to load your reading calendar"
+        query={heatmapQuery}
+      />
     );
   }
   if (!heatmap) {

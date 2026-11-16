@@ -15,8 +15,9 @@ import type {
 import KOReaderUnrecognizedBooks from "./KOReaderUnrecognizedBooks";
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+const toastSuccess = vi.hoisted(() => vi.fn());
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: toastSuccess, error: vi.fn(), dismiss: vi.fn() },
 }));
 
 const DOCUMENT = "0123456789abcdef0123456789abcdef";
@@ -49,6 +50,7 @@ const unrecognized = (
   identifiers: [],
   reading_seconds: 3 * 3600 + 25 * 60,
   last_read_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
+  reading_deleted: false,
   suggestions: [
     candidate(),
     candidate({
@@ -64,7 +66,8 @@ const unrecognized = (
 });
 
 // stubAPI answers the unrecognized books routes from an in-memory list,
-// applying each link, unlink, and dismiss, and records every request.
+// applying each link, unlink, dismiss, restore, and deletion, and records
+// every request.
 const stubAPI = (
   initial: UnrecognizedBook[],
   searchResults: LinkCandidate[] = [],
@@ -103,12 +106,31 @@ const stubAPI = (
         return undefined;
       }
       if (method === "POST" && path === `${LIST}/dismiss-all`) {
-        books = books.filter((b) => b.linked_at);
+        const { documents } = body as { documents: string[] };
+        books = books.map((b) =>
+          documents.includes(b.document)
+            ? { ...b, suggestions: [], dismissed_at: new Date().toISOString() }
+            : b,
+        );
         return undefined;
       }
-      const dismiss = path.match(/\/koreader-unrecognized\/(\w+)\/dismiss$/);
-      if (method === "POST" && dismiss) {
-        books = books.filter((b) => b.document !== dismiss[1]);
+      const copy = path.match(
+        /\/koreader-unrecognized\/(\w+)\/(dismiss|restore|delete-reading)$/,
+      );
+      if (method === "POST" && copy) {
+        const [, document, action] = copy;
+        books = books.map((b) => {
+          if (b.document !== document) return b;
+          if (action === "restore") {
+            return { ...b, dismissed_at: null, reading_deleted: false };
+          }
+          return {
+            ...b,
+            suggestions: [],
+            dismissed_at: b.dismissed_at ?? new Date().toISOString(),
+            reading_deleted: action === "delete-reading",
+          };
+        });
         return undefined;
       }
       throw new Error(`unexpected request ${method} ${path}`);
@@ -130,9 +152,17 @@ const setupUser = () =>
 const posts = (request: ReturnType<typeof stubAPI>) =>
   request.mock.calls.filter((call) => call[0] === "POST");
 
+const lastPost = (request: ReturnType<typeof stubAPI>) => {
+  const all = posts(request);
+  return all[all.length - 1];
+};
+
 describe("KOReaderUnrecognizedBooks", () => {
   beforeEach(() => setAuth({ permissions: ["books:read"] }));
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    localStorage.clear();
+  });
 
   it("shows each book as KOReader knows it, with its best match, and the rest under More", async () => {
     stubAPI([unrecognized()]);
@@ -145,14 +175,18 @@ describe("KOReaderUnrecognizedBooks", () => {
     expect(row).toHaveTextContent(
       "Ursula Le Guin · 3h 25m read in KOReader · Last read 2 hours ago",
     );
-    // Collapsed, it offers only its best match, and nothing to dismiss.
+    // Collapsed, it offers its best match and Dismiss, in one click each.
     const best = within(row).getByRole("list", {
       name: "Best match for Left Hand of Darkness",
     });
     expect(within(best).getAllByRole("listitem")).toHaveLength(1);
     expect(best).toHaveTextContent("The Left Hand of Darkness");
     expect(best).toHaveTextContent("Same identifier");
-    expect(within(row).queryByRole("button", { name: /^Dismiss / })).toBeNull();
+    expect(
+      within(row).getByRole("button", {
+        name: "Dismiss Left Hand of Darkness",
+      }),
+    ).toBeInTheDocument();
 
     await user.click(
       within(row).getByRole("button", {
@@ -320,40 +354,178 @@ describe("KOReaderUnrecognizedBooks", () => {
     ).toBeInTheDocument();
   });
 
-  it("dismisses a book only once confirmed, and hides the section once none are left", async () => {
+  it("dismisses a book in one click, with Undo, keeping it under Dismissed", async () => {
     const request = stubAPI([unrecognized()]);
     const user = setupUser();
     renderSection();
 
     await user.click(
       await screen.findByRole("button", {
-        name: "More options for Left Hand of Darkness",
+        name: "Dismiss Left Hand of Darkness",
       }),
     );
+
+    expect(posts(request)).toEqual([["POST", `${LIST}/${DOCUMENT}/dismiss`]]);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("list", { name: "Unrecognized books" }),
+      ).toBeNull(),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(toastSuccess).toHaveBeenCalledWith(
+      "Dismissed Left Hand of Darkness",
+      expect.anything(),
+    );
+
+    // Undo, the app's own button in the message, restores it.
+    const calls = toastSuccess.mock.calls;
+    const [, options] = calls[calls.length - 1];
+    const message = render(<>{options.description}</>);
     await user.click(
-      screen.getByRole("button", { name: "Dismiss Left Hand of Darkness" }),
+      within(message.container).getByRole("button", { name: "Undo" }),
+    );
+    expect(lastPost(request)).toEqual(["POST", `${LIST}/${DOCUMENT}/restore`]);
+    await screen.findByRole("list", { name: "Unrecognized books" });
+  });
+
+  it("restores a dismissed book to link, and deletes its reading only once confirmed", async () => {
+    const request = stubAPI([
+      unrecognized({ suggestions: [], dismissed_at: "2026-11-01T00:00:00Z" }),
+    ]);
+    const user = setupUser();
+    renderSection();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dismissed (1)" }),
+    );
+    const list = screen.getByRole("list", { name: "Dismissed books" });
+    expect(list).toHaveTextContent("Left Hand of Darkness");
+    expect(list).toHaveTextContent("3h 25m read in KOReader");
+
+    await user.click(
+      within(list).getByRole("button", {
+        name: "Delete the reading history of Left Hand of Darkness",
+      }),
     );
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent(
-      'The reading held for "Left Hand of Darkness" is deleted',
-    );
+    expect(dialog).toHaveTextContent("Send reading history again");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(posts(request)).toEqual([]);
 
     await user.click(
-      screen.getByRole("button", { name: "Dismiss Left Hand of Darkness" }),
+      within(list).getByRole("button", {
+        name: "Delete the reading history of Left Hand of Darkness",
+      }),
     );
     await user.click(
       within(await screen.findByRole("dialog")).getByRole("button", {
-        name: "Dismiss",
+        name: "Delete",
       }),
     );
-    expect(posts(request)).toEqual([["POST", `${LIST}/${DOCUMENT}/dismiss`]]);
+    expect(posts(request)).toEqual([
+      ["POST", `${LIST}/${DOCUMENT}/delete-reading`],
+    ]);
     await waitFor(() =>
       expect(
-        screen.queryByRole("heading", { name: "Unrecognized Books" }),
-      ).toBeNull(),
+        screen.getByRole("list", { name: "Dismissed books" }),
+      ).toHaveTextContent("Reading history deleted"),
     );
+    expect(
+      screen.queryByRole("button", {
+        name: "Delete the reading history of Left Hand of Darkness",
+      }),
+    ).toBeNull();
+
+    await user.click(
+      screen.getByRole("button", { name: "Restore Left Hand of Darkness" }),
+    );
+    // Its history comes back only from the e-reader.
+    expect(toastSuccess).toHaveBeenCalledWith(
+      "Restored Left Hand of Darkness",
+      expect.objectContaining({
+        description: expect.stringContaining("Send reading history again"),
+      }),
+    );
+    expect(lastPost(request)).toEqual(["POST", `${LIST}/${DOCUMENT}/restore`]);
+    await screen.findByRole("list", { name: "Unrecognized books" });
+    expect(screen.queryByRole("button", { name: /^Dismissed/ })).toBeNull();
+  });
+
+  it("deletes reading history without asking once told not to ask again", async () => {
+    const second = "e".repeat(32);
+    const request = stubAPI([
+      unrecognized({ suggestions: [], dismissed_at: "2026-11-01T00:00:00Z" }),
+      unrecognized({
+        document: second,
+        title: "Another Copy",
+        suggestions: [],
+        dismissed_at: "2026-11-01T00:00:00Z",
+      }),
+    ]);
+    const user = setupUser();
+    renderSection();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dismissed (2)" }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Delete the reading history of Left Hand of Darkness",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("checkbox", { name: "Don't ask again" }),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Delete the reading history of Another Copy",
+      }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(posts(request)).toEqual([
+      ["POST", `${LIST}/${DOCUMENT}/delete-reading`],
+      ["POST", `${LIST}/${second}/delete-reading`],
+    ]);
+  });
+
+  it("keeps asking before deleting reading history unless told not to", async () => {
+    stubAPI([
+      unrecognized({ suggestions: [], dismissed_at: "2026-11-01T00:00:00Z" }),
+      unrecognized({
+        document: "e".repeat(32),
+        title: "Another Copy",
+        suggestions: [],
+        dismissed_at: "2026-11-01T00:00:00Z",
+      }),
+    ]);
+    const user = setupUser();
+    renderSection();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Dismissed (2)" }),
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Delete the reading history of Left Hand of Darkness",
+      }),
+    );
+    await user.click(
+      within(await screen.findByRole("dialog")).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Delete the reading history of Another Copy",
+      }),
+    );
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("unlinks a book only once confirmed, listing it to link again", async () => {
@@ -466,7 +638,9 @@ describe("KOReaderUnrecognizedBooks", () => {
       await screen.findByRole("button", { name: "Dismiss all" }),
     );
     const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent("All 2 books still to link are dismissed");
+    expect(dialog).toHaveTextContent(
+      "All 2 books still to link move to Dismissed. Their reading history stays held",
+    );
     expect(dialog).toHaveTextContent("Linked books stay.");
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(posts(request)).toEqual([]);
@@ -493,6 +667,9 @@ describe("KOReaderUnrecognizedBooks", () => {
     expect(
       screen.getByRole("list", { name: "Linked books" }),
     ).toHaveTextContent("Linked Copy");
+    expect(
+      screen.getByRole("button", { name: "Dismissed (2)" }),
+    ).toBeInTheDocument();
   });
 
   it("keeps the linked books open while unlinking them", async () => {

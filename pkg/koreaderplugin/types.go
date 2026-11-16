@@ -175,8 +175,10 @@ const (
 	DocumentRecognized = "recognized"
 	// DocumentHeld is a copy the server holds data for as unrecognized.
 	DocumentHeld = "held"
-	// DocumentDismissed is an unrecognized copy the user dismissed, whose
-	// data the server drops.
+	// DocumentDismissed is an unrecognized copy whose reading the user
+	// deleted, so the server drops its data. A copy the user only dismissed
+	// is still held. The value is older than that split, and plugins already
+	// read it as dropped.
 	DocumentDismissed = "dismissed"
 	// DocumentUnknown is a copy the server knows nothing of.
 	DocumentUnknown = "unknown"
@@ -228,6 +230,10 @@ type PullResponse struct {
 	States []PulledState `json:"states"`
 	// Cursor is what the next pull sends as Since.
 	Cursor int64 `json:"cursor"`
+	// Unlinked is how many copies the server holds for this Device as
+	// unrecognized that are still to link on the Device's page, so the
+	// plugin can say so after a sync.
+	Unlinked int `json:"unlinked"`
 }
 
 // PulledState is what KOReader should show for a book's status and Rating
@@ -266,7 +272,7 @@ type PulledPosition struct {
 
 // UnrecognizedBook is a copy on a KOReader Device that no server the plugin
 // signed in to recognized (ADR 0017), as its Device's page lists it: the
-// ones still to link first, then the linked ones.
+// ones still to link first, then the linked ones, then the dismissed ones.
 type UnrecognizedBook struct {
 	Document    string   `json:"document"`
 	Title       *string  `json:"title" tstype:"string | null"`
@@ -280,10 +286,16 @@ type UnrecognizedBook struct {
 	FirstReadAt    *time.Time `json:"first_read_at" tstype:"string | null"`
 	LastReadAt     *time.Time `json:"last_read_at" tstype:"string | null"`
 	// LinkedAt is when the user linked the copy to a File, and Linked that
-	// File, nil once it's gone. A copy not linked yet has Suggestions.
+	// File, nil once it's gone. A copy still to link has Suggestions.
 	LinkedAt    *time.Time      `json:"linked_at" tstype:"string | null"`
 	Linked      *LinkCandidate  `json:"linked" tstype:"LinkCandidate | null"`
 	Suggestions []LinkCandidate `json:"suggestions"`
+	// DismissedAt is when the user set the copy aside, still held to link
+	// later, and nil for one still to link or linked. ReadingDeleted is a
+	// dismissed copy whose held reading the user deleted, so its data is
+	// dropped until it's restored.
+	DismissedAt    *time.Time `json:"dismissed_at" tstype:"string | null"`
+	ReadingDeleted bool       `json:"reading_deleted"`
 }
 
 // How a candidate File for a link was found.

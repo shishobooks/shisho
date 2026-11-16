@@ -312,6 +312,18 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusNotFound, code: "not_found", message: "Book not found.",
 		},
 		{
+			name:   "marking read in bulk a book that does not exist",
+			method: http.MethodPost, path: "/api/reading/books/bulk/finish",
+			body:   fmt.Sprintf(`{"book_ids":[%d,999999],"today":"2026-03-02"}`, fileBook.ID),
+			status: http.StatusNotFound, code: "not_found", message: "Book not found.",
+		},
+		{
+			name:   "marking not started in bulk a book that does not exist",
+			method: http.MethodPost, path: "/api/reading/books/bulk/not-started",
+			body:   `{"book_ids":[999999]}`,
+			status: http.StatusNotFound, code: "not_found", message: "Book not found.",
+		},
+		{
 			name:   "read-through that does not exist",
 			method: http.MethodDelete, path: "/api/reading/read-throughs/999999",
 			status: http.StatusNotFound, code: "not_found", message: "Read-through not found.",
@@ -394,6 +406,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		{
 			name:   "dismissal of an unrecognized book the Device doesn't hold",
 			method: http.MethodPost, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/0ddc0b7a11c0b7a11c0b7a11c0b7a11c/dismiss",
+			status: http.StatusNotFound, code: "not_found", message: "Unrecognized book not found.",
+		},
+		{
+			name:   "restore of an unrecognized book that isn't dismissed",
+			method: http.MethodPost, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/0ddc0b7a11c0b7a11c0b7a11c0b7a11c/restore",
+			status: http.StatusNotFound, code: "not_found", message: "Unrecognized book not found.",
+		},
+		{
+			name:   "deleting the reading history of an unrecognized book the Device doesn't hold",
+			method: http.MethodPost, path: "/api/user/devices/" + koreader.ID + "/koreader-unrecognized/0ddc0b7a11c0b7a11c0b7a11c0b7a11c/delete-reading",
 			status: http.StatusNotFound, code: "not_found", message: "Unrecognized book not found.",
 		},
 		{

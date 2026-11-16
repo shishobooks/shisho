@@ -16,7 +16,7 @@ import {
   DEVICE_TYPE_LABELS,
   scopeLabel,
 } from "@/utils/devices";
-import { formatDateTime } from "@/utils/format";
+import { formatCount, formatDateTime } from "@/utils/format";
 
 const DeviceRow = ({ device }: { device: DeviceResponse }) => {
   const connections = device.connections
@@ -38,6 +38,9 @@ const DeviceRow = ({ device }: { device: DeviceResponse }) => {
           <Badge variant="secondary">
             {DEVICE_TYPE_LABELS[device.device_type]}
           </Badge>
+          {device.unlinked_books > 0 && (
+            <Badge>{formatCount(device.unlinked_books, "book")} to link</Badge>
+          )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground md:text-sm">
           {scopeLabel(device)} · {connections}

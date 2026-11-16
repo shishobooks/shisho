@@ -44,6 +44,7 @@ local logger = require("logger")
 local util = require("util")
 local T = require("ffi/util").template
 local _ = require("gettext")
+local N_ = _.ngettext
 
 -- KOReader lists a menu item it has no place for after More tools, which on
 -- an e-reader is usually the Tools tab's second page. So the plugin adds
@@ -210,6 +211,21 @@ function Shisho:sendHistoryLater(server)
     })
 end
 
+-- sendHistoryAgain asks whether to send server its reading history again,
+-- and sends it at once, turning Wi-Fi on if needed, as Sync now does.
+function Shisho:sendHistoryAgain(server)
+    UIManager:show(ConfirmBox:new{
+        text = T(_("Send your whole KOReader reading history to %1 again?\n\nShisho takes in only what it doesn't already have, such as the reading history of a book you restored on the Device's page. Nothing is counted twice, and books you linked stay linked."), Urls.label(server.url)),
+        ok_text = _("Send again"),
+        ok_callback = function()
+            if not self.state:find(server.url) or not History.resendable(server) then return end
+            History.resend(server)
+            self.state:flush()
+            NetworkMgr:runWhenOnline(function() self:syncAll(true) end)
+        end,
+    })
+end
+
 -- historyDecided follows a decision about sending history: it asks about the
 -- next server still waiting, if any, and once none is, syncs when online, so
 -- history the person chose to send goes at once.
@@ -233,7 +249,7 @@ function Shisho:askHistory(server)
         self:historyDecided()
     end
     UIManager:show(ConfirmBox:new{
-        text = T(_("Send your existing KOReader reading history to %1?\n\nShisho then shows the reading time KOReader recorded, on the days it happened, and your books' statuses and stars from KOReader. Otherwise only reading from now on is sent."), Urls.label(server.url)),
+        text = T(_("Send your existing KOReader reading history to %1?\n\nShisho then shows the reading time KOReader recorded, on the days it happened, and your books' statuses and stars from KOReader. Otherwise only what you read from now on is sent."), Urls.label(server.url)),
         ok_text = _("Send history"),
         cancel_text = _("Don't send"),
         -- Tapping outside it isn't an answer.
@@ -1123,7 +1139,7 @@ function Shisho:syncAll(interactive, going_to_sleep, while_reading)
     end
     self.syncing = true
     self.pages_since_sync = 0
-    local ok, problems, statistics_on = pcall(self.syncServers, self, interactive, while_reading, going_to_sleep)
+    local ok, problems, statistics_on, synced = pcall(self.syncServers, self, interactive, while_reading, going_to_sleep)
     self.syncing = false
     self.synced_at = os.time()
     if self.summaries_written then
@@ -1134,7 +1150,7 @@ function Shisho:syncAll(interactive, going_to_sleep, while_reading)
     end
     if not ok then
         logger.warn("Shisho: syncing failed:", problems)
-        problems, statistics_on = { _("Couldn't sync. Try again later.") }, true
+        problems, statistics_on, synced = { _("Couldn't sync. Try again later.") }, true, {}
     end
     if not going_to_sleep then
         local pulled, err = pcall(self.pullOpenBook, self, interactive)
@@ -1147,6 +1163,16 @@ function Shisho:syncAll(interactive, going_to_sleep, while_reading)
         else
             for __, problem in ipairs(problems) do table.insert(lines, problem) end
         end
+        -- Each server that synced says how many books wait to be linked
+        -- there, even when another server failed.
+        for __, server in ipairs(synced) do
+            local unlinked = tonumber(server.unlinked) or 0
+            if unlinked > 0 then
+                table.insert(lines, T(N_("1 book on %2 is waiting to be linked on the Device's page there.",
+                    "%1 books on %2 are waiting to be linked on the Device's page there.", unlinked),
+                    unlinked, Urls.label(server.url)))
+            end
+        end
         if not statistics_on then
             table.insert(lines, STATISTICS_OFF)
         end
@@ -1156,7 +1182,7 @@ function Shisho:syncAll(interactive, going_to_sleep, while_reading)
 end
 
 -- syncServers runs the sync for each signed-in server, returning what went
--- wrong and whether statistics is on. A sync while reading leaves out a
+-- wrong, whether statistics is on, and the servers that synced. A sync while reading leaves out a
 -- server that just failed, and doesn't walk the device's folders or read the
 -- sidecars of books only they hold. A server still asking whether to send
 -- history waits for the answer. Unless going to sleep, a long history shows
@@ -1177,7 +1203,7 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
                 "; reading on after row", server.stats_cursor.rowid)
         end
     end
-    local problems = {}
+    local problems, synced = {}, {}
     local plans = {}
     for __, server in ipairs(self.state:enabledServers()) do
         local label = Urls.label(server.url)
@@ -1244,6 +1270,11 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
 
     for __, plan in ipairs(plans) do
         local server, client, store, label = plan.server, plan.client, plan.store, plan.label
+        -- After the lookups, so a book restored on the Device's page since
+        -- the last sync counts as held.
+        if plan.history then
+            plan.history = History.withResent(plan.history, server, books, self.recognition)
+        end
         -- A sync while reading or going to sleep sends history a little
         -- at a time, so it holds up neither, and shows no progress.
         local busy = while_reading or going_to_sleep
@@ -1284,6 +1315,7 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
             outcome = "error"
         end
         Sync.noteOutcome(server, outcome, os.time())
+        if outcome == "ok" then table.insert(synced, server) end
         if outcome == "needs_login" then
             table.insert(problems, T(_("%1 needs a new sign-in."), label))
         elseif outcome ~= "ok" then
@@ -1291,7 +1323,7 @@ function Shisho:syncServers(interactive, while_reading, going_to_sleep)
         end
     end
     self.state:flush()
-    return problems, statistics_on
+    return problems, statistics_on, synced
 end
 
 -- aboutBook is what KOReader knows of the book document
@@ -1370,7 +1402,7 @@ function Shisho:serverMenu(server)
     end
     table.insert(items, {
         text = _("Sign in again"),
-        help_text = _("Sign in to this server again with a new pairing code from the Device's page in Shisho, or with the Device's password. Use it after regenerating the Device's password. Reading waiting to sync is kept and sent once you're signed in."),
+        help_text = _("Sign in to this server again with a new pairing code from the Device's page in Shisho, or with the Device's password. Use it after regenerating the Device's password. Everything waiting to sync is kept and sent once you're signed in."),
         keep_menu_open = true,
         callback = function() self:showSignIn(server.url) end,
     })
@@ -1381,6 +1413,14 @@ function Shisho:serverMenu(server)
             help_text = _("Send this server the reading history KOReader recorded before you signed in to it, as first sign-in offers: your reading time on the days it happened, and your books' statuses and stars where Shisho has none. Reading time that already synced since you signed in isn't added again."),
             keep_menu_open = true,
             callback = function() self:sendHistoryLater(server) end,
+        })
+    end
+    if not server.disabled and History.resendable(server) then
+        table.insert(items, {
+            text = _("Send reading history again"),
+            help_text = _("Send this server every reading session KOReader recorded again, with the statuses and stars of the books it lists as unrecognized. Shisho takes in only what it doesn't already have, so nothing is counted twice and nothing you linked changes. Use it after restoring a book whose reading history you deleted on the Device's page."),
+            keep_menu_open = true,
+            callback = function() self:sendHistoryAgain(server) end,
         })
     end
     if not server.disabled and Versions.reinstallable(self:installed(), self.state:servers(), server.url) then
@@ -1427,7 +1467,7 @@ function Shisho:serverHelp(server)
     if server.disabled then
         table.insert(lines, _("Disabled: the plugin doesn't sync with this server or check it for updates until you turn on Enabled under it."))
     elseif server.needs_login then
-        table.insert(lines, _("Needs login: the server no longer accepts this sign-in, such as after the Device's password was regenerated. Your reading waits on this device until you sign in again."))
+        table.insert(lines, _("Needs login: the server no longer accepts this sign-in, such as after the Device's password was regenerated. Everything waiting to sync stays on this device until you sign in again."))
     elseif server.update_required then
         table.insert(lines, _("Update required: the server no longer accepts this plugin. Install the update it offers."))
     end
@@ -1462,7 +1502,7 @@ end
 local HISTORY_CHOICES = {
     { "ask", _("Ask"), _("Ask at each first sign-in to a server whether to send it your reading history.") },
     { "send", _("Send"), _("Send your reading history to each server signed in to for the first time, without asking.") },
-    { "skip", _("Don't send"), _("Send servers only reading from sign-in on, without asking.") },
+    { "skip", _("Don't send"), _("Send servers only what you read from sign-in on, without asking.") },
 }
 
 -- historyMenu chooses what first sign-in does about history.
@@ -1594,7 +1634,7 @@ function Shisho:addToMainMenu(menu_items)
             end
             table.insert(items, {
                 text = _("Add a server"),
-                help_text = _("Sign in to another Shisho server with a pairing code from a KOReader Device's page there. Each server gets the reading for the books it has."),
+                help_text = _("Sign in to another Shisho server with a pairing code from a KOReader Device's page there. Each server syncs only the books it has."),
                 keep_menu_open = true,
                 separator = true,
                 callback = function()

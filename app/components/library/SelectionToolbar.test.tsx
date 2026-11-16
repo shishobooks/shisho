@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
@@ -45,6 +45,7 @@ const mockBooks = [
   {
     id: 1,
     title: "Book One",
+    reading_status: "currently_reading",
     files: [
       {
         id: 101,
@@ -57,6 +58,7 @@ const mockBooks = [
   {
     id: 2,
     title: "Book Two",
+    reading_status: "paused",
     files: [
       {
         id: 201,
@@ -75,6 +77,7 @@ const mockBooks = [
   {
     id: 3,
     title: "Book Three",
+    reading_status: "read",
     files: [
       {
         id: 301,
@@ -92,11 +95,13 @@ const mockBooks = [
   },
 ];
 
+const mockUseBooks = vi.hoisted(() => vi.fn());
+
 vi.mock("@/hooks/queries/books", () => ({
-  useBooks: () => ({
-    data: { items: mockBooks, total: 3 },
-    isLoading: false,
-  }),
+  useBooks: (...args: unknown[]) => {
+    mockUseBooks(...args);
+    return { data: { items: mockBooks, total: 3 }, isLoading: false };
+  },
   useDeleteBooks: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -128,6 +133,15 @@ const mockBulkSetReviewMutateAsync = vi.fn();
 vi.mock("@/hooks/queries/review", () => ({
   useBulkSetReview: () => ({
     mutateAsync: mockBulkSetReviewMutateAsync,
+    isPending: false,
+  }),
+}));
+
+const mockBulkReadingMutateAsync = vi.fn();
+
+vi.mock("@/hooks/queries/reading", () => ({
+  useBulkReadingChange: () => ({
+    mutateAsync: mockBulkReadingMutateAsync,
     isPending: false,
   }),
 }));
@@ -415,5 +429,172 @@ describe("SelectionToolbar read-only user", () => {
     expect(
       screen.getByRole("button", { name: /create new list/i }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("SelectionToolbar reading status actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("marks the selected books read and reports what it skipped", async () => {
+    const user = createUser();
+    const success = vi.spyOn(toast, "success");
+    mockBulkReadingMutateAsync.mockResolvedValueOnce({
+      changed: 2,
+      skipped: 1,
+    });
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as read" }));
+
+    expect(mockBulkReadingMutateAsync).toHaveBeenCalledWith({
+      action: "finish",
+      bookIds: [1, 2, 3],
+    });
+    expect(success).toHaveBeenCalledWith("Marked 2 books as read, 1 skipped");
+    expect(mockExitSelectionMode).toHaveBeenCalled();
+    success.mockRestore();
+  });
+
+  it("leaves out the skipped count when nothing was skipped", async () => {
+    const user = createUser();
+    const success = vi.spyOn(toast, "success");
+    mockBulkReadingMutateAsync.mockResolvedValueOnce({
+      changed: 1,
+      skipped: 0,
+    });
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as read" }));
+
+    expect(success).toHaveBeenCalledWith("Marked 1 book as read");
+    success.mockRestore();
+  });
+
+  it("confirms marking not started, naming how many reads it deletes", async () => {
+    const user = createUser();
+    const success = vi.spyOn(toast, "success");
+    mockBulkReadingMutateAsync.mockResolvedValueOnce({
+      changed: 2,
+      skipped: 1,
+    });
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(
+      screen.getByRole("button", { name: "Mark as not started" }),
+    );
+    expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog");
+    // Books One and Two are being read; Book Three is already read.
+    expect(dialog).toHaveTextContent(
+      "The reads underway on 2 books are deleted",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Mark as not started" }),
+    );
+
+    expect(mockBulkReadingMutateAsync).toHaveBeenCalledWith({
+      action: "not-started",
+      bookIds: [1, 2, 3],
+    });
+    expect(success).toHaveBeenCalledWith(
+      "Marked 2 books as not started, 1 skipped",
+    );
+    expect(mockExitSelectionMode).toHaveBeenCalled();
+    success.mockRestore();
+  });
+
+  it("says nothing is being read instead of confirming, when none is", async () => {
+    const user = createUser();
+    const info = vi.spyOn(toast, "info");
+    selection.ids = [3];
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(
+      screen.getByRole("button", { name: "Mark as not started" }),
+    );
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(info).toHaveBeenCalledWith(
+      "None of the selected books is being read.",
+    );
+    expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
+    info.mockRestore();
+  });
+
+  it("fetches every selected book, up to the most one page holds", () => {
+    selection.ids = Array.from({ length: 30 }, (_, i) => i + 1);
+    render(wrap(<SelectionToolbar />));
+
+    expect(mockUseBooks).toHaveBeenLastCalledWith(
+      expect.objectContaining({ ids: selection.ids, limit: 30 }),
+      expect.anything(),
+    );
+  });
+
+  it("confirms without a count when not every selected book has loaded", async () => {
+    const user = createUser();
+    // More selected than the three that loaded, such as on other pages.
+    selection.ids = Array.from({ length: 30 }, (_, i) => i + 1);
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(
+      screen.getByRole("button", { name: "Mark as not started" }),
+    );
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "The read underway on each selected book is deleted",
+    );
+  });
+
+  it("keeps the selection when the change fails", async () => {
+    const user = createUser();
+    const failure = vi.spyOn(toast, "error");
+    mockBulkReadingMutateAsync.mockRejectedValueOnce(new Error("boom"));
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as read" }));
+
+    expect(failure).toHaveBeenCalled();
+    expect(mockExitSelectionMode).not.toHaveBeenCalled();
+    failure.mockRestore();
+  });
+
+  it("offers both actions in the phone Actions menu", async () => {
+    const user = createUser();
+    mockBulkReadingMutateAsync.mockResolvedValueOnce({
+      changed: 2,
+      skipped: 1,
+    });
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: /^actions$/i }));
+    const menu = screen.getByRole("dialog");
+    expect(
+      within(menu).getByRole("button", { name: "Mark as not started" }),
+    ).toBeInTheDocument();
+    await user.click(
+      within(menu).getByRole("button", { name: "Mark as read" }),
+    );
+
+    expect(mockBulkReadingMutateAsync).toHaveBeenCalledWith({
+      action: "finish",
+      bookIds: [1, 2, 3],
+    });
+  });
+
+  it("is offered to a user who can only read books", () => {
+    setAuth({ permissions: ["books:read"] });
+    render(wrap(<SelectionToolbar />));
+
+    expect(screen.getByRole("button", { name: "Reading" })).toBeInTheDocument();
   });
 });

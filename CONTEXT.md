@@ -87,7 +87,7 @@ Shisho's add-on for KOReader. It signs into a Shisho server as a KOReader **Devi
 _Avoid_: Shisho plugin, sync plugin (a plugin in Shisho runs on the server)
 
 **Unrecognized book**:
-A copy on a KOReader **Device** that no server the **KOReader plugin** signs into recognizes, such as one downloaded before Shisho recorded the hashes of what it delivers. Each server holds its reading against the copy and lists it on the Device's page until the user links it to a **File**, which applies what was held, or dismisses it (ADR 0017).
+A copy on a KOReader **Device** that no server the **KOReader plugin** signs into recognizes, such as one downloaded before Shisho recorded the hashes of what it delivers. Each server holds its reading history against the copy and lists it on the Device's page until the user links it to a **File**, which applies what was held. Dismissing it sets it aside, still held, to restore or link later; deleting a dismissed copy's reading history drops what was held and what comes later (ADR 0017).
 _Avoid_: unknown book, orphan, unmatched copy
 
 **Delivery Rules**:

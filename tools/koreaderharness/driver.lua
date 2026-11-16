@@ -485,11 +485,14 @@ commands["plugin-menu"] = function()
             stepUI()
             items = entries.shisho.sub_item_table_func()
         end
-        -- send_history taps Send reading history under the first server and
-        -- confirms, with Wi-Fi on, and the menu is then read as it is after.
-        if args.send_history then
+        -- send_history taps Send reading history under the first server, and
+        -- send_history_again Send reading history again, and confirms, with
+        -- Wi-Fi on, and the menu is then read as it is after.
+        local send = args.send_history and "Send reading history"
+            or args.send_history_again and "Send reading history again"
+        if send then
             for __, sub in ipairs(items[1] and items[1].sub_item_table or {}) do
-                if sub.text == "Send reading history" then sub.callback() end
+                if sub.text == send then sub.callback() end
             end
             if confirm_box then
                 confirm_box.ok_callback()
