@@ -99,6 +99,16 @@ worker_processes: 2
 # Default: 30
 job_retention_days: 30
 
+# Check GitHub for a newer Shisho release, about twice a day while a user
+# with Config Read permission uses the web app. When one is out, those users
+# see "Update available" in place of the version at the bottom of the sidebar
+# (the menu on phones), linked to the release notes.
+# The request sends only the running Shisho version, nothing about your library.
+# Demo Mode never checks.
+# Env: UPDATE_CHECK_ENABLED
+# Default: true
+update_check_enabled: true
+
 # =============================================================================
 # CACHE SETTINGS
 # =============================================================================

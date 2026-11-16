@@ -13,6 +13,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import UpdateNotice, { RELEASES_URL } from "@/components/layout/UpdateNotice";
+import { useAvailableUpdate } from "@/components/layout/useAvailableUpdate";
 import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { Button } from "@/components/ui/button";
 import { useMobileNav } from "@/contexts/MobileNav";
@@ -57,6 +59,7 @@ const MobileDrawer = () => {
   const navigate = useNavigate();
   const { can, demoMode, user, logout } = useAuth();
   const { isOpen, close } = useMobileNav();
+  const update = useAvailableUpdate();
   const [showLibraryPicker, setShowLibraryPicker] = useState(false);
 
   // Empty for a role without Books Read, which every library page needs.
@@ -434,15 +437,19 @@ const MobileDrawer = () => {
               Sign out
             </Button>
             <div className="px-4 py-3">
-              <a
-                className="flex items-center justify-center gap-1.5 py-2 rounded-md text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                href="https://github.com/shishobooks/shisho/releases"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <span className="text-xs">shisho</span>
-                <span className="text-xs font-mono">{__APP_VERSION__}</span>
-              </a>
+              {update ? (
+                <UpdateNotice update={update} />
+              ) : (
+                <a
+                  className="flex items-center justify-center gap-1.5 py-2 rounded-md text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                  href={RELEASES_URL}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  <span className="text-xs">shisho</span>
+                  <span className="text-xs font-mono">{__APP_VERSION__}</span>
+                </a>
+              )}
             </div>
           </div>
         </div>

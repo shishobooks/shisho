@@ -78,6 +78,15 @@ func TestCompare(t *testing.T) {
 	}
 }
 
+func TestIsValid(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, IsValid("0.8.0"))
+	assert.True(t, IsValid("v1.2.3-rc1"))
+	assert.False(t, IsValid("dev"))
+	assert.False(t, IsValid(""))
+}
+
 func TestParseSemver(t *testing.T) {
 	t.Parallel()
 

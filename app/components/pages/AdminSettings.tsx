@@ -184,6 +184,11 @@ const AdminSettings = () => {
               value={orDisabled(config.job_retention_days, "days")}
             />
             <ConfigRow
+              description="Checks GitHub for a newer Shisho release and shows it in the sidebar"
+              label="Update Check"
+              value={config.update_check_enabled}
+            />
+            <ConfigRow
               description="Real-time filesystem monitoring of library paths"
               label="Library Monitor"
               value={config.library_monitor_enabled}

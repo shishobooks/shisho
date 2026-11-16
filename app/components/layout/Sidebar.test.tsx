@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Book, Settings } from "lucide-react";
@@ -12,18 +13,46 @@ import {
   vi,
 } from "vitest";
 
+import { API } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
+import type { UpdateCheckResponse } from "@/types/generated/updatecheck";
+
 import Sidebar, { type SidebarItem } from "./Sidebar";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 beforeAll(() => {
   // @ts-expect-error - global defined by Vite
   globalThis.__APP_VERSION__ = "test";
 });
 
+const upToDate: UpdateCheckResponse = {
+  current_version: "0.8.0",
+  latest_version: "0.8.0",
+  releases_behind: 0,
+  update_available: false,
+};
+
+const behind: UpdateCheckResponse = {
+  current_version: "0.6.0",
+  latest_version: "0.8.0",
+  releases_behind: 2,
+  update_available: true,
+};
+
+const stubUpdateCheck = (response: UpdateCheckResponse) =>
+  vi.spyOn(API, "request").mockImplementation(async (_method, path) => {
+    if (path === "/update-check") return response;
+    throw new Error(`unexpected request to ${path}`);
+  });
+
 const renderSidebar = (items: SidebarItem[]) =>
   render(
-    <MemoryRouter>
-      <Sidebar items={items} />
-    </MemoryRouter>,
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <Sidebar items={items} />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 
 const buildItem = (overrides: Partial<SidebarItem> = {}): SidebarItem => ({
@@ -37,10 +66,13 @@ const buildItem = (overrides: Partial<SidebarItem> = {}): SidebarItem => ({
 describe("Sidebar", () => {
   beforeEach(() => {
     localStorage.clear();
+    setAuth({ permissions: ["config:read"] });
+    stubUpdateCheck(upToDate);
   });
 
   afterEach(() => {
     localStorage.clear();
+    vi.restoreAllMocks();
   });
 
   it("renders each visible item's label", () => {
@@ -137,5 +169,55 @@ describe("Sidebar", () => {
     expect(screen.getByRole("link", { name: "Bravo" })).not.toHaveAttribute(
       "aria-current",
     );
+  });
+
+  describe("update check", () => {
+    it("shows the version linked to the release notes while up to date", async () => {
+      renderSidebar([buildItem()]);
+      expect(await screen.findByText("shisho")).toBeInTheDocument();
+      expect(screen.getByText("test").closest("a")).toHaveAttribute(
+        "href",
+        "https://github.com/shishobooks/shisho/releases",
+      );
+      expect(screen.queryByText("Update available")).not.toBeInTheDocument();
+    });
+
+    it("replaces the version with the update and how far behind it is", async () => {
+      stubUpdateCheck(behind);
+      renderSidebar([buildItem()]);
+
+      const notice = (await screen.findByText("Update available")).closest("a");
+      expect(notice).toHaveAttribute(
+        "href",
+        "https://github.com/shishobooks/shisho/releases",
+      );
+      expect(notice).toHaveTextContent("0.6.0 → 0.8.0");
+      expect(notice).toHaveTextContent("2 releases behind");
+      expect(screen.queryByText("shisho")).not.toBeInTheDocument();
+    });
+
+    it("keeps an icon link to the release notes when collapsed", async () => {
+      stubUpdateCheck(behind);
+      localStorage.setItem("shisho-sidebar-collapsed", "true");
+      renderSidebar([buildItem()]);
+
+      expect(
+        await screen.findByRole("link", {
+          name: "Update available: 0.8.0, 2 releases behind",
+        }),
+      ).toHaveAttribute(
+        "href",
+        "https://github.com/shishobooks/shisho/releases",
+      );
+    });
+
+    it("never asks without Config Read", () => {
+      setAuth({ permissions: ["books:read"] });
+      const request = stubUpdateCheck(behind);
+      renderSidebar([buildItem()]);
+
+      expect(screen.getByText("shisho")).toBeInTheDocument();
+      expect(request).not.toHaveBeenCalled();
+    });
   });
 });

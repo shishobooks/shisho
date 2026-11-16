@@ -23,6 +23,7 @@ const baseConfig: ConfigResponse = {
   sync_interval_minutes: 60,
   worker_processes: 2,
   job_retention_days: 30,
+  update_check_enabled: true,
   cache_dir: "/config/cache",
   pdf_render_dpi: 200,
   pdf_render_quality: 85,

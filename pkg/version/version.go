@@ -61,6 +61,12 @@ func Compare(a, b string) int {
 	return 0
 }
 
+// IsValid reports whether s parses as a version Compare understands, so a
+// caller can tell an unparseable version (such as "dev") from an equal one.
+func IsValid(s string) bool {
+	return parseSemver(s) != nil
+}
+
 // parseSemver extracts [major, minor, patch] from a semver string.
 // Returns nil if the string cannot be parsed.
 func parseSemver(s string) []int {

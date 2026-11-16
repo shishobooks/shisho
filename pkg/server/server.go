@@ -59,6 +59,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/sharelinks"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/shishobooks/shisho/pkg/testutils"
+	"github.com/shishobooks/shisho/pkg/updatecheck"
 	"github.com/shishobooks/shisho/pkg/users"
 	"github.com/shishobooks/shisho/pkg/version"
 	"github.com/shishobooks/shisho/pkg/worker"
@@ -236,6 +237,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	})
 	audnexus.RegisterRoutes(api, audnexusService, authMiddleware)
 
+	// Newer-release check for the sidebar (config:read required).
+	updatecheck.RegisterRoutes(api, updatecheck.NewService(updateCheckConfig(cfg)), authMiddleware)
+
 	// Cache management routes (admin only; requires config:read to list, config:write to clear)
 	cacheHandler := cache.NewHandler(svcs.dlCache, svcs.cbzCache, svcs.pdfCache, svcs.coverCache)
 	cache.RegisterRoutes(api, cacheHandler, authMiddleware)
@@ -280,6 +284,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	}
 
 	return srv, nil
+}
+
+// updateCheckConfig configures the newer-release check. The Public Demo never
+// contacts GitHub.
+func updateCheckConfig(cfg *config.Config) updatecheck.ServiceConfig {
+	return updatecheck.ServiceConfig{
+		Enabled:        cfg.UpdateCheckEnabled && !cfg.DemoMode,
+		CurrentVersion: version.Version,
+		UserAgent:      "Shisho/" + version.Version,
+	}
 }
 
 // sharedServices holds the services and caches that pkg/server builds once

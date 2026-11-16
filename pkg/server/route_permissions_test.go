@@ -306,6 +306,21 @@ func TestServerStats_ConfigRead(t *testing.T) {
 	f.expect(nil, http.MethodGet, "/api/server-stats/reading", "", http.StatusUnauthorized)
 }
 
+// The update check is for whoever runs the server: Config Read gets it,
+// nothing else does.
+func TestUpdateCheck_ConfigRead(t *testing.T) {
+	t.Parallel()
+	f := newRoutePermissionsFixture(t)
+	auditor := f.user("auditor", f.role("auditor", "config:read"))
+	reader := f.user("reader", f.role("reader", "books:read", "users:read", "libraries:read"))
+
+	body := f.expect(auditor, http.MethodGet, "/api/update-check", "", http.StatusOK)
+	assert.Contains(t, body, `"update_available":false`)
+	f.expect(f.admin, http.MethodGet, "/api/update-check", "", http.StatusOK)
+	f.expect(reader, http.MethodGet, "/api/update-check", "", http.StatusForbidden)
+	f.expect(nil, http.MethodGet, "/api/update-check", "", http.StatusUnauthorized)
+}
+
 // The review criteria page needs Config Read, the review panel Books Read.
 func TestReviewCriteria_BooksReadOrConfigRead(t *testing.T) {
 	t.Parallel()
