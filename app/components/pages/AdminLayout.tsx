@@ -1,6 +1,7 @@
 import { Menu, Settings } from "lucide-react";
 import { Outlet } from "react-router-dom";
 
+import GettingStarted from "@/components/layout/GettingStarted";
 import {
   TOP_NAV_INNER,
   TOP_NAV_ROW,
@@ -10,6 +11,7 @@ import UserMenu from "@/components/layout/UserMenu";
 import Logo from "@/components/library/Logo";
 import AdminSidebar from "@/components/pages/AdminSidebar";
 import { Button } from "@/components/ui/button";
+import { GettingStartedPanelProvider } from "@/contexts/GettingStarted";
 import { useMobileNav } from "@/contexts/MobileNav";
 
 const AdminHeader = () => {
@@ -36,6 +38,7 @@ const AdminHeader = () => {
             </div>
           </div>
           <div className="flex items-center gap-1 md:gap-4">
+            <GettingStarted />
             <UserMenu />
           </div>
         </div>
@@ -47,7 +50,10 @@ const AdminHeader = () => {
 const AdminLayout = () => {
   return (
     <div className="flex min-h-[calc(100vh-var(--banner-height,0px))] flex-col">
-      <AdminHeader />
+      {/* The Getting Started pill and the user menu both open its panel. */}
+      <GettingStartedPanelProvider>
+        <AdminHeader />
+      </GettingStartedPanelProvider>
       <div className="flex flex-1">
         <div className="hidden md:block">
           <AdminSidebar />

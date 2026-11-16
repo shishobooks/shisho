@@ -36,6 +36,7 @@ import type {
   UpdatePluginPayload,
 } from "@/types";
 
+import { invalidateGettingStarted } from "./gettingStarted";
 import { useRequires, type Requirement } from "./permissions";
 import { invalidateReadingRecords } from "./reading";
 
@@ -244,6 +245,7 @@ export const useInstallPlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginIdentifierTypes],
       });
+      invalidateGettingStarted(queryClient);
     },
   });
 };
@@ -275,6 +277,7 @@ export const useUninstallPlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.LibraryPluginOrder],
       });
+      invalidateGettingStarted(queryClient);
     },
   });
 };

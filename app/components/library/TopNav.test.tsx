@@ -14,6 +14,7 @@ vi.mock("@/contexts/MobileNav", () => ({
   useMobileNav: () => ({ isOpen: mobileNav.isOpen, toggle: vi.fn() }),
 }));
 vi.mock("@/components/layout/UserMenu", () => ({ default: () => null }));
+vi.mock("@/components/layout/GettingStarted", () => ({ default: () => null }));
 vi.mock("@/components/library/GlobalSearch", () => ({ default: () => null }));
 vi.mock("@/components/library/LibraryListPicker", () => ({
   default: () => null,

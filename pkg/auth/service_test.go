@@ -27,6 +27,21 @@ func TestServiceCreateFirstAdmin_SetsTimestamps(t *testing.T) {
 	assert.WithinDuration(t, time.Now(), user.UpdatedAt, time.Minute)
 }
 
+// The first admin gets Getting Started, but the panel doesn't open over
+// Setup on its own.
+func TestServiceCreateFirstAdmin_TurnsOnGettingStartedWithoutOpeningIt(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	svc := NewService(db, "test-jwt-secret", 30*24*time.Hour)
+
+	user, err := svc.CreateFirstAdmin(context.Background(), "admin", nil, "securepassword123")
+	require.NoError(t, err)
+
+	assert.True(t, user.GettingStartedEnabled)
+	assert.False(t, user.GettingStartedAutoOpen)
+}
+
 // See bcryptCost.
 func TestHashPassword_UsesMinimumCostInTests(t *testing.T) {
 	t.Parallel()

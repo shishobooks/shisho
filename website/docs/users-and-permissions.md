@@ -113,7 +113,7 @@ User accounts follow these requirements:
 - Email is optional.
 - Usernames and email addresses must be unique without regard to letter case.
 
-The initial setup screen creates the first user with the built-in admin role.
+The initial setup screen creates the first user with the built-in admin role. That admin starts with the [Getting Started](#getting-started) pill in the top nav.
 
 ## Create and Edit Users
 
@@ -127,6 +127,8 @@ To create an account:
 6. Configure **Library Access**.
 7. Select **Create User**.
 
+The first time the new user signs in, after choosing a new password if a reset was required, their [Getting Started](#getting-started) panel opens on its own.
+
 Select a username on the **Users** list to edit its username, optional email, role, and library access.
 
 ## Password Changes and Forced Resets
@@ -134,6 +136,30 @@ Select a username on the **Users** list to edit its username, optional email, ro
 Any signed-in user can open the user menu, select **Preferences**, and use **Change Password** under **Password**. A normal self-service change requires the current password.
 
 A user with Users Write permission can open another account under **Administration > Users**, select **Reset Password**, and optionally select **Require user to reset password on next login**. A user marked for forced reset must choose a new password before continuing in Shisho.
+
+## Getting Started
+
+Getting Started is each user's short list of first steps, behind the **Getting started** pill in the top nav. The ring in the pill shows how many are done. Each step links to where it gets done and ticks itself off once what it asks for exists, however it was done. A user sees only the steps their role allows:
+
+| Step | Shown to roles with | Done when |
+|------|---------------------|-----------|
+| **Set up your first library** | Libraries Write | Any library exists |
+| **Add metadata plugins** | Config Write, once a library exists | An installed plugin provides a metadata enricher |
+| **Invite someone** | Users Write | Another active user exists |
+| **Connect a reading device** | Books Read | The user has a [Device](#devices) |
+| **Add a book to To Read** | Books Read | The user's To Read isn't empty |
+| **Start reading something** | Books Read | The user has a place saved in any book, or any [reading history](./reading-tracking.md) |
+
+- **Not for me** on a step takes it out of the count, and **Undo** puts it back.
+- **Dismiss this list** hides the pill without asking. **Getting started** in the user menu brings it back.
+- When every step is done or marked **Not for me**, the panel shows **You're all set**, and closing it hides the pill.
+- The panel opens on its own the first time a user added with **Add User** signs in. The first admin gets the pill, but the panel stays closed.
+- A user it isn't on for can turn it on with **Getting started** in the user menu.
+- Getting Started never appears in [Demo Mode](./configuration.md#demo-mode).
+
+### Show Getting Started
+
+A user with Users Write can open an account under **Administration > Users** and select **Show Getting Started**. It brings the list back for that user, clears their **Not for me** choices, and opens the panel on their next visit. The admin never sees which of the user's steps are done.
 
 ## Devices
 

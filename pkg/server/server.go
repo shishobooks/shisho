@@ -36,6 +36,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/filesystem"
 	"github.com/shishobooks/shisho/pkg/frontend"
 	"github.com/shishobooks/shisho/pkg/genres"
+	"github.com/shishobooks/shisho/pkg/gettingstarted"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/kobo"
@@ -182,6 +183,9 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		users.RegisterDirectoryRoutes(userDirectoryGroup, db)
 	}
 	roles.RegisterRoutes(api, db, authMiddleware)
+
+	// Each user's Getting Started list, and an admin's Show Getting Started.
+	gettingstarted.RegisterRoutes(api, db, authMiddleware, cfg.DemoMode)
 
 	// Device management routes
 	devices.RegisterRoutes(api, db, authMiddleware)

@@ -1,5 +1,5 @@
 import equal from "fast-deep-equal";
-import { Loader2, Save, Shield, Trash2 } from "lucide-react";
+import { Loader2, Rocket, Save, Shield, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
+import { useShowGettingStarted } from "@/hooks/queries/gettingStarted";
 import { useLibraries } from "@/hooks/queries/libraries";
 import {
   useDeactivateUser,
@@ -54,6 +55,7 @@ const UserDetail = () => {
   const updateUserMutation = useUpdateUser();
   const resetPasswordMutation = useResetPassword();
   const deactivateUserMutation = useDeactivateUser();
+  const showGettingStartedMutation = useShowGettingStarted();
 
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
@@ -220,6 +222,20 @@ const UserDetail = () => {
       navigate("/admin/users");
     } catch (error) {
       toastRequestError(error, "Failed to deactivate user");
+    }
+  };
+
+  // Clears the user's dismissal and "Not for me" choices and opens the
+  // panel on their next visit. Their progress stays private.
+  const handleShowGettingStarted = async () => {
+    if (!user) return;
+    try {
+      await showGettingStartedMutation.mutateAsync(user.id);
+      toast.success(
+        `Getting Started will open for ${user.username} on their next visit.`,
+      );
+    } catch (error) {
+      toastRequestError(error, "Failed to show Getting Started");
     }
   };
 
@@ -428,6 +444,22 @@ const UserDetail = () => {
               variant="outline"
             >
               Reset Password
+            </Button>
+          )}
+
+          {/* An admin brings back their own list from the user menu. */}
+          {canWrite && !isSelf && (
+            <Button
+              disabled={showGettingStartedMutation.isPending}
+              onClick={handleShowGettingStarted}
+              variant="outline"
+            >
+              {showGettingStartedMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Rocket className="mr-2 h-4 w-4" />
+              )}
+              Show Getting Started
             </Button>
           )}
 

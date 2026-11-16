@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -7,15 +8,24 @@ import {
 } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { GettingStartedPanelProvider } from "@/contexts/GettingStarted";
 import { auth, setAuth } from "@/testing/auth";
 
 import UserMenu from "./UserMenu";
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
+// The menu's Getting started entry restores the list and opens its panel.
+const renderWithProviders = (ui: React.ReactNode) =>
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <GettingStartedPanelProvider>{ui}</GettingStartedPanelProvider>
+    </QueryClientProvider>,
+  );
+
 const openMenu = async () => {
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-  render(
+  renderWithProviders(
     <MemoryRouter>
       <UserMenu />
     </MemoryRouter>,
@@ -72,7 +82,7 @@ describe("UserMenu", () => {
       await router.navigate("/login?redirect=%2Fbooks", { replace: true });
     });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<RouterProvider router={router} />);
+    renderWithProviders(<RouterProvider router={router} />);
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(screen.getByRole("menuitem", { name: "Sign out" }));
     await waitFor(() => expect(router.state.location.search).toBe(""));

@@ -41,6 +41,7 @@ import {
 import { todayDay, type ReadingTransition } from "@/utils/readingStatus";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { invalidateGettingStarted } from "./gettingStarted";
 import { useRequires } from "./permissions";
 import { QueryKey as ServerStatsQueryKey } from "./serverStats";
 import { QueryKey as SettingsQueryKey } from "./settings";
@@ -127,6 +128,8 @@ const onReadingChanged = (
   queryClient.invalidateQueries({ queryKey: [QueryKey.FilePosition] });
   invalidateReadingRecords(queryClient);
   invalidateOtherBookReadings(queryClient, data.book_id);
+  // To Read and Read-throughs tick Getting Started's personal steps.
+  invalidateGettingStarted(queryClient);
 };
 
 // A change to a Read-through carries its Book's reading record, unless the
@@ -140,6 +143,7 @@ const onReadThroughChanged = (
     return;
   }
   invalidateReadingRecords(queryClient);
+  invalidateGettingStarted(queryClient);
 };
 
 // Reading History and Reading Stats summarize every Read-through and Session
@@ -616,6 +620,7 @@ export const invalidateAfterPositionUpdate = (
     predicate: (query) => query.queryKey[1] !== fileId,
   });
   invalidateOtherBookReadings(queryClient, bookId);
+  invalidateGettingStarted(queryClient);
 };
 
 // A save changed the progress the book page and book cards show. An open reader

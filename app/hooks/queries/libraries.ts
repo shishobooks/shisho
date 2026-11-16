@@ -17,6 +17,7 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { invalidateCoverPreviewLists } from "./coverPreviews";
+import { invalidateGettingStarted } from "./gettingStarted";
 import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
 import { anyOf, useRequires } from "./permissions";
 import { invalidateReadingRecords } from "./reading";
@@ -90,6 +91,7 @@ export const useCreateLibrary = () => {
       // The tag namespaces decide which tags each tab and count holds; the
       // counts' key sits under ListTags.
       queryClient.invalidateQueries({ queryKey: [TagsQueryKey.ListTags] });
+      invalidateGettingStarted(queryClient);
     },
   });
 };

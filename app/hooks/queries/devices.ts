@@ -31,6 +31,7 @@ import type {
 } from "@/types/generated/koreaderplugin";
 
 import { QueryKey as BooksQueryKey } from "./books";
+import { invalidateGettingStarted } from "./gettingStarted";
 import { useRequires } from "./permissions";
 import {
   invalidateReadingRecords,
@@ -95,6 +96,7 @@ const useInvalidateDevices = () => {
     queryClient.invalidateQueries({ queryKey: [QueryKey.BookDevices] });
     // Reading Stats names each Device the user read on.
     queryClient.invalidateQueries({ queryKey: [ReadingQueryKey.ReadingStats] });
+    invalidateGettingStarted(queryClient);
   };
 };
 

@@ -90,6 +90,10 @@ func (s *Service) Create(ctx context.Context, opts CreateUserOptions) (*models.U
 		RoleID:             opts.RoleID,
 		IsActive:           true,
 		MustChangePassword: opts.RequirePasswordReset,
+		// A new user gets Getting Started, opening on its own on their
+		// first visit.
+		GettingStartedEnabled:  true,
+		GettingStartedAutoOpen: true,
 	}
 
 	_, err = s.db.NewInsert().Model(user).Exec(ctx)

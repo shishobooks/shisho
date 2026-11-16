@@ -4,12 +4,13 @@ import {
   History,
   List,
   LogOut,
+  Rocket,
   Settings,
   TabletSmartphone,
   User,
   UserCog,
 } from "lucide-react";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -23,13 +24,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useGettingStartedPanel } from "@/contexts/GettingStarted";
+import { useRestoreGettingStarted } from "@/hooks/queries/gettingStarted";
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
-import { ROUTE_PERMISSIONS } from "@/utils/permissions";
+import { anyOf, ROUTE_PERMISSIONS } from "@/utils/permissions";
 
 const UserMenu = () => {
   const { can, demoMode, user, logout } = useAuth();
   const navigate = useNavigate();
+  const restoreGettingStarted = useRestoreGettingStarted();
+  const { setOpen: setGettingStartedOpen } = useGettingStartedPanel();
+  // Set while the Getting started entry opens its panel, which must keep
+  // focus; every other entry returns focus to the menu button.
+  const openingGettingStarted = useRef(false);
+  // A role that can do none of the steps has no list to bring back. The
+  // whole feature is off in Demo Mode, so the entry is hidden there too.
+  const canGetStarted =
+    !demoMode &&
+    can(anyOf("books:read", "libraries:write", "users:write", "config:write"));
 
   // Administration opens the first administration page the role may see.
   const canAccessAdmin = useAdminNavItems().some((item) => item.show);
@@ -47,6 +60,18 @@ const UserMenu = () => {
     }
   }, [logout, navigate]);
 
+  // Brings Getting Started back after a dismissal, or turns it on for a user
+  // it was never on for, and opens it.
+  const handleGettingStarted = async () => {
+    openingGettingStarted.current = true;
+    try {
+      await restoreGettingStarted.mutateAsync();
+      setGettingStartedOpen(true);
+    } catch (error) {
+      toastRequestError(error, "Failed to show Getting Started");
+    }
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -59,7 +84,15 @@ const UserMenu = () => {
           <User className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(e) => {
+          if (openingGettingStarted.current) {
+            openingGettingStarted.current = false;
+            e.preventDefault();
+          }
+        }}
+      >
         <DropdownMenuLabel>
           <div className="flex flex-col">
             <span>{user?.username}</span>
@@ -111,6 +144,12 @@ const UserMenu = () => {
             Preferences
           </Link>
         </DropdownMenuItem>
+        {canGetStarted && (
+          <DropdownMenuItem onClick={handleGettingStarted}>
+            <Rocket className="h-4 w-4" />
+            Getting started
+          </DropdownMenuItem>
+        )}
         {canAccessAdmin && !demoMode && (
           <>
             <DropdownMenuSeparator />

@@ -2,6 +2,7 @@ import { Menu, Search, X } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 
+import GettingStarted from "@/components/layout/GettingStarted";
 import {
   TOP_NAV_INNER,
   TOP_NAV_ROW,
@@ -13,11 +14,12 @@ import LibraryListPicker from "@/components/library/LibraryListPicker";
 import Logo from "@/components/library/Logo";
 import { ResyncButton } from "@/components/library/ResyncButton";
 import { Button } from "@/components/ui/button";
+import { GettingStartedPanelProvider } from "@/contexts/GettingStarted";
 import { useMobileNav } from "@/contexts/MobileNav";
 import { useCan } from "@/hooks/useCan";
 import { cn } from "@/libraries/utils";
 
-const TopNav = () => {
+const TopNavBar = () => {
   const { libraryId } = useParams();
   const { isOpen: navOpen, toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -92,6 +94,7 @@ const TopNav = () => {
               <GlobalSearch />
             </div>
 
+            <GettingStarted />
             <UserMenu />
           </div>
         </div>
@@ -109,5 +112,12 @@ const TopNav = () => {
     </div>
   );
 };
+
+// The Getting Started pill and the user menu both open its panel.
+const TopNav = () => (
+  <GettingStartedPanelProvider>
+    <TopNavBar />
+  </GettingStartedPanelProvider>
+);
 
 export default TopNav;

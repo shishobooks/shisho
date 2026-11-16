@@ -261,6 +261,11 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"PATCH /api/reading/bookmarks/:id", "DELETE /api/reading/bookmarks/:id",
 				// Server Stats is an admin read.
 				"GET /api/server-stats", "GET /api/server-stats/reading",
+				// Getting Started reports itself off in Demo Mode, and the
+				// middleware refuses every change to it.
+				"GET /api/getting-started", "POST /api/getting-started/dismiss", "POST /api/getting-started/restore",
+				"DELETE /api/getting-started/auto-open", "POST /api/getting-started/steps/:step/not-for-me",
+				"DELETE /api/getting-started/steps/:step/not-for-me", "POST /api/users/:id/show-getting-started",
 			} {
 				assert.True(t, routes[route], route)
 			}
@@ -309,6 +314,12 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodPost, "/api/reading/files/42/bookmarks"},
 				{http.MethodPatch, "/api/reading/bookmarks/42"},
 				{http.MethodDelete, "/api/reading/bookmarks/42"},
+				{http.MethodPost, "/api/getting-started/dismiss"},
+				{http.MethodPost, "/api/getting-started/restore"},
+				{http.MethodDelete, "/api/getting-started/auto-open"},
+				{http.MethodPost, "/api/getting-started/steps/device/not-for-me"},
+				{http.MethodDelete, "/api/getting-started/steps/device/not-for-me"},
+				{http.MethodPost, "/api/users/42/show-getting-started"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

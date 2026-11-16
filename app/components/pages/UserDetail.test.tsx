@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
@@ -52,6 +53,9 @@ const mockApi = () =>
       };
     }
     if (method === "POST" && path === "/users/5") return { id: 5 };
+    if (method === "POST" && path === "/users/5/show-getting-started") {
+      return undefined;
+    }
     return {};
   });
 
@@ -161,5 +165,39 @@ describe("UserDetail", () => {
     for (const radio of await within(roleGroup).findAllByRole("radio")) {
       expect(radio).toBeDisabled();
     }
+  });
+
+  it("shows Getting Started to the user on their next visit", async () => {
+    const request = mockApi();
+    const success = vi.spyOn(toast, "success");
+    const user = setupUser();
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Show Getting Started" }),
+    );
+
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "POST",
+        "/users/5/show-getting-started",
+      ),
+    );
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        "Getting Started will open for reader on their next visit.",
+      ),
+    );
+  });
+
+  it("hides Show Getting Started from a role that cannot write users", async () => {
+    setAuth({ permissions: ["users:read"] });
+    mockApi();
+    renderPage();
+
+    await screen.findByRole("radiogroup", { name: "Select Role" });
+    expect(
+      screen.queryByRole("button", { name: "Show Getting Started" }),
+    ).toBeNull();
   });
 });
