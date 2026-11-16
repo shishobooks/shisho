@@ -1,5 +1,7 @@
+import { ScrollText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import LogViewer, { type LogViewerEntry } from "@/components/library/LogViewer";
 import QueryError from "@/components/library/QueryError";
@@ -96,8 +98,17 @@ const AdminLogs = () => {
       ) : (
         <LogViewer
           className="flex-1"
-          emptyMessage={
-            search || level ? "No logs matching filters." : "No logs yet."
+          emptyState={
+            search || level ? (
+              <NoMatchesState bare itemLabel="log messages" />
+            ) : (
+              <EmptyState
+                bare
+                description="Messages from the server show up here as Shisho runs."
+                icon={ScrollText}
+                title="No log messages yet"
+              />
+            )
           }
           entries={entries}
           searchTerm={search}

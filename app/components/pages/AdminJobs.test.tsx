@@ -28,6 +28,8 @@ describe("AdminJobs pagination", () => {
 
     await waitFor(() => expect(router.state.location.search).toBe("?page=2"));
     expect(router.state.historyAction).toBe("REPLACE");
-    expect(screen.queryByText("No jobs found.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "No jobs yet" }),
+    ).not.toBeInTheDocument();
   });
 });

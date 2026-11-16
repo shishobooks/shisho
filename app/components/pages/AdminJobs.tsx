@@ -1,9 +1,10 @@
 import { formatDistanceToNow } from "date-fns";
-import { RefreshCw } from "lucide-react";
+import { Briefcase, RefreshCw } from "lucide-react";
 import { useCallback } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import EmptyState from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import PaginationFooter, {
   type PageChangeHandler,
@@ -166,9 +167,11 @@ const AdminJobs = () => {
       {jobsQuery.error && !data ? (
         <QueryError fallback="Failed to load jobs" query={jobsQuery} />
       ) : total === 0 ? (
-        <div className="border border-border rounded-md p-8 text-center">
-          <p className="text-muted-foreground">No jobs found.</p>
-        </div>
+        <EmptyState
+          description="Jobs are background tasks like library scans and bulk downloads. They show up here while they run and after they finish."
+          icon={Briefcase}
+          title="No jobs yet"
+        />
       ) : (
         <>
           {showing && (

@@ -15,7 +15,9 @@ const entry = (overrides: Partial<LogViewerEntry> = {}): LogViewerEntry => ({
 describe("LogViewer", () => {
   it("expands a log entry from the keyboard and announces its state", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<LogViewer entries={[entry({ error: "disk full" })]} />);
+    render(
+      <LogViewer emptyState={null} entries={[entry({ error: "disk full" })]} />,
+    );
 
     const toggle = screen.getByRole("button", { name: "Details" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
@@ -33,7 +35,9 @@ describe("LogViewer", () => {
 
   it("keeps the message as text and still toggles on a row click", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<LogViewer entries={[entry({ error: "disk full" })]} />);
+    render(
+      <LogViewer emptyState={null} entries={[entry({ error: "disk full" })]} />,
+    );
 
     // The message is not inside the button, so it can be selected.
     expect(screen.getByText("scan started").closest("button")).toBeNull();
@@ -44,7 +48,7 @@ describe("LogViewer", () => {
   });
 
   it("leaves an entry with nothing to expand as plain text", () => {
-    render(<LogViewer entries={[entry()]} />);
+    render(<LogViewer emptyState={null} entries={[entry()]} />);
 
     expect(screen.getByText("scan started")).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();

@@ -119,12 +119,42 @@ describe("LibraryRedirect", () => {
     ).toBeInTheDocument();
   });
 
-  it("sends a role without Libraries Read and no libraries to lists", async () => {
+  it("tells a role with Books Read and no accessible libraries to ask their admin", async () => {
     mockRequests([]);
 
     renderRedirect();
 
-    expect(await screen.findByText("lists page")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", {
+        name: "You don't have access to any libraries yet",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Ask your server admin to give you access."),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("top-nav")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Lists" })).toHaveAttribute(
+      "href",
+      "/lists",
+    );
+    expect(screen.queryByText("lists page")).toBeNull();
+  });
+
+  it("tells a role with Libraries Read but access to only some libraries to ask their admin", async () => {
+    setAuth({
+      permissions: ["books:read", "libraries:read", "libraries:write"],
+      user: { library_access: [] },
+    });
+    mockRequests([]);
+
+    renderRedirect();
+
+    expect(
+      await screen.findByRole("heading", {
+        name: "You don't have access to any libraries yet",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("library settings page")).toBeNull();
   });
 
   it("sends a role without Books Read to lists without requesting libraries", async () => {

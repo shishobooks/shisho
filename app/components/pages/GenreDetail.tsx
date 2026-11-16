@@ -1,7 +1,9 @@
+import { Bookmark } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { BookGallerySection } from "@/components/library/BookGallerySection";
+import EmptyState from "@/components/library/EmptyState";
 import { ResourceDetail } from "@/components/library/ResourceDetail";
 import { useBooks } from "@/hooks/queries/books";
 import {
@@ -132,7 +134,14 @@ const GenreDetail = () => {
       query={genreQuery}
     >
       <BookGallerySection
-        emptyMessage="This genre has no associated books."
+        emptyState={
+          <EmptyState
+            description="Books get a genre from their file metadata when scanned, or when you add it while editing a book."
+            headingLevel={3}
+            icon={Bookmark}
+            title="No books with this genre"
+          />
+        }
         libraryId={libraryId!}
         query={genreBooksQuery}
         sort={sort}

@@ -93,9 +93,16 @@ test.describe("Setup Flow", () => {
     await page.getByLabel("Confirm Password").fill("password123");
     await page.getByRole("button", { name: "Create Admin Account" }).click();
     await expect(page).toHaveURL("/admin/libraries");
-    // Verify we're on the libraries settings page after account creation
+    // Verify we're on the libraries settings page after account creation,
+    // which explains what a Library is and offers to create one.
     await expect(
-      page.getByRole("heading", { name: "Libraries" }),
+      page.getByRole("heading", { name: "Libraries", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "No libraries yet" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Create Library" }),
     ).toBeVisible();
   });
 });

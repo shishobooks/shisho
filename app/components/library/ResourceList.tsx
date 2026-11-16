@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import CoverFan from "@/components/library/CoverFan";
+import { NoMatchesState } from "@/components/library/EmptyState";
 import GalleryGrid from "@/components/library/GalleryGrid";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -53,6 +54,8 @@ interface ResourceListProps<T extends { id: number }, F extends string> {
   itemLabelSingular: string;
   /** Tabs under the search row that split the list (tag namespaces). */
   tabs?: ReactNode;
+  /** The `EmptyState` for a library with none yet; a search that matches nothing gets `NoMatchesState`. */
+  emptyState: ReactNode;
 }
 
 const ResourceList = <T extends { id: number }, F extends string>({
@@ -67,6 +70,7 @@ const ResourceList = <T extends { id: number }, F extends string>({
   itemLabel,
   itemLabelSingular,
   tabs,
+  emptyState,
 }: ResourceListProps<T, F>) => {
   usePageTitle(title);
   // Covers come from Books Read routes; a role without it gets no slot.
@@ -205,13 +209,16 @@ const ResourceList = <T extends { id: number }, F extends string>({
         {showsResults && query.data && showing && (
           <div className="mb-4 text-sm text-muted-foreground">{showing}</div>
         )}
-        {showsResults && query.data?.total === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            {confirmedSearch
-              ? `No ${itemLabel} found matching your search.`
-              : `No ${itemLabel} in this library yet.`}
-          </div>
-        )}
+        {showsResults &&
+          query.data?.total === 0 &&
+          (confirmedSearch ? (
+            <NoMatchesState
+              description="Try a different search."
+              itemLabel={itemLabel}
+            />
+          ) : (
+            emptyState
+          ))}
       </div>
 
       {isLoading && <LoadingSpinner />}

@@ -51,9 +51,7 @@ test.describe("Plugin lifecycle flows", () => {
     // Redirected back to the Installed list; plugin no longer present.
     await expect(page).toHaveURL(/\/admin\/plugins$/);
     await expect(
-      page.getByText(
-        "No plugins installed yet. Browse available plugins to get started.",
-      ),
+      page.getByRole("heading", { name: "No plugins installed" }),
     ).toBeVisible();
   });
 

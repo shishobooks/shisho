@@ -68,7 +68,7 @@ describe("AdminDevices", () => {
       expect(request).toHaveBeenCalledWith("DELETE", "/devices/kobo-1"),
     );
     expect(
-      await screen.findByText("No user has added a device."),
+      await screen.findByRole("heading", { name: "No devices yet" }),
     ).toBeInTheDocument();
   });
 

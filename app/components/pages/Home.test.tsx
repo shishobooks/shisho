@@ -175,9 +175,7 @@ describe("Home search failure", () => {
   it("reports a failed search after the unfiltered list loaded", async () => {
     const user = userEvent.setup();
     renderHome();
-    expect(
-      await screen.findByText("No books in this library yet."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No books yet")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Search books..."), "zzz");
 
@@ -210,9 +208,7 @@ describe("Home background refetch", () => {
       defaultOptions: { queries: { retry: false } },
     });
     renderHome("/libraries/1", queryClient);
-    expect(
-      await screen.findByText("No books in this library yet."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No books yet")).toBeInTheDocument();
 
     // What a reading change (adding a Book to To Read) does to listings.
     act(() => {
@@ -223,9 +219,7 @@ describe("Home background refetch", () => {
     await flush();
 
     expect(booksRequests).toBe(2);
-    expect(
-      screen.getByText("No books in this library yet."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No books yet")).toBeInTheDocument();
   });
 
   it("shows the spinner, not the previous page, while the next page loads", async () => {
@@ -412,7 +406,7 @@ describe("Currently Reading page", () => {
     await flush();
 
     expect(
-      screen.getByText("You aren't reading any books in this library."),
+      screen.getByRole("heading", { name: "Nothing in progress" }),
     ).toBeInTheDocument();
   });
 });

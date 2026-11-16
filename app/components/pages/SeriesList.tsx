@@ -1,8 +1,10 @@
+import { Layers } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import Gallery from "@/components/library/Gallery";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import { SearchInput } from "@/components/library/SearchInput";
@@ -224,10 +226,19 @@ const SeriesList = () => {
       <Gallery
         columns={columns}
         currentPage={currentPage}
-        emptyMessage={
-          confirmedSearch
-            ? "No series found matching your search."
-            : "No series in this library yet."
+        emptyState={
+          confirmedSearch ? (
+            <NoMatchesState
+              description="Try a different search."
+              itemLabel="series"
+            />
+          ) : (
+            <EmptyState
+              description="Series show up here when books in this library name one in their metadata, or when you add a book to a series while editing it."
+              icon={Layers}
+              title="No series yet"
+            />
+          )
         }
         // A background refetch (an SSE event) keeps the loaded items on
         // screen. A new page or search shows the spinner, not the previous

@@ -93,7 +93,7 @@ vi.mock("@/components/library/FileListSection", () => ({
   FileListSection: ({ title }: { title: string }) => <h2>{title}</h2>,
 }));
 
-const NEITHER = "This person has no authored books or narrated files.";
+const NEITHER = "No books or files yet";
 
 const renderPerson = (
   authored: number,
@@ -146,7 +146,7 @@ describe("PersonDetail sections", () => {
     renderPerson(0, 0);
     expect(screen.queryByText("Books Authored")).not.toBeInTheDocument();
     expect(screen.queryByText("Files Narrated")).not.toBeInTheDocument();
-    expect(screen.getByText(NEITHER)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: NEITHER })).toBeInTheDocument();
   });
 
   // The person's counts refresh less often than the lists (a scan refreshes

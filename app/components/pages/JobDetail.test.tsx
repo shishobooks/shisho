@@ -115,7 +115,9 @@ describe("JobDetail", () => {
     await user.click(screen.getByRole("option", { name: "m4a-parser" }));
     await user.click(screen.getByRole("button", { name: "info" }));
 
-    expect(await screen.findByText("No logs found.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("No matching log messages"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Plugin" })).toHaveTextContent(
       "m4a-parser",
     );

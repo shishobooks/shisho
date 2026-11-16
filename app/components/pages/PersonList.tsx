@@ -1,3 +1,6 @@
+import { Users } from "lucide-react";
+
+import EmptyState from "@/components/library/EmptyState";
 import ResourceList from "@/components/library/ResourceList";
 import { usePeopleList } from "@/hooks/queries/people";
 import { useResourceListState } from "@/hooks/useResourceListState";
@@ -11,6 +14,13 @@ const PersonList = () => {
 
   return (
     <ResourceList
+      emptyState={
+        <EmptyState
+          description="Authors and narrators show up here as books in this library are scanned or edited."
+          icon={Users}
+          title="No people yet"
+        />
+      }
       itemConfig={(person) => {
         const badges = [];
         if (person.authored_book_count > 0) {

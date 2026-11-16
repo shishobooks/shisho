@@ -1,5 +1,7 @@
+import { Tags } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
+import EmptyState from "@/components/library/EmptyState";
 import ResourceList from "@/components/library/ResourceList";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useUserLibrary } from "@/hooks/queries/libraries";
@@ -89,6 +91,13 @@ const TagsList = () => {
 
   return (
     <ResourceList
+      emptyState={
+        <EmptyState
+          description="Tags show up here as books in this library are scanned with tags in their metadata, or edited to add them."
+          icon={Tags}
+          title="No tags yet"
+        />
+      }
       itemConfig={(tag) => {
         const bookCount = tag.book_count ?? 0;
         return {

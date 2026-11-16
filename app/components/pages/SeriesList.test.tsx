@@ -91,9 +91,7 @@ describe("SeriesList search failure", () => {
         </MemoryRouter>
       </QueryClientProvider>,
     );
-    expect(
-      await screen.findByText("No series in this library yet."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("No series yet")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText("Search series..."), "zzz");
 

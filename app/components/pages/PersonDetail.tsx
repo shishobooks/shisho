@@ -1,7 +1,9 @@
+import { Book, Headphones, Users } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import { BookGallerySection } from "@/components/library/BookGallerySection";
+import EmptyState from "@/components/library/EmptyState";
 import {
   FILE_LIST_ITEMS_PER_PAGE,
   FileListSection,
@@ -192,7 +194,14 @@ const PersonDetail = () => {
     >
       {showAuthored && (
         <BookGallerySection
-          emptyMessage="This person has no authored books."
+          emptyState={
+            <EmptyState
+              description="Books list this person as an author from their file metadata when scanned, or when you add them while editing a book."
+              headingLevel={3}
+              icon={Book}
+              title="No authored books"
+            />
+          }
           libraryId={libraryId!}
           query={authoredBooksQuery}
           sort={sort}
@@ -201,7 +210,14 @@ const PersonDetail = () => {
       )}
       {showNarrated && (
         <FileListSection
-          emptyMessage="This person has no narrated files."
+          emptyState={
+            <EmptyState
+              description="Audiobook files list this person as a narrator from their metadata when scanned, or when you add them while editing a file."
+              headingLevel={3}
+              icon={Headphones}
+              title="No narrated files"
+            />
+          }
           libraryId={libraryId!}
           pageParam="filePage"
           query={narratedFilesQuery}
@@ -209,9 +225,11 @@ const PersonDetail = () => {
         />
       )}
       {!showAuthored && !showNarrated && (
-        <div className="text-center py-8 text-muted-foreground">
-          This person has no authored books or narrated files.
-        </div>
+        <EmptyState
+          description="People get books from file metadata when scanned, as an author of a book or a narrator of an audiobook file, or when you add them while editing one."
+          icon={Users}
+          title="No books or files yet"
+        />
       )}
     </ResourceDetail>
   );

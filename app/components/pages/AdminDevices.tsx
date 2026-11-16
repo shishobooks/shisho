@@ -1,6 +1,8 @@
+import { TabletSmartphone } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import EmptyState from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
@@ -50,9 +52,11 @@ const AdminDevices = () => {
       ) : devicesQuery.error && !devices ? (
         <QueryError fallback="Failed to load devices" query={devicesQuery} />
       ) : !devices?.length ? (
-        <div className="rounded-md border border-border p-8 text-center">
-          <p className="text-muted-foreground">No user has added a device.</p>
-        </div>
+        <EmptyState
+          description="Every user's Devices show up here once they add them from their own Devices page, to sync a Kobo, connect KOReader, or browse from an e-reader."
+          icon={TabletSmartphone}
+          title="No devices yet"
+        />
       ) : (
         <div className="divide-y divide-border rounded-md border border-border">
           {devices.map((device) => (

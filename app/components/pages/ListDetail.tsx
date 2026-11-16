@@ -1,13 +1,26 @@
 import { format, formatDistanceToNow } from "date-fns";
-import { BookmarkPlus, Edit, Save, Share2, Trash2 } from "lucide-react";
+import {
+  BookmarkPlus,
+  Edit,
+  List as ListIcon,
+  Save,
+  Share2,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { toast } from "sonner";
 
 import { ActiveFilterChips } from "@/components/library/ActiveFilterChips";
 import BookItem from "@/components/library/BookItem";
 import { CreateListDialog } from "@/components/library/CreateListDialog";
 import { DraggableBookList } from "@/components/library/DraggableBookList";
+import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import {
   FilterPanel,
   ReadingFilterSection,
@@ -306,6 +319,29 @@ const ListDetail = () => {
   const bookCount = listQuery.data.book_count;
   const books = listBooksQuery.data?.items ?? [];
 
+  // Shown on its own under the page title, and inside the Books section
+  // (under its heading) when a filtered gallery comes back empty.
+  const emptyListState = (headingLevel: 2 | 3) => (
+    <EmptyState
+      action={
+        canEdit &&
+        canReadBooks && (
+          <Button asChild size="sm" variant="outline">
+            <Link to="/">Browse Books</Link>
+          </Button>
+        )
+      }
+      description={
+        canEdit && canReadBooks
+          ? "Add books from a book's page or a book card's menu, or select several in a library and add them at once."
+          : "Books added to this list show up here."
+      }
+      headingLevel={headingLevel}
+      icon={ListIcon}
+      title="This list is empty"
+    />
+  );
+
   return (
     <div>
       <TopNav />
@@ -536,10 +572,16 @@ const ListDetail = () => {
               <Gallery
                 columns={columns}
                 currentPage={currentPage}
-                emptyMessage={
-                  isFiltered
-                    ? "No books on this list match your filters."
-                    : undefined
+                emptyState={
+                  isFiltered ? (
+                    <NoMatchesState
+                      description="Try fewer filters."
+                      headingLevel={3}
+                      itemLabel="books"
+                    />
+                  ) : (
+                    emptyListState(3)
+                  )
                 }
                 isLoading={listBooksQuery.isLoading}
                 itemLabel="books"
@@ -573,11 +615,7 @@ const ListDetail = () => {
         )}
 
         {/* Empty State */}
-        {bookCount === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            This list has no books yet.
-          </div>
-        )}
+        {bookCount === 0 && emptyListState(2)}
       </ContentWidth>
 
       <CreateListDialog

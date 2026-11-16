@@ -81,13 +81,8 @@ describe("ListsIndex To Read", () => {
       expect.anything(),
     );
     expect(
-      await screen.findByText(
-        "Get started with a template or create a custom list.",
-      ),
+      await screen.findByRole("heading", { name: "Start your first list" }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/You don't have any lists yet/),
-    ).not.toBeInTheDocument();
   });
 
   it("leaves To Read out for a role without Books Read", async () => {
@@ -96,7 +91,7 @@ describe("ListsIndex To Read", () => {
     renderLists();
 
     expect(
-      await screen.findByText(/You don't have any lists yet/),
+      await screen.findByRole("heading", { name: "Start your first list" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: /To Read/ }),

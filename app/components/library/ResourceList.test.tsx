@@ -71,6 +71,7 @@ const list = (
 ) => (
   <MemoryRouter>
     <ResourceList<Item, Field>
+      emptyState={<p>No genres in this library yet.</p>}
       itemConfig={(item) => ({
         name: item.name,
         aliases: [],
@@ -209,6 +210,7 @@ describe("ResourceList", () => {
     render(
       <MemoryRouter>
         <ResourceList<Item, Field>
+          emptyState={<p>No genres in this library yet.</p>}
           itemConfig={(item) => ({
             name: item.name,
             aliases: [],
@@ -247,6 +249,7 @@ describe("ResourceList", () => {
     render(
       <MemoryRouter>
         <ResourceList<Item, Field>
+          emptyState={<p>No genres in this library yet.</p>}
           itemConfig={(item) => ({
             name: item.name,
             aliases: [],
