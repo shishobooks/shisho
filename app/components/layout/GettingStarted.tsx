@@ -1,5 +1,5 @@
 import { CircleCheck, CircleDashed, PartyPopper } from "lucide-react";
-import { forwardRef, useEffect, useId, useRef } from "react";
+import { forwardRef, useEffect, useId, useRef, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -218,7 +218,9 @@ const StepRow = ({ step, onNavigate }: StepRowProps) => {
               ? `Undo Not for me: ${copy.title}`
               : `Not for me: ${copy.title}`
           }
-          className="shrink-0 text-muted-foreground"
+          // Ghost buttons pull their padding into the margin so their text
+          // lines up with the progress count above.
+          className="-mr-3 shrink-0 text-muted-foreground"
           disabled={setNotForMe.isPending}
           onClick={toggleNotForMe}
           size="sm"
@@ -234,6 +236,7 @@ const StepRow = ({ step, onNavigate }: StepRowProps) => {
 interface PanelBodyProps {
   progress: Progress;
   titleId: string;
+  titleRef: RefObject<HTMLHeadingElement | null>;
   /** Whether the title is rendered by the sheet's own header. */
   showTitle: boolean;
   onNavigate: () => void;
@@ -244,6 +247,7 @@ interface PanelBodyProps {
 const PanelBody = ({
   progress,
   titleId,
+  titleRef,
   showTitle,
   onNavigate,
   onDismiss,
@@ -253,7 +257,12 @@ const PanelBody = ({
     <div>
       {showTitle && (
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold" id={titleId}>
+          <h2
+            className="text-base font-semibold focus:outline-none"
+            id={titleId}
+            ref={titleRef}
+            tabIndex={-1}
+          >
             Getting started
           </h2>
           <p className="text-xs text-muted-foreground">
@@ -289,7 +298,7 @@ const PanelBody = ({
           </Button>
         ) : (
           <Button
-            className="text-muted-foreground"
+            className="-mr-3 text-muted-foreground"
             disabled={dismissing}
             onClick={onDismiss}
             size="sm"
@@ -316,6 +325,7 @@ const GettingStarted = () => {
   const { isOpen, setOpen } = useGettingStartedPanel();
   const isPhone = useIsPhone();
   const titleId = useId();
+  const titleRef = useRef<HTMLHeadingElement>(null);
   const dismiss = useDismissGettingStarted();
   const clearAutoOpen = useClearGettingStartedAutoOpen();
   const autoOpened = useRef(false);
@@ -379,6 +389,12 @@ const GettingStarted = () => {
   if (!visible || !progress) return null;
 
   const close = () => setOpen(false);
+  // Opening focuses the title rather than the first control, so a stray
+  // Enter can't mark the first step Not for me.
+  const focusTitle = (e: Event) => {
+    e.preventDefault();
+    titleRef.current?.focus();
+  };
   const body = (showTitle: boolean) => (
     <PanelBody
       dismissing={dismiss.isPending}
@@ -387,6 +403,7 @@ const GettingStarted = () => {
       progress={progress}
       showTitle={showTitle}
       titleId={titleId}
+      titleRef={titleRef}
     />
   );
 
@@ -397,15 +414,27 @@ const GettingStarted = () => {
           <Pill progress={progress} />
         </SheetTrigger>
         <SheetContent
-          className="max-h-[85vh] overflow-y-auto rounded-t-md px-4 pb-6"
+          className="flex max-h-[85vh] flex-col rounded-t-md px-4 pb-6"
           data-layout="sheet"
+          onOpenAutoFocus={focusTitle}
           side="bottom"
         >
           <SheetHeader className="text-left">
-            <SheetTitle>Getting started</SheetTitle>
+            <SheetTitle
+              className="focus:outline-none"
+              ref={titleRef}
+              tabIndex={-1}
+            >
+              Getting started
+            </SheetTitle>
             <SheetDescription>{progressLabel(progress)}</SheetDescription>
           </SheetHeader>
-          {body(false)}
+          {/* Only the steps scroll, so the title and close button stay put. The
+              scroller spans the sheet's padding so the buttons that pull into
+              it aren't clipped. */}
+          <div className="-mx-4 min-h-0 overflow-y-auto px-4">
+            {body(false)}
+          </div>
         </SheetContent>
       </Sheet>
     );
@@ -421,6 +450,7 @@ const GettingStarted = () => {
         aria-labelledby={titleId}
         className="w-96 max-w-[calc(100vw-2rem)]"
         data-layout="popover"
+        onOpenAutoFocus={focusTitle}
       >
         {body(true)}
       </PopoverContent>

@@ -200,4 +200,15 @@ describe("UserDetail", () => {
       screen.queryByRole("button", { name: "Show Getting Started" }),
     ).toBeNull();
   });
+
+  it("hides Show Getting Started in Demo Mode, where the feature is off", async () => {
+    setAuth({ permissions: ["users:read", "users:write"], demoMode: true });
+    mockApi();
+    renderPage();
+
+    await screen.findByRole("radiogroup", { name: "Select Role" });
+    expect(
+      screen.queryByRole("button", { name: "Show Getting Started" }),
+    ).toBeNull();
+  });
 });

@@ -1,13 +1,13 @@
-import { useContext } from "react";
+import { useContext, useState } from "react";
 
 import { GettingStartedPanelContext } from "./context";
 
+/**
+ * Whether the Getting Started panel is open. Outside a provider, such as a
+ * nav rendered alone in a test, the state is the caller's own.
+ */
 export const useGettingStartedPanel = () => {
   const context = useContext(GettingStartedPanelContext);
-  if (!context) {
-    throw new Error(
-      "useGettingStartedPanel must be used within a GettingStartedPanelProvider",
-    );
-  }
-  return context;
+  const [isOpen, setOpen] = useState(false);
+  return context ?? { isOpen, setOpen };
 };

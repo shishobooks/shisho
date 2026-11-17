@@ -14,12 +14,11 @@ import LibraryListPicker from "@/components/library/LibraryListPicker";
 import Logo from "@/components/library/Logo";
 import { ResyncButton } from "@/components/library/ResyncButton";
 import { Button } from "@/components/ui/button";
-import { GettingStartedPanelProvider } from "@/contexts/GettingStarted";
 import { useMobileNav } from "@/contexts/MobileNav";
 import { useCan } from "@/hooks/useCan";
 import { cn } from "@/libraries/utils";
 
-const TopNavBar = () => {
+const TopNav = () => {
   const { libraryId } = useParams();
   const { isOpen: navOpen, toggle } = useMobileNav();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -112,12 +111,5 @@ const TopNavBar = () => {
     </div>
   );
 };
-
-// The Getting Started pill and the user menu both open its panel.
-const TopNav = () => (
-  <GettingStartedPanelProvider>
-    <TopNavBar />
-  </GettingStartedPanelProvider>
-);
 
 export default TopNav;

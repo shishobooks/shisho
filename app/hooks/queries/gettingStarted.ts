@@ -5,6 +5,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 
+import { useAuth } from "@/hooks/useAuth";
 import { API, ShishoAPIError } from "@/libraries/api";
 import type {
   GettingStartedResponse,
@@ -25,9 +26,11 @@ export const invalidateGettingStarted = (queryClient: QueryClient) =>
   queryClient.invalidateQueries({ queryKey: [QueryKey.GettingStarted] });
 
 // The signed-in user's own list. Every signed-in user has one, so the route
-// needs no permission.
+// needs no permission. Demo Mode has no Getting Started at all, so the list
+// isn't asked for there.
 export const useGettingStarted = () =>
   useQuery<GettingStartedResponse, ShishoAPIError>({
+    enabled: !useAuth().demoMode,
     queryKey: [QueryKey.GettingStarted],
     queryFn: ({ signal }) =>
       API.request("GET", "/getting-started", null, null, signal),

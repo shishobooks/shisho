@@ -43,7 +43,7 @@ import { sortRoles } from "@/utils/roles";
 const UserDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
+  const { demoMode, user: currentUser } = useAuth();
   const canWrite = useCan("users:write");
 
   const userQuery = useUser(id);
@@ -447,8 +447,9 @@ const UserDetail = () => {
             </Button>
           )}
 
-          {/* An admin brings back their own list from the user menu. */}
-          {canWrite && !isSelf && (
+          {/* An admin brings back their own list from the user menu, and
+              Demo Mode has no Getting Started. */}
+          {canWrite && !isSelf && !demoMode && (
             <Button
               disabled={showGettingStartedMutation.isPending}
               onClick={handleShowGettingStarted}

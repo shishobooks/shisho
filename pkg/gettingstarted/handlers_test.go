@@ -257,6 +257,28 @@ func TestRetrieve_PersonalStepsAreDoneFromTheUsersOwnData(t *testing.T) {
 	assert.True(t, step(t, status(t, h, reader), StepToRead).Done)
 }
 
+// Starting a Book takes it off To Read, so a Read-through that began from
+// To Read keeps the step done. One started without it doesn't count.
+func TestRetrieve_ToReadStaysDoneOnceABookFromItIsStarted(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	h := newHandler(db, false)
+	library := insertLibrary(t, db)
+	book := insertBook(t, db, library, "one")
+
+	notFromToRead := newUser(t, db, "books:read")
+	insert(t, db, &models.ReadThrough{UserID: notFromToRead.ID, BookID: &book.ID, Outcome: models.ReadThroughOutcomeUnderway, CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	assert.False(t, step(t, status(t, h, notFromToRead), StepToRead).Done)
+
+	fromToRead := newUser(t, db, "books:read")
+	position := 1
+	insert(t, db, &models.ReadThrough{
+		UserID: fromToRead.ID, BookID: &book.ID, Outcome: models.ReadThroughOutcomeFinished,
+		LeftToReadPosition: &position, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+	assert.True(t, step(t, status(t, h, fromToRead), StepToRead).Done)
+}
+
 func TestRetrieve_StartReadingIsDoneByAPositionOrARead(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)

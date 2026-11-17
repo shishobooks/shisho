@@ -35,9 +35,26 @@ const UserMenu = () => {
   const navigate = useNavigate();
   const restoreGettingStarted = useRestoreGettingStarted();
   const { setOpen: setGettingStartedOpen } = useGettingStartedPanel();
-  // Set while the Getting started entry opens its panel, which must keep
-  // focus; every other entry returns focus to the menu button.
-  const openingGettingStarted = useRef(false);
+  // The Getting started entry opens its panel only once the list is back
+  // and the menu has finished closing. The menu traps focus while it
+  // animates out, and the panel closes when focus leaves it, so opening any
+  // sooner closes it again. Focus stays in the panel rather than returning
+  // to the menu button, as it does for every other entry.
+  const gettingStarted = useRef({
+    choosing: false,
+    restored: false,
+    menuClosed: false,
+  });
+  const openGettingStartedWhenReady = () => {
+    const step = gettingStarted.current;
+    if (!step.choosing || !step.restored || !step.menuClosed) return;
+    gettingStarted.current = {
+      choosing: false,
+      restored: false,
+      menuClosed: false,
+    };
+    setGettingStartedOpen(true);
+  };
   // A role that can do none of the steps has no list to bring back. The
   // whole feature is off in Demo Mode, so the entry is hidden there too.
   const canGetStarted =
@@ -63,11 +80,17 @@ const UserMenu = () => {
   // Brings Getting Started back after a dismissal, or turns it on for a user
   // it was never on for, and opens it.
   const handleGettingStarted = async () => {
-    openingGettingStarted.current = true;
+    gettingStarted.current = {
+      choosing: true,
+      restored: false,
+      menuClosed: false,
+    };
     try {
       await restoreGettingStarted.mutateAsync();
-      setGettingStartedOpen(true);
+      gettingStarted.current.restored = true;
+      openGettingStartedWhenReady();
     } catch (error) {
+      gettingStarted.current.choosing = false;
       toastRequestError(error, "Failed to show Getting Started");
     }
   };
@@ -87,10 +110,10 @@ const UserMenu = () => {
       <DropdownMenuContent
         align="end"
         onCloseAutoFocus={(e) => {
-          if (openingGettingStarted.current) {
-            openingGettingStarted.current = false;
-            e.preventDefault();
-          }
+          if (!gettingStarted.current.choosing) return;
+          e.preventDefault();
+          gettingStarted.current.menuClosed = true;
+          openGettingStartedWhenReady();
         }}
       >
         <DropdownMenuLabel>

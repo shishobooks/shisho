@@ -11,7 +11,6 @@ import UserMenu from "@/components/layout/UserMenu";
 import Logo from "@/components/library/Logo";
 import AdminSidebar from "@/components/pages/AdminSidebar";
 import { Button } from "@/components/ui/button";
-import { GettingStartedPanelProvider } from "@/contexts/GettingStarted";
 import { useMobileNav } from "@/contexts/MobileNav";
 
 const AdminHeader = () => {
@@ -50,10 +49,7 @@ const AdminHeader = () => {
 const AdminLayout = () => {
   return (
     <div className="flex min-h-[calc(100vh-var(--banner-height,0px))] flex-col">
-      {/* The Getting Started pill and the user menu both open its panel. */}
-      <GettingStartedPanelProvider>
-        <AdminHeader />
-      </GettingStartedPanelProvider>
+      <AdminHeader />
       <div className="flex flex-1">
         <div className="hidden md:block">
           <AdminSidebar />

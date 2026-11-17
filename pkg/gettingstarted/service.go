@@ -93,9 +93,6 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 			Where("u.is_active = ?", true),
 		StepDevice: s.db.NewSelect().Model((*devices.Device)(nil)).
 			Where("d.user_id = ?", user.ID),
-		StepToRead: s.db.NewSelect().Model((*models.UserBook)(nil)).
-			Where("ub.user_id = ?", user.ID).
-			Where("ub.to_read_position IS NOT NULL"),
 	}
 	for _, key := range steps {
 		query, ok := checks[key]
@@ -109,6 +106,13 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 		done[key] = exists
 	}
 
+	if applies[StepToRead] {
+		queued, err := s.hasUsedToRead(ctx, user.ID)
+		if err != nil {
+			return GettingStartedResponse{}, err
+		}
+		done[StepToRead] = queued
+	}
 	if applies[StepStartReading] {
 		started, err := s.hasStartedReading(ctx, user.ID)
 		if err != nil {
@@ -126,6 +130,24 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 		resp.Steps = append(resp.Steps, step)
 	}
 	return resp, nil
+}
+
+// hasUsedToRead reports whether the user's To Read holds a Book, or held
+// one they then started: starting a Book takes it off To Read, and its
+// Read-through keeps the place it left.
+func (s *Service) hasUsedToRead(ctx context.Context, userID int) (bool, error) {
+	queued, err := s.db.NewSelect().Model((*models.UserBook)(nil)).
+		Where("ub.user_id = ?", userID).
+		Where("ub.to_read_position IS NOT NULL").
+		Exists(ctx)
+	if err != nil || queued {
+		return queued, errors.WithStack(err)
+	}
+	started, err := s.db.NewSelect().Model((*models.ReadThrough)(nil)).
+		Where("rt.user_id = ?", userID).
+		Where("rt.left_to_read_position IS NOT NULL").
+		Exists(ctx)
+	return started, errors.WithStack(err)
 }
 
 // hasStartedReading reports whether the user has any Reading Position or

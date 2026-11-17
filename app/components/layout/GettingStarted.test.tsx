@@ -299,6 +299,34 @@ describe("GettingStarted", () => {
     );
   });
 
+  // Focus on the first "Not for me" would let one Enter skip a step.
+  it("puts focus on the panel's title when it opens", async () => {
+    serve({ auto_open: true });
+    renderNav();
+
+    const dialog = await panel();
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("heading", { name: "Getting started" }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("puts focus on the sheet's title when it opens on a phone", async () => {
+    setPhoneWidth(true);
+    serve({ steps: steps(PERSONAL_STEPS) });
+    const user = setupUser();
+    renderNav();
+
+    await user.click(await pill());
+    const dialog = await panel();
+    await waitFor(() =>
+      expect(
+        within(dialog).getByRole("heading", { name: "Getting started" }),
+      ).toHaveFocus(),
+    );
+  });
+
   it("opens on its own only once, even when another page mounts before the flag clears", async () => {
     const { request } = serve({ auto_open: true });
     const original = request.getMockImplementation()!;
@@ -442,9 +470,9 @@ describe("GettingStarted", () => {
     expect(await panel()).toHaveAttribute("data-layout", "popover");
   });
 
-  it("hides the user menu entry in Demo Mode", async () => {
+  it("shows and asks for nothing in Demo Mode", async () => {
     setAuth({ permissions: ["books:read"], demoMode: true });
-    serve({ enabled: false, steps: [] });
+    const { request } = serve({ enabled: false, steps: [] });
     const user = setupUser();
     renderNav();
 
@@ -458,5 +486,6 @@ describe("GettingStarted", () => {
     expect(
       screen.queryByRole("button", { name: /^Getting started/ }),
     ).toBeNull();
+    expect(request).not.toHaveBeenCalled();
   });
 });
