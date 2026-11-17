@@ -151,7 +151,7 @@ The first time the plugin signs in to a server, it asks whether to send the hist
 
 If you chose **Don't send**, you can still send it later: choose **Send reading history** under the server in the plugin's menu, and confirm. It sends the same history, at once, turning Wi-Fi on if needed. Reading time that already synced since you signed in isn't added again. The item is gone once history has been sent.
 
-Once history has been sent, **Send reading history again** under the server sends every reading session KOReader recorded once more, with the statuses and stars of the books the server lists as [unrecognized](#books-shisho-doesnt-recognize). Shisho takes in only what it doesn't already have, so nothing is counted twice, nothing you deleted in Shisho comes back, and books you linked stay linked. Use it to bring back the reading history of a book you [restored](#books-shisho-doesnt-recognize) after deleting it.
+Once history has been sent, **Send reading history again** under the server sends every reading session KOReader recorded once more, with the statuses and stars of the books the server lists as [unrecognized](#books-shisho-doesnt-recognize). Shisho takes in only what it doesn't already have, so nothing is counted twice, nothing you deleted in Shisho comes back, and books you linked stay linked. Use it to bring back the reading history of a book you [restored](#books-shisho-doesnt-recognize) after deleting it. It needs Shisho newer than v0.8.0 on that server: under a server on v0.8.0 or older, the item doesn't appear until you upgrade Shisho there.
 
 For each book the server [recognizes](#which-books-sync), history sends:
 

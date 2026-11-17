@@ -125,6 +125,9 @@ type PluginReport struct {
 	// "Parent > Item".
 	Tools []string `json:"tools"`
 	Menu  []string `json:"menu"`
+	// Opened is what plugin-menu shows after tapping Open: that submenu's
+	// items, in order.
+	Opened []string `json:"opened"`
 	// WithoutHelp lists the menu items that show nothing when held.
 	WithoutHelp []string `json:"without_help"`
 	Offer       *struct {
@@ -254,6 +257,10 @@ type Args struct {
 	// SendHistoryAgain taps Send reading history again under the first
 	// server in plugin-menu, and confirms.
 	SendHistoryAgain bool
+	// Open taps, in plugin-menu, the Shisho menu's top-level item with that
+	// text, such as a server's label or Settings, so a screenshot shows its
+	// submenu, as a person sees it.
+	Open string
 	// HomeDir and DownloadDir set KOReader's home folder and the folder its
 	// OPDS catalogs download to, inside the books directory, before KOReader
 	// starts.
@@ -386,6 +393,9 @@ func (h *Harness) Run(ctx context.Context, a Args) (*Result, error) {
 	}
 	if a.SendHistoryAgain {
 		payload["send_history_again"] = true
+	}
+	if a.Open != "" {
+		payload["open"] = a.Open
 	}
 	if a.Fire {
 		payload["fire"] = true

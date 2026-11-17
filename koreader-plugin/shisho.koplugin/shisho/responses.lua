@@ -63,6 +63,30 @@ function Responses.infoFromHeaders(headers)
 end
 
 --[[--
+note keeps what server says of itself current from any answer, so a server
+upgraded or rolled back since its last check-in is noticed at once:
+
+- server.info, what it serves, from a successful answer's body;
+- server.capabilities, from the X-Shisho-Capabilities header every answer
+  carries, errors included. Shisho's own answer without it, which has a JSON
+  body, comes from a server from before capabilities, or rolled back to one,
+  which lists none. No answer at all keeps what it last listed, and so does
+  one that isn't Shisho's, such as a proxy's error page or a captive portal.
+]]
+function Responses.note(server, code, body, headers)
+    if type(body) == "table" and type(body.server) == "table" then
+        server.info = body.server
+    end
+    if type(code) ~= "number" or type(headers) ~= "table" then return end
+    if headers["x-shisho-capabilities"] == nil and type(body) ~= "table" then return end
+    local listed = {}
+    for name in (headers["x-shisho-capabilities"] or ""):gmatch("[^,%s]+") do
+        table.insert(listed, name)
+    end
+    server.capabilities = listed
+end
+
+--[[--
 checkIn records a server's answer to a check-in on server: what it serves
 when it answered, or refused this plugin's protocol, and whether it needs a
 new sign-in or a newer plugin. An unreachable server keeps what it last
@@ -70,8 +94,8 @@ said. Returns the outcome.
 ]]
 function Responses.checkIn(server, code, body, headers)
     local outcome = Responses.classify(code, body)
+    Responses.note(server, code, body, headers)
     if outcome == "ok" then
-        server.info = type(body) == "table" and body.server or server.info
         server.device_name = type(body) == "table" and body.device_name or server.device_name
         server.needs_login = nil
         server.update_required = nil

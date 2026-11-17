@@ -52,6 +52,36 @@ return {
         assert_eq(server.info, { plugin_version = "0.8.0" }, "no headers keeps the last info")
     end,
 
+    ["every answer keeps what the server says of itself current, errors included"] = function()
+        local server = { url = "http://a" }
+        Responses.note(server, 200, { server = { plugin_version = "0.9.0" } }, { ["x-shisho-capabilities"] = "a,resend_history" })
+        assert_eq(server.info, { plugin_version = "0.9.0" })
+        assert_eq(server.capabilities, { "a", "resend_history" })
+
+        Responses.note(server, 401, errorBody("unauthorized"), { ["x-shisho-capabilities"] = "resend_history" })
+        assert_eq(server.capabilities, { "resend_history" }, "an error lists them too")
+        assert_eq(server.info, { plugin_version = "0.9.0" }, "an answer that doesn't say what it serves keeps the last")
+
+        Responses.note(server, 426, errorBody("plugin_update_required"), { ["x-shisho-capabilities"] = "" })
+        assert_eq(server.capabilities, {}, "a refused protocol gets none")
+
+        server.capabilities = { "resend_history" }
+        Responses.note(server, 200, { server = { plugin_version = "0.8.0" } }, {})
+        assert_eq(server.capabilities, {}, "a server from before capabilities, or rolled back to one, lists none")
+
+        server.capabilities = { "resend_history" }
+        Responses.note(server, 401, errorBody("unauthorized"), {})
+        assert_eq(server.capabilities, {}, "a Shisho error without the list is from before capabilities too")
+
+        server.capabilities = { "resend_history" }
+        Responses.note(server, nil)
+        assert_eq(server.capabilities, { "resend_history" }, "no answer keeps what it last listed")
+        Responses.note(server, 502, nil, { ["content-type"] = "text/html" })
+        assert_eq(server.capabilities, { "resend_history" }, "nor does a proxy's error page, which isn't Shisho's answer")
+        Responses.note(server, 302, nil, { location = "http://portal.example" })
+        assert_eq(server.capabilities, { "resend_history" }, "or a captive portal's redirect")
+    end,
+
     ["reads a refusal's server info from its headers"] = function()
         assert_eq(Responses.infoFromHeaders({
             ["x-shisho-protocol-min"] = "1", ["x-shisho-protocol-max"] = "2",

@@ -323,6 +323,36 @@ func TestPluginMenuLeadsTools(t *testing.T) {
 	assert.Equal(t, "Shisho", menu.Plugin.Tools[0], "tools: %v", menu.Plugin.Tools)
 }
 
+// plugin-menu opens a top-level item as a tap does, so a screenshot shows
+// that submenu rather than the top level.
+func TestPluginMenuOpensASubmenu(t *testing.T) {
+	s := newScenario(t)
+	s.signInPlugin(time.Now().Add(-time.Hour))
+	shot := filepath.Join(t.TempDir(), "settings.png")
+
+	settings := s.run(Args{Command: "plugin-menu", Open: "Settings", Screenshot: shot})
+	assert.Contains(t, settings.Plugin.Opened, "Sync on sleep")
+	assert.NotContains(t, settings.Plugin.Opened, "Sync now", "the submenu, not the top level")
+	info, err := os.Stat(shot)
+	require.NoError(t, err)
+	assert.Positive(t, info.Size())
+
+	server := s.run(Args{Command: "plugin-menu", Open: s.containerLabel()})
+	assert.Contains(t, server.Plugin.Opened, "Remove server")
+
+	unknown, err := s.h.Run(s.ctx, Args{Command: "plugin-menu", Open: "Nothing by this name"})
+	require.NoError(t, err)
+	assert.False(t, unknown.OK)
+	assert.Contains(t, unknown.Error, "Nothing by this name")
+
+	// An item that runs an action, rather than open a submenu, is refused
+	// before it's tapped.
+	action, err := s.h.Run(s.ctx, Args{Command: "plugin-menu", Open: "Sync now"})
+	require.NoError(t, err)
+	assert.False(t, action.OK)
+	assert.Contains(t, action.Error, "Sync now has no submenu")
+}
+
 // Reinstalling from a server only matters with more than one, so the menu
 // offers it only then.
 func TestPluginMenuOffersReinstallOnlyWithSeveralServers(t *testing.T) {

@@ -163,3 +163,40 @@ func TestProtocol_MatchesThePlugins(t *testing.T) {
 	assert.GreaterOrEqual(t, Protocol, ProtocolMin)
 	assert.LessOrEqual(t, Protocol, ProtocolMax)
 }
+
+// releasedCapabilities copies capabilities in handlers.go, so taking one out
+// there fails a test while its protocol is accepted. Add a name to both in
+// the same change, and never take one out of either.
+var releasedCapabilities = map[int][]string{
+	1: {CapabilityResendHistory},
+}
+
+func TestCapabilities_StayListedForEveryProtocolAccepted(t *testing.T) {
+	t.Parallel()
+	for protocol := ProtocolMin; protocol <= ProtocolMax; protocol++ {
+		for _, capability := range releasedCapabilities[protocol] {
+			assert.Contains(t, capabilitiesFor(protocol), capability,
+				"protocol %d is still accepted, and plugins on it may rely on %q", protocol, capability)
+		}
+	}
+}
+
+func TestCapabilities_OnlyForAProtocolAccepted(t *testing.T) {
+	t.Parallel()
+	assert.Empty(t, capabilitiesFor(ProtocolMin-1))
+	assert.Empty(t, capabilitiesFor(ProtocolMax+1))
+}
+
+func TestCapabilities_CoverWhatThePluginChecks(t *testing.T) {
+	t.Parallel()
+	source, err := fs.ReadFile(pluginfiles.FS, pluginfiles.Dir+"/shisho/protocol.lua")
+	require.NoError(t, err)
+
+	block := regexp.MustCompile(`(?s)capabilities = \{(.*?)\}`).FindSubmatch(source)
+	require.NotNil(t, block, "shisho/protocol.lua names no capabilities")
+	names := regexp.MustCompile(`= "([a-z_]+)"`).FindAllSubmatch(block[1], -1)
+	require.NotEmpty(t, names)
+	for _, name := range names {
+		assert.Contains(t, capabilitiesFor(Protocol), string(name[1]), "the plugin checks for a capability this server never lists to its protocol")
+	}
+}

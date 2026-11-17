@@ -50,6 +50,19 @@ function Versions.compare(x, y)
     return 0
 end
 
+-- supports reports whether server listed capability in its last answer
+-- (Responses.note). A server from before capabilities lists none.
+function Versions.supports(server, capability)
+    -- A name the plugin no longer has, such as one folded away by a protocol
+    -- bump but still checked, would otherwise turn its feature off quietly.
+    assert(type(capability) == "string", "Versions.supports needs a capability name")
+    if type(server) ~= "table" or type(server.capabilities) ~= "table" then return false end
+    for __, listed in ipairs(server.capabilities) do
+        if listed == capability then return true end
+    end
+    return false
+end
+
 -- accepts reports whether a server, by the info it last answered with,
 -- accepts protocol.
 function Versions.accepts(info, protocol)
