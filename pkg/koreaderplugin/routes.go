@@ -19,15 +19,19 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, bundle *Bundle, bookService *books
 
 func registerPluginRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	signIn := mw.BasicAuth(devices.ConnectionKOReaderPlugin)
+	// listCapabilities comes first on each route, so every response carries
+	// the list, a refused sign-in included: it names only features. It's per
+	// route because a group's own middleware would add catch-all routes for
+	// the group's paths.
 	g := e.Group("/koreader/plugin")
-	g.POST("/pair", h.pair, h.requireProtocol)
-	// Signed in first, so only a Device's owner learns what a refused
-	// plugin should update to.
-	g.POST("/status", h.status, signIn, h.requireProtocol)
-	g.POST("/download", h.download, signIn)
-	g.POST("/lookup", h.lookup, signIn, h.requireProtocol)
-	g.POST("/upload", h.upload, signIn, h.requireProtocol)
-	g.POST("/pull", h.pull, signIn, h.requireProtocol)
+	g.POST("/pair", h.pair, listCapabilities, h.requireProtocol)
+	// Signed in before the protocol check, so only a Device's owner learns
+	// the version and build a refused plugin should update to.
+	g.POST("/status", h.status, listCapabilities, signIn, h.requireProtocol)
+	g.POST("/download", h.download, listCapabilities, signIn)
+	g.POST("/lookup", h.lookup, listCapabilities, signIn, h.requireProtocol)
+	g.POST("/upload", h.upload, listCapabilities, signIn, h.requireProtocol)
+	g.POST("/pull", h.pull, listCapabilities, signIn, h.requireProtocol)
 }
 
 // RegisterUserRoutes registers the plugin download and the unrecognized

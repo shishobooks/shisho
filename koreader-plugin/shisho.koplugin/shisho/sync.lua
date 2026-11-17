@@ -421,7 +421,8 @@ function Sync.run(opts)
     local function send(payload)
         hold.describe(payload)
         payload.clock = clock()
-        local status, body = opts.post(payload)
+        local status, body, headers = opts.post(payload)
+        Responses.note(server, status, body, headers)
         local outcome = Responses.classify(status, body)
         if outcome ~= "ok" then
             -- Changes not taken in are worked out again by the next sync.
@@ -602,7 +603,8 @@ function Sync.lookUp(opts)
         for i = first, math.min(first + Recognition.ASK_BATCH - 1, #documents) do
             table.insert(batch, documents[i])
         end
-        local status, body = opts.post(batch)
+        local status, body, headers = opts.post(batch)
+        Responses.note(server, status, body, headers)
         local outcome = Responses.classify(status, body)
         if outcome ~= "ok" then
             noteRefusal(server, outcome)
@@ -636,7 +638,8 @@ function Sync.pullStates(opts)
         local payload = {}
         if #ask > 0 then payload.statuses = ask end
         if first and server.states_cursor then payload.since = server.states_cursor end
-        local status, body = opts.post(payload)
+        local status, body, headers = opts.post(payload)
+        Responses.note(server, status, body, headers)
         local outcome = Responses.classify(status, body)
         if outcome ~= "ok" then
             noteRefusal(server, outcome)

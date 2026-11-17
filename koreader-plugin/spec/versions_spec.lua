@@ -182,4 +182,13 @@ return {
         local next_servers = { server("http://a", "0.9.0", 1, "a-build"), server("http://b", "0.9.0", 1, "b-build") }
         assert_eq(Versions.offer(from_b, next_servers).server, "http://b")
     end,
+
+    ["a server supports only the capabilities it last listed"] = function()
+        assert_eq(Versions.supports({ capabilities = { "a", "resend_history" } }, "resend_history"), true)
+        assert_eq(Versions.supports({ capabilities = {} }, "resend_history"), false)
+        assert_eq(Versions.supports({ url = "http://a" }, "resend_history"), false, "a server that hasn't answered")
+        assert_eq(Versions.supports(nil, "resend_history"), false)
+        local ok = pcall(Versions.supports, { capabilities = {} }, nil)
+        assert_eq(ok, false, "a capability the plugin no longer names is a mistake, not a feature that's off")
+    end,
 }

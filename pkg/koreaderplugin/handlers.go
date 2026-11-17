@@ -33,6 +33,13 @@ const (
 	HeaderServerPluginHash     = "X-Shisho-Server-Plugin-Hash"
 	HeaderServerPluginProtocol = "X-Shisho-Server-Plugin-Protocol"
 
+	// HeaderCapabilities lists, comma-separated, the capabilities the
+	// server offers to the protocol a request names. Every plugin response
+	// carries it, errors included, so the plugin always knows what the
+	// server it just heard from supports, and a server from before
+	// capabilities is told apart by its absence.
+	HeaderCapabilities = "X-Shisho-Capabilities"
+
 	// HeaderSignInExpires is when a plugin downloaded from a Device's page
 	// stops signing itself in, RFC 3339, so the page can say until when.
 	HeaderSignInExpires = "X-Shisho-Sign-In-Expires"
@@ -46,12 +53,62 @@ const (
 	ProtocolMin = 1
 	ProtocolMax = 1
 
+	// CapabilityResendHistory says the server keeps a status or Rating sent
+	// again with history only for an unrecognized copy holding none, so the
+	// plugin can offer Send reading history again.
+	CapabilityResendHistory = "resend_history"
+
 	// maxReportedVersion bounds the version a plugin reports, which is
 	// stored on its Device.
 	maxReportedVersion = 64
 
 	zipName = "shisho.koplugin.zip"
 )
+
+// capabilities holds, by protocol, the capabilities added while it was the
+// newest. The plugin turns such a feature on for a server only when that
+// server lists it, so a server from before the feature, or rolled back to
+// before it, never gets it. A protocol bump starts a new entry, since a
+// plugin on the new protocol assumes everything listed before it. Never
+// remove one while its protocol is accepted: releasedCapabilities in the
+// tests holds each one shipped. shisho/protocol.lua names the ones the
+// plugin checks for.
+var capabilities = map[int][]string{
+	1: {CapabilityResendHistory},
+}
+
+// requestProtocol is the protocol a plugin request names, and whether the
+// server accepts it. A request that names none is refused.
+func requestProtocol(c echo.Context) (int, bool) {
+	protocol, err := strconv.Atoi(c.Request().Header.Get(HeaderPluginProtocol))
+	return protocol, err == nil && protocol >= ProtocolMin && protocol <= ProtocolMax
+}
+
+// capabilitiesFor is what the server offers to a plugin speaking protocol,
+// and nothing for a protocol it doesn't accept.
+func capabilitiesFor(protocol int) []string {
+	if protocol < ProtocolMin || protocol > ProtocolMax {
+		return nil
+	}
+	return capabilities[protocol]
+}
+
+// listCapabilities sets HeaderCapabilities before the route's own
+// middleware runs, so every response from a plugin route carries it,
+// including a refused sign-in or protocol. The list names features, not
+// the server's version or build, so it isn't kept from callers that aren't
+// signed in. A route that doesn't exist, or one Demo Mode refuses, answers
+// before it runs; the plugin reads that as listing none.
+func listCapabilities(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var listed []string
+		if protocol, ok := requestProtocol(c); ok {
+			listed = capabilitiesFor(protocol)
+		}
+		c.Response().Header().Set(HeaderCapabilities, strings.Join(listed, ","))
+		return next(c)
+	}
+}
 
 type handler struct {
 	db        *bun.DB
@@ -95,8 +152,7 @@ func (h *handler) serverInfo() ServerInfo {
 // has Shisho's usual error body.
 func (h *handler) requireProtocol(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		protocol, err := strconv.Atoi(c.Request().Header.Get(HeaderPluginProtocol))
-		if err != nil || protocol < ProtocolMin || protocol > ProtocolMax {
+		if _, ok := requestProtocol(c); !ok {
 			if devices.SignedInDevice(c) != nil {
 				info := h.serverInfo()
 				header := c.Response().Header()

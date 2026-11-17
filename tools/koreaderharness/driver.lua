@@ -531,13 +531,34 @@ commands["plugin-menu"] = function()
             end
         end
         local TouchMenu = require("ui/widget/touchmenu")
-        UIManager:show(TouchMenu:new{
+        local touch_menu = TouchMenu:new{
             width = Screen:getWidth(),
             tab_item_table = { { text = entries.shisho.text, icon = "appbar.tools", table.unpack(items) } },
             show_parent = plugin.ui,
-        })
+        }
+        UIManager:show(touch_menu)
+        -- open taps the top-level item with that text, as a person would, so
+        -- the screenshot shows its submenu, back arrow and all.
+        local opened
+        if args.open then
+            local target
+            for __, item in ipairs(items) do
+                if (item.text_func and item.text_func() or item.text) == args.open then target = item end
+            end
+            if not target then error("the Shisho menu has no item named " .. args.open) end
+            -- Tapping an item without a submenu would run it, such as a sync.
+            if not (target.sub_item_table or target.sub_item_table_func) then
+                error("the Shisho menu's " .. args.open .. " has no submenu to open")
+            end
+            touch_menu:onMenuSelect(target)
+            stepUI()
+            opened = {}
+            for __, item in ipairs(touch_menu.item_table) do
+                table.insert(opened, item.text_func and item.text_func() or item.text)
+            end
+        end
         -- KOReader's JSON writes an empty table as an object, so none is nil.
-        return { menu = texts, tools = tools, without_help = #without_help > 0 and without_help or nil }
+        return { menu = texts, tools = tools, without_help = #without_help > 0 and without_help or nil, opened = opened }
     end)
 end
 

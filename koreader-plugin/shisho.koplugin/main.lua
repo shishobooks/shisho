@@ -154,7 +154,7 @@ end
 
 -- signedIn records a sign-in, adds the server's catalog to KOReader's OPDS
 -- list, and tells the user.
-function Shisho:signedIn(url, answer, username, credential)
+function Shisho:signedIn(url, answer, username, credential, status, headers)
     -- A server signed in to for the first time takes reading from now on,
     -- so the pages of a book open now count as before it.
     if self:statisticsEnabled() then self:flushStatistics() end
@@ -167,6 +167,9 @@ function Shisho:signedIn(url, answer, username, credential)
         device_name = answer.device_name,
         info = answer.server,
     }
+    -- What the server offers comes with the sign-in, so a server signed in
+    -- to again, maybe upgraded meanwhile, isn't judged by its old list.
+    Responses.note(server, status, answer, headers)
     if other_device then
         -- Another Device's statuses and Ratings, and what it held, say
         -- nothing about this one's.
@@ -261,16 +264,16 @@ end
 
 -- trySignIn calls request with each URL what the person typed may mean, and
 -- stops at the first that answers. Returns the URL, the outcome, and the
--- status and answer.
+-- answer, its status, and its headers.
 local function trySignIn(typed, request)
-    local url, outcome, status, body
+    local url, outcome, status, body, headers
     for __, candidate in ipairs(Urls.candidates(typed)) do
         url = candidate
-        status, body = request(candidate)
+        status, body, headers = request(candidate)
         outcome = Responses.classify(status, body)
         if outcome ~= "unreachable" then break end
     end
-    return url, outcome, body
+    return url, outcome, body, status, headers
 end
 
 -- signInWithCode exchanges a Device short code for the Device's sign-in.
@@ -279,13 +282,13 @@ function Shisho:signInWithCode(url, code)
     if not Urls.normalize(url) or not code or code == "" then
         return false, "error", _("Enter the server's URL and the pairing code.")
     end
-    local server_url, outcome, body = trySignIn(url, function(candidate)
+    local server_url, outcome, body, status, headers = trySignIn(url, function(candidate)
         return Client.new(candidate, self.stamps.version):pair(code)
     end)
     if outcome ~= "ok" then
         return false, outcome, Responses.message(outcome, body)
     end
-    self:signedIn(server_url, body, body.username, body.credential)
+    self:signedIn(server_url, body, body.username, body.credential, status, headers)
     return true, outcome
 end
 
@@ -294,13 +297,13 @@ function Shisho:signInWithPassword(url, username, password)
     if not Urls.normalize(url) or not username or username == "" or not password or password == "" then
         return false, "error", _("Enter the server's URL, your username, and the Device's password.")
     end
-    local server_url, outcome, body = trySignIn(url, function(candidate)
+    local server_url, outcome, body, status, headers = trySignIn(url, function(candidate)
         return Client.new(candidate, self.stamps.version, username, password):status()
     end)
     if outcome ~= "ok" then
         return false, outcome, Responses.message(outcome, body)
     end
-    self:signedIn(server_url, body, username, password)
+    self:signedIn(server_url, body, username, password, status, headers)
     return true, outcome
 end
 
@@ -773,7 +776,8 @@ function Shisho:pullOpenBook(interactive)
         if not server.needs_login then
             local client = Client.new(server.url, self.stamps.version, server.username, server.credential,
                 not interactive and Client.BACKGROUND or nil)
-            local status, body = client:pull({ document })
+            local status, body, headers = client:pull({ document })
+            Responses.note(server, status, body, headers)
             if status == 200 and type(body) == "table" and type(body.positions) == "table" then
                 for __, position in ipairs(body.positions) do
                     if position.document == document then table.insert(candidates, position) end

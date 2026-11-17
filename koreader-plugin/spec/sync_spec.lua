@@ -600,6 +600,26 @@ return {
         assert_eq(#sent2, 0, "claimed once")
     end,
 
+    ["uploads, lookups, and pulls note the capabilities the server lists, refused or not"] = function()
+        local state, journal = setup("https://a.example")
+        local s = state:find("https://a.example")
+        local function listing(names) return { ["x-shisho-capabilities"] = names } end
+
+        assert_eq(Sync.run{ state = state, journal = journal, server = s, read_pages = rowsFrom({ row(100) }),
+            post = function() return 200, { server = { plugin_version = "0.9.0" } }, listing("resend_history") end }, "ok")
+        assert_eq(s.capabilities, { "resend_history" }, "an upload")
+        assert_eq(s.info, { plugin_version = "0.9.0" })
+
+        local recognition = Recognition.open(scratch_dir() .. "/recognition.lua")
+        assert_eq(Sync.lookUp{ server = s, recognition = recognition, documents = {},
+            post = function() return 500, nil, listing("") end }, "error")
+        assert_eq(s.capabilities, {}, "a lookup, refused")
+
+        assert_eq(Sync.pullStates{ server = s, store = { synced = {}, asked = {} }, documents = {}, write = function() end,
+            post = function() return 200, { states = {} }, listing("resend_history") end }, "ok")
+        assert_eq(s.capabilities, { "resend_history" }, "a pull")
+    end,
+
     ["looking books up records each server's answers, and a refusal leaves them unanswered"] = function()
         local state = setup("https://a.example")
         local a = state:find("https://a.example")

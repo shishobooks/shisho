@@ -219,16 +219,7 @@ func (s *scenario) serveBuild(build *koreaderplugin.Bundle) *atomic.Pointer[kore
 	require.NoError(s.t, err)
 	served := &atomic.Pointer[koreaderplugin.Bundle]{}
 	served.Store(build)
-	target, err := url.Parse(s.url)
-	require.NoError(s.t, err)
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	direct := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		direct(r)
-		// Left to the transport, which then hands back the body unzipped.
-		r.Header.Del("Accept-Encoding")
-	}
-	proxy.ModifyResponse = func(resp *http.Response) error {
+	s.proxy(func(resp *http.Response) error {
 		build := served.Load()
 		if build == nil || !strings.HasPrefix(resp.Request.URL.Path, "/koreader/plugin/") {
 			return nil
@@ -247,14 +238,30 @@ func (s *scenario) serveBuild(build *koreaderplugin.Bundle) *atomic.Pointer[kore
 		resp.ContentLength = int64(len(body))
 		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
 		return nil
+	})
+	return served
+}
+
+// proxy puts a reverse proxy in front of s's server that passes each
+// response through modify, and makes s's URL the proxy's.
+func (s *scenario) proxy(modify func(*http.Response) error) {
+	s.t.Helper()
+	target, err := url.Parse(s.url)
+	require.NoError(s.t, err)
+	proxy := httputil.NewSingleHostReverseProxy(target)
+	direct := proxy.Director
+	proxy.Director = func(r *http.Request) {
+		direct(r)
+		// Left to the transport, which then hands back the body unzipped.
+		r.Header.Del("Accept-Encoding")
 	}
+	proxy.ModifyResponse = modify
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", "0.0.0.0:0")
 	require.NoError(s.t, err)
 	srv := &http.Server{Handler: proxy, ReadHeaderTimeout: 10 * time.Second}
 	go func() { _ = srv.Serve(listener) }()
 	s.t.Cleanup(func() { _ = srv.Close() })
 	s.url = fmt.Sprintf("http://localhost:%d", listener.Addr().(*net.TCPAddr).Port)
-	return served
 }
 
 // setInstalledFrom records in s's KOReader that the plugin was last
@@ -361,4 +368,42 @@ func TestPluginSendsHistoryAgainForARestoredCopy(t *testing.T) {
 	s.run(Args{Command: "plugin-menu", Online: true, SendHistoryAgain: true})
 	assert.Len(t, s.pluginSessions(), 1, "nothing is counted twice")
 	assert.Zero(t, s.held(oldCopy))
+}
+
+// asOfV080 puts a proxy in front of s's server that, while it holds true,
+// answers the plugin as Shisho v0.8.0 did, from before capabilities: no
+// response lists any. s's URL becomes the proxy's.
+func (s *scenario) asOfV080() *atomic.Bool {
+	s.t.Helper()
+	old := &atomic.Bool{}
+	s.proxy(func(resp *http.Response) error {
+		if old.Load() {
+			resp.Header.Del(koreaderplugin.HeaderCapabilities)
+		}
+		return nil
+	})
+	return old
+}
+
+// Send reading history again needs the server to keep a held copy's own
+// status, which v0.8.0 doesn't, so the plugin offers it only where the server
+// lists the capability, and notices an upgrade or a rollback at the next sync.
+func TestPluginOffersSendHistoryAgainOnlyWhereTheServerTakesIt(t *testing.T) {
+	s := newScenario(t)
+	old := s.asOfV080()
+	old.Store(true)
+	s.signInPluginWith(time.Now().UTC().Add(-24*time.Hour), "history = { through = 0 }")
+	again := s.containerLabel() + " > Send reading history again"
+	menuAfterSync := func() []string {
+		s.run(Args{Command: "plugin-sync", Online: true, SyncNow: true})
+		return s.run(Args{Command: "plugin-menu"}).Plugin.Menu
+	}
+
+	assert.NotContains(t, menuAfterSync(), again, "v0.8.0 would start a held copy's Read-through on the wrong day")
+
+	old.Store(false)
+	assert.Contains(t, menuAfterSync(), again, "the upgraded server lists it")
+
+	old.Store(true)
+	assert.NotContains(t, menuAfterSync(), again, "a rollback takes it away at the next sync")
 }

@@ -22,9 +22,13 @@ reading history of a book whose history was deleted on the Device's page
 and has since been restored there (ADR 0017). It also sends the status and
 stars of each book the server holds as unrecognized (History.withResent),
 which the server keeps only for a book that holds none, and applies by
-history's rules once the book is linked. No UI.
+history's rules once the book is linked. An older server keeps them
+regardless, so history goes again only to a server that lists the
+resend_history capability (shisho/protocol). No UI.
 ]]
+local Protocol = require("shisho/protocol")
 local Statistics = require("shisho/statistics")
+local Versions = require("shisho/versions")
 local random = require("frontend/random")
 
 local History = {}
@@ -109,11 +113,18 @@ function History.accept(server)
     server.stats_from_row = nil
 end
 
+-- takesResent reports whether server, by its last answer, keeps history
+-- sent again by the rules it needs.
+local function takesResent(server)
+    return Versions.supports(server, Protocol.capabilities.resend_history)
+end
+
 -- resendable reports whether server's history can be sent again: it has
--- gone, all of it.
+-- gone, all of it, and the server takes it.
 function History.resendable(server)
     local history = server.history
     return type(history) == "table" and not history.resend and not History.rowsPending(server)
+        and takesResent(server)
 end
 
 -- resend sends server every statistics row again, from the first, keeping
@@ -215,8 +226,11 @@ end
 -- withResent adds to events, the history events for server, the status and
 -- stars of the books the server holds as unrecognized (resendEvents), by
 -- recognition's last answer from it, while its history is being sent again.
+-- A server rolled back since history started going again gets none, while
+-- its rows still go: the server takes each row once.
 function History.withResent(events, server, books, recognition)
     if type(server.history) ~= "table" or not server.history.resend then return events end
+    if not takesResent(server) then return events end
     local resent = History.resendEvents(books, function(document)
         local answer = recognition:answer(server.url, document)
         return answer and answer.state

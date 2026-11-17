@@ -533,3 +533,39 @@ func TestAddressLimiter_SharesOneBucketPastItsCap(t *testing.T) {
 	assert.True(t, l.allow("address-1"), "addresses already tracked keep theirs")
 	assert.LessOrEqual(t, len(l.buckets), maxBuckets+1)
 }
+
+// listedCapabilities is the capability list rec carries.
+func listedCapabilities(t *testing.T, rec *httptest.ResponseRecorder) []string {
+	t.Helper()
+	values, ok := rec.Header()[HeaderCapabilities]
+	require.True(t, ok, "a %d response carries no capability list", rec.Code)
+	require.Len(t, values, 1)
+	listed := []string{}
+	for _, name := range strings.Split(values[0], ",") {
+		if name != "" {
+			listed = append(listed, name)
+		}
+	}
+	return listed
+}
+
+func TestCapabilities_ComeWithEveryResponse(t *testing.T) {
+	t.Parallel()
+	f := newPluginFixture(t)
+
+	ok := f.do(request{path: "/koreader/plugin/status", username: "reader", credential: f.device.Credential})
+	require.Equal(t, http.StatusOK, ok.Code)
+	assert.Equal(t, []string{CapabilityResendHistory}, listedCapabilities(t, ok))
+
+	unauthorized := f.do(request{path: "/koreader/plugin/status", username: "reader", credential: "wrong"})
+	require.Equal(t, http.StatusUnauthorized, unauthorized.Code)
+	assert.Equal(t, []string{CapabilityResendHistory}, listedCapabilities(t, unauthorized), "an error carries them too")
+
+	invalid := f.do(request{path: "/koreader/plugin/upload", username: "reader", credential: f.device.Credential, body: `{"future_field":1}`})
+	require.Equal(t, http.StatusUnprocessableEntity, invalid.Code)
+	assert.Equal(t, []string{CapabilityResendHistory}, listedCapabilities(t, invalid))
+
+	refused := f.do(request{path: "/koreader/plugin/status", username: "reader", credential: f.device.Credential, protocol: strconv.Itoa(ProtocolMin - 1)})
+	require.Equal(t, http.StatusUpgradeRequired, refused.Code)
+	assert.Empty(t, listedCapabilities(t, refused), "nothing is offered on a protocol the server refuses")
+}

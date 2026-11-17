@@ -43,7 +43,8 @@ const usage = `Drives a real, headless KOReader against a running Shisho. Every 
   plugin-install --zip ZIP                                unzip a plugin zip into KOReader's plugins folder
   plugin-launch  [--online]                               start KOReader, as on first launch with or without Wi-Fi
   plugin-signin  --server URL (--code C | --username U --password P)
-  plugin-menu    [--online]                               the Shisho menu under Tools, and what it reads
+  plugin-menu    [--online] [--open ITEM]                 the Shisho menu under Tools, and what it reads;
+                 --open taps a top-level item, such as Settings or a server, so --out shows its submenu
   plugin-update  [--from URL] [--confirm]                 check for an update, or install from a server
   lua-test                                                run the plugin's Lua unit tests
   Each plugin command takes --out PNG to screenshot KOReader as it ends, and
@@ -101,6 +102,7 @@ func run(argv []string) (printed bool, err error) {
 	from := flags.String("from", "", "server to install the plugin from")
 	zipPath := flags.String("zip", "", "KOReader plugin zip")
 	out := flags.String("out", "", "PNG to screenshot to")
+	open := flags.String("open", "", "Shisho menu item for plugin-menu to open, such as Settings or a server")
 	dir := flags.String("dir", filepath.Join("tmp", "koreader"), "harness state directory")
 	flags.SetOutput(io.Discard)
 	if err := flags.Parse(argv[1:]); err != nil {
@@ -126,7 +128,7 @@ func run(argv []string) (printed bool, err error) {
 	args := Args{
 		Command: command, File: *file, Server: *server, Username: *username, Password: *password,
 		Page: *page, Percent: percentValue, XPointer: *xpointer, Mode: *mode, View: *view, Confirm: *confirm, Screenshot: *out,
-		Online: *online, Code: *code, From: *from,
+		Online: *online, Code: *code, From: *from, Open: *open,
 	}
 	if command == "download" {
 		target := *downloadURL

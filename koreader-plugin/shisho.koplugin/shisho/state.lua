@@ -2,11 +2,12 @@
 The plugin's own state, in its own file in KOReader's settings directory:
 
 - servers: every server signed in to, each { url, username, credential,
-  device_id, device_name, needs_login, update_required, info, stats_cursor,
-  stats_from, stats_from_row,
+  device_id, device_name, needs_login, update_required, info, capabilities,
+  stats_cursor, stats_from, stats_from_row,
   last_synced, disabled, signed_in_day, states_cursor, history,
   asking_history }, where info is what
-  the server last answered about itself, stats_cursor is the last statistics
+  the server last answered about itself, capabilities what it last listed
+  (shisho/responses), stats_cursor is the last statistics
   row it acknowledged, stats_from is the row its syncing started after (the
   first row when it was sent history), with stats_from_row naming that row
   (shisho/statistics), disabled marks one the user turned off: the plugin

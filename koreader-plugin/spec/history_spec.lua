@@ -173,6 +173,8 @@ return {
         History.accept(server)
         assert_eq(History.resendable(server), false, "not while it's still going")
         server.stats_cursor = { rowid = 60, id_book = 2, page = 3, start_time = 1800 }
+        assert_eq(History.resendable(server), false, "not to a server that doesn't take it")
+        server.capabilities = { "resend_history" }
         assert_eq(History.resendable(server), true)
 
         History.resend(server)
@@ -215,11 +217,14 @@ return {
             return { state = document }
         end }
         local first = { { document = "before", type = "status" } }
-        local server = { url = "https://a.example", history = { through = 5 } }
+        local server = { url = "https://a.example", history = { through = 5 }, capabilities = { "resend_history" } }
         assert_eq(History.withResent(first, server, books, recognition), { { document = "before", type = "status" } })
 
         server.history.resend = true
         local events = strip(History.withResent({}, server, books, recognition))
         assert_eq(events, { { type = "status", document = "held", status = "complete", day = "2026-11-03" } })
+
+        server.capabilities = {}
+        assert_eq(History.withResent({}, server, books, recognition), {}, "not to a server that no longer takes them")
     end,
 }
