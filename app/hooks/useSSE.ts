@@ -23,7 +23,11 @@ const SCAN_REFETCH_INTERVAL_MS = 3000;
 
 export function useSSE() {
   const queryClient = useQueryClient();
-  const { demoMode, isAuthenticated } = useAuth();
+  const { demoMode, isAuthenticated, user } = useAuth();
+  // The server refuses the stream while a forced password reset is pending,
+  // and a browser EventSource never retries a refused stream, so it opens
+  // once the reset is done.
+  const passwordResetPending = user?.must_change_password ?? false;
   const bulkDownload = useContext(BulkDownloadContext);
 
   // Use ref to avoid the EventSource reconnecting on every progress update.
@@ -40,7 +44,7 @@ export function useSSE() {
     // reached by a full page load, so the pathname at mount is enough.
     const { pathname } = window.location;
     const onSharePage = pathname === "/share" || pathname.startsWith("/share/");
-    if (!isAuthenticated || demoMode || onSharePage) {
+    if (!isAuthenticated || demoMode || onSharePage || passwordResetPending) {
       return;
     }
 
@@ -226,5 +230,5 @@ export function useSSE() {
       es.removeEventListener("scan.progress", handleScanProgress);
       es.close();
     };
-  }, [demoMode, isAuthenticated, queryClient]);
+  }, [demoMode, isAuthenticated, passwordResetPending, queryClient]);
 }
