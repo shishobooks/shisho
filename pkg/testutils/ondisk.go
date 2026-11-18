@@ -24,6 +24,7 @@ type pageSpec struct {
 type epubSpec struct {
 	paragraphs       int
 	toc              bool
+	sections         bool
 	fixedLayout, rtl bool
 	fixedPages       int
 }
@@ -42,6 +43,9 @@ func writeFileOnDisk(root, fileType, title string, pages pageSpec, epub epubSpec
 					pageCount = defaultFixedLayoutPages
 				}
 				return writeFixedLayoutEPUB(path, title, pageCount, epub.rtl)
+			}
+			if epub.sections {
+				return writeSectionsEPUB(path, title)
 			}
 			return writeMinimalEPUB(path, title, epub.paragraphs, epub.toc)
 		}

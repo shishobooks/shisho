@@ -22,6 +22,7 @@ let finishBookId: number;
 let settingsBookId: number;
 let longBookId: number;
 let contentsBookId: number;
+let sectionsBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -35,7 +36,7 @@ async function login(page: Page) {
 // this stores them there before the reader opens.
 async function setDisplaySettings(
   page: Page,
-  settings: { theme?: string; layout?: string },
+  settings: { theme?: string; layout?: string; pages?: string },
 ) {
   await page.evaluate(
     ([key, value]) => localStorage.setItem(key, value),
@@ -120,8 +121,7 @@ test.describe("Reflowable reader", () => {
     const seed = async (
       title: string,
       fileType: string,
-      epubParagraphs = 0,
-      epubToc = false,
+      extra: Record<string, unknown> = {},
     ) => {
       const resp = await apiContext.post("/api/test/books", {
         data: {
@@ -129,8 +129,7 @@ test.describe("Reflowable reader", () => {
           title,
           fileType,
           withFileOnDisk: true,
-          epubParagraphs,
-          epubToc,
+          ...extra,
         },
       });
       expect(resp.ok()).toBe(true);
@@ -141,8 +140,11 @@ test.describe("Reflowable reader", () => {
     resumeBookId = await seed("Resume Book", "epub");
     finishBookId = await seed("Finish Book", "epub");
     settingsBookId = await seed("Settings Book", "epub");
-    longBookId = await seed("Long Book", "epub", 120);
-    contentsBookId = await seed("Contents Book", "epub", 0, true);
+    longBookId = await seed("Long Book", "epub", { epubParagraphs: 120 });
+    contentsBookId = await seed("Contents Book", "epub", { epubToc: true });
+    sectionsBookId = await seed("Sections Book", "epub", {
+      epubSections: true,
+    });
     await apiContext.dispose();
   });
 
@@ -285,6 +287,62 @@ test.describe("Reflowable reader", () => {
     // Back to an earlier chapter's start, too.
     await markers.nth(0).click();
     await bookFrame(page, "Chapter Two text.");
+  });
+
+  test("going to a section lands on the page its heading is on", async ({
+    page,
+    browserName,
+  }) => {
+    await login(page);
+    const put = await page.request.put("/api/settings/user", {
+      data: { viewer_hide_chrome: false },
+    });
+    expect(put.ok()).toBe(true);
+    // One page at a time, so the page a jump lands on is the one on screen.
+    await setDisplaySettings(page, { layout: "paginated", pages: "one" });
+    await openReader(page, sectionsBookId);
+    const frame = await bookFrame(page, "Section 1 begins.");
+
+    if (browserName === "firefox") {
+      // The book holds what this guards against: sections whose header moved
+      // to the next page, for which Firefox reports a box on the page before.
+      const pushed = await frame.evaluate(
+        () =>
+          [...document.querySelectorAll("section")].filter((section) => {
+            const first = [...section.getClientRects()].find(
+              (r) => r.width > 0 && r.height > 0,
+            );
+            const header = section.querySelector("header")!;
+            return (
+              first !== undefined &&
+              header.getBoundingClientRect().left - first.left > 1
+            );
+          }).length,
+      );
+      expect(pushed).toBeGreaterThan(0);
+    }
+
+    const width = page.viewportSize()!.width;
+    const menu = page.getByRole("combobox", { name: "Jump to chapter" });
+    for (let n = 2; n <= 24; n++) {
+      await menu.click();
+      await page
+        .getByRole("option", { name: `Section ${n}`, exact: true })
+        .click();
+      const heading = frame.getByRole("heading", {
+        name: `Section ${n}`,
+        exact: true,
+      });
+      await expect
+        .poll(
+          async () => {
+            const box = await heading.boundingBox();
+            return box !== null && box.x >= 0 && box.x + box.width <= width;
+          },
+          { message: `Section ${n}'s heading is on screen` },
+        )
+        .toBe(true);
+    }
   });
 
   test("a tap on the book closes the settings without turning the page", async ({

@@ -52,6 +52,31 @@ const uncollapse = range => {
     return range
 }
 
+// Shisho patch: an element whose content moved to the next column (a
+// section whose header avoids breaking after itself, as Standard Ebooks'
+// books style them) still starts in the column before it. Firefox reports a
+// non-empty box for it there, and WebKit does for a forced column break, so
+// going to the element would land a page early. Text is only drawn where it
+// is, so an element is measured at the start of its first text instead. An
+// element with no text, such as an image or an empty anchor, keeps its own
+// boxes, and so does one whose text isn't drawn (hidden, say). Ranges (CFIs)
+// are already placed in text and pass through.
+const textStart = target => {
+    if (target?.nodeType !== 1) return target
+    const doc = target.ownerDocument
+    const walker = doc.createTreeWalker(target, NodeFilter.SHOW_TEXT, {
+        acceptNode: node => node.textContent.trim()
+            ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+    })
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        const offset = text.textContent.search(/\S/)
+        const range = makeRange(doc, text, offset, offset + 1)
+        if (Array.from(range.getClientRects()).some(r => r.width > 0 && r.height > 0))
+            return range
+    }
+    return target
+}
+
 const makeRange = (doc, node, start, end = start) => {
     const range = doc.createRange()
     range.setStart(node, start)
@@ -940,7 +965,7 @@ export class Paginator extends HTMLElement {
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor
-        const rects = uncollapse(anchor)?.getClientRects?.()
+        const rects = textStart(uncollapse(anchor))?.getClientRects?.()
         // if anchor is an element or a range
         if (rects) {
             // when the start of the range is immediately after a hyphen in the

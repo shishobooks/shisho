@@ -92,6 +92,63 @@ func writeMinimalEPUB(path, title string, extraParagraphs int, toc bool) (err er
 	return writeEPUBArchive(path, entries)
 }
 
+// sectionsEPUBCount is how many sections writeSectionsEPUB writes.
+const sectionsEPUBCount = 24
+
+// writeSectionsEPUB writes an EPUB of one chapter holding many short
+// sections of varied length, each linked from the table of contents by its
+// id. Each section's header holds a heading and a line of text and, as
+// Standard Ebooks' books style theirs, avoids breaking inside or after
+// itself, so a section that starts near the bottom of a page has its header
+// moved to the next page while the section itself starts on the page before.
+// Firefox reports a box for the section on that earlier page, which the
+// reader's jump to a section must not land on.
+func writeSectionsEPUB(path, title string) error {
+	escaped := html.EscapeString(title)
+	var body, nav strings.Builder
+	for i := 1; i <= sectionsEPUBCount; i++ {
+		fmt.Fprintf(&nav, `<li><a href="chapter1.xhtml#section-%d">Section %d</a></li>`, i, i)
+		fmt.Fprintf(&body, `<section id="section-%d"><header><h2>Section %d</h2><p>Section %d begins.</p></header>`, i, i, i)
+		// Lengths that vary from one section to the next, so their starts
+		// fall at different places on their pages.
+		for p := 0; p < 1+(i*7)%5; p++ {
+			fmt.Fprintf(&body, "<p>%s</p>", strings.Repeat(fmt.Sprintf("Section %d text. ", i), 4+(i*3)%7))
+		}
+		body.WriteString("</section>")
+	}
+	return writeEPUBArchive(path, []epubEntry{
+		{"META-INF/container.xml", epubContainerXML},
+		{"OEBPS/content.opf", `<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>` + escaped + `</dc:title>
+    <dc:identifier id="bookid">urn:uuid:e2e-sections-book</dc:identifier>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter1"/>
+  </spine>
+</package>`},
+		{"OEBPS/nav.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>` + escaped + `</title></head>
+<body><nav epub:type="toc"><ol>` + nav.String() + `</ol></nav></body>
+</html>`},
+		{"OEBPS/chapter1.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>` + escaped + `</title>
+<style>header { break-inside: avoid; break-after: avoid; } h2 { margin: 2em 0 1em; }</style></head>
+<body>` + body.String() + `</body>
+</html>`},
+	})
+}
+
 // defaultFixedLayoutPages is the number of pages in a fixed-layout EPUB unless
 // a test asks for another. It's even, so the last page has no partner; an odd
 // count ends on a two-page spread.

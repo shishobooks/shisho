@@ -208,6 +208,10 @@ type createBookRequest struct {
 	// Gives an EPUB written to disk a table of contents with one entry per
 	// chapter, for tests of the chapter menu and markers.
 	EPUBTOC bool `json:"epubToc"`
+	// Writes an EPUB to disk as one chapter of many short sections, each a
+	// table-of-contents entry whose header keeps itself with the text after
+	// it, as Standard Ebooks' do, so some headers move to the next page.
+	EPUBSections bool `json:"epubSections"`
 	// Writes an EPUB to disk as fixed-layout, with its pages running right to
 	// left if fixedLayoutRTL is set.
 	FixedLayout    bool `json:"fixedLayout"`
@@ -261,6 +265,7 @@ func (h *handler) createBook(c echo.Context) error {
 		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title, pages, epubSpec{
 			paragraphs:  req.EPUBParagraphs,
 			toc:         req.EPUBTOC,
+			sections:    req.EPUBSections,
 			fixedLayout: req.FixedLayout,
 			rtl:         req.FixedLayoutRTL,
 			fixedPages:  req.FixedLayoutPages,
