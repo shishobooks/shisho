@@ -953,6 +953,9 @@ export default function ReflowableReader({
           <PopoverContent
             aria-label="Footnote"
             className="w-80 max-w-[calc(100vw-2rem)] max-h-[min(50vh,var(--radix-popover-content-available-height))] overflow-y-auto"
+            // Keeps the 16px page gutter on a phone, where a reference near
+            // the edge would otherwise push the popover against it.
+            collisionPadding={16}
           >
             <div className="space-y-2 text-sm">
               {footnote?.paragraphs.map((text, i) => (
