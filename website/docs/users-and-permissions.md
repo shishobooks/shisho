@@ -139,7 +139,7 @@ A user with Users Write permission can open another account under **Administrati
 
 ## Getting Started
 
-Getting Started is each user's short list of first steps, behind the **Getting started** pill in the top nav. The ring in the pill shows how many are done. Each step links to where it gets done and ticks itself off once what it asks for exists, however it was done. A user sees only the steps their role allows:
+Getting Started is each user's short list of first steps, behind the **Getting Started** pill in the top nav. The ring in the pill shows how many are done. Each step links to where it gets done and ticks itself off once what it asks for exists, however it was done. A user sees only the steps their role allows:
 
 | Step | Shown to roles with | Done when |
 |------|---------------------|-----------|
@@ -151,10 +151,10 @@ Getting Started is each user's short list of first steps, behind the **Getting s
 | **Start reading something** | Books Read | The user has a place saved in any book, or any [reading history](./reading-tracking.md) |
 
 - **Not for me** on a step takes it out of the count, and **Undo** puts it back.
-- **Dismiss this list** hides the pill without asking. **Getting started** in the user menu brings it back.
+- **Dismiss this list** hides the pill without asking. **Getting Started** in the user menu brings it back.
 - When every step is done or marked **Not for me**, the panel shows **You're all set**, and closing it hides the pill.
 - The panel opens on its own the first time a user added with **Add User** signs in. The first admin gets the pill, but the panel stays closed.
-- A user it isn't on for can turn it on with **Getting started** in the user menu.
+- A user it isn't on for can turn it on with **Getting Started** in the user menu.
 - Getting Started never appears in [Demo Mode](./configuration.md#demo-mode).
 
 ### Show Getting Started

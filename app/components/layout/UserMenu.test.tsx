@@ -15,7 +15,7 @@ import UserMenu from "./UserMenu";
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
-// The menu's Getting started entry restores the list and opens its panel.
+// The menu's Getting Started entry restores the list and opens its panel.
 const renderWithProviders = (ui: React.ReactNode) =>
   render(
     <QueryClientProvider client={new QueryClient()}>

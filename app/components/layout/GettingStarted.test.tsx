@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GettingStartedPanelProvider } from "@/contexts/GettingStarted";
@@ -119,9 +120,9 @@ const renderNav = (client = newClient()) => {
   );
 };
 
-const pill = () => screen.findByRole("button", { name: /^Getting started/ });
+const pill = () => screen.findByRole("button", { name: /^Getting Started/ });
 
-const panel = () => screen.findByRole("dialog", { name: "Getting started" });
+const panel = () => screen.findByRole("dialog", { name: "Getting Started" });
 
 const setPhoneWidth = (phone: boolean) => {
   Object.defineProperty(window, "matchMedia", {
@@ -155,7 +156,7 @@ describe("GettingStarted", () => {
     serve({ steps: steps(ADMIN_STEPS, ["library", "device"]) });
     renderNav();
 
-    expect(await pill()).toHaveAccessibleName("Getting started, 2 of 5 done");
+    expect(await pill()).toHaveAccessibleName("Getting Started, 2 of 5 done");
   });
 
   it("lists only the steps that apply, each linking to where it gets done", async () => {
@@ -248,13 +249,13 @@ describe("GettingStarted", () => {
     expect(request).toHaveBeenCalledWith("POST", "/getting-started/dismiss");
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: /^Getting started/ }),
+        screen.queryByRole("button", { name: /^Getting Started/ }),
       ).toBeNull(),
     );
 
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(
-      await screen.findByRole("menuitem", { name: "Getting started" }),
+      await screen.findByRole("menuitem", { name: "Getting Started" }),
     );
     expect(request).toHaveBeenCalledWith("POST", "/getting-started/restore");
     expect(await panel()).toBeInTheDocument();
@@ -280,7 +281,7 @@ describe("GettingStarted", () => {
         ),
       );
       expect(
-        screen.queryByRole("button", { name: /^Getting started/ }),
+        screen.queryByRole("button", { name: /^Getting Started/ }),
       ).toBeNull();
       unmount();
     }
@@ -307,7 +308,7 @@ describe("GettingStarted", () => {
     const dialog = await panel();
     await waitFor(() =>
       expect(
-        within(dialog).getByRole("heading", { name: "Getting started" }),
+        within(dialog).getByRole("heading", { name: "Getting Started" }),
       ).toHaveFocus(),
     );
   });
@@ -322,7 +323,7 @@ describe("GettingStarted", () => {
     const dialog = await panel();
     await waitFor(() =>
       expect(
-        within(dialog).getByRole("heading", { name: "Getting started" }),
+        within(dialog).getByRole("heading", { name: "Getting Started" }),
       ).toHaveFocus(),
     );
   });
@@ -392,7 +393,7 @@ describe("GettingStarted", () => {
     expect(request).toHaveBeenCalledWith("POST", "/getting-started/dismiss");
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: /^Getting started/ }),
+        screen.queryByRole("button", { name: /^Getting Started/ }),
       ).toBeNull(),
     );
   });
@@ -408,14 +409,68 @@ describe("GettingStarted", () => {
     expect(
       await within(await panel()).findByText("You're all set"),
     ).toBeInTheDocument();
+    const success = vi.spyOn(toast, "success");
     await user.keyboard("{Escape}");
 
     expect(request).toHaveBeenCalledWith("POST", "/getting-started/dismiss");
     await waitFor(() =>
       expect(
-        screen.queryByRole("button", { name: /^Getting started/ }),
+        screen.queryByRole("button", { name: /^Getting Started/ }),
       ).toBeNull(),
     );
+    // Closing it hides the pill, so it says where to find the list again.
+    expect(success).toHaveBeenCalledWith(
+      "Getting Started is hidden",
+      expect.objectContaining({
+        description: "Bring it back from your account menu.",
+      }),
+    );
+  });
+
+  it("says nothing was finished when every step is Not for me", async () => {
+    serve({
+      steps: steps(PERSONAL_STEPS, [], ["device", "to_read", "start_reading"]),
+    });
+    const user = setupUser();
+    renderNav();
+
+    const button = await pill();
+    expect(button).toHaveAccessibleName("Getting Started, all set");
+    await user.click(button);
+    const dialog = await panel();
+    expect(within(dialog).queryByText("0 of 0 done")).toBeNull();
+    expect(
+      within(dialog).getByText("Every step is marked Not for me."),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("You've finished your first steps."),
+    ).toBeNull();
+  });
+
+  it("clears the hidden-list toast once the list is restored", async () => {
+    serve({});
+    const success = vi.spyOn(toast, "success");
+    const dismissToast = vi.spyOn(toast, "dismiss");
+    const user = setupUser();
+    renderNav();
+
+    await user.click(await pill());
+    await user.click(
+      within(await panel()).getByRole("button", { name: "Dismiss this list" }),
+    );
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith(
+        "Getting Started is hidden",
+        expect.objectContaining({ id: "getting-started-hidden" }),
+      ),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Getting Started" }),
+    );
+    expect(await panel()).toBeInTheDocument();
+    expect(dismissToast).toHaveBeenCalledWith("getting-started-hidden");
   });
 
   it("returns focus to the account menu button after other menu entries", async () => {
@@ -442,7 +497,7 @@ describe("GettingStarted", () => {
       await screen.findByRole("menuitem", { name: "Preferences" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("menuitem", { name: "Getting started" }),
+      screen.queryByRole("menuitem", { name: "Getting Started" }),
     ).toBeNull();
   });
 
@@ -481,10 +536,10 @@ describe("GettingStarted", () => {
       await screen.findByRole("menuitem", { name: "Preferences" }),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("menuitem", { name: "Getting started" }),
+      screen.queryByRole("menuitem", { name: "Getting Started" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: /^Getting started/ }),
+      screen.queryByRole("button", { name: /^Getting Started/ }),
     ).toBeNull();
     expect(request).not.toHaveBeenCalled();
   });

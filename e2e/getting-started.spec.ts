@@ -38,16 +38,16 @@ test.describe("Getting Started", () => {
   }
 
   const panel = (page: Page) =>
-    page.getByRole("dialog", { name: "Getting started" });
+    page.getByRole("dialog", { name: "Getting Started" });
 
-  test("the account menu's Getting started entry leaves the panel open", async ({
+  test("the account menu's Getting Started entry leaves the panel open", async ({
     page,
   }) => {
     await login(page);
 
     await page.getByRole("button", { name: "Account menu" }).click();
     await page
-      .getByRole("menuitem", { name: "Getting started", exact: true })
+      .getByRole("menuitem", { name: "Getting Started", exact: true })
       .click();
 
     // The menu animates out after the click; the panel must still be open

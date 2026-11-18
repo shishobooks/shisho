@@ -4,7 +4,7 @@ import { GettingStartedPanelContext } from "./context";
 
 /**
  * Holds whether the Getting Started panel is open, so the user menu's
- * "Getting started" entry can open the panel the nav pill anchors. Root
+ * "Getting Started" entry can open the panel the nav pill anchors. Root
  * provides it above every page: each page renders its own top nav, and `/`
  * redirects after rendering one, so state kept in a nav would be lost with
  * it.

@@ -14,6 +14,7 @@ import { useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { GETTING_STARTED_HIDDEN_TOAST_ID } from "@/components/layout/gettingStartedToast";
 import { useAdminNavItems } from "@/components/pages/useAdminNavItems";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +36,7 @@ const UserMenu = () => {
   const navigate = useNavigate();
   const restoreGettingStarted = useRestoreGettingStarted();
   const { setOpen: setGettingStartedOpen } = useGettingStartedPanel();
-  // The Getting started entry opens its panel only once the list is back
+  // The Getting Started entry opens its panel only once the list is back
   // and the menu has finished closing. The menu traps focus while it
   // animates out, and the panel closes when focus leaves it, so opening any
   // sooner closes it again. Focus stays in the panel rather than returning
@@ -87,6 +88,7 @@ const UserMenu = () => {
     };
     try {
       await restoreGettingStarted.mutateAsync();
+      toast.dismiss(GETTING_STARTED_HIDDEN_TOAST_ID);
       gettingStarted.current.restored = true;
       openGettingStartedWhenReady();
     } catch (error) {
@@ -170,7 +172,7 @@ const UserMenu = () => {
         {canGetStarted && (
           <DropdownMenuItem onClick={handleGettingStarted}>
             <Rocket className="h-4 w-4" />
-            Getting started
+            Getting Started
           </DropdownMenuItem>
         )}
         {canAccessAdmin && !demoMode && (

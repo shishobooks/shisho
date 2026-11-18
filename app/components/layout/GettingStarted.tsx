@@ -3,6 +3,7 @@ import { forwardRef, useEffect, useId, useRef, type RefObject } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { GETTING_STARTED_HIDDEN_TOAST_ID } from "@/components/layout/gettingStartedToast";
 import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Popover,
@@ -97,6 +98,10 @@ const progressOf = (data: GettingStartedResponse): Progress => {
 
 const progressLabel = ({ done, total }: Progress) => `${done} of ${total} done`;
 
+// When every step is Not for me there is no count to give.
+const sheetSummary = (progress: Progress) =>
+  progress.total === 0 ? "Nothing left on your list" : progressLabel(progress);
+
 const ProgressRing = ({ done, total }: { done: number; total: number }) => {
   const radius = 7;
   const circumference = 2 * Math.PI * radius;
@@ -138,7 +143,7 @@ interface PillProps extends ButtonProps {
 const Pill = forwardRef<HTMLButtonElement, PillProps>(
   ({ progress, ...props }, ref) => (
     <Button
-      aria-label={`Getting started, ${progressLabel(progress)}`}
+      aria-label={`Getting Started, ${progress.complete ? "all set" : progressLabel(progress)}`}
       className="gap-2 rounded-full px-2.5 sm:px-3"
       ref={ref}
       variant="outline"
@@ -146,7 +151,7 @@ const Pill = forwardRef<HTMLButtonElement, PillProps>(
     >
       <ProgressRing done={progress.done} total={progress.total} />
       <span className="hidden text-sm font-medium sm:inline">
-        Getting started
+        Getting Started
       </span>
     </Button>
   ),
@@ -263,11 +268,13 @@ const PanelBody = ({
             ref={titleRef}
             tabIndex={-1}
           >
-            Getting started
+            Getting Started
           </h2>
-          <p className="text-xs text-muted-foreground">
-            {progressLabel(progress)}
-          </p>
+          {progress.total > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {progressLabel(progress)}
+            </p>
+          )}
         </div>
       )}
       {/* The steps stay below, so a step marked Not for me by mistake can
@@ -281,7 +288,9 @@ const PanelBody = ({
           <div>
             <p className="text-sm font-semibold">You're all set</p>
             <p className="text-xs text-muted-foreground">
-              You've finished your first steps.
+              {progress.done === 0
+                ? "Every step is marked Not for me."
+                : "You've finished your first steps."}
             </p>
           </div>
         </div>
@@ -313,7 +322,7 @@ const PanelBody = ({
 };
 
 /**
- * The "Getting started" pill in the top nav and the panel it opens: a
+ * The "Getting Started" pill in the top nav and the panel it opens: a
  * popover on wider screens, a bottom sheet on phones. It shows while the
  * user's list is on, not dismissed, and has a step for their role. Once
  * every step is done or Not for me, the panel says "You're all set" and
@@ -353,11 +362,12 @@ const GettingStarted = () => {
   const handleDismiss = async () => {
     try {
       await dismiss.mutateAsync();
-      if (!progress?.complete) {
-        toast.success("Getting Started is hidden", {
-          description: "Bring it back from your account menu.",
-        });
-      }
+      // Closing "You're all set" hides the pill too, so either way the user
+      // hears where the list went.
+      toast.success("Getting Started is hidden", {
+        description: "Bring it back from your account menu.",
+        id: GETTING_STARTED_HIDDEN_TOAST_ID,
+      });
     } catch (error) {
       toastRequestError(error, "Failed to dismiss Getting Started");
     } finally {
@@ -425,9 +435,9 @@ const GettingStarted = () => {
               ref={titleRef}
               tabIndex={-1}
             >
-              Getting started
+              Getting Started
             </SheetTitle>
-            <SheetDescription>{progressLabel(progress)}</SheetDescription>
+            <SheetDescription>{sheetSummary(progress)}</SheetDescription>
           </SheetHeader>
           {/* Only the steps scroll, so the title and close button stay put. The
               scroller spans the sheet's padding so the buttons that pull into
