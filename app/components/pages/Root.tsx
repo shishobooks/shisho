@@ -1,6 +1,7 @@
 import { Outlet, ScrollRestoration } from "react-router-dom";
 
-import DemoBanner from "@/components/layout/DemoBanner";
+import { ReloadOnNewBuild } from "@/components/layout/NewBuild";
+import TopBanners from "@/components/layout/TopBanners";
 import { BulkDownloadToast } from "@/components/library/BulkDownloadToast";
 import MobileDrawer from "@/components/library/MobileDrawer";
 import { Toaster } from "@/components/ui/sonner";
@@ -16,9 +17,10 @@ const Root = () => {
       <MobileNavProvider>
         <ContentWidthProvider>
           <ScrollRestoration />
+          <ReloadOnNewBuild />
           <div className="flex bg-background font-sans min-h-screen">
             <div className="w-full">
-              <DemoBanner />
+              <TopBanners />
               <Outlet />
             </div>
             <MobileDrawer />

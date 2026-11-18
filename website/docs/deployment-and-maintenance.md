@@ -73,6 +73,8 @@ docker compose logs -f shisho
 
 Startup applies migrations before the web frontend is served.
 
+Signed-in browser tabs left open across the update show **Shisho was updated** with a **Reload** button, and load the new version on their own at the next page change. A book open in a [reader or the M4B player](./reading-and-playback.md) shows no banner and loads the new version once it is closed.
+
 ## Restore a Backup
 
 :::warning[Restore a Consistent Backup]
@@ -94,7 +96,7 @@ The image exposes:
 GET /health
 ```
 
-Use it as a liveness signal that the HTTP service is responding:
+Use it as a liveness signal that the HTTP service is responding. It also answers `HEAD`, for monitors that probe that way:
 
 ```bash
 curl --fail http://localhost:5173/health
@@ -155,9 +157,9 @@ Kobo devices leave the port out of `Host`, so this matters most for Kobo sync:
 
 Shisho uses gzip for eligible responses of at least 1 KiB when the client accepts it. Event streams, covers, page images, and file downloads bypass gzip. Keep proxy buffering disabled for event streams so live updates arrive promptly.
 
-Hashed frontend files under `/assets/` carry `Cache-Control: public, max-age=31536000, immutable`. The frontend's `index.html` uses `Cache-Control: no-cache` so browsers revalidate it. Do not override these with a blanket proxy cache rule. Unknown paths under `/api`, `/opds`, `/kobo`, `/ereader`, and `/e` return JSON errors rather than the frontend page; other unknown paths open the frontend.
+Hashed frontend files under `/assets/` carry `Cache-Control: public, max-age=31536000, immutable`. The frontend's `index.html` uses `Cache-Control: no-cache` so browsers revalidate it. Do not override these with a blanket proxy cache rule. Unknown paths under `/api`, `/opds`, `/kobo`, `/ereader`, and `/e` return JSON errors rather than the frontend page, and missing files under `/assets/` return 404; other unknown paths open the frontend.
 
-Responses include `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin`. Shisho does not emit a `Server` header or the deprecated `X-XSS-Protection` header. A reverse proxy may add its own headers, so check the public response when auditing the deployment.
+Responses include `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin`. Shisho does not emit a `Server` header or the deprecated `X-XSS-Protection` header. Responses also carry `X-Shisho-Build`, which open tabs compare with their own version to notice an update; a proxy that strips it leaves stale tabs without the update banner. A reverse proxy may add its own headers, so check the public response when auditing the deployment.
 
 ## Outbound Connections
 

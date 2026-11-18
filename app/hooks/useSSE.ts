@@ -12,6 +12,7 @@ import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
 import { QueryKey as LogsQueryKey } from "@/hooks/queries/logs";
 import { invalidateReadingRecords } from "@/hooks/queries/reading";
 import { useAuth } from "@/hooks/useAuth";
+import { checkServerBuild } from "@/libraries/build";
 
 export function useSSE() {
   const queryClient = useQueryClient();
@@ -37,6 +38,12 @@ export function useSSE() {
     }
 
     const es = new EventSource("/api/events");
+
+    // The stream drops when the server restarts, as it does for an upgrade,
+    // and the browser reopens it once the server is back.
+    es.onopen = () => {
+      void checkServerBuild();
+    };
 
     es.onerror = () => {
       // EventSource auto-reconnects on error. Log for debugging visibility

@@ -82,6 +82,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	e.Use(requestLoggerMiddleware)
 	e.Use(recovery.Middleware())
 	e.Use(securityHeadersMiddleware)
+	e.Use(buildHeaderMiddleware(frontend.EmbeddedBuildID()))
 	e.Use(compressionMiddleware())
 	if cfg.DemoMode {
 		e.Use(demoModeMiddleware)
@@ -100,6 +101,11 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	}
 
 	health.RegisterRoutes(e)
+	// golib registers GET only, and an unmatched HEAD falls through to the
+	// frontend. Uptime monitors often probe with HEAD, so answer it the same.
+	e.HEAD("/health", func(c echo.Context) error {
+		return errors.WithStack(c.JSONBlob(http.StatusOK, []byte(`{"healthy":true}`)))
+	})
 	api := e.Group("/api")
 
 	// Register test-only routes when in test mode

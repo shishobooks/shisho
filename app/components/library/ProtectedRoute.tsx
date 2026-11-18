@@ -18,7 +18,7 @@ export const AccessDenied = ({
 }: {
   message?: string;
 }) => (
-  <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
+  <div className="flex min-h-[calc(100vh-var(--banner-height,0px))] items-center justify-center bg-background">
     <div className="text-center">
       <h1 className="text-2xl font-semibold mb-2">Access Denied</h1>
       <p className="text-muted-foreground">{message}</p>
@@ -46,7 +46,7 @@ const ProtectedRoute = ({
 
   if (isLoading) {
     return (
-      <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center bg-background">
+      <div className="flex min-h-[calc(100vh-var(--banner-height,0px))] items-center justify-center bg-background">
         <LoadingSpinner />
       </div>
     );

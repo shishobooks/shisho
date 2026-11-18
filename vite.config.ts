@@ -1,15 +1,42 @@
+import { createHash } from "crypto";
 import fs from "fs";
 import path from "path";
 
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 // Read version from package.json
 const packageJson = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
 );
 const appVersion = packageJson.version || "dev";
+
+/**
+ * Stamps index.html with an ID for this build, which the Go server reads from
+ * its embedded copy and sends back on every response (pkg/frontend BuildID).
+ * A tab compares it with the one in the page it loaded to learn that the
+ * server was upgraded. The ID hashes the finished index.html, whose script and
+ * stylesheet names are content hashes that change whenever any chunk does, so
+ * rebuilding unchanged code keeps the same ID.
+ */
+const buildId = (): Plugin => ({
+  name: "shisho-build-id",
+  apply: "build",
+  transformIndexHtml: {
+    order: "post",
+    handler: (html) => {
+      const id = createHash("sha256").update(html).digest("hex").slice(0, 12);
+      return [
+        {
+          tag: "meta",
+          attrs: { name: "shisho-build", content: id },
+          injectTo: "head",
+        },
+      ];
+    },
+  },
+});
 
 /**
  * Gets the API port with the following priority:
@@ -111,7 +138,7 @@ export default defineConfig({
     emptyOutDir: true, // also necessary
   },
   clearScreen: false,
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), buildId()],
   define: {
     __APP_VERSION__: JSON.stringify(appVersion),
   },

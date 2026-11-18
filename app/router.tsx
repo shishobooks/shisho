@@ -4,6 +4,7 @@ import {
   type RouteObject,
 } from "react-router-dom";
 
+import type { RouteHandle } from "@/components/layout/NewBuild";
 import ProtectedRoute from "@/components/library/ProtectedRoute";
 import AdminCache from "@/components/pages/AdminCache";
 import AdminDevices from "@/components/pages/AdminDevices";
@@ -418,6 +419,7 @@ export const routes: RouteObject[] = [
       },
       {
         path: "libraries/:libraryId/books/:bookId/files/:fileId/read",
+        handle: { reader: true } satisfies RouteHandle,
         element: (
           <ProtectedRoute
             checkLibraryAccess

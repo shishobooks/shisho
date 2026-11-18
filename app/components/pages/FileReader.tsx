@@ -21,7 +21,7 @@ import {
 // Covers the page below the Demo Mode banner, since readers render outside
 // the library layout.
 const READER_OVERLAY =
-  "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex items-center justify-center";
+  "fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex items-center justify-center";
 
 export default function FileReader() {
   const { libraryId, bookId, fileId } = useParams<{

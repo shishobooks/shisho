@@ -60,6 +60,21 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// buildHeader names the frontend build the server embeds. The web app compares
+// it with the build it runs and offers a reload when they differ.
+const buildHeader = "X-Shisho-Build"
+
+func buildHeaderMiddleware(buildID string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if buildID != "" {
+				c.Response().Header().Set(buildHeader, buildID)
+			}
+			return next(c)
+		}
+	}
+}
+
 func securityHeadersMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		h := c.Response().Header()

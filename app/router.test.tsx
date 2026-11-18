@@ -1,5 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { createMemoryRouter, Outlet, RouterProvider } from "react-router-dom";
+import {
+  createMemoryRouter,
+  Outlet,
+  RouterProvider,
+  type RouteObject,
+} from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { setAuth } from "@/testing/auth";
@@ -181,5 +186,27 @@ describe("router permission guards", () => {
         await screen.findByText("library settings page"),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("route handles", () => {
+  const findRoute = (
+    list: RouteObject[],
+    path: string,
+  ): RouteObject | undefined => {
+    for (const route of list) {
+      if (route.path === path) return route;
+      const child = route.children && findRoute(route.children, path);
+      if (child) return child;
+    }
+    return undefined;
+  };
+
+  it("marks the reader so the new build banner stays out of it", () => {
+    const reader = findRoute(
+      routes,
+      "libraries/:libraryId/books/:bookId/files/:fileId/read",
+    );
+    expect(reader?.handle).toEqual({ reader: true });
   });
 });

@@ -68,6 +68,12 @@ func TestNew_RoutingBoundary(t *testing.T) {
 	rec := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	assert.Equal(t, http.StatusOK, rec.Code)
+	// Uptime monitors often probe with HEAD, which must not fall through to
+	// the frontend and report HTML.
+	rec = httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/health", nil))
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 }
 
 func TestNew_ServerAddress(t *testing.T) {

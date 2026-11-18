@@ -286,6 +286,11 @@ jobs:
           grep -q '<div id="root"></div>' /tmp/shisho-index.html
           grep -q 'src="/assets/[^" ]*\.js"' /tmp/shisho-index.html
           grep -q 'href="/assets/[^" ]*\.css"' /tmp/shisho-index.html
+          # Open tabs compare the server's build header with the page's meta tag
+          # to notice an upgrade; both sides must agree on the embedded build.
+          build=$(sed -n 's/.*<meta name="shisho-build" content="\([0-9a-f]*\)".*/\1/p' /tmp/shisho-index.html)
+          test -n "$build"
+          grep -qi "^x-shisho-build: $build" /tmp/shisho-headers
           for asset in $(grep -oE '(src|href)="/assets/[^" ]+\.(js|css)"' /tmp/shisho-index.html | cut -d '"' -f 2); do
             curl --fail --silent --show-error --max-time 10 \
               -D /tmp/shisho-asset-headers "http://127.0.0.1:5173${asset}" -o /tmp/shisho-asset
