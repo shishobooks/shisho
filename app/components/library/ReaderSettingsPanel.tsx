@@ -26,6 +26,7 @@ import {
   IMPORTED_FONT_PREFIX,
   NUMERIC_SETTINGS,
   READER_LAYOUTS,
+  READER_PAGES,
   READER_THEMES,
   stepSetting,
   type NumericSetting,
@@ -40,17 +41,25 @@ function OptionGroup<T extends string>({
   options,
   value,
   onChange,
+  disabledReason,
 }: {
   label: string;
   options: readonly T[];
   value: T;
   onChange: (value: T) => void;
+  // Disables the group and says why, next to its label.
+  disabledReason?: string;
 }) {
   const labelId = useId();
   return (
     <div>
       <p className="text-sm font-medium" id={labelId}>
         {label}
+        {disabledReason && (
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {disabledReason}
+          </span>
+        )}
       </p>
       <div
         aria-labelledby={labelId}
@@ -60,6 +69,7 @@ function OptionGroup<T extends string>({
         {options.map((option) => (
           <Button
             aria-pressed={value === option}
+            disabled={disabledReason !== undefined}
             key={option}
             onClick={() => onChange(option)}
             size="sm"
@@ -365,6 +375,15 @@ export default function ReaderSettingsPanel({
         onChange={(layout) => onChange({ layout })}
         options={READER_LAYOUTS}
         value={settings.layout}
+      />
+      <OptionGroup
+        disabledReason={
+          settings.layout === "scrolled" ? "Only for Paginated" : undefined
+        }
+        label="Pages"
+        onChange={(pages) => onChange({ pages })}
+        options={READER_PAGES}
+        value={settings.pages}
       />
       {children}
     </div>

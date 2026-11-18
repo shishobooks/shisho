@@ -267,6 +267,14 @@ export default function ReflowableReader({
   const [footnote, setFootnote] = useState<OpenFootnote | null>(null);
   const [footnoteOpen, setFootnoteOpen] = useState(false);
   const closeFootnote = useCallback(() => setFootnoteOpen(false), []);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // A press in the book's frame never reaches this page, where a popover
+  // listens for presses outside it, so the book's listeners close them.
+  const popoverOpen = settingsOpen || footnoteOpen;
+  const closePopovers = useCallback(() => {
+    setSettingsOpen(false);
+    setFootnoteOpen(false);
+  }, []);
   // An open footnote is part of the book, so it looks like the page.
   const noteStyle =
     footnote &&
@@ -473,7 +481,8 @@ export default function ReflowableReader({
     revealChrome,
     toggleChrome,
     recordActivity,
-    closeFootnote,
+    popoverOpen,
+    closePopovers,
   });
   useEffect(() => {
     bookEventsRef.current = {
@@ -483,7 +492,8 @@ export default function ReflowableReader({
       revealChrome,
       toggleChrome,
       recordActivity,
-      closeFootnote,
+      popoverOpen,
+      closePopovers,
     };
   });
 
@@ -547,6 +557,9 @@ export default function ReflowableReader({
         doc.documentElement.style.touchAction = "pan-y pinch-zoom";
       }
       let selectedAtPress = false;
+      // A tap that closes a popover does only that, as a tap outside one on
+      // the rest of the page does.
+      let dismissedAtPress = false;
       // Input inside the book's frame never reaches the window, where the
       // reading-session tracker listens.
       for (const name of ACTIVITY_EVENTS) {
@@ -564,9 +577,8 @@ export default function ReflowableReader({
       // dismisses one only shows at the press.
       doc.addEventListener("pointerdown", () => {
         selectedAtPress = doc.getSelection()?.isCollapsed === false;
-        // A press in the book is outside an open footnote, which the
-        // popover can't see from here.
-        bookEventsRef.current.closeFootnote();
+        dismissedAtPress = bookEventsRef.current.popoverOpen;
+        bookEventsRef.current.closePopovers();
       });
       // foliate scrolls a paginated book to whatever takes focus, on the next
       // frame. A tap's press and click arrive together, so a focused link would
@@ -581,6 +593,7 @@ export default function ReflowableReader({
         // is false for it; check for closest() instead.
         const target = e.target as Element | null;
         if (target?.closest?.("a[href]")) return;
+        if (dismissedAtPress) return;
         if (doc.getSelection()?.isCollapsed === false) return;
         if (isScrolled()) {
           events.toggleChrome();
@@ -600,8 +613,15 @@ export default function ReflowableReader({
         );
       });
     };
+    // foliate's margins are on this page, so a popover closes itself on a
+    // press there; the tap that closed it shouldn't also turn the page.
+    let marginDismissedAtPress = false;
+    const handleMarginPress = () => {
+      marginDismissedAtPress = bookEventsRef.current.popoverOpen;
+    };
     const handleMarginClick = (e: MouseEvent) => {
       const events = bookEventsRef.current;
+      if (marginDismissedAtPress) return;
       if (isScrolled()) return;
       // A press out here leaves the frame's selection in place, so the tap
       // clears it, as a tap on the text does, instead of turning the page.
@@ -619,9 +639,11 @@ export default function ReflowableReader({
     };
 
     view.addEventListener("load", handleLoad);
+    view.addEventListener("pointerdown", handleMarginPress);
     view.addEventListener("click", handleMarginClick);
     return () => {
       view.removeEventListener("load", handleLoad);
+      view.removeEventListener("pointerdown", handleMarginPress);
       view.removeEventListener("click", handleMarginClick);
       stopListening.abort();
     };
@@ -779,6 +801,7 @@ export default function ReflowableReader({
     };
     set("gap", layout.gap);
     set("flow", layout.flow);
+    set("max-column-count", layout.maxColumnCount);
 
     // A section already on screen lays out before a newly chosen font
     // arrives, and Firefox doesn't notice the text change size (see
@@ -887,7 +910,7 @@ export default function ReflowableReader({
               value={currentTocValue}
             />
           )}
-          <Popover>
+          <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
             <PopoverTrigger asChild>
               <Button aria-label="Settings" size="icon" variant="ghost">
                 <Settings className="h-4 w-4" />

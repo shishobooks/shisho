@@ -20,6 +20,7 @@ let epubBookId: number;
 let resumeBookId: number;
 let finishBookId: number;
 let settingsBookId: number;
+let longBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -115,13 +116,18 @@ test.describe("Reflowable reader", () => {
     });
     libraryId = ((await libraryResp.json()) as { id: number }).id;
 
-    const seed = async (title: string, fileType: string) => {
+    const seed = async (
+      title: string,
+      fileType: string,
+      epubParagraphs = 0,
+    ) => {
       const resp = await apiContext.post("/api/test/books", {
         data: {
           libraryId,
           title,
           fileType,
           withFileOnDisk: true,
+          epubParagraphs,
         },
       });
       expect(resp.ok()).toBe(true);
@@ -132,6 +138,7 @@ test.describe("Reflowable reader", () => {
     resumeBookId = await seed("Resume Book", "epub");
     finishBookId = await seed("Finish Book", "epub");
     settingsBookId = await seed("Settings Book", "epub");
+    longBookId = await seed("Long Book", "epub", 120);
     await apiContext.dispose();
   });
 
@@ -206,6 +213,83 @@ test.describe("Reflowable reader", () => {
     await page.getByRole("button", { name: "Settings" }).click();
     await page.getByRole("switch", { name: "Justify text" }).click();
     await expect.poll(alignments).toEqual(["start", "center"]);
+  });
+
+  test.describe("on a wide screen", () => {
+    test.use({ viewport: { width: 1600, height: 900 } });
+
+    test("Pages shows two pages side by side on Auto, and one on One", async ({
+      page,
+    }) => {
+      await login(page);
+      await setDisplaySettings(page, { layout: "paginated" });
+      await openReader(page, longBookId);
+      const frame = await bookFrame(page, "Test chapter.");
+
+      // The columns of text on screen: paragraphs wholly on screen start at
+      // one left edge per page. The next page's column starts just past the
+      // screen's edge, so a partial one doesn't count.
+      const columns = async () => {
+        const offset = (await (await frame.frameElement()).boundingBox())!.x;
+        const boxes = await frame.locator("p").evaluateAll((ps) =>
+          ps.map((p) => {
+            const { left, right } = p.getBoundingClientRect();
+            return { left, right };
+          }),
+        );
+        return new Set(
+          boxes
+            .filter(
+              ({ left, right }) => offset + left >= 0 && offset + right <= 1600,
+            )
+            .map(({ left }) => Math.round(offset + left)),
+        ).size;
+      };
+      await expect.poll(columns).toBe(2);
+
+      await page.getByRole("button", { name: "Settings" }).click();
+      await page.getByRole("button", { name: "One", exact: true }).click();
+      await expect.poll(columns).toBe(1);
+
+      await page.getByRole("button", { name: "Auto", exact: true }).click();
+      await expect.poll(columns).toBe(2);
+    });
+  });
+
+  test("a tap on the book closes the settings without turning the page", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, longBookId);
+    const frame = await bookFrame(page, "Test chapter.");
+    // On screen while the reader is on the first page; a turn moves it off.
+    const onFirstPage = async () => {
+      const box = await frame.locator("p").first().boundingBox();
+      return box !== null && box.x >= 0 && box.x < page.viewportSize()!.width;
+    };
+    await expect.poll(onFirstPage).toBe(true);
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    const settings = page.getByRole("dialog");
+    await expect(settings).toBeVisible();
+
+    // The right third of the page, which turns the page when nothing is
+    // open, left of the popover, which sits under the gear.
+    const box = (await frame.locator("p").first().boundingBox())!;
+    const popover = (await settings.boundingBox())!;
+    const x = page.viewportSize()!.width * 0.7;
+    expect(x).toBeLessThan(popover.x);
+    await page.mouse.click(x, box.y + box.height / 2);
+
+    await expect(settings).toBeHidden();
+    // A turn lands a moment after the tap, so give it time to show.
+    await page.waitForTimeout(500);
+    expect(await onFirstPage()).toBe(true);
+
+    // With nothing open, the same tap turns the page.
+    await page.mouse.click(x, box.y + box.height / 2);
+    await expect.poll(onFirstPage).toBe(false);
   });
 
   test("Force font size sets text the book fixes in px", async ({ page }) => {

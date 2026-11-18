@@ -600,6 +600,36 @@ describe("ReflowableReader", () => {
       return { view, header, doc, tapBook };
     };
 
+    // A press in the book's frame never reaches the page, where the popover
+    // listens for presses outside it.
+    it("close the settings instead of turning the page", async () => {
+      const { view, tapBook } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+      tapBook(295);
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(view.goRight).not.toHaveBeenCalled();
+
+      // The next tap turns the page as usual.
+      tapBook(295);
+      expect(view.goRight).toHaveBeenCalledTimes(1);
+    });
+
+    it("close the settings on the margins instead of turning the page", async () => {
+      const { view } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+
+      fireEvent.pointerDown(view);
+      fireEvent.click(view, { clientX: 295, clientY: 400 });
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(view.goRight).not.toHaveBeenCalled();
+    });
+
     it("replace the overlay buttons", () => {
       setup(true);
       expect(
@@ -1662,6 +1692,11 @@ describe("ReflowableReader display settings", () => {
       pick("Scrolled"),
       (r) => expect(attribute(r, "flow")).toBe("scrolled"),
     ],
+    [
+      "pages",
+      pick("One"),
+      (r) => expect(attribute(r, "max-column-count")).toBe("1"),
+    ],
   ])("applies the %s and remembers it", async (_, change, check) => {
     const first = await openBook();
     const user = await openSettings();
@@ -1715,6 +1750,18 @@ describe("ReflowableReader display settings", () => {
     expect(view.render).not.toHaveBeenCalled();
     await act(async () => fontArrives());
     expect(view.render).toHaveBeenCalled();
+  });
+
+  it("offers the number of pages only for the paginated layout", async () => {
+    await openBook();
+    const user = await openSettings();
+    const pages = screen.getByRole("group", { name: "Pages" });
+    expect(within(pages).getByRole("button", { name: "One" })).toBeEnabled();
+
+    await pick("Scrolled")(user);
+
+    expect(within(pages).getByRole("button", { name: "One" })).toBeDisabled();
+    expect(screen.getByText("Only for Paginated")).toBeInTheDocument();
   });
 
   it("doesn't save display settings to the account", async () => {

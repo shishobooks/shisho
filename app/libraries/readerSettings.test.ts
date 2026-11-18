@@ -69,6 +69,7 @@ describe("readerSettingsFrom", () => {
       forceFontSize: true,
       theme: "dark",
       layout: "scrolled",
+      pages: "one",
     };
     expect(readerSettingsFrom(JSON.stringify(stored))).toEqual(stored);
   });
@@ -83,6 +84,7 @@ describe("readerSettingsFrom", () => {
       forceFontSize: 1,
       theme: "purple",
       layout: "sideways",
+      pages: "two",
     };
     expect(readerSettingsFrom(JSON.stringify(stored))).toEqual(
       DEFAULT_READER_SETTINGS,
@@ -227,6 +229,17 @@ describe("readerCSS", () => {
 });
 
 describe("readerLayout", () => {
+  it("shows two pages side by side when there's room, by default", () => {
+    expect(DEFAULT_READER_SETTINGS.pages).toBe("auto");
+    expect(readerLayout(DEFAULT_READER_SETTINGS).maxColumnCount).toBe("2");
+  });
+
+  it("never shows more than one page when set to one", () => {
+    expect(
+      readerLayout({ ...DEFAULT_READER_SETTINGS, pages: "one" }).maxColumnCount,
+    ).toBe("1");
+  });
+
   it("passes the layout to foliate's flow", () => {
     expect(
       readerLayout({ ...DEFAULT_READER_SETTINGS, layout: "scrolled" }).flow,

@@ -14,6 +14,11 @@ export type ReaderTheme = (typeof READER_THEMES)[number];
 export const READER_LAYOUTS = ["paginated", "scrolled"] as const;
 export type ReaderLayout = (typeof READER_LAYOUTS)[number];
 
+// How many pages a paginated book shows at once. Auto shows two side by side
+// when the reader is wider than tall and has room for both; One never does.
+export const READER_PAGES = ["auto", "one"] as const;
+export type ReaderPages = (typeof READER_PAGES)[number];
+
 // The settings set by number, each with its range and step.
 export const NUMERIC_SETTINGS = {
   // The text's base size in CSS pixels; the book's own sizes scale from it.
@@ -56,6 +61,7 @@ export interface ReaderSettings {
   justify: boolean;
   theme: ReaderTheme;
   layout: ReaderLayout;
+  pages: ReaderPages;
 }
 
 export const DEFAULT_READER_SETTINGS: ReaderSettings = {
@@ -67,6 +73,7 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   justify: true,
   theme: "light",
   layout: "paginated",
+  pages: "auto",
 };
 
 // The settings accounts used to keep on the server, before they moved to the
@@ -176,6 +183,7 @@ export const readerSettingsFrom = (
     justify: validBoolean(stored.justify, d.justify),
     theme: oneOf(READER_THEMES, stored.theme, d.theme),
     layout: oneOf(READER_LAYOUTS, stored.layout, d.layout),
+    pages: oneOf(READER_PAGES, stored.pages, d.pages),
   };
 };
 
@@ -328,6 +336,7 @@ export const recordBookAlignment = (doc: Document) => {
 export const readerLayout = (settings: ReaderSettings) => ({
   flow: settings.layout,
   gap: `${settings.margins}%`,
+  maxColumnCount: settings.pages === "one" ? "1" : "2",
 });
 
 // A footnote popover is part of the book, so it takes the page's colors and
