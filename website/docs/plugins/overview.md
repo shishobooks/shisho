@@ -60,7 +60,7 @@ From **Administration > Plugins**, select the gear button labeled **Advanced plu
    - **Never** makes that hook inactive.
 4. Select **Save Order**.
 
-For metadata enrichment, order matters per field. During automatic scans, the first enricher in order that supplies an enabled field wins. File metadata fills fields that no enricher supplies. A result below the effective confidence threshold is skipped; a result without `confidence` is eligible to apply.
+For metadata enrichment, order matters per field. During automatic scans, the first enricher in order that supplies an enabled field wins. File metadata fills fields that no enricher supplies. On a book already in the library, a value an enricher set earlier stays, even after you change the order: later scans fill empty fields and replace values from the file, but don't replace one enricher's value with another's. Use **Refresh all metadata** on a book to apply the current order to it. See [Metadata Source Priority](../metadata.md#metadata-source-priority). A result below the effective confidence threshold is skipped; a result without `confidence` is eligible to apply.
 
 ## Customize a Library
 
