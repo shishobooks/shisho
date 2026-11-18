@@ -28,6 +28,6 @@ Every resource merge and every re-point mutation follows this checklist. Referen
 6. **Aliases go through `aliases.TransferAliasesOnMerge`.**
 7. **Reindex after commit** with the target and source in `search.Affected` (`search-fts.md`). Calling `Index*` on the target directly would re-insert a ghost row after a self-merge.
 8. **Leave Reviewed and sources alone.** A merge does not change which resources a Book has.
-9. **Rewrite the affected sidecars after commit** with the target's id, through the books service's `WriteSidecarsFor*` (a package `pkg/books` imports takes its own `SidecarWriter` interface). A rename of a sidecar-named resource does the same. Otherwise the next scan reads the old name back from a stale sidecar (ADR 0027). `pkg/server/resource_rename_sidecars_test.go` covers each path.
+9. **Mark the affected sidecars stale after commit** with the target's id, through the books service's `MarkSidecarsStaleFor*`, which also queues the rewrite job (a package `pkg/books` imports takes its own `SidecarWriter` interface). A rename of a sidecar-named resource does the same. Otherwise the next scan reads the old name back from a stale sidecar (ADR 0027). `pkg/server/resource_rename_sidecars_test.go` covers each path.
 
 **Renames onto another resource's name**: Genres, Tags, and Publishers merge into the existing one; Series and People reject with a 422 telling the user to merge, so combining them is always explicit.

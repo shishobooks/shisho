@@ -30,11 +30,11 @@ type handler struct {
 	coverCache     *covers.ThumbnailCache
 }
 
-// writeSidecars rewrites the sidecars of the series' Books after a rename or
-// merge changes the name they record (ADR 0027).
+// writeSidecars queues a rewrite of the series' Books' sidecars after a rename
+// or merge changes the name they record (ADR 0027).
 func (h *handler) writeSidecars(ctx context.Context, seriesID int) {
 	if h.bookService != nil {
-		h.bookService.WriteSidecarsForSeries(ctx, seriesID)
+		h.bookService.MarkSidecarsStaleForSeries(ctx, seriesID)
 	}
 }
 

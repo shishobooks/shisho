@@ -36,11 +36,12 @@ type FileOrganizer interface {
 	GetLibraryOrganizeSetting(ctx context.Context, libraryID int) (bool, error)
 }
 
-// SidecarWriter rewrites the sidecars of every Book that holds a person, after a
-// rename or merge changes the name they record (ADR 0027). books.Service
-// implements it; the interface breaks the import cycle.
+// SidecarWriter marks the sidecars of every Book that holds a person stale,
+// after a rename or merge changes the name they record, and queues the job
+// that rewrites them (ADR 0027). books.Service implements it; the interface
+// breaks the import cycle.
 type SidecarWriter interface {
-	WriteSidecarsForPerson(ctx context.Context, personID int)
+	MarkSidecarsStaleForPerson(ctx context.Context, personID int)
 }
 
 type handler struct {
@@ -53,10 +54,10 @@ type handler struct {
 	sidecars         SidecarWriter // nil in tests that don't cover sidecars
 }
 
-// writeSidecars rewrites the sidecars of the person's Books, if configured.
+// writeSidecars queues a rewrite of the person's Books' sidecars, if configured.
 func (h *handler) writeSidecars(ctx context.Context, personID int) {
 	if h.sidecars != nil {
-		h.sidecars.WriteSidecarsForPerson(ctx, personID)
+		h.sidecars.MarkSidecarsStaleForPerson(ctx, personID)
 	}
 }
 

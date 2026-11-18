@@ -255,6 +255,7 @@ export function ResourceDetail({
       {canMutate && !onEditClick && (
         <MetadataEditDialog
           aliases={aliases}
+          bookCount={bookCount}
           entityName={name}
           entityType={entityType}
           isPending={editConfig.isPending}

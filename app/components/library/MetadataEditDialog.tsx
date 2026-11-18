@@ -20,6 +20,7 @@ import { isDemoModeError, requestErrorMessage } from "@/libraries/api";
 import type { EntityType } from "@/libraries/metadataEntity";
 import { DataSourceManual, type DataSource } from "@/types";
 import { resolveAliases } from "@/utils/aliases";
+import { formatCount } from "@/utils/format";
 import { forPerson, forTitle } from "@/utils/sortname";
 
 export type { EntityType };
@@ -38,7 +39,13 @@ interface MetadataEditDialogProps {
     aliases?: string[];
   }) => Promise<unknown>;
   isPending: boolean;
+  /** How many Books hold the entity, for the warning a big rename shows. */
+  bookCount?: number;
 }
+
+// A rename rewrites the sidecar files of every Book that holds the entity, in
+// a background job. At this many Books the job takes long enough to mention.
+const RENAME_WARNING_BOOK_COUNT = 100;
 
 const ENTITY_LABELS: Record<EntityType, string> = {
   person: "Person",
@@ -58,6 +65,7 @@ export function MetadataEditDialog({
   sortNameSource,
   onSave,
   isPending,
+  bookCount,
 }: MetadataEditDialogProps) {
   const [name, setName] = useState(entityName);
   const [editSortName, setEditSortName] = useState(sortName || "");
@@ -258,6 +266,17 @@ export function MetadataEditDialog({
               onChange={(e) => handleNameChange(e.target.value)}
               value={name}
             />
+            {bookCount !== undefined &&
+              bookCount >= RENAME_WARNING_BOOK_COUNT &&
+              initialValues !== null &&
+              name.trim() !== "" &&
+              name.trim() !== initialValues.name && (
+                <p className="text-sm text-muted-foreground">
+                  Renaming updates the sidecar files of{" "}
+                  {formatCount(bookCount, "book")} in the background. On a large
+                  library that can take a while.
+                </p>
+              )}
           </div>
 
           {hasSortName && (

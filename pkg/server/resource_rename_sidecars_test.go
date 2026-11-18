@@ -7,15 +7,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/appsettings"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// Renaming or merging a resource rewrites the sidecars of the Books that hold
-// it, through the real route table, so a later scan doesn't read the old name
-// back (ADR 0027).
+// Renaming or merging a resource, through the real route table, marks the
+// sidecars of the Books that hold it stale and queues the sidecar rewrite job,
+// which rewrites them, so a later scan doesn't read the old name back (ADR
+// 0027).
 
 type sidecarBook struct {
 	bookDir   string
@@ -66,6 +69,19 @@ func seedSidecarBook(f *resourceDeleteFixture) *sidecarBook {
 	return b
 }
 
+// runQueuedRewrite checks the request queued the sidecar rewrite job, then
+// does its work.
+func runQueuedRewrite(f *resourceDeleteFixture) {
+	f.t.Helper()
+	var queued int
+	require.NoError(f.t, f.db.NewSelect().Model((*models.Job)(nil)).
+		Where("type = ? AND status = ?", models.JobTypeSidecarRewrite, models.JobStatusPending).
+		ColumnExpr("COUNT(*)").Scan(f.ctx, &queued))
+	require.Equal(f.t, 1, queued, "the request must queue the sidecar rewrite job")
+	_, err := books.NewService(f.db, appsettings.NewService(f.db)).RewriteStaleSidecars(f.ctx)
+	require.NoError(f.t, err)
+}
+
 func (b *sidecarBook) sidecars(t *testing.T) (*sidecar.BookSidecar, *sidecar.FileSidecar) {
 	t.Helper()
 	bookSidecar, err := sidecar.ReadBookSidecar(b.bookDir)
@@ -114,6 +130,7 @@ func TestRenameRewritesSidecars(t *testing.T) {
 			b := seedSidecarBook(f)
 
 			f.request(http.MethodPatch, tt.path(b), `{"name": "New Name"}`, http.StatusOK)
+			runQueuedRewrite(f)
 
 			bs, fs := b.sidecars(t)
 			tt.check(t, bs, fs)
@@ -173,6 +190,7 @@ func TestMergeRewritesSidecars(t *testing.T) {
 			target := tt.target(f)
 
 			f.request(http.MethodPost, fmt.Sprintf("/api/%s/%d/merge", tt.path, target), fmt.Sprintf(`{"source_id": %d}`, tt.source(b)), http.StatusNoContent)
+			runQueuedRewrite(f)
 
 			bs, fs := b.sidecars(t)
 			tt.check(t, bs, fs)

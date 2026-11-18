@@ -1125,3 +1125,46 @@ describe("MetadataEditDialog", () => {
     });
   });
 });
+
+describe("MetadataEditDialog rename warning", () => {
+  const renderDialog = (bookCount?: number) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MetadataEditDialog
+          bookCount={bookCount}
+          entityName="Fiction"
+          entityType="genre"
+          isPending={false}
+          onOpenChange={vi.fn()}
+          onSave={vi.fn()}
+          open={true}
+        />
+      </QueryClientProvider>,
+    );
+
+  const warning = () => screen.queryByText(/updates the sidecar files/i);
+
+  it("warns that renaming a resource on many books runs in the background", async () => {
+    const user = createUser();
+    renderDialog(1500);
+    expect(warning()).not.toBeInTheDocument();
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Literary Fiction");
+
+    expect(warning()).toHaveTextContent("1,500 books");
+    expect(warning()).toHaveTextContent(/in the background/i);
+  });
+
+  it("doesn't warn for a resource on a few books", async () => {
+    const user = createUser();
+    renderDialog(20);
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Literary Fiction");
+
+    expect(warning()).not.toBeInTheDocument();
+  });
+});

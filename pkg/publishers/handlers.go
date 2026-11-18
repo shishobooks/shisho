@@ -20,11 +20,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
-// SidecarWriter rewrites the sidecars of every Book that holds a publisher, after a
-// rename or merge changes the name they record (ADR 0027). books.Service
-// implements it; the interface breaks the import cycle.
+// SidecarWriter marks the sidecars of every Book that holds a publisher stale,
+// after a rename or merge changes the name they record, and queues the job
+// that rewrites them (ADR 0027). books.Service implements it; the interface
+// breaks the import cycle.
 type SidecarWriter interface {
-	WriteSidecarsForPublisher(ctx context.Context, publisherID int)
+	MarkSidecarsStaleForPublisher(ctx context.Context, publisherID int)
 }
 
 type handler struct {
@@ -36,11 +37,11 @@ type handler struct {
 	sidecars         SidecarWriter // nil in tests that don't cover sidecars
 }
 
-// writeSidecars rewrites the sidecars of the publisher's Books, if
+// writeSidecars queues a rewrite of the publisher's Books' sidecars, if
 // configured.
 func (h *handler) writeSidecars(ctx context.Context, publisherID int) {
 	if h.sidecars != nil {
-		h.sidecars.WriteSidecarsForPublisher(ctx, publisherID)
+		h.sidecars.MarkSidecarsStaleForPublisher(ctx, publisherID)
 	}
 }
 

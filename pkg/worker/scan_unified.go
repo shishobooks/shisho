@@ -1041,6 +1041,12 @@ func (w *Worker) scanFileCore(
 
 	sidecarSource := models.DataSourceSidecar
 
+	// A rename or merge may have left the Book's sidecars naming a resource by
+	// its old name. They are rewritten from what is stored before being read,
+	// or skipped when they can't be, so a stale name never comes back (ADR
+	// 0027).
+	sidecarsTrusted := w.bookService.RewriteSidecarsIfStale(ctx, book)
+
 	// Read sidecar files if they exist (higher priority than file metadata)
 	// Sidecars can override file metadata but not manual user edits
 	bookSidecarData, err := sidecar.ReadBookSidecarFromModel(book, file)
@@ -1050,6 +1056,9 @@ func (w *Worker) scanFileCore(
 	fileSidecarData, err := sidecar.ReadFileSidecar(file.Filepath)
 	if err != nil {
 		logWarn("failed to read file sidecar", logger.Data{"error": err.Error()})
+	}
+	if !sidecarsTrusted {
+		bookSidecarData, fileSidecarData = nil, nil
 	}
 	// A known Book's and File's sidecars were written by Shisho from what is
 	// stored, so only the fields that differ came from somewhere else.

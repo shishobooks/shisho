@@ -146,7 +146,7 @@ Names for authors, narrators, series, genres, tags, and publishers use Shisho's 
 
 ## Reading and Writing
 
-Library scans read sidecars and then write the resulting current metadata back to sidecars. Metadata edits in Shisho also write the affected sidecars, and so does renaming or merging a person, series, genre, tag, or publisher, which rewrites the sidecars of every book that names it. Otherwise the next scan would read the old name back. These writes are best-effort: a failed write does not roll back the scan or edit, and Shisho records the failure in its logs.
+Library scans read sidecars and then write the resulting current metadata back to sidecars. Metadata edits in Shisho also write the affected sidecars. Renaming or merging a person, series, genre, tag, or publisher rewrites the sidecars of every book that names it in a background job, which shows under **Administration > Jobs** and can take a while for a name used by many books. Until the job reaches a book, a scan of that book rewrites its sidecars before reading them, so the old name never comes back. These writes are best-effort: a failed write does not roll back the scan or edit, and Shisho records the failure in its logs.
 
 The operating-system account running Shisho needs write permission to the media directories. In a container deployment, verify both the mounted path's permissions and that the mount is not read-only. See [Deployment and Maintenance](./deployment-and-maintenance.md).
 

@@ -17,12 +17,13 @@ const (
 )
 
 const (
-	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload | typeof JobTypeHashGeneration | typeof JobTypeRecomputeReview;
+	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload | typeof JobTypeHashGeneration | typeof JobTypeRecomputeReview | typeof JobTypeSidecarRewrite;
 	JobTypeExport          = "export"
 	JobTypeScan            = "scan"
 	JobTypeBulkDownload    = "bulk_download"
 	JobTypeHashGeneration  = "hash_generation"
 	JobTypeRecomputeReview = "recompute_review"
+	JobTypeSidecarRewrite  = "sidecar_rewrite"
 )
 
 type Job struct {
@@ -34,7 +35,7 @@ type Job struct {
 	Type       string      `bun:",nullzero" json:"type" tstype:"JobType"`
 	Status     string      `bun:",nullzero" json:"status" tstype:"JobStatus"`
 	Data       string      `bun:",nullzero" json:"-"`
-	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData | JobHashGenerationData | JobRecomputeReviewData"`
+	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData | JobHashGenerationData | JobRecomputeReviewData | JobSidecarRewriteData"`
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
 	LibraryID  *int        `json:"library_id,omitempty"`
@@ -56,6 +57,8 @@ func (job *Job) UnmarshalData() error {
 		job.DataParsed = &JobHashGenerationData{}
 	case JobTypeRecomputeReview:
 		job.DataParsed = &JobRecomputeReviewData{}
+	case JobTypeSidecarRewrite:
+		job.DataParsed = &JobSidecarRewriteData{}
 	}
 
 	err := json.Unmarshal([]byte(job.Data), job.DataParsed)
@@ -100,6 +103,11 @@ type JobScanProgress struct {
 type JobHashGenerationData struct {
 	LibraryID int `json:"library_id"`
 }
+
+// JobSidecarRewriteData is the payload for a sidecar rewrite job, which
+// rewrites the sidecars of every Book marked stale by a rename or merge
+// (books.sidecars_stale_at). It needs no input.
+type JobSidecarRewriteData struct{}
 
 type JobRecomputeReviewData struct {
 	// ClearOverrides, when true, sets review_override and review_overridden_at to NULL

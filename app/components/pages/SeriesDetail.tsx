@@ -244,6 +244,7 @@ const SeriesDetail = () => {
         <>
           <MetadataEditDialog
             aliases={aliases}
+            bookCount={series.book_count}
             entityName={series.name}
             entityType="series"
             isPending={updateSeriesMutation.isPending}
