@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
+import { OldNameAliasWarning } from "@/components/library/OldNameAliasWarning";
 import { SidecarRewriteNote } from "@/components/library/SidecarRewriteNote";
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -328,6 +329,14 @@ export function MetadataEditDialog({
                 value={aliasInput}
               />
             </div>
+            {initialValues && (
+              <OldNameAliasWarning
+                aliases={resolvedAliases}
+                entityLabel={ENTITY_LABELS[entityType].toLowerCase()}
+                newName={name}
+                oldName={initialValues.name}
+              />
+            )}
             {serverError && (
               <p className="text-sm text-destructive" role="alert">
                 {serverError}

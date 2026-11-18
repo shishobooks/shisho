@@ -518,3 +518,38 @@ describe("PublisherEditDialog", () => {
     });
   });
 });
+
+describe("PublisherEditDialog old-name alias warning", () => {
+  const createQueryClient = () =>
+    new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const defaultProps = {
+    open: true,
+    onOpenChange: vi.fn(),
+    entityName: "Foobar",
+    aliases: [] as string[],
+    onSave: vi.fn(),
+    isPending: false,
+    useParentSearch: vi.fn(),
+  };
+
+  it("warns when a rename drops the old name's alias", async () => {
+    const user = createUser();
+    render(
+      <QueryClientProvider client={createQueryClient()}>
+        <PublisherEditDialog {...defaultProps} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Foobar")).toBeInTheDocument();
+    });
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Foobar Press");
+    await user.click(
+      screen.getByRole("button", { name: "Remove alias Foobar" }),
+    );
+
+    expect(screen.getByText(/separate publisher/i)).toBeInTheDocument();
+  });
+});

@@ -1207,3 +1207,43 @@ describe("MetadataEditDialog rename note and confirmation", () => {
     );
   });
 });
+
+describe("MetadataEditDialog old-name alias warning", () => {
+  const renderPerson = () =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MetadataEditDialog
+          entityName="Jon Smith"
+          entityType="person"
+          isPending={false}
+          onOpenChange={vi.fn()}
+          onSave={vi.fn()}
+          open={true}
+        />
+      </QueryClientProvider>,
+    );
+  const warning = () => screen.queryByText(/separate person/i);
+
+  it("warns that removing the old name's alias splits books off on rescans", async () => {
+    const user = createUser();
+    renderPerson();
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "John Smith");
+    expect(warning()).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove alias Jon Smith" }),
+    );
+
+    expect(warning()).toHaveTextContent(
+      'Without "Jon Smith" as an alias, books whose files still name "Jon Smith" will move to a separate person with that name the next time they are scanned for new metadata.',
+    );
+  });
+
+  it("doesn't warn without a rename", async () => {
+    renderPerson();
+    expect(warning()).not.toBeInTheDocument();
+  });
+});

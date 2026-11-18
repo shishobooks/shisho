@@ -6,6 +6,7 @@ import {
   EntityCombobox,
   type EntityComboboxProps,
 } from "@/components/common/EntityCombobox";
+import { OldNameAliasWarning } from "@/components/library/OldNameAliasWarning";
 import { SidecarRewriteNote } from "@/components/library/SidecarRewriteNote";
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -333,6 +334,14 @@ export function PublisherEditDialog({
                 value={aliasInput}
               />
             </div>
+            {initialValues && (
+              <OldNameAliasWarning
+                aliases={resolvedAliases}
+                entityLabel="publisher"
+                newName={name}
+                oldName={initialValues.name}
+              />
+            )}
             {serverError && (
               <p className="text-sm text-destructive" role="alert">
                 {serverError}
