@@ -2,6 +2,7 @@ package books
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/pkg/errors"
@@ -160,23 +161,33 @@ func (svc *Service) RewriteSidecarsIfStale(ctx context.Context, book *models.Boo
 	return true
 }
 
-// rewriteBookSidecars clears a Book's mark, then writes its book and file
-// sidecars from what is stored. Clearing first means a rename that lands
-// while this runs marks the Book again, so the next job covers it. A write
-// that fails marks it again, so scans keep distrusting its sidecars.
+// rewriteBookSidecars writes a Book's book and file sidecars from what is
+// stored, then clears its mark if no rename marked it again meanwhile. The
+// mark goes only after a successful write, so a server that dies mid-write
+// leaves it for the next pass. A failed write leaves it too, so scans keep
+// distrusting the Book's sidecars.
 func (svc *Service) rewriteBookSidecars(ctx context.Context, bookID int) error {
-	if _, err := svc.db.NewUpdate().Model((*models.Book)(nil)).
-		Set("sidecars_stale_at = NULL").Where("id = ?", bookID).Exec(ctx); err != nil {
-		return errors.Wrap(err, "clear stale sidecar mark")
+	// The mark as stored text, compared as text on clearing: the same value
+	// read back into a time.Time could format differently.
+	var marked sql.NullString
+	if err := svc.db.NewRaw("SELECT CAST(sidecars_stale_at AS TEXT) FROM books WHERE id = ?", bookID).
+		Scan(ctx, &marked); err != nil {
+		return errors.Wrap(err, "read stale sidecar mark")
 	}
-	writeErr := svc.writeBookSidecars(ctx, bookID)
-	if writeErr != nil {
-		if _, err := svc.db.NewUpdate().Model((*models.Book)(nil)).
-			Set("sidecars_stale_at = ?", time.Now()).Where("id = ?", bookID).Exec(context.WithoutCancel(ctx)); err != nil {
-			logger.FromContext(ctx).Warn("failed to mark sidecars stale again after a failed write", logger.Data{"book_id": bookID, "error": err.Error()})
-		}
+	if err := svc.writeBookSidecars(ctx, bookID); err != nil {
+		return err
 	}
-	return writeErr
+	if svc.beforeClearStaleMark != nil {
+		svc.beforeClearStaleMark()
+	}
+	if !marked.Valid {
+		return nil
+	}
+	_, err := svc.db.NewRaw(
+		"UPDATE books SET sidecars_stale_at = NULL WHERE id = ? AND CAST(sidecars_stale_at AS TEXT) = ?",
+		bookID, marked.String,
+	).Exec(context.WithoutCancel(ctx))
+	return errors.Wrap(err, "clear stale sidecar mark")
 }
 
 func (svc *Service) writeBookSidecars(ctx context.Context, bookID int) error {

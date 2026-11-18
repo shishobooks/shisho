@@ -1163,3 +1163,21 @@ func TestScanRules_KeepsStoredCover(t *testing.T) {
 	assert.False(t, created.keepsStoredCover("plugin:shisho/goodreads"))
 	assert.False(t, forced.keepsStoredCover(models.DataSourceManual))
 }
+
+// Every file sidecar field a scan can apply has a case in dropSidecarCopies,
+// or Shisho's own copy of it outranks plugins again (ADR 0027).
+func TestDropSidecarCopies_FileFields(t *testing.T) {
+	t.Parallel()
+	rtl := models.ReadingDirectionRTL
+	file := &models.File{ReadingDirection: &rtl}
+	stored := sidecar.FileSidecarFromModel(file)
+
+	dropSidecarCopies(nil, stored, nil, file)
+
+	assert.Nil(t, stored.ReadingDirection, "a reading direction equal to the stored one is Shisho's copy")
+
+	ltr := models.ReadingDirectionLTR
+	edited := &sidecar.FileSidecar{ReadingDirection: &ltr}
+	dropSidecarCopies(nil, edited, nil, file)
+	assert.Equal(t, &ltr, edited.ReadingDirection, "a reading direction that differs is kept")
+}

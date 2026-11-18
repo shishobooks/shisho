@@ -183,6 +183,9 @@ func dropFileSidecarCopies(s *sidecar.FileSidecar, file *models.File) {
 	if equalStringPointers(s.Language, stored.Language) {
 		s.Language = nil
 	}
+	if equalStringPointers(s.ReadingDirection, stored.ReadingDirection) {
+		s.ReadingDirection = nil
+	}
 	if s.Abridged != nil && stored.Abridged != nil && *s.Abridged == *stored.Abridged {
 		s.Abridged = nil
 	}

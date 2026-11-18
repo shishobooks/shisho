@@ -1869,7 +1869,7 @@ func (w *Worker) scanFileCore(
 		}
 		if metadata.ReadingDirection != nil && models.IsReadingDirection(*metadata.ReadingDirection) {
 			directionSource := metadata.SourceForField("readingDirection")
-			if shouldUpdateScalar(*metadata.ReadingDirection, existingDirection, directionSource, existingDirectionSource, forceRefresh) {
+			if shouldUpdateScalar(*metadata.ReadingDirection, existingDirection, directionSource, existingDirectionSource, fileRules) {
 				logInfo("updating file reading direction", logger.Data{"from": existingDirection, "to": *metadata.ReadingDirection})
 				file.ReadingDirection = metadata.ReadingDirection
 				file.ReadingDirectionSource = &directionSource
