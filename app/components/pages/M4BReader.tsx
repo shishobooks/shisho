@@ -13,9 +13,9 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import ChapterMarkers from "@/components/library/ChapterMarkers";
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import ProgressMarks from "@/components/library/ProgressMarks";
 import BookmarkNoteDialog from "@/components/player/BookmarkNoteDialog";
 import BookmarksSheet from "@/components/player/BookmarksSheet";
 import PlaybackSpeedControl from "@/components/player/PlaybackSpeedControl";
@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { useCreateBookmark } from "@/hooks/queries/bookmarks";
+import { useCreateBookmark, useFileBookmarks } from "@/hooks/queries/bookmarks";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
@@ -425,6 +425,8 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   // Bookmarks. Adding one marks the moment the button was pressed, while
   // playback carries on as the note is written.
   const createBookmark = useCreateBookmark(file.id);
+  // Marked along the seek bar, as the panel lists them.
+  const { data: bookmarks = [] } = useFileBookmarks(file.id);
   const [addingAt, setAddingAt] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
@@ -588,13 +590,23 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
               thumbLabel="Seek"
               value={[Math.min(displayTime, sliderMax)]}
             />
-            {hasChapters && duration > 0 && (
-              <ChapterMarkers
-                markers={chapters.map((chapter) => ({
-                  position: chapter.startSeconds / duration,
-                  label: chapter.title,
-                  onSelect: () => seekTo(chapter.startSeconds),
-                }))}
+            {duration > 0 && (
+              <ProgressMarks
+                markers={[
+                  ...(hasChapters ? chapters : []).map((chapter) => ({
+                    kind: "chapter" as const,
+                    position: chapter.startSeconds / duration,
+                    label: chapter.title,
+                    onSelect: () => seekTo(chapter.startSeconds),
+                  })),
+                  ...bookmarks.map((bookmark) => ({
+                    kind: "bookmark" as const,
+                    position: bookmark.seconds / duration,
+                    label: `Bookmark at ${formatPlayerTime(bookmark.seconds)}`,
+                    note: bookmark.note,
+                    onSelect: () => seekTo(bookmark.seconds),
+                  })),
+                ]}
               />
             )}
           </div>

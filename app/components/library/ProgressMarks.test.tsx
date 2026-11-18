@@ -2,32 +2,41 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import ChapterMarkers, { type ChapterMarker } from "./ChapterMarkers";
+import ProgressMarks, { type ProgressMark } from "./ProgressMarks";
 
-const marker = (position: number, label = `At ${position}`): ChapterMarker => ({
+const marker = (position: number, label = `At ${position}`): ProgressMark => ({
+  kind: "chapter",
   position,
   label,
+  onSelect: vi.fn(),
+});
+
+const bookmark = (position: number, note?: string): ProgressMark => ({
+  kind: "bookmark",
+  position,
+  label: `Bookmark at ${position}`,
+  note,
   onSelect: vi.fn(),
 });
 
 const lefts = () =>
   screen.queryAllByTestId("chapter-marker").map((m) => m.style.left);
 
-describe("ChapterMarkers", () => {
+describe("ProgressMarks", () => {
   it("marks each chapter where it starts along the bar", () => {
-    render(<ChapterMarkers markers={[marker(0.25), marker(0.5)]} />);
+    render(<ProgressMarks markers={[marker(0.25), marker(0.5)]} />);
     expect(lefts()).toEqual(["25%", "50%"]);
   });
 
   it("leaves out a chapter at the very start or end, where the bar's ends are", () => {
-    render(<ChapterMarkers markers={[marker(0), marker(0.4), marker(1)]} />);
+    render(<ProgressMarks markers={[marker(0), marker(0.4), marker(1)]} />);
     expect(lefts()).toEqual(["40%"]);
   });
 
   it("takes a chapter a hair from either end as at that end", () => {
     // foliate nudges every section's start by Number.EPSILON.
     render(
-      <ChapterMarkers
+      <ProgressMarks
         markers={[
           marker(Number.EPSILON),
           marker(0.4),
@@ -39,7 +48,7 @@ describe("ChapterMarkers", () => {
   });
 
   it("runs from the right in a bar that fills right to left", () => {
-    render(<ChapterMarkers markers={[marker(0.25)]} rtl />);
+    render(<ProgressMarks markers={[marker(0.25)]} rtl />);
     const mark = screen.getByTestId("chapter-marker");
     expect(mark.style.right).toBe("25%");
     expect(mark.style.left).toBe("");
@@ -47,7 +56,7 @@ describe("ChapterMarkers", () => {
 
   it("leaves out positions outside the bar", () => {
     render(
-      <ChapterMarkers
+      <ProgressMarks
         markers={[marker(-0.1), marker(0.3), marker(1.2), marker(Number.NaN)]}
       />,
     );
@@ -56,7 +65,7 @@ describe("ChapterMarkers", () => {
 
   it("names the chapter when the pointer rests on its mark", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    render(<ChapterMarkers markers={[marker(0.5, "Chapter 3")]} />);
+    render(<ProgressMarks markers={[marker(0.5, "Chapter 3")]} />);
 
     await user.hover(screen.getByTestId("chapter-marker"));
 
@@ -70,7 +79,7 @@ describe("ChapterMarkers", () => {
     render(
       // Stands in for a reader's progress bar, which seeks on a click.
       <div onClick={barClick}>
-        <ChapterMarkers markers={[chapter]} />
+        <ProgressMarks markers={[chapter]} />
       </div>,
     );
 
@@ -81,10 +90,47 @@ describe("ChapterMarkers", () => {
   });
 
   it("stays out of the tab order, which the chapter menu already serves", () => {
-    render(<ChapterMarkers markers={[marker(0.5, "Chapter 3")]} />);
+    render(<ProgressMarks markers={[marker(0.5, "Chapter 3")]} />);
     expect(screen.getByTestId("chapter-marker")).toHaveAttribute(
       "tabindex",
       "-1",
     );
+  });
+});
+
+describe("ProgressMarks bookmarks", () => {
+  it("marks each bookmark apart from the chapters", () => {
+    render(<ProgressMarks markers={[marker(0.25), bookmark(0.6)]} />);
+    expect(
+      screen.getAllByTestId("bookmark-marker").map((m) => m.style.left),
+    ).toEqual(["60%"]);
+    expect(lefts()).toEqual(["25%"]);
+  });
+
+  it("shows a bookmark right by either end, where a chapter mark would sit on the bar's end", () => {
+    // A bookmark seconds into a long book.
+    render(<ProgressMarks markers={[bookmark(0.0001), bookmark(0.9999)]} />);
+    expect(screen.getAllByTestId("bookmark-marker")).toHaveLength(2);
+  });
+
+  it("shows a bookmark's note under its name on hover", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<ProgressMarks markers={[bookmark(0.5, "The twist")]} />);
+
+    await user.hover(screen.getByTestId("bookmark-marker"));
+
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Bookmark at 0.5");
+    expect(tooltip).toHaveTextContent("The twist");
+  });
+
+  it("goes to the bookmark on a click", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const mark = bookmark(0.5);
+    render(<ProgressMarks markers={[mark]} />);
+
+    await user.click(screen.getByTestId("bookmark-marker"));
+
+    expect(mark.onSelect).toHaveBeenCalledTimes(1);
   });
 });

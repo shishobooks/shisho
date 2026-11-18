@@ -1,8 +1,8 @@
 import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import ChapterMarkers from "@/components/library/ChapterMarkers";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ProgressMarks from "@/components/library/ProgressMarks";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
 import ReaderSettingsPanel from "@/components/library/ReaderSettingsPanel";
 import { Button } from "@/components/ui/button";
@@ -1116,8 +1116,9 @@ export default function ReflowableReader({
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
               style={{ width: `${progressPercent}%` }}
             />
-            <ChapterMarkers
+            <ProgressMarks
               markers={chapterMarks.map((mark) => ({
+                kind: "chapter" as const,
                 position: mark.position,
                 label: mark.label,
                 // The chapter's own link, so a click lands on its first

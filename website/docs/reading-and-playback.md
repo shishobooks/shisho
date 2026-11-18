@@ -93,6 +93,8 @@ A bookmark marks a moment in an audiobook to come back to. Select **Add Bookmark
 
 Select **Bookmarks** to list an audiobook's bookmarks in time order. Select a bookmark to jump to its moment, or use its buttons to edit its note or delete it. Deleting a bookmark takes effect at once and cannot be undone.
 
+Each bookmark is also marked on the seek bar with a dot. Point at a dot to see the bookmark's time and note, or select it to play from that moment.
+
 Bookmarks are saved to your account, so they follow you to any browser. They are private: other users never see yours. Bookmarks belong to one audiobook file, and deleting that file from Shisho deletes its bookmarks too.
 
 ## Reader Settings

@@ -11,8 +11,8 @@ import React, {
 } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
-import ChapterMarkers from "@/components/library/ChapterMarkers";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import ProgressMarks from "@/components/library/ProgressMarks";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -1023,12 +1023,13 @@ export default function PageReader({
               style={{ width: `${progressPercent}%` }}
             />
             {totalPages > 1 && (
-              <ChapterMarkers
+              <ProgressMarks
                 markers={flatChapters.flatMap((ch) =>
                   ch.start_page == null
                     ? []
                     : [
                         {
+                          kind: "chapter" as const,
                           position: ch.start_page / (totalPages - 1),
                           label: ch.title,
                           onSelect: () => goToPage(ch.start_page!),

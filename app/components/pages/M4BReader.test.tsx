@@ -536,6 +536,54 @@ describe("M4BReader", () => {
       ]);
     });
 
+    it("marks each Bookmark on the seek bar, with its note on hover", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(900, "The twist");
+      addServerBookmark(1800);
+      renderReader();
+
+      // 900 and 1800 of the File's 3600 seconds.
+      const marks = await screen.findAllByTestId("bookmark-marker");
+      expect(marks.map((m) => m.style.left)).toEqual(["25%", "50%"]);
+
+      await user.hover(marks[0]);
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip).toHaveTextContent("Bookmark at 15:00");
+      expect(tooltip).toHaveTextContent("The twist");
+    });
+
+    it("plays from a Bookmark on a click on its mark", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(900);
+      renderReader();
+      const audio = getAudio();
+
+      await user.click(await screen.findByTestId("bookmark-marker"));
+
+      expect(audio.currentTime).toBe(900);
+    });
+
+    it("marks a Bookmark as soon as it's added", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      const audio = getAudio();
+      audio.currentTime = 1800;
+      fireEvent.timeUpdate(audio);
+      expect(screen.queryByTestId("bookmark-marker")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "Add Bookmark" }));
+      const dialog = await screen.findByRole("dialog", {
+        name: "Add Bookmark",
+      });
+      await user.click(
+        within(dialog).getByRole("button", { name: "Add Bookmark" }),
+      );
+
+      expect(await screen.findByTestId("bookmark-marker")).toHaveStyle({
+        left: "50%",
+      });
+    });
+
     it("shows Bookmarks added elsewhere when the panel opens again", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       addServerBookmark(83, "test");
