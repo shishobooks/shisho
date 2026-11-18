@@ -35,6 +35,7 @@ import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
 import type { EntityType } from "./MetadataEditDialog";
+import { SidecarRewriteNote, type SidecarCount } from "./SidecarRewriteNote";
 
 export interface EntityOption {
   id: number;
@@ -44,6 +45,8 @@ export interface EntityOption {
    * the count means: "12 books", "40 files", "3 books authored".
    */
   countText: string;
+  /** The number countText states, for the sidecar note on a big merge. */
+  count?: number;
 }
 
 export interface SetChildConfig {
@@ -60,6 +63,8 @@ interface MetadataMergeDialogProps {
   entityType: EntityType;
   targetName: string;
   targetId: number;
+  /** What the target holds, in the unit the entities' counts use. */
+  targetSidecarCount?: SidecarCount;
   /** A rejection is toasted here and keeps the dialog open. */
   onMerge: (sourceId: number) => Promise<unknown>;
   isPending: boolean;
@@ -102,6 +107,7 @@ export function MetadataMergeDialog({
   isSearchPending,
   onSearch,
   setChildConfig,
+  targetSidecarCount,
 }: MetadataMergeDialogProps) {
   // The picked source itself, not its id: a later search can drop it from
   // `entities`, and the picker and Merge must still agree on what merges.
@@ -349,6 +355,21 @@ export function MetadataMergeDialog({
               </Tooltip>
             </RadioGroup>
           )}
+
+          {selectedEntity &&
+            targetSidecarCount &&
+            (!setChildConfig || action === "merge") && (
+              <div className="mt-3">
+                <SidecarRewriteNote
+                  action="Merging"
+                  affected={{
+                    ...targetSidecarCount,
+                    count:
+                      targetSidecarCount.count + (selectedEntity.count ?? 0),
+                  }}
+                />
+              </div>
+            )}
         </DialogBody>
 
         <DialogFooter>

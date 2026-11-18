@@ -1127,17 +1127,17 @@ describe("MetadataEditDialog", () => {
 });
 
 describe("MetadataEditDialog rename warning", () => {
-  const renderDialog = (bookCount?: number) =>
+  const renderDialog = (count: number, singular = "book", plural = "books") =>
     render(
       <QueryClientProvider client={new QueryClient()}>
         <MetadataEditDialog
-          bookCount={bookCount}
           entityName="Fiction"
           entityType="genre"
           isPending={false}
           onOpenChange={vi.fn()}
           onSave={vi.fn()}
           open={true}
+          sidecarCount={{ count, singular, plural }}
         />
       </QueryClientProvider>,
     );
@@ -1155,6 +1155,17 @@ describe("MetadataEditDialog rename warning", () => {
 
     expect(warning()).toHaveTextContent("1,500 books");
     expect(warning()).toHaveTextContent(/in the background/i);
+  });
+
+  it("names what it counts, such as a publisher's files", async () => {
+    const user = createUser();
+    renderDialog(800, "file", "files");
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "New Press");
+
+    expect(warning()).toHaveTextContent("800 files");
   });
 
   it("doesn't warn for a resource on a few books", async () => {

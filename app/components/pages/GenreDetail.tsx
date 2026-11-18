@@ -121,6 +121,7 @@ const GenreDetail = () => {
             id: g.id,
             name: g.name,
             countText: formatCount(g.book_count ?? 0, "book"),
+            count: g.book_count ?? 0,
           })) ?? [],
         isLoadingEntities: genresListQuery.isLoading,
         isSearchPending:

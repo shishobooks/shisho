@@ -2,6 +2,10 @@ import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
+import {
+  SidecarRewriteNote,
+  type SidecarCount,
+} from "@/components/library/SidecarRewriteNote";
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +24,6 @@ import { isDemoModeError, requestErrorMessage } from "@/libraries/api";
 import type { EntityType } from "@/libraries/metadataEntity";
 import { DataSourceManual, type DataSource } from "@/types";
 import { resolveAliases } from "@/utils/aliases";
-import { formatCount } from "@/utils/format";
 import { forPerson, forTitle } from "@/utils/sortname";
 
 export type { EntityType };
@@ -39,13 +42,9 @@ interface MetadataEditDialogProps {
     aliases?: string[];
   }) => Promise<unknown>;
   isPending: boolean;
-  /** How many Books hold the entity, for the warning a big rename shows. */
-  bookCount?: number;
+  /** What a rename rewrites the sidecars of, for the note a big one shows. */
+  sidecarCount?: SidecarCount;
 }
-
-// A rename rewrites the sidecar files of every Book that holds the entity, in
-// a background job. At this many Books the job takes long enough to mention.
-const RENAME_WARNING_BOOK_COUNT = 100;
 
 const ENTITY_LABELS: Record<EntityType, string> = {
   person: "Person",
@@ -65,7 +64,7 @@ export function MetadataEditDialog({
   sortNameSource,
   onSave,
   isPending,
-  bookCount,
+  sidecarCount,
 }: MetadataEditDialogProps) {
   const [name, setName] = useState(entityName);
   const [editSortName, setEditSortName] = useState(sortName || "");
@@ -266,16 +265,11 @@ export function MetadataEditDialog({
               onChange={(e) => handleNameChange(e.target.value)}
               value={name}
             />
-            {bookCount !== undefined &&
-              bookCount >= RENAME_WARNING_BOOK_COUNT &&
+            {sidecarCount &&
               initialValues !== null &&
               name.trim() !== "" &&
               name.trim() !== initialValues.name && (
-                <p className="text-sm text-muted-foreground">
-                  Renaming updates the sidecar files of{" "}
-                  {formatCount(bookCount, "book")} in the background. On a large
-                  library that can take a while.
-                </p>
+                <SidecarRewriteNote action="Renaming" affected={sidecarCount} />
               )}
           </div>
 

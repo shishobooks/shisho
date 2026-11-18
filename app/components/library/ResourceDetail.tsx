@@ -17,6 +17,7 @@ import {
 import QueryError, {
   type RetryableQuery,
 } from "@/components/library/QueryError";
+import type { SidecarCount } from "@/components/library/SidecarRewriteNote";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useUserLibrary } from "@/hooks/queries/libraries";
@@ -87,6 +88,12 @@ interface ResourceDetailProps {
   countLabel?: CountLabel;
   /** Additional badges rendered after the primary count badge */
   extraBadges?: ReactNode;
+  /**
+   * What a rename or merge rewrites the sidecars of, for the note a big one
+   * shows. Defaults to bookCount in countLabel's unit; the merge entities'
+   * `count` must use the same unit.
+   */
+  sidecarCount?: SidecarCount;
   breadcrumbItems: BreadcrumbItem[];
   editConfig: EditConfig;
   mergeConfig: MergeConfig;
@@ -118,6 +125,7 @@ export function ResourceDetail({
   bookCount,
   countLabel = DEFAULT_COUNT_LABEL,
   extraBadges,
+  sidecarCount = { count: bookCount, ...countLabel },
   breadcrumbItems,
   editConfig,
   mergeConfig,
@@ -255,13 +263,13 @@ export function ResourceDetail({
       {canMutate && !onEditClick && (
         <MetadataEditDialog
           aliases={aliases}
-          bookCount={bookCount}
           entityName={name}
           entityType={entityType}
           isPending={editConfig.isPending}
           onOpenChange={setEditOpen}
           onSave={editConfig.onSave}
           open={editOpen}
+          sidecarCount={sidecarCount}
           sortName={editConfig.sortName}
           sortNameSource={editConfig.sortNameSource}
         />
@@ -295,6 +303,7 @@ export function ResourceDetail({
           }
           targetId={entityId}
           targetName={name}
+          targetSidecarCount={sidecarCount}
         />
       )}
 

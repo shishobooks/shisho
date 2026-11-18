@@ -486,3 +486,82 @@ describe("MetadataMergeDialog failures", () => {
     expect(screen.getByText(/Move all 1,200 books from/)).toBeInTheDocument();
   });
 });
+
+describe("MetadataMergeDialog sidecar warning", () => {
+  const sources = [
+    { id: 30, name: "Big", countText: "1,400 files", count: 1400 },
+    { id: 40, name: "Small", countText: "2 files", count: 2 },
+  ];
+  const renderMerge = (setChild = false) =>
+    render(
+      <MetadataMergeDialog
+        entities={sources}
+        entityType="publisher"
+        isLoadingEntities={false}
+        isPending={false}
+        isSearchPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={vi.fn()}
+        open={true}
+        setChildConfig={
+          setChild
+            ? { disabledIds: [], isPending: false, onSetChild: vi.fn() }
+            : undefined
+        }
+        targetId={1}
+        targetName="Penguin"
+        targetSidecarCount={{ count: 300, singular: "file", plural: "files" }}
+      />,
+    );
+  const warning = () => screen.queryByText(/updates the sidecar files/i);
+
+  it("warns that a big merge rewrites sidecars in the background", async () => {
+    const user = createUser();
+    renderMerge();
+    expect(warning()).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Big"));
+
+    expect(warning()).toHaveTextContent("1,700 files");
+    expect(warning()).toHaveTextContent(/in the background/i);
+  });
+
+  it("doesn't warn for a small merge", async () => {
+    const user = createUser();
+    render(
+      <MetadataMergeDialog
+        entities={sources}
+        entityType="publisher"
+        isLoadingEntities={false}
+        isPending={false}
+        isSearchPending={false}
+        onMerge={vi.fn()}
+        onOpenChange={vi.fn()}
+        onSearch={vi.fn()}
+        open={true}
+        targetId={1}
+        targetName="Penguin"
+        targetSidecarCount={{ count: 10, singular: "file", plural: "files" }}
+      />,
+    );
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Small"));
+
+    expect(warning()).not.toBeInTheDocument();
+  });
+
+  it("doesn't warn when setting a child, which rewrites nothing", async () => {
+    const user = createUser();
+    renderMerge(true);
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Big"));
+    expect(warning()).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /set as child/i }));
+    expect(warning()).not.toBeInTheDocument();
+  });
+});

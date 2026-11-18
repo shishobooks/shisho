@@ -138,6 +138,7 @@ const TagDetail = () => {
             id: t.id,
             name: t.name,
             countText: formatCount(t.book_count ?? 0, "book"),
+            count: t.book_count ?? 0,
           })) ?? [],
         isLoadingEntities: tagsListQuery.isLoading,
         isSearchPending:
