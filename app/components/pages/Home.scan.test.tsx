@@ -17,6 +17,10 @@ import { useSSE } from "@/hooks/useSSE";
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 import { emulatePhoneWidth } from "@/testing/phoneWidth";
+import {
+  StepPlugins,
+  type GettingStartedResponse,
+} from "@/types/generated/gettingstarted";
 import type { Permission } from "@/utils/permissions";
 
 import Home from "./Home";
@@ -89,6 +93,7 @@ const WithSSE = ({ children }: { children: ReactNode }) => {
 };
 
 interface ServerState {
+  gettingStarted?: GettingStartedResponse;
   books: { id: number; library_id: number; title: string; files: [] }[];
   job: {
     id: number;
@@ -135,6 +140,16 @@ const renderLibraryPage = (
               total: 1,
             }
           : { items: [], total: 0 };
+      }
+      if (path === "/getting-started") {
+        return (
+          server.gettingStarted ?? {
+            enabled: false,
+            dismissed: false,
+            auto_open: false,
+            steps: [],
+          }
+        );
       }
       if (path === "/books") {
         return { items: server.books, total: server.books.length };
@@ -451,6 +466,50 @@ describe("Library page during a scan", () => {
 
     expect(scanHeader()).toHaveTextContent("Scanning for new metadata");
     expect(scanHeader()).toHaveTextContent("120 of 400 files scanned");
+  });
+
+  it("points to Getting Started while the user has steps left", async () => {
+    renderLibraryPage({
+      books: [],
+      job: { id: 9, status: "in_progress", data: {} },
+      gettingStarted: {
+        enabled: true,
+        dismissed: false,
+        auto_open: false,
+        steps: [
+          {
+            key: StepPlugins,
+            applies: true,
+            done: false,
+            not_for_me: false,
+          },
+        ],
+      },
+    });
+    await flush();
+
+    expect(
+      within(scanHeader()!).getByRole("button", { name: /getting started/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("doesn't point to a Getting Started list the user dismissed", async () => {
+    renderLibraryPage({
+      books: [],
+      job: { id: 9, status: "in_progress", data: {} },
+      gettingStarted: {
+        enabled: true,
+        dismissed: true,
+        auto_open: false,
+        steps: [],
+      },
+    });
+    await flush();
+
+    expect(scanHeader()).toBeInTheDocument();
+    expect(
+      within(scanHeader()!).queryByRole("button", { name: /getting started/i }),
+    ).not.toBeInTheDocument();
   });
 
   describe("at phone width", () => {

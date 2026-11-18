@@ -1,5 +1,8 @@
 import { Loader2 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
+import { useGettingStartedPanel } from "@/contexts/GettingStarted/useGettingStartedPanel";
+import { useGettingStarted } from "@/hooks/queries/gettingStarted";
 import type { LibraryScan } from "@/hooks/useLibraryScan";
 import { formatCount } from "@/utils/format";
 
@@ -37,6 +40,16 @@ export const LibraryScanHeader = ({ scan }: LibraryScanHeaderProps) => {
       ? "Scanning for new metadata"
       : "Scanning this library";
   const detail = scanDetail(scan);
+
+  // While books arrive, point to what's left to set up, as long as the
+  // Getting Started list is on and has a step left.
+  const { data: gettingStarted } = useGettingStarted();
+  const { setOpen: openGettingStarted } = useGettingStartedPanel();
+  const stepsLeft =
+    gettingStarted?.enabled === true &&
+    !gettingStarted.dismissed &&
+    gettingStarted.steps.some((s) => s.applies && !s.done && !s.not_for_me);
+
   return (
     <section
       aria-label={title}
@@ -50,6 +63,19 @@ export const LibraryScanHeader = ({ scan }: LibraryScanHeaderProps) => {
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground">{title}</p>
         {detail && <p className="text-sm text-muted-foreground">{detail}</p>}
+        {stepsLeft && (
+          <p className="text-sm text-muted-foreground">
+            While it runs, see{" "}
+            <Button
+              className="h-auto p-0 text-sm"
+              onClick={() => openGettingStarted(true)}
+              variant="link"
+            >
+              Getting Started
+            </Button>{" "}
+            for what to set up next.
+          </p>
+        )}
       </div>
     </section>
   );
