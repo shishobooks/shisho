@@ -50,11 +50,26 @@ The audiobook player provides:
 - Play, pause, and seek controls
 - 30-second skip controls
 - Chapter navigation when chapters are available
-- Playback speeds from 0.5x to 3x
+- Playback speed from 0.5x to 4x
+- Bookmarks
 
-The selected playback speed is saved to your account. Opening an audiobook returns to where you stopped and starts playing. If your browser blocks that, as it can when you open the player's address directly, press play. An audiobook you reached the very end of stays paused. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
+Opening an audiobook returns to where you stopped and starts playing. If your browser blocks that, as it can when you open the player's address directly, press play. An audiobook you reached the very end of stays paused. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
 
 Browser audio support depends on the file's codec, and some audiobooks play only in certain browsers. See [Audiobook Browser Compatibility](./supported-formats.md#audiobook-browser-compatibility).
+
+### Playback Speed
+
+The minus and plus buttons beside the speed change it by 0.1, from 0.5x to 4x. Select the speed itself to pick a common one from a menu.
+
+Each book remembers its own speed in the browser you set it in, so a fast narrator and a slow one each keep theirs. A book you have not set a speed for starts at 1x. The speed is not saved to your account, so another browser or device starts that book at 1x until you set it there.
+
+### Bookmarks
+
+A bookmark marks a moment in an audiobook to come back to. Select **Add Bookmark** to mark the current moment, and add a note if you like. Playback carries on while you write it.
+
+Select **Bookmarks** to list an audiobook's bookmarks in time order. Select a bookmark to jump to its moment, or use its buttons to edit its note or delete it. Deleting a bookmark takes effect at once and cannot be undone.
+
+Bookmarks are saved to your account, so they follow you to any browser. They are private: other users never see yours. Bookmarks belong to one audiobook file, and deleting that file from Shisho deletes its bookmarks too.
 
 ## Reader Settings
 

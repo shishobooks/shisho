@@ -32,7 +32,6 @@ func newUserSettingsResponse(user *models.User, settings *models.UserSettings) U
 		ReflowableFlow:     settings.ReflowableFlow,
 		GallerySize:        settings.GallerySize,
 		HideChrome:         settings.ViewerHideChrome,
-		PlaybackSpeed:      settings.PlaybackSpeed,
 		DefaultLibraryID:   defaultLibraryID,
 		TimeZone:           settings.TimeZone,
 	}
@@ -86,9 +85,6 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 	}
 	if payload.GallerySize != nil && !IsValidGallerySize(*payload.GallerySize) {
 		return errcodes.ValidationError("gallery_size must be 's', 'm', 'l', or 'xl'")
-	}
-	if payload.PlaybackSpeed != nil && !IsValidPlaybackSpeed(*payload.PlaybackSpeed) {
-		return errcodes.ValidationError("viewer_playback_speed must be one of 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, or 3")
 	}
 	if payload.TimeZone != nil && !IsValidTimeZone(*payload.TimeZone) {
 		return errcodes.ValidationError("time_zone must be an IANA time zone, such as America/Chicago")

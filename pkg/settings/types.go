@@ -25,22 +25,20 @@ type UserSettingsPayload struct {
 	ReflowableFlow     *string              `json:"viewer_reflowable_flow,omitempty" tstype:"ReflowableFlow"`
 	GallerySize        *string              `json:"gallery_size,omitempty" tstype:"GallerySize"`
 	HideChrome         *bool                `json:"viewer_hide_chrome,omitempty"`
-	PlaybackSpeed      *float64             `json:"viewer_playback_speed,omitempty" tstype:"PlaybackSpeed"`
 	DefaultLibraryID   httputil.NullableInt `json:"default_library_id,omitempty" tstype:"number | null"`
 	TimeZone           *string              `json:"time_zone,omitempty"`
 }
 
 // UserSettingsResponse is the response for user settings.
 type UserSettingsResponse struct {
-	PreloadCount       int     `json:"preload_count"`
-	FitMode            string  `json:"fit_mode" tstype:"FitMode"`
-	ReflowableFontSize int     `json:"viewer_reflowable_font_size"`
-	ReflowableTheme    string  `json:"viewer_reflowable_theme" tstype:"ReflowableTheme"`
-	ReflowableFlow     string  `json:"viewer_reflowable_flow" tstype:"ReflowableFlow"`
-	GallerySize        string  `json:"gallery_size" tstype:"GallerySize"`
-	HideChrome         bool    `json:"viewer_hide_chrome"`
-	PlaybackSpeed      float64 `json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
-	DefaultLibraryID   *int    `json:"default_library_id" tstype:"number | null"`
+	PreloadCount       int    `json:"preload_count"`
+	FitMode            string `json:"fit_mode" tstype:"FitMode"`
+	ReflowableFontSize int    `json:"viewer_reflowable_font_size"`
+	ReflowableTheme    string `json:"viewer_reflowable_theme" tstype:"ReflowableTheme"`
+	ReflowableFlow     string `json:"viewer_reflowable_flow" tstype:"ReflowableFlow"`
+	GallerySize        string `json:"gallery_size" tstype:"GallerySize"`
+	HideChrome         bool   `json:"viewer_hide_chrome"`
+	DefaultLibraryID   *int   `json:"default_library_id" tstype:"number | null"`
 	// TimeZone is the IANA zone that dates automatic Read-through days,
 	// null until the browser fills it in.
 	TimeZone *string `json:"time_zone" tstype:"string | null"`
@@ -75,20 +73,6 @@ func IsValidReflowableFlow(flow string) bool {
 	switch flow {
 	case models.ReflowableFlowPaginated, models.ReflowableFlowScrolled:
 		return true
-	}
-	return false
-}
-
-// IsValidPlaybackSpeed returns true if the speed is one of the allowed
-// discrete playback speed steps. Exact float comparison is safe here: every
-// allowed step is a multiple of 0.25, which is exactly representable in
-// binary floating point, so a JSON-decoded step compares equal to the
-// constant.
-func IsValidPlaybackSpeed(speed float64) bool {
-	for _, valid := range models.PlaybackSpeeds {
-		if speed == valid {
-			return true
-		}
 	}
 	return false
 }

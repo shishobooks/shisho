@@ -33,23 +33,6 @@ const (
 	GallerySizeExtraLarge = "xl"
 )
 
-const (
-	// The tygo:emit lines mirror the Go PlaybackSpeeds var into the
-	// generated TS (a const array plus a union type) so the player's speed
-	// menu and the backend validation share the same set of values. tygo
-	// only processes const/type declarations, so the directives live here
-	// rather than on the var. Keep the emitted list in sync with
-	// PlaybackSpeeds.
-	//
-	//tygo:emit export const PlaybackSpeeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
-	//tygo:emit export type PlaybackSpeed = (typeof PlaybackSpeeds)[number];
-	PlaybackSpeedDefault = 1.0
-)
-
-// PlaybackSpeeds lists the allowed audiobook playback speed steps, in
-// ascending order.
-var PlaybackSpeeds = []float64{0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3}
-
 type UserSettings struct {
 	bun.BaseModel `bun:"table:user_settings,alias:us" tstype:"-"`
 
@@ -64,7 +47,6 @@ type UserSettings struct {
 	ReflowableFlow     string    `bun:"viewer_reflowable_flow,notnull,default:'paginated'" json:"viewer_reflowable_flow" tstype:"ReflowableFlow"`
 	GallerySize        string    `bun:",notnull,default:'m'" json:"gallery_size" tstype:"GallerySize"`
 	ViewerHideChrome   bool      `bun:",notnull,default:false" json:"viewer_hide_chrome"`
-	PlaybackSpeed      float64   `bun:"viewer_playback_speed,notnull,default:1.0" json:"viewer_playback_speed" tstype:"PlaybackSpeed"`
 	// DefaultLibraryID is the library `/` opens. Nil opens the first library
 	// the user can access.
 	DefaultLibraryID *int `json:"default_library_id" tstype:"number | null"`
@@ -83,6 +65,5 @@ func DefaultUserSettings() *UserSettings {
 		ReflowableFlow:     ReflowableFlowPaginated,
 		GallerySize:        GallerySizeMedium,
 		ViewerHideChrome:   false,
-		PlaybackSpeed:      PlaybackSpeedDefault,
 	}
 }

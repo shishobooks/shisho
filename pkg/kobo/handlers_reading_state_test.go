@@ -110,7 +110,7 @@ func (f *readingStateFixture) setTimeZone(zone string) *time.Location {
 		UserID: f.user.ID, CreatedAt: time.Now(), UpdatedAt: time.Now(),
 		ViewerFitMode: models.FitModeHeight, ReflowableTheme: models.ReflowableThemeLight,
 		ReflowableFlow: models.ReflowableFlowPaginated, GallerySize: models.GallerySizeMedium,
-		PlaybackSpeed: 1, ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
+		ViewerPreloadCount: 3, ReflowableFontSize: 100, TimeZone: &zone,
 	}).Exec(f.ctx)
 	require.NoError(f.t, err)
 	location, err := time.LoadLocation(zone)

@@ -1,23 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  useUpdateUserSettings,
-  useUserSettings,
-} from "@/hooks/queries/settings";
+import { API, ShishoAPIError } from "@/libraries/api";
+import { queryClient } from "@/libraries/query-client";
 import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
-import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
-import type { Book, File } from "@/types";
+import type { Book, Bookmark, File } from "@/types";
 import {
   AUTOPLAY_TIMEOUT_MS,
   RESTORE_SEEK_TIMEOUT_MS,
   SEEK_TIMEOUT_MS,
 } from "@/utils/audioCodec";
+import { loadBookSpeed, saveBookSpeed } from "@/utils/playbackSpeed";
 
 import M4BReader from "./M4BReader";
 
@@ -71,21 +69,68 @@ vi.mock("@/hooks/queries/reading", () => ({
   },
 }));
 
-// The player reads/writes the persisted playback speed through the
-// user-settings hooks; mock them so tests control the stored speed and can
-// assert on the persistence call without a QueryClient or network.
-vi.mock("@/hooks/queries/settings", () => ({
-  useUserSettings: vi.fn(),
-  useUpdateUserSettings: vi.fn(),
-}));
+// The server's Bookmarks for the signed-in user, which the real bookmark
+// query hooks reach through a stubbed API.request.
+const bookmarkServer = {
+  items: [] as Bookmark[],
+  nextId: 1,
+  failWrites: false,
+};
+
+const addServerBookmark = (seconds: number, note: string | null = null) => {
+  const bookmark = {
+    id: bookmarkServer.nextId++,
+    file_id: 42,
+    seconds,
+    note,
+    created_at: "2026-11-16T12:00:00Z",
+    updated_at: "2026-11-16T12:00:00Z",
+  } as Bookmark;
+  bookmarkServer.items.push(bookmark);
+  return bookmark;
+};
+
+const fakeBookmarksAPI = (
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<unknown> => {
+  const payload = (body ?? {}) as { seconds?: number; note?: string | null };
+  if (method !== "GET" && bookmarkServer.failWrites) {
+    return Promise.reject(
+      new ShishoAPIError("The server refused.", "internal_error", 500),
+    );
+  }
+  if (method === "GET" && path === "/reading/files/42/bookmarks") {
+    return Promise.resolve(
+      [...bookmarkServer.items].sort((a, b) => a.seconds - b.seconds),
+    );
+  }
+  if (method === "POST" && path === "/reading/files/42/bookmarks") {
+    return Promise.resolve(
+      addServerBookmark(payload.seconds ?? 0, payload.note || null),
+    );
+  }
+  const match = path.match(/^\/reading\/bookmarks\/(\d+)$/);
+  const bookmark = match
+    ? bookmarkServer.items.find((b) => b.id === Number(match[1]))
+    : undefined;
+  if (bookmark && method === "PATCH") {
+    bookmark.note = payload.note || null;
+    return Promise.resolve({ ...bookmark });
+  }
+  if (bookmark && method === "DELETE") {
+    bookmarkServer.items = bookmarkServer.items.filter((b) => b !== bookmark);
+    return Promise.resolve(undefined);
+  }
+  return Promise.reject(new Error(`unexpected request ${method} ${path}`));
+};
 
 // jsdom does not implement the HTMLMediaElement playback pipeline. Stub the
 // methods so the component can call them, and let tests drive currentTime /
 // duration / paused manually plus dispatch the media events they assert on.
 let playSpy: ReturnType<typeof vi.spyOn>;
 let pauseSpy: ReturnType<typeof vi.spyOn>;
-
-let updateSettingsMutate: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   setAuth({ permissions: ["books:read"] });
@@ -104,18 +149,19 @@ beforeEach(() => {
     () => {},
   );
 
-  updateSettingsMutate = vi.fn();
-  vi.mocked(useUserSettings).mockReturnValue({
-    data: undefined,
-    isLoading: false,
-  } as never);
-  vi.mocked(useUpdateUserSettings).mockReturnValue({
-    mutate: updateSettingsMutate,
-  } as never);
+  bookmarkServer.items = [];
+  bookmarkServer.nextId = 1;
+  bookmarkServer.failWrites = false;
+  vi.spyOn(API, "request").mockImplementation(((
+    method: string,
+    path: string,
+    body?: unknown,
+  ) => fakeBookmarksAPI(method, path, body)) as never);
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  localStorage.clear();
   // Remove any per-test userAgent override (own property) so the prototype
   // getter is visible again for the next test.
   delete (window.navigator as { userAgent?: string }).userAgent;
@@ -179,9 +225,14 @@ const CHROME_UA =
 const SAFARI_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
 
+// A fresh client per test with the app's defaults, so data stays as fresh
+// as it does in the app: never stale until something invalidates it.
+const appQueryClient = () =>
+  new QueryClient({ defaultOptions: queryClient.getDefaultOptions() });
+
 const renderReader = (props?: { book?: Book; file?: File }) =>
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={appQueryClient()}>
       <MemoryRouter>
         <M4BReader
           book={props?.book ?? book}
@@ -302,6 +353,16 @@ describe("M4BReader", () => {
     expect(audio.currentTime).toBeGreaterThan(0);
   });
 
+  it("moves the focused seek bar by its own step, not the 30 second skip", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader();
+    const slider = screen.getByRole("slider", { name: /seek/i });
+    slider.focus();
+    await user.keyboard("{ArrowRight}{ArrowRight}");
+    expect(getAudio().currentTime).toBe(2);
+    expect(screen.getByText("0:02")).toBeInTheDocument();
+  });
+
   it("stays on the player and pauses at end of file", () => {
     renderReader();
     const audio = getAudio();
@@ -342,107 +403,332 @@ describe("M4BReader", () => {
   });
 
   describe("playback speed", () => {
-    it("defaults to 1x when no speed has been persisted", () => {
+    const speedButton = () => screen.getByRole("button", { name: /^speed /i });
+
+    it("starts a Book with no saved speed at 1x", () => {
+      saveBookSpeed(99, 2);
       renderReader();
-      const combobox = screen.getByRole("combobox", {
-        name: /playback speed/i,
-      });
-      expect(combobox).toHaveTextContent("1x");
+      expect(speedButton()).toHaveTextContent("1x");
       expect(getAudio().playbackRate).toBe(1);
     });
 
-    it("applies the persisted speed from user settings to the audio element", () => {
-      vi.mocked(useUserSettings).mockReturnValue({
-        data: { viewer_playback_speed: 1.5 },
-        isLoading: false,
-      } as never);
+    it("steps by 0.1 with the plus and minus buttons and remembers the Book's speed", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderReader();
-      expect(getAudio().playbackRate).toBe(1.5);
-      expect(
-        screen.getByRole("combobox", { name: /playback speed/i }),
-      ).toHaveTextContent("1.5x");
+      const faster = screen.getByRole("button", { name: "Faster" });
+      for (let i = 0; i < 5; i++) await user.click(faster);
+      await user.click(screen.getByRole("button", { name: "Slower" }));
+
+      expect(speedButton()).toHaveTextContent("1.4x");
+      expect(getAudio().playbackRate).toBe(1.4);
+      expect(loadBookSpeed(7)).toBe(1.4);
+    });
+
+    it("opens each Book at its own saved speed", () => {
+      saveBookSpeed(7, 1.4);
+      const view = renderReader();
+      expect(speedButton()).toHaveTextContent("1.4x");
+      expect(getAudio().playbackRate).toBe(1.4);
+
+      const otherFile = { ...file, id: 43, book_id: 8 } as File;
+      const otherBook = { ...book, id: 8, files: [otherFile] } as Book;
+      view.rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter>
+            <M4BReader book={otherBook} file={otherFile} libraryId="1" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(speedButton()).toHaveTextContent("1x");
+      expect(getAudio().playbackRate).toBe(1);
+      expect(loadBookSpeed(7)).toBe(1.4);
+    });
+
+    it("stops at 4x", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      saveBookSpeed(7, 3.9);
+      renderReader();
+      const faster = screen.getByRole("button", { name: "Faster" });
+      await user.click(faster);
+      expect(speedButton()).toHaveTextContent("4x");
+      expect(faster).toBeDisabled();
+      expect(getAudio().playbackRate).toBe(4);
+      expect(loadBookSpeed(7)).toBe(4);
+    });
+
+    it("stops at 0.5x", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      saveBookSpeed(7, 0.6);
+      renderReader();
+      const slower = screen.getByRole("button", { name: "Slower" });
+      await user.click(slower);
+      expect(speedButton()).toHaveTextContent("0.5x");
+      expect(slower).toBeDisabled();
+      expect(loadBookSpeed(7)).toBe(0.5);
+    });
+
+    it("applies a preset from the speed menu", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      await user.click(speedButton());
+      const presets = await screen.findAllByRole("menuitemradio");
+      expect(presets.map((p) => p.textContent)).toEqual([
+        "0.75x",
+        "1x",
+        "1.25x",
+        "1.5x",
+        "2x",
+        "3x",
+      ]);
+      await user.click(screen.getByRole("menuitemradio", { name: "2x" }));
+
+      expect(getAudio().playbackRate).toBe(2);
+      expect(loadBookSpeed(7)).toBe(2);
+    });
+
+    it("leaves Space and the arrows to the open speed menu", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      await user.click(speedButton());
+      const menu = await screen.findByRole("menu");
+      for (const key of [" ", "ArrowRight", "ArrowLeft"]) {
+        fireEvent.keyDown(menu, { key });
+      }
+      expect(playSpy).not.toHaveBeenCalled();
+      expect(getAudio().currentTime).toBe(0);
     });
 
     it("re-applies the speed after the media load resets the rate", () => {
-      vi.mocked(useUserSettings).mockReturnValue({
-        data: { viewer_playback_speed: 2.5 },
-        isLoading: false,
-      } as never);
+      saveBookSpeed(7, 2.5);
       renderReader();
       const audio = getAudio();
 
       // The HTML media load algorithm resets playbackRate to the default
       // (1) as part of loading the resource, which can land after the
-      // component applied the persisted speed. Simulate the reset, then the
+      // component applied the saved speed. Simulate the reset, then the
       // metadata arriving.
       audio.playbackRate = 1;
       fireEvent.loadedMetadata(audio);
 
       expect(audio.playbackRate).toBe(2.5);
     });
+  });
 
-    it("changes the playback rate immediately when a speed is chosen", async () => {
+  describe("bookmarks", () => {
+    const openBookmarks = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole("button", { name: "Bookmarks" }));
+      return screen.findByRole("dialog", { name: "Bookmarks" });
+    };
+
+    it("lists the File's Bookmarks in time order", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(600);
+      addServerBookmark(83, "test");
       renderReader();
 
-      await user.click(
-        screen.getByRole("combobox", { name: /playback speed/i }),
-      );
-      await user.click(await screen.findByRole("option", { name: "2x" }));
-
-      expect(getAudio().playbackRate).toBe(2);
-    });
-
-    it("persists the chosen speed through the user-settings mutation", async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderReader();
-
-      await user.click(
-        screen.getByRole("combobox", { name: /playback speed/i }),
-      );
-      await user.click(await screen.findByRole("option", { name: "0.75x" }));
-
-      expect(updateSettingsMutate).toHaveBeenCalledWith(
-        { viewer_playback_speed: 0.75 },
-        expect.anything(),
-      );
-    });
-
-    it("toasts when saving the chosen speed fails", async () => {
-      const error = vi.spyOn(toast, "error");
-      vi.mocked(useUpdateUserSettings).mockReturnValue({
-        mutate: rejectingMutate(),
-      } as never);
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderReader();
-
-      await user.click(
-        screen.getByRole("combobox", { name: /playback speed/i }),
-      );
-      await user.click(await screen.findByRole("option", { name: "0.75x" }));
-
-      expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
-    });
-
-    it("offers every discrete step from 0.5x to 3x", async () => {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      renderReader();
-
-      await user.click(
-        screen.getByRole("combobox", { name: /playback speed/i }),
-      );
-      const options = await screen.findAllByRole("option");
-      expect(options.map((o) => o.textContent)).toEqual([
-        "0.5x",
-        "0.75x",
-        "1x",
-        "1.25x",
-        "1.5x",
-        "1.75x",
-        "2x",
-        "2.5x",
-        "3x",
+      const panel = await openBookmarks(user);
+      const jumps = await within(panel).findAllByRole("button", {
+        name: /^jump to/i,
+      });
+      expect(jumps.map((b) => b.textContent)).toEqual([
+        "Jump to 1:23 test",
+        "Jump to 10:00",
       ]);
+    });
+
+    it("shows Bookmarks added elsewhere when the panel opens again", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(83, "test");
+      renderReader();
+      let panel = await openBookmarks(user);
+      await within(panel).findByRole("button", { name: "Jump to 1:23 test" });
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("dialog", { name: "Bookmarks" })).toBeNull();
+
+      // Another browser or device adds one meanwhile.
+      addServerBookmark(600);
+      panel = await openBookmarks(user);
+      expect(
+        await within(panel).findByRole("button", { name: "Jump to 10:00" }),
+      ).toBeInTheDocument();
+    });
+
+    it("says when there are none", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      const panel = await openBookmarks(user);
+      expect(
+        await within(panel).findByText(/no bookmarks yet/i),
+      ).toBeInTheDocument();
+    });
+
+    it("adds a Bookmark at the current time with a note", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      const audio = getAudio();
+      audio.currentTime = 83;
+      fireEvent.timeUpdate(audio);
+
+      await user.click(screen.getByRole("button", { name: "Add Bookmark" }));
+      const dialog = await screen.findByRole("dialog", {
+        name: "Add Bookmark",
+      });
+      expect(dialog).toHaveTextContent("Mark 1:23 to come back to.");
+      // Playback moving on while the note is written doesn't move the mark.
+      audio.currentTime = 90;
+      fireEvent.timeUpdate(audio);
+      await user.type(within(dialog).getByLabelText("Note"), "test");
+      await user.click(
+        within(dialog).getByRole("button", { name: "Add Bookmark" }),
+      );
+
+      expect(bookmarkServer.items).toMatchObject([
+        { seconds: 83, note: "test" },
+      ]);
+      expect(screen.queryByRole("dialog", { name: "Add Bookmark" })).toBeNull();
+      const panel = await openBookmarks(user);
+      expect(
+        await within(panel).findByRole("button", { name: "Jump to 1:23 test" }),
+      ).toBeInTheDocument();
+    });
+
+    it("adds a Bookmark with no note", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      await user.click(screen.getByRole("button", { name: "Add Bookmark" }));
+      const dialog = await screen.findByRole("dialog", {
+        name: "Add Bookmark",
+      });
+      await user.click(
+        within(dialog).getByRole("button", { name: "Add Bookmark" }),
+      );
+      expect(bookmarkServer.items).toMatchObject([{ seconds: 0, note: null }]);
+    });
+
+    it("keeps the draft and reports it when adding fails", async () => {
+      const error = vi.spyOn(toast, "error");
+      bookmarkServer.failWrites = true;
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      await user.click(screen.getByRole("button", { name: "Add Bookmark" }));
+      const dialog = await screen.findByRole("dialog", {
+        name: "Add Bookmark",
+      });
+      await user.type(within(dialog).getByLabelText("Note"), "keep me");
+      await user.click(
+        within(dialog).getByRole("button", { name: "Add Bookmark" }),
+      );
+
+      expect(error).toHaveBeenCalledWith("The server refused.", undefined);
+      expect(within(dialog).getByLabelText("Note")).toHaveValue("keep me");
+    });
+
+    it("jumps to a Bookmark and saves the place", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(83, "test");
+      renderReader();
+      fireEvent.loadedMetadata(getAudio());
+      const panel = await openBookmarks(user);
+      await user.click(
+        await within(panel).findByRole("button", { name: /jump to 1:23/i }),
+      );
+      act(() => vi.advanceTimersByTime(0));
+
+      expect(getAudio().currentTime).toBe(83);
+      expect(position.saves[position.saves.length - 1]).toMatchObject({
+        seconds: 83,
+      });
+      expect(screen.getByText("1:23")).toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Bookmarks" })).toBeNull();
+    });
+
+    it("edits a Bookmark's note", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(83, "test");
+      renderReader();
+      const panel = await openBookmarks(user);
+      await user.click(
+        await within(panel).findByRole("button", {
+          name: "Edit note for bookmark at 1:23",
+        }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: "Edit Bookmark Note",
+      });
+      const note = within(dialog).getByLabelText("Note");
+      expect(note).toHaveValue("test");
+      await user.clear(note);
+      await user.type(note, "the duel");
+      await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+      expect(bookmarkServer.items[0].note).toBe("the duel");
+      expect(
+        await within(panel).findByRole("button", {
+          name: "Jump to 1:23 the duel",
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it("returns focus to the edit button after saving a note", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(83, "test");
+      renderReader();
+      const panel = await openBookmarks(user);
+      const edit = await within(panel).findByRole("button", {
+        name: "Edit note for bookmark at 1:23",
+      });
+      await user.click(edit);
+      const dialog = await screen.findByRole("dialog", {
+        name: "Edit Bookmark Note",
+      });
+      await user.type(within(dialog).getByLabelText("Note"), "!");
+      await user.click(within(dialog).getByRole("button", { name: "Save" }));
+
+      expect(
+        screen.queryByRole("dialog", { name: "Edit Bookmark Note" }),
+      ).toBeNull();
+      expect(edit).toHaveFocus();
+      fireEvent.keyDown(edit, { key: " " });
+      expect(playSpy).not.toHaveBeenCalled();
+    });
+
+    it("deletes a Bookmark", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(83, "test");
+      addServerBookmark(600);
+      renderReader();
+      const panel = await openBookmarks(user);
+      await user.click(
+        await within(panel).findByRole("button", {
+          name: "Delete bookmark at 1:23",
+        }),
+      );
+
+      expect(bookmarkServer.items.map((b) => b.seconds)).toEqual([600]);
+      expect(
+        await within(panel).findByRole("button", { name: "Jump to 10:00" }),
+      ).toBeInTheDocument();
+      expect(
+        within(panel).queryByRole("button", { name: /jump to 1:23/i }),
+      ).toBeNull();
+    });
+
+    it("leaves Space to a dialog's buttons instead of toggling playback", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      renderReader();
+      await user.click(screen.getByRole("button", { name: "Add Bookmark" }));
+      const dialog = await screen.findByRole("dialog", {
+        name: "Add Bookmark",
+      });
+      const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+      const ev = new KeyboardEvent("keydown", {
+        key: " ",
+        bubbles: true,
+        cancelable: true,
+      });
+      cancel.dispatchEvent(ev);
+      expect(playSpy).not.toHaveBeenCalled();
+      expect(ev.defaultPrevented).toBe(false);
     });
   });
 
