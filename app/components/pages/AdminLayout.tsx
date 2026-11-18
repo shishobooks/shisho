@@ -1,6 +1,7 @@
 import { Menu, Settings } from "lucide-react";
 import { Outlet } from "react-router-dom";
 
+import GettingStarted from "@/components/layout/GettingStarted";
 import {
   TOP_NAV_INNER,
   TOP_NAV_ROW,
@@ -36,6 +37,7 @@ const AdminHeader = () => {
             </div>
           </div>
           <div className="flex items-center gap-1 md:gap-4">
+            <GettingStarted />
             <UserMenu />
           </div>
         </div>

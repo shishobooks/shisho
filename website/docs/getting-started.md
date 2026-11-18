@@ -101,6 +101,8 @@ Open `http://localhost:5173`. On the initial setup screen, enter a username of a
 
 The first account receives the built-in admin role. See [Users and Permissions](./users-and-permissions.md) before adding more users.
 
+The **Getting Started** pill in the top nav lists the first steps left, such as setting up a library and inviting someone. See [Getting Started](./users-and-permissions.md#getting-started).
+
 ## Create the First Library
 
 :::danger[Review File Organization Before Creating the Library]

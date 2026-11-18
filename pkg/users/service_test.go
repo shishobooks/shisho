@@ -44,6 +44,29 @@ func TestServiceCreate_SetsMustChangePassword(t *testing.T) {
 	assert.True(t, user.MustChangePassword)
 }
 
+// A user added through Add User gets Getting Started, with the panel
+// opening on its own on their first visit.
+func TestServiceCreate_TurnsOnGettingStarted(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	svc := NewService(db)
+	ctx := context.Background()
+
+	user, err := svc.Create(ctx, CreateUserOptions{
+		Username:         "newreader",
+		Password:         "password123",
+		RoleID:           getRoleIDByName(ctx, t, db, models.RoleViewer),
+		AllLibraryAccess: true,
+	})
+	require.NoError(t, err)
+
+	assert.True(t, user.GettingStartedEnabled)
+	assert.True(t, user.GettingStartedAutoOpen)
+	assert.Nil(t, user.GettingStartedDismissedAt)
+	assert.Empty(t, user.GettingStartedNotForMe)
+}
+
 func TestServiceResetPassword_UpdatesMustChangePassword(t *testing.T) {
 	t.Parallel()
 

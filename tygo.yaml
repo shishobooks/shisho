@@ -210,6 +210,10 @@ packages:
     output_path: "app/types/generated/updatecheck.ts"
     include_files:
       - types.go
+  - path: "github.com/shishobooks/shisho/pkg/gettingstarted"
+    output_path: "app/types/generated/gettingstarted.ts"
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/mediafile"
     output_path: "app/types/generated/mediafile.ts"
     frontmatter: |

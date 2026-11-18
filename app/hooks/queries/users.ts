@@ -21,6 +21,7 @@ import type {
   UserRef,
 } from "@/types";
 
+import { invalidateGettingStarted } from "./gettingStarted";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { useRequires } from "./permissions";
 
@@ -95,6 +96,7 @@ export const useCreateUser = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListUsers] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.UserDirectory] });
+      invalidateGettingStarted(queryClient);
     },
   });
 };
@@ -119,6 +121,8 @@ export const useUpdateUser = () => {
         queryKey: [LibrariesQueryKey.UserLibraries],
       });
       queryClient.setQueryData([QueryKey.RetrieveUser, String(data.id)], data);
+      // Reactivating or deactivating a user changes "Invite someone".
+      invalidateGettingStarted(queryClient);
     },
   });
 };
@@ -146,6 +150,7 @@ export const useDeactivateUser = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListUsers] });
       queryClient.invalidateQueries({ queryKey: [QueryKey.UserDirectory] });
+      invalidateGettingStarted(queryClient);
     },
   });
 };

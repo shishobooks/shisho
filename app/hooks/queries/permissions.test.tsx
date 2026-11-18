@@ -48,6 +48,7 @@ const AUTHENTICATED_ONLY: RegExp[] = [
   /^\/users\/directory$/,
   /^\/settings\/libraries\/\d+$/,
   /^\/events$/,
+  /^\/getting-started$/,
   /^\/share\/[^/]+$/,
 ];
 
@@ -200,6 +201,8 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useTagNamespaceCounts: requires("books:read", [{ library_id: 1 }, on]),
   useTag: requires("books:read", [1, on]),
   useTagsByIds: requires("books:read", [[1, 2]]),
+  // gettingStarted
+  useGettingStarted: authenticated([]),
   // updateCheck
   useUpdateCheck: requires("config:read", []),
   // users

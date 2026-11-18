@@ -202,6 +202,9 @@ func (s *Service) CreateFirstAdmin(ctx context.Context, username string, email *
 		RoleID:             role.ID,
 		IsActive:           true,
 		MustChangePassword: false,
+		// The first admin gets Getting Started, but it doesn't open on its
+		// own over their first look at the server.
+		GettingStartedEnabled: true,
 	}
 
 	_, err = s.db.NewInsert().Model(user).Exec(ctx)

@@ -725,6 +725,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error",
 		},
 		{
+			name:   "Getting Started step that doesn't exist",
+			method: http.MethodPost, path: "/api/getting-started/steps/nope/not-for-me",
+			status: http.StatusUnprocessableEntity, code: "validation_error", message: `Unknown Getting Started step "nope".`,
+		},
+		{
+			name:   "Show Getting Started for a user that doesn't exist",
+			method: http.MethodPost, path: "/api/users/999999/show-getting-started",
+			status: http.StatusNotFound, code: "not_found", message: "User not found.",
+		},
+		{
 			name:   "roles list with a limit above the bound",
 			method: http.MethodGet, path: "/api/roles?limit=1000",
 			status: http.StatusUnprocessableEntity, code: "validation_error",

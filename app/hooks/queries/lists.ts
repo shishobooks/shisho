@@ -27,6 +27,7 @@ import type {
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { QueryKey as DevicesQueryKey } from "./devices";
+import { invalidateGettingStarted } from "./gettingStarted";
 import { useRequires } from "./permissions";
 import { QueryKey as ReadingQueryKey } from "./reading";
 
@@ -296,6 +297,7 @@ export const useCopyListToToRead = () => {
       queryClient.invalidateQueries({
         queryKey: [ReadingQueryKey.BookReading],
       });
+      invalidateGettingStarted(queryClient);
     },
   });
 };

@@ -2,6 +2,7 @@ import { Menu, Search, X } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router-dom";
 
+import GettingStarted from "@/components/layout/GettingStarted";
 import {
   TOP_NAV_INNER,
   TOP_NAV_ROW,
@@ -92,6 +93,7 @@ const TopNav = () => {
               <GlobalSearch />
             </div>
 
+            <GettingStarted />
             <UserMenu />
           </div>
         </div>

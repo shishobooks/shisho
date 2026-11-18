@@ -19,6 +19,17 @@ type User struct {
 	IsActive           bool      `json:"is_active"`
 	MustChangePassword bool      `json:"must_change_password"`
 
+	// Getting Started state. pkg/gettingstarted owns it; creating a user sets
+	// its starting values. It stays out of user payloads: an admin never sees
+	// a user's progress.
+	GettingStartedEnabled     bool       `bun:",notnull" json:"-"`
+	GettingStartedAutoOpen    bool       `bun:",notnull" json:"-"`
+	GettingStartedDismissedAt *time.Time `json:"-"`
+	GettingStartedNotForMe    StringList `bun:",notnull" json:"-"`
+	// GettingStartedDismissedSteps are the steps that applied when the list
+	// was dismissed; one that applies later brings the list back.
+	GettingStartedDismissedSteps StringList `bun:",notnull" json:"-"`
+
 	// Relations
 	Role          *Role                `bun:"rel:belongs-to,join:role_id=id" json:"role,omitempty" tstype:"Role"`
 	LibraryAccess []*UserLibraryAccess `bun:"rel:has-many,join:id=user_id" json:"library_access,omitempty" tstype:"UserLibraryAccess[]"`
