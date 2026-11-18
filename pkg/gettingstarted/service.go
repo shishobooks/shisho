@@ -45,7 +45,7 @@ type state struct {
 // what exists now. Steps apply by permission, not role name, and a step that
 // doesn't apply is never checked. A list that is off has no steps. A
 // dismissed list has none either, unless a step now applies that didn't when
-// it was dismissed and still needs doing: then the list comes back.
+// it was dismissed: then the list comes back.
 func (s *Service) Status(ctx context.Context, user *models.User) (GettingStartedResponse, error) {
 	st := state{}
 	if err := s.db.NewSelect().Model(&st).
@@ -71,20 +71,12 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 		return GettingStartedResponse{}, err
 	}
 
+	// A dismissed list stays hidden until a step applies that didn't when it
+	// was dismissed. It then stays back until it is dismissed again, so the
+	// user can work through the new step, undo a Not for me, or see "You're
+	// all set".
 	if resp.Dismissed {
-		// Every page asks for the list, so only the steps that could bring it
-		// back are checked.
-		var fresh []string
-		for _, key := range applies {
-			if !slices.Contains(st.DismissedSteps, key) && !slices.Contains(st.NotForMe, key) {
-				fresh = append(fresh, key)
-			}
-		}
-		done, err := s.done(ctx, user, fresh)
-		if err != nil {
-			return GettingStartedResponse{}, err
-		}
-		if !slices.ContainsFunc(fresh, func(key string) bool { return !done[key] }) {
+		if !slices.ContainsFunc(applies, func(key string) bool { return !slices.Contains(st.DismissedSteps, key) }) {
 			return resp, nil
 		}
 		resp.Dismissed = false

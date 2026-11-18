@@ -123,8 +123,8 @@ func insertLibrary(t *testing.T, db *bun.DB) *models.Library {
 }
 
 func insertBook(t *testing.T, db *bun.DB, library *models.Library) *models.Book {
-	const name = "one"
 	t.Helper()
+	const name = "one"
 	book := &models.Book{
 		LibraryID: library.ID, Title: name, TitleSource: models.DataSourceFilepath, SortTitle: name,
 		SortTitleSource: models.DataSourceFilepath, AuthorSource: models.DataSourceFilepath, Filepath: "/books/" + name,
@@ -488,31 +488,57 @@ func TestDismiss_ListStaysHiddenWhenAKnownStepComesUndone(t *testing.T) {
 	assert.Empty(t, resp.Steps)
 }
 
-// A new step that is already done or marked Not for me has nothing to show.
-func TestDismiss_ListStaysHiddenWhenNewStepsNeedNothing(t *testing.T) {
+// A list that came back stays back while the user works through it, until
+// it is dismissed again: marking its new step Not for me, or finishing it,
+// leaves the list showing so the choice can be undone or "You're all set"
+// can show.
+func TestDismiss_ReturnedListStaysUntilDismissedAgain(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	h := newHandler(db, false)
-	finished := newUser(t, db, "books:read")
-	skipped := newUser(t, db, "books:read")
-	for _, key := range []string{StepToRead, StepStartReading} {
-		_, err := do(t, h.markNotForMe, skipped, map[string]string{"step": key})
-		require.NoError(t, err)
-	}
-	for _, user := range []*models.User{finished, skipped} {
-		_, err := do(t, h.dismiss, user, nil)
-		require.NoError(t, err)
-	}
-
+	user := newUser(t, db, "books:read")
+	_, err := do(t, h.dismiss, user, nil)
+	require.NoError(t, err)
 	library := insertLibrary(t, db)
+	require.False(t, status(t, h, user).Dismissed)
+
+	rec, err := do(t, h.markNotForMe, user, map[string]string{"step": StepToRead})
+	require.NoError(t, err)
+	resp := decode(t, rec)
+	assert.False(t, resp.Dismissed)
+	assert.True(t, step(t, resp, StepToRead).NotForMe)
+
 	book := insertBook(t, db, library)
-	position := 1
-	insert(t, db, &models.ReadThrough{
-		UserID: finished.ID, BookID: &book.ID, Outcome: models.ReadThroughOutcomeUnderway,
-		LeftToReadPosition: &position, CreatedAt: time.Now(), UpdatedAt: time.Now(),
-	})
-	assert.True(t, status(t, h, finished).Dismissed)
-	assert.True(t, status(t, h, skipped).Dismissed)
+	insert(t, db, &models.ReadThrough{UserID: user.ID, BookID: &book.ID, Outcome: models.ReadThroughOutcomeUnderway, CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	resp = status(t, h, user)
+	assert.False(t, resp.Dismissed)
+	assert.True(t, step(t, resp, StepStartReading).Done)
+
+	rec, err = do(t, h.dismiss, user, nil)
+	require.NoError(t, err)
+	assert.True(t, decode(t, rec).Dismissed)
+	assert.True(t, status(t, h, user).Dismissed)
+}
+
+// A role that gains a permission gains its steps, which bring the list back.
+func TestDismiss_ListReturnsWhenARoleGainsSteps(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	h := newHandler(db, false)
+	user := newUser(t, db, "books:read")
+	_, err := do(t, h.dismiss, user, nil)
+	require.NoError(t, err)
+
+	insert(t, db, &models.Permission{RoleID: user.RoleID, Resource: models.ResourceUsers, Operation: models.OperationWrite})
+	resp := status(t, h, loadUser(t, db, user.ID))
+	assert.False(t, resp.Dismissed)
+	assert.True(t, step(t, resp, StepInvite).Applies)
+
+	// Losing it again hides the list once more, as before the change.
+	_, err = db.NewDelete().Model((*models.Permission)(nil)).Where("role_id = ? AND resource = ?", user.RoleID, models.ResourceUsers).Exec(ctx)
+	require.NoError(t, err)
+	assert.True(t, status(t, h, loadUser(t, db, user.ID)).Dismissed)
 }
 
 // A user it was never turned on for, such as one from before the upgrade,

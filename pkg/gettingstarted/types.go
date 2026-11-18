@@ -12,8 +12,9 @@ const (
 )
 
 // GettingStartedStep is one step's status for the signed-in user. Applies
-// says whether the user's role can do the step at all; Done and NotForMe are
-// false for a step that doesn't apply.
+// says whether the step is offered to them now: their role allows it and
+// what it needs exists, such as a library they can reach. Done and NotForMe
+// are false for a step that doesn't apply.
 //
 //nolint:revive // named for Getting Started, as generated TS types are global
 type GettingStartedStep struct {

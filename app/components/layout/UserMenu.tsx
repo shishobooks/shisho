@@ -35,6 +35,7 @@ const UserMenu = () => {
   const { can, demoMode, user, logout } = useAuth();
   const navigate = useNavigate();
   const restoreGettingStarted = useRestoreGettingStarted();
+  const menuButton = useRef<HTMLButtonElement>(null);
   const { setOpen: setGettingStartedOpen } = useGettingStartedPanel();
   // The Getting Started entry opens its panel only once the list is back
   // and the menu has finished closing. The menu traps focus while it
@@ -92,6 +93,9 @@ const UserMenu = () => {
       gettingStarted.current.restored = true;
       openGettingStartedWhenReady();
     } catch (error) {
+      // The menu may already have closed without returning focus, waiting
+      // for the panel; give it back to the menu button.
+      if (gettingStarted.current.menuClosed) menuButton.current?.focus();
       gettingStarted.current.choosing = false;
       toastRequestError(error, "Failed to show Getting Started");
     }
@@ -103,6 +107,7 @@ const UserMenu = () => {
         <Button
           aria-label="Account menu"
           className="h-9 w-9"
+          ref={menuButton}
           size="icon"
           variant="ghost"
         >

@@ -99,7 +99,7 @@ const progressOf = (data: GettingStartedResponse): Progress => {
 const progressLabel = ({ done, total }: Progress) => `${done} of ${total} done`;
 
 // When every step is Not for me there is no count to give.
-const sheetSummary = (progress: Progress) =>
+const summary = (progress: Progress) =>
   progress.total === 0 ? "Nothing left on your list" : progressLabel(progress);
 
 const ProgressRing = ({ done, total }: { done: number; total: number }) => {
@@ -270,11 +270,7 @@ const PanelBody = ({
           >
             Getting Started
           </h2>
-          {progress.total > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {progressLabel(progress)}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">{summary(progress)}</p>
         </div>
       )}
       {/* The steps stay below, so a step marked Not for me by mistake can
@@ -288,7 +284,7 @@ const PanelBody = ({
           <div>
             <p className="text-sm font-semibold">You're all set</p>
             <p className="text-xs text-muted-foreground">
-              {progress.done === 0
+              {progress.total === 0
                 ? "Every step is marked Not for me."
                 : "You've finished your first steps."}
             </p>
@@ -326,7 +322,8 @@ const PanelBody = ({
  * popover on wider screens, a bottom sheet on phones. It shows while the
  * user's list is on, not dismissed, and has a step for their role. Once
  * every step is done or Not for me, the panel says "You're all set" and
- * closing it hides the pill for good, until the user menu restores it.
+ * closing it hides the pill until the user menu restores it or a step that
+ * didn't apply before does.
  */
 const GettingStarted = () => {
   const query = useGettingStarted();
@@ -437,7 +434,7 @@ const GettingStarted = () => {
             >
               Getting Started
             </SheetTitle>
-            <SheetDescription>{sheetSummary(progress)}</SheetDescription>
+            <SheetDescription>{summary(progress)}</SheetDescription>
           </SheetHeader>
           {/* Only the steps scroll, so the title and close button stay put. The
               scroller spans the sheet's padding so the buttons that pull into

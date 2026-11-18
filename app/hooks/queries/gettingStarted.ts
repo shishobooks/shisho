@@ -28,13 +28,15 @@ export const invalidateGettingStarted = (queryClient: QueryClient) =>
 // The signed-in user's own list. Every signed-in user has one, so the route
 // needs no permission. Demo Mode has no Getting Started at all, so the list
 // isn't asked for there.
-export const useGettingStarted = () =>
-  useQuery<GettingStartedResponse, ShishoAPIError>({
-    enabled: !useAuth().demoMode,
+export const useGettingStarted = () => {
+  const { demoMode } = useAuth();
+  return useQuery<GettingStartedResponse, ShishoAPIError>({
+    enabled: !demoMode,
     queryKey: [QueryKey.GettingStarted],
     queryFn: ({ signal }) =>
       API.request("GET", "/getting-started", null, null, signal),
   });
+};
 
 // Every change to the list answers with the whole list, which replaces the
 // cached one.

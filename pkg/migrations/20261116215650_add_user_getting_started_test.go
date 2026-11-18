@@ -25,12 +25,12 @@ func TestAddUserGettingStarted(t *testing.T) {
 	require.NoError(t, err)
 
 	type state struct {
-		ID          int     `bun:"id"`
-		Enabled     bool    `bun:"getting_started_enabled"`
-		AutoOpen    bool    `bun:"getting_started_auto_open"`
-		DismissedAt *string `bun:"getting_started_dismissed_at"`
-		NotForMe    string  `bun:"getting_started_not_for_me"`
-		Dismissed   string  `bun:"getting_started_dismissed_steps"`
+		ID             int     `bun:"id"`
+		Enabled        bool    `bun:"getting_started_enabled"`
+		AutoOpen       bool    `bun:"getting_started_auto_open"`
+		DismissedAt    *string `bun:"getting_started_dismissed_at"`
+		NotForMe       string  `bun:"getting_started_not_for_me"`
+		DismissedSteps string  `bun:"getting_started_dismissed_steps"`
 	}
 
 	for range 2 {
@@ -45,8 +45,8 @@ func TestAddUserGettingStarted(t *testing.T) {
 			FROM users ORDER BY id
 		`).Scan(ctx, &rows))
 		assert.Equal(t, []state{
-			{ID: 1, Enabled: false, AutoOpen: false, NotForMe: "[]", Dismissed: "[]"},
-			{ID: 2, Enabled: true, AutoOpen: true, NotForMe: "[]", Dismissed: "[]"},
+			{ID: 1, Enabled: false, AutoOpen: false, NotForMe: "[]", DismissedSteps: "[]"},
+			{ID: 2, Enabled: true, AutoOpen: true, NotForMe: "[]", DismissedSteps: "[]"},
 		}, rows)
 
 		_, err = migrator.Rollback(ctx)

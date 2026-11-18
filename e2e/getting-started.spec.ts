@@ -29,6 +29,15 @@ test.describe("Getting Started", () => {
     await apiContext.dispose();
   });
 
+  test.afterAll(async ({ browser }) => {
+    const apiContext = await request.newContext({
+      baseURL: getApiBaseURL(browser.browserType().name()),
+    });
+    await apiContext.delete("/api/test/ereader");
+    await apiContext.delete("/api/test/users");
+    await apiContext.dispose();
+  });
+
   async function login(page: Page) {
     await page.goto("/login", { waitUntil: "domcontentloaded" });
     await page.getByLabel("Username").fill(USERNAME);

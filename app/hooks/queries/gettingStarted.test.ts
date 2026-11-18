@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { useCreateDevice } from "./devices";
 import { QueryKey } from "./gettingStarted";
-import { useCreateLibrary } from "./libraries";
+import { useCreateLibrary, useDeleteLibrary } from "./libraries";
 import { useCopyListToToRead } from "./lists";
 import { useInstallPlugin, useUninstallPlugin } from "./plugins";
 import { useSetOnToRead } from "./reading";
@@ -26,6 +26,7 @@ const MUTATIONS: Record<
   { hook: () => { mutateAsync: (v: never) => Promise<unknown> }; vars: unknown }
 > = {
   useCreateLibrary: { hook: useCreateLibrary, vars: { payload: {} } },
+  useDeleteLibrary: { hook: useDeleteLibrary, vars: { id: 1 } },
   useInstallPlugin: { hook: useInstallPlugin, vars: { scope: "s", id: "p" } },
   useUninstallPlugin: {
     hook: useUninstallPlugin,

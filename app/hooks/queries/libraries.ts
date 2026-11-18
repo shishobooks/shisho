@@ -144,6 +144,8 @@ export const useDeleteLibrary = () => {
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
       // Its Books' Read-throughs stay on Reading History without them.
       invalidateReadingRecords(queryClient);
+      // Whether a library exists decides which steps apply.
+      invalidateGettingStarted(queryClient);
     },
   });
 };

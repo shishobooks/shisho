@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
@@ -440,6 +440,9 @@ describe("GettingStarted", () => {
     const dialog = await panel();
     expect(within(dialog).queryByText("0 of 0 done")).toBeNull();
     expect(
+      within(dialog).getByText("Nothing left on your list"),
+    ).toBeInTheDocument();
+    expect(
       within(dialog).getByText("Every step is marked Not for me."),
     ).toBeInTheDocument();
     expect(
@@ -484,6 +487,32 @@ describe("GettingStarted", () => {
     await user.keyboard("{Escape}");
 
     await waitFor(() => expect(menuButton).toHaveFocus());
+  });
+
+  it("returns focus to the account menu button when restoring fails", async () => {
+    const { request } = serve({ dismissed: true });
+    const original = request.getMockImplementation()!;
+    request.mockImplementation((method, path, ...rest) =>
+      // It fails only after the menu has finished closing.
+      path === "/getting-started/restore"
+        ? new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("restore failed")), 1000),
+          )
+        : original(method, path, ...rest),
+    );
+    const user = setupUser();
+    renderNav();
+
+    const menuButton = screen.getByRole("button", { name: "Account menu" });
+    await user.click(menuButton);
+    await user.click(
+      await screen.findByRole("menuitem", { name: "Getting Started" }),
+    );
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+
+    await waitFor(() => expect(menuButton).toHaveFocus());
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("offers no user menu entry to a role that can do none of the steps", async () => {
