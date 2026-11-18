@@ -73,7 +73,7 @@ The audiobook player provides:
 
 - Play, pause, and seek controls
 - 30-second skip controls
-- Chapter navigation when chapters are available, with each chapter's start marked on the seek bar. Point at a mark to see the chapter's name, or select it to play from the start of that chapter.
+- Chapter navigation when chapters are available, with each chapter's start marked on the seek bar. Point at a mark to see the chapter's name, or select it to go to the start of that chapter.
 - Playback speed from 0.5x to 4x
 - Bookmarks
 
@@ -93,7 +93,7 @@ A bookmark marks a moment in an audiobook to come back to. Select **Add Bookmark
 
 Select **Bookmarks** to list an audiobook's bookmarks in time order. Select a bookmark to jump to its moment, or use its buttons to edit its note or delete it. Deleting a bookmark takes effect at once and cannot be undone.
 
-Each bookmark is also marked on the seek bar with a dot. Point at a dot to see the bookmark's time and note, or select it to play from that moment.
+Each bookmark is also marked on the seek bar with a dot. Point at a dot to see the bookmark's time and note, or select it to go to that moment.
 
 Bookmarks are saved to your account, so they follow you to any browser. They are private: other users never see yours. Bookmarks belong to one audiobook file, and deleting that file from Shisho deletes its bookmarks too.
 

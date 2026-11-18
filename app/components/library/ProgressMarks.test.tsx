@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ProgressMarks, { type ProgressMark } from "./ProgressMarks";
 
@@ -132,5 +132,56 @@ describe("ProgressMarks bookmarks", () => {
     await user.click(screen.getByTestId("bookmark-marker"));
 
     expect(mark.onSelect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ProgressMarks close together", () => {
+  it("keeps each mark's hit area from reaching over its neighbors", () => {
+    render(
+      <ProgressMarks
+        markers={[marker(0.5), marker(0.503), bookmark(0.506), marker(0.9)]}
+      />,
+    );
+    // No wider than the gap to the nearest mark, so pointing at a mark's
+    // center picks that mark.
+    const widths = [
+      ...screen.getAllByTestId("chapter-marker"),
+      ...screen.getAllByTestId("bookmark-marker"),
+    ].map((m) => m.style.maxWidth);
+    expect(widths).toEqual(["0.3%", "0.3%", "", "0.3%"]);
+  });
+});
+
+describe("ProgressMarks on a touch screen", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // A device whose only pointer can't hover, such as a phone.
+  const noHover = () =>
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: query === "(hover: none)",
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+
+  it("goes to the mark on the first tap, with no tooltip in the way", async () => {
+    // iOS takes a tap that shows something on hover as a hover alone.
+    noHover();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const mark = bookmark(0.5, "The twist");
+    render(<ProgressMarks markers={[mark]} />);
+
+    const target = screen.getByTestId("bookmark-marker");
+    // Not a tooltip's trigger at all, which Radix marks with data-state.
+    expect(target).not.toHaveAttribute("data-state");
+    await user.click(target);
+
+    expect(mark.onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 });
