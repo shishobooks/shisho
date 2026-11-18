@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API, ShishoAPIError } from "@/libraries/api";
+import { queryClient } from "@/libraries/query-client";
 import { setAuth } from "@/testing/auth";
 import { mockCoverDimensions } from "@/testing/coverDimensions";
 import type { Book, Bookmark, File } from "@/types";
@@ -224,9 +225,14 @@ const CHROME_UA =
 const SAFARI_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15";
 
+// A fresh client per test with the app's defaults, so data stays as fresh
+// as it does in the app: never stale until something invalidates it.
+const appQueryClient = () =>
+  new QueryClient({ defaultOptions: queryClient.getDefaultOptions() });
+
 const renderReader = (props?: { book?: Book; file?: File }) =>
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={appQueryClient()}>
       <MemoryRouter>
         <M4BReader
           book={props?.book ?? book}
@@ -528,6 +534,23 @@ describe("M4BReader", () => {
         "Jump to 1:23 test",
         "Jump to 10:00",
       ]);
+    });
+
+    it("shows Bookmarks added elsewhere when the panel opens again", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      addServerBookmark(83, "test");
+      renderReader();
+      let panel = await openBookmarks(user);
+      await within(panel).findByRole("button", { name: "Jump to 1:23 test" });
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("dialog", { name: "Bookmarks" })).toBeNull();
+
+      // Another browser or device adds one meanwhile.
+      addServerBookmark(600);
+      panel = await openBookmarks(user);
+      expect(
+        await within(panel).findByRole("button", { name: "Jump to 10:00" }),
+      ).toBeInTheDocument();
     });
 
     it("says when there are none", async () => {

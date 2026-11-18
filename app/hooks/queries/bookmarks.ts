@@ -19,6 +19,9 @@ export enum QueryKey {
 }
 
 // The signed-in user's Bookmarks in an audiobook File, in time order.
+// Another browser or device can add them, and nothing here hears about it,
+// so they count as stale at once: each time the list is shown again it
+// fetches anew, while showing the copy it has.
 export const useFileBookmarks = (
   fileId?: number,
   options: Omit<
@@ -27,6 +30,7 @@ export const useFileBookmarks = (
   > = {},
 ) => {
   return useQuery<Bookmark[], ShishoAPIError>({
+    staleTime: 0,
     ...options,
     enabled: useRequires("books:read", options.enabled ?? Boolean(fileId)),
     queryKey: [QueryKey.FileBookmarks, fileId],
