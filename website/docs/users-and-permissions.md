@@ -147,8 +147,8 @@ Getting Started is each user's short list of first steps, behind the **Getting S
 | **Add metadata plugins** | Config Write, once a library exists | An installed plugin provides a metadata enricher |
 | **Invite someone** | Users Write | Another active user exists |
 | **Connect a reading device** | Books Read | The user has a [Device](#devices) |
-| **Add a book to To Read** | Books Read | The user's To Read holds a book, or held one they then started |
-| **Start reading something** | Books Read | The user has a place saved in any book, or any [reading history](./reading-tracking.md) |
+| **Add a book to To Read** | Books Read, once they have access to a library | The user's To Read holds a book, or held one they then started |
+| **Start reading something** | Books Read, once they have access to a library | The user has a place saved in any book, or any [reading history](./reading-tracking.md) |
 
 - **Not for me** on a step takes it out of the count, and **Undo** puts it back.
 - **Dismiss this list** hides the pill without asking. **Getting Started** in the user menu brings it back.

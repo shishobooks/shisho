@@ -66,12 +66,22 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 	}
 
 	canReadBooks := user.HasPermission(models.ResourceBooks, models.OperationRead)
+	// To Read and reading need a book, so those steps wait until the user can
+	// reach a library. A Device can be set up before then.
+	canReachBooks := false
+	if canReadBooks {
+		reachable, err := s.canReachLibrary(ctx, user)
+		if err != nil {
+			return GettingStartedResponse{}, err
+		}
+		canReachBooks = reachable
+	}
 	applies := map[string]bool{
 		StepLibrary:      user.HasPermission(models.ResourceLibraries, models.OperationWrite),
 		StepInvite:       user.HasPermission(models.ResourceUsers, models.OperationWrite),
 		StepDevice:       canReadBooks,
-		StepToRead:       canReadBooks,
-		StepStartReading: canReadBooks,
+		StepToRead:       canReachBooks,
+		StepStartReading: canReachBooks,
 	}
 	done := map[string]bool{}
 
@@ -130,6 +140,19 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 		resp.Steps = append(resp.Steps, step)
 	}
 	return resp, nil
+}
+
+// canReachLibrary reports whether a library the user has access to exists.
+func (s *Service) canReachLibrary(ctx context.Context, user *models.User) (bool, error) {
+	q := s.db.NewSelect().Model((*models.Library)(nil))
+	if ids := user.GetAccessibleLibraryIDs(); ids != nil {
+		if len(ids) == 0 {
+			return false, nil
+		}
+		q = q.Where("l.id IN (?)", bun.List(ids))
+	}
+	reachable, err := q.Exists(ctx)
+	return reachable, errors.WithStack(err)
 }
 
 // hasUsedToRead reports whether the user's To Read holds a Book, or held

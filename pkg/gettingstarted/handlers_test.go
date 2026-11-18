@@ -30,8 +30,9 @@ var allPermissions = []string{
 
 var roleCounter atomic.Int64
 
-// newUser creates an active user whose role holds exactly perms and loads it
-// the way authentication does, with its role's permissions.
+// newUser creates an active user whose role holds exactly perms, with access
+// to every library as Add User grants by default, and loads it the way
+// authentication does.
 func newUser(t *testing.T, db *bun.DB, perms ...string) *models.User {
 	t.Helper()
 	ctx := context.Background()
@@ -49,6 +50,8 @@ func newUser(t *testing.T, db *bun.DB, perms ...string) *models.User {
 		CreatedAt: time.Now(), UpdatedAt: time.Now(), GettingStartedEnabled: true,
 	}
 	_, err = db.NewInsert().Model(user).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.UserLibraryAccess{UserID: user.ID}).Exec(ctx)
 	require.NoError(t, err)
 	return loadUser(t, db, user.ID)
 }
@@ -143,8 +146,9 @@ func TestRetrieve_StepsApplyByPermission(t *testing.T) {
 		perms   []string
 		applies []string
 	}{
-		{"admin", allPermissions, []string{StepLibrary, StepInvite, StepDevice, StepToRead, StepStartReading}},
-		{"viewer", []string{"books:read"}, []string{StepDevice, StepToRead, StepStartReading}},
+		// No library exists yet, so the reading steps don't apply.
+		{"admin", allPermissions, []string{StepLibrary, StepInvite, StepDevice}},
+		{"viewer", []string{"books:read"}, []string{StepDevice}},
 		{"library manager without Books Read", []string{"libraries:read", "libraries:write"}, []string{StepLibrary}},
 		{"user manager", []string{"users:read", "users:write"}, []string{StepInvite}},
 		{"no permissions", nil, nil},
@@ -168,6 +172,43 @@ func TestRetrieve_StepsApplyByPermission(t *testing.T) {
 			assert.Equal(t, tc.applies, applies)
 		})
 	}
+}
+
+// To Read and reading need a book, so those steps apply only once the user
+// can reach a library: one exists, and they have access to it. A Device can
+// be set up before then.
+func TestRetrieve_ReadingStepsNeedAReachableLibrary(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	h := newHandler(db, false)
+	everyLibrary := newUser(t, db, "books:read")
+	reading := func(user *models.User) []bool {
+		resp := status(t, h, user)
+		return []bool{step(t, resp, StepDevice).Applies, step(t, resp, StepToRead).Applies, step(t, resp, StepStartReading).Applies}
+	}
+
+	assert.Equal(t, []bool{true, false, false}, reading(everyLibrary))
+
+	insertLibrary(t, db)
+	second := insertLibrary(t, db)
+	assert.Equal(t, []bool{true, true, true}, reading(everyLibrary))
+
+	noAccess := newUser(t, db, "books:read")
+	_, err := db.NewDelete().Model((*models.UserLibraryAccess)(nil)).Where("user_id = ?", noAccess.ID).Exec(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []bool{true, false, false}, reading(loadUser(t, db, noAccess.ID)))
+
+	oneLibrary := newUser(t, db, "books:read")
+	_, err = db.NewUpdate().Model((*models.UserLibraryAccess)(nil)).Set("library_id = ?", second.ID).Where("user_id = ?", oneLibrary.ID).Exec(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []bool{true, true, true}, reading(loadUser(t, db, oneLibrary.ID)))
+
+	// Access to a library that no longer exists reaches nothing.
+	_, err = db.NewDelete().Model((*models.Library)(nil)).Where("id = ?", second.ID).Exec(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []bool{true, false, false}, reading(loadUser(t, db, oneLibrary.ID)))
+	assert.Equal(t, []bool{true, true, true}, reading(everyLibrary))
 }
 
 // "Add metadata plugins" needs Config Write, and applies only once a Library
@@ -447,6 +488,7 @@ func TestShow_ResetsAnotherUsersListWithoutRevealingIt(t *testing.T) {
 	h := newHandler(db, false)
 	admin := newUser(t, db, allPermissions...)
 	target := newUser(t, db, "books:read")
+	insertLibrary(t, db)
 	_, err := devices.NewService(db).Create(ctx, target.ID, "Kobo", devices.DeviceTypeKobo)
 	require.NoError(t, err)
 	_, err = db.NewUpdate().Model((*models.User)(nil)).
@@ -506,6 +548,7 @@ func TestRetrieve_StorageFailureIsAServerError(t *testing.T) {
 	db := testdb.New(t)
 	h := newHandler(db, false)
 	user := newUser(t, db, "books:read")
+	insertLibrary(t, db)
 	_, err := db.Exec(`DROP TABLE reading_positions`)
 	require.NoError(t, err)
 
