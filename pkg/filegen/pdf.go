@@ -129,22 +129,26 @@ func (g *PDFGenerator) buildUpdate(ctx context.Context, doc *incremental.Documen
 // Reading Direction as their /Direction, keeping the PDF's other preferences.
 // Left to right only replaces a /Direction that says right to left, since
 // it's what a PDF with none already means. It returns false to leave the
-// catalog alone.
+// catalog alone, as it does for preferences it can't read rather than
+// replace them.
 func viewerPreferences(doc *incremental.Document, catalog incremental.Dict, file *models.File) (incremental.Dict, bool) {
 	if file == nil || file.ReadingDirection == nil {
 		return nil, false
 	}
 	prefs := incremental.Dict{}
-	if o, err := doc.Resolve(catalog["ViewerPreferences"]); err == nil {
-		if d, ok := o.(incremental.Dict); ok {
-			prefs = d.Clone()
+	if existing, ok := catalog["ViewerPreferences"]; ok {
+		o, err := doc.Resolve(existing)
+		d, isDict := o.(incremental.Dict)
+		if err != nil || !isDict {
+			return nil, false
 		}
+		prefs = d.Clone()
 	}
 	switch *file.ReadingDirection {
 	case models.ReadingDirectionRTL:
 		prefs["Direction"] = incremental.Name("R2L")
 	case models.ReadingDirectionLTR:
-		if prefs["Direction"] != incremental.Name("R2L") {
+		if !statesRightToLeft(doc, prefs["Direction"]) {
 			return nil, false
 		}
 		prefs["Direction"] = incremental.Name("L2R")
@@ -152,6 +156,22 @@ func viewerPreferences(doc *incremental.Document, catalog incremental.Dict, file
 		return nil, false
 	}
 	return prefs, true
+}
+
+// statesRightToLeft reports whether a /Direction value says right to left,
+// written as a name or, as some PDFs do, a string.
+func statesRightToLeft(doc *incremental.Document, direction incremental.Object) bool {
+	o, err := doc.Resolve(direction)
+	if err != nil {
+		return false
+	}
+	switch v := o.(type) {
+	case incremental.Name:
+		return v == "R2L"
+	case incremental.String:
+		return v.Text() == "R2L"
+	}
+	return false
 }
 
 // buildOutlines adds the chapters as bookmarks, replacing any the original

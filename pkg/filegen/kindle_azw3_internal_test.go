@@ -73,14 +73,27 @@ func TestKF8Book_RightToLeft(t *testing.T) {
 		}
 	}
 	for spine, want := range map[string]bool{
-		` page-progression-direction="rtl"`: true,
-		` page-progression-direction="ltr"`: false,
-		``:                                  false,
+		` page-progression-direction="rtl"`:   true,
+		` page-progression-direction=" RTL "`: true,
+		` page-progression-direction="ltr"`:   false,
+		``:                                    false,
 	} {
 		book, err := kf8Book(entries(spine))
 		require.NoError(t, err)
 		assert.Equal(t, want, book.RightToLeft, "spine%s", spine)
 	}
+}
+
+// The EPUB's own writing mode goes to the Kindle as it is.
+func TestKF8Book_PrimaryWritingMode(t *testing.T) {
+	t.Parallel()
+	book, err := kf8Book([]kepub.Entry{
+		{Name: "content.opf", Content: []byte(`<package version="3.0" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Novel</dc:title><meta name="primary-writing-mode" content=" vertical-rl "/></metadata>
+<manifest><item id="p1" href="p1.xhtml" media-type="application/xhtml+xml"/></manifest><spine page-progression-direction="rtl"><itemref idref="p1"/></spine></package>`)},
+		{Name: "p1.xhtml", Content: []byte(`<html><body><p>text</p></body></html>`)},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "vertical-rl", book.PrimaryWritingMode)
 }
 
 // Pages of a fixed-layout EPUB can differ in size, such as a landscape

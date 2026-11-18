@@ -61,6 +61,9 @@ type KF8Book struct {
 	// RightToLeft marks a book whose pages turn right to left, as an EPUB's
 	// spine says with page-progression-direction="rtl".
 	RightToLeft bool
+	// PrimaryWritingMode is the book's own writing mode, such as
+	// "vertical-rl", as an EPUB's primary-writing-mode meta gives it, or "".
+	PrimaryWritingMode string
 }
 
 // GuideRef is an entry of a KF8Book's guide: its type, as an EPUB 2
@@ -80,13 +83,6 @@ type KF8Image struct {
 
 // ErrNoDocuments is returned by WriteKF8 for a book with no documents.
 var ErrNoDocuments = errors.New("the book has no documents")
-
-// The page direction record, and the writing mode record Kindle manga also
-// carry, as Calibre and KCC write them.
-const (
-	exthPrimaryWritingMode       = 525
-	exthPageProgressionDirection = 527
-)
 
 const (
 	// textRecordSize is how much text each text record holds.
@@ -117,7 +113,11 @@ const (
 	exthRegionMagnification   = 132
 	exthOriginalResolution    = 307
 	exthASINAlt               = 504
-	ncxTagLength              = 2
+	// The writing mode and page direction records, as Calibre and KCC
+	// write them.
+	exthPrimaryWritingMode       = 525
+	exthPageProgressionDirection = 527
+	ncxTagLength                 = 2
 	// extraFlagsMBEntry says each text record ends in a multibyte entry
 	// alone. The trailing byte sequences that name the index entries a
 	// record touches are not written: the flags tell a reader they are
@@ -815,11 +815,16 @@ func (l *kf8Layout) headerRecord(at kf8Indexes) ([]byte, error) {
 	}
 	if l.book.RightToLeft {
 		exth = append(exth, exthRecord{typ: exthPageProgressionDirection, data: []byte("rtl")})
-		// A text book's writing mode, such as Japanese set vertically, is
-		// its own, so only a comic says it's horizontal.
-		if l.book.FixedLayout {
-			exth = append(exth, exthRecord{typ: exthPrimaryWritingMode, data: []byte("horizontal-rl")})
-		}
+	}
+	// The book's own writing mode goes as it is. Without one, a right to left
+	// comic gets the one Kindle manga carry; a text book's, such as Japanese
+	// set vertically, can't be guessed.
+	writingMode := l.book.PrimaryWritingMode
+	if writingMode == "" && l.book.RightToLeft && l.book.FixedLayout {
+		writingMode = "horizontal-rl"
+	}
+	if writingMode != "" {
+		exth = append(exth, exthRecord{typ: exthPrimaryWritingMode, data: []byte(writingMode)})
 	}
 	rec = append(rec, encodeEXTH(exth)...)
 

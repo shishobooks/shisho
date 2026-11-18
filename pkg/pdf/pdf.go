@@ -162,27 +162,27 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	meta := &mediafile.ParsedMetadata{
-		Title:         title,
-		Authors:       authors,
-		Description:   description,
-		Tags:          tags,
-		ReleaseDate:   releaseDate,
-		PageCount:     pageCount,
-		Language:      language,
-		CoverData:     coverData,
-		CoverMimeType: coverMime,
-		CoverPage:     coverPage,
-		Chapters:      chapters,
-		DataSource:    models.DataSourcePDFMetadata,
-	}
-	meta.ReadingDirection = readingDirection
-	return meta, nil
+	return &mediafile.ParsedMetadata{
+		Title:            title,
+		Authors:          authors,
+		Description:      description,
+		Tags:             tags,
+		ReleaseDate:      releaseDate,
+		PageCount:        pageCount,
+		Language:         language,
+		CoverData:        coverData,
+		CoverMimeType:    coverMime,
+		CoverPage:        coverPage,
+		Chapters:         chapters,
+		DataSource:       models.DataSourcePDFMetadata,
+		ReadingDirection: readingDirection,
+	}, nil
 }
 
 // readingDirectionFromCatalog is the Reading Direction a PDF's viewer
 // preferences state: /Direction /R2L runs right to left, /L2R left to right,
-// and anything else, or no preferences, says nothing.
+// and anything else, or no preferences, says nothing. Some PDFs write the
+// value as a string, which a relaxed read accepts too.
 func readingDirectionFromCatalog(xrt *model.XRefTable) *string {
 	if xrt.RootDict == nil {
 		return nil
@@ -195,12 +195,21 @@ func readingDirectionFromCatalog(xrt *model.XRefTable) *string {
 	if err != nil || prefs == nil {
 		return nil
 	}
-	name, ok := prefs["Direction"].(types.Name)
-	if !ok {
+	value, err := xrt.Dereference(prefs["Direction"])
+	if err != nil {
+		return nil
+	}
+	var stated string
+	switch v := value.(type) {
+	case types.Name:
+		stated = v.Value()
+	case types.StringLiteral:
+		stated = v.Value()
+	default:
 		return nil
 	}
 	var direction string
-	switch name.Value() {
+	switch stated {
 	case "R2L":
 		direction = models.ReadingDirectionRTL
 	case "L2R":

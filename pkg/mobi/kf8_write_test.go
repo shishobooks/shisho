@@ -403,6 +403,12 @@ func TestWriteKF8_MarksRightToLeft(t *testing.T) {
 	assert.Equal(t, "rtl", h.text(exthPageProgressionDirection))
 	assert.Empty(t, h.text(exthPrimaryWritingMode), "a text book's writing mode is its own")
 
+	h = header(&KF8Book{Metadata: Metadata{Title: "Novel"}, Documents: doc, RightToLeft: true, PrimaryWritingMode: "vertical-rl"})
+	assert.Equal(t, "vertical-rl", h.text(exthPrimaryWritingMode), "the book's own writing mode is kept")
+
+	h = header(&KF8Book{Metadata: Metadata{Title: "Manga"}, Documents: doc, FixedLayout: true, RightToLeft: true, PrimaryWritingMode: "horizontal-lr"})
+	assert.Equal(t, "horizontal-lr", h.text(exthPrimaryWritingMode), "the book's own writing mode wins over the comic default")
+
 	h = header(&KF8Book{Metadata: Metadata{Title: "Comic"}, Documents: doc, FixedLayout: true})
 	assert.Empty(t, h.text(exthPageProgressionDirection))
 	assert.Empty(t, h.text(exthPrimaryWritingMode))

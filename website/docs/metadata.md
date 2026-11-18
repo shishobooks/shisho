@@ -19,7 +19,7 @@ CBZ and PDF files have a **Reading Direction**: **Left to right**, or **Right to
 - A CBZ is right to left when its `ComicInfo.xml` has `Manga` set to `YesAndRightToLeft`, and left to right when `Manga` is `Yes` or `No`.
 - A PDF is right to left when its viewer preferences set `Direction` to `R2L`, and left to right when they set `L2R`.
 
-Any other file reads left to right until you edit it and choose a **Reading Direction**. A direction you choose is kept through later scans. The [comic and PDF reader](./reading-and-playback.md#cbz-and-pdf-readers) turns pages in this direction. [CBZ](./supported-formats.md#cbz-downloads) and [PDF](./supported-formats.md#pdf-downloads) downloads carry it, and so do a CBZ's [conversions](./supported-formats.md#conversions).
+Any other file reads left to right until you edit it and choose a **Reading Direction**. A library scan only reads files that changed since the last scan, so for a file already in your library, run **Scan for new metadata** on its book to read the direction the file states. A direction you choose is kept through later scans. The [comic and PDF reader](./reading-and-playback.md#cbz-and-pdf-readers) turns pages in this direction. [CBZ](./supported-formats.md#cbz-downloads) and [PDF](./supported-formats.md#pdf-downloads) downloads carry it, and so do a CBZ's [conversions](./supported-formats.md#conversions).
 
 ## People and Roles
 

@@ -48,7 +48,9 @@ import (
 //     and fixed-layout AZW3s carry the comic EXTH records
 //     (pkg/mobi/write.go, pkg/mobi/kf8_write.go).
 //   - 11: AZW3 downloads of a right to left EPUB carry the page direction
-//     record (pkg/filegen/kindle_azw3.go, pkg/mobi/kf8_write.go).
+//     record, a fixed-layout one also the comic writing mode, and an EPUB's
+//     own primary-writing-mode carries over (pkg/filegen/kindle_azw3.go,
+//     pkg/mobi/kf8_write.go).
 const GeneratorVersion = 11
 
 // Fingerprint represents the metadata that affects file generation.
