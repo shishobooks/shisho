@@ -516,6 +516,52 @@ describe("PageReader chapter menu", () => {
   });
 });
 
+describe("PageReader chapter marks", () => {
+  it("marks where each chapter starts along the progress bar", () => {
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 3 },
+      { id: 3, title: "Unplaced" },
+    ];
+    renderReader(10);
+    // Page 4 of 10 sits a third of the way along a bar that runs from the
+    // first page to the last. The first chapter is at the bar's start.
+    expect(
+      screen.getAllByTestId("chapter-mark").map((m) => m.style.left),
+    ).toEqual(["33.3333%"]);
+  });
+});
+
+describe("PageReader chapter marks right to left", () => {
+  it("marks chapters from the right, as the bar fills", () => {
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 3 },
+    ];
+    settings.mutate = vi.fn();
+    renderReader(10, undefined, "/", ReadingDirectionRTL);
+    const mark = screen.getByTestId("chapter-mark");
+    expect(mark.style.right).toBe("33.3333%");
+    expect(mark.style.left).toBe("");
+  });
+});
+
+describe("PageReader chapter mark clicks", () => {
+  it("goes to the chapter's first page on a click on its mark", async () => {
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 3 },
+    ];
+    settings.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader(10);
+
+    await user.click(screen.getByTestId("chapter-mark"));
+
+    expect(screen.getByText("Page 4 of 10")).toBeInTheDocument();
+  });
+});
+
 describe("PageReader keyboard", () => {
   it("turns pages with the arrow keys, but not while a control has them", async () => {
     chapters.data = [{ id: 1, title: "Opening", start_page: 0 }];

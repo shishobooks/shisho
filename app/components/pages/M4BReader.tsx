@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
+import ProgressMarks from "@/components/library/ProgressMarks";
 import BookmarkNoteDialog from "@/components/player/BookmarkNoteDialog";
 import BookmarksSheet from "@/components/player/BookmarksSheet";
 import PlaybackSpeedControl from "@/components/player/PlaybackSpeedControl";
@@ -27,13 +28,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { useCreateBookmark } from "@/hooks/queries/bookmarks";
+import { useCreateBookmark, useFileBookmarks } from "@/hooks/queries/bookmarks";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import type { Book, File } from "@/types";
+import type { Book, Bookmark, File } from "@/types";
 import {
   AUTOPLAY_TIMEOUT_MS,
   resolveCodecSupport,
@@ -72,6 +73,10 @@ function joinNames(
     .filter((name): name is string => Boolean(name))
     .join(", ");
 }
+
+// Stable while the Bookmarks load or fail, so the seek bar's marks aren't
+// rebuilt on every second of playback meanwhile.
+const NO_BOOKMARKS: Bookmark[] = [];
 
 export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const navigate = useNavigate();
@@ -424,6 +429,8 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   // Bookmarks. Adding one marks the moment the button was pressed, while
   // playback carries on as the note is written.
   const createBookmark = useCreateBookmark(file.id);
+  // Marked along the seek bar, as the panel lists them.
+  const { data: bookmarks = NO_BOOKMARKS } = useFileBookmarks(file.id);
   const [addingAt, setAddingAt] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
@@ -440,6 +447,30 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
       }
     },
     [addingAt, createBookmark],
+  );
+
+  // Built once per change, not on every second of playback, since each mark
+  // is a tooltip of its own.
+  const seekMarks = useMemo(
+    () =>
+      duration > 0
+        ? [
+            ...(hasChapters ? chapters : []).map((chapter) => ({
+              kind: "chapter" as const,
+              position: chapter.startSeconds / duration,
+              label: chapter.title,
+              onSelect: () => seekTo(chapter.startSeconds),
+            })),
+            ...bookmarks.map((bookmark) => ({
+              kind: "bookmark" as const,
+              position: bookmark.seconds / duration,
+              label: `Bookmark at ${formatPlayerTime(bookmark.seconds)}`,
+              note: bookmark.note,
+              onSelect: () => seekTo(bookmark.seconds),
+            })),
+          ]
+        : [],
+    [bookmarks, chapters, duration, hasChapters, seekTo],
   );
 
   const authorNames = joinNames(book?.authors);
@@ -586,23 +617,11 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
               step={1}
               thumbLabel="Seek"
               value={[Math.min(displayTime, sliderMax)]}
-            />
-            {/* Chapter markers along the seek bar, positioned by start/duration.
-                Skip the first marker at 0 (it sits under the thumb origin). */}
-            {hasChapters &&
-              duration > 0 &&
-              chapters.map((chapter) =>
-                chapter.startSeconds <= 0 ? null : (
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute top-1/2 h-2 w-px -translate-x-1/2 -translate-y-1/2 bg-primary/40"
-                    key={chapter.index}
-                    style={{
-                      left: `${(chapter.startSeconds / duration) * 100}%`,
-                    }}
-                  />
-                ),
-              )}
+            >
+              {/* Inside the seek bar, under its handle, so the handle can
+                  still be dragged where it sits on a mark. */}
+              <ProgressMarks marks={seekMarks} />
+            </Slider>
           </div>
 
           <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">

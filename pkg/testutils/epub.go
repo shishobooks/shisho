@@ -15,10 +15,19 @@ import (
 // chapters, so the reader e2e tests can turn pages and reach the end. The
 // first is styled with a white body and black text the way Project Gutenberg
 // EPUBs are, so the reader e2e test can check that themes override book
-// colors. extraParagraphs adds filler text to the first chapter, so a test
-// can turn pages within a chapter as well as across chapters.
-func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
+// colors. It also has a scene break the book centers by class, which
+// justification leaves alone, and a paragraph at a fixed px size for Force
+// font size. The second refers to a note the book marks as one, kept in the
+// third, for the reader's footnote popover. extraParagraphs adds filler text
+// to the first chapter, so a test can turn pages within a chapter as well as
+// across chapters. toc adds a table of contents with an entry per chapter.
+func writeMinimalEPUB(path, title string, extraParagraphs int, toc bool) (err error) {
 	escaped := html.EscapeString(title)
+	navItem := ""
+	if toc {
+		navItem = `
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`
+	}
 	filler := strings.Repeat("<p>"+strings.Repeat("Filler text to fill a page. ", 10)+"</p>", extraParagraphs)
 	entries := []epubEntry{
 		{"META-INF/container.xml", epubContainerXML},
@@ -29,7 +38,7 @@ func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
     <dc:identifier id="bookid">urn:uuid:e2e-test-book</dc:identifier>
     <dc:language>en</dc:language>
   </metadata>
-  <manifest>
+  <manifest>` + navItem + `
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
@@ -46,21 +55,113 @@ func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><title>` + escaped + `</title>
-<style>body { color: black; background-color: white; } a { color: blue; }</style></head>
-<body><p>Test chapter. <a href="#end">A link.</a></p>` + filler + `<p id="end">The end.</p></body>
+<style>body { color: black; background-color: white; } a { color: blue; } .break { text-align: center; } .fixed { font-size: 11px; }</style></head>
+<body><p>Test chapter. <a href="#end">A link.</a></p><p class="break">* * *</p><p class="fixed">Fixed size.</p>` + filler + `<p id="end">The end.</p></body>
 </html>`},
 	}
 	for i, name := range []string{"Two", "Three", "Four"} {
+		body := `<p>Chapter ` + name + ` text.</p>`
+		switch i {
+		case 0:
+			body = `<p>Chapter Two text.<a epub:type="noteref" href="chapter3.xhtml#note1">1</a></p>`
+		case 1:
+			body += `<aside epub:type="endnote" id="note1"><p>The footnote's text.</p></aside>`
+		}
 		entries = append(entries, epubEntry{
 			fmt.Sprintf("OEBPS/chapter%d.xhtml", i+2), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
 <head><title>` + escaped + `</title></head>
-<body><p>Chapter ` + name + ` text.</p></body>
+<body>` + body + `</body>
 </html>`,
 		})
 	}
+	if toc {
+		entries = append(entries, epubEntry{"OEBPS/nav.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>` + escaped + `</title></head>
+<body><nav epub:type="toc"><ol>
+<li><a href="chapter1.xhtml">Chapter One</a></li>
+<li><a href="chapter2.xhtml">Chapter Two</a></li>
+<li><a href="chapter3.xhtml">Chapter Three</a></li>
+<li><a href="chapter4.xhtml">Chapter Four</a></li>
+</ol></nav></body>
+</html>`})
+	}
 	return writeEPUBArchive(path, entries)
+}
+
+// sectionsEPUBCount is how many sections writeSectionsEPUB writes.
+const sectionsEPUBCount = 24
+
+// writeSectionsEPUB writes an EPUB of one chapter holding many short
+// sections of varied length, each linked from the table of contents by its
+// id. Each section's header holds a heading and a line of text and, as
+// Standard Ebooks' books style theirs, avoids breaking inside or after
+// itself, so a section that starts near the bottom of a page has its header
+// moved to the next page while the section itself starts on the page before.
+// Firefox reports a box for the section on that earlier page, which the
+// reader's jump to a section must not land on. A second spine section holds
+// "Figure", which opens with a picture as tall as a page after a line of
+// text, so the picture starts a page later and the section's text a page
+// after that: a jump there must land on the picture. It's a file of its own
+// because foliate re-lays out a page when it shrinks a picture to fit, which
+// would race the quick jumps between the other sections.
+func writeSectionsEPUB(path, title string) error {
+	escaped := html.EscapeString(title)
+	var body, nav strings.Builder
+	for i := 1; i <= sectionsEPUBCount; i++ {
+		fmt.Fprintf(&nav, `<li><a href="chapter1.xhtml#section-%d">Section %d</a></li>`, i, i)
+		fmt.Fprintf(&body, `<section id="section-%d"><header><h2>Section %d</h2><p>Section %d begins.</p></header>`, i, i, i)
+		// Lengths that vary from one section to the next, so their starts
+		// fall at different places on their pages.
+		for p := 0; p < 1+(i*7)%5; p++ {
+			fmt.Fprintf(&body, "<p>%s</p>", strings.Repeat(fmt.Sprintf("Section %d text. ", i), 4+(i*3)%7))
+		}
+		body.WriteString("</section>")
+	}
+	nav.WriteString(`<li><a href="chapter2.xhtml#figure">Figure</a></li>`)
+	return writeEPUBArchive(path, []epubEntry{
+		{"META-INF/container.xml", epubContainerXML},
+		{"OEBPS/content.opf", `<?xml version="1.0" encoding="UTF-8"?>
+<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>` + escaped + `</dc:title>
+    <dc:identifier id="bookid">urn:uuid:e2e-sections-book</dc:identifier>
+    <dc:language>en</dc:language>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapter2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="chapter1"/>
+    <itemref idref="chapter2"/>
+  </spine>
+</package>`},
+		{"OEBPS/nav.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>` + escaped + `</title></head>
+<body><nav epub:type="toc"><ol>` + nav.String() + `</ol></nav></body>
+</html>`},
+		{"OEBPS/chapter1.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>` + escaped + `</title>
+<style>header { break-inside: avoid; break-after: avoid; } h2 { margin: 2em 0 1em; }</style></head>
+<body>` + body.String() + `</body>
+</html>`},
+		{"OEBPS/chapter2.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>` + escaped + `</title></head>
+<body><p>Before the figure.</p><section id="figure"><div><svg xmlns="http://www.w3.org/2000/svg" width="300" height="4000" viewBox="0 0 300 4000"><rect width="300" height="4000" fill="#88c"/></svg></div>
+<header><h2>Figure section</h2><p>The figure's section begins.</p></header><p>Figure text.</p></section></body>
+</html>`},
+	})
 }
 
 // defaultFixedLayoutPages is the number of pages in a fixed-layout EPUB unless

@@ -1,15 +1,25 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { IDBFactory } from "fake-indexeddb";
 import { MemoryRouter } from "react-router-dom";
 import { toast } from "sonner";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
 } from "@/hooks/queries/settings";
+import { READER_SETTINGS_KEY } from "@/hooks/useReaderSettings";
 import { POSITION_SAVE_DELAY_MS } from "@/hooks/useReadingProgress";
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
@@ -32,6 +42,10 @@ vi.mock("@/hooks/queries/reflowable", () => ({
 let mockToc: unknown[] = [];
 // The page progression direction the mocked foliate view reports.
 let mockDir: string | undefined;
+// Where each section starts along the book, as foliate reports it, and the
+// section each table-of-contents link goes to.
+let mockFractions: number[] = [];
+let mockSectionOf: Record<string, number> = {};
 // Whether the mocked renderer is at the end of the book.
 let mockAtEnd = false;
 // The screen the mocked renderer shows when the book opens.
@@ -66,8 +80,16 @@ beforeAll(() => {
           setAttribute: vi.fn(),
         };
         lastLocation = { cfi: "epubcfi(/6/2!/4/2)", fraction: 0 };
+        getSectionFractions = () => mockFractions;
         get book() {
-          return { toc: mockToc, dir: mockDir };
+          return {
+            toc: mockToc,
+            dir: mockDir,
+            resolveHref: (href: string) =>
+              href in mockSectionOf
+                ? { index: mockSectionOf[href], anchor: () => 0 }
+                : null,
+          };
         }
       },
     );
@@ -80,10 +102,16 @@ vi.mock("@/hooks/queries/settings", () => ({
 }));
 
 beforeEach(() => {
+  // Display settings and imported fonts live in the browser; every test
+  // starts with none.
+  localStorage.clear();
+  vi.stubGlobal("indexedDB", new IDBFactory());
   setAuth({ permissions: ["books:read"] });
   mockAtEnd = false;
   mockPage = undefined;
   mockDir = undefined;
+  mockFractions = [];
+  mockSectionOf = {};
   savedCfi = null;
   savedPercentageOnly = null;
   saveResult = {};
@@ -205,6 +233,98 @@ describe("ReflowableReader", () => {
     } finally {
       mockToc = [];
     }
+  });
+
+  it("marks where each chapter starts along the progress bar", async () => {
+    mockToc = [
+      { label: "Cover", href: "cover.xhtml" },
+      { label: "Part One", href: "" },
+      { label: "Chapter 1", href: "ch1.xhtml" },
+      { label: "Chapter 2", href: "ch2.xhtml" },
+    ];
+    mockSectionOf = { "cover.xhtml": 0, "ch1.xhtml": 1, "ch2.xhtml": 2 };
+    mockFractions = [0, 0.05, 0.5, 1];
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    try {
+      renderReader();
+      const progress = screen.getByRole("slider", { name: "Reading progress" });
+      // The cover starts the book, at the bar's own start; the part heading
+      // goes nowhere.
+      await vi.waitFor(() =>
+        expect(
+          within(progress)
+            .getAllByTestId("chapter-mark")
+            .map((m) => m.style.left),
+        ).toEqual(["5%", "50%"]),
+      );
+    } finally {
+      mockToc = [];
+    }
+  });
+
+  it("goes to the chapter's exact start on a click on its mark", async () => {
+    mockToc = [
+      { label: "Chapter 1", href: "ch1.xhtml" },
+      { label: "Chapter 2", href: "ch2.xhtml" },
+    ];
+    mockSectionOf = { "ch1.xhtml": 0, "ch2.xhtml": 1 };
+    mockFractions = [0, 0.4, 1];
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    try {
+      const { container } = renderReader();
+      const view = container.querySelector("foliate-view") as unknown as {
+        goTo: ReturnType<typeof vi.fn>;
+        goToFraction: ReturnType<typeof vi.fn>;
+      };
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const mark = await screen.findByTestId("chapter-mark");
+      await user.click(mark);
+
+      // The chapter's link, not the fraction under the pointer.
+      expect(view.goTo).toHaveBeenCalledWith("ch2.xhtml");
+      expect(view.goToFraction).not.toHaveBeenCalled();
+    } finally {
+      mockToc = [];
+    }
+  });
+
+  it("shows progress to a tenth of a percent", async () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const progress = screen.getByRole("slider", { name: "Reading progress" });
+    await vi.waitFor(() => expect(progress).toBeInTheDocument());
+
+    act(() => {
+      container
+        .querySelector("foliate-view")!
+        .dispatchEvent(
+          new CustomEvent("relocate", { detail: { fraction: 0.2345 } }),
+        );
+    });
+
+    expect(progress).toHaveAttribute("aria-valuenow", "23.5");
+    expect(progress).toHaveAttribute("aria-valuetext", "23.5%");
+    expect(screen.getByText("23.5%")).toBeInTheDocument();
   });
 
   it("lists headings in the chapter menu without making them selectable", async () => {
@@ -585,6 +705,104 @@ describe("ReflowableReader", () => {
       };
       return { view, header, doc, tapBook };
     };
+
+    // A press in the book's frame never reaches the page, where the popover
+    // listens for presses outside it.
+    it("close the settings instead of turning the page", async () => {
+      const { view, tapBook } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+      tapBook(295);
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(view.goRight).not.toHaveBeenCalled();
+
+      // The next tap turns the page as usual.
+      tapBook(295);
+      expect(view.goRight).toHaveBeenCalledTimes(1);
+    });
+
+    it("close the settings on the margins instead of turning the page", async () => {
+      const { view } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+
+      fireEvent.pointerDown(view);
+      fireEvent.click(view, { clientX: 295, clientY: 400 });
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(view.goRight).not.toHaveBeenCalled();
+    });
+
+    it("close the settings on a link instead of following it", async () => {
+      const { view, doc } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+
+      const link = doc.querySelector("a")!;
+      act(() => {
+        link.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      });
+      // foliate reports the link it's about to follow; a canceled report
+      // stays put.
+      let follow = true;
+      act(() => {
+        follow = view.dispatchEvent(
+          new CustomEvent("link", {
+            detail: { a: link, href: "#n" },
+            cancelable: true,
+          }),
+        );
+      });
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(follow).toBe(false);
+    });
+
+    it("close the settings on a link out of the book instead of opening it", async () => {
+      const { view, doc } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+
+      const link = doc.querySelector("a")!;
+      act(() => {
+        link.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      });
+      let open = true;
+      act(() => {
+        open = view.dispatchEvent(
+          new CustomEvent("external-link", {
+            detail: { a: link, href: "https://example.com" },
+            cancelable: true,
+          }),
+        );
+      });
+
+      expect(open).toBe(false);
+    });
+
+    it("follow a link from the keyboard after a tap closed the settings", async () => {
+      const { view, doc, tapBook } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+      tapBook(150);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+      // Enter on a focused link: a click with no press before it.
+      let follow = false;
+      act(() => {
+        follow = view.dispatchEvent(
+          new CustomEvent("link", {
+            detail: { a: doc.querySelector("a")!, href: "#n" },
+            cancelable: true,
+          }),
+        );
+      });
+
+      expect(follow).toBe(true);
+    });
 
     it("replace the overlay buttons", () => {
       setup(true);
@@ -973,48 +1191,10 @@ describe("ReflowableReader", () => {
     expect(screen.getByRole("banner")).not.toHaveClass("-translate-y-full");
   });
 
-  it("updates settings when the theme button is clicked", async () => {
-    const mutate = vi.fn();
-    vi.mocked(useUserSettings).mockReturnValue({
-      data: {
-        preload_count: 3,
-        fit_mode: "fit-height",
-        viewer_reflowable_font_size: 100,
-        viewer_reflowable_theme: "light",
-        viewer_reflowable_flow: "paginated",
-      },
-      isLoading: false,
-    } as never);
-    vi.mocked(useUpdateUserSettings).mockReturnValue({ mutate } as never);
-
-    vi.mocked(useReflowableBlob).mockReturnValue({
-      data: new Blob(["x"], { type: "application/epub+zip" }),
-      isLoading: false,
-      isError: false,
-      error: null,
-      refetch: vi.fn(),
-    } as never);
-
-    renderReader();
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await user.click(await screen.findByRole("button", { name: /settings/i }));
-    await user.click(screen.getByRole("button", { name: /dark/i }));
-    expect(mutate).toHaveBeenCalledWith(
-      expect.objectContaining({ viewer_reflowable_theme: "dark" }),
-      expect.anything(),
-    );
-  });
-
-  it("toasts when saving a setting fails", async () => {
+  it("toasts when saving auto-hide fails", async () => {
     const error = vi.spyOn(toast, "error");
     vi.mocked(useUserSettings).mockReturnValue({
-      data: {
-        preload_count: 3,
-        fit_mode: "fit-height",
-        viewer_reflowable_font_size: 100,
-        viewer_reflowable_theme: "light",
-        viewer_reflowable_flow: "paginated",
-      },
+      data: { viewer_hide_chrome: false },
       isLoading: false,
     } as never);
     vi.mocked(useUpdateUserSettings).mockReturnValue({
@@ -1031,7 +1211,9 @@ describe("ReflowableReader", () => {
     renderReader();
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     await user.click(await screen.findByRole("button", { name: /settings/i }));
-    await user.click(screen.getByRole("button", { name: /dark/i }));
+    await user.click(
+      screen.getByRole("switch", { name: "Auto-hide controls" }),
+    );
 
     expect(error).toHaveBeenCalledWith(REJECTION_MESSAGE, undefined);
   });
@@ -1070,6 +1252,62 @@ describe("ReflowableReader", () => {
     expect(view.goToFraction).toHaveBeenLastCalledWith(0);
   });
 
+  it("says the font size with its unit", async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(
+      await screen.findByRole("slider", { name: "Font size" }),
+    ).toHaveAttribute("aria-valuetext", "16 px");
+    expect(screen.getByRole("slider", { name: "Margins" })).toHaveAttribute(
+      "aria-valuetext",
+      "7%",
+    );
+  });
+
+  it("keeps focus in the settings when a step reaches the end of its range", async () => {
+    localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ margins: 14 }));
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    renderReader();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const increase = await screen.findByRole("button", {
+      name: "Increase margins",
+    });
+
+    act(() => increase.focus());
+    await user.keyboard("{Enter}");
+
+    // The button it pressed is now disabled, so focus moves to the other.
+    expect(increase).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Decrease margins" }),
+    ).toHaveFocus();
+  });
+
   it("names the font size slider", async () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: {
@@ -1095,7 +1333,7 @@ describe("ReflowableReader", () => {
 
     expect(
       await screen.findByRole("slider", { name: "Font size" }),
-    ).toHaveAttribute("aria-valuenow", "100");
+    ).toHaveAttribute("aria-valuenow", "16");
   });
 });
 
@@ -1501,5 +1739,552 @@ describe("ReflowableReader resuming", () => {
       vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
     });
     expect(dismiss).toHaveBeenCalledWith("reading-finished-3");
+  });
+});
+
+describe("ReflowableReader display settings", () => {
+  type MockRenderer = {
+    setStyles: ReturnType<typeof vi.fn>;
+    setAttribute: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    // jsdom has no object URLs.
+    let next = 0;
+    URL.createObjectURL = vi.fn(() => `blob:http://localhost/font-${++next}`);
+    URL.revokeObjectURL = vi.fn();
+    // jsdom has no FontFace, which import uses when the browser has it.
+    vi.stubGlobal("FontFace", undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Opens the book and returns the renderer the reader styles.
+  const openBook = async () => {
+    const { container, unmount } = renderReader();
+    const view = container.querySelector("foliate-view") as unknown as {
+      renderer: MockRenderer;
+    };
+    await vi.waitFor(() => expect(view.renderer.setStyles).toHaveBeenCalled());
+    return { renderer: view.renderer, unmount };
+  };
+
+  const css = (renderer: MockRenderer) =>
+    renderer.setStyles.mock.lastCall?.[0] as string;
+  const attribute = (renderer: MockRenderer, name: string) => {
+    const calls = renderer.setAttribute.mock.calls.filter(([n]) => n === name);
+    return calls[calls.length - 1]?.[1];
+  };
+
+  const openSettings = async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    return user;
+  };
+
+  type User = ReturnType<typeof userEvent.setup>;
+  const pick = (name: string) => (user: User) =>
+    user.click(screen.getByRole("button", { name }));
+
+  it.each<[string, (user: User) => Promise<void>, (r: MockRenderer) => void]>([
+    [
+      "font",
+      async (user) => {
+        await user.click(screen.getByRole("combobox", { name: "Font" }));
+        await user.click(screen.getByRole("option", { name: "OpenDyslexic" }));
+      },
+      (r) => {
+        expect(css(r)).toContain('font-family: "OpenDyslexic", sans-serif');
+        expect(css(r)).toMatch(/@font-face[^}]*OpenDyslexic-Regular/);
+      },
+    ],
+    [
+      "size",
+      async (user) => {
+        act(() => screen.getByRole("slider", { name: "Font size" }).focus());
+        await user.keyboard("{ArrowRight}");
+      },
+      (r) => expect(css(r)).toContain("font-size: 16.5px !important"),
+    ],
+    [
+      "size, one step at a time",
+      async (user) => {
+        await pick("Increase font size")(user);
+        await pick("Increase font size")(user);
+        await pick("Decrease font size")(user);
+      },
+      (r) => expect(css(r)).toContain("font-size: 16.5px !important"),
+    ],
+    [
+      "forced font size",
+      (user) =>
+        user.click(screen.getByRole("switch", { name: "Force font size" })),
+      (r) => expect(css(r)).toContain("font-size: inherit !important"),
+    ],
+    [
+      "line spacing",
+      async (user) => {
+        await pick("Increase line spacing")(user);
+        await pick("Increase line spacing")(user);
+      },
+      (r) => expect(css(r)).toContain("line-height: 1.55 !important"),
+    ],
+    [
+      "margins",
+      async (user) => {
+        act(() => screen.getByRole("slider", { name: "Margins" }).focus());
+        await user.keyboard("{End}");
+      },
+      (r) => expect(attribute(r, "gap")).toBe("15%"),
+    ],
+    [
+      "justification",
+      (user) =>
+        user.click(screen.getByRole("switch", { name: "Justify text" })),
+      (r) => expect(css(r)).toContain("text-align: start !important"),
+    ],
+    [
+      "theme",
+      pick("Black"),
+      (r) => expect(css(r)).toContain("background: #000000 !important"),
+    ],
+    [
+      "layout",
+      pick("Scrolled"),
+      (r) => expect(attribute(r, "flow")).toBe("scrolled"),
+    ],
+    [
+      "pages",
+      pick("One"),
+      (r) => expect(attribute(r, "max-column-count")).toBe("1"),
+    ],
+  ])("applies the %s and remembers it", async (_, change, check) => {
+    const first = await openBook();
+    const user = await openSettings();
+    await change(user);
+    check(first.renderer);
+    first.unmount();
+
+    const reopened = await openBook();
+    check(reopened.renderer);
+  });
+
+  it("keeps a section's own centered text out of justification", async () => {
+    const { container } = renderReader();
+    const doc = document.implementation.createHTMLDocument("section");
+    doc.body.innerHTML = '<p>Body.</p><p align="center">* * *</p>';
+    act(() => {
+      container
+        .querySelector("foliate-view")!
+        .dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+    });
+    // The section's elements come from another document, which jest-dom's
+    // matchers refuse.
+    expect(doc.documentElement.hasAttribute("data-shisho-align")).toBe(true);
+    const [body, centered] = doc.querySelectorAll("p");
+    expect(centered.hasAttribute("data-shisho-own-align")).toBe(true);
+    expect(body.hasAttribute("data-shisho-own-align")).toBe(false);
+  });
+
+  it("lays the shown section out again once a newly chosen font arrives", async () => {
+    const { renderer } = await openBook();
+    let fontArrives = () => {};
+    const doc = {
+      fonts: {
+        check: vi.fn(() => false),
+        load: vi.fn(
+          () => new Promise<void>((resolve) => (fontArrives = resolve)),
+        ),
+      },
+    };
+    const view = renderer as MockRenderer & {
+      getContents: () => unknown[];
+      render: ReturnType<typeof vi.fn>;
+    };
+    view.getContents = () => [{ doc }];
+    view.render = vi.fn();
+    const user = await openSettings();
+    await user.click(screen.getByRole("combobox", { name: "Font" }));
+    await user.click(screen.getByRole("option", { name: "Literata" }));
+
+    expect(doc.fonts.load).toHaveBeenCalledWith('1em "Literata"');
+    expect(view.render).not.toHaveBeenCalled();
+    await act(async () => fontArrives());
+    expect(view.render).toHaveBeenCalled();
+  });
+
+  it("offers the number of pages only for the paginated layout", async () => {
+    await openBook();
+    const user = await openSettings();
+    const pages = screen.getByRole("group", { name: "Pages" });
+    expect(within(pages).getByRole("button", { name: "One" })).toBeEnabled();
+
+    await pick("Scrolled")(user);
+
+    expect(within(pages).getByRole("button", { name: "One" })).toBeDisabled();
+    expect(screen.getByText("Only for Paginated")).toBeInTheDocument();
+  });
+
+  it("doesn't save display settings to the account", async () => {
+    const mutate = vi.fn();
+    vi.mocked(useUpdateUserSettings).mockReturnValue({ mutate } as never);
+    await openBook();
+    const user = await openSettings();
+    await pick("Dark")(user);
+    expect(mutate).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem(READER_SETTINGS_KEY)!)).toEqual(
+      expect.objectContaining({ theme: "dark" }),
+    );
+  });
+
+  it("starts from the account's old settings in a browser that stored none", async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: {
+        viewer_hide_chrome: false,
+        viewer_reflowable_font_size: 140,
+        viewer_reflowable_theme: "sepia",
+        viewer_reflowable_flow: "scrolled",
+      },
+      isLoading: false,
+    } as never);
+    const { renderer } = await openBook();
+    // 140% of the browser's 16px.
+    expect(css(renderer)).toContain("font-size: 22.5px !important");
+    expect(css(renderer)).toContain("background: #f4ecd8 !important");
+    expect(attribute(renderer, "flow")).toBe("scrolled");
+  });
+
+  it("follows a change made in another tab", async () => {
+    const { renderer } = await openBook();
+    act(() => {
+      localStorage.setItem(
+        READER_SETTINGS_KEY,
+        JSON.stringify({ theme: "dark" }),
+      );
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: READER_SETTINGS_KEY }),
+      );
+    });
+    expect(css(renderer)).toContain("background: #1a1a1a !important");
+  });
+
+  const fontFile = (name: string) =>
+    new File([new Uint8Array([0, 1, 0, 0])], name);
+
+  it("imports a font, reads in it, keeps it, and removes it", async () => {
+    const first = await openBook();
+    const user = await openSettings();
+    await user.upload(screen.getByLabelText("Font file"), fontFile("Mine.ttf"));
+
+    const imported = await screen.findByRole("list", {
+      name: "Imported fonts",
+    });
+    expect(within(imported).getByText("Mine")).toBeInTheDocument();
+    await vi.waitFor(() =>
+      expect(css(first.renderer)).toContain(
+        'url("blob:http://localhost/font-1") format("truetype")',
+      ),
+    );
+    expect(css(first.renderer)).toMatch(/font-family: "Imported Font /);
+    first.unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(
+      "blob:http://localhost/font-1",
+    );
+
+    const reopened = await openBook();
+    await vi.waitFor(() =>
+      expect(css(reopened.renderer)).toContain(
+        'url("blob:http://localhost/font-2")',
+      ),
+    );
+    const user2 = await openSettings();
+    await user2.click(
+      await screen.findByRole("button", { name: "Remove Mine" }),
+    );
+
+    await vi.waitFor(() =>
+      expect(css(reopened.renderer)).not.toContain("font-family"),
+    );
+    expect(
+      screen.queryByRole("list", { name: "Imported fonts" }),
+    ).not.toBeInTheDocument();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(
+      "blob:http://localhost/font-2",
+    );
+    expect(JSON.parse(localStorage.getItem(READER_SETTINGS_KEY)!).font).toBe(
+      "book",
+    );
+  });
+
+  it("waits for an imported font before styling the book", async () => {
+    const first = await openBook();
+    const user = await openSettings();
+    await user.upload(screen.getByLabelText("Font file"), fontFile("Mine.otf"));
+    await screen.findByRole("list", { name: "Imported fonts" });
+    first.unmount();
+
+    const { container } = renderReader();
+    const view = container.querySelector("foliate-view") as unknown as {
+      renderer: MockRenderer;
+    };
+    await vi.waitFor(() => expect(view.renderer.setStyles).toHaveBeenCalled());
+    // The first styles it gets already use the font.
+    expect(view.renderer.setStyles.mock.calls[0][0]).toContain(
+      'format("opentype")',
+    );
+  });
+
+  it("says plainly when the browser can't store an imported font", async () => {
+    const error = vi.spyOn(toast, "error");
+    // A browser's storage errors are Errors with the browser's own wording.
+    vi.stubGlobal("indexedDB", {
+      open: () => {
+        throw new Error("The quota has been exceeded.");
+      },
+    });
+    await openBook();
+    const user = await openSettings();
+    await user.upload(screen.getByLabelText("Font file"), fontFile("Mine.ttf"));
+
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith("Failed to import the font"),
+    );
+  });
+
+  it("refuses a file that isn't a font", async () => {
+    const error = vi.spyOn(toast, "error");
+    await openBook();
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      applyAccept: false,
+    });
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.upload(screen.getByLabelText("Font file"), fontFile("a.zip"));
+
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith(
+        "Choose a TTF, OTF, or WOFF2 font file.",
+      ),
+    );
+    expect(
+      screen.queryByRole("list", { name: "Imported fonts" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("ReflowableReader footnotes", () => {
+  const EPUB_NS = "http://www.idpf.org/2007/ops";
+  const xhtml = (body: string) =>
+    new DOMParser().parseFromString(
+      `<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="${EPUB_NS}"><body>${body}</body></html>`,
+      "application/xhtml+xml",
+    );
+
+  type MockView = HTMLElement & {
+    goTo: ReturnType<typeof vi.fn>;
+    renderer: { getContents: () => unknown[] };
+  };
+
+  // An AZW3 book resolves links asynchronously.
+  const openBook = async (doc: Document, { async = false } = {}) => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const view = container.querySelector("foliate-view") as unknown as MockView;
+    await screen.findByRole("button", { name: "Next page", hidden: true });
+    view.renderer.getContents = () => [{ doc, index: 1 }];
+    Object.defineProperty(view, "book", {
+      value: {
+        resolveHref: (href: string) => {
+          const resolved = {
+            index: 1,
+            anchor: (d: Document) => d.getElementById(href.split("#")[1]),
+          };
+          return async ? Promise.resolve(resolved) : resolved;
+        },
+        sections: [],
+      },
+    });
+    return view;
+  };
+
+  // foliate's report that a link in the book was clicked. Returns whether
+  // foliate would go on to follow it.
+  const clickLink = (view: HTMLElement, a: Element, href: string) => {
+    let follow = true;
+    act(() => {
+      follow = view.dispatchEvent(
+        new CustomEvent("link", { detail: { a, href }, cancelable: true }),
+      );
+    });
+    return follow;
+  };
+
+  const NOTE_DOC = `<p>Text<a epub:type="noteref" href="#n1">1</a> and <a href="#end">a link</a>.</p>
+    <aside epub:type="footnote" id="n1"><p>The footnote's text.</p></aside>
+    <p id="end">The end.</p>`;
+
+  it("opens a footnote in a popover instead of jumping to it", async () => {
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+
+    const follow = clickLink(
+      view,
+      doc.querySelector("a")!,
+      "chapter2.xhtml#n1",
+    );
+
+    expect(follow).toBe(false);
+    const popover = await screen.findByRole("dialog", { name: "Footnote" });
+    expect(within(popover).getByText("The footnote's text.")).toBeVisible();
+    expect(view.goTo).not.toHaveBeenCalled();
+  });
+
+  it("opens a footnote in an AZW3 book, whose links resolve later", async () => {
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc, { async: true });
+
+    expect(clickLink(view, doc.querySelector("a")!, "part2.html#n1")).toBe(
+      false,
+    );
+
+    const popover = await screen.findByRole("dialog", { name: "Footnote" });
+    expect(within(popover).getByText("The footnote's text.")).toBeVisible();
+    expect(view.goTo).not.toHaveBeenCalled();
+  });
+
+  it("shows a footnote in the reader's theme and type, not the app's", async () => {
+    localStorage.setItem(
+      READER_SETTINGS_KEY,
+      JSON.stringify({ theme: "black", font: "literata", size: 20 }),
+    );
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+
+    clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#n1");
+
+    const popover = await screen.findByRole("dialog", { name: "Footnote" });
+    expect(popover).toHaveStyle({
+      backgroundColor: "rgb(0, 0, 0)",
+      color: "rgb(200, 200, 200)",
+      fontSize: "18px",
+    });
+    // The chosen font, under a name that can't replace the app's own fonts.
+    expect(popover.style.fontFamily).toMatch(/^"?Shisho Note Font"?, serif$/);
+    expect(popover.querySelector("style")?.textContent).toMatch(
+      /@font-face \{\s*font-family: "Shisho Note Font";\s*src: url\("[^"]*Literata/,
+    );
+    expect(
+      within(popover).getByRole("button", { name: "Go to note" }),
+    ).toHaveStyle({ color: "rgb(138, 180, 248)" });
+  });
+
+  it("links from the popover to the full note", async () => {
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+    clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#n1");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.click(await screen.findByRole("button", { name: "Go to note" }));
+
+    expect(view.goTo).toHaveBeenCalledWith("chapter2.xhtml#n1");
+    expect(
+      screen.queryByRole("dialog", { name: "Footnote" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it.each(["page", "anchor"])(
+    "closes the popover when the page moves or lays out again (%s)",
+    async (reason) => {
+      const doc = xhtml(NOTE_DOC);
+      const view = await openBook(doc);
+      clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#n1");
+      await screen.findByRole("dialog", { name: "Footnote" });
+
+      act(() => {
+        view.dispatchEvent(
+          new CustomEvent("relocate", {
+            detail: { fraction: 0.5, reason },
+          }),
+        );
+      });
+
+      expect(
+        screen.queryByRole("dialog", { name: "Footnote" }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("closes the popover on a tap in the book", async () => {
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+    // foliate's report of the section, which the reader listens to.
+    act(() => {
+      view.dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+    });
+    clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#n1");
+    await screen.findByRole("dialog", { name: "Footnote" });
+
+    act(() => {
+      doc
+        .querySelector("p")!
+        .dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+    expect(
+      screen.queryByRole("dialog", { name: "Footnote" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lets foliate follow an ordinary link", async () => {
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+
+    const follow = clickLink(
+      view,
+      doc.querySelectorAll("a")[1],
+      "chapter2.xhtml#end",
+    );
+
+    expect(follow).toBe(true);
+    expect(
+      screen.queryByRole("dialog", { name: "Footnote" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("jumps to a note it can't read the text of", async () => {
+    const doc = xhtml(`<p>Text<sup><a href="#gone">1</a></sup></p>`);
+    const view = await openBook(doc);
+
+    clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#gone");
+
+    await vi.waitFor(() =>
+      expect(view.goTo).toHaveBeenCalledWith("chapter2.xhtml#gone"),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Footnote" }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -52,6 +52,40 @@ const uncollapse = range => {
     return range
 }
 
+// Shisho patch: an element whose content moved to the next column (a
+// section whose header avoids breaking after itself, as Standard Ebooks'
+// books style them) still starts in the column before it. Firefox reports a
+// non-empty box for it there, and WebKit does for a forced column break, so
+// going to the element would land a page early. Content is only drawn where
+// it is, so an element is measured at its first drawn content instead: an
+// image or other replaced element, or the first letter of its text. An
+// element with nothing drawn keeps its own boxes. Ranges (CFIs) are already
+// placed in text and pass through. Only paginated layouts need this; see
+// #scrollToAnchor.
+const REPLACED = 'img, svg, video, canvas, object, embed, iframe, image'
+const isDrawn = node => Array.from(node.getClientRects())
+    .some(r => r.width > 0 && r.height > 0)
+const contentStart = target => {
+    if (target?.nodeType !== 1) return target
+    const doc = target.ownerDocument
+    const walker = doc.createTreeWalker(target,
+        NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+            acceptNode: node => (node.nodeType === 1
+                ? node.matches(REPLACED) : node.textContent.trim())
+                ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+        })
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.nodeType === 1) {
+            if (isDrawn(node)) return node
+            continue
+        }
+        const offset = node.textContent.search(/\S/)
+        const range = makeRange(doc, node, offset, offset + 1)
+        if (isDrawn(range)) return range
+    }
+    return target
+}
+
 const makeRange = (doc, node, start, end = start) => {
     const range = doc.createRange()
     range.setStart(node, start)
@@ -940,7 +974,13 @@ export class Paginator extends HTMLElement {
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor
-        const rects = uncollapse(anchor)?.getClientRects?.()
+        // Shisho patch: measure an element at its first drawn content
+        // (contentStart, above) in a paginated layout. In a scrolled one
+        // nothing breaks into columns, and the element's own top, padding
+        // included, is the place to show.
+        const target = uncollapse(anchor)
+        const rects = (this.scrolled ? target : contentStart(target))
+            ?.getClientRects?.()
         // if anchor is an element or a range
         if (rects) {
             // when the start of the range is immediately after a hyphen in the
