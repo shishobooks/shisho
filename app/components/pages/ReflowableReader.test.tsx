@@ -761,6 +761,49 @@ describe("ReflowableReader", () => {
       expect(follow).toBe(false);
     });
 
+    it("close the settings on a link out of the book instead of opening it", async () => {
+      const { view, doc } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+
+      const link = doc.querySelector("a")!;
+      act(() => {
+        link.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      });
+      let open = true;
+      act(() => {
+        open = view.dispatchEvent(
+          new CustomEvent("external-link", {
+            detail: { a: link, href: "https://example.com" },
+            cancelable: true,
+          }),
+        );
+      });
+
+      expect(open).toBe(false);
+    });
+
+    it("follow a link from the keyboard after a tap closed the settings", async () => {
+      const { view, doc, tapBook } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+      tapBook(150);
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+      // Enter on a focused link: a click with no press before it.
+      let follow = false;
+      act(() => {
+        follow = view.dispatchEvent(
+          new CustomEvent("link", {
+            detail: { a: doc.querySelector("a")!, href: "#n" },
+            cancelable: true,
+          }),
+        );
+      });
+
+      expect(follow).toBe(true);
+    });
+
     it("replace the overlay buttons", () => {
       setup(true);
       expect(

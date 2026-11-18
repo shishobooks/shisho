@@ -34,7 +34,7 @@ import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
-import type { Book, File } from "@/types";
+import type { Book, Bookmark, File } from "@/types";
 import {
   AUTOPLAY_TIMEOUT_MS,
   resolveCodecSupport,
@@ -73,6 +73,10 @@ function joinNames(
     .filter((name): name is string => Boolean(name))
     .join(", ");
 }
+
+// Stable while the Bookmarks load or fail, so the seek bar's marks aren't
+// rebuilt on every second of playback meanwhile.
+const NO_BOOKMARKS: Bookmark[] = [];
 
 export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   const navigate = useNavigate();
@@ -426,7 +430,7 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
   // playback carries on as the note is written.
   const createBookmark = useCreateBookmark(file.id);
   // Marked along the seek bar, as the panel lists them.
-  const { data: bookmarks = [] } = useFileBookmarks(file.id);
+  const { data: bookmarks = NO_BOOKMARKS } = useFileBookmarks(file.id);
   const [addingAt, setAddingAt] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
   const [bookmarksOpen, setBookmarksOpen] = useState(false);

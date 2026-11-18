@@ -845,6 +845,21 @@ describe("M4BReader", () => {
       expect(audio.currentTime).toBe(2400);
     });
 
+    it("keeps the arrow keys skipping after a click on a mark", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { container } = renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      await user.click(within(container).getAllByTestId("chapter-mark")[0]);
+      expect(audio.currentTime).toBe(1200);
+      fireEvent.timeUpdate(audio);
+      // The mark doesn't keep focus, so the seek bar it sits in doesn't take
+      // the arrows as a 1-second step.
+      await user.keyboard("{ArrowRight}");
+
+      expect(audio.currentTime).toBe(1230);
+    });
+
     it("advances to the next chapter with the next button", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderReader({ file: fileWithChapters });

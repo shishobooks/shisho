@@ -974,8 +974,10 @@ export class Paginator extends HTMLElement {
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor
-        // In a scrolled layout nothing breaks into columns, and the element's
-        // own top, padding included, is the place to show.
+        // Shisho patch: measure an element at its first drawn content
+        // (contentStart, above) in a paginated layout. In a scrolled one
+        // nothing breaks into columns, and the element's own top, padding
+        // included, is the place to show.
         const target = uncollapse(anchor)
         const rects = (this.scrolled ? target : contentStart(target))
             ?.getClientRects?.()

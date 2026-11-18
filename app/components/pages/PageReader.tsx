@@ -504,6 +504,27 @@ export default function PageReader({
     [totalPages, navigate, libraryId, bookId, scrolled],
   );
 
+  // Built once per change, not on every page turn, since each mark is a
+  // tooltip of its own.
+  const progressMarks = useMemo(
+    () =>
+      totalPages > 1
+        ? flatChapters.flatMap((ch) =>
+            ch.start_page == null
+              ? []
+              : [
+                  {
+                    kind: "chapter" as const,
+                    position: ch.start_page / (totalPages - 1),
+                    label: ch.title,
+                    onSelect: () => goToPage(ch.start_page!),
+                  },
+                ],
+          )
+        : [],
+    [flatChapters, goToPage, totalPages],
+  );
+
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1022,23 +1043,7 @@ export default function PageReader({
               )}
               style={{ width: `${progressPercent}%` }}
             />
-            {totalPages > 1 && (
-              <ProgressMarks
-                marks={flatChapters.flatMap((ch) =>
-                  ch.start_page == null
-                    ? []
-                    : [
-                        {
-                          kind: "chapter" as const,
-                          position: ch.start_page / (totalPages - 1),
-                          label: ch.title,
-                          onSelect: () => goToPage(ch.start_page!),
-                        },
-                      ],
-                )}
-                rtl={rtl}
-              />
-            )}
+            <ProgressMarks marks={progressMarks} rtl={rtl} />
           </div>
           {currentChapter && (
             <div className="text-xs text-muted-foreground mt-1">

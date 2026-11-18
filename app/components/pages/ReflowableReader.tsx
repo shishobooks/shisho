@@ -581,11 +581,16 @@ export default function ReflowableReader({
       });
       doc.addEventListener("click", (e) => {
         const events = bookEventsRef.current;
+        // The press's verdict is for this click alone. foliate's own click
+        // listener, added first, has already reported a link by now, so a
+        // later click with no press (Enter on a focused link) isn't caught.
+        const dismissed = dismissedAtPressRef.current;
+        dismissedAtPressRef.current = false;
         // The target comes from the iframe's realm, so `instanceof Element`
         // is false for it; check for closest() instead.
         const target = e.target as Element | null;
         if (target?.closest?.("a[href]")) return;
-        if (dismissedAtPressRef.current) return;
+        if (dismissed) return;
         if (doc.getSelection()?.isCollapsed === false) return;
         if (isScrolled()) {
           events.toggleChrome();
@@ -760,10 +765,17 @@ export default function ReflowableReader({
         view.goTo?.(href);
       });
     };
+    // A link out of the book opens a new tab, which a tap that closed a
+    // popover shouldn't do either.
+    const handleExternalLink = (evt: Event) => {
+      if (dismissedAtPressRef.current) evt.preventDefault();
+    };
     view.addEventListener("link", handleLink);
+    view.addEventListener("external-link", handleExternalLink);
     return () => {
       latest++;
       view.removeEventListener("link", handleLink);
+      view.removeEventListener("external-link", handleExternalLink);
     };
   }, [viewElement]);
 

@@ -35,7 +35,10 @@ export interface ChapterMark {
 // Chapters closer than this share one mark: the bar can't show them apart.
 const MIN_GAP = 0.004;
 
-// Lets the page draw and take input between sections, which can be large.
+// Lets the page draw and take input once a stretch of work has run this
+// long. Yielding after every section would crawl in a background tab, where
+// timers wait a second or more.
+const WORK_BUDGET_MS = 16;
 const breathe = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // The share of a section's text before each target, in one pass over the
@@ -98,7 +101,12 @@ export const chapterMarks = async (
     inSections.set(resolved.index, waiting);
   }
 
+  let workedSince = performance.now();
   for (const [index, waiting] of [...inSections].sort(([a], [b]) => a - b)) {
+    if (performance.now() - workedSince > WORK_BUDGET_MS) {
+      await breathe();
+      workedSince = performance.now();
+    }
     if (cancelled()) return null;
     const start = sectionFractions[index];
     const end = sectionFractions[index + 1] ?? 1;
@@ -120,7 +128,6 @@ export const chapterMarks = async (
       const share = targets[i] ? (shares.get(targets[i]!) ?? 0) : 0;
       marks.push({ position: start + share * (end - start), label, href });
     });
-    await breathe();
   }
 
   // A stable sort keeps the contents' order among chapters at one place, so

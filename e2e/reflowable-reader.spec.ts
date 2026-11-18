@@ -333,14 +333,17 @@ test.describe("Reflowable reader", () => {
     await openReader(page, sectionsBookId);
     const frame = await bookFrame(page, "Section 1 begins.");
     // The reader lays the book out again as it applies the display settings
-    // once the book opens; a jump before then can be undone by it.
+    // once the book opens; a jump before then can be undone by it. One page
+    // at a time on foliate's renderer says they're in.
     await expect(page.getByText("Preparing book…")).toBeHidden();
-    await expect(
-      page
-        .getByRole("slider", { name: "Reading progress" })
-        .getByTestId("chapter-mark")
-        .first(),
-    ).toBeAttached();
+    await page.waitForFunction(
+      () =>
+        (
+          document.querySelector("foliate-view") as unknown as {
+            renderer?: Element;
+          } | null
+        )?.renderer?.getAttribute("max-column-count") === "1",
+    );
 
     if (browserName === "firefox") {
       // The book holds what this guards against: sections whose header moved

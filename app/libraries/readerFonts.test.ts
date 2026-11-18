@@ -37,7 +37,7 @@ describe("bundled fonts", () => {
   });
 
   it("declares a bundled font's faces at absolute addresses, which a book's frame can load", () => {
-    const face = fontFaceFor("opendyslexic", undefined);
+    const face = fontFaceFor("opendyslexic");
     expect(face?.family).toBe("OpenDyslexic");
     const urls = [...face!.faces.matchAll(/url\("([^"]+)"\)/g)].map(
       (m) => m[1],
@@ -52,7 +52,7 @@ describe("bundled fonts", () => {
   });
 
   it("declares a variable font across its weights", () => {
-    const face = fontFaceFor("noto-sans", undefined);
+    const face = fontFaceFor("noto-sans");
     expect(face!.faces).toContain("font-weight: 100 900");
     expect(face!.faces).toContain('format("truetype")');
   });
@@ -67,7 +67,7 @@ describe("bundled fonts", () => {
   });
 
   it("declares nothing for the book's own font", () => {
-    expect(fontFaceFor("book", undefined)).toBeUndefined();
+    expect(fontFaceFor("book")).toBeUndefined();
   });
 });
 
@@ -148,6 +148,6 @@ describe("imported fonts", () => {
   });
 
   it("declares nothing for an imported font that's gone", () => {
-    expect(fontFaceFor("imported:missing", undefined)).toBeUndefined();
+    expect(fontFaceFor("imported:missing")).toBeUndefined();
   });
 });

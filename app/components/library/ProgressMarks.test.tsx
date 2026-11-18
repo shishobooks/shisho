@@ -226,6 +226,19 @@ describe("ProgressMarks at one place", () => {
     expect(chapter.onSelect).not.toHaveBeenCalled();
   });
 
+  it("keeps the notes of two bookmarks at one moment on their one mark", () => {
+    render(
+      <ProgressMarks
+        marks={[bookmark(0.4, "First note"), bookmark(0.4, "Second note")]}
+      />,
+    );
+    const marks = screen.getAllByTestId("bookmark-mark");
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toHaveAccessibleName(
+      "Bookmark at 0.4: First note / Second note",
+    );
+  });
+
   it("keeps a bookmark and a chapter at one place as two marks", () => {
     render(<ProgressMarks marks={[chapterMark(0.4), bookmark(0.4)]} />);
     expect(screen.getAllByTestId("chapter-mark")).toHaveLength(1);
@@ -235,9 +248,9 @@ describe("ProgressMarks at one place", () => {
 
 describe("ProgressMarks near the ends", () => {
   it("shows a chapter close to an end that isn't at it", () => {
-    // A minute-long last chapter of a ten-hour audiobook.
+    // Chapters 18 seconds from either end of a ten-hour audiobook.
     render(
-      <ProgressMarks marks={[chapterMark(0.0005), chapterMark(0.9983)]} />,
+      <ProgressMarks marks={[chapterMark(0.0005), chapterMark(0.9995)]} />,
     );
     expect(screen.getAllByTestId("chapter-mark")).toHaveLength(2);
   });

@@ -19,8 +19,8 @@ const EDGE = 1e-6;
 // chapter on one page, or two chapters starting at one moment.
 const SAME_PLACE = 1e-6;
 
-// One mark per place for each kind, named after everything there and going
-// to the first, in the order given.
+// One mark per place for each kind, named after everything there, with
+// every bookmark's note, and going to the first, in the order given.
 const mergeSamePlace = (marks: ProgressMark[]) => {
   const merged: ProgressMark[] = [];
   for (const mark of marks) {
@@ -31,8 +31,13 @@ const mergeSamePlace = (marks: ProgressMark[]) => {
     );
     if (!same) {
       merged.push({ ...mark });
-    } else if (!same.label.split(" / ").includes(mark.label)) {
+      continue;
+    }
+    if (!same.label.split(" / ").includes(mark.label)) {
       same.label = `${same.label} / ${mark.label}`;
+    }
+    if (mark.note) {
+      same.note = same.note ? `${same.note} / ${mark.note}` : mark.note;
     }
   }
   return merged;
@@ -131,6 +136,9 @@ function ProgressMarks({
               e.stopPropagation();
               mark.onSelect();
             }}
+            // A mark takes no focus on a press: inside the audiobook's seek
+            // bar, a focused mark would hand the arrow keys to the bar.
+            onMouseDown={(e) => e.preventDefault()}
             // The audiobook's seek bar starts a drag on a press, which a
             // press on a mark isn't.
             onPointerDown={(e) => e.stopPropagation()}

@@ -162,7 +162,7 @@ const fontFaces = (family: string, faces: Face[]) =>
 // page that has a font of the same name already.
 export const fontFaceFor = (
   fontId: string,
-  imported: LoadedImportedFont | undefined,
+  imported?: LoadedImportedFont,
   as?: string,
 ): ReaderFontFace | undefined => {
   const bundled = BUNDLED_FONTS.find((f) => f.id === fontId);
