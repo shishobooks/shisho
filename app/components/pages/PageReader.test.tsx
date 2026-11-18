@@ -16,7 +16,12 @@ import {
 import { POSITION_SAVE_DELAY_MS } from "@/hooks/useReadingProgress";
 import { setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
-import type { PageFlow } from "@/types";
+import {
+  ReadingDirectionLTR,
+  ReadingDirectionRTL,
+  type PageFlow,
+  type ReadingDirection,
+} from "@/types";
 
 import PageReader from "./PageReader";
 
@@ -165,6 +170,7 @@ const renderReader = (
   totalPages = 10,
   title?: string,
   initialPath: string | { search: string; state: unknown } = "/",
+  readingDirection?: ReadingDirection | null,
 ) =>
   render(
     <QueryClientProvider client={queryClient}>
@@ -174,6 +180,7 @@ const renderReader = (
           fileId={42}
           getPageUrl={getPageUrl}
           libraryId="1"
+          readingDirection={readingDirection}
           title={title}
           totalPages={totalPages}
         />
@@ -530,6 +537,175 @@ describe("PageReader keyboard", () => {
       { key: "ArrowRight" },
     );
     expect(screen.getByText("Page 2 of 10")).toBeInTheDocument();
+  });
+});
+
+describe("PageReader Reading Direction", () => {
+  const touch = (screenX: number, screenY: number) => ({ screenX, screenY });
+  const swipe = (target: Element, fromX: number, toX: number) => {
+    fireEvent.touchStart(target, {
+      touches: [touch(fromX, 400)],
+      changedTouches: [touch(fromX, 400)],
+    });
+    fireEvent.touchEnd(target, {
+      touches: [],
+      changedTouches: [touch(toX, 400)],
+    });
+    act(() => vi.advanceTimersByTime(500));
+  };
+  const openOnPage = (
+    page: number,
+    direction: ReadingDirection | null = ReadingDirectionRTL,
+  ) => {
+    settings.mutate = vi.fn();
+    renderReader(10, undefined, `/?page=${page}`, direction);
+    return screen.getByRole("main");
+  };
+  const location = () => screen.getByTestId("location");
+  const panelOf = (page: number) =>
+    document.querySelector(`main img[src="/page-${page}"]`)!.parentElement!;
+
+  afterEach(() => localStorage.clear());
+
+  it("turns right to left with the arrow keys", () => {
+    openOnPage(3);
+    fireEvent.keyDown(document.body, { key: "ArrowLeft" });
+    expect(location()).toHaveTextContent("page=4");
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(location()).toHaveTextContent("page=2");
+  });
+
+  it("turns to the next page on a swipe to the right", () => {
+    const main = openOnPage(3);
+    swipe(main, 100, 300);
+    expect(location()).toHaveTextContent("page=4");
+    swipe(main, 300, 100);
+    expect(location()).toHaveTextContent("page=3");
+  });
+
+  it("turns to the next page from the left tap zone", () => {
+    const main = openOnPage(3);
+    const [left, right] = main.querySelectorAll('button[aria-hidden="true"]');
+    fireEvent.click(left);
+    expect(location()).toHaveTextContent("page=4");
+    fireEvent.click(right);
+    expect(location()).toHaveTextContent("page=3");
+  });
+
+  it("keeps the previous page's tap zone off on the first page", () => {
+    const main = openOnPage(0);
+    const [left, right] = main.querySelectorAll('button[aria-hidden="true"]');
+    expect(left).toBeEnabled();
+    expect(right).toBeDisabled();
+  });
+
+  it("waits with the next page on the left and the previous on the right", () => {
+    openOnPage(3);
+    expect(panelOf(4)).toHaveClass("-translate-x-full");
+    expect(panelOf(2)).toHaveClass("translate-x-full");
+    expect(panelOf(2)).not.toHaveClass("-translate-x-full");
+  });
+
+  it("resists a drag toward the previous page on the first page", () => {
+    const main = openOnPage(0);
+    fireEvent.touchStart(main, {
+      touches: [touch(200, 400)],
+      changedTouches: [touch(200, 400)],
+    });
+    fireEvent.touchMove(main, {
+      touches: [touch(100, 400)],
+      changedTouches: [touch(100, 400)],
+    });
+    expect(screen.getByTestId("page-track").style.transform).toBe(
+      "translateX(-25px)",
+    );
+  });
+
+  it("puts the next page button on the left", () => {
+    openOnPage(3);
+    const buttons = within(screen.getByRole("contentinfo")).getAllByRole(
+      "button",
+      { name: /page$/ },
+    );
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Next page",
+      "Previous page",
+    ]);
+  });
+
+  it("slides the page the way the finger went", () => {
+    const main = openOnPage(3);
+    Object.defineProperty(main, "clientWidth", { value: 400 });
+    fireEvent.touchStart(main, {
+      touches: [touch(100, 400)],
+      changedTouches: [touch(100, 400)],
+    });
+    fireEvent.touchEnd(main, {
+      touches: [],
+      changedTouches: [touch(300, 400)],
+    });
+    expect(screen.getByTestId("page-track").style.transform).toBe(
+      "translateX(400px)",
+    );
+    act(() => vi.advanceTimersByTime(500));
+    expect(location()).toHaveTextContent("page=4");
+  });
+
+  it("starts the progress bar at the right", () => {
+    openOnPage(3);
+    const bar = screen.getByRole("slider", { name: "Reading progress" });
+    vi.spyOn(bar, "getBoundingClientRect").mockReturnValue({
+      left: 0,
+      right: 900,
+      width: 900,
+      top: 0,
+      bottom: 6,
+      height: 6,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent.click(bar, { clientX: 890 });
+    expect(location()).toHaveTextContent("page=0");
+    fireEvent.click(bar, { clientX: 10 });
+    expect(location()).toHaveTextContent("page=9");
+  });
+
+  it.each<ReadingDirection | null>([ReadingDirectionLTR, null])(
+    "runs a File with direction %s left to right",
+    (direction) => {
+      openOnPage(3, direction);
+      fireEvent.keyDown(document.body, { key: "ArrowRight" });
+      expect(location()).toHaveTextContent("page=4");
+    },
+  );
+
+  it("runs every File left to right once following is turned off, and remembers it", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { unmount } = (() => {
+      settings.mutate = vi.fn();
+      return renderReader(10, undefined, "/?page=3", ReadingDirectionRTL);
+    })();
+
+    await openSettings(user);
+    const follow = await screen.findByRole("switch", {
+      name: "Follow Reading Direction",
+    });
+    expect(follow).toBeChecked();
+    await user.click(follow);
+    expect(follow).not.toBeChecked();
+    await user.keyboard("{Escape}");
+
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(location()).toHaveTextContent("page=4");
+    expect(panelOf(5)).toHaveClass("translate-x-full");
+    expect(panelOf(5)).not.toHaveClass("-translate-x-full");
+
+    unmount();
+    openOnPage(3);
+    fireEvent.keyDown(document.body, { key: "ArrowRight" });
+    expect(location()).toHaveTextContent("page=4");
   });
 });
 

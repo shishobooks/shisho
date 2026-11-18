@@ -221,6 +221,44 @@ func TestCBZGenerator_Generate(t *testing.T) {
 		assert.Equal(t, "Action", comicInfo.Genre)
 	})
 
+	t.Run("carries the Reading Direction in ComicInfo Manga", func(t *testing.T) {
+		t.Parallel()
+		rtl := models.ReadingDirectionRTL
+		ltr := models.ReadingDirectionLTR
+		tests := []struct {
+			name        string
+			sourceManga string
+			direction   *string
+			wantManga   string
+			wantParsed  *string
+		}{
+			{name: "right to left is YesAndRightToLeft", sourceManga: "", direction: &rtl, wantManga: cbz.MangaYesAndRightToLeft, wantParsed: &rtl},
+			{name: "right to left replaces Yes", sourceManga: cbz.MangaYes, direction: &rtl, wantManga: cbz.MangaYesAndRightToLeft, wantParsed: &rtl},
+			{name: "left to right on right to left manga is Yes", sourceManga: cbz.MangaYesAndRightToLeft, direction: &ltr, wantManga: cbz.MangaYes, wantParsed: &ltr},
+			{name: "left to right keeps No", sourceManga: cbz.MangaNo, direction: &ltr, wantManga: cbz.MangaNo, wantParsed: &ltr},
+			{name: "left to right adds nothing to a file that says nothing", sourceManga: "", direction: &ltr, wantManga: "", wantParsed: nil},
+			{name: "no direction keeps the source value", sourceManga: cbz.MangaYesAndRightToLeft, direction: nil, wantManga: cbz.MangaYesAndRightToLeft, wantParsed: &rtl},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				tmpDir := t.TempDir()
+				srcPath := filepath.Join(tmpDir, "source.cbz")
+				createTestCBZ(t, srcPath, testCBZOptions{title: "Manga", manga: tt.sourceManga})
+				destPath := filepath.Join(tmpDir, "dest.cbz")
+
+				file := &models.File{FileType: models.FileTypeCBZ, ReadingDirection: tt.direction}
+				gen := &CBZGenerator{}
+				require.NoError(t, gen.Generate(context.Background(), srcPath, destPath, &models.Book{Title: "Manga"}, file))
+
+				assert.Equal(t, tt.wantManga, readComicInfoFromCBZ(t, destPath).Manga)
+				parsed, err := cbz.Parse(destPath)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantParsed, parsed.ReadingDirection)
+			})
+		}
+	})
+
 	t.Run("includes all page images in output", func(t *testing.T) {
 		tmpDir := t.TempDir()
 
@@ -903,6 +941,7 @@ type testCBZOptions struct {
 	publisher     string
 	genre         string
 	tags          string
+	manga         string
 	pageCount     int
 	skipComicInfo bool
 	pages         []testPage // If specified, creates real images instead of dummy headers
@@ -973,6 +1012,9 @@ func createTestCBZ(t *testing.T, path string, opts testCBZOptions) {
 		}
 		if opts.tags != "" {
 			comicInfoXML.WriteString("  <Tags>" + opts.tags + "</Tags>\n")
+		}
+		if opts.manga != "" {
+			comicInfoXML.WriteString("  <Manga>" + opts.manga + "</Manga>\n")
 		}
 		comicInfoXML.WriteString("</ComicInfo>")
 

@@ -81,6 +81,11 @@ type ParsedMetadata struct {
 	Language *string `json:"language,omitempty"`
 	// Abridged indicates whether this is an abridged edition
 	Abridged *bool `json:"abridged,omitempty"`
+	// ReadingDirection is the order a Page-based File's pages run in
+	// (models.ReadingDirectionLTR or models.ReadingDirectionRTL), nil when the
+	// file doesn't say. Only file parsers set it: it isn't part of the plugin
+	// contract.
+	ReadingDirection *string `json:"-"`
 	// PageCount is the number of pages (CBZ and PDF files)
 	PageCount *int `json:"page_count,omitempty"`
 	// Identifiers contains file identifiers (ISBN, ASIN, etc.) parsed from metadata

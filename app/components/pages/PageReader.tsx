@@ -30,6 +30,7 @@ import {
 } from "@/hooks/queries/settings";
 import { useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { pagesToProbe, useDetectedPageFlow } from "@/hooks/useDetectedPageFlow";
+import { useFollowReadingDirection } from "@/hooks/useFollowReadingDirection";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { usePreloadImages } from "@/hooks/usePreloadImages";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
@@ -39,13 +40,19 @@ import { toastRequestError } from "@/libraries/api";
 import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
 import {
+  ReadingDirectionRTL,
   ThumbnailSize256,
   type Chapter,
   type PageFlow,
+  type ReadingDirection,
   type ThumbnailSize,
   type UserSettingsPayload,
 } from "@/types";
-import { pageTurnForKey, type PageTurn } from "@/utils/readerKeys";
+import {
+  pageTurnForKey,
+  turnInDirection,
+  type PageTurn,
+} from "@/utils/readerKeys";
 import { savedPage } from "@/utils/readingPosition";
 
 // Flatten chapters for progress bar (CBZ/PDF chapters don't nest)
@@ -197,6 +204,8 @@ interface PageReaderProps {
   // A page's image URL, or its thumbnail's when given a size.
   getPageUrl: (pageNum: number, size?: ThumbnailSize) => string;
   title?: string;
+  // The File's Reading Direction; none runs left to right.
+  readingDirection?: ReadingDirection | null;
 }
 
 export default function PageReader({
@@ -206,8 +215,14 @@ export default function PageReader({
   totalPages,
   getPageUrl,
   title,
+  readingDirection,
 }: PageReaderProps) {
   const navigate = useNavigate();
+  // Right to left reverses every sideways turn: keys, swipes, tap zones, the
+  // page buttons, and the progress bar, in either flow. The scrolled flow
+  // still stacks its pages top to bottom.
+  const [followDirection, setFollowDirection] = useFollowReadingDirection();
+  const rtl = followDirection && readingDirection === ReadingDirectionRTL;
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
 
@@ -491,14 +506,14 @@ export default function PageReader({
   // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const turn = pageTurnForKey(e);
+      const turn = turnInDirection(pageTurnForKey(e), rtl);
       if (turn === "next") goToPage(currentPage + 1);
       else if (turn === "prev") goToPage(currentPage - 1);
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentPage, goToPage]);
+  }, [currentPage, goToPage, rtl]);
 
   // The slide in progress: its timer, and how to finish it right away.
   const slideRef = useRef<{ timer: number; finish: () => void } | null>(null);
@@ -527,8 +542,11 @@ export default function PageReader({
     };
   }, [currentPage]);
 
+  // A swipe names its turn by the way the finger went, so the track slides
+  // that way whatever the Reading Direction; which page it brings follows it.
   const handleSwipe = useCallback(
-    (turn: PageTurn) => {
+    (swiped: PageTurn) => {
+      const turn = turnInDirection(swiped, rtl);
       const target = currentPage + (turn === "next" ? 1 : -1);
       const reduceMotion = window.matchMedia?.(
         "(prefers-reduced-motion: reduce)",
@@ -540,11 +558,11 @@ export default function PageReader({
         goToPage(target);
         return;
       }
-      moveTrack(turn === "next" ? -main.clientWidth : main.clientWidth, true);
+      moveTrack(swiped === "next" ? -main.clientWidth : main.clientWidth, true);
       const finish = () => goToPage(target);
       slideRef.current = { timer: window.setTimeout(finish, SLIDE_MS), finish };
     },
-    [currentPage, goToPage, moveTrack, totalPages],
+    [currentPage, goToPage, moveTrack, rtl, totalPages],
   );
   const swipeDrag = useMemo(
     () => ({
@@ -556,12 +574,17 @@ export default function PageReader({
         // tall page scrolled partway down.
         track.style.setProperty("--panel-top", `${main.scrollTop}px`);
         track.style.setProperty("--panel-height", `${main.clientHeight}px`);
-        const hasPage = dx < 0 ? currentPage < totalPages - 1 : currentPage > 0;
+        // A drag to the left brings in the page on the right: the next
+        // page, or in a right to left book the previous one.
+        const towardNext = dx < 0 !== rtl;
+        const hasPage = towardNext
+          ? currentPage < totalPages - 1
+          : currentPage > 0;
         moveTrack(hasPage ? dx : dx * EDGE_RESISTANCE, false);
       },
       onDragEnd: () => moveTrack(0, true),
     }),
-    [currentPage, moveTrack, totalPages],
+    [currentPage, moveTrack, rtl, totalPages],
   );
   const { onTouchStart: startSwipe, ...swipeRest } = useSwipeTurn(
     handleSwipe,
@@ -612,11 +635,36 @@ export default function PageReader({
   // Handle progress bar click
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+    // Right to left, the bar starts at the right.
+    const x = rtl ? rect.right - e.clientX : e.clientX - rect.left;
     const percent = x / rect.width;
     const targetPage = Math.round(percent * (totalPages - 1));
     goToPage(Math.max(0, Math.min(targetPage, totalPages - 1)));
   };
+
+  // The turn each side of the screen makes, left first.
+  const sideTurns: { side: "left" | "right"; turn: PageTurn }[] = [
+    { side: "left", turn: turnInDirection("prev", rtl) },
+    { side: "right", turn: turnInDirection("next", rtl) },
+  ];
+
+  const turnPage = (turn: PageTurn) =>
+    goToPage(currentPage + (turn === "next" ? 1 : -1));
+  const pageButton = ({ side, turn }: (typeof sideTurns)[number]) => (
+    <Button
+      aria-label={turn === "next" ? "Next page" : "Previous page"}
+      disabled={turn === "prev" && currentPage === 0}
+      onClick={() => turnPage(turn)}
+      size="icon"
+      variant="ghost"
+    >
+      {side === "left" ? (
+        <ChevronLeft className="h-5 w-5" />
+      ) : (
+        <ChevronRight className="h-5 w-5" />
+      )}
+    </Button>
+  );
 
   const handleProgressKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Home") goToPage(0);
@@ -756,6 +804,23 @@ export default function PageReader({
                     </div>
                   </div>
                 )}
+                <div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="follow-reading-direction">
+                      Follow Reading Direction
+                    </Label>
+                    <Switch
+                      checked={followDirection}
+                      id="follow-reading-direction"
+                      onCheckedChange={setFollowDirection}
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {followDirection
+                      ? "Right to left books turn the other way. Saved in this browser."
+                      : "Every book turns left to right. Saved in this browser."}
+                  </p>
+                </div>
                 <div className="flex items-center justify-between">
                   <Label htmlFor="hide-chrome">Auto-hide controls</Label>
                   <Switch
@@ -833,23 +898,21 @@ export default function PageReader({
             {/* Tap zones for mobile navigation. They duplicate the labeled
                 footer buttons for pointer users only, so assistive tech, the
                 tab order, and mouse focus skip them. */}
-            <Button
-              aria-hidden
-              className="absolute left-0 top-0 w-1/3 h-full z-10 opacity-0"
-              disabled={currentPage === 0}
-              onClick={() => goToPage(currentPage - 1)}
-              onMouseDown={(e) => e.preventDefault()}
-              tabIndex={-1}
-              variant="ghost"
-            />
-            <Button
-              aria-hidden
-              className="absolute right-0 top-0 w-1/3 h-full z-10 opacity-0"
-              onClick={() => goToPage(currentPage + 1)}
-              onMouseDown={(e) => e.preventDefault()}
-              tabIndex={-1}
-              variant="ghost"
-            />
+            {sideTurns.map(({ side, turn }) => (
+              <Button
+                aria-hidden
+                className={cn(
+                  "absolute top-0 w-1/3 h-full z-10 opacity-0",
+                  side === "left" ? "left-0" : "right-0",
+                )}
+                disabled={turn === "prev" && currentPage === 0}
+                key={side}
+                onClick={() => turnPage(turn)}
+                onMouseDown={(e) => e.preventDefault()}
+                tabIndex={-1}
+                variant="ghost"
+              />
+            ))}
 
             {/* Center tap zone: toggle chrome on mobile */}
             {hideChrome && (
@@ -882,6 +945,8 @@ export default function PageReader({
             >
               {panelPages.map((page) => {
                 const offset = page - currentPage;
+                // Which side of the current page it waits on.
+                const side = rtl ? -offset : offset;
                 return (
                   <div
                     aria-hidden={offset !== 0 || undefined}
@@ -891,8 +956,8 @@ export default function PageReader({
                       offset === 0
                         ? !fitWidth && "absolute inset-0"
                         : "absolute left-0 top-[var(--panel-top,0px)] h-[var(--panel-height,100%)] overflow-hidden",
-                      offset < 0 && "-translate-x-full",
-                      offset > 0 && "translate-x-full",
+                      side < 0 && "-translate-x-full",
+                      side > 0 && "translate-x-full",
                     )}
                     key={page}
                   >
@@ -950,7 +1015,10 @@ export default function PageReader({
             tabIndex={0}
           >
             <div
-              className="absolute inset-y-0 left-0 bg-primary rounded-full"
+              className={cn(
+                "absolute inset-y-0 bg-primary rounded-full",
+                rtl ? "right-0" : "left-0",
+              )}
               style={{ width: `${progressPercent}%` }}
             />
             {/* Chapter markers */}
@@ -961,7 +1029,7 @@ export default function PageReader({
                 <div
                   className="absolute top-1/2 -translate-y-1/2 w-0.5 h-2.5 bg-muted-foreground/50"
                   key={ch.id}
-                  style={{ left: `${pos}%` }}
+                  style={rtl ? { right: `${pos}%` } : { left: `${pos}%` }}
                   title={ch.title}
                 />
               );
@@ -976,27 +1044,12 @@ export default function PageReader({
 
         {/* Navigation buttons */}
         <div className="flex items-center justify-between px-4 py-2">
-          <Button
-            aria-label="Previous page"
-            disabled={currentPage === 0}
-            onClick={() => goToPage(currentPage - 1)}
-            size="icon"
-            variant="ghost"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
+          {pageButton(sideTurns[0])}
           <span className="text-sm text-muted-foreground">
             Page {(currentPage + 1).toLocaleString()} of{" "}
             {totalPages.toLocaleString()}
           </span>
-          <Button
-            aria-label="Next page"
-            onClick={() => goToPage(currentPage + 1)}
-            size="icon"
-            variant="ghost"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </Button>
+          {pageButton(sideTurns[1])}
         </div>
       </footer>
     </div>

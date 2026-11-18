@@ -463,6 +463,20 @@ func modifyCBZComicInfo(existing *cbzComicInfo, book *models.Book, file *models.
 		comicInfo.LanguageISO = *file.Language
 	}
 
+	// Update Reading Direction (Manga in ComicInfo.xml). Left to right only
+	// changes a value that says right to left: whether a left to right book
+	// is manga at all isn't something Shisho knows.
+	if file.ReadingDirection != nil {
+		switch *file.ReadingDirection {
+		case models.ReadingDirectionRTL:
+			comicInfo.Manga = cbz.MangaYesAndRightToLeft
+		case models.ReadingDirectionLTR:
+			if rd := cbz.ReadingDirectionFromManga(comicInfo.Manga); rd != nil && *rd == models.ReadingDirectionRTL {
+				comicInfo.Manga = cbz.MangaYes
+			}
+		}
+	}
+
 	// Update cover page in Pages section
 	if file.CoverPage != nil {
 		updateCoverPage(&comicInfo, *file.CoverPage)

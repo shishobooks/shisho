@@ -487,6 +487,13 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error",
 		},
 		{
+			name:   "file update with a Reading Direction for an EPUB",
+			method: http.MethodPost, path: fmt.Sprintf("/api/books/files/%d", seeded.fileID),
+			body:   `{"reading_direction":"rtl"}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
+			message: "Only CBZ and PDF files have a Reading Direction.",
+		},
+		{
 			name:   "review criteria with a field the section does not allow",
 			method: http.MethodPut, path: "/api/settings/review-criteria",
 			body:   `{"book_fields":["narrators"],"audio_fields":[]}`,

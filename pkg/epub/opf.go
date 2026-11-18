@@ -96,9 +96,10 @@ type Package struct {
 		} `xml:"item"`
 	} `xml:"manifest"`
 	Spine struct {
-		Text    string `xml:",chardata"`
-		Toc     string `xml:"toc,attr"`
-		Itemref []struct {
+		Text                     string `xml:",chardata"`
+		Toc                      string `xml:"toc,attr"`
+		PageProgressionDirection string `xml:"page-progression-direction,attr"`
+		Itemref                  []struct {
 			Text  string `xml:",chardata"`
 			Idref string `xml:"idref,attr"`
 		} `xml:"itemref"`

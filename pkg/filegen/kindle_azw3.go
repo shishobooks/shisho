@@ -198,7 +198,11 @@ func kf8Book(entries []kepub.Entry) (*mobi.KF8Book, error) {
 		return nil, NewGenerationError(models.FileTypeAZW3, fmt.Errorf("%w: %w", ErrUnsupportedContent, mobi.ErrNoDocuments),
 			"this book can't be converted to AZW3: its EPUB has no documents")
 	}
+	book.RightToLeft = strings.EqualFold(strings.TrimSpace(pkg.Spine.PageProgressionDirection), "rtl")
 	for _, m := range pkg.Metadata.Meta {
+		if m.Name == "primary-writing-mode" {
+			book.PrimaryWritingMode = strings.TrimSpace(m.Content)
+		}
 		if m.Property == "rendition:layout" && strings.TrimSpace(m.Text) == "pre-paginated" {
 			book.FixedLayout = true
 			book.OriginalResolution = pageResolution(book.Documents)

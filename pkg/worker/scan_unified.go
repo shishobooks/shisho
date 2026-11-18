@@ -1801,6 +1801,37 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
+	// Reading Direction (from metadata, then sidecar). Only a Page-based File
+	// has one.
+	if models.IsPageBasedFileType(file.FileType) {
+		existingDirection := ""
+		if file.ReadingDirection != nil {
+			existingDirection = *file.ReadingDirection
+		}
+		existingDirectionSource := ""
+		if file.ReadingDirectionSource != nil {
+			existingDirectionSource = *file.ReadingDirectionSource
+		}
+		if metadata.ReadingDirection != nil && models.IsReadingDirection(*metadata.ReadingDirection) {
+			directionSource := metadata.SourceForField("readingDirection")
+			if shouldUpdateScalar(*metadata.ReadingDirection, existingDirection, directionSource, existingDirectionSource, forceRefresh) {
+				logInfo("updating file reading direction", logger.Data{"from": existingDirection, "to": *metadata.ReadingDirection})
+				file.ReadingDirection = metadata.ReadingDirection
+				file.ReadingDirectionSource = &directionSource
+				fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "reading_direction", "reading_direction_source")
+				existingDirection, existingDirectionSource = *file.ReadingDirection, directionSource
+			}
+		}
+		if fileSidecarData != nil && fileSidecarData.ReadingDirection != nil && models.IsReadingDirection(*fileSidecarData.ReadingDirection) {
+			if shouldApplySidecarScalar(*fileSidecarData.ReadingDirection, existingDirection, existingDirectionSource, forceRefresh) {
+				logInfo("updating file reading direction from sidecar", logger.Data{"from": existingDirection, "to": *fileSidecarData.ReadingDirection})
+				file.ReadingDirection = fileSidecarData.ReadingDirection
+				file.ReadingDirectionSource = &sidecarSource
+				fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "reading_direction", "reading_direction_source")
+			}
+		}
+	}
+
 	// Publisher (from metadata)
 	publisherName := strings.TrimSpace(metadata.Publisher)
 	if publisherName != "" {
@@ -3731,6 +3762,12 @@ func mergeEnrichedMetadata(target, enrichment *mediafile.ParsedMetadata, source 
 		target.Abridged = enrichment.Abridged
 		target.FieldDataSources["abridged"] = source
 	}
+	// Plugins never set a Reading Direction, so this is the file parser's,
+	// merged as the fallback with its own source.
+	if target.ReadingDirection == nil && enrichment.ReadingDirection != nil {
+		target.ReadingDirection = enrichment.ReadingDirection
+		target.FieldDataSources["readingDirection"] = source
+	}
 	if len(target.CoverData) == 0 && len(enrichment.CoverData) > 0 {
 		target.CoverData = enrichment.CoverData
 		target.CoverMimeType = enrichment.CoverMimeType
@@ -4374,6 +4411,8 @@ func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file
 	file.LanguageSource = nil
 	file.Abridged = nil
 	file.AbridgedSource = nil
+	file.ReadingDirection = nil
+	file.ReadingDirectionSource = nil
 	file.ChapterSource = nil
 	file.NarratorSource = nil
 	file.IdentifierSource = nil
@@ -4385,6 +4424,7 @@ func (w *Worker) resetBookFileState(ctx context.Context, book *models.Book, file
 		"publisher_id", "publisher_source",
 		"language", "language_source",
 		"abridged", "abridged_source",
+		"reading_direction", "reading_direction_source",
 		"chapter_source",
 		"narrator_source", "identifier_source",
 	}

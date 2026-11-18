@@ -1058,3 +1058,25 @@ func TestScanEnricher_AppliesHighestConfidenceResult(t *testing.T) {
 	require.NotNil(t, books[0].Description, "the exact match clears the threshold and should be applied")
 	assert.Equal(t, "Exact match", *books[0].Description)
 }
+
+// A Reading Direction comes only from the file parser, so it survives an
+// enricher's merge with the parser's own source, not the plugin's.
+func TestMergeFileParserFallback_KeepsParsedReadingDirection(t *testing.T) {
+	t.Parallel()
+
+	rtl := models.ReadingDirectionRTL
+	fileMetadata := &mediafile.ParsedMetadata{
+		Title:            "File Title",
+		ReadingDirection: &rtl,
+		DataSource:       models.DataSourceCBZMetadata,
+	}
+
+	var enrichedMeta mediafile.ParsedMetadata
+	mergeEnrichedMetadata(&enrichedMeta, &mediafile.ParsedMetadata{Title: "Enricher Title"}, "plugin:test/enricher")
+	enrichedMeta.DataSource = "plugin:test/enricher"
+	mergeFileParserFallback(&enrichedMeta, fileMetadata, models.FileTypeCBZ)
+
+	require.NotNil(t, enrichedMeta.ReadingDirection)
+	assert.Equal(t, models.ReadingDirectionRTL, *enrichedMeta.ReadingDirection)
+	assert.Equal(t, models.DataSourceCBZMetadata, enrichedMeta.SourceForField("readingDirection"))
+}

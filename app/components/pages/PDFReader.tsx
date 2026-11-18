@@ -21,6 +21,7 @@ export default function PDFReader({
       fileId={file.id}
       getPageUrl={(page, size) => filePageUrl(file, page, size)}
       libraryId={libraryId}
+      readingDirection={file.reading_direction}
       title={fileTitle(file, bookTitle)}
       totalPages={file.page_count || 0}
     />

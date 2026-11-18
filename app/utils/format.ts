@@ -2,7 +2,11 @@ import { differenceInCalendarDays, formatDistance, startOfDay } from "date-fns";
 
 // Shared formatting utilities
 
-import { FileTypeKePub } from "@/types";
+import {
+  FileTypeKePub,
+  ReadingDirectionRTL,
+  type ReadingDirection,
+} from "@/types";
 
 /**
  * Formats bytes into a human-readable size in 1024-byte units, rounded to two
@@ -50,6 +54,15 @@ export const fileTitle = (file: { name?: string }, bookTitle = ""): string =>
  */
 export const fileTypeLabel = (fileType: string): string =>
   fileType === FileTypeKePub ? "KePub" : fileType.toUpperCase();
+
+/**
+ * Names a Page-based File's Reading Direction. A File with none runs left to
+ * right.
+ */
+export const readingDirectionLabel = (
+  direction: ReadingDirection | null | undefined,
+): string =>
+  direction === ReadingDirectionRTL ? "Right to left" : "Left to right";
 
 /**
  * Formats a page count with the right plural.

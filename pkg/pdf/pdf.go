@@ -142,6 +142,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	readingDirection := readingDirectionFromCatalog(xrt)
+
 	// Extract outline (bookmarks) as chapters. Best-effort: don't fail Parse.
 	var chapters []mediafile.ParsedChapter
 	outlineEntries, outlineErr := ExtractOutline(path)
@@ -161,19 +163,61 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	}
 
 	return &mediafile.ParsedMetadata{
-		Title:         title,
-		Authors:       authors,
-		Description:   description,
-		Tags:          tags,
-		ReleaseDate:   releaseDate,
-		PageCount:     pageCount,
-		Language:      language,
-		CoverData:     coverData,
-		CoverMimeType: coverMime,
-		CoverPage:     coverPage,
-		Chapters:      chapters,
-		DataSource:    models.DataSourcePDFMetadata,
+		Title:            title,
+		Authors:          authors,
+		Description:      description,
+		Tags:             tags,
+		ReleaseDate:      releaseDate,
+		PageCount:        pageCount,
+		Language:         language,
+		CoverData:        coverData,
+		CoverMimeType:    coverMime,
+		CoverPage:        coverPage,
+		Chapters:         chapters,
+		DataSource:       models.DataSourcePDFMetadata,
+		ReadingDirection: readingDirection,
 	}, nil
+}
+
+// readingDirectionFromCatalog is the Reading Direction a PDF's viewer
+// preferences state: /Direction /R2L runs right to left, /L2R left to right,
+// and anything else, or no preferences, says nothing. Some PDFs write the
+// value as a string, which a relaxed read accepts too.
+func readingDirectionFromCatalog(xrt *model.XRefTable) *string {
+	if xrt.RootDict == nil {
+		return nil
+	}
+	prefsObj, ok := xrt.RootDict["ViewerPreferences"]
+	if !ok {
+		return nil
+	}
+	prefs, err := xrt.DereferenceDict(prefsObj)
+	if err != nil || prefs == nil {
+		return nil
+	}
+	value, err := xrt.Dereference(prefs["Direction"])
+	if err != nil {
+		return nil
+	}
+	var stated string
+	switch v := value.(type) {
+	case types.Name:
+		stated = v.Value()
+	case types.StringLiteral:
+		stated = v.Value()
+	default:
+		return nil
+	}
+	var direction string
+	switch stated {
+	case "R2L":
+		direction = models.ReadingDirectionRTL
+	case "L2R":
+		direction = models.ReadingDirectionLTR
+	default:
+		return nil
+	}
+	return &direction
 }
 
 // splitAuthors splits an author string on comma, ampersand, or semicolon

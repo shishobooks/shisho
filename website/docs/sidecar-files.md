@@ -102,7 +102,8 @@ All metadata fields are optional, but keep `"version": 1`. Constraints include:
   ],
   "cover_page": 0,
   "language": "en-US",
-  "abridged": true
+  "abridged": true,
+  "reading_direction": "rtl"
 }
 ```
 
@@ -113,6 +114,7 @@ File-sidecar constraints include:
 - `cover_page` is a zero-indexed page number for CBZ and PDF.
 - `language` is a BCP 47 tag such as `en`, `en-US`, or `zh-Hans`.
 - `abridged` is `true`, `false`, or omitted when unknown.
+- `reading_direction` is `ltr` or `rtl`, for CBZ and PDF files only. See [Reading Direction](./metadata.md#reading-direction).
 
 Each chapter uses the position field for its media format:
 

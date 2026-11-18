@@ -8,9 +8,11 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/robinjoseph08/golib/pointerutil"
@@ -261,4 +263,50 @@ func TestEPUBToAZW3_FindsAnEscapedCover(t *testing.T) {
 	meta, err := mobi.Parse(out)
 	require.NoError(t, err)
 	assert.Equal(t, azw3TestImage(t, "image/jpeg"), meta.CoverData)
+}
+
+// An EPUB whose spine runs right to left becomes an AZW3 that does too, with
+// its own writing mode.
+func TestEPUBToAZW3_RightToLeft(t *testing.T) {
+	t.Parallel()
+	src := filepath.Join(t.TempDir(), "book.epub")
+	writeAZW3SourceEPUB(t, src)
+	rewriteZipEntry(t, src, "OEBPS/content.opf", func(opf []byte) []byte {
+		s := strings.Replace(string(opf), "<spine>", `<spine page-progression-direction="rtl">`, 1)
+		s = strings.Replace(s, `<meta name="cover" content="cover"/>`, `<meta name="cover" content="cover"/><meta name="primary-writing-mode" content="vertical-rl"/>`, 1)
+		return []byte(s)
+	})
+	book, file, _ := azw3Book(t, src, 7)
+	data, err := os.ReadFile(generateAZW3(t, models.FileTypeEPUB, src, book, file))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "\x00\x00\x02\x0f\x00\x00\x00\x0brtl", "page direction record")
+	assert.Contains(t, string(data), "\x00\x00\x02\x0d\x00\x00\x00\x13vertical-rl", "writing mode record")
+}
+
+// rewriteZipEntry replaces one entry of the zip at path with what edit makes
+// of it, keeping every entry's header so a stored mimetype stays stored.
+func rewriteZipEntry(t *testing.T, path, name string, edit func([]byte) []byte) {
+	t.Helper()
+	r, err := zip.OpenReader(path)
+	require.NoError(t, err)
+	var out bytes.Buffer
+	w := zip.NewWriter(&out)
+	for _, f := range r.File {
+		rc, err := f.Open()
+		require.NoError(t, err)
+		data, err := io.ReadAll(rc)
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+		if f.Name == name {
+			data = edit(data)
+		}
+		header := f.FileHeader
+		dst, err := w.CreateHeader(&header)
+		require.NoError(t, err)
+		_, err = dst.Write(data)
+		require.NoError(t, err)
+	}
+	require.NoError(t, w.Close())
+	require.NoError(t, r.Close())
+	require.NoError(t, os.WriteFile(path, out.Bytes(), 0o600))
 }

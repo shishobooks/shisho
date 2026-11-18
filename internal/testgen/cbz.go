@@ -153,6 +153,9 @@ func generateComicInfo(opts CBZOptions, pageCount int) string {
 	if opts.Translator != "" {
 		buf.WriteString(fmt.Sprintf("  <Translator>%s</Translator>\n", escapeXML(opts.Translator)))
 	}
+	if opts.Manga != "" {
+		buf.WriteString(fmt.Sprintf("  <Manga>%s</Manga>\n", escapeXML(opts.Manga)))
+	}
 
 	buf.WriteString(fmt.Sprintf("  <PageCount>%d</PageCount>\n", pageCount))
 

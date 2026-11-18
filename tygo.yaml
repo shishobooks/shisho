@@ -40,7 +40,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/books"
     output_path: "app/types/generated/books.ts"
     frontmatter: |
-      import { AuthorRole, Book, FileRole, ReadingStatusFilter, ReviewOverride, ReviewedFilter, SeriesNumberUnit } from "@/types";
+      import { AuthorRole, Book, FileRole, ReadingDirection, ReadingStatusFilter, ReviewOverride, ReviewedFilter, SeriesNumberUnit } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/config"

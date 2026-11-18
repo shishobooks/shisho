@@ -53,14 +53,21 @@ import {
   FileRoleMain,
   FileRoleSupplement,
   FileTypeM4B,
+  ReadingDirectionLTR,
+  ReadingDirectionRTL,
   type Book,
   type File,
   type FileRole,
+  type ReadingDirection,
   type ReviewOverride,
 } from "@/types";
 import { fileCoverUrl } from "@/utils/coverUrl";
 import { isEbookFileType, isMainEligibleFileType } from "@/utils/fileTypes";
-import { fileTypeLabel, formatCount } from "@/utils/format";
+import {
+  fileTypeLabel,
+  formatCount,
+  readingDirectionLabel,
+} from "@/utils/format";
 import { pageThumbnailSize } from "@/utils/pageUrl";
 import { reviewDraftChanged } from "@/utils/review";
 
@@ -159,6 +166,11 @@ export function FileEditDialog({
   const [isPreferredCover, setIsPreferredCover] = useState(
     file.is_preferred_cover ?? false,
   );
+  // A File with no Reading Direction runs left to right, so that's what the
+  // field shows, and it's sent only when changed.
+  const [readingDirection, setReadingDirection] = useState<ReadingDirection>(
+    file.reading_direction ?? ReadingDirectionLTR,
+  );
 
   const updateFileMutation = useUpdateFile();
   const uploadCoverMutation = useUploadFileCover();
@@ -236,6 +248,7 @@ export function FileEditDialog({
     coverPage: number | null;
     language: string;
     abridged: string;
+    readingDirection: ReadingDirection;
     isPreferredCover: boolean;
     /** The file's saved override; null means "auto". */
     reviewOverride: ReviewOverride | null;
@@ -282,6 +295,8 @@ export function FileEditDialog({
     const initialReviewOverride: ReviewOverride | null =
       file.review_override ?? null;
     const initialIsPreferredCover = file.is_preferred_cover ?? false;
+    const initialReadingDirection =
+      file.reading_direction ?? ReadingDirectionLTR;
 
     setSaveError(null);
     setNarrators(initialNarrators);
@@ -294,6 +309,7 @@ export function FileEditDialog({
     setShowDowngradeConfirm(false);
     setLanguage(initialLanguage);
     setAbridged(initialAbridged);
+    setReadingDirection(initialReadingDirection);
     setPendingCoverPage(null);
     setPendingCoverFile(null);
     updatePendingCoverPreview(null);
@@ -312,6 +328,7 @@ export function FileEditDialog({
       coverPage: file.cover_page ?? null,
       language: initialLanguage,
       abridged: initialAbridged,
+      readingDirection: initialReadingDirection,
       isPreferredCover: initialIsPreferredCover,
       reviewOverride: initialReviewOverride,
     });
@@ -330,6 +347,7 @@ export function FileEditDialog({
       fileRole !== initialValues.fileRole ||
       language !== initialValues.language ||
       abridged !== initialValues.abridged ||
+      readingDirection !== initialValues.readingDirection ||
       pendingCoverFile !== null ||
       (pendingCoverPage !== null &&
         pendingCoverPage !== initialValues.coverPage) ||
@@ -347,6 +365,7 @@ export function FileEditDialog({
     fileRole,
     language,
     abridged,
+    readingDirection,
     pendingCoverFile,
     pendingCoverPage,
     isPreferredCover,
@@ -388,6 +407,7 @@ export function FileEditDialog({
       release_date?: string;
       language?: string;
       abridged?: string;
+      reading_direction?: ReadingDirection;
       identifiers?: Array<{ type: string; value: string }>;
       is_preferred_cover?: boolean;
     } = {};
@@ -443,6 +463,10 @@ export function FileEditDialog({
     // Check if abridged changed
     if (abridged !== initialValues?.abridged) {
       payload.abridged = abridged;
+    }
+
+    if (readingDirection !== initialValues?.readingDirection) {
+      payload.reading_direction = readingDirection;
     }
 
     // Check if identifiers changed
@@ -553,6 +577,7 @@ export function FileEditDialog({
       coverPage: pendingCoverPage ?? initialValues?.coverPage ?? null,
       language: canonicalLanguage,
       abridged: canonicalAbridged,
+      readingDirection,
       isPreferredCover,
       reviewOverride:
         draftReviewOverride === undefined || fileRole === FileRoleSupplement
@@ -910,6 +935,32 @@ export function FileEditDialog({
                   value={language}
                 />
               </div>
+
+              {/* Reading Direction (Page-based Files only) */}
+              {isPageBased && (
+                <div className="space-y-2">
+                  <Label htmlFor="reading-direction">Reading Direction</Label>
+                  <Select
+                    onValueChange={(v) =>
+                      setReadingDirection(v as ReadingDirection)
+                    }
+                    value={readingDirection}
+                  >
+                    <SelectTrigger id="reading-direction">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(
+                        [ReadingDirectionLTR, ReadingDirectionRTL] as const
+                      ).map((d) => (
+                        <SelectItem key={d} value={d}>
+                          {readingDirectionLabel(d)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Abridged */}
               <div className="space-y-2">

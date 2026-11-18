@@ -47,7 +47,11 @@ import (
 //   - 10: MOBI and AZW3 downloads are marked as personal documents (PDOC),
 //     and fixed-layout AZW3s carry the comic EXTH records
 //     (pkg/mobi/write.go, pkg/mobi/kf8_write.go).
-const GeneratorVersion = 10
+//   - 11: AZW3 downloads of a right to left EPUB carry the page direction
+//     record, a fixed-layout one also the comic writing mode, and an EPUB's
+//     own primary-writing-mode carries over (pkg/filegen/kindle_azw3.go,
+//     pkg/mobi/kf8_write.go).
+const GeneratorVersion = 11
 
 // Fingerprint represents the metadata that affects file generation.
 // Changes to any of these fields should invalidate the cached file.
@@ -73,6 +77,7 @@ type Fingerprint struct {
 	Name             *string                 `json:"name,omitempty"`   // File name (edition name)
 	Language         *string                 `json:"language,omitempty"`
 	Abridged         *bool                   `json:"abridged,omitempty"`
+	ReadingDirection *string                 `json:"reading_direction,omitempty"`
 	SourceModTime    time.Time               `json:"source_mod_time"`
 	SourceSize       int64                   `json:"source_size"`
 }
@@ -228,6 +233,7 @@ func ComputeFingerprint(book *models.Book, file *models.File) (*Fingerprint, err
 		}
 		fp.Language = file.Language
 		fp.Abridged = file.Abridged
+		fp.ReadingDirection = file.ReadingDirection
 	}
 
 	// Add authors sorted by SortOrder for consistent fingerprinting

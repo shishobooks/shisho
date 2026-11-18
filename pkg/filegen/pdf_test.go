@@ -916,3 +916,93 @@ func TestPDFGenerator_Generate_CancelledContext(t *testing.T) {
 	require.ErrorAs(t, err, &genErr)
 	assert.Equal(t, models.FileTypePDF, genErr.FileType)
 }
+
+// A download carries the File's Reading Direction in the catalog's viewer
+// preferences, where a scan of the download reads it back.
+func TestPDFGenerator_Generate_ReadingDirection(t *testing.T) {
+	t.Parallel()
+
+	rtl := models.ReadingDirectionRTL
+	ltr := models.ReadingDirectionLTR
+	generate := func(t *testing.T, src string, direction *string) string {
+		t.Helper()
+		dest := filepath.Join(t.TempDir(), "dest.pdf")
+		file := &models.File{FileType: models.FileTypePDF, ReadingDirection: direction}
+		require.NoError(t, (&PDFGenerator{}).Generate(context.Background(), src, dest, &models.Book{Title: "Manga"}, file))
+		return dest
+	}
+	parsed := func(t *testing.T, path string) *string {
+		t.Helper()
+		meta, err := pdf.Parse(path)
+		require.NoError(t, err)
+		return meta.ReadingDirection
+	}
+	src := filepath.Join(t.TempDir(), "source.pdf")
+	writeTestPDF(t, src, nil)
+
+	t.Run("right to left is written", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, &rtl, parsed(t, generate(t, src, &rtl)))
+	})
+	t.Run("left to right replaces right to left", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, &ltr, parsed(t, generate(t, generate(t, src, &rtl), &ltr)))
+	})
+	t.Run("left to right adds nothing to a PDF that says nothing", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, parsed(t, generate(t, src, &ltr)))
+	})
+	t.Run("other preferences are kept, even in their own object", func(t *testing.T) {
+		t.Parallel()
+		indirect := filepath.Join(t.TempDir(), "indirect.pdf")
+		writeCatalogTestPDF(t, indirect, "/ViewerPreferences 4 0 R", "<< /Direction /R2L /HideToolbar true >>")
+		dest := generate(t, indirect, &ltr)
+		assert.Equal(t, &ltr, parsed(t, dest))
+		data, err := os.ReadFile(dest)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), "/HideToolbar true")
+	})
+	t.Run("a string Direction is replaced too", func(t *testing.T) {
+		t.Parallel()
+		str := filepath.Join(t.TempDir(), "string.pdf")
+		writeCatalogTestPDF(t, str, "/ViewerPreferences << /Direction (R2L) >>")
+		assert.Equal(t, &ltr, parsed(t, generate(t, str, &ltr)))
+	})
+	t.Run("preferences it can't read are left alone", func(t *testing.T) {
+		t.Parallel()
+		odd := filepath.Join(t.TempDir(), "odd.pdf")
+		writeCatalogTestPDF(t, odd, "/ViewerPreferences 9 0 R")
+		data, err := os.ReadFile(generate(t, odd, &rtl))
+		require.NoError(t, err)
+		assert.NotContains(t, string(data), "/R2L")
+	})
+	t.Run("no direction keeps the PDF's own", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, &rtl, parsed(t, generate(t, generate(t, src, &rtl), nil)))
+	})
+}
+
+// writeCatalogTestPDF writes a one-page PDF whose catalog has catalogExtra
+// added, with extra objects numbered from 4.
+func writeCatalogTestPDF(t *testing.T, path, catalogExtra string, extra ...string) {
+	t.Helper()
+	objects := append([]string{
+		"<< /Type /Catalog /Pages 2 0 R " + catalogExtra + " >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 /MediaBox [0 0 612 792] >>",
+		"<< /Type /Page /Parent 2 0 R >>",
+	}, extra...)
+	var b strings.Builder
+	b.WriteString("%PDF-1.4\n")
+	offsets := make([]int, len(objects))
+	for i, o := range objects {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objects)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xref)
+	require.NoError(t, os.WriteFile(path, []byte(b.String()), 0o644))
+}

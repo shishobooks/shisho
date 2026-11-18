@@ -3,7 +3,13 @@ import type { ReactNode } from "react";
 import type { LabelGridRow } from "@/components/library/LabelGrid";
 import TextLink from "@/components/library/TextLink";
 import { languageLabel } from "@/constants/languages";
-import { FileTypeM4B, type File, type PluginIdentifierType } from "@/types";
+import { isPageBasedFileType } from "@/libraries/utils";
+import {
+  FileTypeM4B,
+  ReadingDirectionRTL,
+  type File,
+  type PluginIdentifierType,
+} from "@/types";
 import {
   fileTypeLabel,
   formatBitrate,
@@ -14,6 +20,7 @@ import {
   formatIdentifierType,
   formatPageCount,
   getFilename,
+  readingDirectionLabel,
 } from "@/utils/format";
 import { getIdentifierUrl } from "@/utils/identifiers";
 
@@ -48,7 +55,8 @@ export const fileHeaderFacts = (file: File): string[] =>
   ].filter((fact): fact is string => fact !== null);
 
 /**
- * What edition the file is: publisher, release date, language, abridged.
+ * What edition the file is: publisher, release date, language, Reading
+ * Direction, abridged.
  * `linkPublisher: false` (a Share Link) names the publisher as plain text.
  */
 export const fileEditionRows = (
@@ -77,6 +85,17 @@ export const fileEditionRows = (
   }
   if (file.language) {
     rows.push({ label: "Language", value: languageLabel(file.language) });
+  }
+  // Left to right is how nearly every book runs, so only right to left says
+  // something.
+  if (
+    isPageBasedFileType(file.file_type) &&
+    file.reading_direction === ReadingDirectionRTL
+  ) {
+    rows.push({
+      label: "Reading Direction",
+      value: readingDirectionLabel(file.reading_direction),
+    });
   }
   // Audiobooks were often sold abridged, so an M4B always says which it is;
   // another format says so only when it is.

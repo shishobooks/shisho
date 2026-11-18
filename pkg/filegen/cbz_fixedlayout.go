@@ -66,6 +66,7 @@ func buildCBZMetadata(book *models.Book, file *models.File) *fixedlayout.Metadat
 	}
 	if file != nil {
 		metadata.Language = file.Language
+		metadata.ReadingDirection = file.ReadingDirection
 	}
 
 	// Add authors with their roles and sort names

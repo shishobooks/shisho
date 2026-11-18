@@ -784,6 +784,17 @@ func (h *handler) updateFile(c echo.Context) error {
 		return err
 	}
 
+	// A Reading Direction is checked before anything changes. The binder lets
+	// "" through, which isn't a direction.
+	if params.ReadingDirection != nil {
+		if !models.IsReadingDirection(*params.ReadingDirection) {
+			return errcodes.ValidationError("Reading Direction must be ltr or rtl.")
+		}
+		if !models.IsPageBasedFileType(file.FileType) {
+			return errcodes.InvalidState("Only CBZ and PDF files have a Reading Direction.")
+		}
+	}
+
 	// Get the library to check OrganizeFileStructure
 	library, err := h.libraryService.RetrieveLibrary(ctx, libraries.RetrieveLibraryOptions{
 		ID: &file.LibraryID,
@@ -1122,6 +1133,15 @@ func (h *handler) updateFile(c echo.Context) error {
 				file.AbridgedSource = strPtr(models.DataSourceManual)
 				opts.Columns = append(opts.Columns, "abridged", "abridged_source")
 			}
+		}
+	}
+
+	// Update Reading Direction
+	if params.ReadingDirection != nil {
+		if file.ReadingDirection == nil || *file.ReadingDirection != *params.ReadingDirection {
+			file.ReadingDirection = params.ReadingDirection
+			file.ReadingDirectionSource = strPtr(models.DataSourceManual)
+			opts.Columns = append(opts.Columns, "reading_direction", "reading_direction_source")
 		}
 	}
 

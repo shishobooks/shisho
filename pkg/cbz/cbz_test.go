@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -232,6 +233,54 @@ func TestParseCBZ_Language(t *testing.T) {
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.wantLang, metadata.Language)
+		})
+	}
+}
+
+func TestParseCBZ_ReadingDirection(t *testing.T) {
+	t.Parallel()
+
+	ltr := models.ReadingDirectionLTR
+	rtl := models.ReadingDirectionRTL
+
+	tests := []struct {
+		name      string
+		comicInfo string // empty means the archive has no ComicInfo.xml
+		want      *string
+	}{
+		{name: "YesAndRightToLeft runs right to left", comicInfo: "<Manga>YesAndRightToLeft</Manga>", want: &rtl},
+		{name: "value is matched without regard to case or spaces", comicInfo: "<Manga> yesandrighttoleft </Manga>", want: &rtl},
+		{name: "Yes is manga read left to right", comicInfo: "<Manga>Yes</Manga>", want: &ltr},
+		{name: "No runs left to right", comicInfo: "<Manga>No</Manga>", want: &ltr},
+		{name: "Unknown says nothing", comicInfo: "<Manga>Unknown</Manga>", want: nil},
+		{name: "no Manga element says nothing", comicInfo: "<Title>Test</Title>", want: nil},
+		{name: "no ComicInfo says nothing", comicInfo: "", want: nil},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cbzPath := filepath.Join(t.TempDir(), "test.cbz")
+
+			f, err := os.Create(cbzPath)
+			require.NoError(t, err)
+			zw := zip.NewWriter(f)
+			imgWriter, err := zw.Create("page001.jpg")
+			require.NoError(t, err)
+			_, err = imgWriter.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
+			require.NoError(t, err)
+			if tt.comicInfo != "" {
+				w, err := zw.Create("ComicInfo.xml")
+				require.NoError(t, err)
+				_, err = w.Write([]byte(`<?xml version="1.0"?><ComicInfo>` + tt.comicInfo + `</ComicInfo>`))
+				require.NoError(t, err)
+			}
+			require.NoError(t, zw.Close())
+			require.NoError(t, f.Close())
+
+			metadata, err := Parse(cbzPath)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, metadata.ReadingDirection)
 		})
 	}
 }

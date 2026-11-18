@@ -7,6 +7,14 @@ const CONTROL_KEYS =
 
 export type PageTurn = "next" | "prev";
 
+// The page turn a rightward or leftward input makes once the Reading Direction
+// is applied. Inputs name the turn as a left to right book takes it, so in a
+// right to left book they run the other way: right goes back.
+export const turnInDirection = <T extends PageTurn | null>(
+  turn: T,
+  rightToLeft: boolean,
+): T => (turn && rightToLeft ? (turn === "next" ? "prev" : "next") : turn) as T;
+
 // The page turn a keydown in the reader asks for, or null for none.
 export const pageTurnForKey = (event: KeyboardEvent): PageTurn | null => {
   // Browser shortcuts such as Cmd+D and Alt+Left aren't page turns.
