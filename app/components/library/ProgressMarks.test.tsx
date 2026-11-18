@@ -148,7 +148,14 @@ describe("ProgressMarks close together", () => {
       ...screen.getAllByTestId("chapter-marker"),
       ...screen.getAllByTestId("bookmark-marker"),
     ].map((m) => m.style.maxWidth);
-    expect(widths).toEqual(["0.3%", "0.3%", "", "0.3%"]);
+    expect(widths).toEqual(["0.3%", "0.3%", "", ""]);
+  });
+
+  it("keeps a chapter's hit area whole under a bookmark at the same place", () => {
+    // The bookmark draws on top; the chapter's tick stays reachable around it.
+    render(<ProgressMarks markers={[marker(0.5), bookmark(0.5)]} />);
+    expect(screen.getByTestId("chapter-marker").style.maxWidth).toBe("");
+    expect(screen.getByTestId("bookmark-marker").style.maxWidth).toBe("");
   });
 });
 

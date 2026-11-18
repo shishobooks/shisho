@@ -55,21 +55,27 @@ export default function ProgressMarks({
         position >= 0 && position <= 1,
   );
   if (shown.length === 0) return null;
-  // How close each mark's nearest neighbor is, as a share of the bar. Its
-  // hit area stays within that, so pointing at a mark in a crowded stretch
-  // (a book with a hundred short chapters) picks that mark.
-  const byPosition = [...shown].sort((a, b) => a.position - b.position);
-  const room = new Map(
-    byPosition.map((mark, i) => [
-      mark,
-      Math.min(
-        i > 0 ? mark.position - byPosition[i - 1].position : Infinity,
-        i < byPosition.length - 1
-          ? byPosition[i + 1].position - mark.position
-          : Infinity,
-      ),
-    ]),
-  );
+  // How close each mark's nearest neighbor of its own kind is, as a share
+  // of the bar. Its hit area stays within that, so pointing at a mark in a
+  // crowded stretch (a book with a hundred short chapters) picks that mark.
+  // A bookmark draws over a chapter mark, so the two kinds may overlap.
+  const room = new Map<ProgressMark, number>();
+  for (const kind of ["chapter", "bookmark"] as const) {
+    const ofKind = shown
+      .filter((mark) => mark.kind === kind)
+      .sort((a, b) => a.position - b.position);
+    ofKind.forEach((mark, i) => {
+      room.set(
+        mark,
+        Math.min(
+          i > 0 ? mark.position - ofKind[i - 1].position : Infinity,
+          i < ofKind.length - 1
+            ? ofKind[i + 1].position - mark.position
+            : Infinity,
+        ),
+      );
+    });
+  }
   // Bookmarks draw over chapter marks, so one at a chapter's start can still
   // be pointed at.
   shown.sort(
