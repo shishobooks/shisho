@@ -154,7 +154,9 @@ describe("Enrich existing books after installing an enricher", () => {
     });
     expect(prompt).toHaveTextContent(/takes a while/i);
     expect(prompt).toHaveTextContent(/services for every book/i);
-    expect(prompt).toHaveTextContent(/manual edits are kept/i);
+    expect(prompt).toHaveTextContent(
+      /manual edits and values you chose in identify are kept/i,
+    );
 
     await user.click(
       within(prompt).getByRole("button", { name: "Enrich books" }),

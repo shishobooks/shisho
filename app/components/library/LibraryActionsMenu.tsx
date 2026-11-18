@@ -65,7 +65,7 @@ export const LibraryActionsMenu = ({
       </DropdownMenu>
       <ConfirmDialog
         confirmLabel="Start scan"
-        description={`Runs your metadata plugins again on every book in ${libraryName ?? "this library"}, including books whose files haven't changed, mostly filling in details they're missing. It takes a while and calls each plugin's services for every book. Manual edits are kept.`}
+        description={`Runs your metadata plugins again on every book in ${libraryName ?? "this library"}, including books whose files haven't changed, replacing details that came from the files themselves. It takes a while and calls each plugin's services for every book. Manual edits and values you chose in Identify are kept.`}
         isPending={createJob.isPending}
         onConfirm={startScan}
         onOpenChange={setConfirmOpen}

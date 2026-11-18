@@ -79,8 +79,8 @@ func validateIdentifierTypes(fields map[string]any) error {
 // changed or new entry takes its own intent (plugin source for a Proposal
 // Acceptance, manual otherwise). The aggregate follows the field-level
 // intent. A collection equal to the stored one is a no-op that preserves
-// both layers without any delete or insert, and a clear nulls the aggregate
-// so a later Scan may repopulate the collection.
+// both layers without any delete or insert, and a clear leaves a protected
+// empty collection (see clearedSource) that a later Scan leaves empty.
 func (h *handler) applyIdentifiers(ctx context.Context, file *models.File, proposed []mediafile.ParsedIdentifier, attr applyAttribution, overrides *ApplyOverrides) (bool, error) {
 	var intents map[string]string
 	if overrides != nil {
@@ -100,7 +100,7 @@ func (h *handler) applyIdentifiers(ctx context.Context, file *models.File, propo
 	}
 
 	unchanged := identifiers.ReconcileSources(file.Identifiers, toInsert)
-	if unchanged && (len(toInsert) > 0 || file.IdentifierSource == nil) {
+	if unchanged && (len(toInsert) > 0 || emptySlotSettled(file.IdentifierSource)) {
 		return false, nil
 	}
 

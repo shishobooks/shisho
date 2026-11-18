@@ -74,17 +74,19 @@ func validateSourceIntents(payload *PluginApplyPayload) error {
 // nil value is an Explicit Clear. It reports false, leaving both untouched,
 // when the value is a semantic no-op.
 //
-// A clear nulls the value and its source so a later Scan may repopulate the
-// field. That includes a source left behind on an already-absent value:
-// before ADR 0006 a clear kept the plugin source, which outranks embedded
-// metadata, so clearing again has to be able to heal it.
+// A clear leaves a protected empty slot: no value, with a manual source, as
+// the Edit form stores most cleared fields. A Scan then leaves it empty, so a
+// value a bad match set and the editor removed doesn't come back when the
+// next Scan's automatic search lands on the same match (ADR 0006
+// amendment). Refresh all metadata and Reset to file metadata can still fill
+// it.
 func applyOptional[T any](value *T, stored **T, storedSource **string, source string, equal func(a, b T) bool) bool {
 	if value == nil {
-		if *stored == nil && *storedSource == nil {
+		if *stored == nil && emptySlotSettled(*storedSource) {
 			return false
 		}
 		*stored = nil
-		*storedSource = nil
+		*storedSource = clearedSource()
 		return true
 	}
 	if *stored != nil && equal(*value, **stored) {
@@ -93,6 +95,27 @@ func applyOptional[T any](value *T, stored **T, storedSource **string, source st
 	*stored = value
 	*storedSource = &source
 	return true
+}
+
+// clearedSource is the source an Explicit Clear stores: a protected empty
+// slot, as the Edit form writes for most cleared fields.
+func clearedSource() *string {
+	source := models.DataSourceManual
+	return &source
+}
+
+// emptySlotSettled reports whether an empty field with this source needs no
+// write when it is cleared: it is already a protected empty slot, or it has
+// no source or one below plugins, which nothing has to be protected from yet.
+// Only a leftover plugin or sidecar source on an empty field is stamped
+// manual. The Identify form sends empty rows it selects in bulk, so stamping
+// every empty field would block later plugins from filling fields the editor
+// never touched.
+func emptySlotSettled(source *string) bool {
+	if source == nil || *source == "" || *source == models.DataSourceManual {
+		return true
+	}
+	return models.GetDataSourcePriority(*source) >= models.DataSourceFileMetadataPriority
 }
 
 // applyOptionalValue is applyOptional for comparable values. Absence is nil

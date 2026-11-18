@@ -55,10 +55,10 @@ func newEnricherCoverFixture(t *testing.T) (file *models.File, dir, prevPath str
 	return file, dir, prevPath, prevBytes
 }
 
-func enricherCoverMetadata(data []byte, mime string) *mediafile.ParsedMetadata {
+func enricherCoverMetadata(data []byte) *mediafile.ParsedMetadata {
 	return &mediafile.ParsedMetadata{
 		CoverData:        data,
-		CoverMimeType:    mime,
+		CoverMimeType:    "image/png",
 		FieldDataSources: map[string]string{"cover": models.PluginDataSource("test", "enricher")},
 	}
 }
@@ -81,7 +81,7 @@ func TestUpgradeEnricherCover_TruncatedImageIsSkipped(t *testing.T) {
 	file, dir, prevPath, prevBytes := newEnricherCoverFixture(t)
 
 	truncated := makePNG(800, 1200)[:33]
-	tc.worker.upgradeEnricherCover(tc.ctx, enricherCoverMetadata(truncated, "image/png"), file, dir, nil)
+	tc.worker.upgradeEnricherCover(tc.ctx, enricherCoverMetadata(truncated), file, dir, scanRules{}, nil)
 
 	assertEnricherCoverUntouched(t, file, prevPath, prevBytes)
 	entries, err := filepath.Glob(filepath.Join(dir, "book.epub.cover.*"))
@@ -95,7 +95,7 @@ func TestUpgradeEnricherCover_FailedWriteKeepsPreviousCover(t *testing.T) {
 	file, dir, prevPath, prevBytes := newEnricherCoverFixture(t)
 	obstruct(t, filepath.Join(dir, "book.epub.cover.png"))
 
-	tc.worker.upgradeEnricherCover(tc.ctx, enricherCoverMetadata(makePNG(800, 1200), "image/png"), file, dir, nil)
+	tc.worker.upgradeEnricherCover(tc.ctx, enricherCoverMetadata(makePNG(800, 1200)), file, dir, scanRules{}, nil)
 
 	assertEnricherCoverUntouched(t, file, prevPath, prevBytes)
 }
@@ -202,7 +202,7 @@ func TestUpgradeEnricherCover_KeepsPreviousCoverWhenUpdateFails(t *testing.T) {
 	cancelled, cancel := context.WithCancel(tc.ctx)
 	cancel()
 
-	tc.worker.upgradeEnricherCover(cancelled, enricherCoverMetadata(makePNG(800, 1200), "image/png"), file, dir, nil)
+	tc.worker.upgradeEnricherCover(cancelled, enricherCoverMetadata(makePNG(800, 1200)), file, dir, scanRules{}, nil)
 
 	got, err := os.ReadFile(prevPath)
 	require.NoError(t, err, "the previous cover must survive a failed database write")
@@ -226,4 +226,37 @@ func TestExtractPDFPageCover_FailedWriteKeepsPreviousCover(t *testing.T) {
 	got, readErr := os.ReadFile(prevPath)
 	require.NoError(t, readErr, "the previous cover must still exist after a failed install")
 	assert.Equal(t, prevBytes, got)
+}
+
+// An ordinary rescan keeps a cover a plugin or the user chose. Only a cover
+// from the file itself is upgraded to a larger enricher cover (ADR 0027).
+func TestUpgradeEnricherCover_KeepsChosenCovers(t *testing.T) {
+	t.Parallel()
+	rescan := scanRules{keepPluginValues: true}
+
+	for _, existing := range []string{models.PluginDataSource("test", "identified"), models.DataSourceManual} {
+		t.Run(existing, func(t *testing.T) {
+			t.Parallel()
+			tc := newTestContext(t)
+			file, dir, prevPath, prevBytes := newEnricherCoverFixture(t)
+			file.CoverSource = &existing
+
+			tc.worker.upgradeEnricherCover(tc.ctx, enricherCoverMetadata(makePNG(800, 1200)), file, dir, rescan, nil)
+
+			got, err := os.ReadFile(prevPath)
+			require.NoError(t, err)
+			assert.Equal(t, prevBytes, got)
+			assert.Equal(t, existing, *file.CoverSource)
+		})
+	}
+
+	t.Run("a cover from the file is upgraded", func(t *testing.T) {
+		t.Parallel()
+		tc := newTestContext(t)
+		file, dir, _, _ := newEnricherCoverFixture(t)
+
+		tc.worker.upgradeEnricherCover(tc.ctx, enricherCoverMetadata(makePNG(800, 1200)), file, dir, rescan, nil)
+
+		assert.Equal(t, models.PluginDataSource("test", "enricher"), *file.CoverSource)
+	})
 }

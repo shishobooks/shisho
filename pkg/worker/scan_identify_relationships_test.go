@@ -40,7 +40,8 @@ const identifyRelationshipEnricherJS = `var plugin = {
 };`
 
 // Native M4B metadata has lower priority than plugin metadata, unlike a plugin
-// parser. This fixture catches a source left behind after a complete clear.
+// parser. The embedded relationships are what a Scan would refill a cleared
+// collection from.
 func newIdentifyRelationshipScanFixture(t *testing.T, autoEnrich, rootLevel bool) *identifyScanFixture {
 	t.Helper()
 	testgen.SkipIfNoFFmpeg(t)
@@ -133,8 +134,8 @@ func TestIdentifyApply_RelationshipClear_ThenOrdinaryScan(t *testing.T) {
 	require.False(t, t.Failed(), "precondition: all four relationships come from native M4B metadata")
 	e := newIdentifyApplyServer(t, f.tc)
 
-	// Establish plugin provenance before clearing, so stale provenance would
-	// outrank the embedded metadata on the next ordinary Scan.
+	// Establish plugin provenance before clearing, so the clear has to replace
+	// it.
 	postIdentifyApply(t, e, plugins.PluginApplyPayload{
 		BookID: book.ID,
 		FileID: &file.ID,
@@ -163,22 +164,28 @@ func TestIdentifyApply_RelationshipClear_ThenOrdinaryScan(t *testing.T) {
 		PluginScope: "test",
 		PluginID:    "relationship-enricher",
 	})
+	// A complete clear leaves protected empty collections.
 	book, file = f.retrieve(t)
-	assert.Empty(t, book.Authors)
-	assert.Empty(t, book.BookGenres)
-	assert.Empty(t, book.BookTags)
-	assert.Empty(t, file.Narrators)
-	assert.Empty(t, book.AuthorSource)
-	assert.Nil(t, book.GenreSource)
-	assert.Nil(t, book.TagSource)
-	assert.Nil(t, file.NarratorSource)
-	var authorSourceIsNull bool
-	require.NoError(t, f.tc.db.NewSelect().Table("books").ColumnExpr("author_source IS NULL").Where("id = ?", book.ID).Scan(f.tc.ctx, &authorSourceIsNull))
-	assert.True(t, authorSourceIsNull, "complete clear must remove author provenance from the database")
+	assertClearedIdentifyRelationships(t, book, file)
 
 	f.ordinaryScan(t, file.ID)
 	book, file = f.retrieve(t)
-	assertIdentifyRelationships(t, book, file, "Embedded", true, models.DataSourceM4BMetadata)
+	assertClearedIdentifyRelationships(t, book, file)
+}
+
+// assertClearedIdentifyRelationships checks that all four relationships are
+// protected empty collections: no entries, with a manual source.
+func assertClearedIdentifyRelationships(t *testing.T, book *models.Book, file *models.File) {
+	t.Helper()
+	manual := models.DataSourceManual
+	assert.Empty(t, book.Authors, "authors")
+	assert.Empty(t, book.BookGenres, "genres")
+	assert.Empty(t, book.BookTags, "tags")
+	assert.Empty(t, file.Narrators, "narrators")
+	assert.Equal(t, manual, book.AuthorSource, "author source")
+	assert.Equal(t, &manual, book.GenreSource, "genre source")
+	assert.Equal(t, &manual, book.TagSource, "tag source")
+	assert.Equal(t, &manual, file.NarratorSource, "narrator source")
 }
 
 func TestIdentifyApply_OrganizedRelationshipClear_ThenOrdinaryScan(t *testing.T) {
@@ -212,9 +219,9 @@ func TestIdentifyApply_OrganizedRelationshipClear_ThenOrdinaryScan(t *testing.T)
 	})
 	book, file = f.retrieve(t)
 	require.Empty(t, book.Authors)
-	require.Empty(t, book.AuthorSource)
+	require.Equal(t, models.DataSourceManual, book.AuthorSource)
 	require.Empty(t, file.Narrators)
-	require.Nil(t, file.NarratorSource)
+	require.Equal(t, models.DataSourceManual, *file.NarratorSource)
 	require.Equal(t, filepath.Join(libraryPath, "Embedded Title"), book.Filepath)
 	require.Equal(t, filepath.Join(book.Filepath, "Embedded Title.m4b"), file.Filepath)
 	require.FileExists(t, file.Filepath)
@@ -229,14 +236,12 @@ func TestIdentifyApply_OrganizedRelationshipClear_ThenOrdinaryScan(t *testing.T)
 
 	f.ordinaryScan(t, file.ID)
 	book, file = f.retrieve(t)
-	require.Len(t, book.Authors, 2)
-	assert.Equal(t, "Embedded Author One", book.Authors[0].Person.Name)
-	assert.Equal(t, "Embedded Author Two", book.Authors[1].Person.Name)
-	assert.Equal(t, models.DataSourceM4BMetadata, book.AuthorSource)
-	require.Len(t, file.Narrators, 2)
-	assert.Equal(t, "Embedded Narrator One", file.Narrators[0].Person.Name)
-	assert.Equal(t, "Embedded Narrator Two", file.Narrators[1].Person.Name)
-	assert.Equal(t, models.DataSourceM4BMetadata, *file.NarratorSource)
+	assert.Empty(t, book.Authors, "cleared authors must stay empty")
+	assert.Equal(t, models.DataSourceManual, book.AuthorSource)
+	assert.Empty(t, file.Narrators, "cleared narrators must stay empty")
+	assert.Equal(t, models.DataSourceManual, *file.NarratorSource)
+	assert.Equal(t, filepath.Join(libraryPath, "Embedded Title"), book.Filepath)
+	assert.Equal(t, filepath.Join(book.Filepath, "Embedded Title.m4b"), file.Filepath)
 	require.FileExists(t, file.Filepath)
 }
 

@@ -2266,8 +2266,8 @@ export function IdentifyReviewForm({
                       opt-in checkbox, Identify must distinguish an
                       explicit `false` (a plugin can propose one, and
                       restoring that proposal is a Proposal Acceptance)
-                      from an Explicit Clear, which nulls the value and its
-                      source so a later Scan may repopulate it. */}
+                      from an Explicit Clear, which removes the value and
+                      protects the empty field from later Scans. */}
                   <div className="w-40">
                     <Select
                       disabled={isDisabled("abridged") || !decisions.abridged}

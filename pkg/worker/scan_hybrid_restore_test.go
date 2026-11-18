@@ -7,13 +7,15 @@ import (
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
-	"github.com/shishobooks/shisho/pkg/plugins"
 	"github.com/shishobooks/shisho/pkg/sidecar"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestIdentifyApply_HybridClear_OrdinaryScanOrganizesRestoredNarrators(t *testing.T) {
+// A hybrid Book whose shared authors and audiobook narrators were never
+// filled gets them from embedded metadata on an ordinary Scan, and the Scan
+// organizes the folder and the M4B filename to match.
+func TestScan_HybridOrganizesRestoredNarrators(t *testing.T) {
 	t.Parallel()
 	f := newIdentifyRelationshipScanFixture(t, false, true)
 	initial, audio := f.retrieve(t)
@@ -45,20 +47,23 @@ func TestIdentifyApply_HybridClear_OrdinaryScanOrganizesRestoredNarrators(t *tes
 	_, err := f.tc.db.NewUpdate().Model((*models.Library)(nil)).
 		Set("organize_file_structure = ?", true).Where("id = ?", book.LibraryID).Exec(f.tc.ctx)
 	require.NoError(t, err)
-	e := newIdentifyApplyServer(t, f.tc)
-	postIdentifyApply(t, e, plugins.PluginApplyPayload{
-		BookID: book.ID, FileID: &audio.ID,
-		Fields:      map[string]any{"authors": []map[string]string{{"name": "Manual Author"}}, "narrators": []string{"Manual Narrator"}},
-		PluginScope: "test", PluginID: "relationship-enricher",
-	})
-	postIdentifyApply(t, e, plugins.PluginApplyPayload{
-		BookID: book.ID, FileID: &audio.ID,
-		Fields:      map[string]any{"authors": []any{}, "narrators": []string{}},
-		PluginScope: "test", PluginID: "relationship-enricher",
-	})
+	// Put authors and narrators in the state of fields that were never filled,
+	// or of an install migrated from before Identify clears left a protected
+	// empty slot: removed with NULL sources, with the organized folder and
+	// sidecars to match. A Scan may fill them from embedded metadata.
+	require.NoError(t, f.tc.bookService.DeleteAuthors(f.tc.ctx, book.ID))
+	_, err = f.tc.db.NewRaw("UPDATE books SET author_source = NULL WHERE id = ?", book.ID).Exec(f.tc.ctx)
+	require.NoError(t, err)
+	_, err = f.tc.bookService.DeleteNarratorsForFile(f.tc.ctx, audio.ID)
+	require.NoError(t, err)
+	_, err = f.tc.db.NewRaw("UPDATE files SET narrator_source = NULL WHERE id = ?", audio.ID).Exec(f.tc.ctx)
+	require.NoError(t, err)
+	syncDiskToStoredMetadata(t, f.tc, book.ID)
 	book, ebook, audio := retrieve()
 	require.Empty(t, book.Authors)
+	require.Empty(t, book.AuthorSource)
 	require.Empty(t, audio.Narrators)
+	require.Nil(t, audio.NarratorSource)
 	require.Equal(t, filepath.Join(libraryPath, "Embedded Title", "Embedded Title.m4b"), audio.Filepath)
 	// Restore shared authors first. The M4B scan then changes only narrators,
 	// so it cannot rely on an author/title change to organize the filename.

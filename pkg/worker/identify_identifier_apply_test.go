@@ -123,7 +123,9 @@ func TestIdentifyIdentifiers_MixedCollectionKeepsPerEntryOrigin(t *testing.T) {
 	}, identifierSourcesByType(updated))
 }
 
-func TestIdentifyIdentifiers_ClearThenOrdinaryScanRepopulates(t *testing.T) {
+// An Explicit Clear leaves a protected empty collection, so the enricher's
+// identifiers do not come back on the next ordinary Scan.
+func TestIdentifyIdentifiers_ClearThenOrdinaryScanStaysEmpty(t *testing.T) {
 	t.Parallel()
 	f := newIdentifyScanFixture(t)
 	book, file := f.retrieve(t)
@@ -137,12 +139,15 @@ func TestIdentifyIdentifiers_ClearThenOrdinaryScanRepopulates(t *testing.T) {
 
 	_, updated := f.retrieve(t)
 	assert.Empty(t, updated.Identifiers)
-	assert.Nil(t, updated.IdentifierSource, "an Explicit Clear leaves no source behind")
+	require.NotNil(t, updated.IdentifierSource)
+	assert.Equal(t, models.DataSourceManual, *updated.IdentifierSource, "an Explicit Clear leaves a protected empty slot")
 
 	f.ordinaryScan(t, file.ID)
 
 	_, rescanned := f.retrieve(t)
-	requireEnricherIdentifiers(t, rescanned)
+	assert.Empty(t, rescanned.Identifiers, "cleared identifiers must stay empty")
+	require.NotNil(t, rescanned.IdentifierSource)
+	assert.Equal(t, models.DataSourceManual, *rescanned.IdentifierSource)
 }
 
 func TestIdentifyIdentifiers_PartialRemovalSurvivesOrdinaryScan(t *testing.T) {

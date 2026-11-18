@@ -257,24 +257,24 @@ func TestIdentifySeries_ManualMembershipSurvivesOrdinaryScan(t *testing.T) {
 	assert.Equal(t, &manual, book.SeriesSource)
 }
 
-func TestIdentifySeries_ClearNullsSourceAndScanRepopulates(t *testing.T) {
+// An Explicit Clear of the membership collection leaves a protected empty
+// slot: no memberships and a manual series_source, so the next ordinary Scan
+// leaves it empty although the EPUB still embeds a series.
+func TestIdentifySeries_ClearLeavesProtectedEmptySlot(t *testing.T) {
 	t.Parallel()
 	f := newIdentifySeriesScanFixture(t, false)
 	book, file := f.retrieve(t)
 	e := newIdentifyApplyServer(t, f.tc)
-	// Establish plugin provenance first; a leftover plugin source on an empty
-	// collection would outrank the embedded metadata.
+	// Establish plugin provenance first, so the clear has to replace it.
 	postIdentifyApply(t, e, seriesApplyPayload(book, file, []map[string]any{seriesEntry("Plugin Series", 2, nil)}, plugins.SourceIntentPlugin))
 	book, _ = f.retrieve(t)
 	require.Equal(t, models.PluginDataSource("test", "series-enricher"), *book.SeriesSource)
 
-	postIdentifyApply(t, e, seriesApplyPayload(book, file, []map[string]any{}, plugins.SourceIntentUser))
+	postIdentifyApply(t, e, seriesApplyPayload(book, file, []map[string]any{}, plugins.SourceIntentPlugin))
 	book, _ = f.retrieve(t)
 	assert.Empty(t, book.BookSeries)
-	assert.Nil(t, book.SeriesSource)
-	var sourceIsNull bool
-	require.NoError(t, f.tc.db.NewSelect().Table("books").ColumnExpr("series_source IS NULL").Where("id = ?", book.ID).Scan(f.tc.ctx, &sourceIsNull))
-	assert.True(t, sourceIsNull, "an Explicit Clear leaves no provenance behind")
+	manual := models.DataSourceManual
+	assert.Equal(t, &manual, book.SeriesSource, "an Explicit Clear is manual whatever the field intent")
 	bookSidecar, err := sidecar.ReadBookSidecarFromModel(book, file)
 	require.NoError(t, err)
 	require.NotNil(t, bookSidecar)
@@ -282,9 +282,8 @@ func TestIdentifySeries_ClearNullsSourceAndScanRepopulates(t *testing.T) {
 
 	f.ordinaryScan(t, file.ID)
 	book, _ = f.retrieve(t)
-	assert.Equal(t, []string{"Embedded Series|1||"}, membershipSummary(book))
-	epub := models.DataSourceEPUBMetadata
-	assert.Equal(t, &epub, book.SeriesSource)
+	assert.Empty(t, book.BookSeries, "a cleared series membership must stay empty")
+	assert.Equal(t, &manual, book.SeriesSource)
 }
 
 func TestIdentifySeries_SidecarScanWritesSidecarSource(t *testing.T) {

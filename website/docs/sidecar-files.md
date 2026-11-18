@@ -140,7 +140,7 @@ During a scan, metadata precedence is:
 | | Embedded file metadata |
 | Lowest | Filepath-derived metadata |
 
-A sidecar can override plugin, embedded, and filepath values, but it does not override a field that still has manual priority in the database. See [Metadata](./metadata.md) for rescan and priority behavior.
+A sidecar can override plugin, embedded, and filepath values, but it does not override a field that still has manual priority in the database. Because Shisho writes the sidecars itself, a sidecar value that matches what Shisho has saved is treated as Shisho's own copy and does not block a plugin. Only a value that differs, such as one from another library or one you edited on disk, takes priority. See [Metadata](./metadata.md) for rescan and priority behavior.
 
 Names for authors, narrators, series, genres, tags, and publishers use Shisho's normal alias resolution. A sidecar name that matches an alias resolves to the existing canonical resource instead of creating a duplicate.
 

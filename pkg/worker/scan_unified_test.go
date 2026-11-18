@@ -646,7 +646,7 @@ func TestScanFileCore_BookTitle_HigherPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -695,7 +695,7 @@ func TestScanFileCore_BookTitle_LowerPriority_Skipped(t *testing.T) {
 	}
 
 	// Call scanFileCore without forceRefresh
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -744,7 +744,7 @@ func TestScanFileCore_BookTitle_ForceRefresh(t *testing.T) {
 	}
 
 	// Call scanFileCore with forceRefresh=true
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -793,7 +793,7 @@ func TestScanFileCore_BookSortTitle_Regenerated(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -843,7 +843,7 @@ func TestScanFileCore_BookSubtitle_Updated(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -894,7 +894,7 @@ func TestScanFileCore_BookDescription_Updated(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -939,7 +939,7 @@ func TestScanFileCore_NilMetadata(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call scanFileCore with nil metadata
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, nil, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, nil, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed but make no changes
 	require.NoError(t, err)
@@ -1007,7 +1007,7 @@ func TestScanFileCore_Authors_HigherPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1082,7 +1082,7 @@ func TestScanFileCore_Authors_LowerPriority_Skipped(t *testing.T) {
 	}
 
 	// Call scanFileCore without forceRefresh
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1157,7 +1157,7 @@ func TestScanFileCore_Authors_ForceRefresh(t *testing.T) {
 	}
 
 	// Call scanFileCore with forceRefresh=true
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1234,7 +1234,7 @@ func TestScanFileCore_Series_HigherPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1274,7 +1274,7 @@ func TestScanFileCore_CBZSeriesRange_PersistsAtomicGroup(t *testing.T) {
 		SeriesNumberUnit: &unit, DataSource: models.DataSourceCBZMetadata,
 	}
 
-	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 	updatedBook, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
 	require.NoError(t, err)
@@ -1347,7 +1347,7 @@ func TestScanFileCore_Genres_HigherPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1422,7 +1422,7 @@ func TestScanFileCore_Tags_HigherPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1502,7 +1502,7 @@ func TestScanFileCore_Narrators_HigherPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1562,7 +1562,7 @@ func TestScanFileCore_FileName_CBZ(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1623,7 +1623,7 @@ func TestScanFileCore_FileName_CBZ_UsesSeriesWhenNoTitle(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -1680,7 +1680,7 @@ func TestScanFileCore_WritesSidecars(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	// Verify book sidecar exists: <bookpath>/<dirname>.metadata.json
@@ -1732,7 +1732,7 @@ func TestScanFileCore_UpdatesSearchIndex(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	// Verify search index was updated by checking the FTS table directly
@@ -1790,7 +1790,7 @@ func TestScanFileCore_Resync_IndexesNewRelations(t *testing.T) {
 
 	// isResync=true mirrors POST /files/:id/resync and the monitor's per-file
 	// scanInternal(FileID) flow.
-	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	// Each entity must have an FTS row matching its name. Without the fix the
@@ -1878,7 +1878,7 @@ func TestScanFileCore_Resync_ReindexesDetachedOldSeries(t *testing.T) {
 		Series:     "New Series",
 		DataSource: models.DataSourceEPUBMetadata,
 	}
-	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	// Old series' aggregate must no longer mention this book — the helper
@@ -2521,7 +2521,7 @@ func TestScanFileCore_FileLevelFields_Publisher(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -2579,7 +2579,7 @@ func TestScanFileCore_FileLevelFields_ReleaseDate(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -2645,7 +2645,7 @@ func TestScanFileCore_SidecarReading_BookTitle(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -2702,7 +2702,7 @@ func TestScanFileCore_SidecarSeriesRangeOverridesSameNamedFileMetadata(t *testin
 	metadata := &mediafile.ParsedMetadata{
 		Series: "Saga", SeriesNumber: seriesFloatPtr(1), DataSource: models.DataSourceCBZMetadata,
 	}
-	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err = tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	var got models.BookSeries
@@ -2765,7 +2765,7 @@ func TestScanFileCore_SidecarPriority_OverridesFileMetadata(t *testing.T) {
 	}
 
 	// Call scanFileCore without forceRefresh
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -2826,7 +2826,7 @@ func TestScanFileCore_SidecarPriority_OverridesLowerPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore without forceRefresh
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3221,7 +3221,7 @@ func TestScanFileCore_SidecarReading_FileLevelFields(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3288,7 +3288,7 @@ func TestScanFileCore_FileName_M4B(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3349,7 +3349,7 @@ func TestScanFileCore_FileName_EPUB(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3415,7 +3415,7 @@ func TestScanFileCore_FileName_ForceRefresh_OverridesExisting(t *testing.T) {
 	}
 
 	// Call scanFileCore with forceRefresh
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3503,7 +3503,7 @@ func TestScanFileCore_FileOrganization_RenamesFileOnDisk(t *testing.T) {
 	}
 
 	// Call scanFileCore - this should update file.name and rename the file on disk
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3592,7 +3592,7 @@ func TestScanFileCore_FileOrganization_SkipsWhenOrganizeDisabled(t *testing.T) {
 	}
 
 	// Call scanFileCore - this should update file.name but NOT rename the file on disk
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3686,7 +3686,7 @@ func TestScanFileCore_FileOrganization_SidecarNameChange(t *testing.T) {
 	}
 
 	// Call scanFileCore - this should update file.name from sidecar and rename the file on disk
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3793,7 +3793,7 @@ func TestScanFileCore_FileOrganization_StripsAuthorPrefixOnResync(t *testing.T) 
 	// Call scanFileCore with isResync=true
 	// Even though the DB name matches, the file on disk should be renamed
 	// to strip the author prefix
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3894,7 +3894,7 @@ func TestScanFileCore_BookOrganization_RenamesFolderOnDisk(t *testing.T) {
 
 	// Call scanFileCore with isResync=true (simulating a resync, not a full scan)
 	// This should trigger book organization because title changed
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -3990,7 +3990,7 @@ func TestScanFileCore_BookOrganization_SkippedDuringFullScan(t *testing.T) {
 
 	// Call scanFileCore with isResync=false (simulating a full scan)
 	// This should NOT trigger book organization
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, false, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, false, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4052,7 +4052,7 @@ func TestScanFileCore_Supplement_SetsFileNameFromFilename(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4123,7 +4123,7 @@ func TestScanFileCore_Supplement_DoesNotUpdateBookMetadata(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4215,7 +4215,7 @@ func TestScanFileCore_Supplement_FileOrganization_NoAuthorPrefix(t *testing.T) {
 	}
 
 	// Call scanFileCore - this should update file.Name and rename the file WITHOUT author prefix
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4289,7 +4289,7 @@ func TestScanFileCore_Chapters_SavedFromMetadata(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4362,7 +4362,7 @@ func TestScanFileCore_Chapters_HigherPriority(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4434,7 +4434,7 @@ func TestScanFileCore_Chapters_LowerPriority_Skipped(t *testing.T) {
 	}
 
 	// Call scanFileCore without forceRefresh
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4505,7 +4505,7 @@ func TestScanFileCore_Chapters_ForceRefresh(t *testing.T) {
 	}
 
 	// Call scanFileCore WITH forceRefresh=true
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, true, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4576,7 +4576,7 @@ func TestScanFileCore_Chapters_NestedHierarchy(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4643,7 +4643,7 @@ func TestScanFileCore_Chapters_EmptyChapters_Skipped(t *testing.T) {
 	}
 
 	// Call scanFileCore
-	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	result, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -4709,7 +4709,7 @@ func TestScanFileCore_PDFCoverPageRestoredFromSidecar(t *testing.T) {
 		CoverPage:  &reparsedCoverPage,
 	}
 
-	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	updatedFile, err := tc.bookService.RetrieveFile(tc.ctx, books.RetrieveFileOptions{ID: &file.ID})
@@ -5653,7 +5653,7 @@ func TestScanFileCore_Title_PluginSource_NotVolumeNormalized(t *testing.T) {
 		DataSource: models.PluginDataSource("test", "enricher"),
 	}
 
-	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	reloaded, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
@@ -5693,7 +5693,7 @@ func TestScanFileCore_Title_FileMetadataSource_StillVolumeNormalized(t *testing.
 		DataSource: models.DataSourceCBZMetadata,
 	}
 
-	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	reloaded, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})
@@ -5733,7 +5733,7 @@ func TestScanFileCore_Description_StripsHTMLFromMetadata(t *testing.T) {
 		DataSource:  models.PluginDataSource("test", "enricher"),
 	}
 
-	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, true, nil, nil)
+	_, err := tc.worker.scanFileCore(tc.ctx, file, book, metadata, false, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 
 	reloaded, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &book.ID})

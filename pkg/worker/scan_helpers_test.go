@@ -162,7 +162,7 @@ func TestShouldUpdateScalar(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldUpdateScalar(tt.newValue, tt.existingValue, tt.newSource, tt.existingSource, tt.forceRefresh)
+			got := shouldUpdateScalar(tt.newValue, tt.existingValue, tt.newSource, tt.existingSource, scanRules{forceRefresh: tt.forceRefresh})
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -318,7 +318,7 @@ func TestShouldUpdateRelationship(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := shouldUpdateRelationship(tt.newItems, tt.existingItems, tt.newSource, tt.existingSource, tt.forceRefresh)
+			got := shouldUpdateRelationship(tt.newItems, tt.existingItems, tt.newSource, tt.existingSource, scanRules{forceRefresh: tt.forceRefresh})
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -616,9 +616,9 @@ func TestShouldUpdateParsedSeries_NumberGroupUsesSourcePriority(t *testing.T) {
 		DataSource: models.DataSourcePlugin,
 	}
 
-	assert.True(t, shouldUpdateParsedSeries(pluginRange, existing, models.DataSourceFileMetadata, false))
-	assert.False(t, shouldUpdateParsedSeries(fileSingle, existing, models.DataSourceManual, false))
-	assert.False(t, shouldUpdateParsedSeries(malformed, existing, models.DataSourceFileMetadata, true))
+	assert.True(t, shouldUpdateParsedSeries(pluginRange, existing, models.DataSourceFileMetadata, scanRules{forceRefresh: false}))
+	assert.False(t, shouldUpdateParsedSeries(fileSingle, existing, models.DataSourceManual, scanRules{forceRefresh: false}))
+	assert.False(t, shouldUpdateParsedSeries(malformed, existing, models.DataSourceFileMetadata, scanRules{forceRefresh: true}))
 }
 
 func TestShouldApplySeriesSidecar_NumberGroupChanges(t *testing.T) {
@@ -830,7 +830,7 @@ func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
 	newKeys := parsedIdentifierKeys(parsed)
 
 	// With a matching source (steady state), the diff must report no change.
-	got := shouldUpdateRelationship(newKeys, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
+	got := shouldUpdateRelationship(newKeys, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, scanRules{forceRefresh: false})
 	assert.False(t, got, "rescan must not report identifier change when only cosmetic formatting differs")
 
 	// Sidecar path uses the same key-building helpers.
@@ -843,7 +843,7 @@ func TestIdentifierDiff_StableAcrossRescans(t *testing.T) {
 		Value: "12345678",
 	})
 	newKeysWithAddition := parsedIdentifierKeys(parsedWithAddition)
-	got = shouldUpdateRelationship(newKeysWithAddition, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, false)
+	got = shouldUpdateRelationship(newKeysWithAddition, existingKeys, models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, scanRules{forceRefresh: false})
 	assert.True(t, got, "rescan must still detect a real addition even when the existing entries have cosmetic variants")
 }
 
@@ -1119,4 +1119,47 @@ func TestDropNegativeStartPageChapters_AllDropped(t *testing.T) {
 
 	assert.Empty(t, got)
 	assert.Equal(t, 1, dropped)
+}
+
+func TestScanRules_PluginTie(t *testing.T) {
+	t.Parallel()
+	identified := "plugin:shisho/goodreads"
+	other := "plugin:shisho/openlibrary"
+	parser := "plugin:shisho/docx"
+	_, known := fileScanState{bookKnown: true, fileKnown: true, parserSource: parser}.rules(false)
+	_, created := fileScanState{parserSource: parser}.rules(false)
+	_, forced := fileScanState{bookKnown: true, fileKnown: true}.rules(true)
+
+	// A rescan keeps a stored plugin value.
+	assert.False(t, shouldUpdateScalar("Wrong", "Right", identified, identified, known))
+	assert.False(t, shouldUpdateScalar("Other", "Right", other, identified, known))
+	assert.False(t, shouldUpdateRelationship([]string{"Wrong"}, []string{"Right"}, other, identified, known))
+	// It still replaces a value from the file or the filepath, and fills a gap.
+	assert.True(t, shouldUpdateScalar("Enriched", "Embedded", other, models.DataSourceEPUBMetadata, known))
+	assert.True(t, shouldUpdateScalar("Enriched", "", other, "", known))
+	// A plugin file parser's values are the file's own: an enricher replaces
+	// them, and they never replace an enricher's.
+	assert.True(t, shouldUpdateScalar("Enriched", "Parsed", other, parser, known))
+	assert.False(t, shouldUpdateScalar("Parsed", "Enriched", parser, other, known))
+	assert.True(t, shouldUpdateScalar("New parse", "Old parse", parser, parser, known))
+	// Two file values still tie to the newer one.
+	assert.True(t, shouldUpdateScalar("New", "Old", models.DataSourceEPUBMetadata, models.DataSourceEPUBMetadata, known))
+	// A new record, and a refresh, take the newer plugin value.
+	assert.True(t, shouldUpdateScalar("New", "Old", identified, identified, created))
+	assert.True(t, shouldUpdateScalar("New", "Old", identified, identified, forced))
+}
+
+func TestScanRules_KeepsStoredCover(t *testing.T) {
+	t.Parallel()
+	_, known := fileScanState{bookKnown: true, fileKnown: true}.rules(false)
+	_, created := fileScanState{}.rules(false)
+	_, forced := fileScanState{bookKnown: true, fileKnown: true}.rules(true)
+
+	assert.True(t, known.keepsStoredCover(models.DataSourceManual))
+	assert.True(t, known.keepsStoredCover("plugin:shisho/goodreads"))
+	assert.False(t, known.keepsStoredCover(models.DataSourceEPUBMetadata))
+	assert.False(t, known.keepsStoredCover(""))
+	assert.True(t, created.keepsStoredCover(models.DataSourceManual))
+	assert.False(t, created.keepsStoredCover("plugin:shisho/goodreads"))
+	assert.False(t, forced.keepsStoredCover(models.DataSourceManual))
 }

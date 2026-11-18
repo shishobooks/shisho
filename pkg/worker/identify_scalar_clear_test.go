@@ -11,10 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// An Explicit Clear leaves no tombstone (ADR 0006): the next ordinary Scan
-// may repopulate the field from embedded file metadata, which ranks below
-// every plugin source. These fixtures use native parsers and an enricher
-// that proposes nothing, so the restored values can only come from the file.
+// An Explicit Clear leaves a protected empty slot (ADR 0006 amendment): no
+// value, with a manual source, so the next ordinary Scan leaves the field
+// empty even though the file's embedded metadata still carries a value.
+// These fixtures use native parsers and an enricher that proposes nothing, so
+// any refilled value could only come from the file.
 
 const identifyScalarClearManifest = `{
   "manifestVersion": 1,
@@ -81,29 +82,25 @@ func TestIdentifyApply_ScalarClear_ThenOrdinaryScan_EPUB(t *testing.T) {
 
 	book, file = f.retrieve(t)
 	require.Nil(t, book.Description)
-	require.Nil(t, book.DescriptionSource)
+	require.Equal(t, models.DataSourceManual, *book.DescriptionSource)
 	require.Nil(t, file.PublisherID)
-	require.Nil(t, file.PublisherSource)
+	require.Equal(t, models.DataSourceManual, *file.PublisherSource)
 	require.Nil(t, file.Language)
-	require.Nil(t, file.LanguageSource)
+	require.Equal(t, models.DataSourceManual, *file.LanguageSource)
 	require.Nil(t, file.ReleaseDate)
-	require.Nil(t, file.ReleaseDateSource)
+	require.Equal(t, models.DataSourceManual, *file.ReleaseDateSource)
 
 	f.ordinaryScan(t, file.ID)
 
 	book, file = f.retrieve(t)
-	require.NotNil(t, book.Description, "a cleared description must be repopulated from embedded metadata")
-	assert.Equal(t, "Embedded description", *book.Description)
-	assert.Equal(t, models.DataSourceEPUBMetadata, *book.DescriptionSource)
-	require.NotNil(t, file.Publisher, "a cleared publisher must be repopulated from embedded metadata")
-	assert.Equal(t, "Embedded Publisher", file.Publisher.Name)
-	assert.Equal(t, models.DataSourceEPUBMetadata, *file.PublisherSource)
-	require.NotNil(t, file.Language, "a cleared language must be repopulated from embedded metadata")
-	assert.Equal(t, "fr", *file.Language)
-	assert.Equal(t, models.DataSourceEPUBMetadata, *file.LanguageSource)
-	require.NotNil(t, file.ReleaseDate, "a cleared release date must be repopulated from embedded metadata")
-	assert.Equal(t, "2020-01-02", file.ReleaseDate.UTC().Format("2006-01-02"))
-	assert.Equal(t, models.DataSourceEPUBMetadata, *file.ReleaseDateSource)
+	assert.Nil(t, book.Description, "a cleared description must stay empty")
+	assert.Equal(t, models.DataSourceManual, *book.DescriptionSource)
+	assert.Nil(t, file.PublisherID, "a cleared publisher must stay empty")
+	assert.Equal(t, models.DataSourceManual, *file.PublisherSource)
+	assert.Nil(t, file.Language, "a cleared language must stay empty")
+	assert.Equal(t, models.DataSourceManual, *file.LanguageSource)
+	assert.Nil(t, file.ReleaseDate, "a cleared release date must stay empty")
+	assert.Equal(t, models.DataSourceManual, *file.ReleaseDateSource)
 }
 
 func TestIdentifyApply_ScalarClear_ThenOrdinaryScan_M4B(t *testing.T) {
@@ -152,32 +149,27 @@ func TestIdentifyApply_ScalarClear_ThenOrdinaryScan_M4B(t *testing.T) {
 
 	book, file = f.retrieve(t)
 	require.Nil(t, book.Subtitle)
-	require.Nil(t, book.SubtitleSource)
+	require.Equal(t, models.DataSourceManual, *book.SubtitleSource)
 	require.Nil(t, book.Description)
-	require.Nil(t, book.DescriptionSource)
+	require.Equal(t, models.DataSourceManual, *book.DescriptionSource)
 	require.Nil(t, file.URL)
-	require.Nil(t, file.URLSource)
+	require.Equal(t, models.DataSourceManual, *file.URLSource)
 	require.Nil(t, file.Language)
-	require.Nil(t, file.LanguageSource)
+	require.Equal(t, models.DataSourceManual, *file.LanguageSource)
 	require.Nil(t, file.Abridged)
-	require.Nil(t, file.AbridgedSource)
+	require.Equal(t, models.DataSourceManual, *file.AbridgedSource)
 
 	f.ordinaryScan(t, file.ID)
 
 	book, file = f.retrieve(t)
-	require.NotNil(t, book.Subtitle, "a cleared subtitle must be repopulated from embedded metadata")
-	assert.Equal(t, "Embedded Subtitle", *book.Subtitle)
-	assert.Equal(t, models.DataSourceM4BMetadata, *book.SubtitleSource)
-	require.NotNil(t, book.Description, "a cleared description must be repopulated from embedded metadata")
-	assert.Equal(t, "Embedded description", *book.Description)
-	assert.Equal(t, models.DataSourceM4BMetadata, *book.DescriptionSource)
-	require.NotNil(t, file.URL, "a cleared URL must be repopulated from embedded metadata")
-	assert.Equal(t, "https://example.com/embedded", *file.URL)
-	assert.Equal(t, models.DataSourceM4BMetadata, *file.URLSource)
-	require.NotNil(t, file.Language, "a cleared language must be repopulated from embedded metadata")
-	assert.Equal(t, "fr", *file.Language)
-	assert.Equal(t, models.DataSourceM4BMetadata, *file.LanguageSource)
-	require.NotNil(t, file.Abridged, "a cleared abridged flag must be repopulated from embedded metadata")
-	assert.True(t, *file.Abridged)
-	assert.Equal(t, models.DataSourceM4BMetadata, *file.AbridgedSource)
+	assert.Nil(t, book.Subtitle, "a cleared subtitle must stay empty")
+	assert.Equal(t, models.DataSourceManual, *book.SubtitleSource)
+	assert.Nil(t, book.Description, "a cleared description must stay empty")
+	assert.Equal(t, models.DataSourceManual, *book.DescriptionSource)
+	assert.Nil(t, file.URL, "a cleared URL must stay empty")
+	assert.Equal(t, models.DataSourceManual, *file.URLSource)
+	assert.Nil(t, file.Language, "a cleared language must stay empty")
+	assert.Equal(t, models.DataSourceManual, *file.LanguageSource)
+	assert.Nil(t, file.Abridged, "a cleared abridged flag must stay empty")
+	assert.Equal(t, models.DataSourceManual, *file.AbridgedSource)
 }

@@ -27,6 +27,8 @@ golangci `forbidigo` and `pkg/migrations/schema_invariants_test.go` enforce seve
 
 Lower priority number wins (`pkg/models/data-source.go`).
 
+**An ordinary Scan has two exceptions (ADR 0027).** It ignores a Sidecar field equal to the stored value, since Shisho wrote it, and it never replaces a stored plugin value with another one for a Book or File already in the library. A field the scanner writes goes through `shouldUpdateScalar` or `shouldUpdateRelationship` with the scan's `scanRules`, and a new Sidecar field needs a case in `dropSidecarCopies` (`pkg/worker/scan_rules.go`), or its stale copy outranks plugins again.
+
 **Series memberships have their own source.** `books.series_source` is the provenance of a Book's membership collection and number groups; `series.name_source` describes only the Series' name. Gate on and stamp `books.series_source`; never read `Series.NameSource` as a proxy (ADR 0006).
 
 ## Core gotchas

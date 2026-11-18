@@ -551,7 +551,7 @@ func TestPersistMetadata_IdentifierClearUpdatesSourceAndReviewState(t *testing.T
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Book", models.FileTypeEPUB)
-	source := models.DataSourceManual
+	source := applyTestPluginSource
 	file.IdentifierSource = &source
 	store := &stubBookStoreForPersist{book: book}
 	identStore := &stubIdentStoreForPersist{}
@@ -561,8 +561,9 @@ func TestPersistMetadata_IdentifierClearUpdatesSourceAndReviewState(t *testing.T
 	_, err := h.persistMetadata(context.Background(), book, file, &mediafile.ParsedMetadata{}, "test", "plugin-id", overrides, testLogger())
 	require.NoError(t, err)
 
-	assert.Empty(t, identStore.deleteCalls, "the collection is already empty; only the stale source is healed")
-	assert.Nil(t, file.IdentifierSource)
+	assert.Empty(t, identStore.deleteCalls, "the collection is already empty; only its source becomes manual")
+	require.NotNil(t, file.IdentifierSource)
+	assert.Equal(t, models.DataSourceManual, *file.IdentifierSource)
 	require.Len(t, store.updatedFileColumns, 1)
 	assert.Contains(t, store.updatedFileColumns[0], "identifier_source", "UpdateFile recomputes review state")
 }
@@ -744,7 +745,8 @@ func TestPersistMetadata_SkipsPersonIndexForUnchangedAuthor(t *testing.T) {
 }
 
 // TestPersistMetadata_ExplicitFileName_EmptyStringClears verifies that an
-// explicitly selected empty file name clears both Name and NameSource.
+// explicitly selected empty file name clears Name and leaves a protected
+// empty slot: NameSource becomes manual.
 func TestPersistMetadata_ExplicitFileName_EmptyStringClears(t *testing.T) {
 	t.Parallel()
 
@@ -753,7 +755,7 @@ func TestPersistMetadata_ExplicitFileName_EmptyStringClears(t *testing.T) {
 	require.NoError(t, os.WriteFile(filePath, []byte("fake epub"), 0600))
 
 	originalName := "Original Custom Name"
-	originalSource := "manual"
+	originalSource := applyTestPluginSource
 	file := &models.File{
 		ID:         1,
 		BookID:     1,
@@ -785,5 +787,6 @@ func TestPersistMetadata_ExplicitFileName_EmptyStringClears(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Nil(t, file.Name)
-	assert.Nil(t, file.NameSource)
+	require.NotNil(t, file.NameSource)
+	assert.Equal(t, models.DataSourceManual, *file.NameSource)
 }

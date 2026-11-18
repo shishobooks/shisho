@@ -61,7 +61,7 @@ export const EnrichExistingBooksPrompt = ({
     <ConfirmDialog
       cancelLabel="Not now"
       confirmLabel="Enrich books"
-      description={`${pluginName ?? "The plugin"} only runs on books as they're scanned, and scans skip books whose files haven't changed. Scanning for new metadata runs your metadata plugins on every book you already have, mostly filling in details they're missing. It takes a while and calls the plugins' services for every book. Manual edits are kept.`}
+      description={`${pluginName ?? "The plugin"} only runs on books as they're scanned, and scans skip books whose files haven't changed. Scanning for new metadata runs your metadata plugins on every book you already have, replacing details that came from the files themselves. It takes a while and calls the plugins' services for every book. Manual edits and values you chose in Identify are kept.`}
       isPending={createJob.isPending}
       onConfirm={startScan}
       onOpenChange={(next) => {
