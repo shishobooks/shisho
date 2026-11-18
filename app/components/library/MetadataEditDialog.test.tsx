@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
-import { ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import { MetadataEditDialog } from "./MetadataEditDialog";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -1126,56 +1130,80 @@ describe("MetadataEditDialog", () => {
   });
 });
 
-describe("MetadataEditDialog rename warning", () => {
-  const renderDialog = (count: number, singular = "book", plural = "books") =>
+describe("MetadataEditDialog rename note and confirmation", () => {
+  const renderDialog = (bookCount: number, onSave = vi.fn()) => {
+    setAuth({ permissions: ["books:read", "books:write"] });
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ book_count: bookCount });
     render(
-      <QueryClientProvider client={new QueryClient()}>
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
         <MetadataEditDialog
+          entityId={7}
           entityName="Fiction"
           entityType="genre"
           isPending={false}
           onOpenChange={vi.fn()}
-          onSave={vi.fn()}
+          onSave={onSave}
           open={true}
-          sidecarCount={{ count, singular, plural }}
         />
       </QueryClientProvider>,
     );
+    return request;
+  };
 
-  const warning = () => screen.queryByText(/updates the sidecar files/i);
+  const note = () => screen.queryByText(/updates the sidecar files/i);
 
-  it("warns that renaming a resource on many books runs in the background", async () => {
-    const user = createUser();
-    renderDialog(1500);
-    expect(warning()).not.toBeInTheDocument();
-
+  const rename = async (user: ReturnType<typeof createUser>) => {
     const nameInput = screen.getByLabelText("Name");
     await user.clear(nameInput);
     await user.type(nameInput, "Literary Fiction");
+  };
 
-    expect(warning()).toHaveTextContent("1,500 books");
-    expect(warning()).toHaveTextContent(/in the background/i);
-  });
-
-  it("names what it counts, such as a publisher's files", async () => {
+  it("says how many books a big rename rewrites in the background", async () => {
     const user = createUser();
-    renderDialog(800, "file", "files");
+    const request = renderDialog(1500);
+    expect(note()).not.toBeInTheDocument();
 
-    const nameInput = screen.getByLabelText("Name");
-    await user.clear(nameInput);
-    await user.type(nameInput, "New Press");
+    await rename(user);
 
-    expect(warning()).toHaveTextContent("800 files");
+    expect(
+      await screen.findByText(/updates the sidecar files/i),
+    ).toHaveTextContent("1,500 books");
+    expect(note()).toHaveTextContent(/in the background/i);
+    expect(request).toHaveBeenCalledWith(
+      "GET",
+      "/books/sidecar-impact",
+      null,
+      { kind: "genre", ids: [7] },
+      expect.anything(),
+    );
   });
 
-  it("doesn't warn for a resource on a few books", async () => {
+  it("says nothing for a rename touching few books", async () => {
     const user = createUser();
     renderDialog(20);
 
-    const nameInput = screen.getByLabelText("Name");
-    await user.clear(nameInput);
-    await user.type(nameInput, "Literary Fiction");
+    await rename(user);
+    await waitFor(() => expect(API.request).toHaveBeenCalled());
 
-    expect(warning()).not.toBeInTheDocument();
+    expect(note()).not.toBeInTheDocument();
+  });
+
+  it("confirms a rename once it's saved", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderDialog(5, vi.fn().mockResolvedValue({}));
+
+    await rename(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Renamed to "Literary Fiction"'),
+    );
   });
 });

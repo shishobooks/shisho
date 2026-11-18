@@ -221,7 +221,6 @@ const PublisherDetail = () => {
               id: p.id,
               name: p.name,
               countText: formatCount(p.file_count ?? 0, "file"),
-              count: p.file_count ?? 0,
             })) ?? [],
           isLoadingEntities: publishersListQuery.isLoading,
           isSearchPending:
@@ -279,6 +278,7 @@ const PublisherDetail = () => {
       {canWriteBooks && (
         <PublisherEditDialog
           aliases={aliases}
+          entityId={publisherId}
           entityName={publisher?.name ?? ""}
           isPending={updatePublisherMutation.isPending}
           onOpenChange={setEditOpen}

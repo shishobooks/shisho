@@ -1,10 +1,12 @@
 import { Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import {
   EntityCombobox,
   type EntityComboboxProps,
 } from "@/components/common/EntityCombobox";
+import { SidecarRewriteNote } from "@/components/library/SidecarRewriteNote";
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +42,11 @@ interface PublisherEditDialogProps {
   parentName?: string | null;
   onSave: (data: PublisherEditData) => Promise<unknown>;
   isPending: boolean;
+  /**
+   * The publisher's id. With it, a rename that rewrites many Books' sidecars
+   * says so (see SidecarRewriteNote).
+   */
+  entityId?: number;
   useParentSearch: EntityComboboxProps<PublisherIdOption>["hook"];
 }
 
@@ -53,6 +60,7 @@ export function PublisherEditDialog({
   onSave,
   isPending,
   useParentSearch,
+  entityId,
 }: PublisherEditDialogProps) {
   const [name, setName] = useState(entityName);
   const [editAliases, setEditAliases] = useState<string[]>([]);
@@ -209,6 +217,11 @@ export function PublisherEditDialog({
       }
       await onSave(data);
       setChangesSaved(true);
+      toast.success(
+        data.name !== initialValues?.name
+          ? `Renamed to "${data.name}"`
+          : "Changes saved",
+      );
       requestClose();
     } catch (err) {
       // checkStatus already toasted a Demo Mode rejection; keep the draft
@@ -237,6 +250,16 @@ export function PublisherEditDialog({
               onChange={(e) => handleNameChange(e.target.value)}
               value={name}
             />
+            {entityId !== undefined &&
+              initialValues !== null &&
+              name.trim() !== "" &&
+              name.trim() !== initialValues.name && (
+                <SidecarRewriteNote
+                  action="Renaming"
+                  ids={[entityId]}
+                  kind="publisher"
+                />
+              )}
           </div>
 
           <div className="space-y-2">

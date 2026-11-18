@@ -1,11 +1,9 @@
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
-import {
-  SidecarRewriteNote,
-  type SidecarCount,
-} from "@/components/library/SidecarRewriteNote";
+import { SidecarRewriteNote } from "@/components/library/SidecarRewriteNote";
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,8 +40,11 @@ interface MetadataEditDialogProps {
     aliases?: string[];
   }) => Promise<unknown>;
   isPending: boolean;
-  /** What a rename rewrites the sidecars of, for the note a big one shows. */
-  sidecarCount?: SidecarCount;
+  /**
+   * The entity's id. With it, a rename that rewrites many Books' sidecars
+   * says so (see SidecarRewriteNote).
+   */
+  entityId?: number;
 }
 
 const ENTITY_LABELS: Record<EntityType, string> = {
@@ -64,7 +65,7 @@ export function MetadataEditDialog({
   sortNameSource,
   onSave,
   isPending,
-  sidecarCount,
+  entityId,
 }: MetadataEditDialogProps) {
   const [name, setName] = useState(entityName);
   const [editSortName, setEditSortName] = useState(sortName || "");
@@ -236,6 +237,11 @@ export function MetadataEditDialog({
       data.aliases = resolvedAliases;
       await onSave(data);
       setChangesSaved(true);
+      toast.success(
+        data.name !== initialValues?.name
+          ? `Renamed to "${data.name}"`
+          : "Changes saved",
+      );
       requestClose();
     } catch (err) {
       // checkStatus already toasted a Demo Mode rejection; keep the draft
@@ -265,11 +271,15 @@ export function MetadataEditDialog({
               onChange={(e) => handleNameChange(e.target.value)}
               value={name}
             />
-            {sidecarCount &&
+            {entityId !== undefined &&
               initialValues !== null &&
               name.trim() !== "" &&
               name.trim() !== initialValues.name && (
-                <SidecarRewriteNote action="Renaming" affected={sidecarCount} />
+                <SidecarRewriteNote
+                  action="Renaming"
+                  ids={[entityId]}
+                  kind={entityType}
+                />
               )}
           </div>
 

@@ -1,6 +1,7 @@
 import equal from "fast-deep-equal";
 import { Image, Loader2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { EntityCombobox } from "@/components/common/EntityCombobox";
 import { IdentifierEditor } from "@/components/common/IdentifierEditor";
@@ -584,6 +585,7 @@ export function FileEditDialog({
           ? (initialValues?.reviewOverride ?? null)
           : draftReviewOverride,
     });
+    toast.success("File saved");
     requestClose();
   };
 

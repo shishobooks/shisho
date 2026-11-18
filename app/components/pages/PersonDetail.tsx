@@ -179,7 +179,6 @@ const PersonDetail = () => {
               p.authored_book_count,
               p.narrated_file_count,
             ),
-            count: p.authored_book_count + p.narrated_file_count,
           })) ?? [],
         isLoadingEntities: peopleListQuery.isLoading,
         isSearchPending:
@@ -191,11 +190,6 @@ const PersonDetail = () => {
       name={person?.name ?? ""}
       notFoundLabel="Person Not Found"
       query={personQuery}
-      sidecarCount={{
-        count: bookCount + narratedFileCount,
-        singular: "book or file",
-        plural: "books and files",
-      }}
       sortName={person?.sort_name}
     >
       {showAuthored && (

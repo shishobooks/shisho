@@ -211,3 +211,28 @@ type ResyncBookResponse struct {
 type UpdateFileCoverPagePayload struct {
 	Page int `json:"page"` // 0-indexed page number
 }
+
+// SidecarImpactKind names the kind of resource a rename or merge changes the
+// name of, for GET /books/sidecar-impact.
+const (
+	//tygo:emit export type SidecarImpactKind = typeof SidecarImpactPerson | typeof SidecarImpactSeries | typeof SidecarImpactGenre | typeof SidecarImpactTag | typeof SidecarImpactPublisher;
+	SidecarImpactPerson    = "person"
+	SidecarImpactSeries    = "series"
+	SidecarImpactGenre     = "genre"
+	SidecarImpactTag       = "tag"
+	SidecarImpactPublisher = "publisher"
+)
+
+// SidecarImpactQuery asks how many Books' sidecars a rename of one resource,
+// or a merge of two, would rewrite. IDs is the resource, plus a merge's
+// source.
+type SidecarImpactQuery struct {
+	Kind string `query:"kind" json:"kind" validate:"required,oneof=person series genre tag publisher" tstype:"SidecarImpactKind"`
+	IDs  []int  `query:"ids" json:"ids" validate:"required,min=1,max=2,dive,min=1"`
+}
+
+// SidecarImpactResponse is the number of distinct Books whose sidecars the
+// rename or merge rewrites in the background (ADR 0027).
+type SidecarImpactResponse struct {
+	BookCount int `json:"book_count"`
+}

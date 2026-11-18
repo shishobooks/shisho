@@ -244,17 +244,13 @@ const SeriesDetail = () => {
         <>
           <MetadataEditDialog
             aliases={aliases}
+            entityId={seriesId}
             entityName={series.name}
             entityType="series"
             isPending={updateSeriesMutation.isPending}
             onOpenChange={setEditOpen}
             onSave={handleEdit}
             open={editOpen}
-            sidecarCount={{
-              count: series.book_count,
-              singular: "book",
-              plural: "books",
-            }}
             sortName={series.sort_name}
             sortNameSource={series.sort_name_source}
           />
@@ -265,7 +261,6 @@ const SeriesDetail = () => {
                 id: s.id,
                 name: s.name,
                 countText: formatCount(s.book_count ?? 0, "book"),
-                count: s.book_count ?? 0,
               })) ?? []
             }
             entityType="series"
@@ -279,13 +274,9 @@ const SeriesDetail = () => {
             onOpenChange={setMergeOpen}
             onSearch={setMergeSearch}
             open={mergeOpen}
+            showSidecarNote
             targetId={seriesId!}
             targetName={series.name}
-            targetSidecarCount={{
-              count: series.book_count,
-              singular: "book",
-              plural: "books",
-            }}
           />
 
           <MetadataDeleteDialog

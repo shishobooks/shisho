@@ -3,6 +3,7 @@ package books
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/sidecar"
+	"github.com/uptrace/bun"
 )
 
 // Sidecars name People, Series, Genres, Tags, and Publishers, so renaming or
@@ -28,58 +30,112 @@ import (
 // sidecarRewriteBatch is how many marked Books the job loads at a time.
 const sidecarRewriteBatch = 100
 
+// sidecarKind is how to find the Books whose sidecars name one kind of
+// resource, and what renaming it takes.
+type sidecarKind struct {
+	// name is the resource's name in errors.
+	name string
+	// table holds the resources, for their library.
+	table string
+	// resource is the permission resource a rename or merge needs write on.
+	resource string
+	// books selects the book_id of every Book naming any of the resources
+	// bound to each of its ? placeholders.
+	books string
+}
+
+var sidecarKinds = map[string]sidecarKind{
+	SidecarImpactPerson: {name: "Person", table: "persons", resource: models.ResourcePeople, books: `
+		SELECT book_id FROM authors WHERE person_id IN (?)
+		UNION
+		SELECT f.book_id FROM narrators n JOIN files f ON f.id = n.file_id WHERE n.person_id IN (?)`},
+	SidecarImpactSeries:    {name: "Series", table: "series", resource: models.ResourceSeries, books: `SELECT book_id FROM book_series WHERE series_id IN (?)`},
+	SidecarImpactGenre:     {name: "Genre", table: "genres", resource: models.ResourceBooks, books: `SELECT book_id FROM book_genres WHERE genre_id IN (?)`},
+	SidecarImpactTag:       {name: "Tag", table: "tags", resource: models.ResourceBooks, books: `SELECT book_id FROM book_tags WHERE tag_id IN (?)`},
+	SidecarImpactPublisher: {name: "Publisher", table: "publishers", resource: models.ResourceBooks, books: `SELECT book_id FROM files WHERE publisher_id IN (?)`},
+}
+
+// booksArgs binds ids to every placeholder in the kind's books query.
+func (k sidecarKind) booksArgs(ids []int) []any {
+	args := make([]any, strings.Count(k.books, "?"))
+	for i := range args {
+		args[i] = bun.List(ids)
+	}
+	return args
+}
+
 // MarkSidecarsStaleForPerson marks every Book the Person authored or narrated
 // a File of, and queues the rewrite.
 func (svc *Service) MarkSidecarsStaleForPerson(ctx context.Context, personID int) {
-	svc.markSidecarsStale(ctx, "person", personID, `
-		SELECT book_id FROM authors WHERE person_id = ?
-		UNION
-		SELECT f.book_id FROM narrators n JOIN files f ON f.id = n.file_id WHERE n.person_id = ?`, personID, personID)
+	svc.markSidecarsStale(ctx, SidecarImpactPerson, personID)
 }
 
 // MarkSidecarsStaleForSeries marks every Book in the Series, and queues the
 // rewrite.
 func (svc *Service) MarkSidecarsStaleForSeries(ctx context.Context, seriesID int) {
-	svc.markSidecarsStale(ctx, "series", seriesID, `SELECT book_id FROM book_series WHERE series_id = ?`, seriesID)
+	svc.markSidecarsStale(ctx, SidecarImpactSeries, seriesID)
 }
 
 // MarkSidecarsStaleForGenre marks every Book with the Genre, and queues the
 // rewrite.
 func (svc *Service) MarkSidecarsStaleForGenre(ctx context.Context, genreID int) {
-	svc.markSidecarsStale(ctx, "genre", genreID, `SELECT book_id FROM book_genres WHERE genre_id = ?`, genreID)
+	svc.markSidecarsStale(ctx, SidecarImpactGenre, genreID)
 }
 
 // MarkSidecarsStaleForTag marks every Book with the Tag, and queues the
 // rewrite.
 func (svc *Service) MarkSidecarsStaleForTag(ctx context.Context, tagID int) {
-	svc.markSidecarsStale(ctx, "tag", tagID, `SELECT book_id FROM book_tags WHERE tag_id = ?`, tagID)
+	svc.markSidecarsStale(ctx, SidecarImpactTag, tagID)
 }
 
 // MarkSidecarsStaleForPublisher marks every Book with a File published by
 // the Publisher, and queues the rewrite.
 func (svc *Service) MarkSidecarsStaleForPublisher(ctx context.Context, publisherID int) {
-	svc.markSidecarsStale(ctx, "publisher", publisherID, `SELECT book_id FROM files WHERE publisher_id = ?`, publisherID)
+	svc.markSidecarsStale(ctx, SidecarImpactPublisher, publisherID)
 }
 
-// markSidecarsStale marks the Books query selects and queues the rewrite. It
-// ignores ctx cancellation, since the rename it follows has committed, and
-// logs a failure rather than failing the request for the same reason.
-func (svc *Service) markSidecarsStale(ctx context.Context, kind string, id int, query string, args ...any) {
+// markSidecarsStale marks the Books naming the resource and queues the
+// rewrite. It ignores ctx cancellation, since the rename it follows has
+// committed, and logs a failure rather than failing the request for the same
+// reason.
+func (svc *Service) markSidecarsStale(ctx context.Context, kindName string, id int) {
 	ctx = context.WithoutCancel(ctx)
 	log := logger.FromContext(ctx)
+	kind := sidecarKinds[kindName]
 
-	res, err := svc.db.NewRaw("UPDATE books SET sidecars_stale_at = ? WHERE id IN ("+query+")",
-		append([]any{time.Now()}, args...)...).Exec(ctx)
+	args := append([]any{time.Now()}, kind.booksArgs([]int{id})...)
+	res, err := svc.db.NewRaw("UPDATE books SET sidecars_stale_at = ? WHERE id IN ("+kind.books+")", args...).Exec(ctx)
 	if err != nil {
-		log.Warn("failed to mark sidecars stale after a rename", logger.Data{"kind": kind, "id": id, "error": err.Error()})
+		log.Warn("failed to mark sidecars stale after a rename", logger.Data{"kind": kindName, "id": id, "error": err.Error()})
 		return
 	}
 	if n, err := res.RowsAffected(); err == nil && n == 0 {
 		return
 	}
 	if err := svc.EnsureSidecarRewriteJob(ctx); err != nil {
-		log.Warn("failed to queue the sidecar rewrite job", logger.Data{"kind": kind, "id": id, "error": err.Error()})
+		log.Warn("failed to queue the sidecar rewrite job", logger.Data{"kind": kindName, "id": id, "error": err.Error()})
 	}
+}
+
+// CountSidecarBooks counts the distinct Books naming any of the resources,
+// which a rename of one or a merge of two marks for the rewrite job.
+func (svc *Service) CountSidecarBooks(ctx context.Context, kindName string, ids []int) (int, error) {
+	kind, ok := sidecarKinds[kindName]
+	if !ok {
+		return 0, errors.Errorf("unknown sidecar kind %q", kindName)
+	}
+	var count int
+	err := svc.db.NewRaw("SELECT COUNT(DISTINCT book_id) FROM ("+kind.books+")", kind.booksArgs(ids)...).Scan(ctx, &count)
+	return count, errors.WithStack(err)
+}
+
+// sidecarResourceLibraries returns the library of each resource found, so a
+// handler can check access, and how many of ids exist.
+func (svc *Service) sidecarResourceLibraries(ctx context.Context, kindName string, ids []int) ([]int, error) {
+	kind := sidecarKinds[kindName]
+	var libraryIDs []int
+	err := svc.db.NewRaw("SELECT library_id FROM "+kind.table+" WHERE id IN (?)", bun.List(ids)).Scan(ctx, &libraryIDs)
+	return libraryIDs, errors.WithStack(err)
 }
 
 // EnsureSidecarRewriteJob queues a sidecar rewrite job unless one is already

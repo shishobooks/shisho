@@ -21,6 +21,8 @@ import {
   type MergeBooksResponse,
   type MoveFilesPayload,
   type MoveFilesResponse,
+  type SidecarImpactKind,
+  type SidecarImpactResponse,
   type UpdateBookPayload,
   type UpdateFileCoverPagePayload,
   type UpdateFilePayload,
@@ -31,7 +33,7 @@ import { invalidateCoverPreviewLists } from "./coverPreviews";
 import { QueryKey as GenresQueryKey } from "./genres";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { QueryKey as PeopleQueryKey } from "./people";
-import { useRequires } from "./permissions";
+import { useRequires, type Requirement } from "./permissions";
 import { QueryKey as PublishersQueryKey } from "./publishers";
 import {
   invalidateReadingRecords,
@@ -44,6 +46,7 @@ import { QueryKey as TagsQueryKey } from "./tags";
 export enum QueryKey {
   RetrieveBook = "RetrieveBook",
   ListBooks = "ListBooks",
+  SidecarImpact = "SidecarImpact",
 }
 
 export const useBook = (
@@ -359,3 +362,44 @@ export const useDeleteBooks = () => {
 };
 
 export * from "./resync";
+
+// GET /books/sidecar-impact sits in the Books Read group and also needs the
+// write permission the kind's rename and merge routes need.
+const SIDECAR_IMPACT_REQUIREMENT: Record<SidecarImpactKind, Requirement> = {
+  person: ["books:read", "people:write"],
+  series: ["books:read", "series:write"],
+  genre: ["books:read", "books:write"],
+  tag: ["books:read", "books:write"],
+  publisher: ["books:read", "books:write"],
+};
+
+/**
+ * How many distinct Books' sidecars renaming the resource (one id) or merging
+ * two (both ids) would rewrite in the background (ADR 0027).
+ */
+export const useSidecarImpact = (
+  kind: SidecarImpactKind,
+  ids: number[],
+  options: Omit<
+    UseQueryOptions<SidecarImpactResponse, ShishoAPIError>,
+    "queryKey" | "queryFn"
+  > = {},
+) => {
+  return useQuery<SidecarImpactResponse, ShishoAPIError>({
+    ...options,
+    enabled: useRequires(
+      SIDECAR_IMPACT_REQUIREMENT[kind],
+      (options.enabled ?? true) && ids.length > 0,
+    ),
+    queryKey: [QueryKey.SidecarImpact, kind, ids],
+    queryFn: ({ signal }) => {
+      return API.request(
+        "GET",
+        "/books/sidecar-impact",
+        null,
+        { kind, ids },
+        signal,
+      );
+    },
+  });
+};

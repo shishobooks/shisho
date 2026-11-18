@@ -1,5 +1,6 @@
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +36,7 @@ import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
 import type { EntityType } from "./MetadataEditDialog";
-import { SidecarRewriteNote, type SidecarCount } from "./SidecarRewriteNote";
+import { SidecarRewriteNote } from "./SidecarRewriteNote";
 
 export interface EntityOption {
   id: number;
@@ -45,8 +46,6 @@ export interface EntityOption {
    * the count means: "12 books", "40 files", "3 books authored".
    */
   countText: string;
-  /** The number countText states, for the sidecar note on a big merge. */
-  count?: number;
 }
 
 export interface SetChildConfig {
@@ -63,8 +62,10 @@ interface MetadataMergeDialogProps {
   entityType: EntityType;
   targetName: string;
   targetId: number;
-  /** What the target holds, in the unit the entities' counts use. */
-  targetSidecarCount?: SidecarCount;
+  /**
+   * Say when a merge rewrites many Books' sidecars (see SidecarRewriteNote).
+   */
+  showSidecarNote?: boolean;
   /** A rejection is toasted here and keeps the dialog open. */
   onMerge: (sourceId: number) => Promise<unknown>;
   isPending: boolean;
@@ -107,7 +108,7 @@ export function MetadataMergeDialog({
   isSearchPending,
   onSearch,
   setChildConfig,
-  targetSidecarCount,
+  showSidecarNote = false,
 }: MetadataMergeDialogProps) {
   // The picked source itself, not its id: a later search can drop it from
   // `entities`, and the picker and Merge must still agree on what merges.
@@ -182,6 +183,11 @@ export function MetadataMergeDialog({
       );
       return;
     }
+    toast.success(
+      setChild
+        ? `"${selectedEntity?.name}" is now under "${targetName}"`
+        : `Merged "${selectedEntity?.name}" into "${targetName}"`,
+    );
     resetDialogState();
   };
 
@@ -357,16 +363,13 @@ export function MetadataMergeDialog({
           )}
 
           {selectedEntity &&
-            targetSidecarCount &&
+            showSidecarNote &&
             (!setChildConfig || action === "merge") && (
               <div className="mt-3">
                 <SidecarRewriteNote
                   action="Merging"
-                  affected={{
-                    ...targetSidecarCount,
-                    count:
-                      targetSidecarCount.count + (selectedEntity.count ?? 0),
-                  }}
+                  ids={[targetId, selectedEntity.id]}
+                  kind={entityType}
                 />
               </div>
             )}

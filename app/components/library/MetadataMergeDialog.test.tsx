@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -5,7 +6,8 @@ import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
 import { useDebounce } from "@/hooks/useDebounce";
-import { ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 import { watchUnhandledRejections } from "@/testing/mutations";
 import {
   advancePastSearch,
@@ -14,6 +16,8 @@ import {
 } from "@/testing/searchQuery";
 
 import { MetadataMergeDialog } from "./MetadataMergeDialog";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const SOURCES = [
   { id: 30, name: "Ace", countText: "1 book" },
@@ -487,81 +491,114 @@ describe("MetadataMergeDialog failures", () => {
   });
 });
 
-describe("MetadataMergeDialog sidecar warning", () => {
+describe("MetadataMergeDialog sidecar note and confirmation", () => {
   const sources = [
-    { id: 30, name: "Big", countText: "1,400 files", count: 1400 },
-    { id: 40, name: "Small", countText: "2 files", count: 2 },
+    { id: 30, name: "Big", countText: "1,400 files" },
+    { id: 40, name: "Small", countText: "2 files" },
   ];
-  const renderMerge = (setChild = false) =>
+  const renderMerge = ({
+    bookCount,
+    setChild = false,
+    onMerge = vi.fn(),
+  }: {
+    bookCount: number;
+    setChild?: boolean;
+    onMerge?: (id: number) => Promise<unknown>;
+  }) => {
+    setAuth({ permissions: ["books:read", "books:write"] });
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ book_count: bookCount });
     render(
-      <MetadataMergeDialog
-        entities={sources}
-        entityType="publisher"
-        isLoadingEntities={false}
-        isPending={false}
-        isSearchPending={false}
-        onMerge={vi.fn()}
-        onOpenChange={vi.fn()}
-        onSearch={vi.fn()}
-        open={true}
-        setChildConfig={
-          setChild
-            ? { disabledIds: [], isPending: false, onSetChild: vi.fn() }
-            : undefined
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
-        targetId={1}
-        targetName="Penguin"
-        targetSidecarCount={{ count: 300, singular: "file", plural: "files" }}
-      />,
+      >
+        <MetadataMergeDialog
+          entities={sources}
+          entityType="publisher"
+          isLoadingEntities={false}
+          isPending={false}
+          isSearchPending={false}
+          onMerge={onMerge}
+          onOpenChange={vi.fn()}
+          onSearch={vi.fn()}
+          open={true}
+          setChildConfig={
+            setChild
+              ? { disabledIds: [], isPending: false, onSetChild: vi.fn() }
+              : undefined
+          }
+          showSidecarNote
+          targetId={1}
+          targetName="Penguin"
+        />
+      </QueryClientProvider>,
     );
-  const warning = () => screen.queryByText(/updates the sidecar files/i);
+    return request;
+  };
+  const note = () => screen.queryByText(/updates the sidecar files/i);
 
-  it("warns that a big merge rewrites sidecars in the background", async () => {
+  it("counts the distinct books a big merge rewrites", async () => {
     const user = createUser();
-    renderMerge();
-    expect(warning()).not.toBeInTheDocument();
+    const request = renderMerge({ bookCount: 1650 });
+    expect(note()).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("combobox"));
     await user.click(screen.getByText("Big"));
 
-    expect(warning()).toHaveTextContent("1,700 files");
-    expect(warning()).toHaveTextContent(/in the background/i);
+    expect(
+      await screen.findByText(/updates the sidecar files/i),
+    ).toHaveTextContent("1,650 books");
+    expect(request).toHaveBeenCalledWith(
+      "GET",
+      "/books/sidecar-impact",
+      null,
+      { kind: "publisher", ids: [1, 30] },
+      expect.anything(),
+    );
   });
 
-  it("doesn't warn for a small merge", async () => {
+  it("says nothing for a small merge", async () => {
     const user = createUser();
-    render(
-      <MetadataMergeDialog
-        entities={sources}
-        entityType="publisher"
-        isLoadingEntities={false}
-        isPending={false}
-        isSearchPending={false}
-        onMerge={vi.fn()}
-        onOpenChange={vi.fn()}
-        onSearch={vi.fn()}
-        open={true}
-        targetId={1}
-        targetName="Penguin"
-        targetSidecarCount={{ count: 10, singular: "file", plural: "files" }}
-      />,
-    );
+    renderMerge({ bookCount: 3 });
 
     await user.click(screen.getByRole("combobox"));
     await user.click(screen.getByText("Small"));
+    await waitFor(() => expect(API.request).toHaveBeenCalled());
 
-    expect(warning()).not.toBeInTheDocument();
+    expect(note()).not.toBeInTheDocument();
   });
 
-  it("doesn't warn when setting a child, which rewrites nothing", async () => {
+  it("says nothing when setting a child, which rewrites nothing", async () => {
     const user = createUser();
-    renderMerge(true);
+    renderMerge({ bookCount: 1650, setChild: true });
 
     await user.click(screen.getByRole("combobox"));
     await user.click(screen.getByText("Big"));
-    expect(warning()).toBeInTheDocument();
+    expect(
+      await screen.findByText(/updates the sidecar files/i),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("radio", { name: /set as child/i }));
-    expect(warning()).not.toBeInTheDocument();
+    expect(note()).not.toBeInTheDocument();
+  });
+
+  it("confirms a merge once it's done", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderMerge({
+      bookCount: 3,
+      onMerge: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Small"));
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Merged "Small" into "Penguin"'),
+    );
   });
 });

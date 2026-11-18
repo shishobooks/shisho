@@ -1,6 +1,7 @@
 import equal from "fast-deep-equal";
 import { Loader2, Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { SortableEntityList } from "@/components/common/SortableEntityList";
 import { SortNameInput } from "@/components/common/SortNameInput";
@@ -469,6 +470,7 @@ export function BookEditDialog({
         draftReviewOverride === undefined ? saved : draftReviewOverride,
       ),
     });
+    toast.success("Book saved");
     requestClose();
   };
 
