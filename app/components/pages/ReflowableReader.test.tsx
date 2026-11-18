@@ -42,6 +42,10 @@ vi.mock("@/hooks/queries/reflowable", () => ({
 let mockToc: unknown[] = [];
 // The page progression direction the mocked foliate view reports.
 let mockDir: string | undefined;
+// Where each section starts along the book, as foliate reports it, and the
+// section each table-of-contents link goes to.
+let mockFractions: number[] = [];
+let mockSectionOf: Record<string, number> = {};
 // Whether the mocked renderer is at the end of the book.
 let mockAtEnd = false;
 // The screen the mocked renderer shows when the book opens.
@@ -76,8 +80,16 @@ beforeAll(() => {
           setAttribute: vi.fn(),
         };
         lastLocation = { cfi: "epubcfi(/6/2!/4/2)", fraction: 0 };
+        getSectionFractions = () => mockFractions;
         get book() {
-          return { toc: mockToc, dir: mockDir };
+          return {
+            toc: mockToc,
+            dir: mockDir,
+            resolveHref: (href: string) =>
+              href in mockSectionOf
+                ? { index: mockSectionOf[href], anchor: () => 0 }
+                : null,
+          };
         }
       },
     );
@@ -98,6 +110,8 @@ beforeEach(() => {
   mockAtEnd = false;
   mockPage = undefined;
   mockDir = undefined;
+  mockFractions = [];
+  mockSectionOf = {};
   savedCfi = null;
   savedPercentageOnly = null;
   saveResult = {};
@@ -216,6 +230,40 @@ describe("ReflowableReader", () => {
         );
       });
       expect(menu).toHaveTextContent(/^Part Two$/);
+    } finally {
+      mockToc = [];
+    }
+  });
+
+  it("marks where each chapter starts along the progress bar", async () => {
+    mockToc = [
+      { label: "Cover", href: "cover.xhtml" },
+      { label: "Part One", href: "" },
+      { label: "Chapter 1", href: "ch1.xhtml" },
+      { label: "Chapter 2", href: "ch2.xhtml" },
+    ];
+    mockSectionOf = { "cover.xhtml": 0, "ch1.xhtml": 1, "ch2.xhtml": 2 };
+    mockFractions = [0, 0.05, 0.5, 1];
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    try {
+      renderReader();
+      const progress = screen.getByRole("slider", { name: "Reading progress" });
+      // The cover starts the book, at the bar's own start; the part heading
+      // goes nowhere.
+      await vi.waitFor(() =>
+        expect(
+          within(progress)
+            .getAllByTestId("chapter-marker")
+            .map((m) => m.style.left),
+        ).toEqual(["5%", "50%"]),
+      );
     } finally {
       mockToc = [];
     }

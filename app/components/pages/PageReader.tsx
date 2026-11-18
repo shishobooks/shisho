@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import ChapterMarkers from "@/components/library/ChapterMarkers";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
 import { Button } from "@/components/ui/button";
@@ -1021,19 +1022,13 @@ export default function PageReader({
               )}
               style={{ width: `${progressPercent}%` }}
             />
-            {/* Chapter markers */}
-            {flatChapters.map((ch) => {
-              if (ch.start_page == null || totalPages <= 1) return null;
-              const pos = (ch.start_page / (totalPages - 1)) * 100;
-              return (
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-0.5 h-2.5 bg-muted-foreground/50"
-                  key={ch.id}
-                  style={rtl ? { right: `${pos}%` } : { left: `${pos}%` }}
-                  title={ch.title}
-                />
-              );
-            })}
+            {totalPages > 1 && (
+              <ChapterMarkers
+                positions={flatChapters
+                  .filter((ch) => ch.start_page != null)
+                  .map((ch) => ch.start_page! / (totalPages - 1))}
+              />
+            )}
           </div>
           {currentChapter && (
             <div className="text-xs text-muted-foreground mt-1">

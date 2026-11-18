@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import ChapterMarkers from "@/components/library/ChapterMarkers";
 import CoverImage from "@/components/library/CoverImage";
 import CoverPlaceholder from "@/components/library/CoverPlaceholder";
 import BookmarkNoteDialog from "@/components/player/BookmarkNoteDialog";
@@ -587,22 +588,13 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
               thumbLabel="Seek"
               value={[Math.min(displayTime, sliderMax)]}
             />
-            {/* Chapter markers along the seek bar, positioned by start/duration.
-                Skip the first marker at 0 (it sits under the thumb origin). */}
-            {hasChapters &&
-              duration > 0 &&
-              chapters.map((chapter) =>
-                chapter.startSeconds <= 0 ? null : (
-                  <span
-                    aria-hidden="true"
-                    className="pointer-events-none absolute top-1/2 h-2 w-px -translate-x-1/2 -translate-y-1/2 bg-primary/40"
-                    key={chapter.index}
-                    style={{
-                      left: `${(chapter.startSeconds / duration) * 100}%`,
-                    }}
-                  />
-                ),
-              )}
+            {hasChapters && duration > 0 && (
+              <ChapterMarkers
+                positions={chapters.map(
+                  (chapter) => chapter.startSeconds / duration,
+                )}
+              />
+            )}
           </div>
 
           <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">

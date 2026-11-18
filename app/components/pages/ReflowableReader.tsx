@@ -1,6 +1,7 @@
 import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import ChapterMarkers from "@/components/library/ChapterMarkers";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
 import ReaderSettingsPanel from "@/components/library/ReaderSettingsPanel";
@@ -26,6 +27,7 @@ import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import { chapterPositions } from "@/libraries/readerChapterMarkers";
 import { fontFaceFor } from "@/libraries/readerFonts";
 import { footnoteText, isFootnoteReference } from "@/libraries/readerFootnotes";
 import {
@@ -254,6 +256,8 @@ export default function ReflowableReader({
   const headerRef = useRef<HTMLElement | null>(null);
   const footerRef = useRef<HTMLElement | null>(null);
   const [toc, setToc] = useState<TocEntry[]>([]);
+  // Where each chapter starts along the progress bar.
+  const [chapterMarks, setChapterMarks] = useState<number[]>([]);
   const [fraction, setFraction] = useState(0);
   const [currentTocHref, setCurrentTocHref] = useState<string | null>(null);
   const [currentTocLabel, setCurrentTocLabel] = useState<string | null>(null);
@@ -648,6 +652,34 @@ export default function ReflowableReader({
       stopListening.abort();
     };
   }, [viewElement, goNext, goPrev]);
+
+  // Chapter markers wait for the book to open, which is when foliate knows
+  // its sections' sizes. Chapters partway through a section need its
+  // document read, so they can arrive a moment after the book shows.
+  useEffect(() => {
+    setChapterMarks([]);
+    if (!bookReady || toc.length === 0) return;
+    const view = viewRef.current as
+      (FoliateBookView & { getSectionFractions?: () => number[] }) | null;
+    if (!view?.book) return;
+    let stale = false;
+    chapterPositions(
+      toc,
+      view.book,
+      view.getSectionFractions?.() ?? [],
+      () => stale,
+    )
+      .then((positions) => {
+        if (!stale && positions) setChapterMarks(positions);
+      })
+      .catch((err: unknown) => {
+        // The bar works without markers.
+        console.warn("ReflowableReader: couldn't place chapter markers", err);
+      });
+    return () => {
+      stale = true;
+    };
+  }, [bookReady, toc]);
 
   // A link to a footnote opens the note in a popover instead of jumping
   // there. foliate reports every link it's about to follow, and a canceled
@@ -1076,6 +1108,7 @@ export default function ReflowableReader({
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
               style={{ width: `${progressPercent}%` }}
             />
+            <ChapterMarkers positions={chapterMarks} />
           </div>
           {currentTocLabel && (
             <div className="text-xs text-muted-foreground mt-1">

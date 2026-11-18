@@ -205,6 +205,9 @@ type createBookRequest struct {
 	PageHeight int `json:"pageHeight"`
 	// Filler paragraphs in an EPUB written to disk, for tests that turn pages.
 	EPUBParagraphs int `json:"epubParagraphs"`
+	// Gives an EPUB written to disk a table of contents with one entry per
+	// chapter, for tests of the chapter menu and markers.
+	EPUBTOC bool `json:"epubToc"`
 	// Writes an EPUB to disk as fixed-layout, with its pages running right to
 	// left if fixedLayoutRTL is set.
 	FixedLayout    bool `json:"fixedLayout"`
@@ -257,6 +260,7 @@ func (h *handler) createBook(c echo.Context) error {
 		}
 		base, err := writeFileOnDisk(h.fileRoot, fileType, req.Title, pages, epubSpec{
 			paragraphs:  req.EPUBParagraphs,
+			toc:         req.EPUBTOC,
 			fixedLayout: req.FixedLayout,
 			rtl:         req.FixedLayoutRTL,
 			fixedPages:  req.FixedLayoutPages,

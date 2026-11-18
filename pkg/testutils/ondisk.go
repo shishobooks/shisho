@@ -23,6 +23,7 @@ type pageSpec struct {
 // epubSpec is the kind of EPUB written for withFileOnDisk.
 type epubSpec struct {
 	paragraphs       int
+	toc              bool
 	fixedLayout, rtl bool
 	fixedPages       int
 }
@@ -42,7 +43,7 @@ func writeFileOnDisk(root, fileType, title string, pages pageSpec, epub epubSpec
 				}
 				return writeFixedLayoutEPUB(path, title, pageCount, epub.rtl)
 			}
-			return writeMinimalEPUB(path, title, epub.paragraphs)
+			return writeMinimalEPUB(path, title, epub.paragraphs, epub.toc)
 		}
 	case models.FileTypeMOBI:
 		write = writeMinimalMOBI

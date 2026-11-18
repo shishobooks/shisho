@@ -20,9 +20,14 @@ import (
 // font size. The second refers to a note the book marks as one, kept in the
 // third, for the reader's footnote popover. extraParagraphs adds filler text
 // to the first chapter, so a test can turn pages within a chapter as well as
-// across chapters.
-func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
+// across chapters. toc adds a table of contents with an entry per chapter.
+func writeMinimalEPUB(path, title string, extraParagraphs int, toc bool) (err error) {
 	escaped := html.EscapeString(title)
+	navItem := ""
+	if toc {
+		navItem = `
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`
+	}
 	filler := strings.Repeat("<p>"+strings.Repeat("Filler text to fill a page. ", 10)+"</p>", extraParagraphs)
 	entries := []epubEntry{
 		{"META-INF/container.xml", epubContainerXML},
@@ -33,7 +38,7 @@ func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
     <dc:identifier id="bookid">urn:uuid:e2e-test-book</dc:identifier>
     <dc:language>en</dc:language>
   </metadata>
-  <manifest>
+  <manifest>` + navItem + `
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
     <item id="chapter3" href="chapter3.xhtml" media-type="application/xhtml+xml"/>
@@ -70,6 +75,19 @@ func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 <body>` + body + `</body>
 </html>`,
 		})
+	}
+	if toc {
+		entries = append(entries, epubEntry{"OEBPS/nav.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>` + escaped + `</title></head>
+<body><nav epub:type="toc"><ol>
+<li><a href="chapter1.xhtml">Chapter One</a></li>
+<li><a href="chapter2.xhtml">Chapter Two</a></li>
+<li><a href="chapter3.xhtml">Chapter Three</a></li>
+<li><a href="chapter4.xhtml">Chapter Four</a></li>
+</ol></nav></body>
+</html>`})
 	}
 	return writeEPUBArchive(path, entries)
 }

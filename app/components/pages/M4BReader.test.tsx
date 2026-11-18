@@ -765,9 +765,7 @@ describe("M4BReader", () => {
       const { container } = renderReader({ file: fileWithChapters });
       // The first chapter starts at 0 (no marker); the two later chapters get
       // markers positioned by start/duration.
-      const markers = container.querySelectorAll(
-        '[aria-hidden="true"][style*="left"]',
-      );
+      const markers = within(container).queryAllByTestId("chapter-marker");
       const lefts = Array.from(markers).map(
         (m) => (m as HTMLElement).style.left,
       );

@@ -516,6 +516,22 @@ describe("PageReader chapter menu", () => {
   });
 });
 
+describe("PageReader chapter markers", () => {
+  it("marks where each chapter starts along the progress bar", () => {
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 3 },
+      { id: 3, title: "Unplaced" },
+    ];
+    renderReader(10);
+    // Page 4 of 10 sits a third of the way along a bar that runs from the
+    // first page to the last. The first chapter is at the bar's start.
+    expect(
+      screen.getAllByTestId("chapter-marker").map((m) => m.style.left),
+    ).toEqual(["33.3333%"]);
+  });
+});
+
 describe("PageReader keyboard", () => {
   it("turns pages with the arrow keys, but not while a control has them", async () => {
     chapters.data = [{ id: 1, title: "Opening", start_page: 0 }];

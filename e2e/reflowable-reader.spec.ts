@@ -21,6 +21,7 @@ let resumeBookId: number;
 let finishBookId: number;
 let settingsBookId: number;
 let longBookId: number;
+let contentsBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -120,6 +121,7 @@ test.describe("Reflowable reader", () => {
       title: string,
       fileType: string,
       epubParagraphs = 0,
+      epubToc = false,
     ) => {
       const resp = await apiContext.post("/api/test/books", {
         data: {
@@ -128,6 +130,7 @@ test.describe("Reflowable reader", () => {
           fileType,
           withFileOnDisk: true,
           epubParagraphs,
+          epubToc,
         },
       });
       expect(resp.ok()).toBe(true);
@@ -139,6 +142,7 @@ test.describe("Reflowable reader", () => {
     finishBookId = await seed("Finish Book", "epub");
     settingsBookId = await seed("Settings Book", "epub");
     longBookId = await seed("Long Book", "epub", 120);
+    contentsBookId = await seed("Contents Book", "epub", 0, true);
     await apiContext.dispose();
   });
 
@@ -254,6 +258,28 @@ test.describe("Reflowable reader", () => {
       await page.getByRole("button", { name: "Auto", exact: true }).click();
       await expect.poll(columns).toBe(2);
     });
+  });
+
+  test("chapter markers sit where the chapters start", async ({ page }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, contentsBookId);
+    await bookFrame(page, "Test chapter.");
+
+    const bar = page.getByRole("slider", { name: "Reading progress" });
+    const markers = bar.getByTestId("chapter-marker");
+    // Chapter One starts the book, at the bar's own start.
+    await expect(markers).toHaveCount(3);
+
+    // Just past each marker is the start of its chapter.
+    for (const [i, name] of ["Two", "Three", "Four"].entries()) {
+      const marker = (await markers.nth(i).boundingBox())!;
+      const start = (await bar.boundingBox())!;
+      await bar.click({
+        position: { x: marker.x + marker.width / 2 + 3 - start.x, y: 3 },
+      });
+      await bookFrame(page, `Chapter ${name} text.`);
+    }
   });
 
   test("a tap on the book closes the settings without turning the page", async ({
