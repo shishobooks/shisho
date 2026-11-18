@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import type { UserSettingsResponse } from "@/types";
 
 // The ebook reader's display settings. The Shisho app's readers offer the
@@ -346,17 +348,21 @@ export const footnoteStyle = (
   settings: ReaderSettings,
   fontFace: ReaderFontFace | undefined,
   bookFontFamily: string,
-) => {
+): { style: CSSProperties; link: string } => {
   const { fg, bg, noteLink } = THEME_COLORS[settings.theme];
   return {
-    backgroundColor: bg,
-    color: fg,
+    style: {
+      backgroundColor: bg,
+      color: fg,
+      // A quarter of the text's color, which shows on every theme.
+      borderColor: "color-mix(in srgb, currentColor 25%, transparent)",
+      fontFamily: fontFace
+        ? `"${fontFace.family}", ${fontFace.fallback}`
+        : bookFontFamily,
+      // To the half pixel, as the text size steps.
+      fontSize: `${Math.round(settings.size * 0.9 * 2) / 2}px`,
+      lineHeight: settings.lineSpacing,
+    },
     link: noteLink,
-    fontFamily: fontFace
-      ? `"${fontFace.family}", ${fontFace.fallback}`
-      : bookFontFamily,
-    // To the half pixel, as the text size steps.
-    fontSize: `${Math.round(settings.size * 0.9 * 2) / 2}px`,
-    lineHeight: settings.lineSpacing,
   };
 };

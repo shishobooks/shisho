@@ -157,11 +157,12 @@ const fontFaces = (family: string, faces: Face[]) =>
 
 // The faces to inject for a font setting, or undefined to keep the book's
 // own fonts (including when an imported font chosen earlier is gone).
-// `as` declares them under another family name, for a page that has a font
-// of the same name already.
+// `imported` is the chosen imported font with its address in this page, if
+// it has one yet. `as` declares the faces under another family name, for a
+// page that has a font of the same name already.
 export const fontFaceFor = (
   fontId: string,
-  imported: LoadedImportedFont[],
+  imported: LoadedImportedFont | undefined,
   as?: string,
 ): ReaderFontFace | undefined => {
   const bundled = BUNDLED_FONTS.find((f) => f.id === fontId);
@@ -175,7 +176,7 @@ export const fontFaceFor = (
   }
   if (!fontId.startsWith(IMPORTED_FONT_PREFIX)) return undefined;
   const id = fontId.slice(IMPORTED_FONT_PREFIX.length);
-  const match = imported.find(({ font }) => String(font.id) === id);
+  const match = imported && String(imported.font.id) === id ? imported : null;
   if (!match) return undefined;
   // Named by id, so a file named like a bundled font can't take its place.
   const family = as ?? `Imported Font ${id}`;

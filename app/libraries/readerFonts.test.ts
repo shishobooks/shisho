@@ -37,7 +37,7 @@ describe("bundled fonts", () => {
   });
 
   it("declares a bundled font's faces at absolute addresses, which a book's frame can load", () => {
-    const face = fontFaceFor("opendyslexic", []);
+    const face = fontFaceFor("opendyslexic", undefined);
     expect(face?.family).toBe("OpenDyslexic");
     const urls = [...face!.faces.matchAll(/url\("([^"]+)"\)/g)].map(
       (m) => m[1],
@@ -52,7 +52,7 @@ describe("bundled fonts", () => {
   });
 
   it("declares a variable font across its weights", () => {
-    const face = fontFaceFor("noto-sans", []);
+    const face = fontFaceFor("noto-sans", undefined);
     expect(face!.faces).toContain("font-weight: 100 900");
     expect(face!.faces).toContain('format("truetype")');
   });
@@ -60,14 +60,14 @@ describe("bundled fonts", () => {
   it("declares a font under another family name when asked", () => {
     // The app page has a Noto Sans of its own, which a note's copy mustn't
     // replace.
-    const face = fontFaceFor("noto-sans", [], "Shisho Note Font");
+    const face = fontFaceFor("noto-sans", undefined, "Shisho Note Font");
     expect(face?.family).toBe("Shisho Note Font");
     expect(face?.faces).toContain('font-family: "Shisho Note Font"');
     expect(face?.faces).not.toContain('font-family: "Noto Sans"');
   });
 
   it("declares nothing for the book's own font", () => {
-    expect(fontFaceFor("book", [])).toBeUndefined();
+    expect(fontFaceFor("book", undefined)).toBeUndefined();
   });
 });
 
@@ -138,15 +138,16 @@ describe("imported fonts", () => {
 
   it("declares an imported font's face from its address in this page", async () => {
     const font = await importFont(fontFile("Mine.woff2"));
-    const face = fontFaceFor(`imported:${font.id}`, [
-      { font, url: "blob:http://localhost/abc" },
-    ]);
+    const face = fontFaceFor(`imported:${font.id}`, {
+      font,
+      url: "blob:http://localhost/abc",
+    });
     expect(face?.faces).toContain('url("blob:http://localhost/abc")');
     expect(face?.faces).toContain('format("woff2")');
     expect(face?.family).not.toBe("Mine");
   });
 
   it("declares nothing for an imported font that's gone", () => {
-    expect(fontFaceFor("imported:missing", [])).toBeUndefined();
+    expect(fontFaceFor("imported:missing", undefined)).toBeUndefined();
   });
 });

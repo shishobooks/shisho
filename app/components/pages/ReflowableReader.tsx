@@ -172,11 +172,7 @@ export default function ReflowableReader({
   );
   const chosenImportedUrl = useImportedFontUrl(chosenImportedFont);
   const fontFace = useMemo(
-    () =>
-      fontFaceFor(
-        readerSettings.font,
-        chosenImportedUrl ? [chosenImportedUrl] : [],
-      ),
+    () => fontFaceFor(readerSettings.font, chosenImportedUrl),
     [readerSettings.font, chosenImportedUrl],
   );
   // The same font for a footnote popover, which this page draws itself. A
@@ -184,11 +180,7 @@ export default function ReflowableReader({
   // (the app uses Noto Sans).
   const noteFontFace = useMemo(
     () =>
-      fontFaceFor(
-        readerSettings.font,
-        chosenImportedUrl ? [chosenImportedUrl] : [],
-        "Shisho Note Font",
-      ),
+      fontFaceFor(readerSettings.font, chosenImportedUrl, "Shisho Note Font"),
     [readerSettings.font, chosenImportedUrl],
   );
   // Until an imported font's bytes are ready, the book waits rather than
@@ -1063,19 +1055,7 @@ export default function ReflowableReader({
             collisionPadding={16}
             // The reader theme's colors and type, not the app's: they come
             // from the reader settings, which no Tailwind token holds.
-            style={
-              noteStyle
-                ? {
-                    backgroundColor: noteStyle.backgroundColor,
-                    color: noteStyle.color,
-                    borderColor:
-                      "color-mix(in srgb, currentColor 25%, transparent)",
-                    fontFamily: noteStyle.fontFamily,
-                    fontSize: noteStyle.fontSize,
-                    lineHeight: noteStyle.lineHeight,
-                  }
-                : undefined
-            }
+            style={noteStyle?.style}
           >
             {/* The chosen font's faces, which this page loads only while a
                 note shows. */}

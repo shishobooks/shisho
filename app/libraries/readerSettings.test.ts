@@ -312,7 +312,7 @@ describe("stepSetting", () => {
 });
 
 describe("footnoteStyle", () => {
-  const style = (
+  const note = (
     overrides = {},
     fontFace?: Parameters<typeof footnoteStyle>[1],
   ) =>
@@ -328,35 +328,35 @@ describe("footnoteStyle", () => {
     ["dark", "#1a1a1a", "#e8e8e8"],
     ["black", "#000000", "#c8c8c8"],
   ])("colors a footnote like the %s page", (theme, bg, fg) => {
-    expect(style({ theme })).toEqual(
+    expect(note({ theme }).style).toEqual(
       expect.objectContaining({ backgroundColor: bg, color: fg }),
     );
   });
 
   it("gives the note's link the theme's link color", () => {
-    expect(style({ theme: "sepia" }).link).toBe("#8a4b08");
-    expect(style({ theme: "light" }).link).toMatch(/^#/);
+    expect(note({ theme: "sepia" }).link).toBe("#8a4b08");
+    expect(note({ theme: "light" }).link).toMatch(/^#/);
   });
 
   it("rounds a note's size to a half pixel", () => {
     // 90% of 16px.
-    expect(style({ size: 16 }).fontSize).toBe("14.5px");
+    expect(note({ size: 16 }).style.fontSize).toBe("14.5px");
   });
 
   it("sets a note a little smaller than the text, at its line spacing", () => {
-    expect(style({ size: 20, lineSpacing: 1.6 })).toEqual(
+    expect(note({ size: 20, lineSpacing: 1.6 }).style).toEqual(
       expect.objectContaining({ fontSize: "18px", lineHeight: 1.6 }),
     );
   });
 
   it("sets a note in the chosen font", () => {
     expect(
-      style({}, { family: "Literata", fallback: "serif", faces: "" })
+      note({}, { family: "Literata", fallback: "serif", faces: "" }).style
         .fontFamily,
     ).toBe('"Literata", serif');
   });
 
   it("sets a note in the book's font when that's the choice", () => {
-    expect(style({}).fontFamily).toBe("Georgia, serif");
+    expect(note({}).style.fontFamily).toBe("Georgia, serif");
   });
 });
