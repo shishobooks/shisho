@@ -206,7 +206,7 @@ type createBookRequest struct {
 	// Filler paragraphs in an EPUB written to disk, for tests that turn pages.
 	EPUBParagraphs int `json:"epubParagraphs"`
 	// Gives an EPUB written to disk a table of contents with one entry per
-	// chapter, for tests of the chapter menu and markers.
+	// chapter, for tests of the chapter menu and marks.
 	EPUBTOC bool `json:"epubToc"`
 	// Writes an EPUB to disk as one chapter of many short sections, each a
 	// table-of-contents entry whose header keeps itself with the text after

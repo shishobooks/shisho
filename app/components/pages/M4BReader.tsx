@@ -445,6 +445,30 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
     [addingAt, createBookmark],
   );
 
+  // Built once per change, not on every second of playback, since each mark
+  // is a tooltip of its own.
+  const seekMarks = useMemo(
+    () =>
+      duration > 0
+        ? [
+            ...(hasChapters ? chapters : []).map((chapter) => ({
+              kind: "chapter" as const,
+              position: chapter.startSeconds / duration,
+              label: chapter.title,
+              onSelect: () => seekTo(chapter.startSeconds),
+            })),
+            ...bookmarks.map((bookmark) => ({
+              kind: "bookmark" as const,
+              position: bookmark.seconds / duration,
+              label: `Bookmark at ${formatPlayerTime(bookmark.seconds)}`,
+              note: bookmark.note,
+              onSelect: () => seekTo(bookmark.seconds),
+            })),
+          ]
+        : [],
+    [bookmarks, chapters, duration, hasChapters, seekTo],
+  );
+
   const authorNames = joinNames(book?.authors);
   const narratorNames = joinNames(file.narrators);
 
@@ -589,26 +613,11 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
               step={1}
               thumbLabel="Seek"
               value={[Math.min(displayTime, sliderMax)]}
-            />
-            {duration > 0 && (
-              <ProgressMarks
-                markers={[
-                  ...(hasChapters ? chapters : []).map((chapter) => ({
-                    kind: "chapter" as const,
-                    position: chapter.startSeconds / duration,
-                    label: chapter.title,
-                    onSelect: () => seekTo(chapter.startSeconds),
-                  })),
-                  ...bookmarks.map((bookmark) => ({
-                    kind: "bookmark" as const,
-                    position: bookmark.seconds / duration,
-                    label: `Bookmark at ${formatPlayerTime(bookmark.seconds)}`,
-                    note: bookmark.note,
-                    onSelect: () => seekTo(bookmark.seconds),
-                  })),
-                ]}
-              />
-            )}
+            >
+              {/* Inside the seek bar, under its handle, so the handle can
+                  still be dragged where it sits on a mark. */}
+              <ProgressMarks marks={seekMarks} />
+            </Slider>
           </div>
 
           <div className="flex items-center justify-between text-xs tabular-nums text-muted-foreground">

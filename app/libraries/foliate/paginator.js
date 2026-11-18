@@ -56,23 +56,32 @@ const uncollapse = range => {
 // section whose header avoids breaking after itself, as Standard Ebooks'
 // books style them) still starts in the column before it. Firefox reports a
 // non-empty box for it there, and WebKit does for a forced column break, so
-// going to the element would land a page early. Text is only drawn where it
-// is, so an element is measured at the start of its first text instead. An
-// element with no text, such as an image or an empty anchor, keeps its own
-// boxes, and so does one whose text isn't drawn (hidden, say). Ranges (CFIs)
-// are already placed in text and pass through.
-const textStart = target => {
+// going to the element would land a page early. Content is only drawn where
+// it is, so an element is measured at its first drawn content instead: an
+// image or other replaced element, or the first letter of its text. An
+// element with nothing drawn keeps its own boxes. Ranges (CFIs) are already
+// placed in text and pass through. Only paginated layouts need this; see
+// #scrollToAnchor.
+const REPLACED = 'img, svg, video, canvas, object, embed, iframe, image'
+const isDrawn = node => Array.from(node.getClientRects())
+    .some(r => r.width > 0 && r.height > 0)
+const contentStart = target => {
     if (target?.nodeType !== 1) return target
     const doc = target.ownerDocument
-    const walker = doc.createTreeWalker(target, NodeFilter.SHOW_TEXT, {
-        acceptNode: node => node.textContent.trim()
-            ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
-    })
-    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
-        const offset = text.textContent.search(/\S/)
-        const range = makeRange(doc, text, offset, offset + 1)
-        if (Array.from(range.getClientRects()).some(r => r.width > 0 && r.height > 0))
-            return range
+    const walker = doc.createTreeWalker(target,
+        NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+            acceptNode: node => (node.nodeType === 1
+                ? node.matches(REPLACED) : node.textContent.trim())
+                ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP,
+        })
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.nodeType === 1) {
+            if (isDrawn(node)) return node
+            continue
+        }
+        const offset = node.textContent.search(/\S/)
+        const range = makeRange(doc, node, offset, offset + 1)
+        if (isDrawn(range)) return range
     }
     return target
 }
@@ -965,7 +974,11 @@ export class Paginator extends HTMLElement {
     }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor
-        const rects = textStart(uncollapse(anchor))?.getClientRects?.()
+        // In a scrolled layout nothing breaks into columns, and the element's
+        // own top, padding included, is the place to show.
+        const target = uncollapse(anchor)
+        const rects = (this.scrolled ? target : contentStart(target))
+            ?.getClientRects?.()
         // if anchor is an element or a range
         if (rects) {
             // when the start of the range is immediately after a hyphen in the

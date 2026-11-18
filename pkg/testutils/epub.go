@@ -102,7 +102,12 @@ const sectionsEPUBCount = 24
 // itself, so a section that starts near the bottom of a page has its header
 // moved to the next page while the section itself starts on the page before.
 // Firefox reports a box for the section on that earlier page, which the
-// reader's jump to a section must not land on.
+// reader's jump to a section must not land on. A second spine section holds
+// "Figure", which opens with a picture as tall as a page after a line of
+// text, so the picture starts a page later and the section's text a page
+// after that: a jump there must land on the picture. It's a file of its own
+// because foliate re-lays out a page when it shrinks a picture to fit, which
+// would race the quick jumps between the other sections.
 func writeSectionsEPUB(path, title string) error {
 	escaped := html.EscapeString(title)
 	var body, nav strings.Builder
@@ -116,6 +121,7 @@ func writeSectionsEPUB(path, title string) error {
 		}
 		body.WriteString("</section>")
 	}
+	nav.WriteString(`<li><a href="chapter2.xhtml#figure">Figure</a></li>`)
 	return writeEPUBArchive(path, []epubEntry{
 		{"META-INF/container.xml", epubContainerXML},
 		{"OEBPS/content.opf", `<?xml version="1.0" encoding="UTF-8"?>
@@ -128,9 +134,11 @@ func writeSectionsEPUB(path, title string) error {
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="chapter2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
   <spine>
     <itemref idref="chapter1"/>
+    <itemref idref="chapter2"/>
   </spine>
 </package>`},
 		{"OEBPS/nav.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
@@ -145,6 +153,13 @@ func writeSectionsEPUB(path, title string) error {
 <head><title>` + escaped + `</title>
 <style>header { break-inside: avoid; break-after: avoid; } h2 { margin: 2em 0 1em; }</style></head>
 <body>` + body.String() + `</body>
+</html>`},
+		{"OEBPS/chapter2.xhtml", `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>` + escaped + `</title></head>
+<body><p>Before the figure.</p><section id="figure"><div><svg xmlns="http://www.w3.org/2000/svg" width="300" height="4000" viewBox="0 0 300 4000"><rect width="300" height="4000" fill="#88c"/></svg></div>
+<header><h2>Figure section</h2><p>The figure's section begins.</p></header><p>Figure text.</p></section></body>
 </html>`},
 	})
 }

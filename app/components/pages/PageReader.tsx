@@ -1024,7 +1024,7 @@ export default function PageReader({
             />
             {totalPages > 1 && (
               <ProgressMarks
-                markers={flatChapters.flatMap((ch) =>
+                marks={flatChapters.flatMap((ch) =>
                   ch.start_page == null
                     ? []
                     : [

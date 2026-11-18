@@ -221,6 +221,36 @@ test.describe("Reflowable reader", () => {
     await expect.poll(alignments).toEqual(["start", "center"]);
   });
 
+  test.describe("on a phone-sized screen", () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test("a footnote's popover keeps clear of the screen's edges", async ({
+      page,
+    }) => {
+      await login(page);
+      await setPaginatedReader(page);
+      await openReader(page, epubBookId);
+      await bookFrame(page, "Test chapter.");
+      await turnPageTo(page, "Chapter Two text.");
+      const frame = await bookFrame(page, "Chapter Two text.");
+
+      // The reference sits by the page's left edge.
+      const reference = (await frame
+        .locator('a[href="chapter3.xhtml#note1"]')
+        .boundingBox())!;
+      await page.mouse.click(
+        reference.x + reference.width / 2,
+        reference.y + reference.height / 2,
+      );
+
+      const popover = page.getByRole("dialog", { name: "Footnote" });
+      await expect(popover).toBeVisible();
+      const box = (await popover.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(16);
+      expect(box.x + box.width).toBeLessThanOrEqual(390 - 16);
+    });
+  });
+
   test.describe("on a wide screen", () => {
     test.use({ viewport: { width: 1600, height: 900 } });
 
@@ -262,7 +292,7 @@ test.describe("Reflowable reader", () => {
     });
   });
 
-  test("chapter markers name their chapters and go to their starts", async ({
+  test("chapter marks name their chapters and go to their starts", async ({
     page,
   }) => {
     await login(page);
@@ -271,21 +301,21 @@ test.describe("Reflowable reader", () => {
     await bookFrame(page, "Test chapter.");
 
     const bar = page.getByRole("slider", { name: "Reading progress" });
-    const markers = bar.getByTestId("chapter-marker");
+    const marks = bar.getByTestId("chapter-mark");
     // Chapter One starts the book, at the bar's own start.
-    await expect(markers).toHaveCount(3);
+    await expect(marks).toHaveCount(3);
 
     for (const [i, name] of ["Two", "Three", "Four"].entries()) {
-      await markers.nth(i).hover();
+      await marks.nth(i).hover();
       // The last mark's tooltip can still be fading out.
       await expect(
         page.getByRole("tooltip").filter({ hasText: `Chapter ${name}` }),
       ).toBeVisible();
-      await markers.nth(i).click();
+      await marks.nth(i).click();
       await bookFrame(page, `Chapter ${name} text.`);
     }
     // Back to an earlier chapter's start, too.
-    await markers.nth(0).click();
+    await marks.nth(0).click();
     await bookFrame(page, "Chapter Two text.");
   });
 
@@ -302,6 +332,15 @@ test.describe("Reflowable reader", () => {
     await setDisplaySettings(page, { layout: "paginated", pages: "one" });
     await openReader(page, sectionsBookId);
     const frame = await bookFrame(page, "Section 1 begins.");
+    // The reader lays the book out again as it applies the display settings
+    // once the book opens; a jump before then can be undone by it.
+    await expect(page.getByText("Preparing book…")).toBeHidden();
+    await expect(
+      page
+        .getByRole("slider", { name: "Reading progress" })
+        .getByTestId("chapter-mark")
+        .first(),
+    ).toBeAttached();
 
     if (browserName === "firefox") {
       // The book holds what this guards against: sections whose header moved
@@ -322,27 +361,51 @@ test.describe("Reflowable reader", () => {
       expect(pushed).toBeGreaterThan(0);
     }
 
-    const width = page.viewportSize()!.width;
-    const menu = page.getByRole("combobox", { name: "Jump to chapter" });
+    // Jumps go straight to foliate, as the chapter menu and marks do: this
+    // is about where a jump lands, and other tests cover those controls.
+    // To the table of contents entry with this label, by its link as
+    // foliate resolved it.
+    const goTo = (label: string) =>
+      page.evaluate(async (wanted) => {
+        const view = document.querySelector("foliate-view") as unknown as {
+          book: { toc: Array<{ label: string; href: string }> };
+          goTo: (href: string) => Promise<unknown>;
+        };
+        const entry = view.book.toc.find((e) => e.label === wanted);
+        if (!entry) throw new Error(`No contents entry ${wanted}`);
+        await view.goTo(entry.href);
+      }, label);
+    const onScreen = (locator: ReturnType<Frame["locator"]>) => async () => {
+      const box = await locator.boundingBox();
+      return (
+        box !== null &&
+        box.x >= 0 &&
+        box.x + box.width <= page.viewportSize()!.width
+      );
+    };
+
+    // The sections pkg/testutils/epub.go writes (sectionsEPUBCount).
     for (let n = 2; n <= 24; n++) {
-      await menu.click();
-      await page
-        .getByRole("option", { name: `Section ${n}`, exact: true })
-        .click();
-      const heading = frame.getByRole("heading", {
-        name: `Section ${n}`,
-        exact: true,
-      });
+      await goTo(`Section ${n}`);
       await expect
         .poll(
-          async () => {
-            const box = await heading.boundingBox();
-            return box !== null && box.x >= 0 && box.x + box.width <= width;
-          },
+          onScreen(
+            frame.getByRole("heading", { name: `Section ${n}`, exact: true }),
+          ),
           { message: `Section ${n}'s heading is on screen` },
         )
         .toBe(true);
     }
+
+    // A section that opens with a page-tall picture lands on the picture, not
+    // on its text a page later. Its file opens in a frame of its own.
+    await goTo("Figure");
+    const figureFrame = await bookFrame(page, "The figure's section begins.");
+    await expect
+      .poll(onScreen(figureFrame.locator("#figure svg")), {
+        message: "The figure is on screen",
+      })
+      .toBe(true);
   });
 
   test("a tap on the book closes the settings without turning the page", async ({

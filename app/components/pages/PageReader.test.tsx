@@ -516,7 +516,7 @@ describe("PageReader chapter menu", () => {
   });
 });
 
-describe("PageReader chapter markers", () => {
+describe("PageReader chapter marks", () => {
   it("marks where each chapter starts along the progress bar", () => {
     chapters.data = [
       { id: 1, title: "Opening", start_page: 0 },
@@ -527,12 +527,12 @@ describe("PageReader chapter markers", () => {
     // Page 4 of 10 sits a third of the way along a bar that runs from the
     // first page to the last. The first chapter is at the bar's start.
     expect(
-      screen.getAllByTestId("chapter-marker").map((m) => m.style.left),
+      screen.getAllByTestId("chapter-mark").map((m) => m.style.left),
     ).toEqual(["33.3333%"]);
   });
 });
 
-describe("PageReader chapter markers right to left", () => {
+describe("PageReader chapter marks right to left", () => {
   it("marks chapters from the right, as the bar fills", () => {
     chapters.data = [
       { id: 1, title: "Opening", start_page: 0 },
@@ -540,13 +540,13 @@ describe("PageReader chapter markers right to left", () => {
     ];
     settings.mutate = vi.fn();
     renderReader(10, undefined, "/", ReadingDirectionRTL);
-    const mark = screen.getByTestId("chapter-marker");
+    const mark = screen.getByTestId("chapter-mark");
     expect(mark.style.right).toBe("33.3333%");
     expect(mark.style.left).toBe("");
   });
 });
 
-describe("PageReader chapter marker clicks", () => {
+describe("PageReader chapter mark clicks", () => {
   it("goes to the chapter's first page on a click on its mark", async () => {
     chapters.data = [
       { id: 1, title: "Opening", start_page: 0 },
@@ -556,7 +556,7 @@ describe("PageReader chapter marker clicks", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     renderReader(10);
 
-    await user.click(screen.getByTestId("chapter-marker"));
+    await user.click(screen.getByTestId("chapter-mark"));
 
     expect(screen.getByText("Page 4 of 10")).toBeInTheDocument();
   });

@@ -260,7 +260,7 @@ describe("ReflowableReader", () => {
       await vi.waitFor(() =>
         expect(
           within(progress)
-            .getAllByTestId("chapter-marker")
+            .getAllByTestId("chapter-mark")
             .map((m) => m.style.left),
         ).toEqual(["5%", "50%"]),
       );
@@ -291,7 +291,7 @@ describe("ReflowableReader", () => {
         goToFraction: ReturnType<typeof vi.fn>;
       };
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const mark = await screen.findByTestId("chapter-marker");
+      const mark = await screen.findByTestId("chapter-mark");
       await user.click(mark);
 
       // The chapter's link, not the fraction under the pointer.
@@ -734,6 +734,31 @@ describe("ReflowableReader", () => {
 
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(view.goRight).not.toHaveBeenCalled();
+    });
+
+    it("close the settings on a link instead of following it", async () => {
+      const { view, doc } = setup(false);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await user.click(screen.getByRole("button", { name: "Settings" }));
+
+      const link = doc.querySelector("a")!;
+      act(() => {
+        link.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      });
+      // foliate reports the link it's about to follow; a canceled report
+      // stays put.
+      let follow = true;
+      act(() => {
+        follow = view.dispatchEvent(
+          new CustomEvent("link", {
+            detail: { a: link, href: "#n" },
+            cancelable: true,
+          }),
+        );
+      });
+
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(follow).toBe(false);
     });
 
     it("replace the overlay buttons", () => {
@@ -2168,6 +2193,27 @@ describe("ReflowableReader footnotes", () => {
       ).not.toBeInTheDocument();
     },
   );
+
+  it("closes the popover on a tap in the book", async () => {
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+    // foliate's report of the section, which the reader listens to.
+    act(() => {
+      view.dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+    });
+    clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#n1");
+    await screen.findByRole("dialog", { name: "Footnote" });
+
+    act(() => {
+      doc
+        .querySelector("p")!
+        .dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    });
+
+    expect(
+      screen.queryByRole("dialog", { name: "Footnote" }),
+    ).not.toBeInTheDocument();
+  });
 
   it("lets foliate follow an ordinary link", async () => {
     const doc = xhtml(NOTE_DOC);

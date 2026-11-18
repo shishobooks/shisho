@@ -1,3 +1,5 @@
+import { memo } from "react";
+
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -7,9 +9,34 @@ import {
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/libraries/utils";
 
-// Closer to an end than this counts as at it. foliate nudges every section's
-// start by Number.EPSILON, so the first chapter isn't quite at 0.
-const EDGE = 0.001;
+// Closer to an end than this counts as at it: foliate nudges every section's
+// start by Number.EPSILON, so the first chapter isn't quite at 0. Anything
+// further in is a real place, such as a minute-long last chapter of a long
+// audiobook.
+const EDGE = 1e-6;
+
+// Marks of one kind closer than this are one place: a part and its first
+// chapter on one page, or two chapters starting at one moment.
+const SAME_PLACE = 1e-6;
+
+// One mark per place for each kind, named after everything there and going
+// to the first, in the order given.
+const mergeSamePlace = (marks: ProgressMark[]) => {
+  const merged: ProgressMark[] = [];
+  for (const mark of marks) {
+    const same = merged.find(
+      (m) =>
+        m.kind === mark.kind &&
+        Math.abs(m.position - mark.position) < SAME_PLACE,
+    );
+    if (!same) {
+      merged.push({ ...mark });
+    } else if (!same.label.split(" / ").includes(mark.label)) {
+      same.label = `${same.label} / ${mark.label}`;
+    }
+  }
+  return merged;
+};
 
 export interface ProgressMark {
   // A chapter's start, or a bookmark the reader added.
@@ -34,11 +61,11 @@ export interface ProgressMark {
 // The marks stay out of the tab order and away from screen readers: the
 // chapter menu and the Bookmarks panel beside the bar do the same from the
 // keyboard, and a mark each would bury the controls after them.
-export default function ProgressMarks({
-  markers,
+function ProgressMarks({
+  marks,
   rtl = false,
 }: {
-  markers: ProgressMark[];
+  marks: ProgressMark[];
   // For a bar that fills from the right, as a page-based File that reads
   // right to left shows it.
   rtl?: boolean;
@@ -47,7 +74,7 @@ export default function ProgressMarks({
   // hover as only a hover, so a tooltip there would cost every mark a second
   // tap.
   const canHover = !useMediaQuery("(hover: none)");
-  const shown = markers.filter(({ kind, position }) =>
+  const shown = mergeSamePlace(marks).filter(({ kind, position }) =>
     kind === "chapter"
       ? // A chapter at either end would sit on the bar's own rounded end.
         position > EDGE && position < 1 - EDGE
@@ -83,36 +110,38 @@ export default function ProgressMarks({
   );
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-      {shown.map((marker, i) => {
+      {shown.map((mark) => {
         // Only marks this close need the limit: past it, the gap is wider
         // than the hit area on any bar a reader shows.
-        const gap = room.get(marker) ?? Infinity;
+        const gap = room.get(mark) ?? Infinity;
+        // Stable as bookmarks come and go, so an open tooltip stays with
+        // its mark.
+        const key = `${mark.kind}:${mark.position}`;
         const target = (
           // A hit area wider than the mark, centered on it.
           <Button
-            aria-label={
-              marker.note ? `${marker.label}: ${marker.note}` : marker.label
-            }
+            aria-label={mark.note ? `${mark.label}: ${mark.note}` : mark.label}
             className={cn(
               "pointer-events-auto absolute top-1/2 flex h-4 w-3 -translate-y-1/2 items-center justify-center",
               rtl ? "translate-x-1/2" : "-translate-x-1/2",
             )}
-            data-testid={`${marker.kind}-marker`}
-            key={canHover ? undefined : i}
+            data-testid={`${mark.kind}-mark`}
+            key={key}
             onClick={(e) => {
               e.stopPropagation();
-              marker.onSelect();
+              mark.onSelect();
             }}
-            size="none"
+            // The audiobook's seek bar starts a drag on a press, which a
+            // press on a mark isn't.
+            onPointerDown={(e) => e.stopPropagation()}
             style={{
-              [rtl ? "right" : "left"]: `${marker.position * 100}%`,
-              maxWidth:
-                gap < Infinity && gap < 0.05 ? `${gap * 100}%` : undefined,
+              [rtl ? "right" : "left"]: `${mark.position * 100}%`,
+              maxWidth: gap < 0.05 ? `${gap * 100}%` : undefined,
             }}
             tabIndex={-1}
             variant="unstyled"
           >
-            {marker.kind === "chapter" ? (
+            {mark.kind === "chapter" ? (
               <span className="h-3 w-0.5 shrink-0 rounded-full bg-muted-foreground/60" />
             ) : (
               // Ringed in the page's color, so it shows on the filled part
@@ -123,11 +152,11 @@ export default function ProgressMarks({
         );
         if (!canHover) return target;
         return (
-          <Tooltip key={i}>
+          <Tooltip key={key}>
             <TooltipTrigger asChild>{target}</TooltipTrigger>
             <TooltipContent className="max-w-64" side="top">
-              <p>{marker.label}</p>
-              {marker.note && <p className="opacity-80">{marker.note}</p>}
+              <p>{mark.label}</p>
+              {mark.note && <p className="opacity-80">{mark.note}</p>}
             </TooltipContent>
           </Tooltip>
         );
@@ -135,3 +164,8 @@ export default function ProgressMarks({
     </div>
   );
 }
+
+// Readers re-render on every page turn and every second of playback, and
+// each mark is a tooltip of its own, so the marks re-render only when they
+// change.
+export default memo(ProgressMarks);

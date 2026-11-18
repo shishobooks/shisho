@@ -30,7 +30,8 @@ import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import {
   chapterMarks as findChapterMarks,
   type ChapterMark,
-} from "@/libraries/readerChapterMarkers";
+  type FoliateBook,
+} from "@/libraries/readerChapterMarks";
 import { fontFaceFor } from "@/libraries/readerFonts";
 import { footnoteText, isFootnoteReference } from "@/libraries/readerFootnotes";
 import {
@@ -88,21 +89,12 @@ type FoliateRenderer = EndRenderer & {
 
 // What foliate's resolveHref gives for a link: the section, and a function
 // finding the place in the section's document.
-interface ResolvedHref {
-  index: number;
-  anchor: (doc: Document) => unknown;
-}
-
 type FoliateBookView = HTMLElement & {
   renderer?: FoliateRenderer;
   goTo?: (target: string) => unknown;
-  book?: {
-    // Asynchronous in an AZW3 book.
-    resolveHref?: (
-      href: string,
-    ) => ResolvedHref | null | Promise<ResolvedHref | null>;
-    sections?: Array<{ createDocument?: () => Promise<Document> }>;
-  };
+  book?: FoliateBook;
+  // Where each section starts along the book, from 0 to 1.
+  getSectionFractions?: () => number[];
 };
 
 // A footnote open in a popover, beside the reference that opened it.
@@ -275,6 +267,10 @@ export default function ReflowableReader({
   const [footnoteOpen, setFootnoteOpen] = useState(false);
   const closeFootnote = useCallback(() => setFootnoteOpen(false), []);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Whether the last press in the book closed a popover. A tap that closes
+  // one does only that, as a tap outside one on the rest of the page does:
+  // it doesn't also turn the page or follow a link.
+  const dismissedAtPressRef = useRef(false);
   // A press in the book's frame never reaches this page, where a popover
   // listens for presses outside it, so the book's listeners close them.
   const popoverOpen = settingsOpen || footnoteOpen;
@@ -564,9 +560,6 @@ export default function ReflowableReader({
         doc.documentElement.style.touchAction = "pan-y pinch-zoom";
       }
       let selectedAtPress = false;
-      // A tap that closes a popover does only that, as a tap outside one on
-      // the rest of the page does.
-      let dismissedAtPress = false;
       // Input inside the book's frame never reaches the window, where the
       // reading-session tracker listens.
       for (const name of ACTIVITY_EVENTS) {
@@ -584,7 +577,7 @@ export default function ReflowableReader({
       // dismisses one only shows at the press.
       doc.addEventListener("pointerdown", () => {
         selectedAtPress = doc.getSelection()?.isCollapsed === false;
-        dismissedAtPress = bookEventsRef.current.popoverOpen;
+        dismissedAtPressRef.current = bookEventsRef.current.popoverOpen;
         bookEventsRef.current.closePopovers();
       });
       // foliate scrolls a paginated book to whatever takes focus, on the next
@@ -600,7 +593,7 @@ export default function ReflowableReader({
         // is false for it; check for closest() instead.
         const target = e.target as Element | null;
         if (target?.closest?.("a[href]")) return;
-        if (dismissedAtPress) return;
+        if (dismissedAtPressRef.current) return;
         if (doc.getSelection()?.isCollapsed === false) return;
         if (isScrolled()) {
           events.toggleChrome();
@@ -656,14 +649,13 @@ export default function ReflowableReader({
     };
   }, [viewElement, goNext, goPrev]);
 
-  // Chapter markers wait for the book to open, which is when foliate knows
+  // Chapter marks wait for the book to open, which is when foliate knows
   // its sections' sizes. Chapters partway through a section need its
   // document read, so they can arrive a moment after the book shows.
   useEffect(() => {
     setChapterMarks([]);
     if (!bookReady || toc.length === 0) return;
-    const view = viewRef.current as
-      (FoliateBookView & { getSectionFractions?: () => number[] }) | null;
+    const view = viewRef.current as FoliateBookView | null;
     if (!view?.book) return;
     let stale = false;
     findChapterMarks(
@@ -676,13 +668,29 @@ export default function ReflowableReader({
         if (!stale && marks) setChapterMarks(marks);
       })
       .catch((err: unknown) => {
-        // The bar works without markers.
-        console.warn("ReflowableReader: couldn't place chapter markers", err);
+        // The bar works without marks.
+        console.warn("ReflowableReader: couldn't place chapter marks", err);
       });
     return () => {
       stale = true;
     };
   }, [bookReady, toc]);
+
+  // Built once per set of marks, not on every relocate, since each mark is a
+  // tooltip of its own.
+  const progressMarks = useMemo(
+    () =>
+      chapterMarks.map((mark) => ({
+        kind: "chapter" as const,
+        position: mark.position,
+        label: mark.label,
+        // The chapter's own link, so a click lands on its first page rather
+        // than wherever the fraction falls.
+        onSelect: () =>
+          (viewRef.current as FoliateBookView | null)?.goTo?.(mark.href),
+      })),
+    [chapterMarks],
+  );
 
   // A link to a footnote opens the note in a popover instead of jumping
   // there. foliate reports every link it's about to follow, and a canceled
@@ -746,6 +754,11 @@ export default function ReflowableReader({
     };
 
     const handleLink = (evt: Event) => {
+      // A tap that closed a popover does only that, on a link as anywhere.
+      if (dismissedAtPressRef.current) {
+        evt.preventDefault();
+        return;
+      }
       const { a, href } = (evt as CustomEvent<{ a: Element; href: string }>)
         .detail;
       if (!isFootnoteReference(a)) return;
@@ -842,17 +855,19 @@ export default function ReflowableReader({
     // arrives, and Firefox doesn't notice the text change size (see
     // paginator.js `load`), so lay it out again once the font is in.
     let stale = false;
-    const family = fontFace && `1em "${fontFace.family}"`;
-    for (const { doc } of family ? (renderer.getContents?.() ?? []) : []) {
-      if (!family || doc.fonts?.check?.(family) !== false) continue;
-      doc.fonts
-        .load(family)
-        .then(() => {
-          if (!stale) renderer.render?.();
-        })
-        .catch(() => {
-          // The page keeps the fallback font it already shows.
-        });
+    if (fontFace) {
+      const family = `1em "${fontFace.family}"`;
+      for (const { doc } of renderer.getContents?.() ?? []) {
+        if (doc.fonts?.check?.(family) !== false) continue;
+        doc.fonts
+          .load(family)
+          .then(() => {
+            if (!stale) renderer.render?.();
+          })
+          .catch(() => {
+            // The page keeps the fallback font it already shows.
+          });
+      }
     }
     return () => {
       stale = true;
@@ -1078,7 +1093,6 @@ export default function ReflowableReader({
                 view?.goTo?.(footnote.href);
                 closeFootnote();
               }}
-              size="inline"
               style={noteStyle ? { color: noteStyle.link } : undefined}
               variant="link"
             >
@@ -1116,19 +1130,7 @@ export default function ReflowableReader({
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
               style={{ width: `${progressPercent}%` }}
             />
-            <ProgressMarks
-              markers={chapterMarks.map((mark) => ({
-                kind: "chapter" as const,
-                position: mark.position,
-                label: mark.label,
-                // The chapter's own link, so a click lands on its first
-                // page rather than wherever the fraction falls.
-                onSelect: () =>
-                  (viewRef.current as FoliateBookView | null)?.goTo?.(
-                    mark.href,
-                  ),
-              }))}
-            />
+            <ProgressMarks marks={progressMarks} />
           </div>
           {currentTocLabel && (
             <div className="text-xs text-muted-foreground mt-1">

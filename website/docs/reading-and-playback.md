@@ -33,7 +33,7 @@ Use the **Settings** button inside the reader to change how books look:
 | **Justify text** | On justifies and hyphenates paragraphs; off aligns them to the start of the line. Text the book centers or aligns right, such as scene breaks, keeps its alignment either way. |
 | **Theme** | **Light**, **Sepia**, **Dark**, or **Black**. Light keeps the book's own text and background colors; the others replace them. In Dark and Black, images get a white background so transparent images stay visible. |
 | **Layout** | **Paginated** or **Scrolled** |
-| **Pages** | **Auto** shows two pages side by side when the reader is wider than it is tall and has room for both. **One** always shows a single page, which stops widening at about 720 px so lines stay a comfortable length; past that, the margins have no further effect. Applies only to **Paginated**. |
+| **Pages** | **Auto** shows two pages side by side when the reader is wider than it is tall and has room for both. **One** always shows a single page, which stops widening at about 720 px so lines stay a comfortable length. Applies only to **Paginated**. |
 
 A change applies right away and keeps your place in the book. Display settings are kept in your browser rather than your account, so each browser or device can have its own. They apply to every book you open in that browser, in all of these formats.
 

@@ -543,7 +543,7 @@ describe("M4BReader", () => {
       renderReader();
 
       // 900 and 1800 of the File's 3600 seconds.
-      const marks = await screen.findAllByTestId("bookmark-marker");
+      const marks = await screen.findAllByTestId("bookmark-mark");
       expect(marks.map((m) => m.style.left)).toEqual(["25%", "50%"]);
 
       await user.hover(marks[0]);
@@ -552,13 +552,27 @@ describe("M4BReader", () => {
       expect(tooltip).toHaveTextContent("The twist");
     });
 
+    it("keeps the seek bar's handle above the marks, so it drags from on a mark", async () => {
+      addServerBookmark(0);
+      renderReader();
+      const mark = await screen.findByTestId("bookmark-mark");
+      const handle = screen.getByRole("slider", { name: "Seek" });
+      // Drawn after the marks, inside the same seek bar, so it's on top.
+      expect(
+        mark.compareDocumentPosition(handle) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      // The seek bar's root, the nearest ancestor Radix marks with an
+      // orientation, holds both.
+      expect(mark.closest("[data-orientation]")).toContainElement(handle);
+    });
+
     it("plays from a Bookmark on a click on its mark", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       addServerBookmark(900);
       renderReader();
       const audio = getAudio();
 
-      await user.click(await screen.findByTestId("bookmark-marker"));
+      await user.click(await screen.findByTestId("bookmark-mark"));
 
       expect(audio.currentTime).toBe(900);
     });
@@ -569,7 +583,7 @@ describe("M4BReader", () => {
       const audio = getAudio();
       audio.currentTime = 1800;
       fireEvent.timeUpdate(audio);
-      expect(screen.queryByTestId("bookmark-marker")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("bookmark-mark")).not.toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: "Add Bookmark" }));
       const dialog = await screen.findByRole("dialog", {
@@ -579,7 +593,7 @@ describe("M4BReader", () => {
         within(dialog).getByRole("button", { name: "Add Bookmark" }),
       );
 
-      expect(await screen.findByTestId("bookmark-marker")).toHaveStyle({
+      expect(await screen.findByTestId("bookmark-mark")).toHaveStyle({
         left: "50%",
       });
     });
@@ -809,14 +823,12 @@ describe("M4BReader", () => {
       expect(combobox).not.toHaveTextContent("Chapter One");
     });
 
-    it("renders chapter markers along the seek bar at the correct positions", () => {
+    it("renders chapter marks along the seek bar at the correct positions", () => {
       const { container } = renderReader({ file: fileWithChapters });
-      // The first chapter starts at 0 (no marker); the two later chapters get
-      // markers positioned by start/duration.
-      const markers = within(container).queryAllByTestId("chapter-marker");
-      const lefts = Array.from(markers).map(
-        (m) => (m as HTMLElement).style.left,
-      );
+      // The first chapter starts at 0 (no mark); the two later chapters get
+      // marks positioned by start/duration.
+      const marks = within(container).queryAllByTestId("chapter-mark");
+      const lefts = Array.from(marks).map((m) => (m as HTMLElement).style.left);
       // 1200/3600 => 33.33%, 2400/3600 => 66.66%
       expect(lefts).toHaveLength(2);
       expect(lefts[0]).toMatch(/^33\.33/);
@@ -828,7 +840,7 @@ describe("M4BReader", () => {
       const { container } = renderReader({ file: fileWithChapters });
       const audio = getAudio();
 
-      await user.click(within(container).getAllByTestId("chapter-marker")[1]);
+      await user.click(within(container).getAllByTestId("chapter-mark")[1]);
 
       expect(audio.currentTime).toBe(2400);
     });

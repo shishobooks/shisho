@@ -13,12 +13,15 @@ type SliderProps = React.ComponentPropsWithoutRef<
   // What a screen reader says for the value, when the bare number doesn't
   // say it (a size in px, a percent).
   thumbValueText?: string;
+  // Drawn over the track and under the thumb, such as marks along the bar,
+  // so the thumb stays on top and can always be dragged.
+  children?: React.ReactNode;
 };
 
 const Slider = React.forwardRef<
   React.ComponentRef<typeof SliderPrimitive.Root>,
   SliderProps
->(({ className, thumbLabel, thumbValueText, ...props }, ref) => (
+>(({ className, thumbLabel, thumbValueText, children, ...props }, ref) => (
   <SliderPrimitive.Root
     ref={ref}
     className={cn(
@@ -30,6 +33,7 @@ const Slider = React.forwardRef<
     <SliderPrimitive.Track className="relative h-1.5 w-full grow overflow-hidden rounded-full bg-primary/20">
       <SliderPrimitive.Range className="absolute h-full bg-primary" />
     </SliderPrimitive.Track>
+    {children}
     <SliderPrimitive.Thumb
       aria-label={thumbLabel}
       aria-valuetext={thumbValueText}
