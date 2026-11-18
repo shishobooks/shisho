@@ -98,6 +98,17 @@ function NumberSetting({
     setDraft(value);
   }, [value]);
   const name = label.toLowerCase();
+  const decreaseRef = useRef<HTMLButtonElement>(null);
+  const increaseRef = useRef<HTMLButtonElement>(null);
+  // A step that reaches the end disables its own button, which would drop
+  // keyboard focus out of the popover, so focus moves to the other button.
+  const stepTo = (direction: 1 | -1) => {
+    const next = stepSetting(setting, value, direction);
+    onChange(next);
+    if (next === (direction === 1 ? max : min)) {
+      (direction === 1 ? decreaseRef : increaseRef).current?.focus();
+    }
+  };
   return (
     <div>
       <div className="flex items-baseline justify-between">
@@ -115,7 +126,8 @@ function NumberSetting({
         <Button
           aria-label={`Decrease ${name}`}
           disabled={value <= min}
-          onClick={() => onChange(stepSetting(setting, value, -1))}
+          onClick={() => stepTo(-1)}
+          ref={decreaseRef}
           size="icon-sm"
           variant="ghost"
         >
@@ -134,7 +146,8 @@ function NumberSetting({
         <Button
           aria-label={`Increase ${name}`}
           disabled={value >= max}
-          onClick={() => onChange(stepSetting(setting, value, 1))}
+          onClick={() => stepTo(1)}
+          ref={increaseRef}
           size="icon-sm"
           variant="ghost"
         >

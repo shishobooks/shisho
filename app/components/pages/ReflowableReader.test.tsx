@@ -1074,6 +1074,36 @@ describe("ReflowableReader", () => {
     );
   });
 
+  it("keeps focus in the settings when a step reaches the end of its range", async () => {
+    localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ margins: 14 }));
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    renderReader();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const increase = await screen.findByRole("button", {
+      name: "Increase margins",
+    });
+
+    act(() => increase.focus());
+    await user.keyboard("{Enter}");
+
+    // The button it pressed is now disabled, so focus moves to the other.
+    expect(increase).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Decrease margins" }),
+    ).toHaveFocus();
+  });
+
   it("names the font size slider", async () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: {
