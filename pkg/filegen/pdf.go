@@ -117,8 +117,41 @@ func (g *PDFGenerator) buildUpdate(ctx context.Context, doc *incremental.Documen
 		newCatalog["Outlines"] = outlines
 	}
 
+	if prefs, ok := viewerPreferences(doc, newCatalog, file); ok {
+		newCatalog["ViewerPreferences"] = prefs
+	}
+
 	u.Set(catalogRef, newCatalog)
 	return u.Bytes()
+}
+
+// viewerPreferences returns the catalog's viewer preferences with the File's
+// Reading Direction as their /Direction, keeping the PDF's other preferences.
+// Left to right only replaces a /Direction that says right to left, since
+// it's what a PDF with none already means. It returns false to leave the
+// catalog alone.
+func viewerPreferences(doc *incremental.Document, catalog incremental.Dict, file *models.File) (incremental.Dict, bool) {
+	if file == nil || file.ReadingDirection == nil {
+		return nil, false
+	}
+	prefs := incremental.Dict{}
+	if o, err := doc.Resolve(catalog["ViewerPreferences"]); err == nil {
+		if d, ok := o.(incremental.Dict); ok {
+			prefs = d.Clone()
+		}
+	}
+	switch *file.ReadingDirection {
+	case models.ReadingDirectionRTL:
+		prefs["Direction"] = incremental.Name("R2L")
+	case models.ReadingDirectionLTR:
+		if prefs["Direction"] != incremental.Name("R2L") {
+			return nil, false
+		}
+		prefs["Direction"] = incremental.Name("L2R")
+	default:
+		return nil, false
+	}
+	return prefs, true
 }
 
 // buildOutlines adds the chapters as bookmarks, replacing any the original

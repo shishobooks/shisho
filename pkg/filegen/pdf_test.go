@@ -916,3 +916,44 @@ func TestPDFGenerator_Generate_CancelledContext(t *testing.T) {
 	require.ErrorAs(t, err, &genErr)
 	assert.Equal(t, models.FileTypePDF, genErr.FileType)
 }
+
+// A download carries the File's Reading Direction in the catalog's viewer
+// preferences, where a scan of the download reads it back.
+func TestPDFGenerator_Generate_ReadingDirection(t *testing.T) {
+	t.Parallel()
+
+	rtl := models.ReadingDirectionRTL
+	ltr := models.ReadingDirectionLTR
+	generate := func(t *testing.T, src string, direction *string) string {
+		t.Helper()
+		dest := filepath.Join(t.TempDir(), "dest.pdf")
+		file := &models.File{FileType: models.FileTypePDF, ReadingDirection: direction}
+		require.NoError(t, (&PDFGenerator{}).Generate(context.Background(), src, dest, &models.Book{Title: "Manga"}, file))
+		return dest
+	}
+	parsed := func(t *testing.T, path string) *string {
+		t.Helper()
+		meta, err := pdf.Parse(path)
+		require.NoError(t, err)
+		return meta.ReadingDirection
+	}
+	src := filepath.Join(t.TempDir(), "source.pdf")
+	writeTestPDF(t, src, nil)
+
+	t.Run("right to left is written", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, &rtl, parsed(t, generate(t, src, &rtl)))
+	})
+	t.Run("left to right replaces right to left", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, &ltr, parsed(t, generate(t, generate(t, src, &rtl), &ltr)))
+	})
+	t.Run("left to right adds nothing to a PDF that says nothing", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, parsed(t, generate(t, src, &ltr)))
+	})
+	t.Run("no direction keeps the PDF's own", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, &rtl, parsed(t, generate(t, generate(t, src, &rtl), nil)))
+	})
+}

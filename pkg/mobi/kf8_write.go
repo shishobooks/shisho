@@ -58,6 +58,9 @@ type KF8Book struct {
 	// made for, as "800x1200".
 	FixedLayout        bool
 	OriginalResolution string
+	// RightToLeft marks a book whose pages turn right to left, as an EPUB's
+	// spine says with page-progression-direction="rtl".
+	RightToLeft bool
 }
 
 // GuideRef is an entry of a KF8Book's guide: its type, as an EPUB 2
@@ -77,6 +80,13 @@ type KF8Image struct {
 
 // ErrNoDocuments is returned by WriteKF8 for a book with no documents.
 var ErrNoDocuments = errors.New("the book has no documents")
+
+// The page direction record, and the writing mode record Kindle manga also
+// carry, as Calibre and KCC write them.
+const (
+	exthPrimaryWritingMode       = 525
+	exthPageProgressionDirection = 527
+)
 
 const (
 	// textRecordSize is how much text each text record holds.
@@ -801,6 +811,14 @@ func (l *kf8Layout) headerRecord(at kf8Indexes) ([]byte, error) {
 			exth = append(exth,
 				exthRecord{typ: exthOriginalResolutionAlt, data: []byte(l.book.OriginalResolution)},
 				exthRecord{typ: exthOriginalResolution, data: []byte(l.book.OriginalResolution)})
+		}
+	}
+	if l.book.RightToLeft {
+		exth = append(exth, exthRecord{typ: exthPageProgressionDirection, data: []byte("rtl")})
+		// A text book's writing mode, such as Japanese set vertically, is
+		// its own, so only a comic says it's horizontal.
+		if l.book.FixedLayout {
+			exth = append(exth, exthRecord{typ: exthPrimaryWritingMode, data: []byte("horizontal-rl")})
 		}
 	}
 	rec = append(rec, encodeEXTH(exth)...)

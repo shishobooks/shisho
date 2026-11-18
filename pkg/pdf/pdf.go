@@ -142,6 +142,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
+	readingDirection := readingDirectionFromCatalog(xrt)
+
 	// Extract outline (bookmarks) as chapters. Best-effort: don't fail Parse.
 	var chapters []mediafile.ParsedChapter
 	outlineEntries, outlineErr := ExtractOutline(path)
@@ -160,7 +162,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		}
 	}
 
-	return &mediafile.ParsedMetadata{
+	meta := &mediafile.ParsedMetadata{
 		Title:         title,
 		Authors:       authors,
 		Description:   description,
@@ -173,7 +175,40 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 		CoverPage:     coverPage,
 		Chapters:      chapters,
 		DataSource:    models.DataSourcePDFMetadata,
-	}, nil
+	}
+	meta.ReadingDirection = readingDirection
+	return meta, nil
+}
+
+// readingDirectionFromCatalog is the Reading Direction a PDF's viewer
+// preferences state: /Direction /R2L runs right to left, /L2R left to right,
+// and anything else, or no preferences, says nothing.
+func readingDirectionFromCatalog(xrt *model.XRefTable) *string {
+	if xrt.RootDict == nil {
+		return nil
+	}
+	prefsObj, ok := xrt.RootDict["ViewerPreferences"]
+	if !ok {
+		return nil
+	}
+	prefs, err := xrt.DereferenceDict(prefsObj)
+	if err != nil || prefs == nil {
+		return nil
+	}
+	name, ok := prefs["Direction"].(types.Name)
+	if !ok {
+		return nil
+	}
+	var direction string
+	switch name.Value() {
+	case "R2L":
+		direction = models.ReadingDirectionRTL
+	case "L2R":
+		direction = models.ReadingDirectionLTR
+	default:
+		return nil
+	}
+	return &direction
 }
 
 // splitAuthors splits an author string on comma, ampersand, or semicolon

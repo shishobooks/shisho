@@ -378,6 +378,36 @@ func TestWriteKF8_MarksFixedLayout(t *testing.T) {
 	}
 }
 
+// A right to left book carries the page direction record a Kindle turns pages
+// by; a comic also carries the writing mode Kindle manga carry.
+func TestWriteKF8_MarksRightToLeft(t *testing.T) {
+	t.Parallel()
+	header := func(b *KF8Book) *header {
+		data, err := os.ReadFile(writeKF8File(t, b))
+		require.NoError(t, err)
+		db, err := readPDB(bytes.NewReader(data), int64(len(data)))
+		require.NoError(t, err)
+		rec, err := db.record(0, maxHeaderRecord)
+		require.NoError(t, err)
+		h, err := parseHeader(rec)
+		require.NoError(t, err)
+		return h
+	}
+	doc := []Document{{Name: "p.xhtml", Content: []byte(`<html><body><img src="p.jpg"/></body></html>`)}}
+
+	h := header(&KF8Book{Metadata: Metadata{Title: "Manga"}, Documents: doc, FixedLayout: true, RightToLeft: true})
+	assert.Equal(t, "rtl", h.text(exthPageProgressionDirection))
+	assert.Equal(t, "horizontal-rl", h.text(exthPrimaryWritingMode))
+
+	h = header(&KF8Book{Metadata: Metadata{Title: "Novel"}, Documents: doc, RightToLeft: true})
+	assert.Equal(t, "rtl", h.text(exthPageProgressionDirection))
+	assert.Empty(t, h.text(exthPrimaryWritingMode), "a text book's writing mode is its own")
+
+	h = header(&KF8Book{Metadata: Metadata{Title: "Comic"}, Documents: doc, FixedLayout: true})
+	assert.Empty(t, h.text(exthPageProgressionDirection))
+	assert.Empty(t, h.text(exthPrimaryWritingMode))
+}
+
 // testFont is a TrueType font as far as a sniff of its first bytes goes,
 // with bytes after the header that don't compress.
 func testFont() []byte {

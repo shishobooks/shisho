@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/kepub"
 	"github.com/shishobooks/shisho/pkg/mobi"
@@ -61,6 +62,27 @@ func TestKF8Book_FixedLayout(t *testing.T) {
 	assert.Empty(t, book.OriginalResolution)
 }
 
+// The EPUB's spine says which way its pages run.
+func TestKF8Book_RightToLeft(t *testing.T) {
+	t.Parallel()
+	entries := func(spine string) []kepub.Entry {
+		return []kepub.Entry{
+			{Name: "OEBPS/content.opf", Content: []byte(`<package version="3.0" xmlns="http://www.idpf.org/2007/opf"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Manga</dc:title></metadata>
+<manifest><item id="p1" href="page1.xhtml" media-type="application/xhtml+xml"/></manifest><spine` + spine + `><itemref idref="p1"/></spine></package>`)},
+			{Name: "OEBPS/page1.xhtml", Content: []byte(`<html><body><p>page</p></body></html>`)},
+		}
+	}
+	for spine, want := range map[string]bool{
+		` page-progression-direction="rtl"`: true,
+		` page-progression-direction="ltr"`: false,
+		``:                                  false,
+	} {
+		book, err := kf8Book(entries(spine))
+		require.NoError(t, err)
+		assert.Equal(t, want, book.RightToLeft, "spine%s", spine)
+	}
+}
+
 // Pages of a fixed-layout EPUB can differ in size, such as a landscape
 // spread, so the resolution is the largest any page gives, with the
 // viewport's attributes in either order; one with no viewport is still
@@ -104,6 +126,28 @@ func TestCBZToAZW3_IsFixedLayout(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, bytes.Contains(data, []byte("\x00\x00\x00\x7a\x00\x00\x00\x0ctrue")), "fixed-layout record")
 	assert.Regexp(t, "\x00\x00\x01\x33\x00\x00\x00.[0-9]+x[0-9]+", string(data), "resolution record")
+}
+
+// A right to left comic stays right to left through the EPUB the CBZ
+// Conversion writes: its EXTH block holds the page direction record (type
+// 527, "rtl").
+func TestCBZToAZW3_RightToLeft(t *testing.T) {
+	t.Parallel()
+	src := testgen.GenerateCBZ(t, t.TempDir(), "manga.cbz", testgen.CBZOptions{Title: "Manga"})
+	gen, err := GeneratorFor(models.FileTypeCBZ, models.FileTypeAZW3)
+	require.NoError(t, err)
+	record := []byte("\x00\x00\x02\x0f\x00\x00\x00\x0brtl")
+	for _, tt := range []struct {
+		direction *string
+		want      bool
+	}{{pointerutil.String(models.ReadingDirectionRTL), true}, {nil, false}} {
+		dest := filepath.Join(t.TempDir(), "manga.azw3")
+		file := &models.File{ID: 1, FileType: models.FileTypeCBZ, ReadingDirection: tt.direction}
+		require.NoError(t, gen.Generate(context.Background(), src, dest, &models.Book{Title: "Manga"}, file))
+		data, err := os.ReadFile(dest)
+		require.NoError(t, err)
+		assert.Equal(t, tt.want, bytes.Contains(data, record))
+	}
 }
 
 // The guide is the OPF's when it has one, and an EPUB 3's landmarks
