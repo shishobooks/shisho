@@ -1035,6 +1035,7 @@ export default function PageReader({
                         },
                       ],
                 )}
+                rtl={rtl}
               />
             )}
           </div>

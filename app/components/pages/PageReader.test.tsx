@@ -532,6 +532,20 @@ describe("PageReader chapter markers", () => {
   });
 });
 
+describe("PageReader chapter markers right to left", () => {
+  it("marks chapters from the right, as the bar fills", () => {
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 3 },
+    ];
+    settings.mutate = vi.fn();
+    renderReader(10, undefined, "/", ReadingDirectionRTL);
+    const mark = screen.getByTestId("chapter-marker");
+    expect(mark.style.right).toBe("33.3333%");
+    expect(mark.style.left).toBe("");
+  });
+});
+
 describe("PageReader chapter marker clicks", () => {
   it("goes to the chapter's first page on a click on its mark", async () => {
     chapters.data = [

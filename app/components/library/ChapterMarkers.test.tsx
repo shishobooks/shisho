@@ -38,6 +38,13 @@ describe("ChapterMarkers", () => {
     expect(lefts()).toEqual(["40%"]);
   });
 
+  it("runs from the right in a bar that fills right to left", () => {
+    render(<ChapterMarkers markers={[marker(0.25)]} rtl />);
+    const mark = screen.getByTestId("chapter-marker");
+    expect(mark.style.right).toBe("25%");
+    expect(mark.style.left).toBe("");
+  });
+
   it("leaves out positions outside the bar", () => {
     render(
       <ChapterMarkers

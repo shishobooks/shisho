@@ -4,6 +4,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/libraries/utils";
 
 // Closer to an end than this counts as at it. foliate nudges every section's
 // start by Number.EPSILON, so the first chapter isn't quite at 0.
@@ -29,8 +30,12 @@ export interface ChapterMarker {
 // per chapter would bury the controls after them.
 export default function ChapterMarkers({
   markers,
+  rtl = false,
 }: {
   markers: ChapterMarker[];
+  // For a bar that fills from the right, as a page-based File that reads
+  // right to left shows it.
+  rtl?: boolean;
 }) {
   // A chapter at either end would sit on the bar's own rounded end.
   const inside = markers.filter(
@@ -45,14 +50,19 @@ export default function ChapterMarkers({
             {/* A hit area wider than the tick, centered on it. */}
             <Button
               aria-label={marker.label}
-              className="pointer-events-auto absolute top-1/2 flex h-4 w-3 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+              className={cn(
+                "pointer-events-auto absolute top-1/2 flex h-4 w-3 -translate-y-1/2 items-center justify-center",
+                rtl ? "translate-x-1/2" : "-translate-x-1/2",
+              )}
               data-testid="chapter-marker"
               onClick={(e) => {
                 e.stopPropagation();
                 marker.onSelect();
               }}
               size="none"
-              style={{ left: `${marker.position * 100}%` }}
+              style={{
+                [rtl ? "right" : "left"]: `${marker.position * 100}%`,
+              }}
               tabIndex={-1}
               variant="unstyled"
             >
