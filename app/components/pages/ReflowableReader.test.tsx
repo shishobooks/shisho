@@ -1048,6 +1048,32 @@ describe("ReflowableReader", () => {
     expect(view.goToFraction).toHaveBeenLastCalledWith(0);
   });
 
+  it("says the font size with its unit", async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    renderReader();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+
+    expect(
+      await screen.findByRole("slider", { name: "Font size" }),
+    ).toHaveAttribute("aria-valuetext", "16 px");
+    expect(screen.getByRole("slider", { name: "Margins" })).toHaveAttribute(
+      "aria-valuetext",
+      "7%",
+    );
+  });
+
   it("names the font size slider", async () => {
     vi.mocked(useUserSettings).mockReturnValue({
       data: {
@@ -1073,7 +1099,7 @@ describe("ReflowableReader", () => {
 
     expect(
       await screen.findByRole("slider", { name: "Font size" }),
-    ).toHaveAttribute("aria-valuenow", "100");
+    ).toHaveAttribute("aria-valuenow", "16");
   });
 });
 
@@ -1557,20 +1583,38 @@ describe("ReflowableReader display settings", () => {
         act(() => screen.getByRole("slider", { name: "Font size" }).focus());
         await user.keyboard("{ArrowRight}");
       },
-      (r) => expect(css(r)).toContain("font-size: 105% !important"),
+      (r) => expect(css(r)).toContain("font-size: 16.5px !important"),
+    ],
+    [
+      "size, one step at a time",
+      async (user) => {
+        await pick("Increase font size")(user);
+        await pick("Increase font size")(user);
+        await pick("Decrease font size")(user);
+      },
+      (r) => expect(css(r)).toContain("font-size: 16.5px !important"),
+    ],
+    [
+      "forced font size",
+      (user) =>
+        user.click(screen.getByRole("switch", { name: "Force font size" })),
+      (r) => expect(css(r)).toContain("font-size: inherit !important"),
     ],
     [
       "line spacing",
-      pick("Relaxed"),
-      (r) => expect(css(r)).toContain("line-height: 1.75 !important"),
+      async (user) => {
+        await pick("Increase line spacing")(user);
+        await pick("Increase line spacing")(user);
+      },
+      (r) => expect(css(r)).toContain("line-height: 1.55 !important"),
     ],
     [
       "margins",
-      pick("Large"),
-      (r) => {
-        expect(attribute(r, "gap")).toBe("12%");
-        expect(attribute(r, "max-inline-size")).toBe("600px");
+      async (user) => {
+        act(() => screen.getByRole("slider", { name: "Margins" }).focus());
+        await user.keyboard("{End}");
       },
+      (r) => expect(attribute(r, "gap")).toBe("15%"),
     ],
     [
       "justification",
@@ -1666,7 +1710,8 @@ describe("ReflowableReader display settings", () => {
       isLoading: false,
     } as never);
     const { renderer } = await openBook();
-    expect(css(renderer)).toContain("font-size: 140% !important");
+    // 140% of the browser's 16px.
+    expect(css(renderer)).toContain("font-size: 22.5px !important");
     expect(css(renderer)).toContain("background: #f4ecd8 !important");
     expect(attribute(renderer, "flow")).toBe("scrolled");
   });
@@ -1877,6 +1922,32 @@ describe("ReflowableReader footnotes", () => {
     const popover = await screen.findByRole("dialog", { name: "Footnote" });
     expect(within(popover).getByText("The footnote's text.")).toBeVisible();
     expect(view.goTo).not.toHaveBeenCalled();
+  });
+
+  it("shows a footnote in the reader's theme and type, not the app's", async () => {
+    localStorage.setItem(
+      READER_SETTINGS_KEY,
+      JSON.stringify({ theme: "black", font: "literata", size: 20 }),
+    );
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+
+    clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#n1");
+
+    const popover = await screen.findByRole("dialog", { name: "Footnote" });
+    expect(popover).toHaveStyle({
+      backgroundColor: "rgb(0, 0, 0)",
+      color: "rgb(200, 200, 200)",
+      fontSize: "18px",
+    });
+    // The chosen font, under a name that can't replace the app's own fonts.
+    expect(popover.style.fontFamily).toMatch(/^"?Shisho Note Font"?, serif$/);
+    expect(popover.querySelector("style")?.textContent).toMatch(
+      /@font-face \{\s*font-family: "Shisho Note Font";\s*src: url\("[^"]*Literata/,
+    );
+    expect(
+      within(popover).getByRole("button", { name: "Go to note" }),
+    ).toHaveStyle({ color: "rgb(138, 180, 248)" });
   });
 
   it("links from the popover to the full note", async () => {

@@ -15,11 +15,12 @@ import (
 // chapters, so the reader e2e tests can turn pages and reach the end. The
 // first is styled with a white body and black text the way Project Gutenberg
 // EPUBs are, so the reader e2e test can check that themes override book
-// colors, and has a scene break the book centers by class, which
-// justification leaves alone. The second refers to a note the book marks as
-// one, kept in the third, for the reader's footnote popover. extraParagraphs
-// adds filler text to the first chapter, so a test can turn pages within a
-// chapter as well as across chapters.
+// colors. It also has a scene break the book centers by class, which
+// justification leaves alone, and a paragraph at a fixed px size for Force
+// font size. The second refers to a note the book marks as one, kept in the
+// third, for the reader's footnote popover. extraParagraphs adds filler text
+// to the first chapter, so a test can turn pages within a chapter as well as
+// across chapters.
 func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 	escaped := html.EscapeString(title)
 	filler := strings.Repeat("<p>"+strings.Repeat("Filler text to fill a page. ", 10)+"</p>", extraParagraphs)
@@ -49,8 +50,8 @@ func writeMinimalEPUB(path, title string, extraParagraphs int) (err error) {
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><title>` + escaped + `</title>
-<style>body { color: black; background-color: white; } a { color: blue; } .break { text-align: center; }</style></head>
-<body><p>Test chapter. <a href="#end">A link.</a></p><p class="break">* * *</p>` + filler + `<p id="end">The end.</p></body>
+<style>body { color: black; background-color: white; } a { color: blue; } .break { text-align: center; } .fixed { font-size: 11px; }</style></head>
+<body><p>Test chapter. <a href="#end">A link.</a></p><p class="break">* * *</p><p class="fixed">Fixed size.</p>` + filler + `<p id="end">The end.</p></body>
 </html>`},
 	}
 	for i, name := range []string{"Two", "Three", "Four"} {

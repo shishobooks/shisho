@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   DEFAULT_READER_SETTINGS,
+  footnoteStyle,
   readerCSS,
   readerLayout,
   readerSettingsFrom,
   recordBookAlignment,
+  stepSetting,
 } from "./readerSettings";
 
 describe("readerSettingsFrom", () => {
@@ -22,10 +24,24 @@ describe("readerSettingsFrom", () => {
       }),
     ).toEqual({
       ...DEFAULT_READER_SETTINGS,
-      size: 130,
+      // 130% of the browser's 16px, the size those settings scaled.
+      size: 21,
       theme: "sepia",
       layout: "scrolled",
     });
+  });
+
+  it("takes an old size below the smallest one as the smallest", () => {
+    // 50% of 16px is 8px.
+    expect(
+      readerSettingsFrom(null, { viewer_reflowable_font_size: 50 }).size,
+    ).toBe(10);
+  });
+
+  it("rounds an old percentage to the nearest half pixel", () => {
+    expect(
+      readerSettingsFrom(null, { viewer_reflowable_font_size: 140 }).size,
+    ).toBe(22.5);
   });
 
   it("prefers what this browser stored over the account's old settings", () => {
@@ -45,11 +61,12 @@ describe("readerSettingsFrom", () => {
 
   it("keeps every valid stored value", () => {
     const stored = {
-      font: "imported:abc",
-      size: 85,
-      lineSpacing: "relaxed",
-      margins: "large",
+      font: "imported:3",
+      size: 18.5,
+      lineSpacing: 1.8,
+      margins: 12,
       justify: false,
+      forceFontSize: true,
       theme: "dark",
       layout: "scrolled",
     };
@@ -60,9 +77,10 @@ describe("readerSettingsFrom", () => {
     const stored = {
       font: "comic-sans",
       size: 47,
-      lineSpacing: "huge",
-      margins: 3,
+      lineSpacing: "relaxed",
+      margins: 16,
       justify: "yes",
+      forceFontSize: 1,
       theme: "purple",
       layout: "sideways",
     };
@@ -71,12 +89,16 @@ describe("readerSettingsFrom", () => {
     );
   });
 
-  it("snaps a size between steps to the nearest step", () => {
+  it.each([
+    ["size", 17.3, 17.5],
+    ["lineSpacing", 1.62, 1.6],
+    ["margins", 4.4, 4],
+  ])("snaps a %s between steps to the nearest step", (key, value, snapped) => {
     expect(
       readerSettingsFrom(
-        JSON.stringify({ ...DEFAULT_READER_SETTINGS, size: 112 }),
-      ).size,
-    ).toBe(110);
+        JSON.stringify({ ...DEFAULT_READER_SETTINGS, [key]: value }),
+      )[key as "size"],
+    ).toBe(snapped);
   });
 
   it("ignores stored text that isn't JSON", () => {
@@ -88,18 +110,36 @@ describe("readerCSS", () => {
   const css = (overrides = {}, fontFace?: Parameters<typeof readerCSS>[1]) =>
     readerCSS({ ...DEFAULT_READER_SETTINGS, ...overrides }, fontFace);
 
-  it.each([
-    ["compact", "1.2"],
-    ["normal", "1.45"],
-    ["relaxed", "1.75"],
-  ])("sets %s line spacing", (lineSpacing, value) => {
-    expect(css({ lineSpacing })).toContain(`line-height: ${value} !important`);
+  it("sets the line spacing", () => {
+    expect(css({ lineSpacing: 1.75 })).toContain(
+      "line-height: 1.75 !important",
+    );
   });
 
   it("sets the size on the page once, so it doesn't compound", () => {
-    const out = css({ size: 135 });
-    expect(out.match(/font-size: 135%/g)).toHaveLength(1);
-    expect(out).toMatch(/html \{[^}]*font-size: 135% !important/);
+    const out = css({ size: 18.5 });
+    expect(out.match(/font-size: 18.5px/g)).toHaveLength(1);
+    expect(out).toMatch(/html \{[^}]*font-size: 18.5px !important/);
+  });
+
+  it("leaves the book's own text sizes alone unless the size is forced", () => {
+    expect(css({ forceFontSize: false })).not.toContain("font-size: inherit");
+  });
+
+  it("sets the body text at the chosen size when the size is forced", () => {
+    expect(css({ forceFontSize: true })).toMatch(
+      /body \{\s*font-size: 1rem !important/,
+    );
+  });
+
+  it("sets every element but headings and small print at the body's size when forced", () => {
+    const out = css({ forceFontSize: true });
+    const kept = out.match(
+      /body :not\(([^)]*)\) \{\s*font-size: inherit !important/,
+    )![1];
+    for (const tag of ["h1", "h6", "small", "sup", "sub", "code"]) {
+      expect(kept.split(/,\s*/)).toContain(tag);
+    }
   });
 
   it("aligns only paragraphs the book doesn't align itself, once they're recorded", () => {
@@ -193,24 +233,22 @@ describe("readerLayout", () => {
     ).toBe("scrolled");
   });
 
-  it("widens the gap and shortens the lines as margins grow", () => {
-    const small = readerLayout({
-      ...DEFAULT_READER_SETTINGS,
-      margins: "small",
-    });
-    const medium = readerLayout({
-      ...DEFAULT_READER_SETTINGS,
-      margins: "medium",
-    });
-    const large = readerLayout({
-      ...DEFAULT_READER_SETTINGS,
-      margins: "large",
-    });
-    const pct = (v: string) => parseFloat(v);
-    expect(pct(small.gap)).toBeLessThan(pct(medium.gap));
-    expect(pct(medium.gap)).toBeLessThan(pct(large.gap));
-    expect(pct(small.maxInlineSize)).toBeGreaterThan(pct(medium.maxInlineSize));
-    expect(pct(medium.maxInlineSize)).toBeGreaterThan(pct(large.maxInlineSize));
+  it("makes the margin on each side the chosen share of the page", () => {
+    // foliate leaves its whole gap on each side of the text, half outside
+    // the frame and half inside it.
+    expect(readerLayout({ ...DEFAULT_READER_SETTINGS, margins: 6 }).gap).toBe(
+      "6%",
+    );
+  });
+
+  it("keeps a gutter between two columns at the smallest margins", () => {
+    // foliate also uses the gap between the columns of a two-page spread.
+    expect(
+      parseFloat(readerLayout({ ...DEFAULT_READER_SETTINGS, margins: 1 }).gap),
+    ).toBeGreaterThan(0);
+    expect(readerSettingsFrom(JSON.stringify({ margins: 0 })).margins).toBe(
+      DEFAULT_READER_SETTINGS.margins,
+    );
   });
 });
 
@@ -244,5 +282,68 @@ describe("recordBookAlignment", () => {
     );
     recordBookAlignment(doc);
     expect(own(doc)).toEqual(["Left."]);
+  });
+});
+
+describe("stepSetting", () => {
+  it("steps a setting up and down by its step", () => {
+    expect(stepSetting("size", 16, 1)).toBe(16.5);
+    expect(stepSetting("lineSpacing", 1.45, -1)).toBe(1.4);
+    expect(stepSetting("margins", 4, 1)).toBe(5);
+  });
+
+  it("stops at the ends of the range", () => {
+    expect(stepSetting("size", 40, 1)).toBe(40);
+    expect(stepSetting("margins", 1, -1)).toBe(1);
+  });
+});
+
+describe("footnoteStyle", () => {
+  const style = (
+    overrides = {},
+    fontFace?: Parameters<typeof footnoteStyle>[1],
+  ) =>
+    footnoteStyle(
+      { ...DEFAULT_READER_SETTINGS, ...overrides },
+      fontFace,
+      "Georgia, serif",
+    );
+
+  it.each([
+    ["light", "#ffffff", "#111111"],
+    ["sepia", "#f4ecd8", "#5b4636"],
+    ["dark", "#1a1a1a", "#e8e8e8"],
+    ["black", "#000000", "#c8c8c8"],
+  ])("colors a footnote like the %s page", (theme, bg, fg) => {
+    expect(style({ theme })).toEqual(
+      expect.objectContaining({ backgroundColor: bg, color: fg }),
+    );
+  });
+
+  it("gives the note's link the theme's link color", () => {
+    expect(style({ theme: "sepia" }).link).toBe("#8a4b08");
+    expect(style({ theme: "light" }).link).toMatch(/^#/);
+  });
+
+  it("rounds a note's size to a half pixel", () => {
+    // 90% of 16px.
+    expect(style({ size: 16 }).fontSize).toBe("14.5px");
+  });
+
+  it("sets a note a little smaller than the text, at its line spacing", () => {
+    expect(style({ size: 20, lineSpacing: 1.6 })).toEqual(
+      expect.objectContaining({ fontSize: "18px", lineHeight: 1.6 }),
+    );
+  });
+
+  it("sets a note in the chosen font", () => {
+    expect(
+      style({}, { family: "Literata", fallback: "serif", faces: "" })
+        .fontFamily,
+    ).toBe('"Literata", serif');
+  });
+
+  it("sets a note in the book's font when that's the choice", () => {
+    expect(style({}).fontFamily).toBe("Georgia, serif");
   });
 });

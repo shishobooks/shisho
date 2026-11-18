@@ -10,12 +10,15 @@ type SliderProps = React.ComponentPropsWithoutRef<
   typeof SliderPrimitive.Root
 > & {
   thumbLabel?: string;
+  // What a screen reader says for the value, when the bare number doesn't
+  // say it (a size in px, a percent).
+  thumbValueText?: string;
 };
 
 const Slider = React.forwardRef<
   React.ComponentRef<typeof SliderPrimitive.Root>,
   SliderProps
->(({ className, thumbLabel, ...props }, ref) => (
+>(({ className, thumbLabel, thumbValueText, ...props }, ref) => (
   <SliderPrimitive.Root
     ref={ref}
     className={cn(
@@ -29,6 +32,7 @@ const Slider = React.forwardRef<
     </SliderPrimitive.Track>
     <SliderPrimitive.Thumb
       aria-label={thumbLabel}
+      aria-valuetext={thumbValueText}
       className="block h-4 w-4 rounded-full border border-primary/50 bg-background shadow transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
     />
   </SliderPrimitive.Root>

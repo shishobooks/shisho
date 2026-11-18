@@ -14,13 +14,22 @@ export type ReaderTheme = (typeof READER_THEMES)[number];
 export const READER_LAYOUTS = ["paginated", "scrolled"] as const;
 export type ReaderLayout = (typeof READER_LAYOUTS)[number];
 
-export const LINE_SPACINGS = ["compact", "normal", "relaxed"] as const;
-export type LineSpacing = (typeof LINE_SPACINGS)[number];
+// The settings set by number, each with its range and step.
+export const NUMERIC_SETTINGS = {
+  // The text's base size in CSS pixels; the book's own sizes scale from it.
+  size: { min: 10, max: 40, step: 0.5 },
+  // A multiple of the font size.
+  lineSpacing: { min: 1, max: 2.5, step: 0.05 },
+  // The space on each side of the text, as a percent of the page's width.
+  // At least 1: foliate leaves the same space between the two columns of a
+  // spread, which would otherwise run together.
+  margins: { min: 1, max: 15, step: 1 },
+} as const;
+export type NumericSetting = keyof typeof NUMERIC_SETTINGS;
 
-export const READER_MARGINS = ["small", "medium", "large"] as const;
-export type ReaderMargins = (typeof READER_MARGINS)[number];
-
-export const FONT_SIZE = { min: 50, max: 200, step: 5 } as const;
+// The size browsers give text that sets none, which the old percentage
+// setting scaled.
+const BROWSER_FONT_SIZE = 16;
 
 // The book's own fonts.
 export const BOOK_FONT = "book";
@@ -39,10 +48,11 @@ export type BundledFontId = (typeof BUNDLED_FONT_IDS)[number];
 export interface ReaderSettings {
   // BOOK_FONT, a BundledFontId, or IMPORTED_FONT_PREFIX + an id.
   font: string;
-  // Percent of the book's own size.
   size: number;
-  lineSpacing: LineSpacing;
-  margins: ReaderMargins;
+  // Sets body text at `size` even where the book sets its own sizes.
+  forceFontSize: boolean;
+  lineSpacing: number;
+  margins: number;
   justify: boolean;
   theme: ReaderTheme;
   layout: ReaderLayout;
@@ -50,9 +60,10 @@ export interface ReaderSettings {
 
 export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   font: BOOK_FONT,
-  size: 100,
-  lineSpacing: "normal",
-  margins: "medium",
+  size: BROWSER_FONT_SIZE,
+  forceFontSize: false,
+  lineSpacing: 1.45,
+  margins: 7,
   justify: true,
   theme: "light",
   layout: "paginated",
@@ -75,11 +86,38 @@ const oneOf = <T extends string>(
   fallback: T,
 ): T => (options.includes(value as T) ? (value as T) : fallback);
 
-const validSize = (value: unknown, fallback: number) => {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  if (value < FONT_SIZE.min || value > FONT_SIZE.max) return fallback;
-  return Math.round(value / FONT_SIZE.step) * FONT_SIZE.step;
+// The nearest step, without the float noise of 0.05 steps (1.4500000001).
+const snap = (setting: NumericSetting, value: number) => {
+  const { step } = NUMERIC_SETTINGS[setting];
+  return Number((Math.round(value / step) * step).toFixed(2));
 };
+
+const validNumber = (setting: NumericSetting, value: unknown) => {
+  const { min, max } = NUMERIC_SETTINGS[setting];
+  const fallback = DEFAULT_READER_SETTINGS[setting];
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  if (value < min || value > max) return fallback;
+  return snap(setting, value);
+};
+
+const validBoolean = (value: unknown, fallback: boolean) =>
+  typeof value === "boolean" ? value : fallback;
+
+const clamp = (setting: NumericSetting, value: number) => {
+  const { min, max } = NUMERIC_SETTINGS[setting];
+  return Math.min(max, Math.max(min, value));
+};
+
+// A setting one step up (1) or down (-1), held to its range.
+export const stepSetting = (
+  setting: NumericSetting,
+  value: number,
+  direction: 1 | -1,
+) =>
+  snap(
+    setting,
+    clamp(setting, value + direction * NUMERIC_SETTINGS[setting].step),
+  );
 
 const validFont = (value: unknown) => {
   if (typeof value !== "string") return BOOK_FONT;
@@ -117,38 +155,40 @@ export const readerSettingsFrom = (
   const d = DEFAULT_READER_SETTINGS;
   const stored = parse(raw);
   if (!stored) {
+    // The account kept a percentage of the browser's default size.
+    const percent = account?.viewer_reflowable_font_size;
     return {
       ...d,
-      size: validSize(account?.viewer_reflowable_font_size, d.size),
+      size:
+        percent == null
+          ? d.size
+          : snap("size", clamp("size", (percent / 100) * BROWSER_FONT_SIZE)),
       theme: oneOf(READER_THEMES, account?.viewer_reflowable_theme, d.theme),
       layout: oneOf(READER_LAYOUTS, account?.viewer_reflowable_flow, d.layout),
     };
   }
   return {
     font: validFont(stored.font),
-    size: validSize(stored.size, d.size),
-    lineSpacing: oneOf(LINE_SPACINGS, stored.lineSpacing, d.lineSpacing),
-    margins: oneOf(READER_MARGINS, stored.margins, d.margins),
-    justify: typeof stored.justify === "boolean" ? stored.justify : d.justify,
+    size: validNumber("size", stored.size),
+    forceFontSize: validBoolean(stored.forceFontSize, d.forceFontSize),
+    lineSpacing: validNumber("lineSpacing", stored.lineSpacing),
+    margins: validNumber("margins", stored.margins),
+    justify: validBoolean(stored.justify, d.justify),
     theme: oneOf(READER_THEMES, stored.theme, d.theme),
     layout: oneOf(READER_LAYOUTS, stored.layout, d.layout),
   };
 };
 
-const LINE_HEIGHTS: Record<LineSpacing, string> = {
-  compact: "1.2",
-  normal: "1.45",
-  relaxed: "1.75",
-};
-
+// `link` replaces the book's link colors on the page (Light keeps them);
+// `noteLink` is the link in a footnote popover.
 const THEME_COLORS: Record<
   ReaderTheme,
-  { fg: string; bg: string; link: string | null }
+  { fg: string; bg: string; link: string | null; noteLink: string }
 > = {
-  light: { fg: "#111111", bg: "#ffffff", link: null },
-  sepia: { fg: "#5b4636", bg: "#f4ecd8", link: "#8a4b08" },
-  dark: { fg: "#e8e8e8", bg: "#1a1a1a", link: "#8ab4f8" },
-  black: { fg: "#c8c8c8", bg: "#000000", link: "#8ab4f8" },
+  light: { fg: "#111111", bg: "#ffffff", link: null, noteLink: "#0645ad" },
+  sepia: { fg: "#5b4636", bg: "#f4ecd8", link: "#8a4b08", noteLink: "#8a4b08" },
+  dark: { fg: "#e8e8e8", bg: "#1a1a1a", link: "#8ab4f8", noteLink: "#8ab4f8" },
+  black: { fg: "#c8c8c8", bg: "#000000", link: "#8ab4f8", noteLink: "#8ab4f8" },
 };
 
 // A font other than the book's: its @font-face rules and the family to set.
@@ -209,12 +249,13 @@ export const readerCSS = (
     html {
       color: ${fg} !important;
       background: ${bg} !important;
-      font-size: ${settings.size}% !important;
+      font-size: ${settings.size}px !important;
     }
     ${replaceBookColors}
     ${font}
+    ${settings.forceFontSize ? FORCED_SIZE : ""}
     ${TEXT} {
-      line-height: ${LINE_HEIGHTS[settings.lineSpacing]} !important;
+      line-height: ${settings.lineSpacing} !important;
     }
     /* Only text the book leaves at the start or justified: a centered scene
        break or a right-aligned signature keeps its place. */
@@ -227,6 +268,21 @@ export const readerCSS = (
 
 // The text the line spacing and justification settings apply to.
 const TEXT = "p, li, blockquote, dd";
+
+// Text at the chosen size, for a book whose own sizes (often in px) would
+// ignore it: everything takes its parent's size, down from the body.
+// Headings, small print (small, sup, sub) and code keep the book's sizes,
+// and what's inside them takes theirs. Anything else the book sizes on
+// purpose, such as a drop cap or a heading made of a styled paragraph, is
+// flattened: that's what forcing the size means.
+const FORCED_SIZE = `
+  body {
+    font-size: 1rem !important;
+  }
+  body :not(h1, h2, h3, h4, h5, h6, small, sup, sub, code, pre, kbd, samp, tt) {
+    font-size: inherit !important;
+  }
+`;
 const ALIGNMENT_RECORDED = "data-shisho-align";
 const OWN_ALIGNMENT = "data-shisho-own-align";
 
@@ -266,19 +322,32 @@ export const recordBookAlignment = (doc: Document) => {
   doc.documentElement.setAttribute(ALIGNMENT_RECORDED, "");
 };
 
-// foliate's gap is the space beside the text as a share of the page, and its
-// max-inline-size caps how long a line gets on a wide screen.
-const MARGIN_LAYOUT: Record<
-  ReaderMargins,
-  { gap: string; maxInlineSize: string }
-> = {
-  small: { gap: "4%", maxInlineSize: "840px" },
-  medium: { gap: "7%", maxInlineSize: "720px" },
-  large: { gap: "12%", maxInlineSize: "600px" },
-};
-
-// The attributes set on foliate's renderer.
+// The attributes set on foliate's renderer. foliate leaves its whole gap on
+// each side of the text, half outside the frame and half as padding inside
+// it, and the same gap between two columns.
 export const readerLayout = (settings: ReaderSettings) => ({
   flow: settings.layout,
-  ...MARGIN_LAYOUT[settings.margins],
+  gap: `${settings.margins}%`,
 });
+
+// A footnote popover is part of the book, so it takes the page's colors and
+// type, the text a little smaller as books set notes. `bookFontFamily` is the
+// family the book itself uses around the reference.
+export const footnoteStyle = (
+  settings: ReaderSettings,
+  fontFace: ReaderFontFace | undefined,
+  bookFontFamily: string,
+) => {
+  const { fg, bg, noteLink } = THEME_COLORS[settings.theme];
+  return {
+    backgroundColor: bg,
+    color: fg,
+    link: noteLink,
+    fontFamily: fontFace
+      ? `"${fontFace.family}", ${fontFace.fallback}`
+      : bookFontFamily,
+    // To the half pixel, as the text size steps.
+    fontSize: `${Math.round(settings.size * 0.9 * 2) / 2}px`,
+    lineHeight: settings.lineSpacing,
+  };
+};

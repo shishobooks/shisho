@@ -1,4 +1,4 @@
-import { Loader2, Upload, X } from "lucide-react";
+import { Loader2, Minus, Plus, Upload, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
@@ -23,12 +23,12 @@ import {
 } from "@/libraries/readerFonts";
 import {
   BOOK_FONT,
-  FONT_SIZE,
   IMPORTED_FONT_PREFIX,
-  LINE_SPACINGS,
+  NUMERIC_SETTINGS,
   READER_LAYOUTS,
-  READER_MARGINS,
   READER_THEMES,
+  stepSetting,
+  type NumericSetting,
   type ReaderSettings,
 } from "@/libraries/readerSettings";
 
@@ -73,6 +73,84 @@ function OptionGroup<T extends string>({
   );
 }
 
+// A setting set by number: a slider for big moves and buttons for one step.
+// The value and the slider follow a drag, and the book reflows only when it
+// ends.
+function NumberSetting({
+  setting,
+  label,
+  value,
+  format,
+  ends,
+  onChange,
+}: {
+  setting: NumericSetting;
+  label: string;
+  value: number;
+  format: (value: number) => string;
+  // Words for the slider's two ends, which say what the number means.
+  ends?: [string, string];
+  onChange: (value: number) => void;
+}) {
+  const { min, max, step } = NUMERIC_SETTINGS[setting];
+  const [draft, setDraft] = useState(value);
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+  const name = label.toLowerCase();
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <p className="text-sm font-medium">{label}</p>
+        {/* Announces a step from the buttons, which leave focus on the
+            button rather than the slider. */}
+        <span
+          aria-live="polite"
+          className="text-sm text-muted-foreground tabular-nums"
+        >
+          {format(draft)}
+        </span>
+      </div>
+      <div className="flex items-center gap-2 mt-1">
+        <Button
+          aria-label={`Decrease ${name}`}
+          disabled={value <= min}
+          onClick={() => onChange(stepSetting(setting, value, -1))}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <Minus className="h-4 w-4" />
+        </Button>
+        <Slider
+          max={max}
+          min={min}
+          onValueChange={([next]) => setDraft(next)}
+          onValueCommit={([next]) => onChange(next)}
+          step={step}
+          thumbLabel={label}
+          thumbValueText={format(draft)}
+          value={[draft]}
+        />
+        <Button
+          aria-label={`Increase ${name}`}
+          disabled={value >= max}
+          onClick={() => onChange(stepSetting(setting, value, 1))}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <Plus className="h-4 w-4" />
+        </Button>
+      </div>
+      {ends && (
+        <div className="flex justify-between px-9 text-xs text-muted-foreground">
+          <span>{ends[0]}</span>
+          <span>{ends[1]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface ReaderSettingsPanelProps {
   settings: ReaderSettings;
   onChange: (change: Partial<ReaderSettings>) => void;
@@ -92,13 +170,6 @@ export default function ReaderSettingsPanel({
   onRemoveFont,
   children,
 }: ReaderSettingsPanelProps) {
-  // The slider's thumb and label follow a drag, and the book reflows only
-  // when it ends.
-  const [sizeDraft, setSizeDraft] = useState(settings.size);
-  useEffect(() => {
-    setSizeDraft(settings.size);
-  }, [settings.size]);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
 
@@ -222,29 +293,44 @@ export default function ReaderSettingsPanel({
           TTF, OTF, or WOFF2. Kept in this browser only.
         </p>
       </div>
+      <NumberSetting
+        format={(size) => `${size} px`}
+        label="Font size"
+        onChange={(size) => onChange({ size })}
+        setting="size"
+        value={settings.size}
+      />
       <div>
-        <p className="text-sm font-medium">Font size: {sizeDraft}%</p>
-        <Slider
-          className="mt-2"
-          max={FONT_SIZE.max}
-          min={FONT_SIZE.min}
-          onValueChange={([value]) => setSizeDraft(value)}
-          onValueCommit={([value]) => onChange({ size: value })}
-          step={FONT_SIZE.step}
-          thumbLabel="Font size"
-          value={[sizeDraft]}
-        />
+        <div className="flex items-center justify-between">
+          <Label htmlFor="reader-force-size">Force font size</Label>
+          <Switch
+            aria-describedby="reader-force-size-hint"
+            checked={settings.forceFontSize}
+            id="reader-force-size"
+            onCheckedChange={(forceFontSize) => onChange({ forceFontSize })}
+          />
+        </div>
+        <p
+          className="text-xs text-muted-foreground mt-1"
+          id="reader-force-size-hint"
+        >
+          For books that set their own text sizes and ignore the font size.
+        </p>
       </div>
-      <OptionGroup
+      <NumberSetting
+        ends={["Compact", "Relaxed"]}
+        format={(spacing) => spacing.toFixed(2)}
         label="Line spacing"
         onChange={(lineSpacing) => onChange({ lineSpacing })}
-        options={LINE_SPACINGS}
+        setting="lineSpacing"
         value={settings.lineSpacing}
       />
-      <OptionGroup
+      <NumberSetting
+        ends={["Narrow", "Wide"]}
+        format={(margins) => `${margins}%`}
         label="Margins"
         onChange={(margins) => onChange({ margins })}
-        options={READER_MARGINS}
+        setting="margins"
         value={settings.margins}
       />
       <div className="flex items-center justify-between">

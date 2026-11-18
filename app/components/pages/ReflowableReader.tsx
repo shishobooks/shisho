@@ -29,6 +29,7 @@ import { requestErrorMessage, toastRequestError } from "@/libraries/api";
 import { fontFaceFor } from "@/libraries/readerFonts";
 import { footnoteText, isFootnoteReference } from "@/libraries/readerFootnotes";
 import {
+  footnoteStyle,
   IMPORTED_FONT_PREFIX,
   readerCSS,
   readerLayout,
@@ -103,6 +104,9 @@ type FoliateBookView = HTMLElement & {
 interface OpenFootnote {
   href: string;
   paragraphs: string[];
+  // The book's own font around the reference, for a note when the reader
+  // keeps the book's fonts.
+  bookFontFamily: string;
   // The reference's box on screen.
   rect: { left: number; top: number; width: number; height: number };
 }
@@ -178,6 +182,18 @@ export default function ReflowableReader({
       ),
     [readerSettings.font, chosenImportedUrl],
   );
+  // The same font for a footnote popover, which this page draws itself. A
+  // private name keeps it from replacing the app's own font of that name
+  // (the app uses Noto Sans).
+  const noteFontFace = useMemo(
+    () =>
+      fontFaceFor(
+        readerSettings.font,
+        chosenImportedUrl ? [chosenImportedUrl] : [],
+        "Shisho Note Font",
+      ),
+    [readerSettings.font, chosenImportedUrl],
+  );
   // Until an imported font's bytes are ready, the book waits rather than
   // laying out once in its own font and again in the chosen one.
   const fontPending =
@@ -246,8 +262,15 @@ export default function ReflowableReader({
   // buttons, which turn by side, swap labels.
   const [rtl, setRtl] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  // The last footnote stays after the popover closes, so it keeps its text
+  // and colors while it fades out.
   const [footnote, setFootnote] = useState<OpenFootnote | null>(null);
-  const closeFootnote = useCallback(() => setFootnote(null), []);
+  const [footnoteOpen, setFootnoteOpen] = useState(false);
+  const closeFootnote = useCallback(() => setFootnoteOpen(false), []);
+  // An open footnote is part of the book, so it looks like the page.
+  const noteStyle =
+    footnote &&
+    footnoteStyle(readerSettings, noteFontFace, footnote.bookFontFamily);
 
   // Load the blob into foliate once both it and the saved location are
   // available.
@@ -648,9 +671,14 @@ export default function ReflowableReader({
           ? frameRect.width / frame.offsetWidth
           : 1;
       const box = a.getBoundingClientRect();
+      const bookFontFamily =
+        a.ownerDocument.defaultView?.getComputedStyle(a.parentElement ?? a)
+          .fontFamily || "serif";
+      setFootnoteOpen(true);
       setFootnote({
         href,
         paragraphs,
+        bookFontFamily,
         rect: {
           left: (frameRect?.left ?? 0) + box.left * scale,
           top: (frameRect?.top ?? 0) + box.top * scale,
@@ -687,7 +715,7 @@ export default function ReflowableReader({
       if (!detail) return;
       // An open footnote points at a spot on the page it came from, which a
       // move or a re-layout leaves.
-      setFootnote(null);
+      setFootnoteOpen(false);
       if (typeof detail.fraction === "number") setFraction(detail.fraction);
       setCurrentTocHref(detail.tocItem?.href ?? null);
       setCurrentTocLabel(detail.tocItem?.label ?? null);
@@ -750,7 +778,6 @@ export default function ReflowableReader({
       }
     };
     set("gap", layout.gap);
-    set("max-inline-size", layout.maxInlineSize);
     set("flow", layout.flow);
 
     // A section already on screen lays out before a newly chosen font
@@ -939,7 +966,7 @@ export default function ReflowableReader({
           onOpenChange={(open) => {
             if (!open) closeFootnote();
           }}
-          open={footnote !== null}
+          open={footnoteOpen}
         >
           {footnote && (
             <PopoverAnchor asChild>
@@ -956,8 +983,26 @@ export default function ReflowableReader({
             // Keeps the 16px page gutter on a phone, where a reference near
             // the edge would otherwise push the popover against it.
             collisionPadding={16}
+            // The reader theme's colors and type, not the app's: they come
+            // from the reader settings, which no Tailwind token holds.
+            style={
+              noteStyle
+                ? {
+                    backgroundColor: noteStyle.backgroundColor,
+                    color: noteStyle.color,
+                    borderColor:
+                      "color-mix(in srgb, currentColor 25%, transparent)",
+                    fontFamily: noteStyle.fontFamily,
+                    fontSize: noteStyle.fontSize,
+                    lineHeight: noteStyle.lineHeight,
+                  }
+                : undefined
+            }
           >
-            <div className="space-y-2 text-sm">
+            {/* The chosen font's faces, which this page loads only while a
+                note shows. */}
+            {noteFontFace && <style>{noteFontFace.faces}</style>}
+            <div className="space-y-2">
               {footnote?.paragraphs.map((text, i) => (
                 <p key={i}>{text}</p>
               ))}
@@ -971,6 +1016,7 @@ export default function ReflowableReader({
                 closeFootnote();
               }}
               size="inline"
+              style={noteStyle ? { color: noteStyle.link } : undefined}
               variant="link"
             >
               Go to note

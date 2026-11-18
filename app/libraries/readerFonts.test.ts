@@ -57,6 +57,15 @@ describe("bundled fonts", () => {
     expect(face!.faces).toContain('format("truetype")');
   });
 
+  it("declares a font under another family name when asked", () => {
+    // The app page has a Noto Sans of its own, which a note's copy mustn't
+    // replace.
+    const face = fontFaceFor("noto-sans", [], "Shisho Note Font");
+    expect(face?.family).toBe("Shisho Note Font");
+    expect(face?.faces).toContain('font-family: "Shisho Note Font"');
+    expect(face?.faces).not.toContain('font-family: "Noto Sans"');
+  });
+
   it("declares nothing for the book's own font", () => {
     expect(fontFaceFor("book", [])).toBeUndefined();
   });

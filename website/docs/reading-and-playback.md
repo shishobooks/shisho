@@ -12,7 +12,7 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 - Previous and next page controls
 - A progress bar that can jump within the book
 - [Display settings](#display-settings) for the font, size, spacing, margins, theme, and layout
-- Footnotes that open in a popover beside the text. Select **Go to note** in the popover to jump to the full note.
+- Footnotes that open in a popover beside the text, in the page's theme and in the font chosen under [display settings](#display-settings). With **Book's font**, a book's embedded fonts may show as a standard serif font in the popover. Select **Go to note** in the popover to jump to the full note.
 - Optional automatic hiding of the header and footer
 
 In paginated mode, click or tap the left and right sides to change pages, or swipe from anywhere on the page. Fixed-layout books always turn this way, whatever the layout setting. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. In a book that reads right to left, such as many Arabic, Hebrew, and Japanese books, the sides swap: the left side, the Left Arrow, and the left footer button move forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page or its top or bottom edge (paginated) or the text (scrolled).
@@ -26,10 +26,11 @@ Use the **Settings** button inside the reader to change how books look:
 | Setting | Options |
 | --- | --- |
 | **Font** | **Book's font** keeps the fonts the book sets. The included fonts are Libron, Literata, Atkinson Hyperlegible, Noto Serif, Noto Sans, and OpenDyslexic. You can also [import your own](#imported-fonts). |
-| **Font size** | 50% to 200% of the book's own size, in steps of 5% |
-| **Line spacing** | **Compact**, **Normal**, or **Relaxed** |
-| **Margins** | **Small**, **Medium**, or **Large**. Larger margins also shorten the lines on a wide screen. |
-| **Justify text** | On justifies and hyphenates paragraphs; off aligns them to the start of the line. |
+| **Font size** | 10 to 40 px, in steps of 0.5 px. Headings and other text the book sizes relative to its body text scale with it. |
+| **Force font size** | Off by default. Turn it on when the font size has no effect because the book sets its own text sizes. All text then uses the font size, except headings, small print, and code. Text the book sizes for effect, such as a large first letter, also takes the font size. |
+| **Line spacing** | 1.00 to 2.50 times the font size, in steps of 0.05, from compact to relaxed |
+| **Margins** | 1% to 15% of the page's width on each side, in steps of 1%, from narrow to wide. When two pages show side by side, the same space separates them. |
+| **Justify text** | On justifies and hyphenates paragraphs; off aligns them to the start of the line. Text the book centers or aligns right, such as scene breaks, keeps its alignment either way. |
 | **Theme** | **Light**, **Sepia**, **Dark**, or **Black**. Light keeps the book's own text and background colors; the others replace them. In Dark and Black, images get a white background so transparent images stay visible. |
 | **Layout** | **Paginated** or **Scrolled** |
 

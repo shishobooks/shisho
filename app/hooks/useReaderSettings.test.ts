@@ -30,14 +30,14 @@ describe("useReaderSettings", () => {
   });
 
   it("still applies a change when the browser refuses to store it", () => {
-    localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ size: 90 }));
+    localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify({ size: 18 }));
     const { result } = renderHook(() => useReaderSettings());
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("full", "QuotaExceededError");
     });
 
-    act(() => result.current[1]({ size: 120 }));
+    act(() => result.current[1]({ size: 24 }));
 
-    expect(result.current[0].size).toBe(120);
+    expect(result.current[0].size).toBe(24);
   });
 });

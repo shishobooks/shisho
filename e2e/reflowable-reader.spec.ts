@@ -208,6 +208,26 @@ test.describe("Reflowable reader", () => {
     await expect.poll(alignments).toEqual(["start", "center"]);
   });
 
+  test("Force font size sets text the book fixes in px", async ({ page }) => {
+    await login(page);
+    await setDisplaySettings(page, { layout: "paginated" });
+    await openReader(page, epubBookId);
+    const frame = await bookFrame(page, "Fixed size.");
+
+    const sizes = () =>
+      frame.evaluate(() =>
+        [...document.querySelectorAll("p")]
+          .slice(0, 3)
+          .map((p) => getComputedStyle(p).fontSize),
+      );
+    await expect.poll(sizes).toEqual(["16px", "16px", "11px"]);
+
+    await page.getByRole("button", { name: "Settings" }).click();
+    await page.getByRole("switch", { name: "Force font size" }).click();
+    await page.getByRole("button", { name: "Increase font size" }).click();
+    await expect.poll(sizes).toEqual(["16.5px", "16.5px", "16.5px"]);
+  });
+
   // Paginated with the controls showing, so the page buttons are on screen.
   async function setPaginatedReader(page: Page) {
     const put = await page.request.put("/api/settings/user", {
@@ -288,7 +308,7 @@ test.describe("Reflowable reader", () => {
     await size.focus();
     await size.press("ArrowRight");
     await size.press("ArrowRight");
-    await expect(size).toHaveAttribute("aria-valuenow", "110");
+    await expect(size).toHaveAttribute("aria-valuenow", "17");
     await page.keyboard.press("Escape");
 
     await turnPageTo(page, "Chapter Two text.");
@@ -331,7 +351,7 @@ test.describe("Reflowable reader", () => {
       font: "OpenDyslexic, sans-serif",
       fontLoaded: true,
       background: "rgb(0, 0, 0)",
-      fontSize: "17.6px",
+      fontSize: "17px",
     });
 
     await page.getByRole("button", { name: "Settings" }).click();
@@ -343,7 +363,7 @@ test.describe("Reflowable reader", () => {
     ).toHaveAttribute("aria-pressed", "true");
     await expect(
       page.getByRole("slider", { name: "Font size" }),
-    ).toHaveAttribute("aria-valuenow", "110");
+    ).toHaveAttribute("aria-valuenow", "17");
     await page.keyboard.press("Escape");
 
     const before = await progress(page);
@@ -356,6 +376,20 @@ test.describe("Reflowable reader", () => {
     );
     const popover = page.getByRole("dialog", { name: "Footnote" });
     await expect(popover).toContainText("The footnote's text.");
+    // The note looks like the page: the Black theme, in the chosen font,
+    // which this page loads to draw it.
+    await expect(popover).toHaveCSS("background-color", "rgb(0, 0, 0)");
+    await expect(popover).toHaveCSS("font-family", /Shisho Note Font/);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          [...document.fonts].some(
+            (f) =>
+              f.family.includes("Shisho Note Font") && f.status === "loaded",
+          ),
+        ),
+      )
+      .toBe(true);
     await expect(
       popover.getByRole("button", { name: "Go to note" }),
     ).toBeVisible();
