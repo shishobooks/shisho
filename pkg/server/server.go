@@ -394,7 +394,7 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	peopleGroup.Use(authMiddleware.Authenticate)
 	peopleGroup.Use(authMiddleware.RequirePermission(models.ResourcePeople, models.OperationRead))
 	fileOrganizer := NewFileOrganizer(db, bookService)
-	people.RegisterRoutes(peopleGroup, db, authMiddleware, bookService, fileOrganizer)
+	people.RegisterRoutes(peopleGroup, db, authMiddleware, bookService, fileOrganizer, bookService)
 
 	// Series routes
 	seriesGroup := e.Group("/series")
@@ -419,19 +419,19 @@ func registerProtectedRoutes(e *echo.Group, db *bun.DB, cfg *config.Config, auth
 	genresGroup := e.Group("/genres")
 	genresGroup.Use(authMiddleware.Authenticate)
 	genresGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	genres.RegisterRoutes(genresGroup, db, authMiddleware, bookService)
+	genres.RegisterRoutes(genresGroup, db, authMiddleware, bookService, bookService)
 
 	// Tags routes
 	tagsGroup := e.Group("/tags")
 	tagsGroup.Use(authMiddleware.Authenticate)
 	tagsGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	tags.RegisterRoutes(tagsGroup, db, authMiddleware, bookService)
+	tags.RegisterRoutes(tagsGroup, db, authMiddleware, bookService, bookService)
 
 	// Publishers routes
 	publishersGroup := e.Group("/publishers")
 	publishersGroup.Use(authMiddleware.Authenticate)
 	publishersGroup.Use(authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))
-	publishers.RegisterRoutes(publishersGroup, db, authMiddleware, bookService)
+	publishers.RegisterRoutes(publishersGroup, db, authMiddleware, bookService, bookService)
 
 	// Search routes (requires read access to books since search returns book
 	// data). The handler adds the series and people sections only for roles

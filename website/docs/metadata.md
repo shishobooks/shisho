@@ -112,12 +112,12 @@ See [Metadata Source Priority](#metadata-source-priority) for how sources are ra
 Each Identify field has its own apply checkbox. An unchecked field is left untouched.
 
 :::warning[Clearing Metadata]
-Clearing a checked field removes that value or relationship from the book or file and rewrites its sidecar metadata. It does not delete the media file or shared people, genre, tag, series, or publisher records. Before applying, verify every checked row and back up the database and sidecars if the current metadata matters. You can restore a value by editing it, identifying again, or scanning it from an available source, but a custom value may not be recoverable. Leave a field unchecked to preserve it.
+Clearing a checked field removes that value or relationship from the book or file and rewrites its sidecar metadata. It does not delete the media file or shared people, genre, tag, series, or publisher records. Before applying, verify every checked row and back up the database and sidecars if the current metadata matters. You can restore a value by editing it, identifying again, or using **Refresh all metadata**, but a custom value may not be recoverable. Leave a field unchecked to preserve it.
 :::
 
 If you check a field and remove its value, applying the result clears that metadata, including lists such as authors, genres, narrators, and identifiers. Title is required and cannot be cleared. Cover selection only replaces a cover, and narrators are available only for M4B files.
 
-Clearing **Subtitle**, **Description**, **Name**, **Publisher**, **Language**, **Release Date**, **URL**, or **Abridged**, or removing every entry from **Authors**, **Series**, **Genres**, **Tags**, **Narrators**, or **Identifiers**, saves the empty field as a manual edit. Normal scans leave it empty, so a value you removed while correcting a bad match does not come back when a plugin's automatic search finds that match again. **Refresh all metadata** and **Reset to file metadata** can fill it again, and so can identifying again or editing the field. With file organization enabled, clearing authors or narrators also updates their names in the folder or filename.
+Clearing **Subtitle**, **Description**, **Name**, **Publisher**, **Language**, **Release Date**, **URL**, or **Abridged**, or removing every entry from **Authors**, **Series**, **Genres**, **Tags**, **Narrators**, or **Identifiers**, saves the empty field as a manual edit, the same as clearing it in **Edit**. Normal scans leave it empty, so a value you removed while correcting a bad match does not come back when a plugin's automatic search finds that match again. **Refresh all metadata** and **Reset to file metadata** can fill it again, and so can identifying again or editing the field. With file organization enabled, clearing authors or narrators also updates their names in the folder or filename.
 
 ## Metadata Source Priority
 

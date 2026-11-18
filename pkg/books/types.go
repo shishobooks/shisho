@@ -83,7 +83,7 @@ type UpdateFilePayload struct {
 	Publisher        *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
 	ReleaseDate      *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
 	Language         *string              `json:"language,omitempty" validate:"omitempty,max=35"`
-	Abridged         *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
+	Abridged         *string              `json:"abridged,omitempty" validate:"omitempty,eq=|oneof=true false"` // "true", "false", or "" to clear
 	Identifiers      *[]IdentifierPayload `json:"identifiers,omitempty" mod:"dive" validate:"omitempty,dive"`
 	IsPreferredCover *bool                `json:"is_preferred_cover,omitempty"`
 	// ReadingDirection applies only to Page-based Files (CBZ, PDF).

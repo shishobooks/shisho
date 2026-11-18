@@ -19,12 +19,27 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
+// SidecarWriter rewrites the sidecars of every Book that holds a tag, after a
+// rename or merge changes the name they record (ADR 0027). books.Service
+// implements it; the interface breaks the import cycle.
+type SidecarWriter interface {
+	WriteSidecarsForTag(ctx context.Context, tagID int)
+}
+
 type handler struct {
 	tagService       *Service
 	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
+	sidecars         SidecarWriter // nil in tests that don't cover sidecars
+}
+
+// writeSidecars rewrites the sidecars of the tag's Books, if configured.
+func (h *handler) writeSidecars(ctx context.Context, tagID int) {
+	if h.sidecars != nil {
+		h.sidecars.WriteSidecarsForTag(ctx, tagID)
+	}
 }
 
 // buildTagResponse adds the book count and the flat alias list to a tag.
@@ -229,6 +244,7 @@ func (h *handler) update(c echo.Context) error {
 			if err != nil {
 				return errors.WithStack(err)
 			}
+			h.writeSidecars(ctx, existing.ID)
 
 			response, err := h.buildTagResponse(ctx, existing)
 			if err != nil {
@@ -243,6 +259,7 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		h.writeSidecars(ctx, id)
 	}
 
 	if params.Aliases != nil {
@@ -309,6 +326,7 @@ func (h *handler) merge(c echo.Context) error {
 	if err := h.tagService.MergeTags(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
+	h.writeSidecars(ctx, id)
 
 	return c.NoContent(http.StatusNoContent)
 }

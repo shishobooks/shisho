@@ -36,6 +36,13 @@ type FileOrganizer interface {
 	GetLibraryOrganizeSetting(ctx context.Context, libraryID int) (bool, error)
 }
 
+// SidecarWriter rewrites the sidecars of every Book that holds a person, after a
+// rename or merge changes the name they record (ADR 0027). books.Service
+// implements it; the interface breaks the import cycle.
+type SidecarWriter interface {
+	WriteSidecarsForPerson(ctx context.Context, personID int)
+}
+
 type handler struct {
 	personService    *Service
 	bookPreviews     *bookpreviews.Service
@@ -43,6 +50,14 @@ type handler struct {
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
 	fileOrganizer    FileOrganizer // optional, can be nil if not configured
+	sidecars         SidecarWriter // nil in tests that don't cover sidecars
+}
+
+// writeSidecars rewrites the sidecars of the person's Books, if configured.
+func (h *handler) writeSidecars(ctx context.Context, personID int) {
+	if h.sidecars != nil {
+		h.sidecars.WriteSidecarsForPerson(ctx, personID)
+	}
 }
 
 // buildPersonResponse adds the authored book count, the narrated file count,
@@ -307,6 +322,12 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
+	// Organizing moves files but doesn't rewrite every sidecar, so this runs
+	// either way, after any moves.
+	if nameChanged {
+		h.writeSidecars(ctx, id)
+	}
+
 	response, err := h.buildPersonResponse(ctx, person)
 	if err != nil {
 		return err
@@ -398,6 +419,7 @@ func (h *handler) merge(c echo.Context) error {
 	if err := h.personService.MergePeople(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
+	h.writeSidecars(ctx, id)
 
 	return c.NoContent(http.StatusNoContent)
 }

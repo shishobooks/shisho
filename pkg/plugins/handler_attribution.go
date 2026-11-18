@@ -75,7 +75,7 @@ func validateSourceIntents(payload *PluginApplyPayload) error {
 // when the value is a semantic no-op.
 //
 // A clear leaves a protected empty slot: no value, with a manual source, as
-// the Edit form stores most cleared fields. A Scan then leaves it empty, so a
+// the Edit form stores a cleared field. A Scan then leaves it empty, so a
 // value a bad match set and the editor removed doesn't come back when the
 // next Scan's automatic search lands on the same match (ADR 0006
 // amendment). Refresh all metadata and Reset to file metadata can still fill
@@ -98,7 +98,7 @@ func applyOptional[T any](value *T, stored **T, storedSource **string, source st
 }
 
 // clearedSource is the source an Explicit Clear stores: a protected empty
-// slot, as the Edit form writes for most cleared fields.
+// slot, as the Edit form writes for a cleared field.
 func clearedSource() *string {
 	source := models.DataSourceManual
 	return &source

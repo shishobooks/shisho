@@ -19,12 +19,27 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
+// SidecarWriter rewrites the sidecars of every Book that holds a genre, after a
+// rename or merge changes the name they record (ADR 0027). books.Service
+// implements it; the interface breaks the import cycle.
+type SidecarWriter interface {
+	WriteSidecarsForGenre(ctx context.Context, genreID int)
+}
+
 type handler struct {
 	genreService     *Service
 	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
+	sidecars         SidecarWriter // nil in tests that don't cover sidecars
+}
+
+// writeSidecars rewrites the sidecars of the genre's Books, if configured.
+func (h *handler) writeSidecars(ctx context.Context, genreID int) {
+	if h.sidecars != nil {
+		h.sidecars.WriteSidecarsForGenre(ctx, genreID)
+	}
 }
 
 // buildGenreResponse adds the book count and the flat alias list to a genre.
@@ -182,6 +197,7 @@ func (h *handler) update(c echo.Context) error {
 			if err != nil {
 				return errors.WithStack(err)
 			}
+			h.writeSidecars(ctx, existing.ID)
 
 			// Return the target genre
 			response, err := h.buildGenreResponse(ctx, existing)
@@ -197,6 +213,7 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		h.writeSidecars(ctx, id)
 	}
 
 	// Sync aliases if provided
@@ -265,6 +282,7 @@ func (h *handler) merge(c echo.Context) error {
 	if err := h.genreService.MergeGenres(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
+	h.writeSidecars(ctx, id)
 
 	return c.NoContent(http.StatusNoContent)
 }

@@ -20,12 +20,28 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
+// SidecarWriter rewrites the sidecars of every Book that holds a publisher, after a
+// rename or merge changes the name they record (ADR 0027). books.Service
+// implements it; the interface breaks the import cycle.
+type SidecarWriter interface {
+	WriteSidecarsForPublisher(ctx context.Context, publisherID int)
+}
+
 type handler struct {
 	publisherService *Service
 	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
+	sidecars         SidecarWriter // nil in tests that don't cover sidecars
+}
+
+// writeSidecars rewrites the sidecars of the publisher's Books, if
+// configured.
+func (h *handler) writeSidecars(ctx context.Context, publisherID int) {
+	if h.sidecars != nil {
+		h.sidecars.WriteSidecarsForPublisher(ctx, publisherID)
+	}
 }
 
 // setParentError renders a SetParent failure. A parent the hierarchy cannot
@@ -325,6 +341,7 @@ func (h *handler) update(c echo.Context) error {
 			if err != nil {
 				return errors.WithStack(err)
 			}
+			h.writeSidecars(ctx, existing.ID)
 
 			// Re-retrieve to pick up parent_id change
 			existing, err = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &existing.ID})
@@ -344,6 +361,7 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		h.writeSidecars(ctx, id)
 	}
 
 	if params.Aliases != nil {
@@ -443,6 +461,7 @@ func (h *handler) merge(c echo.Context) error {
 	if err := h.publisherService.MergePublishers(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
+	h.writeSidecars(ctx, id)
 
 	return c.NoContent(http.StatusNoContent)
 }
