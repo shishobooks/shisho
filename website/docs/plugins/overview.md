@@ -20,6 +20,8 @@ Viewing this page, including installed plugins, their settings, and the Discover
 
 An incompatible plugin version cannot be installed. A repository can provide several versions, but Shisho installs the first compatible version listed in its index.
 
+A metadata enricher runs on books as they are scanned, and a normal scan skips files that haven't changed. After you install one while any library has books, Shisho offers to enrich your existing books; see [Scanning a Library for New Metadata](../libraries.md#scanning-a-library-for-new-metadata).
+
 :::warning[Install only plugins you trust]
 A plugin executes code on the Shisho server. The sandbox limits access, but capabilities can grant network access, broad filesystem access, FFmpeg access, or specific executable commands. The installation dialog shows capabilities supplied by the repository publisher; Shisho does not verify that this preview matches the downloaded plugin manifest. A SHA256 checksum confirms that the downloaded bytes match the repository index, not that the code, publisher, or preview is trustworthy. Review the publisher, homepage, source, and requested capabilities before installing.
 :::

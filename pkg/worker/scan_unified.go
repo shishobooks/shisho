@@ -138,6 +138,15 @@ type ScanOptions struct {
 	SkipPlugins   bool // Skip enricher plugins, use only file-embedded metadata
 	Reset         bool // Wipe all metadata before scanning (reset to file-only state)
 	BookResetDone bool // Book-level wipe already done by scanBook (skip in scanFileByID)
+	// ScanUnchanged sends a known main File whose size and modified time
+	// haven't changed through scanFileByID anyway (FilePath mode only), as
+	// the library-wide Scan for new metadata does. Without it, a batch scan
+	// skips such a File. A cache is required, as ProcessScanJob passes.
+	ScanUnchanged bool
+	// DeferOrganize stops scanFileByID from moving the File or its Book
+	// (FileID mode), for a caller that organizes once its whole batch is
+	// done, so Files still queued at their old paths stay where they are.
+	DeferOrganize bool
 
 	// Logging (optional, for batch scan job context)
 	JobLog *joblogs.JobLogger
@@ -160,6 +169,7 @@ type ScanResult struct {
 	File        *models.File // The scanned/updated file (nil if deleted)
 	Book        *models.Book // The parent book (nil if deleted)
 	FileCreated bool         // True if file was newly created
+	BookCreated bool         // True if the file's Book was newly created for it (FilePath mode)
 	FileDeleted bool         // True if the file record was deleted (gone from disk, or DRM-protected)
 	BookDeleted bool         // True if book was also deleted (was last file)
 
@@ -331,6 +341,13 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			// both re-parsing and fingerprint invalidation.
 			changed, changedErr := fileContentChanged(opts.FilePath, existingFile, opts.ForceRefresh)
 			if changedErr == nil && !changed {
+				if opts.ScanUnchanged {
+					return w.scanFileByID(ctx, ScanOptions{
+						FileID:        existingFile.ID,
+						DeferOrganize: true,
+						JobLog:        opts.JobLog,
+					}, cache)
+				}
 				return &ScanResult{File: existingFile, Book: existingFile.Book}, nil
 			}
 			// File content changed (or we can't tell) — invalidate stale
@@ -598,8 +615,11 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	w.upgradeEnricherCover(ctx, metadata, file, book.Filepath, opts.JobLog)
 
 	// Use scanFileCore for all metadata updates, sidecars, and search index
-	// This is a resync (FileID mode), so pass isResync=true to enable book organization
-	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog, cache)
+	// This is a resync (FileID mode), so pass isResync=true to enable book
+	// organization, unless the caller organizes after its batch. isResync
+	// also reindexes search, which a deferring caller (a full scan) rebuilds
+	// at its end anyway.
+	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, !opts.DeferOrganize, opts.JobLog, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -2754,6 +2774,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 
 	// Mark as file created
 	result.FileCreated = true
+	result.BookCreated = existingBook == nil
 
 	// Discover and create supplement files
 	w.discoverAndCreateSupplements(ctx, book, path, isRootLevelFile, opts.LibraryID, library, opts.JobLog)

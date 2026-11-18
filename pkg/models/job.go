@@ -68,7 +68,31 @@ func (job *Job) UnmarshalData() error {
 
 type JobExportData struct{}
 
-type JobScanData struct{}
+// JobScanData is the payload for a scan job.
+type JobScanData struct {
+	// ScanForNewMetadata runs Scan for new metadata on every main File, as
+	// the single-file rescan does, including Files whose size and modified
+	// time haven't changed since the last scan, which a normal scan skips.
+	ScanForNewMetadata bool `json:"scan_for_new_metadata,omitempty"`
+}
+
+// JobScanProgress is the payload of a scan.progress event: how far a scan
+// job has got through one library. It carries only ids and counts, since
+// every signed-in user receives it.
+type JobScanProgress struct {
+	JobID              int  `json:"job_id"`
+	LibraryID          int  `json:"library_id"`
+	ScanForNewMetadata bool `json:"scan_for_new_metadata"`
+	// FilesFound counts the files the scan has found to scan so far.
+	FilesFound int `json:"files_found"`
+	// FilesScanned counts the found files the scan has finished with.
+	FilesScanned int `json:"files_scanned"`
+	// BooksImported counts the Books the scan has created.
+	BooksImported int `json:"books_imported"`
+	// Done is set on the last event for the library, once the scan has
+	// finished with it.
+	Done bool `json:"done"`
+}
 
 // JobHashGenerationData is the payload for a hash generation job.
 // The job processes all files in the given library that do not yet have

@@ -12,7 +12,9 @@ import EmptyState, { NoMatchesState } from "@/components/library/EmptyState";
 import type { SelectedFilter } from "@/components/library/FilterChip";
 import { FilterSheet } from "@/components/library/FilterSheet";
 import Gallery from "@/components/library/Gallery";
+import { LibraryActionsMenu } from "@/components/library/LibraryActionsMenu";
 import LibraryLayout from "@/components/library/LibraryLayout";
+import { LibraryScanHeader } from "@/components/library/LibraryScanHeader";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { SearchInput } from "@/components/library/SearchInput";
 import { SelectableBookItem } from "@/components/library/SelectableBookItem";
@@ -37,6 +39,7 @@ import { useBulkSelection } from "@/hooks/useBulkSelection";
 import { useCan } from "@/hooks/useCan";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGallerySizeParam } from "@/hooks/useGallerySizeParam";
+import { useLibraryScan } from "@/hooks/useLibraryScan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useSearchQueryParam } from "@/hooks/useSearchQueryParam";
 import { useUpdateSearchParams } from "@/hooks/useUpdateSearchParams";
@@ -152,6 +155,9 @@ const HomeContent = ({ currentlyReading = false }: HomeProps) => {
   // Fetch distinct languages for the library
   const libraryIdNum = libraryId ? parseInt(libraryId, 10) : undefined;
   const languagesQuery = useLibraryLanguages(libraryIdNum);
+  // The Currently Reading page lists books already imported, so a scan
+  // doesn't concern it.
+  const scan = useLibraryScan(currentlyReading ? undefined : libraryIdNum);
 
   // Fetch per-library sort preference. Hooks can't be called conditionally,
   // so we pass a 0 placeholder when libraryIdNum is undefined. Both hooks
@@ -561,6 +567,8 @@ const HomeContent = ({ currentlyReading = false }: HomeProps) => {
         </div>
       )}
 
+      {scan.scanning && <LibraryScanHeader scan={scan} />}
+
       {/* Search and Filters */}
       <div className="mb-6 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -636,6 +644,12 @@ const HomeContent = ({ currentlyReading = false }: HomeProps) => {
             />
           </div>
           <div className="flex-1" />
+          {!currentlyReading && libraryIdNum !== undefined && (
+            <LibraryActionsMenu
+              libraryId={libraryIdNum}
+              libraryName={libraryQuery.data?.name}
+            />
+          )}
           {isSelectionMode ? (
             <Button onClick={exitSelectionMode} size="sm" variant="outline">
               Cancel
@@ -686,6 +700,12 @@ const HomeContent = ({ currentlyReading = false }: HomeProps) => {
           emptyState={
             confirmedHasFilters ? (
               <NoMatchesState itemLabel="books" />
+            ) : scan.scanning ? (
+              <EmptyState
+                description="Books show up here as the scan imports them."
+                icon={BookIcon}
+                title="Looking for books"
+              />
             ) : currentlyReading ? (
               <EmptyState
                 action={

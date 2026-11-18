@@ -9,12 +9,16 @@ import type {
   AvailablePlugin,
   PluginCapabilities,
 } from "@/hooks/queries/plugins";
+import { setAuth } from "@/testing/auth";
 import { PluginStatusActive, type Plugin } from "@/types/generated/models";
 
 import { filterPlugins } from "./discoverFilters";
 import { DiscoverTab } from "./DiscoverTab";
 
 // --- Mocks ---
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+setAuth({ permissions: ["config:read", "config:write"] });
 
 const mockInstallMutate = vi.fn();
 const mockUpdateMutate = vi.fn();

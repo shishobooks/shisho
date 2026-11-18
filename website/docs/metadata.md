@@ -137,7 +137,7 @@ When a book has more than one main file, such as an EPUB and a PDF, the file Shi
 
 The rescan choices have intentionally different effects:
 
-- **Scan for new metadata** respects source priority and protects manual values from lower-priority sources.
+- **Scan for new metadata** respects source priority and protects manual values from lower-priority sources. To run it on every book in a library at once, for example after installing a metadata plugin, see [Scanning a Library for New Metadata](./libraries.md#scanning-a-library-for-new-metadata).
 - **Refresh all metadata** bypasses source priority, can overwrite manual values, rebuilds metadata from current sources, and runs plugins again.
 - **Reset to file metadata** clears existing values, including manual values, then rebuilds metadata from the file without plugin enrichment. Missing title and author data can fall back to the filepath.
 

@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
+import { EnrichExistingBooksPrompt } from "@/components/plugins/EnrichExistingBooksPrompt";
+import { isMetadataEnricher } from "@/components/plugins/pluginCapabilities";
 import { PluginCapabilitiesSection } from "@/components/plugins/PluginCapabilitiesSection";
 import { PluginConfigForm } from "@/components/plugins/PluginConfigForm";
 import { PluginDangerZone } from "@/components/plugins/PluginDangerZone";
@@ -24,6 +26,7 @@ import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { firstFailedQuery, toastRequestError } from "@/libraries/api";
+import { PluginStatusActive } from "@/types";
 
 export const PluginDetail = () => {
   const { scope, id } = useParams<{ scope: string; id: string }>();
@@ -37,6 +40,13 @@ export const PluginDetail = () => {
 
   const [configDirty, setConfigDirty] = useState(false);
   const [installDialogOpen, setInstallDialogOpen] = useState(false);
+  // The metadata enricher just installed, to offer enriching existing Books
+  // to a role that can start the scan (the resync button's permissions).
+  const canScan = useCan(["jobs:read", "jobs:write"]);
+  const [installedEnricher, setInstalledEnricher] = useState<string | null>(
+    null,
+  );
+  const closeEnrichPrompt = useCallback(() => setInstalledEnricher(null), []);
   const { cancelNavigation, proceedNavigation, showBlockerDialog } =
     useUnsavedChanges(configDirty);
 
@@ -91,9 +101,15 @@ export const PluginDetail = () => {
         onError: (err) => {
           toastRequestError(err, "Failed to install plugin");
         },
-        onSuccess: () => {
+        onSuccess: (installed) => {
           setInstallDialogOpen(false);
           toast.success(`${available.name} installed`);
+          if (
+            installed.status === PluginStatusActive &&
+            isMetadataEnricher(compatibleVersion.capabilities)
+          ) {
+            setInstalledEnricher(available.name);
+          }
         },
       },
     );
@@ -207,6 +223,12 @@ export const PluginDetail = () => {
         open={installDialogOpen}
         plugin={available ?? null}
       />
+      {canScan && (
+        <EnrichExistingBooksPrompt
+          onClose={closeEnrichPrompt}
+          pluginName={installedEnricher}
+        />
+      )}
     </div>
   );
 };

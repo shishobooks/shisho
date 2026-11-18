@@ -86,9 +86,10 @@ var (
 
 // scanResult holds the result of a single file scan for the worker pool.
 type scanResult struct {
-	BookID int
-	Path   string
-	Err    error
+	BookID      int
+	BookCreated bool
+	Path        string
+	Err         error
 }
 
 // generateCBZFileName creates a clean file name for CBZ files.
@@ -400,6 +401,20 @@ func (w *Worker) ProcessScanJob(ctx context.Context, job *models.Job, jobLog *jo
 		return errors.WithStack(err)
 	}
 
+	// The library-wide Scan for new metadata rescans every main File, not
+	// only the ones that changed on disk.
+	scanForNewMetadata := false
+	jobID := 0
+	if job != nil {
+		jobID = job.ID
+		if data, ok := job.DataParsed.(*models.JobScanData); ok && data != nil {
+			scanForNewMetadata = data.ScanForNewMetadata
+		}
+	}
+	if scanForNewMetadata {
+		jobLog.Info("scanning every file for new metadata", nil)
+	}
+
 	// Filter to specific library if set
 	if job != nil && job.LibraryID != nil {
 		filtered := make([]*models.Library, 0, 1)
@@ -434,6 +449,11 @@ libraries:
 		}
 		jobLog.Info("processing library", logger.Data{"library_id": library.ID})
 		filesToScan := make([]string, 0)
+		progress := newScanProgressReporter(w.broker, jobID, library.ID, scanForNewMetadata)
+		addFile := func(path string) {
+			filesToScan = append(filesToScan, path)
+			progress.fileFound()
+		}
 
 		// Pre-load all known files (main + supplement) for fast lookup during
 		// discovery and scan. The cache must include supplements so the scan
@@ -485,11 +505,11 @@ libraries:
 						pluginExts := w.pluginManager.RegisteredFileExtensions()
 						converterExts := w.pluginManager.RegisteredConverterExtensions()
 						if _, isParser := pluginExts[extNoDot]; isParser {
-							filesToScan = append(filesToScan, path)
+							addFile(path)
 							return nil
 						}
 						if _, isConverter := converterExts[extNoDot]; isConverter {
-							filesToScan = append(filesToScan, path)
+							addFile(path)
 							return nil
 						}
 					}
@@ -499,7 +519,7 @@ libraries:
 				// Skip MIME detection for files we already know about — they were
 				// validated when first imported, so re-checking is redundant I/O.
 				if cache.GetKnownFile(path) != nil {
-					filesToScan = append(filesToScan, path)
+					addFile(path)
 					return nil
 				}
 
@@ -517,7 +537,7 @@ libraries:
 				// This is a file that we care about, so store it in the slice. We do this so that we can know the total
 				// number of files that we need to scan before we start doing any real work so that we can accurately
 				// update the progress of the job.
-				filesToScan = append(filesToScan, path)
+				addFile(path)
 
 				return nil
 			})
@@ -526,6 +546,7 @@ libraries:
 			}
 			if err != nil {
 				skip(library, libraryPath.Filepath, err)
+				progress.finish()
 				continue libraries
 			}
 		}
@@ -542,6 +563,7 @@ libraries:
 		if w.pluginManager != nil {
 			convertedFiles := w.runInputConverters(ctx, filesToScan, jobLog, library.ID)
 			filesToScan = append(filesToScan, convertedFiles...)
+			progress.setFilesFound(len(filesToScan))
 		}
 
 		// --- Move reconciliation ---
@@ -594,9 +616,10 @@ libraries:
 						continue
 					}
 					result, err := w.scanInternal(ctx, ScanOptions{
-						FilePath:  path,
-						LibraryID: library.ID,
-						JobLog:    jobLog,
+						FilePath:      path,
+						LibraryID:     library.ID,
+						ScanUnchanged: scanForNewMetadata,
+						JobLog:        jobLog,
 					}, cache)
 
 					sr := scanResult{Path: path}
@@ -604,6 +627,7 @@ libraries:
 						sr.Err = err
 					} else if result != nil && result.Book != nil && !result.BookDeleted {
 						sr.BookID = result.Book.ID
+						sr.BookCreated = result.BookCreated
 					}
 					resultChan <- sr
 				}
@@ -629,6 +653,7 @@ libraries:
 
 		// Process results
 		for result := range resultChan {
+			progress.fileScanned(result.BookCreated)
 			if result.Err != nil {
 				jobLog.Warn("failed to scan file", logger.Data{"path": result.Path, "error": result.Err.Error()})
 				continue
@@ -637,6 +662,7 @@ libraries:
 				booksToOrganize[result.BookID] = struct{}{}
 			}
 		}
+		progress.flush()
 
 		jobLog.Info("parallel scan complete", logger.Data{
 			"persons_cached":    cache.PersonCount(),
@@ -696,6 +722,8 @@ libraries:
 				}
 			}
 		}
+
+		progress.finish()
 
 		// Queue async sha256 hash generation for files that still lack a fingerprint.
 		// Handles both initial backfill and newly-discovered files from this scan.

@@ -3,12 +3,19 @@ package events
 import (
 	"fmt"
 	"sync"
+
+	"github.com/segmentio/encoding/json"
+	"github.com/shishobooks/shisho/pkg/models"
 )
 
 // EventTypeLogEntry is the type of events carrying server log lines. The
 // stream handler delivers them only to users with Config Read, the same
 // permission GET /api/logs requires.
 const EventTypeLogEntry = "log.entry"
+
+// EventTypeScanProgress is the type of events carrying a scan job's progress
+// through one library.
+const EventTypeScanProgress = "scan.progress"
 
 // Event represents a server-sent event with a named type and JSON data.
 type Event struct {
@@ -118,4 +125,12 @@ func NewJobEvent(eventType string, jobID int, status, jobType string, libraryID 
 		data = fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s","library_id":%d}`, jobID, status, jobType, *libraryID)
 	}
 	return Event{Type: eventType, Data: data}
+}
+
+// NewScanProgressEvent builds a progress event for a scan job's pass over one
+// library.
+func NewScanProgressEvent(progress models.JobScanProgress) Event {
+	// A struct of ints and bools always marshals.
+	data, _ := json.Marshal(progress)
+	return Event{Type: EventTypeScanProgress, Data: string(data)}
 }

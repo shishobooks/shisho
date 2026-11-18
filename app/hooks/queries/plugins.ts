@@ -231,7 +231,8 @@ export const usePluginIdentifierTypes = (
 export const useInstallPlugin = () => {
   const queryClient = useQueryClient();
 
-  return useMutation<void, ShishoAPIError, InstallPluginPayload>({
+  // Resolves to the installed plugin, whose status says whether it loaded.
+  return useMutation<Plugin, ShishoAPIError, InstallPluginPayload>({
     mutationFn: (payload) => {
       return API.request("POST", "/plugins/installed", payload);
     },

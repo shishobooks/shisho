@@ -140,3 +140,16 @@ export const useCreateJob = () => {
     },
   });
 };
+
+/**
+ * The payload that starts the Scan for new metadata over one library, or over
+ * every library when libraryId is left out. It rescans every main File, as
+ * the single-file Scan for new metadata does, including unchanged ones.
+ */
+export const scanForNewMetadataPayload = (
+  libraryId?: number,
+): CreateJobPayload => ({
+  type: "scan",
+  ...(libraryId !== undefined && { library_id: libraryId }),
+  data: { scan_for_new_metadata: true },
+});
