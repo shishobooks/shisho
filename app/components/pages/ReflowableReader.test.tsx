@@ -269,6 +269,64 @@ describe("ReflowableReader", () => {
     }
   });
 
+  it("goes to the chapter's exact start on a click on its mark", async () => {
+    mockToc = [
+      { label: "Chapter 1", href: "ch1.xhtml" },
+      { label: "Chapter 2", href: "ch2.xhtml" },
+    ];
+    mockSectionOf = { "ch1.xhtml": 0, "ch2.xhtml": 1 };
+    mockFractions = [0, 0.4, 1];
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+
+    try {
+      const { container } = renderReader();
+      const view = container.querySelector("foliate-view") as unknown as {
+        goTo: ReturnType<typeof vi.fn>;
+        goToFraction: ReturnType<typeof vi.fn>;
+      };
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const mark = await screen.findByTestId("chapter-marker");
+      await user.click(mark);
+
+      // The chapter's link, not the fraction under the pointer.
+      expect(view.goTo).toHaveBeenCalledWith("ch2.xhtml");
+      expect(view.goToFraction).not.toHaveBeenCalled();
+    } finally {
+      mockToc = [];
+    }
+  });
+
+  it("shows progress to a tenth of a percent", async () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const progress = screen.getByRole("slider", { name: "Reading progress" });
+    await vi.waitFor(() => expect(progress).toBeInTheDocument());
+
+    act(() => {
+      container
+        .querySelector("foliate-view")!
+        .dispatchEvent(
+          new CustomEvent("relocate", { detail: { fraction: 0.2345 } }),
+        );
+    });
+
+    expect(progress).toHaveAttribute("aria-valuenow", "23.5");
+    expect(progress).toHaveAttribute("aria-valuetext", "23.5%");
+    expect(screen.getByText("23.5%")).toBeInTheDocument();
+  });
+
   it("lists headings in the chapter menu without making them selectable", async () => {
     mockToc = [
       {

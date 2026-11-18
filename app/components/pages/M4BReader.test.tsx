@@ -775,6 +775,16 @@ describe("M4BReader", () => {
       expect(lefts[1]).toMatch(/^66\.66/);
     });
 
+    it("goes to the chapter's start on a click on its mark", async () => {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { container } = renderReader({ file: fileWithChapters });
+      const audio = getAudio();
+
+      await user.click(within(container).getAllByTestId("chapter-marker")[1]);
+
+      expect(audio.currentTime).toBe(2400);
+    });
+
     it("advances to the next chapter with the next button", async () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       renderReader({ file: fileWithChapters });

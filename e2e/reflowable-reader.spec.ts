@@ -260,7 +260,9 @@ test.describe("Reflowable reader", () => {
     });
   });
 
-  test("chapter markers sit where the chapters start", async ({ page }) => {
+  test("chapter markers name their chapters and go to their starts", async ({
+    page,
+  }) => {
     await login(page);
     await setPaginatedReader(page);
     await openReader(page, contentsBookId);
@@ -271,15 +273,18 @@ test.describe("Reflowable reader", () => {
     // Chapter One starts the book, at the bar's own start.
     await expect(markers).toHaveCount(3);
 
-    // Just past each marker is the start of its chapter.
     for (const [i, name] of ["Two", "Three", "Four"].entries()) {
-      const marker = (await markers.nth(i).boundingBox())!;
-      const start = (await bar.boundingBox())!;
-      await bar.click({
-        position: { x: marker.x + marker.width / 2 + 3 - start.x, y: 3 },
-      });
+      await markers.nth(i).hover();
+      // The last mark's tooltip can still be fading out.
+      await expect(
+        page.getByRole("tooltip").filter({ hasText: `Chapter ${name}` }),
+      ).toBeVisible();
+      await markers.nth(i).click();
       await bookFrame(page, `Chapter ${name} text.`);
     }
+    // Back to an earlier chapter's start, too.
+    await markers.nth(0).click();
+    await bookFrame(page, "Chapter Two text.");
   });
 
   test("a tap on the book closes the settings without turning the page", async ({
@@ -371,7 +376,7 @@ test.describe("Reflowable reader", () => {
             position: { percentage: number } | null;
           };
           return body.position
-            ? String(Math.round(body.position.percentage * 100))
+            ? String(Math.round(body.position.percentage * 1000) / 10)
             : null;
         },
         { timeout: 10_000 },

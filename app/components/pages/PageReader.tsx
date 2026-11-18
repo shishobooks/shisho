@@ -1024,9 +1024,17 @@ export default function PageReader({
             />
             {totalPages > 1 && (
               <ChapterMarkers
-                positions={flatChapters
-                  .filter((ch) => ch.start_page != null)
-                  .map((ch) => ch.start_page! / (totalPages - 1))}
+                markers={flatChapters.flatMap((ch) =>
+                  ch.start_page == null
+                    ? []
+                    : [
+                        {
+                          position: ch.start_page / (totalPages - 1),
+                          label: ch.title,
+                          onSelect: () => goToPage(ch.start_page!),
+                        },
+                      ],
+                )}
               />
             )}
           </div>

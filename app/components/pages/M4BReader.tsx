@@ -590,9 +590,11 @@ export default function M4BReader({ file, book, libraryId }: M4BReaderProps) {
             />
             {hasChapters && duration > 0 && (
               <ChapterMarkers
-                positions={chapters.map(
-                  (chapter) => chapter.startSeconds / duration,
-                )}
+                markers={chapters.map((chapter) => ({
+                  position: chapter.startSeconds / duration,
+                  label: chapter.title,
+                  onSelect: () => seekTo(chapter.startSeconds),
+                }))}
               />
             )}
           </div>

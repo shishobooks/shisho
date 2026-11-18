@@ -10,7 +10,7 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 
 - Table-of-contents navigation
 - Previous and next page controls
-- A progress bar that can jump within the book, marked where each chapter in the book's table of contents starts
+- A progress bar that can jump within the book, marked where each chapter in the book's table of contents starts. Point at a mark to see the chapter's name, or select it to go to the start of that chapter.
 - [Display settings](#display-settings) for the font, size, spacing, margins, theme, and layout
 - Footnotes that open in a popover beside the text, in the page's theme and in the font chosen under [display settings](#display-settings). With **Book's font**, a book's embedded fonts may show as a standard serif font in the popover. Select **Go to note** in the popover to jump to the full note.
 - Optional automatic hiding of the header and footer
@@ -46,7 +46,7 @@ Select **Import font** to add a TTF, OTF, or WOFF2 font file you have. The font 
 CBZ and PDF use the same page-based reader. It provides:
 
 - Page and chapter navigation
-- A clickable page progress bar, marked where each chapter starts
+- A clickable page progress bar, marked where each chapter starts. Point at a mark to see the chapter's name, or select it to go to the chapter's first page.
 - **Fit Height** and **Fit Width** display modes
 - Configurable preloading of nearby pages
 - Optional automatic hiding of controls
@@ -73,7 +73,7 @@ The audiobook player provides:
 
 - Play, pause, and seek controls
 - 30-second skip controls
-- Chapter navigation when chapters are available, with each chapter's start marked on the seek bar
+- Chapter navigation when chapters are available, with each chapter's start marked on the seek bar. Point at a mark to see the chapter's name, or select it to play from the start of that chapter.
 - Playback speed from 0.5x to 4x
 - Bookmarks
 

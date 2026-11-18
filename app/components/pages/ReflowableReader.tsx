@@ -27,7 +27,10 @@ import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
-import { chapterPositions } from "@/libraries/readerChapterMarkers";
+import {
+  chapterMarks as findChapterMarks,
+  type ChapterMark,
+} from "@/libraries/readerChapterMarkers";
 import { fontFaceFor } from "@/libraries/readerFonts";
 import { footnoteText, isFootnoteReference } from "@/libraries/readerFootnotes";
 import {
@@ -257,7 +260,7 @@ export default function ReflowableReader({
   const footerRef = useRef<HTMLElement | null>(null);
   const [toc, setToc] = useState<TocEntry[]>([]);
   // Where each chapter starts along the progress bar.
-  const [chapterMarks, setChapterMarks] = useState<number[]>([]);
+  const [chapterMarks, setChapterMarks] = useState<ChapterMark[]>([]);
   const [fraction, setFraction] = useState(0);
   const [currentTocHref, setCurrentTocHref] = useState<string | null>(null);
   const [currentTocLabel, setCurrentTocLabel] = useState<string | null>(null);
@@ -663,14 +666,14 @@ export default function ReflowableReader({
       (FoliateBookView & { getSectionFractions?: () => number[] }) | null;
     if (!view?.book) return;
     let stale = false;
-    chapterPositions(
+    findChapterMarks(
       toc,
       view.book,
       view.getSectionFractions?.() ?? [],
       () => stale,
     )
-      .then((positions) => {
-        if (!stale && positions) setChapterMarks(positions);
+      .then((marks) => {
+        if (!stale && marks) setChapterMarks(marks);
       })
       .catch((err: unknown) => {
         // The bar works without markers.
@@ -888,7 +891,12 @@ export default function ReflowableReader({
     view?.goToFraction?.(e.key === "Home" ? 0 : 1);
   };
 
-  const progressPercent = useMemo(() => Math.round(fraction * 100), [fraction]);
+  // To a tenth of a percent, so the bar and the number move with each page
+  // in all but the longest books.
+  const progressPercent = useMemo(
+    () => Math.round(fraction * 1000) / 10,
+    [fraction],
+  );
 
   // A failed background refetch keeps an open book on screen.
   if ((error && !blob) || loadError) {
@@ -1097,7 +1105,7 @@ export default function ReflowableReader({
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={progressPercent}
-            aria-valuetext={`${progressPercent}%`}
+            aria-valuetext={`${progressPercent.toFixed(1)}%`}
             className="relative h-1.5 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={handleProgressClick}
             onKeyDown={handleProgressKeyDown}
@@ -1108,7 +1116,18 @@ export default function ReflowableReader({
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
               style={{ width: `${progressPercent}%` }}
             />
-            <ChapterMarkers positions={chapterMarks} />
+            <ChapterMarkers
+              markers={chapterMarks.map((mark) => ({
+                position: mark.position,
+                label: mark.label,
+                // The chapter's own link, so a click lands on its first
+                // page rather than wherever the fraction falls.
+                onSelect: () =>
+                  (viewRef.current as FoliateBookView | null)?.goTo?.(
+                    mark.href,
+                  ),
+              }))}
+            />
           </div>
           {currentTocLabel && (
             <div className="text-xs text-muted-foreground mt-1">
@@ -1127,8 +1146,8 @@ export default function ReflowableReader({
           >
             <ChevronLeft className="h-5 w-5" />
           </Button>
-          <span className="text-sm text-muted-foreground">
-            {progressPercent}%
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {progressPercent.toFixed(1)}%
           </span>
           <Button
             aria-label={rtl ? "Previous page" : "Next page"}

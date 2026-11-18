@@ -35,18 +35,26 @@ const textBefore = (doc: Document, target: Element) => {
   return range.toString().length / total;
 };
 
-// The positions of the entries' chapters, in book order, or null if
-// `cancelled` says the answer is no longer wanted. Reading a section's
-// document is the slow part, so each is read at most once.
-export const chapterPositions = async (
-  entries: Array<{ href: string }>,
+export interface ChapterMark {
+  position: number;
+  // The names of the chapters that start here.
+  label: string;
+  // The first of those chapters' links, for going to its exact start.
+  href: string;
+}
+
+// A mark for each entry's chapter, in book order, or null if `cancelled`
+// says the answer is no longer wanted. Reading a section's document is the
+// slow part, so each is read at most once.
+export const chapterMarks = async (
+  entries: Array<{ label: string; href: string }>,
   book: MarkerBook,
   sectionFractions: number[],
   cancelled: () => boolean = () => false,
-): Promise<number[] | null> => {
+): Promise<ChapterMark[] | null> => {
   const docs = new Map<number, Promise<Document | undefined>>();
-  const positions: number[] = [];
-  for (const { href } of entries) {
+  const marks: ChapterMark[] = [];
+  for (const { label, href } of entries) {
     if (!href) continue;
     const resolved = await book.resolveHref?.(href);
     if (!resolved || resolved.index < 0) continue;
@@ -54,7 +62,7 @@ export const chapterPositions = async (
     if (start === undefined) continue;
     const end = sectionFractions[resolved.index + 1] ?? 1;
     if (!href.includes("#")) {
-      positions.push(start);
+      marks.push({ position: start, label, href });
       continue;
     }
     if (!docs.has(resolved.index)) {
@@ -71,10 +79,21 @@ export const chapterPositions = async (
       doc && (target as Node | null)?.nodeType === 1
         ? textBefore(doc, target as Element)
         : 0;
-    positions.push(start + share * (end - start));
+    marks.push({ position: start + share * (end - start), label, href });
   }
-  positions.sort((a, b) => a - b);
-  return positions.filter(
-    (position, i) => i === 0 || position - positions[i - 1] >= MIN_GAP,
-  );
+  // A stable sort keeps the contents' order among chapters at one place, so
+  // a part comes before its first chapter.
+  marks.sort((a, b) => a.position - b.position);
+  const merged: ChapterMark[] = [];
+  for (const mark of marks) {
+    const last = merged[merged.length - 1];
+    if (last && mark.position - last.position < MIN_GAP) {
+      if (!last.label.split(" / ").includes(mark.label)) {
+        last.label = `${last.label} / ${mark.label}`;
+      }
+      continue;
+    }
+    merged.push({ ...mark });
+  }
+  return merged;
 };

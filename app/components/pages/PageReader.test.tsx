@@ -532,6 +532,22 @@ describe("PageReader chapter markers", () => {
   });
 });
 
+describe("PageReader chapter marker clicks", () => {
+  it("goes to the chapter's first page on a click on its mark", async () => {
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 3 },
+    ];
+    settings.mutate = vi.fn();
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderReader(10);
+
+    await user.click(screen.getByTestId("chapter-marker"));
+
+    expect(screen.getByText("Page 4 of 10")).toBeInTheDocument();
+  });
+});
+
 describe("PageReader keyboard", () => {
   it("turns pages with the arrow keys, but not while a control has them", async () => {
     chapters.data = [{ id: 1, title: "Opening", start_page: 0 }];

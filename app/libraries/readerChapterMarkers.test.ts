@@ -1,6 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { chapterPositions, type MarkerBook } from "./readerChapterMarkers";
+import { chapterMarks, type MarkerBook } from "./readerChapterMarkers";
+
+// Where the marks fall, for entries named after their links.
+const chapterPositions = async (
+  entries: Array<{ href: string }>,
+  ...rest: Parameters<typeof chapterMarks> extends [unknown, ...infer R]
+    ? R
+    : never
+) =>
+  (
+    await chapterMarks(
+      entries.map((entry) => ({ ...entry, label: entry.href })),
+      ...rest,
+    )
+  )?.map((mark) => mark.position) ?? null;
 
 const html = (body: string) =>
   new DOMParser().parseFromString(
@@ -141,5 +155,37 @@ describe("chapterPositions", () => {
     );
     await expect(positions).resolves.toBeNull();
     expect(b.loads).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("chapterMarks", () => {
+  it("names each mark after its chapter and keeps the chapter's link", async () => {
+    const marks = await chapterMarks(
+      [
+        { label: "Chapter 2", href: "two.xhtml" },
+        { label: "Chapter 3", href: "three.xhtml" },
+      ],
+      book(),
+      FRACTIONS,
+    );
+    expect(marks).toEqual([
+      { position: 0.2, label: "Chapter 2", href: "two.xhtml" },
+      { position: 0.6, label: "Chapter 3", href: "three.xhtml" },
+    ]);
+  });
+
+  it("names a shared mark after every chapter at it, going to the first", async () => {
+    // A part and its first chapter often start together.
+    const marks = await chapterMarks(
+      [
+        { label: "Part One", href: "two.xhtml" },
+        { label: "Chapter 1", href: "two.xhtml#c1" },
+      ],
+      book({ 1: html('<h2 id="c1">Chapter 1</h2><p>Text</p>') }),
+      FRACTIONS,
+    );
+    expect(marks).toEqual([
+      { position: 0.2, label: "Part One / Chapter 1", href: "two.xhtml" },
+    ]);
   });
 });
