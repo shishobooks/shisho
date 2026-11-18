@@ -42,6 +42,8 @@ type FileOrganizer interface {
 // breaks the import cycle.
 type SidecarWriter interface {
 	MarkSidecarsStaleForPerson(ctx context.Context, personID int)
+	SidecarBooksForPerson(ctx context.Context, personID int) []int
+	MarkBookSidecarsStale(ctx context.Context, bookIDs []int)
 }
 
 type handler struct {
@@ -58,6 +60,22 @@ type handler struct {
 func (h *handler) writeSidecars(ctx context.Context, personID int) {
 	if h.sidecars != nil {
 		h.sidecars.MarkSidecarsStaleForPerson(ctx, personID)
+	}
+}
+
+// sidecarBooks lists the Books whose sidecars name the person, for a merge
+// to collect before it re-points them.
+func (h *handler) sidecarBooks(ctx context.Context, personID int) []int {
+	if h.sidecars == nil {
+		return nil
+	}
+	return h.sidecars.SidecarBooksForPerson(ctx, personID)
+}
+
+// markBookSidecars queues a rewrite of the Books' sidecars after a merge.
+func (h *handler) markBookSidecars(ctx context.Context, bookIDs []int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkBookSidecarsStale(ctx, bookIDs)
 	}
 }
 
@@ -262,6 +280,14 @@ func (h *handler) update(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	if nameChanged {
+		// Marked as soon as the rename commits, so a rejected alias list
+		// below still leaves the Books marked, and again on the way out, after
+		// organizing, which can take long enough for a job pass to clear the
+		// first mark mid-way.
+		h.writeSidecars(ctx, id)
+		defer h.writeSidecars(ctx, id)
+	}
 
 	// Sync aliases if provided
 	if params.Aliases != nil {
@@ -321,12 +347,6 @@ func (h *handler) update(c echo.Context) error {
 				}
 			}
 		}
-	}
-
-	// Organizing moves files but doesn't rewrite every sidecar, so this runs
-	// either way, after any moves.
-	if nameChanged {
-		h.writeSidecars(ctx, id)
 	}
 
 	response, err := h.buildPersonResponse(ctx, person)
@@ -417,10 +437,12 @@ func (h *handler) merge(c echo.Context) error {
 	defer h.searchService.ReindexAffected(ctx, affected)
 
 	// Merge source person into target (this) person
+	// Only the source's Books name the source's name.
+	mergedBooks := h.sidecarBooks(ctx, params.SourceID)
 	if err := h.personService.MergePeople(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
-	h.writeSidecars(ctx, id)
+	h.markBookSidecars(ctx, mergedBooks)
 
 	return c.NoContent(http.StatusNoContent)
 }

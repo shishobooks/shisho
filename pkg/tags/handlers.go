@@ -25,6 +25,8 @@ import (
 // breaks the import cycle.
 type SidecarWriter interface {
 	MarkSidecarsStaleForTag(ctx context.Context, tagID int)
+	SidecarBooksForTag(ctx context.Context, tagID int) []int
+	MarkBookSidecarsStale(ctx context.Context, bookIDs []int)
 }
 
 type handler struct {
@@ -40,6 +42,22 @@ type handler struct {
 func (h *handler) writeSidecars(ctx context.Context, tagID int) {
 	if h.sidecars != nil {
 		h.sidecars.MarkSidecarsStaleForTag(ctx, tagID)
+	}
+}
+
+// sidecarBooks lists the Books whose sidecars name the tag, for a merge to
+// collect before it re-points them.
+func (h *handler) sidecarBooks(ctx context.Context, tagID int) []int {
+	if h.sidecars == nil {
+		return nil
+	}
+	return h.sidecars.SidecarBooksForTag(ctx, tagID)
+}
+
+// markBookSidecars queues a rewrite of the Books' sidecars after a merge.
+func (h *handler) markBookSidecars(ctx context.Context, bookIDs []int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkBookSidecarsStale(ctx, bookIDs)
 	}
 }
 
@@ -229,7 +247,7 @@ func (h *handler) update(c echo.Context) error {
 	affected := h.searchService.CollectAffected(ctx, search.Affected{TagIDs: []int{id}})
 	defer h.searchService.ReindexAffected(ctx, affected)
 
-	if params.Name != nil && *params.Name != tag.Name {
+	if params.Name != nil && strings.TrimSpace(*params.Name) != tag.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
 			return errcodes.ValidationError("Tag name cannot be empty")
@@ -241,11 +259,13 @@ func (h *handler) update(c echo.Context) error {
 		})
 		if err == nil && existing.ID != id {
 			affected.TagIDs = append(affected.TagIDs, existing.ID)
+			// Only the renamed tag's Books name the old name.
+			mergedBooks := h.sidecarBooks(ctx, id)
 			err = h.tagService.MergeTags(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
 			}
-			h.writeSidecars(ctx, existing.ID)
+			h.markBookSidecars(ctx, mergedBooks)
 
 			response, err := h.buildTagResponse(ctx, existing)
 			if err != nil {
@@ -324,10 +344,12 @@ func (h *handler) merge(c echo.Context) error {
 	affected := h.searchService.CollectAffected(ctx, search.Affected{TagIDs: []int{id, params.SourceID}})
 	defer h.searchService.ReindexAffected(ctx, affected)
 
+	// Only the source's Books name the source's name.
+	mergedBooks := h.sidecarBooks(ctx, params.SourceID)
 	if err := h.tagService.MergeTags(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
-	h.writeSidecars(ctx, id)
+	h.markBookSidecars(ctx, mergedBooks)
 
 	return c.NoContent(http.StatusNoContent)
 }

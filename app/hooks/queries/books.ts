@@ -374,30 +374,33 @@ const SIDECAR_IMPACT_REQUIREMENT: Record<SidecarImpactKind, Requirement> = {
 };
 
 /**
- * How many distinct Books' sidecars renaming the resource (one id) or merging
- * two (both ids) would rewrite in the background (ADR 0027).
+ * How many distinct Books' sidecars renaming the resource, or merging it into
+ * another, would rewrite in the background (ADR 0027). The count changes with
+ * every scan and edit, so it is fetched afresh each time a dialog asks.
  */
 export const useSidecarImpact = (
   kind: SidecarImpactKind,
-  ids: number[],
+  id: number,
   options: Omit<
     UseQueryOptions<SidecarImpactResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
   > = {},
 ) => {
   return useQuery<SidecarImpactResponse, ShishoAPIError>({
+    staleTime: 0,
+    gcTime: 0,
     ...options,
     enabled: useRequires(
       SIDECAR_IMPACT_REQUIREMENT[kind],
-      (options.enabled ?? true) && ids.length > 0,
+      options.enabled ?? true,
     ),
-    queryKey: [QueryKey.SidecarImpact, kind, ids],
+    queryKey: [QueryKey.SidecarImpact, kind, id],
     queryFn: ({ signal }) => {
       return API.request(
         "GET",
         "/books/sidecar-impact",
         null,
-        { kind, ids },
+        { kind, id },
         signal,
       );
     },

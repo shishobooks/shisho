@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import {
   afterAll,
   beforeAll,
@@ -633,6 +634,7 @@ describe("FileEditDialog", () => {
     });
 
     it("sends the new direction and nothing else when it changes", async () => {
+      const success = vi.spyOn(toast, "success");
       const user = createUser();
       renderDialog();
 
@@ -648,6 +650,7 @@ describe("FileEditDialog", () => {
       expect(mockUpdateFile.mock.calls[0][0].payload).toEqual({
         reading_direction: ReadingDirectionRTL,
       });
+      await waitFor(() => expect(success).toHaveBeenCalledWith("File saved"));
     });
 
     it("sends no direction when it wasn't changed", async () => {

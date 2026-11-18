@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
-import { ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import { PublisherEditDialog } from "./PublisherEditDialog";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -551,5 +555,54 @@ describe("PublisherEditDialog old-name alias warning", () => {
     );
 
     expect(screen.getByText(/separate publisher/i)).toBeInTheDocument();
+  });
+});
+
+describe("PublisherEditDialog rename", () => {
+  it("notes a big rename's sidecar rewrite and confirms the rename", async () => {
+    setAuth({ permissions: ["books:read", "books:write"] });
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ book_count: 250 });
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <PublisherEditDialog
+          aliases={[]}
+          entityId={30}
+          entityName="Foobar"
+          isPending={false}
+          onOpenChange={vi.fn()}
+          onSave={vi.fn().mockResolvedValue({ id: 30 })}
+          open={true}
+          useParentSearch={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Foobar Press");
+
+    expect(
+      await screen.findByText(/updates the sidecar files/i),
+    ).toHaveTextContent("250 books");
+    expect(request).toHaveBeenCalledWith(
+      "GET",
+      "/books/sidecar-impact",
+      null,
+      { kind: "publisher", id: 30 },
+      expect.anything(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Renamed to "Foobar Press"'),
+    );
   });
 });

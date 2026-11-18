@@ -303,6 +303,16 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error",
 		},
 		{
+			name:   "sidecar impact of an unknown kind",
+			method: http.MethodGet, path: "/api/books/sidecar-impact?kind=shelf&id=1",
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
+			name:   "sidecar impact of a missing genre",
+			method: http.MethodGet, path: "/api/books/sidecar-impact?kind=genre&id=999999",
+			status: http.StatusNotFound, code: "not_found",
+		},
+		{
 			name:   "book listing with a rating range upside down",
 			method: http.MethodGet, path: "/api/books?rating_min=4&rating_max=3",
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "The minimum rating is above the maximum.",

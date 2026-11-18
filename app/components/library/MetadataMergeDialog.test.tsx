@@ -540,7 +540,7 @@ describe("MetadataMergeDialog sidecar note and confirmation", () => {
   };
   const note = () => screen.queryByText(/updates the sidecar files/i);
 
-  it("counts the distinct books a big merge rewrites", async () => {
+  it("counts the distinct books of the source, the only ones a merge rewrites", async () => {
     const user = createUser();
     const request = renderMerge({ bookCount: 1650 });
     expect(note()).not.toBeInTheDocument();
@@ -555,7 +555,7 @@ describe("MetadataMergeDialog sidecar note and confirmation", () => {
       "GET",
       "/books/sidecar-impact",
       null,
-      { kind: "publisher", ids: [1, 30] },
+      { kind: "publisher", id: 30 },
       expect.anything(),
     );
   });
@@ -599,6 +599,21 @@ describe("MetadataMergeDialog sidecar note and confirmation", () => {
 
     await waitFor(() =>
       expect(success).toHaveBeenCalledWith('Merged "Small" into "Penguin"'),
+    );
+  });
+
+  it("confirms setting a child", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderMerge({ bookCount: 3, setChild: true });
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Small"));
+    await user.click(screen.getByRole("radio", { name: /set as child/i }));
+    await user.click(screen.getByRole("button", { name: /set as child/i }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('"Small" is now under "Penguin"'),
     );
   });
 });

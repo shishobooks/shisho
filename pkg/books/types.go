@@ -223,12 +223,11 @@ const (
 	SidecarImpactPublisher = "publisher"
 )
 
-// SidecarImpactQuery asks how many Books' sidecars a rename of one resource,
-// or a merge of two, would rewrite. IDs is the resource, plus a merge's
-// source.
+// SidecarImpactQuery asks how many Books' sidecars renaming the resource, or
+// merging it into another, would rewrite: the Books whose sidecars name it.
 type SidecarImpactQuery struct {
 	Kind string `query:"kind" json:"kind" validate:"required,oneof=person series genre tag publisher" tstype:"SidecarImpactKind"`
-	IDs  []int  `query:"ids" json:"ids" validate:"required,min=1,max=2,dive,min=1"`
+	ID   int    `query:"id" json:"id" validate:"required,min=1"`
 }
 
 // SidecarImpactResponse is the number of distinct Books whose sidecars the

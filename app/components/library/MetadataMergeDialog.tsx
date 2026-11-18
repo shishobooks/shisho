@@ -368,7 +368,7 @@ export function MetadataMergeDialog({
               <div className="mt-3">
                 <SidecarRewriteNote
                   action="Merging"
-                  ids={[targetId, selectedEntity.id]}
+                  id={selectedEntity.id}
                   kind={entityType}
                 />
               </div>

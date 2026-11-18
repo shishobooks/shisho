@@ -3,7 +3,9 @@ package worker
 import (
 	"os"
 	"testing"
+	"time"
 
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/robinjoseph08/golib/pointerutil"
 	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/aliases"
@@ -76,7 +78,7 @@ func (f *renameFixture) fileSidecar(t *testing.T) *sidecar.FileSidecar {
 // rewriteStale runs the sidecar rewrite job's work.
 func (f *renameFixture) rewriteStale(t *testing.T) {
 	t.Helper()
-	_, err := f.tc.bookService.RewriteStaleSidecars(f.tc.ctx)
+	_, err := f.tc.bookService.RewriteStaleSidecars(f.tc.ctx, noWarn)
 	require.NoError(t, err)
 }
 
@@ -229,6 +231,38 @@ func TestWriteSidecars_UnwritableBookStaysMarked(t *testing.T) {
 	require.NoError(t, os.MkdirAll(sidecarPath, 0o755))
 
 	f.rewriteStale(t)
-
 	assert.NotNil(t, f.reload(t).SidecarsStaleAt)
+
+	// A scan can't rewrite them either, so it doesn't read the stale book
+	// sidecar, which still names "Jon Smith", as an edit on disk.
+	libraryID := f.book.LibraryID
+	require.NoError(t, f.tc.runScanJob(&models.Job{
+		Type:       models.JobTypeScan,
+		LibraryID:  &libraryID,
+		DataParsed: &models.JobScanData{ScanForNewMetadata: true},
+	}))
+	assert.NotEqual(t, models.DataSourceSidecar, f.reload(t).AuthorSource)
 }
+
+// At startup the worker queues the rewrite job when Books are still marked,
+// as after a shutdown that cancelled it.
+func TestEnsureSidecarRewrite_QueuesTheJobAtStartup(t *testing.T) {
+	t.Parallel()
+	f := newRenameFixture(t)
+	jobType := models.JobTypeSidecarRewrite
+	queued := func() int {
+		pending, err := f.tc.jobService.ListJobs(f.tc.ctx, jobs.ListJobsOptions{Type: &jobType})
+		require.NoError(t, err)
+		return len(pending)
+	}
+
+	f.tc.worker.ensureSidecarRewrite(f.tc.ctx)
+	assert.Equal(t, 0, queued(), "nothing marked, nothing queued")
+
+	_, err := f.tc.db.NewUpdate().Model((*models.Book)(nil)).Set("sidecars_stale_at = ?", time.Now()).Where("id = ?", f.book.ID).Exec(f.tc.ctx)
+	require.NoError(t, err)
+	f.tc.worker.ensureSidecarRewrite(f.tc.ctx)
+	assert.Equal(t, 1, queued())
+}
+
+func noWarn(string, logger.Data) {}

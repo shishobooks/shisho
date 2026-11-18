@@ -39,37 +39,23 @@ func sidecarImpact(t *testing.T, db *bun.DB, user *models.User, query string) *h
 	return executeRequestWithUser(t, e, req, user)
 }
 
-func TestSidecarImpact_CountsDistinctBooksAcrossTargetAndSource(t *testing.T) {
+func TestSidecarImpact_CountsTheResourcesBooks(t *testing.T) {
 	t.Parallel()
 	db := testdb.New(t)
 	ctx := context.Background()
 	library, _, _ := seedBookAndFile(t, db, "Unrelated", nil, nil, models.FileRoleMain)
 	user := impactUser(t, db, "admin", models.RoleAdmin, library.ID, true)
 
-	target := &models.Genre{LibraryID: library.ID, Name: "Fiction"}
-	source := &models.Genre{LibraryID: library.ID, Name: "Novels"}
-	for _, g := range []*models.Genre{target, source} {
-		_, err := db.NewInsert().Model(g).Exec(ctx)
-		require.NoError(t, err)
-	}
-	targetBooks := seedGenreBooks(t, db, library.ID, target, 3)
-	seedGenreBooks(t, db, library.ID, source, 2)
-	// One Book holds both, and is rewritten once.
-	_, err := db.NewInsert().Model(&models.BookGenre{BookID: targetBooks[0].ID, GenreID: source.ID}).Exec(ctx)
+	genre := &models.Genre{LibraryID: library.ID, Name: "Fiction"}
+	_, err := db.NewInsert().Model(genre).Exec(ctx)
 	require.NoError(t, err)
+	seedGenreBooks(t, db, library.ID, genre, 3)
 
-	rr := sidecarImpact(t, db, user, "kind=genre&ids="+itoa(target.ID))
+	rr := sidecarImpact(t, db, user, "kind=genre&id="+itoa(genre.ID))
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	var resp SidecarImpactResponse
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
 	assert.Equal(t, 3, resp.BookCount)
-
-	rr = sidecarImpact(t, db, user, "kind=genre&ids="+itoa(target.ID)+"&ids="+itoa(source.ID))
-	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
-	// Three target Books and two source Books, one shared target Book
-	// counted once: 5, where adding the two counts would give 6.
-	assert.Equal(t, 5, resp.BookCount)
 }
 
 func TestSidecarImpact_CountsBooksOfNarratedFiles(t *testing.T) {
@@ -86,7 +72,7 @@ func TestSidecarImpact_CountsBooksOfNarratedFiles(t *testing.T) {
 	_, err = db.NewInsert().Model(&models.Author{BookID: book.ID, PersonID: person.ID, SortOrder: 1}).Exec(ctx)
 	require.NoError(t, err)
 
-	rr := sidecarImpact(t, db, user, "kind=person&ids="+itoa(person.ID))
+	rr := sidecarImpact(t, db, user, "kind=person&id="+itoa(person.ID))
 	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
 	var resp SidecarImpactResponse
 	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
@@ -103,15 +89,15 @@ func TestSidecarImpact_Errors(t *testing.T) {
 	require.NoError(t, err)
 
 	admin := impactUser(t, db, "admin", models.RoleAdmin, library.ID, true)
-	assert.Equal(t, http.StatusNotFound, sidecarImpact(t, db, admin, "kind=genre&ids=99999").Code)
-	assert.Equal(t, http.StatusUnprocessableEntity, sidecarImpact(t, db, admin, "kind=nope&ids="+itoa(genre.ID)).Code)
+	assert.Equal(t, http.StatusNotFound, sidecarImpact(t, db, admin, "kind=genre&id=99999").Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, sidecarImpact(t, db, admin, "kind=nope&id="+itoa(genre.ID)).Code)
 
 	noAccess := impactUser(t, db, "elsewhere", models.RoleAdmin, library.ID, false)
-	assert.Equal(t, http.StatusForbidden, sidecarImpact(t, db, noAccess, "kind=genre&ids="+itoa(genre.ID)).Code)
+	assert.Equal(t, http.StatusForbidden, sidecarImpact(t, db, noAccess, "kind=genre&id="+itoa(genre.ID)).Code)
 
 	// A role that reads books but can't rename them.
 	viewer := impactUser(t, db, "viewer", models.RoleViewer, library.ID, true)
-	assert.Equal(t, http.StatusForbidden, sidecarImpact(t, db, viewer, "kind=genre&ids="+itoa(genre.ID)).Code)
+	assert.Equal(t, http.StatusForbidden, sidecarImpact(t, db, viewer, "kind=genre&id="+itoa(genre.ID)).Code)
 }
 
 // impactUser creates a user with the named role, with or without access to
@@ -134,4 +120,17 @@ func impactUser(t *testing.T, db *bun.DB, username, roleName string, libraryID i
 	user = loadUserWithRole(t, db, user)
 	user.LibraryAccess = access
 	return user
+}
+
+// A failed lookup is a server fault, not the "no such resource" 404.
+func TestSidecarImpact_LookupFailureIs500(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library, _, _ := seedBookAndFile(t, db, "A", nil, nil, models.FileRoleMain)
+	admin := impactUser(t, db, "admin", models.RoleAdmin, library.ID, true)
+	_, err := db.ExecContext(ctx, "DROP TABLE genres")
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusInternalServerError, sidecarImpact(t, db, admin, "kind=genre&id=1").Code)
 }

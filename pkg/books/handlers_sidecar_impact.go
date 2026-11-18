@@ -2,7 +2,6 @@ package books
 
 import (
 	"net/http"
-	"slices"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -12,8 +11,8 @@ import (
 )
 
 // sidecarImpact answers GET /books/sidecar-impact: how many distinct Books'
-// sidecars a rename of one resource, or a merge of two, rewrites in the
-// background. The rename and merge dialogs show it when it's large. It needs
+// sidecars renaming the resource, or merging it into another, rewrites in
+// the background. The rename and merge dialogs show it when it's large. It needs
 // the write permission the rename and merge routes need, and access to each
 // resource's library.
 func (h *handler) sidecarImpact(c echo.Context) error {
@@ -32,21 +31,18 @@ func (h *handler) sidecarImpact(c echo.Context) error {
 		return errcodes.PermissionDenied(kind.resource, models.OperationWrite)
 	}
 
-	ids := slices.Compact(slices.Sorted(slices.Values(params.IDs)))
-	libraryIDs, err := h.bookService.sidecarResourceLibraries(ctx, params.Kind, ids)
+	libraryID, found, err := h.bookService.sidecarResourceLibrary(ctx, params.Kind, params.ID)
 	if err != nil {
 		return err
 	}
-	if len(libraryIDs) != len(ids) {
+	if !found {
 		return errcodes.NotFound(kind.name)
 	}
-	for _, libraryID := range libraryIDs {
-		if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
-			return err
-		}
+	if err := auth.RequireLibraryAccessFor(c, libraryID); err != nil {
+		return err
 	}
 
-	count, err := h.bookService.CountSidecarBooks(ctx, params.Kind, ids)
+	count, err := h.bookService.CountSidecarBooks(ctx, params.Kind, params.ID)
 	if err != nil {
 		return err
 	}

@@ -417,11 +417,18 @@ func (h *handler) merge(c echo.Context) error {
 	affected := h.searchService.CollectAffected(ctx, search.Affected{SeriesIDs: []int{id, params.SourceID}})
 	defer h.searchService.ReindexAffected(ctx, affected)
 
+	// Only the source's Books name the source's name.
+	var mergedBooks []int
+	if h.bookService != nil {
+		mergedBooks = h.bookService.SidecarBooksForSeries(ctx, params.SourceID)
+	}
 	// Merge source series into target (this) series
 	if err := h.seriesService.MergeSeries(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
-	h.writeSidecars(ctx, id)
+	if h.bookService != nil {
+		h.bookService.MarkBookSidecarsStale(ctx, mergedBooks)
+	}
 
 	return c.NoContent(http.StatusNoContent)
 }

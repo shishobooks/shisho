@@ -13,7 +13,7 @@ import (
 // marked, and scans skip its sidecars until they can be.
 func (w *Worker) ProcessSidecarRewriteJob(ctx context.Context, _ *models.Job, jobLog *joblogs.JobLogger) error {
 	jobLog.Info("rewriting stale sidecars", nil)
-	rewritten, err := w.bookService.RewriteStaleSidecars(ctx)
+	rewritten, err := w.bookService.RewriteStaleSidecars(ctx, jobLog.Warn)
 	jobLog.Info("rewrote stale sidecars", logger.Data{"books": rewritten})
 	return err
 }

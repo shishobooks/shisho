@@ -66,11 +66,7 @@ export const LibraryScanHeader = ({ scan }: LibraryScanHeaderProps) => {
         {stepsLeft && (
           <p className="text-sm text-muted-foreground">
             While it runs, see{" "}
-            <Button
-              className="h-auto p-0 text-sm"
-              onClick={() => openGettingStarted(true)}
-              variant="link"
-            >
+            <Button onClick={() => openGettingStarted(true)} variant="link">
               Getting Started
             </Button>{" "}
             for what to set up next.

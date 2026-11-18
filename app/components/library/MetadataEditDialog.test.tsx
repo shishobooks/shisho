@@ -1179,7 +1179,7 @@ describe("MetadataEditDialog rename note and confirmation", () => {
       "GET",
       "/books/sidecar-impact",
       null,
-      { kind: "genre", ids: [7] },
+      { kind: "genre", id: 7 },
       expect.anything(),
     );
   });
@@ -1205,6 +1205,33 @@ describe("MetadataEditDialog rename note and confirmation", () => {
     await waitFor(() =>
       expect(success).toHaveBeenCalledWith('Renamed to "Literary Fiction"'),
     );
+  });
+
+  it("says a rename onto an existing name merged into it", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    // The server merges into the existing genre and answers with it.
+    renderDialog(5, vi.fn().mockResolvedValue({ id: 99, name: "Novels" }));
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Novels");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Merged into "Novels"'),
+    );
+  });
+
+  it("doesn't call a whitespace-only change a rename", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderDialog(5, vi.fn().mockResolvedValue({ id: 7 }));
+
+    await user.type(screen.getByLabelText("Name"), " ");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith("Changes saved"));
   });
 });
 

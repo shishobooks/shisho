@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -78,7 +79,7 @@ func runQueuedRewrite(f *resourceDeleteFixture) {
 		Where("type = ? AND status = ?", models.JobTypeSidecarRewrite, models.JobStatusPending).
 		ColumnExpr("COUNT(*)").Scan(f.ctx, &queued))
 	require.Equal(f.t, 1, queued, "the request must queue the sidecar rewrite job")
-	_, err := books.NewService(f.db, appsettings.NewService(f.db)).RewriteStaleSidecars(f.ctx)
+	_, err := books.NewService(f.db, appsettings.NewService(f.db)).RewriteStaleSidecars(f.ctx, noWarn)
 	require.NoError(f.t, err)
 }
 
@@ -196,4 +197,50 @@ func TestMergeRewritesSidecars(t *testing.T) {
 			tt.check(t, bs, fs)
 		})
 	}
+}
+
+func noWarn(string, logger.Data) {}
+
+// A merge marks only the source's Books: the target's own Books already name
+// the target.
+func TestMergeMarksOnlyTheSourcesBooks(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	b := seedSidecarBook(f)
+	target := &models.Genre{LibraryID: f.lib.ID, Name: "Target"}
+	f.insert(target)
+	targetOnly := &models.Book{
+		LibraryID: f.lib.ID, Filepath: t.TempDir(), Title: "Target Only", TitleSource: models.DataSourceFilepath,
+		SortTitle: "Target Only", SortTitleSource: models.DataSourceFilepath, AuthorSource: models.DataSourceFilepath,
+	}
+	f.insert(targetOnly)
+	f.insert(&models.BookGenre{BookID: targetOnly.ID, GenreID: target.ID})
+
+	f.request(http.MethodPost, fmt.Sprintf("/api/genres/%d/merge", target.ID), fmt.Sprintf(`{"source_id": %d}`, b.genre.ID), http.StatusNoContent)
+
+	var marked []int
+	require.NoError(t, f.db.NewSelect().Model((*models.Book)(nil)).Column("b.id").
+		Where("b.sidecars_stale_at IS NOT NULL").Scan(f.ctx, &marked))
+	assert.NotContains(t, marked, targetOnly.ID)
+	assert.Len(t, marked, 1, "only the source's Book is marked")
+}
+
+// A person rename whose alias list is rejected has still committed the new
+// name, so its Books are marked anyway.
+func TestPersonRenameWithRejectedAliasesStillMarks(t *testing.T) {
+	t.Parallel()
+	f := newResourceDeleteFixture(t)
+	b := seedSidecarBook(f)
+	other := f.person("Someone Else")
+
+	f.request(http.MethodPatch, fmt.Sprintf("/api/people/%d", b.author.ID),
+		fmt.Sprintf(`{"name": "New Name", "aliases": [%q]}`, other.Name), http.StatusUnprocessableEntity)
+
+	var renamed models.Person
+	require.NoError(t, f.db.NewSelect().Model(&renamed).Where("id = ?", b.author.ID).Scan(f.ctx))
+	require.Equal(t, "New Name", renamed.Name, "precondition: the rename committed before the alias check")
+	runQueuedRewrite(f)
+	bs, _ := b.sidecars(t)
+	require.Len(t, bs.Authors, 1)
+	assert.Equal(t, "New Name", bs.Authors[0].Name)
 }

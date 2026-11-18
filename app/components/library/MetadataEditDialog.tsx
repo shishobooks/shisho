@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { SortNameInput } from "@/components/common/SortNameInput";
 import { OldNameAliasWarning } from "@/components/library/OldNameAliasWarning";
+import { renameConfirmation } from "@/components/library/renameConfirmation";
 import { SidecarRewriteNote } from "@/components/library/SidecarRewriteNote";
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -236,12 +237,15 @@ export function MetadataEditDialog({
         data.sort_name = editSortName;
       }
       data.aliases = resolvedAliases;
-      await onSave(data);
+      const saved = await onSave(data);
       setChangesSaved(true);
       toast.success(
-        data.name !== initialValues?.name
-          ? `Renamed to "${data.name}"`
-          : "Changes saved",
+        renameConfirmation(
+          initialValues?.name ?? data.name,
+          data.name,
+          entityId,
+          saved,
+        ),
       );
       requestClose();
     } catch (err) {
@@ -278,7 +282,7 @@ export function MetadataEditDialog({
               name.trim() !== initialValues.name && (
                 <SidecarRewriteNote
                   action="Renaming"
-                  ids={[entityId]}
+                  id={entityId}
                   kind={entityType}
                 />
               )}

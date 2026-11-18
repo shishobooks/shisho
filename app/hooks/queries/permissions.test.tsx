@@ -86,7 +86,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   // books
   useBook: requires("books:read", ["1", on]),
   useBooks: requires("books:read", [{}, on]),
-  useSidecarImpact: requires(["books:read", "books:write"], ["genre", [1], on]),
+  useSidecarImpact: requires(["books:read", "books:write"], ["genre", 1, on]),
   useBooksByIds: requires("books:read", [[1, 2]]),
   // cache
   useCaches: requires("config:read", []),

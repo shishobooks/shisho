@@ -94,6 +94,61 @@ func (svc *Service) MarkSidecarsStaleForPublisher(ctx context.Context, publisher
 	svc.markSidecarsStale(ctx, SidecarImpactPublisher, publisherID)
 }
 
+// SidecarBooksForPerson, and its siblings, list the Books whose sidecars
+// name the resource, for a merge to collect before it re-points them and mark
+// after (MarkBookSidecarsStale). Only the source's Books need a rewrite: the
+// target's own Books already name the target. A lookup failure is logged and
+// returns none, since the merge goes ahead regardless.
+func (svc *Service) SidecarBooksForPerson(ctx context.Context, personID int) []int {
+	return svc.sidecarBooks(ctx, SidecarImpactPerson, personID)
+}
+
+func (svc *Service) SidecarBooksForSeries(ctx context.Context, seriesID int) []int {
+	return svc.sidecarBooks(ctx, SidecarImpactSeries, seriesID)
+}
+
+func (svc *Service) SidecarBooksForGenre(ctx context.Context, genreID int) []int {
+	return svc.sidecarBooks(ctx, SidecarImpactGenre, genreID)
+}
+
+func (svc *Service) SidecarBooksForTag(ctx context.Context, tagID int) []int {
+	return svc.sidecarBooks(ctx, SidecarImpactTag, tagID)
+}
+
+func (svc *Service) SidecarBooksForPublisher(ctx context.Context, publisherID int) []int {
+	return svc.sidecarBooks(ctx, SidecarImpactPublisher, publisherID)
+}
+
+func (svc *Service) sidecarBooks(ctx context.Context, kindName string, id int) []int {
+	kind := sidecarKinds[kindName]
+	var bookIDs []int
+	if err := svc.db.NewRaw("SELECT DISTINCT book_id FROM ("+kind.books+")", kind.booksArgs([]int{id})...).
+		Scan(ctx, &bookIDs); err != nil {
+		logger.FromContext(ctx).Warn("failed to list books whose sidecars name a resource", logger.Data{"kind": kindName, "id": id, "error": err.Error()})
+		return nil
+	}
+	return bookIDs
+}
+
+// MarkBookSidecarsStale marks the Books and queues the rewrite, for a merge
+// that collected them before it ran. Like markSidecarsStale it ignores ctx
+// cancellation and logs a failure.
+func (svc *Service) MarkBookSidecarsStale(ctx context.Context, bookIDs []int) {
+	if len(bookIDs) == 0 {
+		return
+	}
+	ctx = context.WithoutCancel(ctx)
+	log := logger.FromContext(ctx)
+	if _, err := svc.db.NewUpdate().Model((*models.Book)(nil)).
+		Set("sidecars_stale_at = ?", time.Now()).Where("id IN (?)", bun.List(bookIDs)).Exec(ctx); err != nil {
+		log.Warn("failed to mark sidecars stale after a merge", logger.Data{"books": len(bookIDs), "error": err.Error()})
+		return
+	}
+	if err := svc.EnsureSidecarRewriteJob(ctx); err != nil {
+		log.Warn("failed to queue the sidecar rewrite job", logger.Data{"error": err.Error()})
+	}
+}
+
 // markSidecarsStale marks the Books naming the resource and queues the
 // rewrite. It ignores ctx cancellation, since the rename it follows has
 // committed, and logs a failure rather than failing the request for the same
@@ -117,25 +172,31 @@ func (svc *Service) markSidecarsStale(ctx context.Context, kindName string, id i
 	}
 }
 
-// CountSidecarBooks counts the distinct Books naming any of the resources,
-// which a rename of one or a merge of two marks for the rewrite job.
-func (svc *Service) CountSidecarBooks(ctx context.Context, kindName string, ids []int) (int, error) {
+// CountSidecarBooks counts the distinct Books whose sidecars name the
+// resource: the Books a rename of it, or a merge of it into another, marks
+// for the rewrite job.
+func (svc *Service) CountSidecarBooks(ctx context.Context, kindName string, id int) (int, error) {
 	kind, ok := sidecarKinds[kindName]
 	if !ok {
 		return 0, errors.Errorf("unknown sidecar kind %q", kindName)
 	}
 	var count int
-	err := svc.db.NewRaw("SELECT COUNT(DISTINCT book_id) FROM ("+kind.books+")", kind.booksArgs(ids)...).Scan(ctx, &count)
+	err := svc.db.NewRaw("SELECT COUNT(DISTINCT book_id) FROM ("+kind.books+")", kind.booksArgs([]int{id})...).Scan(ctx, &count)
 	return count, errors.WithStack(err)
 }
 
-// sidecarResourceLibraries returns the library of each resource found, so a
-// handler can check access, and how many of ids exist.
-func (svc *Service) sidecarResourceLibraries(ctx context.Context, kindName string, ids []int) ([]int, error) {
+// sidecarResourceLibrary returns the resource's library, so a handler can
+// check access; found is false when there is no such resource.
+func (svc *Service) sidecarResourceLibrary(ctx context.Context, kindName string, id int) (libraryID int, found bool, err error) {
 	kind := sidecarKinds[kindName]
 	var libraryIDs []int
-	err := svc.db.NewRaw("SELECT library_id FROM "+kind.table+" WHERE id IN (?)", bun.List(ids)).Scan(ctx, &libraryIDs)
-	return libraryIDs, errors.WithStack(err)
+	if err := svc.db.NewRaw("SELECT library_id FROM "+kind.table+" WHERE id = ?", id).Scan(ctx, &libraryIDs); err != nil {
+		return 0, false, errors.WithStack(err)
+	}
+	if len(libraryIDs) == 0 {
+		return 0, false, nil
+	}
+	return libraryIDs[0], true, nil
 }
 
 // EnsureSidecarRewriteJob queues a sidecar rewrite job unless one is already
@@ -172,8 +233,9 @@ func (svc *Service) HasStaleSidecars(ctx context.Context) (bool, error) {
 // RewriteStaleSidecars rewrites the sidecars of every marked Book, the body
 // of the sidecar rewrite job. It walks the marked Books in id order, so a
 // Book whose sidecars can't be written stays marked without stopping the
-// rest. It returns how many Books it rewrote.
-func (svc *Service) RewriteStaleSidecars(ctx context.Context) (int, error) {
+// rest; warn reports each one (the job log). It returns how many Books it
+// rewrote.
+func (svc *Service) RewriteStaleSidecars(ctx context.Context, warn func(msg string, data logger.Data)) (int, error) {
 	rewritten := 0
 	afterID := 0
 	for {
@@ -193,7 +255,7 @@ func (svc *Service) RewriteStaleSidecars(ctx context.Context) (int, error) {
 		for _, id := range ids {
 			afterID = id
 			if err := svc.rewriteBookSidecars(ctx, id); err != nil {
-				logger.FromContext(ctx).Warn("failed to rewrite stale sidecars", logger.Data{"book_id": id, "error": err.Error()})
+				warn("failed to rewrite stale sidecars", logger.Data{"book_id": id, "error": err.Error()})
 				continue
 			}
 			rewritten++
@@ -218,35 +280,92 @@ func (svc *Service) RewriteSidecarsIfStale(ctx context.Context, book *models.Boo
 }
 
 // rewriteBookSidecars writes a Book's book and file sidecars from what is
-// stored, then clears its mark if no rename marked it again meanwhile. The
-// mark goes only after a successful write, so a server that dies mid-write
-// leaves it for the next pass. A failed write leaves it too, so scans keep
-// distrusting the Book's sidecars.
+// stored, then clears its mark. The mark goes only after a successful write,
+// so a server that dies mid-write leaves it for the next pass, and a failed
+// write leaves it so scans keep distrusting the Book's sidecars. It stays
+// too when a rename marked the Book again during the write, and is restored
+// when a scan or edit changed the Book meanwhile: that writer's newer
+// sidecar may have been overwritten with the older snapshot written here,
+// and the next pass, or the next scan's rewrite before reading, puts it
+// right.
 func (svc *Service) rewriteBookSidecars(ctx context.Context, bookID int) error {
 	// The mark as stored text, compared as text on clearing: the same value
 	// read back into a time.Time could format differently.
-	var marked sql.NullString
-	if err := svc.db.NewRaw("SELECT CAST(sidecars_stale_at AS TEXT) FROM books WHERE id = ?", bookID).
-		Scan(ctx, &marked); err != nil {
+	var mark struct {
+		Text sql.NullString `bun:"mark_text"`
+		At   *time.Time     `bun:"mark_at"`
+	}
+	if err := svc.db.NewRaw(
+		"SELECT CAST(sidecars_stale_at AS TEXT) AS mark_text, sidecars_stale_at AS mark_at FROM books WHERE id = ?", bookID,
+	).Scan(ctx, &mark); err != nil {
 		return errors.Wrap(err, "read stale sidecar mark")
 	}
-	if err := svc.writeBookSidecars(ctx, bookID); err != nil {
+	before, err := svc.bookVersion(ctx, bookID)
+	if err != nil {
+		return err
+	}
+	if err := svc.writeBookSidecars(ctx, bookID, mark.At); err != nil {
 		return err
 	}
 	if svc.beforeClearStaleMark != nil {
 		svc.beforeClearStaleMark()
 	}
-	if !marked.Valid {
+	after, err := svc.bookVersion(ctx, bookID)
+	if err != nil {
+		return err
+	}
+	if after != before {
+		svc.remarkSidecarsStale(ctx, bookID, mark.At)
 		return nil
 	}
-	_, err := svc.db.NewRaw(
+	if !mark.Text.Valid {
+		return nil
+	}
+	_, err = svc.db.NewRaw(
 		"UPDATE books SET sidecars_stale_at = NULL WHERE id = ? AND CAST(sidecars_stale_at AS TEXT) = ?",
-		bookID, marked.String,
+		bookID, mark.Text.String,
 	).Exec(context.WithoutCancel(ctx))
 	return errors.Wrap(err, "clear stale sidecar mark")
 }
 
-func (svc *Service) writeBookSidecars(ctx context.Context, bookID int) error {
+// bookVersion changes whenever a scan or edit writes the Book or one of its
+// Files, which each bump updated_at.
+func (svc *Service) bookVersion(ctx context.Context, bookID int) (string, error) {
+	var version string
+	err := svc.db.NewRaw(`
+		SELECT CAST(b.updated_at AS TEXT)
+			|| '|' || COALESCE((SELECT CAST(MAX(f.updated_at) AS TEXT) FROM files f WHERE f.book_id = b.id), '')
+			|| '|' || (SELECT COUNT(*) FROM files f WHERE f.book_id = b.id)
+		FROM books b WHERE b.id = ?`, bookID).Scan(ctx, &version)
+	return version, errors.Wrap(err, "read book version")
+}
+
+// remarkSidecarsStale marks a Book again and queues the job, after a write
+// that raced another writer. It restores the original mark time, so a File
+// created since still counts as newer than the mark (see writeBookSidecars),
+// and keeps a mark a rename set meanwhile.
+func (svc *Service) remarkSidecarsStale(ctx context.Context, bookID int, markedAt *time.Time) {
+	ctx = context.WithoutCancel(ctx)
+	log := logger.FromContext(ctx)
+	at := time.Now()
+	if markedAt != nil {
+		at = *markedAt
+	}
+	if _, err := svc.db.NewUpdate().Model((*models.Book)(nil)).
+		Set("sidecars_stale_at = COALESCE(sidecars_stale_at, ?)", at).Where("id = ?", bookID).Exec(ctx); err != nil {
+		log.Warn("failed to mark sidecars stale again", logger.Data{"book_id": bookID, "error": err.Error()})
+		return
+	}
+	if err := svc.EnsureSidecarRewriteJob(ctx); err != nil {
+		log.Warn("failed to queue the sidecar rewrite job", logger.Data{"error": err.Error()})
+	}
+}
+
+// writeBookSidecars writes the Book's sidecar and its Files' sidecars from
+// what is stored. A File created after the mark is skipped: its sidecar
+// can't name the old name, and it may be one carried over from another
+// library that the scan importing the File has yet to read.
+func (svc *Service) writeBookSidecars(ctx context.Context, bookID int, markedAt *time.Time) error {
 	book, err := svc.RetrieveBook(ctx, RetrieveBookOptions{ID: &bookID})
 	if err != nil {
 		return errors.Wrap(err, "load book")
@@ -255,6 +374,9 @@ func (svc *Service) writeBookSidecars(ctx context.Context, bookID int) error {
 		return errors.Wrap(err, "write book sidecar")
 	}
 	for _, file := range book.Files {
+		if markedAt != nil && file.CreatedAt.After(*markedAt) {
+			continue
+		}
 		if err := sidecar.WriteFileSidecarFromModel(file); err != nil {
 			return errors.Wrapf(err, "write file sidecar for file %d", file.ID)
 		}
