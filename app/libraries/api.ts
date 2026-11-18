@@ -1,6 +1,8 @@
 import QueryString from "qs";
 import { toast } from "sonner";
 
+import { noteServerBuild } from "@/libraries/build";
+
 export class ShishoAPIError extends Error {
   // The Shisho error code. Undefined when the response did not carry a
   // Shisho error body (e.g. a reverse proxy's HTML 502/504 page).
@@ -131,6 +133,7 @@ class ShishoAPI {
   // would JSON-encode) passes its response here rather than calling
   // response.json().
   async checkStatus<T = unknown>(response: Response): Promise<T> {
+    noteServerBuild(response);
     // Read the body as text rather than trusting content-length or
     // content-type: chunked empty bodies have no content-length, and proxies
     // label their error pages inconsistently.

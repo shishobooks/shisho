@@ -186,3 +186,27 @@ func TestRequestLoggingClientVersion(t *testing.T) {
 		assert.NotContains(t, line, "version")
 	}
 }
+
+func TestBuildHeaderMiddlewareNamesTheEmbeddedBuild(t *testing.T) {
+	t.Parallel()
+	e := echo.New()
+	e.Use(buildHeaderMiddleware("a1b2c3d4e5f6"))
+	e.GET("/api/books", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	e.GET("/api/broken", func(_ echo.Context) error { return echo.ErrInternalServerError })
+	for _, path := range []string{"/api/books", "/api/broken", "/missing"} {
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.Equal(t, "a1b2c3d4e5f6", rec.Header().Get(buildHeader), path)
+	}
+}
+
+func TestBuildHeaderMiddlewareSendsNothingWithoutABuild(t *testing.T) {
+	t.Parallel()
+	e := echo.New()
+	e.Use(buildHeaderMiddleware(""))
+	e.GET("/api/books", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/books", nil))
+	_, sent := rec.Header()[buildHeader]
+	assert.False(t, sent)
+}

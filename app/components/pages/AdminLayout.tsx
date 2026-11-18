@@ -46,7 +46,7 @@ const AdminHeader = () => {
 
 const AdminLayout = () => {
   return (
-    <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] flex-col">
+    <div className="flex min-h-[calc(100vh-var(--banner-height,0px))] flex-col">
       <AdminHeader />
       <div className="flex flex-1">
         <div className="hidden md:block">

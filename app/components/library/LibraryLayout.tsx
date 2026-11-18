@@ -12,7 +12,7 @@ interface LibraryLayoutProps {
 // readable measure caps its own parts.
 const LibraryLayout = ({ children }: LibraryLayoutProps) => {
   return (
-    <div className="flex min-h-[calc(100vh-var(--demo-banner-height,0px))] flex-col">
+    <div className="flex min-h-[calc(100vh-var(--banner-height,0px))] flex-col">
       <TopNav />
       <div className="flex flex-1">
         {/* Desktop sidebar - hidden on mobile */}

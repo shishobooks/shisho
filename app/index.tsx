@@ -7,7 +7,10 @@ import { AuthProvider } from "@/components/contexts/Auth";
 import { SSEProvider } from "@/components/contexts/SSEProvider";
 import ThemeProvider from "@/components/contexts/Theme/ThemeProvider";
 import { queryClient } from "@/libraries/query-client";
+import { installStaleChunkReload } from "@/libraries/staleChunkReload";
 import { router } from "@/router";
+
+installStaleChunkReload();
 
 const container = document.getElementById("root");
 const root = createRoot(container!);

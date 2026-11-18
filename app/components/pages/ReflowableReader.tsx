@@ -696,7 +696,7 @@ export default function ReflowableReader({
       ? loadError.message
       : requestErrorMessage(error, "Failed to load book");
     return (
-      <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
+      <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" />
         <div>
           <p className="font-medium">We couldn't load this book.</p>
@@ -717,12 +717,12 @@ export default function ReflowableReader({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col">
+    <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col">
       <header
         className={cn(
           "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           hideChrome &&
-            "fixed top-[var(--demo-banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
+            "fixed top-[var(--banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           hideChrome && !chromeVisible && "-translate-y-full",
         )}
         ref={headerRef}
@@ -837,7 +837,7 @@ export default function ReflowableReader({
         className={cn(
           "relative bg-background",
           hideChrome
-            ? "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)]"
+            ? "fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)]"
             : "flex-1",
         )}
       >

@@ -159,7 +159,7 @@ const MobileDrawer = () => {
       <div
         aria-hidden="true"
         className={cn(
-          "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 md:hidden",
+          "fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] z-40 bg-black/60 backdrop-blur-sm transition-opacity duration-300 md:hidden",
           isOpen ? "opacity-100" : "opacity-0 pointer-events-none",
         )}
         onClick={close}
@@ -169,7 +169,7 @@ const MobileDrawer = () => {
       <aside
         aria-label="Mobile navigation"
         className={cn(
-          "fixed bottom-0 left-0 top-[var(--demo-banner-height,0px)] z-50 w-72 bg-background transition-[translate,box-shadow] duration-300 ease-out md:hidden flex flex-col",
+          "fixed bottom-0 left-0 top-[var(--banner-height,0px)] z-50 w-72 bg-background transition-[translate,box-shadow] duration-300 ease-out md:hidden flex flex-col",
           // The shadow only applies while open: translating the closed
           // drawer off screen leaves its shadow along the left edge. It
           // transitions with the slide so closing does not snap it off.

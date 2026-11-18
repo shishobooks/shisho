@@ -62,7 +62,7 @@ const LibraryRedirect = () => {
     return (
       <div>
         <TopNav />
-        <div className="flex h-[calc(100vh-var(--demo-banner-height,0px))] items-center justify-center">
+        <div className="flex h-[calc(100vh-var(--banner-height,0px))] items-center justify-center">
           <LoadingSpinner />
         </div>
       </div>

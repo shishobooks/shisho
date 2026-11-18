@@ -1,5 +1,5 @@
 import { Download, Eye, Info, type LucideIcon } from "lucide-react";
-import { useLayoutEffect, useRef, type SVGProps } from "react";
+import type { SVGProps } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -55,40 +55,12 @@ const links: DemoLink[] = [
 
 const DemoBanner = () => {
   const { demoMode } = useAuth();
-  const bannerRef = useRef<HTMLElement>(null);
-
-  useLayoutEffect(() => {
-    if (!demoMode || !bannerRef.current) return;
-
-    const banner = bannerRef.current;
-    const updateHeight = () => {
-      document.documentElement.style.setProperty(
-        "--demo-banner-height",
-        `${banner.offsetHeight}px`,
-      );
-    };
-    updateHeight();
-
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(banner);
-    return () => {
-      observer.disconnect();
-      document.documentElement.style.removeProperty("--demo-banner-height");
-    };
-  }, [demoMode]);
 
   if (!demoMode) return null;
 
-  // z-40 keeps the banner above the top nav (z-30) and below the modal layer
-  // (z-50), so sheets and dialogs cover it instead of being clipped by it.
-  // Modal surfaces are not offset for the banner; never raise it above z-50.
-  // Its height is not fixed (the notice wraps to two or three lines on
-  // phones), so consumers read --demo-banner-height, never a constant.
+  // TopBanners positions this and publishes its height.
   return (
-    <aside
-      className="sticky top-0 z-40 border-b border-primary/20 bg-background text-sm"
-      ref={bannerRef}
-    >
+    <aside className="border-b border-primary/20 bg-background text-sm">
       {/* The tint sits on an inner layer so the sticky bar stays opaque. */}
       <div className="bg-primary/10">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-1.5 md:px-6">

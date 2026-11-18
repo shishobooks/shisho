@@ -56,3 +56,30 @@ func TestHandlerSPAFallback(t *testing.T) {
 	assert.Equal(t, "console.log('Shisho')", rec.Body.String())
 	assert.Equal(t, "public, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 }
+
+func TestHandlerMissingAssetIsNotFound(t *testing.T) {
+	t.Parallel()
+	// A page loaded before an upgrade still asks for the old build's chunks.
+	// Answering with index.html makes the browser report a MIME type error
+	// instead of a missing file, and hides the 404 from caches and logs.
+	h := NewHandler(fstest.MapFS{"index.html": {Data: []byte("<html>Shisho</html>")}})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/assets/epub-old123.js", nil))
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "Shisho")
+	assert.Equal(t, "no-cache", rec.Header().Get("Cache-Control"))
+}
+
+func TestBuildIDReadsTheBuildMetaTag(t *testing.T) {
+	t.Parallel()
+	files := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html><html><head><meta charset="UTF-8" /><meta name="shisho-build" content="a1b2c3d4e5f6" /></head></html>`)}}
+	assert.Equal(t, "a1b2c3d4e5f6", BuildID(files))
+}
+
+func TestBuildIDIsEmptyWithoutABuild(t *testing.T) {
+	t.Parallel()
+	// Development serves the app from Vite, and the binary embeds only the
+	// placeholder, so there is no build to compare a tab against.
+	assert.Empty(t, BuildID(fstest.MapFS{"placeholder.html": {Data: []byte("<html>Frontend not built</html>")}}))
+	assert.Empty(t, BuildID(fstest.MapFS{"index.html": {Data: []byte("<html><head></head></html>")}}))
+}

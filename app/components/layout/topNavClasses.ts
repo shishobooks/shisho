@@ -6,7 +6,7 @@ import { cn } from "@/libraries/utils";
 // them together.
 
 export const TOP_NAV_WRAPPER = cn(
-  "sticky top-[var(--demo-banner-height,0px)] z-30 border-b border-border bg-background",
+  "sticky top-[var(--banner-height,0px)] z-30 border-b border-border bg-background",
 );
 // The nav spans the full window rather than a centered column: pages with a
 // sidebar center their body to the right of it, so a centered nav column

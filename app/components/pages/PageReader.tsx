@@ -626,13 +626,13 @@ export default function PageReader({
   };
 
   return (
-    <div className="fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)] bg-background flex flex-col">
+    <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col">
       {/* Header */}
       <header
         className={cn(
           "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           hideChrome &&
-            "fixed top-[var(--demo-banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
+            "fixed top-[var(--banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           hideChrome && !chromeVisible && "-translate-y-full",
         )}
       >
@@ -778,7 +778,7 @@ export default function PageReader({
         className={cn(
           "flex bg-black relative",
           hideChrome
-            ? "fixed inset-x-0 bottom-0 top-[var(--demo-banner-height,0px)]"
+            ? "fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)]"
             : "flex-1",
           scrolled
             ? "flex-col items-center overflow-y-auto outline-none [overflow-anchor:none]"
