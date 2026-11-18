@@ -122,7 +122,8 @@ func insertLibrary(t *testing.T, db *bun.DB) *models.Library {
 	return library
 }
 
-func insertBook(t *testing.T, db *bun.DB, library *models.Library, name string) *models.Book {
+func insertBook(t *testing.T, db *bun.DB, library *models.Library) *models.Book {
+	const name = "one"
 	t.Helper()
 	book := &models.Book{
 		LibraryID: library.ID, Title: name, TitleSource: models.DataSourceFilepath, SortTitle: name,
@@ -265,7 +266,7 @@ func TestRetrieve_PersonalStepsAreDoneFromTheUsersOwnData(t *testing.T) {
 	reader := newUser(t, db, "books:read")
 	other := newUser(t, db, "books:read")
 	library := insertLibrary(t, db)
-	book := insertBook(t, db, library, "one")
+	book := insertBook(t, db, library)
 
 	// Another user's Device, To Read, and reading don't count.
 	_, err := devices.NewService(db).Create(ctx, other.ID, "Kobo", devices.DeviceTypeKobo)
@@ -305,7 +306,7 @@ func TestRetrieve_ToReadStaysDoneOnceABookFromItIsStarted(t *testing.T) {
 	db := testdb.New(t)
 	h := newHandler(db, false)
 	library := insertLibrary(t, db)
-	book := insertBook(t, db, library, "one")
+	book := insertBook(t, db, library)
 
 	notFromToRead := newUser(t, db, "books:read")
 	insert(t, db, &models.ReadThrough{UserID: notFromToRead.ID, BookID: &book.ID, Outcome: models.ReadThroughOutcomeUnderway, CreatedAt: time.Now(), UpdatedAt: time.Now()})
@@ -325,7 +326,7 @@ func TestRetrieve_StartReadingIsDoneByAPositionOrARead(t *testing.T) {
 	db := testdb.New(t)
 	h := newHandler(db, false)
 	library := insertLibrary(t, db)
-	book := insertBook(t, db, library, "one")
+	book := insertBook(t, db, library)
 	file := &models.File{LibraryID: library.ID, BookID: book.ID, Filepath: "/books/one/one.epub", FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain}
 	insert(t, db, file)
 
@@ -447,6 +448,71 @@ func TestDismissAndRestore(t *testing.T) {
 	assert.False(t, resp.Dismissed)
 	assert.True(t, resp.Enabled)
 	assert.True(t, step(t, resp, StepDevice).NotForMe)
+}
+
+// A dismissed list comes back when a step applies that didn't when it was
+// dismissed, such as To Read once a library exists.
+func TestDismiss_ListReturnsWhenANewStepApplies(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	h := newHandler(db, false)
+	user := newUser(t, db, "books:read")
+	_, err := do(t, h.dismiss, user, nil)
+	require.NoError(t, err)
+	require.True(t, status(t, h, user).Dismissed)
+
+	insertLibrary(t, db)
+	resp := status(t, h, user)
+	assert.False(t, resp.Dismissed)
+	assert.True(t, step(t, resp, StepToRead).Applies)
+	assert.True(t, step(t, resp, StepDevice).Applies)
+}
+
+// A step that was on the list when it was dismissed doesn't bring it back,
+// even once it comes undone.
+func TestDismiss_ListStaysHiddenWhenAKnownStepComesUndone(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	h := newHandler(db, false)
+	user := newUser(t, db, "books:read")
+	device, err := devices.NewService(db).Create(ctx, user.ID, "Kobo", devices.DeviceTypeKobo)
+	require.NoError(t, err)
+	_, err = do(t, h.dismiss, user, nil)
+	require.NoError(t, err)
+
+	_, err = db.NewDelete().Model((*devices.Device)(nil)).Where("id = ?", device.ID).Exec(ctx)
+	require.NoError(t, err)
+	resp := status(t, h, user)
+	assert.True(t, resp.Dismissed)
+	assert.Empty(t, resp.Steps)
+}
+
+// A new step that is already done or marked Not for me has nothing to show.
+func TestDismiss_ListStaysHiddenWhenNewStepsNeedNothing(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	h := newHandler(db, false)
+	finished := newUser(t, db, "books:read")
+	skipped := newUser(t, db, "books:read")
+	for _, key := range []string{StepToRead, StepStartReading} {
+		_, err := do(t, h.markNotForMe, skipped, map[string]string{"step": key})
+		require.NoError(t, err)
+	}
+	for _, user := range []*models.User{finished, skipped} {
+		_, err := do(t, h.dismiss, user, nil)
+		require.NoError(t, err)
+	}
+
+	library := insertLibrary(t, db)
+	book := insertBook(t, db, library)
+	position := 1
+	insert(t, db, &models.ReadThrough{
+		UserID: finished.ID, BookID: &book.ID, Outcome: models.ReadThroughOutcomeUnderway,
+		LeftToReadPosition: &position, CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+	assert.True(t, status(t, h, finished).Dismissed)
+	assert.True(t, status(t, h, skipped).Dismissed)
 }
 
 // A user it was never turned on for, such as one from before the upgrade,

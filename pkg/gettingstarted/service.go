@@ -34,20 +34,23 @@ func NewService(db *bun.DB) *Service {
 type state struct {
 	bun.BaseModel `bun:"table:users,alias:u"`
 
-	Enabled     bool              `bun:"getting_started_enabled"`
-	AutoOpen    bool              `bun:"getting_started_auto_open"`
-	DismissedAt *time.Time        `bun:"getting_started_dismissed_at"`
-	NotForMe    models.StringList `bun:"getting_started_not_for_me"`
+	Enabled        bool              `bun:"getting_started_enabled"`
+	AutoOpen       bool              `bun:"getting_started_auto_open"`
+	DismissedAt    *time.Time        `bun:"getting_started_dismissed_at"`
+	NotForMe       models.StringList `bun:"getting_started_not_for_me"`
+	DismissedSteps models.StringList `bun:"getting_started_dismissed_steps"`
 }
 
 // Status builds user's Getting Started list from their stored state and
 // what exists now. Steps apply by permission, not role name, and a step that
-// doesn't apply is never checked. A list that is off or dismissed has no
-// steps.
+// doesn't apply is never checked. A list that is off has no steps. A
+// dismissed list has none either, unless a step now applies that didn't when
+// it was dismissed and still needs doing: then the list comes back.
 func (s *Service) Status(ctx context.Context, user *models.User) (GettingStartedResponse, error) {
 	st := state{}
 	if err := s.db.NewSelect().Model(&st).
-		Column("getting_started_enabled", "getting_started_auto_open", "getting_started_dismissed_at", "getting_started_not_for_me").
+		Column("getting_started_enabled", "getting_started_auto_open", "getting_started_dismissed_at",
+			"getting_started_not_for_me", "getting_started_dismissed_steps").
 		Where("u.id = ?", user.ID).
 		Scan(ctx); err != nil {
 		return GettingStartedResponse{}, errors.WithStack(err)
@@ -59,80 +62,40 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 		AutoOpen:  st.AutoOpen,
 		Steps:     make([]GettingStartedStep, 0, len(steps)),
 	}
-	// Nothing shows a list that is off or dismissed, and every page asks
-	// for it, so its steps aren't checked.
-	if !resp.Enabled || resp.Dismissed {
+	if !resp.Enabled {
 		return resp, nil
 	}
 
-	canReadBooks := user.HasPermission(models.ResourceBooks, models.OperationRead)
-	// To Read and reading need a book, so those steps wait until the user can
-	// reach a library. A Device can be set up before then.
-	canReachBooks := false
-	if canReadBooks {
-		reachable, err := s.canReachLibrary(ctx, user)
+	applies, err := s.applicable(ctx, user)
+	if err != nil {
+		return GettingStartedResponse{}, err
+	}
+
+	if resp.Dismissed {
+		// Every page asks for the list, so only the steps that could bring it
+		// back are checked.
+		var fresh []string
+		for _, key := range applies {
+			if !slices.Contains(st.DismissedSteps, key) && !slices.Contains(st.NotForMe, key) {
+				fresh = append(fresh, key)
+			}
+		}
+		done, err := s.done(ctx, user, fresh)
 		if err != nil {
 			return GettingStartedResponse{}, err
 		}
-		canReachBooks = reachable
-	}
-	applies := map[string]bool{
-		StepLibrary:      user.HasPermission(models.ResourceLibraries, models.OperationWrite),
-		StepInvite:       user.HasPermission(models.ResourceUsers, models.OperationWrite),
-		StepDevice:       canReadBooks,
-		StepToRead:       canReachBooks,
-		StepStartReading: canReachBooks,
-	}
-	done := map[string]bool{}
-
-	if applies[StepLibrary] || user.HasPermission(models.ResourceConfig, models.OperationWrite) {
-		libraryExists, err := s.db.NewSelect().Model((*models.Library)(nil)).Exists(ctx)
-		if err != nil {
-			return GettingStartedResponse{}, errors.WithStack(err)
+		if !slices.ContainsFunc(fresh, func(key string) bool { return !done[key] }) {
+			return resp, nil
 		}
-		done[StepLibrary] = libraryExists
-		// Before a Library exists, setting one up covers plugins.
-		applies[StepPlugins] = libraryExists && user.HasPermission(models.ResourceConfig, models.OperationWrite)
+		resp.Dismissed = false
 	}
 
-	checks := map[string]*bun.SelectQuery{
-		StepPlugins: s.db.NewSelect().Model((*models.PluginHookConfig)(nil)).
-			Where("phc.hook_type = ?", models.PluginHookMetadataEnricher),
-		StepInvite: s.db.NewSelect().Model((*models.User)(nil)).
-			Where("u.id != ?", user.ID).
-			Where("u.is_active = ?", true),
-		StepDevice: s.db.NewSelect().Model((*devices.Device)(nil)).
-			Where("d.user_id = ?", user.ID),
+	done, err := s.done(ctx, user, applies)
+	if err != nil {
+		return GettingStartedResponse{}, err
 	}
 	for _, key := range steps {
-		query, ok := checks[key]
-		if !ok || !applies[key] {
-			continue
-		}
-		exists, err := query.Exists(ctx)
-		if err != nil {
-			return GettingStartedResponse{}, errors.WithStack(err)
-		}
-		done[key] = exists
-	}
-
-	if applies[StepToRead] {
-		queued, err := s.hasUsedToRead(ctx, user.ID)
-		if err != nil {
-			return GettingStartedResponse{}, err
-		}
-		done[StepToRead] = queued
-	}
-	if applies[StepStartReading] {
-		started, err := s.hasStartedReading(ctx, user.ID)
-		if err != nil {
-			return GettingStartedResponse{}, err
-		}
-		done[StepStartReading] = started
-	}
-
-	for _, key := range steps {
-		step := GettingStartedStep{Key: key, Applies: applies[key]}
+		step := GettingStartedStep{Key: key, Applies: slices.Contains(applies, key)}
 		if step.Applies {
 			step.Done = done[key]
 			step.NotForMe = slices.Contains(st.NotForMe, key)
@@ -140,6 +103,79 @@ func (s *Service) Status(ctx context.Context, user *models.User) (GettingStarted
 		resp.Steps = append(resp.Steps, step)
 	}
 	return resp, nil
+}
+
+// applicable returns the steps the user can do now, in panel order.
+func (s *Service) applicable(ctx context.Context, user *models.User) ([]string, error) {
+	canReadBooks := user.HasPermission(models.ResourceBooks, models.OperationRead)
+	canWriteConfig := user.HasPermission(models.ResourceConfig, models.OperationWrite)
+	applies := map[string]bool{
+		StepLibrary: user.HasPermission(models.ResourceLibraries, models.OperationWrite),
+		StepInvite:  user.HasPermission(models.ResourceUsers, models.OperationWrite),
+		StepDevice:  canReadBooks,
+	}
+	// Before a Library exists, setting one up covers plugins.
+	if canWriteConfig {
+		libraryExists, err := s.db.NewSelect().Model((*models.Library)(nil)).Exists(ctx)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		applies[StepPlugins] = libraryExists
+	}
+	// To Read and reading need a book, so those steps wait until the user can
+	// reach a library. A Device can be set up before then.
+	if canReadBooks {
+		reachable, err := s.canReachLibrary(ctx, user)
+		if err != nil {
+			return nil, err
+		}
+		applies[StepToRead] = reachable
+		applies[StepStartReading] = reachable
+	}
+	keys := make([]string, 0, len(steps))
+	for _, key := range steps {
+		if applies[key] {
+			keys = append(keys, key)
+		}
+	}
+	return keys, nil
+}
+
+// done reports, for each of keys, whether what the step asks for exists.
+func (s *Service) done(ctx context.Context, user *models.User, keys []string) (map[string]bool, error) {
+	done := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		var (
+			exists bool
+			err    error
+		)
+		switch key {
+		case StepLibrary:
+			exists, err = s.db.NewSelect().Model((*models.Library)(nil)).Exists(ctx)
+		case StepPlugins:
+			exists, err = s.db.NewSelect().Model((*models.PluginHookConfig)(nil)).
+				Where("phc.hook_type = ?", models.PluginHookMetadataEnricher).
+				Exists(ctx)
+		case StepInvite:
+			exists, err = s.db.NewSelect().Model((*models.User)(nil)).
+				Where("u.id != ?", user.ID).
+				Where("u.is_active = ?", true).
+				Exists(ctx)
+		case StepDevice:
+			exists, err = s.db.NewSelect().Model((*devices.Device)(nil)).
+				Where("d.user_id = ?", user.ID).
+				Exists(ctx)
+		case StepToRead:
+			exists, err = s.hasUsedToRead(ctx, user.ID)
+		case StepStartReading:
+			exists, err = s.hasStartedReading(ctx, user.ID)
+		}
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		done[key] = exists
+	}
+	return done, nil
 }
 
 // canReachLibrary reports whether a library the user has access to exists.
@@ -218,11 +254,17 @@ func (s *Service) SetNotForMe(ctx context.Context, userID int, step string, notF
 	}))
 }
 
-// Dismiss hides the user's list until they restore it.
-func (s *Service) Dismiss(ctx context.Context, userID int) error {
-	_, err := s.db.NewUpdate().Model((*models.User)(nil)).
+// Dismiss hides the user's list until they restore it, or until a step
+// applies that doesn't now. It records the steps that apply now to tell.
+func (s *Service) Dismiss(ctx context.Context, user *models.User) error {
+	applies, err := s.applicable(ctx, user)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.NewUpdate().Model((*models.User)(nil)).
 		Set("getting_started_dismissed_at = ?", time.Now()).
-		Where("id = ?", userID).
+		Set("getting_started_dismissed_steps = ?", models.StringList(applies)).
+		Where("id = ?", user.ID).
 		Exec(ctx)
 	return errors.WithStack(err)
 }

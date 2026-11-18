@@ -26,6 +26,9 @@ type User struct {
 	GettingStartedAutoOpen    bool       `bun:",notnull" json:"-"`
 	GettingStartedDismissedAt *time.Time `json:"-"`
 	GettingStartedNotForMe    StringList `bun:",notnull" json:"-"`
+	// GettingStartedDismissedSteps are the steps that applied when the list
+	// was dismissed; one that applies later brings the list back.
+	GettingStartedDismissedSteps StringList `bun:",notnull" json:"-"`
 
 	// Relations
 	Role          *Role                `bun:"rel:belongs-to,join:role_id=id" json:"role,omitempty" tstype:"Role"`

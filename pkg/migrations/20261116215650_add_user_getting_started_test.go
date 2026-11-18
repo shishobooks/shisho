@@ -30,6 +30,7 @@ func TestAddUserGettingStarted(t *testing.T) {
 		AutoOpen    bool    `bun:"getting_started_auto_open"`
 		DismissedAt *string `bun:"getting_started_dismissed_at"`
 		NotForMe    string  `bun:"getting_started_not_for_me"`
+		Dismissed   string  `bun:"getting_started_dismissed_steps"`
 	}
 
 	for range 2 {
@@ -39,17 +40,19 @@ func TestAddUserGettingStarted(t *testing.T) {
 		var rows []state
 		require.NoError(t, db.NewRaw(`
 			SELECT id, getting_started_enabled, getting_started_auto_open,
-				getting_started_dismissed_at, getting_started_not_for_me
+				getting_started_dismissed_at, getting_started_not_for_me,
+				getting_started_dismissed_steps
 			FROM users ORDER BY id
 		`).Scan(ctx, &rows))
 		assert.Equal(t, []state{
-			{ID: 1, Enabled: false, AutoOpen: false, NotForMe: "[]"},
-			{ID: 2, Enabled: true, AutoOpen: true, NotForMe: "[]"},
+			{ID: 1, Enabled: false, AutoOpen: false, NotForMe: "[]", Dismissed: "[]"},
+			{ID: 2, Enabled: true, AutoOpen: true, NotForMe: "[]", Dismissed: "[]"},
 		}, rows)
 
 		_, err = migrator.Rollback(ctx)
 		require.NoError(t, err)
 		assert.NotContains(t, columnNames(ctx, t, db, "users"), "getting_started_enabled")
 		assert.NotContains(t, columnNames(ctx, t, db, "users"), "getting_started_not_for_me")
+		assert.NotContains(t, columnNames(ctx, t, db, "users"), "getting_started_dismissed_steps")
 	}
 }

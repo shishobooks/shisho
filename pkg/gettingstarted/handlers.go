@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
 
@@ -41,44 +42,44 @@ func (h *handler) retrieve(c echo.Context) error {
 }
 
 // update runs fn for the signed-in user, then responds with their list.
-func (h *handler) update(c echo.Context, fn func(userID int) error) error {
+func (h *handler) update(c echo.Context, fn func(user *models.User) error) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
 	}
-	if err := fn(user.ID); err != nil {
+	if err := fn(user); err != nil {
 		return err
 	}
 	return h.respond(c)
 }
 
 func (h *handler) markNotForMe(c echo.Context) error {
-	return h.update(c, func(userID int) error {
-		return h.service.SetNotForMe(c.Request().Context(), userID, c.Param("step"), true)
+	return h.update(c, func(user *models.User) error {
+		return h.service.SetNotForMe(c.Request().Context(), user.ID, c.Param("step"), true)
 	})
 }
 
 func (h *handler) unmarkNotForMe(c echo.Context) error {
-	return h.update(c, func(userID int) error {
-		return h.service.SetNotForMe(c.Request().Context(), userID, c.Param("step"), false)
+	return h.update(c, func(user *models.User) error {
+		return h.service.SetNotForMe(c.Request().Context(), user.ID, c.Param("step"), false)
 	})
 }
 
 func (h *handler) dismiss(c echo.Context) error {
-	return h.update(c, func(userID int) error {
-		return h.service.Dismiss(c.Request().Context(), userID)
+	return h.update(c, func(user *models.User) error {
+		return h.service.Dismiss(c.Request().Context(), user)
 	})
 }
 
 func (h *handler) restore(c echo.Context) error {
-	return h.update(c, func(userID int) error {
-		return h.service.Restore(c.Request().Context(), userID)
+	return h.update(c, func(user *models.User) error {
+		return h.service.Restore(c.Request().Context(), user.ID)
 	})
 }
 
 func (h *handler) clearAutoOpen(c echo.Context) error {
-	return h.update(c, func(userID int) error {
-		return h.service.ClearAutoOpen(c.Request().Context(), userID)
+	return h.update(c, func(user *models.User) error {
+		return h.service.ClearAutoOpen(c.Request().Context(), user.ID)
 	})
 }
 
