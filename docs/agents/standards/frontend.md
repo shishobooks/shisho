@@ -39,7 +39,7 @@ Judgement rules a reviewer applies to a frontend diff, on top of `app/AGENTS.md`
 
 - Unsaved changes protection ("Forms" in `app/AGENTS.md`) covers every form with a Save step: create and edit dialogs, settings pages, child editors with their own Save, and tab switches away from inline editing. Not needed: action dialogs that run immediately (merge, move, delete confirmations), quick actions with no pending state, view-only pages, settings that apply on change.
 - Metadata fields are first-class: no helper text implying a field is secondary or derived ("Leave empty to use the title from file metadata").
-- Clearing a metadata field saves the cleared value; it does not revert to a default. The next scan repopulates from the file if needed.
+- Clearing a metadata field saves the cleared value; it does not revert to a default.
 
 ## Query cache
 

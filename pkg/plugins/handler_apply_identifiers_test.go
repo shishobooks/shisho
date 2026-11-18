@@ -198,46 +198,64 @@ func TestApplyMetadata_Identifiers_ReplacedValueUsesEntryIntent(t *testing.T) {
 	}
 }
 
-func TestApplyMetadata_Identifiers_ExplicitClearRemovesBothLayers(t *testing.T) {
+// An Explicit Clear leaves a protected empty collection: no entries, with a
+// manual aggregate source, so a later Scan leaves it empty.
+func TestApplyMetadata_Identifiers_ExplicitClearLeavesProtectedEmptyCollection(t *testing.T) {
 	t.Parallel()
 
 	book, file, identStore, h := newIdentifierFixture(t, applyTestPluginSource,
 		&models.FileIdentifier{Type: "asin", Value: "B01ABC1234", Source: applyTestPluginSource})
 
 	err := applyForAttribution(t, h, PluginApplyPayload{
-		BookID: book.ID,
-		FileID: &file.ID,
-		Fields: map[string]any{"identifiers": []any{}},
-		// A clear carries user intent, which must not produce a manual tombstone.
-		Sources: map[string]string{"identifiers": SourceIntentUser},
+		BookID:  book.ID,
+		FileID:  &file.ID,
+		Fields:  map[string]any{"identifiers": []any{}},
+		Sources: map[string]string{"identifiers": SourceIntentPlugin},
 	})
 	require.NoError(t, err)
 
 	assert.Equal(t, []int{file.ID}, identStore.deleteCalls)
 	assert.Empty(t, identStore.bulkCalls)
-	assert.Nil(t, file.IdentifierSource)
+	require.NotNil(t, file.IdentifierSource)
+	assert.Equal(t, models.DataSourceManual, *file.IdentifierSource, "a clear is manual whatever the field intent")
 }
 
-func TestApplyMetadata_Identifiers_ClearingEmptyCollectionRemovesStaleSource(t *testing.T) {
+// Clearing a collection that is already empty but whose aggregate source is a
+// plugin source (left by a pre-ADR 0006 clear) stamps manual without touching
+// the entries. One with no source is left as it is.
+func TestApplyMetadata_Identifiers_ClearingEmptyCollectionStampsManual(t *testing.T) {
 	t.Parallel()
 
-	book, file, identStore, h := newIdentifierFixture(t, applyTestPluginSource)
+	for name, tt := range map[string]struct {
+		aggregate string
+		want      *string
+	}{
+		"plugin source": {aggregate: applyTestPluginSource, want: strPtr(models.DataSourceManual)},
+		"null source":   {aggregate: "", want: nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	err := applyForAttribution(t, h, PluginApplyPayload{
-		BookID: book.ID,
-		FileID: &file.ID,
-		Fields: map[string]any{"identifiers": []any{}},
-	})
-	require.NoError(t, err)
+			book, file, identStore, h := newIdentifierFixture(t, tt.aggregate)
 
-	assert.Empty(t, identStore.bulkCalls)
-	assert.Nil(t, file.IdentifierSource, "a stale source on an empty collection blocks Scan repopulation")
+			err := applyForAttribution(t, h, PluginApplyPayload{
+				BookID: book.ID,
+				FileID: &file.ID,
+				Fields: map[string]any{"identifiers": []any{}},
+			})
+			require.NoError(t, err)
+
+			assert.Empty(t, identStore.deleteCalls)
+			assert.Empty(t, identStore.bulkCalls)
+			assert.Equal(t, tt.want, file.IdentifierSource)
+		})
+	}
 }
 
-func TestApplyMetadata_Identifiers_ClearingEmptyUnsourcedCollectionIsNoOp(t *testing.T) {
+func TestApplyMetadata_Identifiers_ClearingProtectedEmptyCollectionIsNoOp(t *testing.T) {
 	t.Parallel()
 
-	book, file, identStore, h := newIdentifierFixture(t, "")
+	book, file, identStore, h := newIdentifierFixture(t, models.DataSourceManual)
 
 	err := applyForAttribution(t, h, PluginApplyPayload{
 		BookID: book.ID,
@@ -248,5 +266,6 @@ func TestApplyMetadata_Identifiers_ClearingEmptyUnsourcedCollectionIsNoOp(t *tes
 
 	assert.Empty(t, identStore.deleteCalls)
 	assert.Empty(t, identStore.bulkCalls)
-	assert.Nil(t, file.IdentifierSource)
+	require.NotNil(t, file.IdentifierSource)
+	assert.Equal(t, models.DataSourceManual, *file.IdentifierSource)
 }

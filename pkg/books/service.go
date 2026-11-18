@@ -115,6 +115,10 @@ type UpdateFileOptions struct {
 type Service struct {
 	db                 *bun.DB
 	appSettingsService *appsettings.Service
+
+	// beforeClearStaleMark runs between writing a Book's sidecars and
+	// clearing its stale mark. Tests set it to mark the Book again there.
+	beforeClearStaleMark func()
 }
 
 // NewService creates a book service. appSettings must be non-nil: mutation

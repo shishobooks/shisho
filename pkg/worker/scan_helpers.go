@@ -10,8 +10,9 @@ import (
 
 // shouldUpdateScalar determines if a scalar field should be updated based on priority rules.
 // Returns true if the new value should replace the existing value.
-// When forceRefresh is true, priority checks are bypassed (but empty values are still skipped).
-func shouldUpdateScalar(newValue, existingValue, newSource, existingSource string, forceRefresh bool) bool {
+// When rules.forceRefresh is true, priority checks are bypassed (but empty values are still skipped).
+func shouldUpdateScalar(newValue, existingValue, newSource, existingSource string, rules scanRules) bool {
+	forceRefresh := rules.forceRefresh
 	// Never update with empty new value
 	if newValue == "" {
 		return false
@@ -38,8 +39,11 @@ func shouldUpdateScalar(newValue, existingValue, newSource, existingSource strin
 		existingSource = models.DataSourceFilepath
 	}
 
-	newPriority := models.GetDataSourcePriority(newSource)
-	existingPriority := models.GetDataSourcePriority(existingSource)
+	newPriority := rules.priority(newSource)
+	existingPriority := rules.priority(existingSource)
+	if rules.keepsStoredPluginValue(newPriority, existingPriority) {
+		return false
+	}
 
 	// Higher or equal priority wins when new value is non-empty and different
 	return newPriority <= existingPriority
@@ -48,7 +52,8 @@ func shouldUpdateScalar(newValue, existingValue, newSource, existingSource strin
 // shouldUpdateRelationship determines if a relationship (authors, series, etc.) should be updated.
 // Returns true if the new items should replace the existing items.
 // When forceRefresh is true, priority checks are bypassed (but empty items are still skipped).
-func shouldUpdateRelationship(newItems, existingItems []string, newSource, existingSource string, forceRefresh bool) bool {
+func shouldUpdateRelationship(newItems, existingItems []string, newSource, existingSource string, rules scanRules) bool {
+	forceRefresh := rules.forceRefresh
 	// Never update with empty new items
 	if len(newItems) == 0 {
 		return false
@@ -73,8 +78,11 @@ func shouldUpdateRelationship(newItems, existingItems []string, newSource, exist
 		existingSource = models.DataSourceFilepath
 	}
 
-	newPriority := models.GetDataSourcePriority(newSource)
-	existingPriority := models.GetDataSourcePriority(existingSource)
+	newPriority := rules.priority(newSource)
+	existingPriority := rules.priority(existingSource)
+	if rules.keepsStoredPluginValue(newPriority, existingPriority) {
+		return false
+	}
 
 	// Higher or equal priority wins when new items are non-empty and different
 	return newPriority <= existingPriority
@@ -155,7 +163,8 @@ func shouldApplySidecarRelationship(newItems, existingItems []string, existingSo
 	return sidecarPriority < existingPriority
 }
 
-func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*models.BookSeries, existingSource string, forceRefresh bool) bool {
+func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*models.BookSeries, existingSource string, rules scanRules) bool {
+	forceRefresh := rules.forceRefresh
 	if incoming == nil || incoming.Series == "" {
 		return false
 	}
@@ -167,7 +176,7 @@ func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*mo
 				existingNames = append(existingNames, membership.Series.Name)
 			}
 		}
-		return shouldUpdateRelationship([]string{incoming.Series}, existingNames, newSource, existingSource, forceRefresh)
+		return shouldUpdateRelationship([]string{incoming.Series}, existingNames, newSource, existingSource, rules)
 	}
 
 	// A partially present or invalid external group must never mutate storage.
@@ -191,7 +200,12 @@ func shouldUpdateParsedSeries(incoming *mediafile.ParsedMetadata, existing []*mo
 	if existingSource == "" {
 		existingSource = models.DataSourceFilepath
 	}
-	return models.GetDataSourcePriority(newSource) <= models.GetDataSourcePriority(existingSource)
+	newPriority := rules.priority(newSource)
+	existingPriority := rules.priority(existingSource)
+	if rules.keepsStoredPluginValue(newPriority, existingPriority) {
+		return false
+	}
+	return newPriority <= existingPriority
 }
 
 func shouldApplySeriesSidecar(incoming []sidecar.SeriesMetadata, existing []*models.BookSeries, existingSource string, forceRefresh bool) bool {

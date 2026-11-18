@@ -244,6 +244,7 @@ const SeriesDetail = () => {
         <>
           <MetadataEditDialog
             aliases={aliases}
+            entityId={seriesId}
             entityName={series.name}
             entityType="series"
             isPending={updateSeriesMutation.isPending}
@@ -273,6 +274,7 @@ const SeriesDetail = () => {
             onOpenChange={setMergeOpen}
             onSearch={setMergeSearch}
             open={mergeOpen}
+            showSidecarNote
             targetId={seriesId!}
             targetName={series.name}
           />

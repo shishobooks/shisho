@@ -30,3 +30,8 @@ export const resolveInstalledPluginCapabilities = (
   if (match?.capabilities) return match.capabilities;
   return available.versions[0]?.capabilities ?? null;
 };
+
+/** Whether a plugin version's capabilities include a metadata enricher. */
+export const isMetadataEnricher = (
+  capabilities: PluginCapabilities | null | undefined,
+): boolean => Boolean(capabilities?.metadataEnricher);

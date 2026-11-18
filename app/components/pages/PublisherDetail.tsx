@@ -278,6 +278,7 @@ const PublisherDetail = () => {
       {canWriteBooks && (
         <PublisherEditDialog
           aliases={aliases}
+          entityId={publisherId}
           entityName={publisher?.name ?? ""}
           isPending={updatePublisherMutation.isPending}
           onOpenChange={setEditOpen}

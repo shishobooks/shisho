@@ -17,12 +17,13 @@ const (
 )
 
 const (
-	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload | typeof JobTypeHashGeneration | typeof JobTypeRecomputeReview;
+	//tygo:emit export type JobType = typeof JobTypeExport | typeof JobTypeScan | typeof JobTypeBulkDownload | typeof JobTypeHashGeneration | typeof JobTypeRecomputeReview | typeof JobTypeSidecarRewrite;
 	JobTypeExport          = "export"
 	JobTypeScan            = "scan"
 	JobTypeBulkDownload    = "bulk_download"
 	JobTypeHashGeneration  = "hash_generation"
 	JobTypeRecomputeReview = "recompute_review"
+	JobTypeSidecarRewrite  = "sidecar_rewrite"
 )
 
 type Job struct {
@@ -34,7 +35,7 @@ type Job struct {
 	Type       string      `bun:",nullzero" json:"type" tstype:"JobType"`
 	Status     string      `bun:",nullzero" json:"status" tstype:"JobStatus"`
 	Data       string      `bun:",nullzero" json:"-"`
-	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData | JobHashGenerationData | JobRecomputeReviewData"`
+	DataParsed interface{} `bun:"-" json:"data" tstype:"JobExportData | JobScanData | JobBulkDownloadData | JobHashGenerationData | JobRecomputeReviewData | JobSidecarRewriteData"`
 	Progress   int         `json:"progress"`
 	ProcessID  *string     `json:"process_id,omitempty"`
 	LibraryID  *int        `json:"library_id,omitempty"`
@@ -56,6 +57,8 @@ func (job *Job) UnmarshalData() error {
 		job.DataParsed = &JobHashGenerationData{}
 	case JobTypeRecomputeReview:
 		job.DataParsed = &JobRecomputeReviewData{}
+	case JobTypeSidecarRewrite:
+		job.DataParsed = &JobSidecarRewriteData{}
 	}
 
 	err := json.Unmarshal([]byte(job.Data), job.DataParsed)
@@ -68,7 +71,31 @@ func (job *Job) UnmarshalData() error {
 
 type JobExportData struct{}
 
-type JobScanData struct{}
+// JobScanData is the payload for a scan job.
+type JobScanData struct {
+	// ScanForNewMetadata runs Scan for new metadata on every main File, as
+	// the single-file rescan does, including Files whose size and modified
+	// time haven't changed since the last scan, which a normal scan skips.
+	ScanForNewMetadata bool `json:"scan_for_new_metadata,omitempty"`
+}
+
+// JobScanProgress is the payload of a scan.progress event: how far a scan
+// job has got through one library. It carries only ids and counts, since
+// every signed-in user receives it.
+type JobScanProgress struct {
+	JobID              int  `json:"job_id"`
+	LibraryID          int  `json:"library_id"`
+	ScanForNewMetadata bool `json:"scan_for_new_metadata"`
+	// FilesFound counts the files the scan has found to scan so far.
+	FilesFound int `json:"files_found"`
+	// FilesScanned counts the found files the scan has finished with.
+	FilesScanned int `json:"files_scanned"`
+	// BooksImported counts the Books the scan has created.
+	BooksImported int `json:"books_imported"`
+	// Done is set on the last event for the library, once the scan has
+	// finished with it.
+	Done bool `json:"done"`
+}
 
 // JobHashGenerationData is the payload for a hash generation job.
 // The job processes all files in the given library that do not yet have
@@ -76,6 +103,11 @@ type JobScanData struct{}
 type JobHashGenerationData struct {
 	LibraryID int `json:"library_id"`
 }
+
+// JobSidecarRewriteData is the payload for a sidecar rewrite job, which
+// rewrites the sidecars of every Book marked stale by a rename or merge
+// (books.sidecars_stale_at). It needs no input.
+type JobSidecarRewriteData struct{}
 
 type JobRecomputeReviewData struct {
 	// ClearOverrides, when true, sets review_override and review_overridden_at to NULL

@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
@@ -155,6 +156,7 @@ describe("BookEditDialog early Enter", () => {
 describe("BookEditDialog series range editing", () => {
   it("includes an edited range end in the update payload", async () => {
     mocks.updateBook.mockClear();
+    const success = vi.spyOn(toast, "success");
     const user = userEvent.setup({
       advanceTimers: vi.advanceTimersByTime,
       delay: null,
@@ -190,6 +192,7 @@ describe("BookEditDialog series range editing", () => {
         },
       });
     });
+    await waitFor(() => expect(success).toHaveBeenCalledWith("Book saved"));
   });
 
   it("loads and preserves an existing range when the start changes", async () => {

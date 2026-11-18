@@ -210,6 +210,25 @@ func (tc *testContext) runScan() error {
 	return tc.worker.ProcessScanJob(tc.ctx, nil, jobLog)
 }
 
+// runScanJob runs ProcessScanJob for job, as the worker does once it has
+// claimed it.
+func (tc *testContext) runScanJob(job *models.Job) error {
+	log := logger.FromContext(tc.ctx)
+	jobLog := tc.jobLogService.NewJobLogger(tc.ctx, job.ID, log)
+	return tc.worker.ProcessScanJob(tc.ctx, job, jobLog)
+}
+
+// listLibraryIDs returns the ids of every library, oldest first.
+func (tc *testContext) listLibraryIDs() []int {
+	tc.t.Helper()
+	var ids []int
+	err := tc.db.NewSelect().Model((*models.Library)(nil)).Column("id").Order("id").Scan(tc.ctx, &ids)
+	if err != nil {
+		tc.t.Fatalf("failed to list libraries: %v", err)
+	}
+	return ids
+}
+
 // listSeries returns all series in the database.
 func (tc *testContext) listSeries() []*models.Series {
 	tc.t.Helper()

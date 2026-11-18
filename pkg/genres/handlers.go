@@ -19,12 +19,46 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
+// SidecarWriter marks the sidecars of every Book that holds a genre stale,
+// after a rename or merge changes the name they record, and queues the job
+// that rewrites them (ADR 0027). books.Service implements it; the interface
+// breaks the import cycle.
+type SidecarWriter interface {
+	MarkSidecarsStaleForGenre(ctx context.Context, genreID int)
+	SidecarBooksForGenre(ctx context.Context, genreID int) []int
+	MarkBookSidecarsStale(ctx context.Context, bookIDs []int)
+}
+
 type handler struct {
 	genreService     *Service
 	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
+	sidecars         SidecarWriter // nil in tests that don't cover sidecars
+}
+
+// writeSidecars queues a rewrite of the genre's Books' sidecars, if configured.
+func (h *handler) writeSidecars(ctx context.Context, genreID int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkSidecarsStaleForGenre(ctx, genreID)
+	}
+}
+
+// sidecarBooks lists the Books whose sidecars name the genre, for a merge to
+// collect before it re-points them.
+func (h *handler) sidecarBooks(ctx context.Context, genreID int) []int {
+	if h.sidecars == nil {
+		return nil
+	}
+	return h.sidecars.SidecarBooksForGenre(ctx, genreID)
+}
+
+// markBookSidecars queues a rewrite of the Books' sidecars after a merge.
+func (h *handler) markBookSidecars(ctx context.Context, bookIDs []int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkBookSidecarsStale(ctx, bookIDs)
+	}
 }
 
 // buildGenreResponse adds the book count and the flat alias list to a genre.
@@ -164,7 +198,7 @@ func (h *handler) update(c echo.Context) error {
 	affected := h.searchService.CollectAffected(ctx, search.Affected{GenreIDs: []int{id}})
 	defer h.searchService.ReindexAffected(ctx, affected)
 
-	if params.Name != nil && *params.Name != genre.Name {
+	if params.Name != nil && strings.TrimSpace(*params.Name) != genre.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
 			return errcodes.ValidationError("Genre name cannot be empty")
@@ -178,10 +212,13 @@ func (h *handler) update(c echo.Context) error {
 		if err == nil && existing.ID != id {
 			// Merge into existing genre
 			affected.GenreIDs = append(affected.GenreIDs, existing.ID)
+			// Only the renamed genre's Books name the old name.
+			mergedBooks := h.sidecarBooks(ctx, id)
 			err = h.genreService.MergeGenres(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
 			}
+			h.markBookSidecars(ctx, mergedBooks)
 
 			// Return the target genre
 			response, err := h.buildGenreResponse(ctx, existing)
@@ -197,6 +234,7 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		h.writeSidecars(ctx, id)
 	}
 
 	// Sync aliases if provided
@@ -262,9 +300,12 @@ func (h *handler) merge(c echo.Context) error {
 	affected := h.searchService.CollectAffected(ctx, search.Affected{GenreIDs: []int{id, params.SourceID}})
 	defer h.searchService.ReindexAffected(ctx, affected)
 
+	// Only the source's Books name the source's name.
+	mergedBooks := h.sidecarBooks(ctx, params.SourceID)
 	if err := h.genreService.MergeGenres(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
+	h.markBookSidecars(ctx, mergedBooks)
 
 	return c.NoContent(http.StatusNoContent)
 }

@@ -956,6 +956,25 @@ describe("IdentifyReviewForm component", () => {
     expect(getApplyButton()).toBeEnabled();
   });
 
+  it("toggles every field from the Apply all text, not only its checkbox", async () => {
+    const user = createUser();
+    renderForm({
+      book: makeBook({
+        title: "Old Title",
+        title_source: DataSourceFilepath,
+      }),
+      result: makeResult({ title: "New Title" }),
+    });
+
+    const applyAll = screen.getByRole("checkbox", { name: "Apply all" });
+    expect(applyAll).toHaveAttribute("data-state", "checked");
+
+    await user.click(screen.getByText("Apply all"));
+
+    expect(applyAll).toHaveAttribute("data-state", "unchecked");
+    expect(getApplyButton()).toBeDisabled();
+  });
+
   it("blocks a selected blank Title with a visible validation error", async () => {
     const user = createUser();
     renderForm({

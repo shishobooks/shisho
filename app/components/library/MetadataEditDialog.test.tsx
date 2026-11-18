@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
-import { ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 
 import { MetadataEditDialog } from "./MetadataEditDialog";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const createUser = () =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -1123,5 +1127,150 @@ describe("MetadataEditDialog", () => {
         screen.getByDisplayValue("Original Name Edited"),
       ).toBeInTheDocument();
     });
+  });
+});
+
+describe("MetadataEditDialog rename note and confirmation", () => {
+  const renderDialog = (bookCount: number, onSave = vi.fn()) => {
+    setAuth({ permissions: ["books:read", "books:write"] });
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ book_count: bookCount });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MetadataEditDialog
+          entityId={7}
+          entityName="Fiction"
+          entityType="genre"
+          isPending={false}
+          onOpenChange={vi.fn()}
+          onSave={onSave}
+          open={true}
+        />
+      </QueryClientProvider>,
+    );
+    return request;
+  };
+
+  const note = () => screen.queryByText(/updates the sidecar files/i);
+
+  const rename = async (user: ReturnType<typeof createUser>) => {
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Literary Fiction");
+  };
+
+  it("says how many books a big rename rewrites in the background", async () => {
+    const user = createUser();
+    const request = renderDialog(1500);
+    expect(note()).not.toBeInTheDocument();
+
+    await rename(user);
+
+    expect(
+      await screen.findByText(/updates the sidecar files/i),
+    ).toHaveTextContent("1,500 books");
+    expect(note()).toHaveTextContent(/in the background/i);
+    expect(request).toHaveBeenCalledWith(
+      "GET",
+      "/books/sidecar-impact",
+      null,
+      { kind: "genre", id: 7 },
+      expect.anything(),
+    );
+  });
+
+  it("says nothing for a rename touching few books", async () => {
+    const user = createUser();
+    renderDialog(20);
+
+    await rename(user);
+    await waitFor(() => expect(API.request).toHaveBeenCalled());
+
+    expect(note()).not.toBeInTheDocument();
+  });
+
+  it("confirms a rename once it's saved", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderDialog(5, vi.fn().mockResolvedValue({}));
+
+    await rename(user);
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Renamed to "Literary Fiction"'),
+    );
+  });
+
+  it("says a rename onto an existing name merged into it", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    // The server merges into the existing genre and answers with it.
+    renderDialog(5, vi.fn().mockResolvedValue({ id: 99, name: "Novels" }));
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Novels");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Merged into "Novels"'),
+    );
+  });
+
+  it("doesn't call a whitespace-only change a rename", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderDialog(5, vi.fn().mockResolvedValue({ id: 7 }));
+
+    await user.type(screen.getByLabelText("Name"), " ");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(success).toHaveBeenCalledWith("Changes saved"));
+  });
+});
+
+describe("MetadataEditDialog old-name alias warning", () => {
+  const renderPerson = () =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MetadataEditDialog
+          entityName="Jon Smith"
+          entityType="person"
+          isPending={false}
+          onOpenChange={vi.fn()}
+          onSave={vi.fn()}
+          open={true}
+        />
+      </QueryClientProvider>,
+    );
+  const warning = () => screen.queryByText(/separate person/i);
+
+  it("warns that removing the old name's alias splits books off on rescans", async () => {
+    const user = createUser();
+    renderPerson();
+
+    const nameInput = screen.getByLabelText("Name");
+    await user.clear(nameInput);
+    await user.type(nameInput, "John Smith");
+    expect(warning()).not.toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Remove alias Jon Smith" }),
+    );
+
+    expect(warning()).toHaveTextContent(
+      'Without "Jon Smith" as an alias, books whose files still name "Jon Smith" will move to a separate person with that name the next time they are scanned for new metadata.',
+    );
+  });
+
+  it("doesn't warn without a rename", async () => {
+    renderPerson();
+    expect(warning()).not.toBeInTheDocument();
   });
 });

@@ -138,6 +138,15 @@ type ScanOptions struct {
 	SkipPlugins   bool // Skip enricher plugins, use only file-embedded metadata
 	Reset         bool // Wipe all metadata before scanning (reset to file-only state)
 	BookResetDone bool // Book-level wipe already done by scanBook (skip in scanFileByID)
+	// ScanUnchanged sends a known main File whose size and modified time
+	// haven't changed through scanFileByID anyway (FilePath mode only), as
+	// the library-wide Scan for new metadata does. Without it, a batch scan
+	// skips such a File. A cache is required, as ProcessScanJob passes.
+	ScanUnchanged bool
+	// DeferOrganize stops scanFileByID from moving the File or its Book
+	// (FileID mode), for a caller that organizes once its whole batch is
+	// done, so Files still queued at their old paths stay where they are.
+	DeferOrganize bool
 
 	// Logging (optional, for batch scan job context)
 	JobLog *joblogs.JobLogger
@@ -160,6 +169,7 @@ type ScanResult struct {
 	File        *models.File // The scanned/updated file (nil if deleted)
 	Book        *models.Book // The parent book (nil if deleted)
 	FileCreated bool         // True if file was newly created
+	BookCreated bool         // True if the file's Book was newly created for it (FilePath mode)
 	FileDeleted bool         // True if the file record was deleted (gone from disk, or DRM-protected)
 	BookDeleted bool         // True if book was also deleted (was last file)
 
@@ -331,6 +341,13 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			// both re-parsing and fingerprint invalidation.
 			changed, changedErr := fileContentChanged(opts.FilePath, existingFile, opts.ForceRefresh)
 			if changedErr == nil && !changed {
+				if opts.ScanUnchanged {
+					return w.scanFileByID(ctx, ScanOptions{
+						FileID:        existingFile.ID,
+						DeferOrganize: true,
+						JobLog:        opts.JobLog,
+					}, cache)
+				}
 				return &ScanResult{File: existingFile, Book: existingFile.Book}, nil
 			}
 			// File content changed (or we can't tell) — invalidate stale
@@ -532,12 +549,25 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	// The file parsed, so any error recorded by an earlier scan is stale.
 	w.clearFileScanError(ctx, file, logWarn)
 
+	// A Book's Files rescan one at a time, so each one loads what the one
+	// before it stored and compares its sidecars with that (dropSidecarCopies)
+	// rather than with a stale copy.
+	if cache != nil {
+		unlock := cache.LockBookPath(book.Filepath, file.LibraryID)
+		defer unlock()
+	}
+
 	// Reload the parent book for scanFileCore. Recovering the cover and
 	// clearing the scan error above update this file, which book.Files holds.
 	book, err = w.bookService.RetrieveBook(ctx, books.RetrieveBookOptions{ID: &file.BookID})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to retrieve parent book")
 	}
+
+	// The File and its Book were already in the library. The parser's source
+	// is taken before enrichment adds plugin sources.
+	state := fileScanState{bookKnown: true, fileKnown: true, parserSource: metadata.DataSource}
+	_, fileRules := state.rules(opts.ForceRefresh)
 
 	// Reset mode: wipe metadata and apply filepath fallbacks
 	if opts.Reset {
@@ -595,11 +625,14 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	}
 
 	// Apply enricher cover if it's higher resolution than the current cover
-	w.upgradeEnricherCover(ctx, metadata, file, book.Filepath, opts.JobLog)
+	w.upgradeEnricherCover(ctx, metadata, file, book.Filepath, fileRules, opts.JobLog)
 
 	// Use scanFileCore for all metadata updates, sidecars, and search index
-	// This is a resync (FileID mode), so pass isResync=true to enable book organization
-	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, true, opts.JobLog, cache)
+	// This is a resync (FileID mode), so pass isResync=true to enable book
+	// organization, unless the caller organizes after its batch. isResync
+	// also reindexes search, which a deferring caller (a full scan) rebuilds
+	// at its end anyway.
+	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, state, !opts.DeferOrganize, opts.JobLog, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -948,6 +981,9 @@ func (w *Worker) scanBook(ctx context.Context, opts ScanOptions, cache *ScanCach
 //   - book: The parent book record to update (must already exist in DB)
 //   - metadata: Parsed metadata from the file (can be nil, in which case no updates are made)
 //   - forceRefresh: If true, bypass priority checks and overwrite all fields
+//   - state: Whether the file was already in the library and whether its
+//     contents changed, which decide the scan's rules (see scanRules) and
+//     whether its sidecars may hold Shisho's own copies (dropSidecarCopies).
 //   - isResync: True if this is a single file/book resync (not a full library scan).
 //     When true, book organization (folder rename) is performed immediately after
 //     title/author changes. When false (batch scan), organization is skipped to
@@ -962,10 +998,12 @@ func (w *Worker) scanFileCore(
 	book *models.Book,
 	metadata *mediafile.ParsedMetadata,
 	forceRefresh bool,
+	state fileScanState,
 	isResync bool,
 	jobLog *joblogs.JobLogger,
 	cache *ScanCache,
 ) (*ScanResult, error) {
+	bookRules, fileRules := state.rules(forceRefresh)
 	log := logger.FromContext(ctx)
 
 	logWarn := func(msg string, data logger.Data) {
@@ -1003,6 +1041,12 @@ func (w *Worker) scanFileCore(
 
 	sidecarSource := models.DataSourceSidecar
 
+	// A rename or merge may have left the Book's sidecars naming a resource by
+	// its old name. They are rewritten from what is stored before being read,
+	// or skipped when they can't be, so a stale name never comes back (ADR
+	// 0027).
+	sidecarsTrusted := w.bookService.RewriteSidecarsIfStale(ctx, book)
+
 	// Read sidecar files if they exist (higher priority than file metadata)
 	// Sidecars can override file metadata but not manual user edits
 	bookSidecarData, err := sidecar.ReadBookSidecarFromModel(book, file)
@@ -1012,6 +1056,17 @@ func (w *Worker) scanFileCore(
 	fileSidecarData, err := sidecar.ReadFileSidecar(file.Filepath)
 	if err != nil {
 		logWarn("failed to read file sidecar", logger.Data{"error": err.Error()})
+	}
+	if !sidecarsTrusted {
+		bookSidecarData, fileSidecarData = nil, nil
+	}
+	// A known Book's and File's sidecars were written by Shisho from what is
+	// stored, so only the fields that differ came from somewhere else.
+	if state.bookKnown {
+		dropSidecarCopies(bookSidecarData, nil, book, nil)
+	}
+	if state.fileKnown {
+		dropSidecarCopies(nil, fileSidecarData, nil, file)
 	}
 
 	bookUpdateOpts := books.UpdateBookOptions{Columns: []string{}}
@@ -1044,7 +1099,7 @@ func (w *Worker) scanFileCore(
 				applySeriesNumberUnit(metadata, unit, titleSource)
 			}
 		}
-		if !keepOwnersBookValue(ownsBook, titleSource, book.TitleSource, forceRefresh) && shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, forceRefresh) {
+		if !keepOwnersBookValue(ownsBook, titleSource, book.TitleSource, forceRefresh) && shouldUpdateScalar(title, book.Title, titleSource, book.TitleSource, bookRules) {
 			logInfo("updating book title", logger.Data{"from": book.Title, "to": title})
 			book.Title = title
 			book.TitleSource = titleSource
@@ -1053,7 +1108,7 @@ func (w *Worker) scanFileCore(
 
 			// Regenerate sort title
 			newSortTitle := sortname.ForTitle(title)
-			if !keepOwnersBookValue(ownsBook, titleSource, book.SortTitleSource, forceRefresh) && shouldUpdateScalar(newSortTitle, book.SortTitle, titleSource, book.SortTitleSource, forceRefresh) {
+			if !keepOwnersBookValue(ownsBook, titleSource, book.SortTitleSource, forceRefresh) && shouldUpdateScalar(newSortTitle, book.SortTitle, titleSource, book.SortTitleSource, bookRules) {
 				book.SortTitle = newSortTitle
 				book.SortTitleSource = titleSource
 				bookUpdateOpts.Columns = append(bookUpdateOpts.Columns, "sort_title", "sort_title_source")
@@ -1090,7 +1145,7 @@ func (w *Worker) scanFileCore(
 				existingSubtitleSource = *book.SubtitleSource
 			}
 			subtitleSource := metadata.SourceForField("subtitle")
-			if !keepOwnersBookValue(ownsBook, subtitleSource, existingSubtitleSource, forceRefresh) && shouldUpdateScalar(subtitle, existingSubtitle, subtitleSource, existingSubtitleSource, forceRefresh) {
+			if !keepOwnersBookValue(ownsBook, subtitleSource, existingSubtitleSource, forceRefresh) && shouldUpdateScalar(subtitle, existingSubtitle, subtitleSource, existingSubtitleSource, bookRules) {
 				logInfo("updating book subtitle", logger.Data{"from": existingSubtitle, "to": subtitle})
 				book.Subtitle = &subtitle
 				book.SubtitleSource = &subtitleSource
@@ -1129,7 +1184,7 @@ func (w *Worker) scanFileCore(
 				existingDescriptionSource = *book.DescriptionSource
 			}
 			descSource := metadata.SourceForField("description")
-			if !keepOwnersBookValue(ownsBook, descSource, existingDescriptionSource, forceRefresh) && shouldUpdateScalar(description, existingDescription, descSource, existingDescriptionSource, forceRefresh) {
+			if !keepOwnersBookValue(ownsBook, descSource, existingDescriptionSource, forceRefresh) && shouldUpdateScalar(description, existingDescription, descSource, existingDescriptionSource, bookRules) {
 				logInfo("updating book description", nil)
 				book.Description = &description
 				book.DescriptionSource = &descSource
@@ -1176,7 +1231,7 @@ func (w *Worker) scanFileCore(
 			}
 
 			authorSource := metadata.SourceForField("authors")
-			if !keepOwnersBookValue(ownsBook, authorSource, book.AuthorSource, forceRefresh) && shouldUpdateRelationship(authorNames, existingAuthorNames, authorSource, book.AuthorSource, forceRefresh) {
+			if !keepOwnersBookValue(ownsBook, authorSource, book.AuthorSource, forceRefresh) && shouldUpdateRelationship(authorNames, existingAuthorNames, authorSource, book.AuthorSource, bookRules) {
 				logInfo("updating authors", logger.Data{"new_count": len(metadata.Authors), "old_count": len(book.Authors)})
 
 				// Collect authors for batch insert (replaces immediate delete + create)
@@ -1276,7 +1331,7 @@ func (w *Worker) scanFileCore(
 			// membership on every scan.
 			metadata.Series = w.canonicalAttachedSeriesName(ctx, metadata.Series, book)
 			seriesSource := metadata.SourceForField("series")
-			if !keepOwnersBookValue(ownsBook, seriesSource, existingSeriesSource, forceRefresh) && shouldUpdateParsedSeries(metadata, book.BookSeries, existingSeriesSource, forceRefresh) {
+			if !keepOwnersBookValue(ownsBook, seriesSource, existingSeriesSource, forceRefresh) && shouldUpdateParsedSeries(metadata, book.BookSeries, existingSeriesSource, bookRules) {
 				logInfo("updating series", logger.Data{"new_count": 1, "old_count": len(book.BookSeries)})
 
 				// Collect series for batch insert (replaces immediate delete + create)
@@ -1399,7 +1454,7 @@ func (w *Worker) scanFileCore(
 			sort.Strings(existingGenreNames)
 
 			genreSource := metadata.SourceForField("genres")
-			if !keepOwnersBookValue(ownsBook, genreSource, existingGenreSource, forceRefresh) && shouldUpdateRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, forceRefresh) {
+			if !keepOwnersBookValue(ownsBook, genreSource, existingGenreSource, forceRefresh) && shouldUpdateRelationship(metadata.Genres, existingGenreNames, genreSource, existingGenreSource, bookRules) {
 				logInfo("updating genres", logger.Data{"new_count": len(metadata.Genres), "old_count": len(book.BookGenres)})
 
 				// Collect genres for batch insert (replaces immediate delete + create)
@@ -1500,7 +1555,7 @@ func (w *Worker) scanFileCore(
 			sort.Strings(existingTagNames)
 
 			tagSource := metadata.SourceForField("tags")
-			if !keepOwnersBookValue(ownsBook, tagSource, existingTagSource, forceRefresh) && shouldUpdateRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, forceRefresh) {
+			if !keepOwnersBookValue(ownsBook, tagSource, existingTagSource, forceRefresh) && shouldUpdateRelationship(metadata.Tags, existingTagNames, tagSource, existingTagSource, bookRules) {
 				logInfo("updating tags", logger.Data{"new_count": len(metadata.Tags), "old_count": len(book.BookTags)})
 
 				// Collect tags for batch insert (replaces immediate delete + create)
@@ -1609,7 +1664,7 @@ func (w *Worker) scanFileCore(
 			existingNameSource = *file.NameSource
 		}
 		nameSource := metadata.SourceForField("title")
-		if shouldUpdateScalar(newFileName, existingName, nameSource, existingNameSource, forceRefresh) {
+		if shouldUpdateScalar(newFileName, existingName, nameSource, existingNameSource, fileRules) {
 			logInfo("updating file name", logger.Data{"from": existingName, "to": newFileName})
 			file.Name = &newFileName
 			file.NameSource = &nameSource
@@ -1645,7 +1700,7 @@ func (w *Worker) scanFileCore(
 			existingURLSource = *file.URLSource
 		}
 		urlSource := metadata.SourceForField("url")
-		if shouldUpdateScalar(metadata.URL, existingURL, urlSource, existingURLSource, forceRefresh) {
+		if shouldUpdateScalar(metadata.URL, existingURL, urlSource, existingURLSource, fileRules) {
 			logInfo("updating file URL", logger.Data{"from": existingURL, "to": metadata.URL})
 			file.URL = &metadata.URL
 			file.URLSource = &urlSource
@@ -1683,7 +1738,7 @@ func (w *Worker) scanFileCore(
 			existingDateStr = file.ReleaseDate.Format("2006-01-02")
 		}
 		releaseDateSource := metadata.SourceForField("releaseDate")
-		if shouldUpdateScalar(newDateStr, existingDateStr, releaseDateSource, existingReleaseDateSource, forceRefresh) {
+		if shouldUpdateScalar(newDateStr, existingDateStr, releaseDateSource, existingReleaseDateSource, fileRules) {
 			logInfo("updating file release date", logger.Data{"from": existingDateStr, "to": newDateStr})
 			file.ReleaseDate = metadata.ReleaseDate
 			file.ReleaseDateSource = &releaseDateSource
@@ -1724,7 +1779,7 @@ func (w *Worker) scanFileCore(
 			existingLanguageSource = *file.LanguageSource
 		}
 		langSource := metadata.SourceForField("language")
-		if shouldUpdateScalar(*metadata.Language, existingLanguage, langSource, existingLanguageSource, forceRefresh) {
+		if shouldUpdateScalar(*metadata.Language, existingLanguage, langSource, existingLanguageSource, fileRules) {
 			logInfo("updating file language", logger.Data{"from": existingLanguage, "to": *metadata.Language})
 			file.Language = metadata.Language
 			file.LanguageSource = &langSource
@@ -1768,7 +1823,7 @@ func (w *Worker) scanFileCore(
 			}
 		}
 		abridgedSource := metadata.SourceForField("abridged")
-		if shouldUpdateScalar(newAbridgedStr, existingAbridgedStr, abridgedSource, existingAbridgedSource, forceRefresh) {
+		if shouldUpdateScalar(newAbridgedStr, existingAbridgedStr, abridgedSource, existingAbridgedSource, fileRules) {
 			logInfo("updating file abridged", logger.Data{"from": existingAbridgedStr, "to": newAbridgedStr})
 			file.Abridged = metadata.Abridged
 			file.AbridgedSource = &abridgedSource
@@ -1814,7 +1869,7 @@ func (w *Worker) scanFileCore(
 		}
 		if metadata.ReadingDirection != nil && models.IsReadingDirection(*metadata.ReadingDirection) {
 			directionSource := metadata.SourceForField("readingDirection")
-			if shouldUpdateScalar(*metadata.ReadingDirection, existingDirection, directionSource, existingDirectionSource, forceRefresh) {
+			if shouldUpdateScalar(*metadata.ReadingDirection, existingDirection, directionSource, existingDirectionSource, fileRules) {
 				logInfo("updating file reading direction", logger.Data{"from": existingDirection, "to": *metadata.ReadingDirection})
 				file.ReadingDirection = metadata.ReadingDirection
 				file.ReadingDirectionSource = &directionSource
@@ -1844,7 +1899,7 @@ func (w *Worker) scanFileCore(
 			existingPublisherSource = *file.PublisherSource
 		}
 		pubSource := metadata.SourceForField("publisher")
-		if shouldUpdateScalar(publisherName, existingPublisherName, pubSource, existingPublisherSource, forceRefresh) {
+		if shouldUpdateScalar(publisherName, existingPublisherName, pubSource, existingPublisherSource, fileRules) {
 			var publisher *models.Publisher
 			var err error
 			if cache != nil {
@@ -2005,7 +2060,7 @@ func (w *Worker) scanFileCore(
 		}
 
 		narratorSource := metadata.SourceForField("narrators")
-		if shouldUpdateRelationship(metadata.Narrators, existingNarratorNames, narratorSource, existingNarratorSource, forceRefresh) {
+		if shouldUpdateRelationship(metadata.Narrators, existingNarratorNames, narratorSource, existingNarratorSource, fileRules) {
 			logInfo("updating narrators", logger.Data{"new_count": len(metadata.Narrators), "old_count": len(file.Narrators)})
 
 			// Collect narrators for batch insert (replaces immediate delete + create)
@@ -2146,7 +2201,7 @@ func (w *Worker) scanFileCore(
 		newIdentifierValues := parsedIdentifierKeys(metadata.Identifiers)
 
 		identifierSource := metadata.SourceForField("identifiers")
-		updateIdentifiers := shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, forceRefresh)
+		updateIdentifiers := shouldUpdateRelationship(newIdentifierValues, existingIdentifierValues, identifierSource, existingIdentifierSource, fileRules)
 		if !updateIdentifiers && equalStringSlices(newIdentifierValues, existingIdentifierValues) {
 			updateIdentifiers = identifierAttributionStale(file.Identifiers, existingIdentifierSource, metadata.Identifiers, identifierSource, forceRefresh)
 		}
@@ -2344,13 +2399,11 @@ func (w *Worker) scanFileCore(
 			existingCoverSource = *file.CoverSource
 		}
 
-		metadataPriority := models.GetDataSourcePriority(metadataCoverSource)
-		existingPriority := models.GetDataSourcePriority(existingCoverSource)
-		if existingCoverSource == "" {
-			existingPriority = models.GetDataSourcePriority(models.DataSourceFilepath)
-		}
+		metadataPriority := fileRules.priority(metadataCoverSource)
+		existingPriority := fileRules.priority(existingCoverSource)
 
-		shouldApply := metadataPriority <= existingPriority
+		shouldApply := metadataPriority <= existingPriority &&
+			!fileRules.keepsStoredPluginValue(metadataPriority, existingPriority)
 		isDifferent := file.CoverPage == nil || *file.CoverPage != *metadata.CoverPage
 
 		if shouldApply && isDifferent {
@@ -2737,23 +2790,32 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		return nil, errors.Wrap(err, "failed to reload book")
 	}
 
+	// The File is new; its Book may already be in the library. The parser's
+	// source is taken before enrichment adds plugin sources.
+	createState := fileScanState{bookKnown: existingBook != nil}
+	if metadata != nil {
+		createState.parserSource = metadata.DataSource
+	}
+	_, createFileRules := createState.rules(opts.ForceRefresh)
+
 	// Run metadata enrichers after parsing
 	if !opts.SkipPlugins {
 		metadata = w.runMetadataEnrichers(ctx, metadata, file, book, opts.LibraryID, opts.JobLog)
 	}
 
 	// Apply enricher cover if it's higher resolution than the current cover
-	w.upgradeEnricherCover(ctx, metadata, file, bookPath, opts.JobLog)
+	w.upgradeEnricherCover(ctx, metadata, file, bookPath, createFileRules, opts.JobLog)
 
 	// Use scanFileCore to handle all metadata updates (authors, series, etc.)
 	// This is a batch scan (FilePath mode), so pass isResync=false to skip book organization
-	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, false, opts.JobLog, cache)
+	result, err := w.scanFileCore(ctx, file, book, metadata, opts.ForceRefresh, createState, false, opts.JobLog, cache)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to update metadata")
 	}
 
 	// Mark as file created
 	result.FileCreated = true
+	result.BookCreated = existingBook == nil
 
 	// Discover and create supplement files
 	w.discoverAndCreateSupplements(ctx, book, path, isRootLevelFile, opts.LibraryID, library, opts.JobLog)
@@ -3234,6 +3296,7 @@ func (w *Worker) upgradeEnricherCover(
 	metadata *mediafile.ParsedMetadata,
 	file *models.File,
 	bookFilepath string,
+	rules scanRules,
 	jobLog *joblogs.JobLogger,
 ) {
 	log := logger.FromContext(ctx)
@@ -3265,6 +3328,16 @@ func (w *Worker) upgradeEnricherCover(
 
 	// 3. Skip for page-based file types — they derive covers from page content
 	if models.IsPageBasedFileType(file.FileType) {
+		return
+	}
+
+	// 3b. Keep a cover the user, a sidecar, or (on a rescan) a plugin chose.
+	// Only a cover from the file itself is upgraded (ADR 0027).
+	existingCoverSource := ""
+	if file.CoverSource != nil {
+		existingCoverSource = *file.CoverSource
+	}
+	if rules.keepsStoredCover(existingCoverSource) {
 		return
 	}
 

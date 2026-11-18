@@ -162,15 +162,40 @@ func TestScanSeries_HybridBookKeepsManualMembership(t *testing.T) {
 	assert.Equal(t, &manual, book.SeriesSource)
 }
 
+// syncDiskToStoredMetadata organizes a Book's files and rewrites its sidecars
+// from the stored metadata, as an edit through the API does. Tests that change
+// the database directly call it so the files on disk match the new state.
+func syncDiskToStoredMetadata(t *testing.T, tc *testContext, bookID int) {
+	t.Helper()
+	book, err := tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	require.NoError(t, tc.bookService.OrganizeBookFiles(tc.ctx, book))
+	book, err = tc.bookService.RetrieveBook(tc.ctx, books.RetrieveBookOptions{ID: &bookID})
+	require.NoError(t, err)
+	require.NoError(t, sidecar.WriteBookSidecarFromModel(book))
+	for _, file := range book.Files {
+		require.NoError(t, sidecar.WriteFileSidecarFromModel(file))
+	}
+}
+
+// unfillSeries puts a Book's series memberships in the state of a field that
+// was never filled, or of an install migrated from before Identify clears
+// left a protected empty slot: no memberships and a NULL series_source, with
+// the organized folder and sidecars to match. A Scan may fill it from the
+// file's embedded metadata.
+func unfillSeries(t *testing.T, tc *testContext, bookID int) {
+	t.Helper()
+	require.NoError(t, tc.bookService.DeleteBookSeries(tc.ctx, bookID))
+	_, err := tc.db.NewRaw("UPDATE books SET series_source = NULL WHERE id = ?", bookID).Exec(tc.ctx)
+	require.NoError(t, err)
+	syncDiskToStoredMetadata(t, tc, bookID)
+}
+
 // Restoring a CBZ membership during a scan is path-affecting: the organized
 // folder must regain its series number suffix.
 func TestScanSeries_RestoredMembershipReorganizesCBZFolder(t *testing.T) {
 	t.Parallel()
-	pluginDir := t.TempDir()
-	tc := newTestContextWithPlugins(t, pluginDir)
-	// The apply route needs a loaded plugin to attribute to; this one proposes nothing.
-	installTestPlugin(t, tc, pluginDir, "series-enricher", identifySeriesEnricherManifest, `var plugin = {metadataEnricher: {search: function(ctx) {return {results: []};}}};`)
-	require.NoError(t, tc.worker.pluginManager.LoadAll(tc.ctx))
+	tc := newTestContext(t)
 	libraryPath := testgen.TempLibraryDir(t)
 	tc.createLibraryWithOptions([]string{libraryPath}, true)
 	number := 1.0
@@ -182,14 +207,11 @@ func TestScanSeries_RestoredMembershipReorganizesCBZFolder(t *testing.T) {
 	require.Equal(t, []string{"Comic Run|1||"}, membershipSummary(book))
 	organizedFileName := filepath.Base(file.Filepath)
 
-	postIdentifyApply(t, newIdentifyApplyServer(t, tc), plugins.PluginApplyPayload{
-		BookID: book.ID, FileID: &file.ID,
-		Fields:  map[string]any{"series": []any{}},
-		Sources: map[string]string{"series": plugins.SourceIntentUser}, PluginScope: "test", PluginID: "series-enricher",
-	})
+	unfillSeries(t, tc, book.ID)
 	book, file = f.retrieve(t)
 	require.Empty(t, book.BookSeries)
-	require.Equal(t, "[QA Comics] Comic Run", filepath.Base(book.Filepath), "precondition: the clear removed the suffix")
+	require.Nil(t, book.SeriesSource)
+	require.Equal(t, "[QA Comics] Comic Run", filepath.Base(book.Filepath), "precondition: organizing without the membership removed the suffix")
 
 	f.ordinaryScan(t, file.ID)
 	book, file = f.retrieve(t)
@@ -203,10 +225,7 @@ func TestScanSeries_RestoredMembershipReorganizesCBZFolder(t *testing.T) {
 // restored while scanning its EPUB is path-affecting too.
 func TestScanSeries_RestoredMembershipReorganizesHybridCBZFolder(t *testing.T) {
 	t.Parallel()
-	pluginDir := t.TempDir()
-	tc := newTestContextWithPlugins(t, pluginDir)
-	installTestPlugin(t, tc, pluginDir, "series-enricher", identifySeriesEnricherManifest, `var plugin = {metadataEnricher: {search: function(ctx) {return {results: []};}}};`)
-	require.NoError(t, tc.worker.pluginManager.LoadAll(tc.ctx))
+	tc := newTestContext(t)
 	libraryPath := testgen.TempLibraryDir(t)
 	tc.createLibraryWithOptions([]string{libraryPath}, true)
 	bookDir := testgen.CreateSubDir(t, libraryPath, "Comic Run")
@@ -229,17 +248,14 @@ func TestScanSeries_RestoredMembershipReorganizesHybridCBZFolder(t *testing.T) {
 		t.Fatal("no EPUB file")
 		return nil, nil
 	}
-	book, epub := retrieve()
+	book, _ := retrieve()
 	require.Equal(t, "[QA Comics] Comic Run v001", filepath.Base(book.Filepath), "precondition: hybrid book uses CBZ folder naming")
 
-	postIdentifyApply(t, newIdentifyApplyServer(t, tc), plugins.PluginApplyPayload{
-		BookID: book.ID, FileID: &epub.ID,
-		Fields:  map[string]any{"series": []any{}},
-		Sources: map[string]string{"series": plugins.SourceIntentUser}, PluginScope: "test", PluginID: "series-enricher",
-	})
-	book, epub = retrieve()
+	unfillSeries(t, tc, book.ID)
+	book, epub := retrieve()
 	require.Empty(t, book.BookSeries)
-	require.Equal(t, "[QA Comics] Comic Run", filepath.Base(book.Filepath), "precondition: the clear removed the suffix")
+	require.Nil(t, book.SeriesSource)
+	require.Equal(t, "[QA Comics] Comic Run", filepath.Base(book.Filepath), "precondition: organizing without the membership removed the suffix")
 
 	// Only the EPUB is rescanned; it carries the series and is not itself a CBZ.
 	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: epub.ID}, nil)

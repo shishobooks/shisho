@@ -140,13 +140,13 @@ During a scan, metadata precedence is:
 | | Embedded file metadata |
 | Lowest | Filepath-derived metadata |
 
-A sidecar can override plugin, embedded, and filepath values, but it does not override a field that still has manual priority in the database. See [Metadata](./metadata.md) for rescan and priority behavior.
+A sidecar can override plugin, embedded, and filepath values, but it does not override a field that still has manual priority in the database. Because Shisho writes the sidecars itself, a sidecar value that matches what Shisho has saved is treated as Shisho's own copy and does not block a plugin. Only a value that differs, such as one from another library or one you edited on disk, takes priority. See [Metadata](./metadata.md) for rescan and priority behavior.
 
 Names for authors, narrators, series, genres, tags, and publishers use Shisho's normal alias resolution. A sidecar name that matches an alias resolves to the existing canonical resource instead of creating a duplicate.
 
 ## Reading and Writing
 
-Library scans read sidecars and then write the resulting current metadata back to sidecars. Metadata edits in Shisho also write the affected sidecars. These writes are best-effort: a failed write does not roll back the scan or edit, and Shisho records the failure in its logs.
+Library scans read sidecars and then write the resulting current metadata back to sidecars. Metadata edits in Shisho also write the affected sidecars. Renaming or merging a person, series, genre, tag, or publisher rewrites the sidecars of every book that names it in a background job, which shows under **Administration > Jobs** and can take a while for a name used by many books. Until the job reaches a book, a scan of that book rewrites its sidecars before reading them, so the sidecar doesn't bring the old name back. Because the rewrite comes from what Shisho has stored, an edit you made by hand to one of those sidecars and haven't scanned yet is overwritten. These writes are best-effort: a failed write does not roll back the scan or edit, and Shisho records the failure in its logs.
 
 The operating-system account running Shisho needs write permission to the media directories. In a container deployment, verify both the mounted path's permissions and that the mount is not read-only. See [Deployment and Maintenance](./deployment-and-maintenance.md).
 

@@ -20,12 +20,47 @@ import (
 	"github.com/shishobooks/shisho/pkg/sortspec"
 )
 
+// SidecarWriter marks the sidecars of every Book that holds a publisher stale,
+// after a rename or merge changes the name they record, and queues the job
+// that rewrites them (ADR 0027). books.Service implements it; the interface
+// breaks the import cycle.
+type SidecarWriter interface {
+	MarkSidecarsStaleForPublisher(ctx context.Context, publisherID int)
+	SidecarBooksForPublisher(ctx context.Context, publisherID int) []int
+	MarkBookSidecarsStale(ctx context.Context, bookIDs []int)
+}
+
 type handler struct {
 	publisherService *Service
 	bookPreviews     *bookpreviews.Service
 	aliasService     *aliases.Service
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
+	sidecars         SidecarWriter // nil in tests that don't cover sidecars
+}
+
+// writeSidecars queues a rewrite of the publisher's Books' sidecars, if
+// configured.
+func (h *handler) writeSidecars(ctx context.Context, publisherID int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkSidecarsStaleForPublisher(ctx, publisherID)
+	}
+}
+
+// sidecarBooks lists the Books whose sidecars name the publisher, for a merge to
+// collect before it re-points them.
+func (h *handler) sidecarBooks(ctx context.Context, publisherID int) []int {
+	if h.sidecars == nil {
+		return nil
+	}
+	return h.sidecars.SidecarBooksForPublisher(ctx, publisherID)
+}
+
+// markBookSidecars queues a rewrite of the Books' sidecars after a merge.
+func (h *handler) markBookSidecars(ctx context.Context, bookIDs []int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkBookSidecarsStale(ctx, bookIDs)
+	}
 }
 
 // setParentError renders a SetParent failure. A parent the hierarchy cannot
@@ -299,7 +334,7 @@ func (h *handler) update(c echo.Context) error {
 		}
 	}
 
-	if params.Name != nil && *params.Name != publisher.Name {
+	if params.Name != nil && strings.TrimSpace(*params.Name) != publisher.Name {
 		newName := strings.TrimSpace(*params.Name)
 		if newName == "" {
 			return errcodes.ValidationError("Publisher name cannot be empty")
@@ -321,10 +356,13 @@ func (h *handler) update(c echo.Context) error {
 			}
 
 			affected.PublisherIDs = append(affected.PublisherIDs, existing.ID)
+			// Only the renamed publisher's Books name the old name.
+			mergedBooks := h.sidecarBooks(ctx, id)
 			err = h.publisherService.MergePublishers(ctx, existing.ID, id)
 			if err != nil {
 				return errors.WithStack(err)
 			}
+			h.markBookSidecars(ctx, mergedBooks)
 
 			// Re-retrieve to pick up parent_id change
 			existing, err = h.publisherService.RetrievePublisher(ctx, RetrievePublisherOptions{ID: &existing.ID})
@@ -344,6 +382,7 @@ func (h *handler) update(c echo.Context) error {
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		h.writeSidecars(ctx, id)
 	}
 
 	if params.Aliases != nil {
@@ -440,9 +479,12 @@ func (h *handler) merge(c echo.Context) error {
 	affected := h.searchService.CollectAffected(ctx, search.Affected{PublisherIDs: []int{id, params.SourceID}})
 	defer h.searchService.ReindexAffected(ctx, affected)
 
+	// Only the source's Books name the source's name.
+	mergedBooks := h.sidecarBooks(ctx, params.SourceID)
 	if err := h.publisherService.MergePublishers(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
+	h.markBookSidecars(ctx, mergedBooks)
 
 	return c.NoContent(http.StatusNoContent)
 }

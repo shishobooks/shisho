@@ -66,28 +66,32 @@ func newRelationshipApplyFixture(t *testing.T) *identifyScanFixture {
 	return f
 }
 
-func TestIdentifyRelationships_ClearRemovesSource(t *testing.T) {
+// A complete clear leaves protected empty collections: no entries, with a
+// manual source, even when the clear carries plugin intent.
+func TestIdentifyRelationships_ClearLeavesProtectedEmptySlot(t *testing.T) {
 	t.Parallel()
 	f := newRelationshipApplyFixture(t)
 	book, file := f.retrieve(t)
 	postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
 		BookID: book.ID, FileID: &file.ID,
 		Fields:  map[string]any{"authors": []any{}, "genres": []any{}, "tags": []any{}, "narrators": []any{}},
-		Sources: relationshipIntents(plugins.SourceIntentUser), PluginScope: "test", PluginID: "auto-enricher",
+		Sources: relationshipIntents(plugins.SourceIntentPlugin), PluginScope: "test", PluginID: "auto-enricher",
 	})
 	book, file = f.retrieve(t)
+	manual := models.DataSourceManual
 	assert.Empty(t, book.Authors)
 	assert.Empty(t, book.BookGenres)
 	assert.Empty(t, book.BookTags)
 	assert.Empty(t, file.Narrators)
-	assert.Empty(t, book.AuthorSource)
-	assert.Nil(t, book.GenreSource)
-	assert.Nil(t, book.TagSource)
-	assert.Nil(t, file.NarratorSource)
-	// AuthorSource is represented as a nullzero string by the model.
+	assert.Equal(t, manual, book.AuthorSource)
+	assert.Equal(t, &manual, book.GenreSource)
+	assert.Equal(t, &manual, book.TagSource)
+	assert.Equal(t, &manual, file.NarratorSource)
+	// AuthorSource is represented as a nullzero string by the model, so read
+	// the column to see what is stored.
 	var source *string
 	require.NoError(t, f.tc.db.NewRaw("SELECT author_source FROM books WHERE id = ?", book.ID).Scan(f.tc.ctx, &source))
-	assert.Nil(t, source)
+	assert.Equal(t, &manual, source)
 }
 
 func TestIdentifyRelationships_NoOpPreservesSourceWithoutWrites(t *testing.T) {

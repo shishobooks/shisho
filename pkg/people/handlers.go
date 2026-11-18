@@ -36,6 +36,16 @@ type FileOrganizer interface {
 	GetLibraryOrganizeSetting(ctx context.Context, libraryID int) (bool, error)
 }
 
+// SidecarWriter marks the sidecars of every Book that holds a person stale,
+// after a rename or merge changes the name they record, and queues the job
+// that rewrites them (ADR 0027). books.Service implements it; the interface
+// breaks the import cycle.
+type SidecarWriter interface {
+	MarkSidecarsStaleForPerson(ctx context.Context, personID int)
+	SidecarBooksForPerson(ctx context.Context, personID int) []int
+	MarkBookSidecarsStale(ctx context.Context, bookIDs []int)
+}
+
 type handler struct {
 	personService    *Service
 	bookPreviews     *bookpreviews.Service
@@ -43,6 +53,30 @@ type handler struct {
 	searchService    *search.Service
 	reviewRecomputer review.BookReviewRecomputer
 	fileOrganizer    FileOrganizer // optional, can be nil if not configured
+	sidecars         SidecarWriter // nil in tests that don't cover sidecars
+}
+
+// writeSidecars queues a rewrite of the person's Books' sidecars, if configured.
+func (h *handler) writeSidecars(ctx context.Context, personID int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkSidecarsStaleForPerson(ctx, personID)
+	}
+}
+
+// sidecarBooks lists the Books whose sidecars name the person, for a merge
+// to collect before it re-points them.
+func (h *handler) sidecarBooks(ctx context.Context, personID int) []int {
+	if h.sidecars == nil {
+		return nil
+	}
+	return h.sidecars.SidecarBooksForPerson(ctx, personID)
+}
+
+// markBookSidecars queues a rewrite of the Books' sidecars after a merge.
+func (h *handler) markBookSidecars(ctx context.Context, bookIDs []int) {
+	if h.sidecars != nil {
+		h.sidecars.MarkBookSidecarsStale(ctx, bookIDs)
+	}
 }
 
 // buildPersonResponse adds the authored book count, the narrated file count,
@@ -246,6 +280,14 @@ func (h *handler) update(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	if nameChanged {
+		// Marked as soon as the rename commits, so a rejected alias list
+		// below still leaves the Books marked, and again on the way out, after
+		// organizing, which can take long enough for a job pass to clear the
+		// first mark mid-way.
+		h.writeSidecars(ctx, id)
+		defer h.writeSidecars(ctx, id)
+	}
 
 	// Sync aliases if provided
 	if params.Aliases != nil {
@@ -395,9 +437,12 @@ func (h *handler) merge(c echo.Context) error {
 	defer h.searchService.ReindexAffected(ctx, affected)
 
 	// Merge source person into target (this) person
+	// Only the source's Books name the source's name.
+	mergedBooks := h.sidecarBooks(ctx, params.SourceID)
 	if err := h.personService.MergePeople(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
 	}
+	h.markBookSidecars(ctx, mergedBooks)
 
 	return c.NoContent(http.StatusNoContent)
 }

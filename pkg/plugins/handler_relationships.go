@@ -34,7 +34,7 @@ func (h *handler) applyAuthors(ctx context.Context, book *models.Book, proposed 
 	same := slices.EqualFunc(book.Authors, resolved, func(a, b *models.Author) bool {
 		return a.PersonID == b.PersonID && roleValue(a.Role) == roleValue(b.Role)
 	})
-	if same && (len(resolved) > 0 || book.AuthorSource == "") {
+	if same && (len(resolved) > 0 || emptySlotSettled(&book.AuthorSource)) {
 		return nil
 	}
 	if !same {
@@ -52,12 +52,9 @@ func (h *handler) applyAuthors(ctx context.Context, book *models.Book, proposed 
 			}
 		}
 	}
-	// author_source is nullable, but the Go field is a nullzero string, so ""
-	// writes NULL.
-	book.AuthorSource = ""
-	if len(resolved) > 0 {
-		book.AuthorSource = attr.sourceFor("authors")
-	}
+	// A complete clear leaves a protected empty collection (see
+	// clearedSource).
+	book.AuthorSource = *collectionSource(len(resolved), attr.sourceFor("authors"))
 	if err := h.enrich.bookStore.UpdateBook(ctx, book, []string{"author_source"}); err != nil {
 		return errors.Wrap(err, "failed to update author source")
 	}
@@ -92,7 +89,7 @@ func (h *handler) applyGenres(ctx context.Context, book *models.Book, proposed [
 		ids[id] = struct{}{}
 	}
 	same := equalIntSets(old, ids)
-	if same && (len(resolved) > 0 || book.GenreSource == nil) {
+	if same && (len(resolved) > 0 || emptySlotSettled(book.GenreSource)) {
 		return nil
 	}
 	if !same {
@@ -138,7 +135,7 @@ func (h *handler) applyTags(ctx context.Context, book *models.Book, proposed []s
 		ids[id] = struct{}{}
 	}
 	same := equalIntSets(old, ids)
-	if same && (len(resolved) > 0 || book.TagSource == nil) {
+	if same && (len(resolved) > 0 || emptySlotSettled(book.TagSource)) {
 		return nil
 	}
 	if !same {
@@ -177,7 +174,7 @@ func (h *handler) applyNarrators(ctx context.Context, libraryID int, file *model
 		resolved = append(resolved, &models.Narrator{FileID: file.ID, PersonID: person.ID, Person: person, SortOrder: len(resolved) + 1})
 	}
 	same := slices.EqualFunc(file.Narrators, resolved, func(a, b *models.Narrator) bool { return a.PersonID == b.PersonID })
-	if same && (len(resolved) > 0 || file.NarratorSource == nil) {
+	if same && (len(resolved) > 0 || emptySlotSettled(file.NarratorSource)) {
 		return false, nil
 	}
 	if !same {
@@ -199,9 +196,11 @@ func (h *handler) applyNarrators(ctx context.Context, libraryID int, file *model
 	return true, nil
 }
 
+// collectionSource is the source a collection of length entries is stored
+// with: an empty one, a complete clear, leaves a protected empty collection.
 func collectionSource(length int, source string) *string {
 	if length == 0 {
-		return nil
+		return clearedSource()
 	}
 	return &source
 }
@@ -256,7 +255,7 @@ func (h *handler) applySeries(ctx context.Context, book *models.Book, entries []
 	}
 
 	same := slices.EqualFunc(book.BookSeries, resolved, sameSeriesMembership)
-	if same && (len(resolved) > 0 || book.SeriesSource == nil) {
+	if same && (len(resolved) > 0 || emptySlotSettled(book.SeriesSource)) {
 		return nil
 	}
 	if !same {

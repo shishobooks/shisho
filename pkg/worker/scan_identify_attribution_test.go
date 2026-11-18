@@ -62,9 +62,9 @@ const identifyTestEnricherManifest = `{
   "version": "1.0.0",
   "capabilities": {
     "metadataEnricher": {
-      "description": "Proposes a description, publisher, and identifiers",
+      "description": "Proposes a description, publisher, genres, and identifiers",
       "fileTypes": ["idtest"],
-      "fields": ["description", "publisher", "identifiers"]
+      "fields": ["description", "publisher", "genres", "identifiers"]
     }
   }
 }`
@@ -78,6 +78,7 @@ const identifyTestEnricherJS = `var plugin = (function() {
         return { results: [{
           description: "Plugin description",
           publisher: "Plugin Publisher",
+          genres: ["Plugin Genre"],
           identifiers: [{ type: "isbn_13", value: "9780316769488" }, { type: "asin", value: "B01ABC1234" }]
         }] };
       }
@@ -224,14 +225,15 @@ func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
 	require.Equal(t, models.DataSourceManual, *book.DescriptionSource)
 	require.Equal(t, "My Publisher", file.Publisher.Name)
 	require.Equal(t, models.DataSourceManual, *file.PublisherSource)
+	// An Explicit Clear leaves a protected empty slot, as the Edit form does.
 	require.Nil(t, book.Subtitle)
-	require.Nil(t, book.SubtitleSource)
+	require.Equal(t, models.DataSourceManual, *book.SubtitleSource)
 	require.Nil(t, file.URL)
-	require.Nil(t, file.URLSource)
+	require.Equal(t, models.DataSourceManual, *file.URLSource)
 	require.Nil(t, file.ReleaseDate)
-	require.Nil(t, file.ReleaseDateSource)
+	require.Equal(t, models.DataSourceManual, *file.ReleaseDateSource)
 	require.Nil(t, file.Language)
-	require.Nil(t, file.LanguageSource)
+	require.Equal(t, models.DataSourceManual, *file.LanguageSource)
 
 	f.ordinaryScan(t, file.ID)
 
@@ -241,18 +243,16 @@ func TestIdentifyApply_ThenOrdinaryScan(t *testing.T) {
 	assert.Equal(t, "My Publisher", file.Publisher.Name, "a manual Identify edit must survive auto-enrichment")
 	assert.Equal(t, models.DataSourceManual, *file.PublisherSource)
 
-	require.NotNil(t, book.Subtitle, "a cleared subtitle must be repopulated from embedded metadata")
-	assert.Equal(t, "Embedded Subtitle", *book.Subtitle)
-	require.NotNil(t, file.URL, "a cleared URL must be repopulated from embedded metadata")
-	assert.Equal(t, "https://example.com/embedded", *file.URL)
-	require.NotNil(t, file.ReleaseDate, "a cleared release date must be repopulated from embedded metadata")
-	assert.Equal(t, "2020-01-02", file.ReleaseDate.UTC().Format("2006-01-02"))
-	require.NotNil(t, file.Language, "a cleared language must be repopulated from embedded metadata")
-	assert.Equal(t, "en", *file.Language)
+	assert.Nil(t, book.Subtitle, "a cleared subtitle must stay empty")
+	assert.Nil(t, file.URL, "a cleared URL must stay empty")
+	assert.Nil(t, file.ReleaseDate, "a cleared release date must stay empty")
+	assert.Nil(t, file.Language, "a cleared language must stay empty")
 }
 
 // TestIdentifyApply_ClearedEnricherFields_ThenOrdinaryScan covers the cleared
-// fields the first test spends on manual edits, plus Abridged.
+// fields the first test spends on manual edits, plus Abridged. Clearing a
+// value a bad match set must hold, or the next Scan's automatic search could
+// put it back.
 func TestIdentifyApply_ClearedEnricherFields_ThenOrdinaryScan(t *testing.T) {
 	t.Parallel()
 
@@ -276,19 +276,69 @@ func TestIdentifyApply_ClearedEnricherFields_ThenOrdinaryScan(t *testing.T) {
 
 	book, file = f.retrieve(t)
 	require.Nil(t, book.Description)
-	require.Nil(t, book.DescriptionSource)
+	require.Equal(t, models.DataSourceManual, *book.DescriptionSource)
 	require.Nil(t, file.PublisherID)
-	require.Nil(t, file.PublisherSource)
+	require.Equal(t, models.DataSourceManual, *file.PublisherSource)
 	require.Nil(t, file.Abridged)
-	require.Nil(t, file.AbridgedSource)
+	require.Equal(t, models.DataSourceManual, *file.AbridgedSource)
 
 	f.ordinaryScan(t, file.ID)
 
 	book, file = f.retrieve(t)
-	require.NotNil(t, book.Description, "a cleared description must be repopulated by the next Scan")
+	assert.Nil(t, book.Description, "a cleared description must not be refilled by the plugin")
+	assert.Nil(t, file.Publisher, "a cleared publisher must not be refilled by the plugin")
+	assert.Nil(t, file.Abridged, "a cleared abridged flag must stay empty")
+}
+
+// TestIdentifyApply_ClearedCollections_ThenOrdinaryScan covers clearing a
+// relationship collection the plugin would fill again.
+func TestIdentifyApply_ClearedCollections_ThenOrdinaryScan(t *testing.T) {
+	t.Parallel()
+
+	f := newIdentifyScanFixture(t)
+	book, file := f.retrieve(t)
+
+	require.Len(t, book.BookGenres, 1, "precondition: the auto-enricher sets a genre")
+
+	postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
+		BookID:      book.ID,
+		FileID:      &file.ID,
+		Fields:      map[string]any{"genres": []any{}},
+		PluginScope: "test",
+		PluginID:    "auto-enricher",
+	})
+	book, _ = f.retrieve(t)
+	require.Empty(t, book.BookGenres)
+	require.Equal(t, models.DataSourceManual, *book.GenreSource)
+
+	f.ordinaryScan(t, file.ID)
+
+	book, _ = f.retrieve(t)
+	assert.Empty(t, book.BookGenres, "cleared genres must stay empty")
+}
+
+// TestIdentifyApply_ClearedField_RefreshFillsIt shows the protected empty slot
+// an Explicit Clear leaves is not permanent: Refresh all metadata fills it.
+func TestIdentifyApply_ClearedField_RefreshFillsIt(t *testing.T) {
+	t.Parallel()
+
+	f := newIdentifyScanFixture(t)
+	book, file := f.retrieve(t)
+	postIdentifyApply(t, newIdentifyApplyServer(t, f.tc), plugins.PluginApplyPayload{
+		BookID:      book.ID,
+		FileID:      &file.ID,
+		Fields:      map[string]any{"description": ""},
+		PluginScope: "test",
+		PluginID:    "auto-enricher",
+	})
+	f.ordinaryScan(t, file.ID)
+	book, _ = f.retrieve(t)
+	require.Nil(t, book.Description)
+
+	_, err := f.tc.worker.scanInternal(f.tc.ctx, ScanOptions{FileID: file.ID, ForceRefresh: true}, nil)
+	require.NoError(t, err)
+
+	book, _ = f.retrieve(t)
+	require.NotNil(t, book.Description)
 	assert.Equal(t, "Plugin description", *book.Description)
-	require.NotNil(t, file.Publisher, "a cleared publisher must be repopulated by the next Scan")
-	assert.Equal(t, "Plugin Publisher", file.Publisher.Name)
-	require.NotNil(t, file.Abridged, "a cleared abridged flag must be repopulated from embedded metadata")
-	assert.True(t, *file.Abridged)
 }

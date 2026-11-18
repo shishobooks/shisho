@@ -15,7 +15,7 @@ import (
 // configured with authentication and the resource's read permission.
 // reviewRecomputer is required; pass a books service with app settings
 // attached, or the delete handler's review recompute does nothing.
-func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer review.BookReviewRecomputer) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer review.BookReviewRecomputer, sidecars SidecarWriter) {
 	tagService := NewService(db)
 	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)
@@ -26,6 +26,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, 
 		aliasService:     aliasService,
 		searchService:    searchService,
 		reviewRecomputer: reviewRecomputer,
+		sidecars:         sidecars,
 	}
 
 	g.GET("", h.list)

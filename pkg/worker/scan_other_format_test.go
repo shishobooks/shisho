@@ -100,7 +100,7 @@ func (f *bookOwnerFixture) scan(t *testing.T, file *models.File, metadata *media
 	require.NoError(t, err)
 	loaded, err := f.tc.bookService.RetrieveFileWithRelations(f.tc.ctx, file.ID)
 	require.NoError(t, err)
-	_, err = f.tc.worker.scanFileCore(f.tc.ctx, loaded, book, metadata, forceRefresh, true, nil, nil)
+	_, err = f.tc.worker.scanFileCore(f.tc.ctx, loaded, book, metadata, forceRefresh, fileScanState{}, true, nil, nil)
 	require.NoError(t, err)
 	book, err = f.tc.bookService.RetrieveBook(f.tc.ctx, books.RetrieveBookOptions{ID: &f.book.ID})
 	require.NoError(t, err)

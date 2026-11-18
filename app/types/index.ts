@@ -25,6 +25,8 @@ export {
   ResyncModeScan,
   type ResyncPayload,
   type SeriesInput,
+  type SidecarImpactKind,
+  type SidecarImpactResponse,
   type UpdateBookPayload,
   type UpdateFileCoverPagePayload,
   type UpdateFilePayload,

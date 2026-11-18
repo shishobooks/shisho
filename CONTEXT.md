@@ -127,13 +127,13 @@ A metadata value or relationship collection suggested by a plugin during Identif
 When the user has not made an Explicit Clear, their final metadata result differs semantically from the current metadata and matches the Plugin Proposal. This remains a Proposal Acceptance if the user temporarily edited the proposal before restoring it, unless the final result is also a no-op against the current metadata.
 
 **Metadata Provenance**:
-The source responsible for establishing the current meaning of a metadata value or relationship. Under the Identify rules, a no-op preserves existing provenance, an Explicit Clear removes provenance, a Proposal Acceptance has plugin provenance, and any other changed nonempty result has manual provenance.
+The source responsible for establishing the current meaning of a metadata value or relationship. Under the Identify rules, a no-op preserves existing provenance, an Explicit Clear has manual provenance on the empty value, a Proposal Acceptance has plugin provenance, and any other changed nonempty result has manual provenance.
 
 **Relationship Provenance**:
 The provenance of a relationship collection as a whole. The Identify rules use Relationship Provenance for Authors, Genres, Tags, Narrators, and Series memberships. Identifiers additionally retain provenance for each entry.
 
 **Explicit Clear**:
-A user's deliberate removal of a metadata value or all entries in a relationship. Under the Identify rules, the resulting absence has no enduring provenance and may be repopulated by a later Scan.
+A user's deliberate removal of a metadata value or all entries in a relationship. The resulting absence is protected like a manual edit, so a later Scan leaves it empty; Refresh all metadata and Reset to file metadata can fill it (ADR 0027).
 
 **Merge**:
 Combining two resources of the same type into one, transferring all associations from the source to the target and deleting the source.
@@ -143,7 +143,7 @@ Re-running the scan pipeline for an existing book or file, in one of three modes
 _Avoid_: rescan (in new code; some existing identifiers, comments, and docs/UI copy still say "Rescan")
 
 **Sidecar**:
-A `.metadata.json` file placed alongside a book or file that provides metadata overrides.
+A `.metadata.json` file placed alongside a book or file that provides metadata overrides. Shisho rewrites it after every Scan and edit, so a Sidecar field that matches what is stored is only Shisho's copy; only a field that differs, such as one carried over from another library or edited on disk, outranks plugins (ADR 0027).
 
 ### Sharing
 

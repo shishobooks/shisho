@@ -20,6 +20,8 @@ Viewing this page, including installed plugins, their settings, and the Discover
 
 An incompatible plugin version cannot be installed. A repository can provide several versions, but Shisho installs the first compatible version listed in its index.
 
+A metadata enricher runs on books as they are scanned, and a normal scan skips files that haven't changed. After you install one while any library has books, Shisho offers to enrich your existing books; see [Scanning a Library for New Metadata](../libraries.md#scanning-a-library-for-new-metadata).
+
 :::warning[Install only plugins you trust]
 A plugin executes code on the Shisho server. The sandbox limits access, but capabilities can grant network access, broad filesystem access, FFmpeg access, or specific executable commands. The installation dialog shows capabilities supplied by the repository publisher; Shisho does not verify that this preview matches the downloaded plugin manifest. A SHA256 checksum confirms that the downloaded bytes match the repository index, not that the code, publisher, or preview is trustworthy. Review the publisher, homepage, source, and requested capabilities before installing.
 :::
@@ -58,7 +60,7 @@ From **Administration > Plugins**, select the gear button labeled **Advanced plu
    - **Never** makes that hook inactive.
 4. Select **Save Order**.
 
-For metadata enrichment, order matters per field. During automatic scans, the first enricher in order that supplies an enabled field wins. File metadata fills fields that no enricher supplies. A result below the effective confidence threshold is skipped; a result without `confidence` is eligible to apply.
+For metadata enrichment, order matters per field. During automatic scans, the first enricher in order that supplies an enabled field wins. File metadata fills fields that no enricher supplies. On a book already in the library, a value an enricher set earlier stays, even after you change the order: later scans fill empty fields and replace values from the file, but don't replace one enricher's value with another's. Use **Refresh all metadata** on a book to apply the current order to it. See [Metadata Source Priority](../metadata.md#metadata-source-priority). A result below the effective confidence threshold is skipped; a result without `confidence` is eligible to apply.
 
 ## Customize a Library
 

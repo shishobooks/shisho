@@ -10,7 +10,7 @@ Paths must be visible from inside the Shisho container. A host path such as `/mn
 
 A path may be a symbolic link to a directory. A path entered twice in one library is saved once.
 
-Saving a library queues a global scan of all libraries, unless a scan is already pending or running. The new library may therefore take a little time to appear populated. If your role has Jobs Read, follow progress under **Administration > Jobs**.
+Saving a library queues a global scan of all libraries, unless a scan is already pending or running. The new library may therefore take a little time to appear populated. While a library is being scanned, its page shows how many files the scan has found and how many books it has imported so far, and books appear in the gallery as they are imported. If your role has Jobs Read, the scan's log is under **Administration > Jobs**.
 
 ### Cover Aspect Ratio
 
@@ -68,6 +68,14 @@ Shisho discovers and reconciles content in three ways:
 The same two permissions let you start a library scan with the resync button beside the library picker in the top navigation. If Shisho rejects the request or cannot start the scan, an error notification appears. The button becomes available for another attempt.
 
 See [Configuration](./configuration.md) for the server settings behind the schedule and monitor.
+
+## Scanning a Library for New Metadata
+
+A normal scan reads only the files that are new or have changed on disk since the last scan. A metadata plugin installed later therefore never reaches the books you already have. To run your metadata plugins on every book in a library, open the library, select **Library actions** (**⋯**) next to **Select**, and choose **Scan for new metadata**. It needs Jobs Read and Jobs Write, the same as the resync button.
+
+This scan runs **Scan for new metadata** on every main file in the library, including files that haven't changed. On a large library it takes a while, and each enabled metadata plugin calls its service for every book it applies to. It follows the same rules as running **Scan for new metadata** on a single book: plugins fill in empty fields and replace values that came from the files themselves. Manual edits are kept, and so are values another plugin already set (including ones you applied in Identify) and values from [sidecar files](./sidecar-files.md) you carried over from another library or edited by hand. It never refreshes or resets metadata. See [Metadata](./metadata.md#normal-scans-refresh-and-reset).
+
+When you install a metadata enricher from **Administration > Plugins** while any library has books, and your role has Jobs Read and Jobs Write, Shisho offers to enrich your existing books and says how many there are. **Enrich books** starts this scan across every library. **Not now** starts nothing, and you can run the scan later from each library's actions menu.
 
 ## Scan Outcomes
 

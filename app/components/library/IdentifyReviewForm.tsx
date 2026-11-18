@@ -1427,14 +1427,19 @@ export function IdentifyReviewForm({
       {/* Select-all bar — sits outside the scroll body so there is no gap
           between the dialog header and this bar. */}
       <div className="flex shrink-0 items-center gap-3.5 border-b bg-muted px-5 py-2.5">
-        <Checkbox
-          aria-label="Apply all"
-          checked={globalCheckboxState}
-          onCheckedChange={(v) =>
-            setSectionDecisions(allVisibleKeys, v === true)
-          }
-        />
-        <span className="text-xs font-medium">Apply all</span>
+        {/* The label wraps the checkbox so clicking its text toggles it. */}
+        <Label
+          className="flex cursor-pointer items-center gap-3.5"
+          variant="unstyled"
+        >
+          <Checkbox
+            checked={globalCheckboxState}
+            onCheckedChange={(v) =>
+              setSectionDecisions(allVisibleKeys, v === true)
+            }
+          />
+          <span className="text-xs font-medium">Apply all</span>
+        </Label>
         <span className="whitespace-nowrap text-[11.5px] tabular-nums text-muted-foreground">
           <span className="font-semibold text-foreground">{totalSelected}</span>{" "}
           of {totalVisible} selected
@@ -2266,8 +2271,8 @@ export function IdentifyReviewForm({
                       opt-in checkbox, Identify must distinguish an
                       explicit `false` (a plugin can propose one, and
                       restoring that proposal is a Proposal Acceptance)
-                      from an Explicit Clear, which nulls the value and its
-                      source so a later Scan may repopulate it. */}
+                      from an Explicit Clear, which removes the value and
+                      protects the empty field from later Scans. */}
                   <div className="w-40">
                     <Select
                       disabled={isDisabled("abridged") || !decisions.abridged}

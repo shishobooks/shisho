@@ -83,7 +83,7 @@ type UpdateFilePayload struct {
 	Publisher        *string              `json:"publisher,omitempty" validate:"omitempty,max=200"`
 	ReleaseDate      *string              `json:"release_date,omitempty" validate:"omitempty"` // ISO 8601 date string
 	Language         *string              `json:"language,omitempty" validate:"omitempty,max=35"`
-	Abridged         *string              `json:"abridged,omitempty" validate:"omitempty,oneof=true false"` // "true", "false", or "" to clear
+	Abridged         *string              `json:"abridged,omitempty" validate:"omitempty,eq=|oneof=true false"` // "true", "false", or "" to clear
 	Identifiers      *[]IdentifierPayload `json:"identifiers,omitempty" mod:"dive" validate:"omitempty,dive"`
 	IsPreferredCover *bool                `json:"is_preferred_cover,omitempty"`
 	// ReadingDirection applies only to Page-based Files (CBZ, PDF).
@@ -210,4 +210,28 @@ type ResyncBookResponse struct {
 // /books/files/:id/cover-page, which sets a page-based file's cover page.
 type UpdateFileCoverPagePayload struct {
 	Page int `json:"page"` // 0-indexed page number
+}
+
+// SidecarImpactKind names the kind of resource a rename or merge changes the
+// name of, for GET /books/sidecar-impact.
+const (
+	//tygo:emit export type SidecarImpactKind = typeof SidecarImpactPerson | typeof SidecarImpactSeries | typeof SidecarImpactGenre | typeof SidecarImpactTag | typeof SidecarImpactPublisher;
+	SidecarImpactPerson    = "person"
+	SidecarImpactSeries    = "series"
+	SidecarImpactGenre     = "genre"
+	SidecarImpactTag       = "tag"
+	SidecarImpactPublisher = "publisher"
+)
+
+// SidecarImpactQuery asks how many Books' sidecars renaming the resource, or
+// merging it into another, would rewrite: the Books whose sidecars name it.
+type SidecarImpactQuery struct {
+	Kind string `query:"kind" json:"kind" validate:"required,oneof=person series genre tag publisher" tstype:"SidecarImpactKind"`
+	ID   int    `query:"id" json:"id" validate:"required,min=1"`
+}
+
+// SidecarImpactResponse is the number of distinct Books whose sidecars the
+// rename or merge rewrites in the background (ADR 0027).
+type SidecarImpactResponse struct {
+	BookCount int `json:"book_count"`
 }

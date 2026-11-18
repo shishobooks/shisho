@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -5,7 +6,8 @@ import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 
 import { useDebounce } from "@/hooks/useDebounce";
-import { ShishoAPIError } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
+import { setAuth } from "@/testing/auth";
 import { watchUnhandledRejections } from "@/testing/mutations";
 import {
   advancePastSearch,
@@ -14,6 +16,8 @@ import {
 } from "@/testing/searchQuery";
 
 import { MetadataMergeDialog } from "./MetadataMergeDialog";
+
+vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 const SOURCES = [
   { id: 30, name: "Ace", countText: "1 book" },
@@ -484,5 +488,132 @@ describe("MetadataMergeDialog failures", () => {
 
     expect(trigger).toHaveTextContent("Dutton (1,200 books)");
     expect(screen.getByText(/Move all 1,200 books from/)).toBeInTheDocument();
+  });
+});
+
+describe("MetadataMergeDialog sidecar note and confirmation", () => {
+  const sources = [
+    { id: 30, name: "Big", countText: "1,400 files" },
+    { id: 40, name: "Small", countText: "2 files" },
+  ];
+  const renderMerge = ({
+    bookCount,
+    setChild = false,
+    onMerge = vi.fn(),
+  }: {
+    bookCount: number;
+    setChild?: boolean;
+    onMerge?: (id: number) => Promise<unknown>;
+  }) => {
+    setAuth({ permissions: ["books:read", "books:write"] });
+    const request = vi
+      .spyOn(API, "request")
+      .mockResolvedValue({ book_count: bookCount });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <MetadataMergeDialog
+          entities={sources}
+          entityType="publisher"
+          isLoadingEntities={false}
+          isPending={false}
+          isSearchPending={false}
+          onMerge={onMerge}
+          onOpenChange={vi.fn()}
+          onSearch={vi.fn()}
+          open={true}
+          setChildConfig={
+            setChild
+              ? { disabledIds: [], isPending: false, onSetChild: vi.fn() }
+              : undefined
+          }
+          showSidecarNote
+          targetId={1}
+          targetName="Penguin"
+        />
+      </QueryClientProvider>,
+    );
+    return request;
+  };
+  const note = () => screen.queryByText(/updates the sidecar files/i);
+
+  it("counts the distinct books of the source, the only ones a merge rewrites", async () => {
+    const user = createUser();
+    const request = renderMerge({ bookCount: 1650 });
+    expect(note()).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Big"));
+
+    expect(
+      await screen.findByText(/updates the sidecar files/i),
+    ).toHaveTextContent("1,650 books");
+    expect(request).toHaveBeenCalledWith(
+      "GET",
+      "/books/sidecar-impact",
+      null,
+      { kind: "publisher", id: 30 },
+      expect.anything(),
+    );
+  });
+
+  it("says nothing for a small merge", async () => {
+    const user = createUser();
+    renderMerge({ bookCount: 3 });
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Small"));
+    await waitFor(() => expect(API.request).toHaveBeenCalled());
+
+    expect(note()).not.toBeInTheDocument();
+  });
+
+  it("says nothing when setting a child, which rewrites nothing", async () => {
+    const user = createUser();
+    renderMerge({ bookCount: 1650, setChild: true });
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Big"));
+    expect(
+      await screen.findByText(/updates the sidecar files/i),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: /set as child/i }));
+    expect(note()).not.toBeInTheDocument();
+  });
+
+  it("confirms a merge once it's done", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderMerge({
+      bookCount: 3,
+      onMerge: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Small"));
+    await user.click(screen.getByRole("button", { name: "Merge" }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('Merged "Small" into "Penguin"'),
+    );
+  });
+
+  it("confirms setting a child", async () => {
+    const success = vi.spyOn(toast, "success");
+    const user = createUser();
+    renderMerge({ bookCount: 3, setChild: true });
+
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByText("Small"));
+    await user.click(screen.getByRole("radio", { name: /set as child/i }));
+    await user.click(screen.getByRole("button", { name: /set as child/i }));
+
+    await waitFor(() =>
+      expect(success).toHaveBeenCalledWith('"Small" is now under "Penguin"'),
+    );
   });
 });

@@ -153,10 +153,10 @@ func (h *handler) persistMetadata(ctx context.Context, book *models.Book, target
 	// Publisher (file-level, applied to target file)
 	publisherName := strings.TrimSpace(md.Publisher)
 	if targetFile != nil && applyFieldSelected(overrides, "publisher") && publisherName == "" {
-		if targetFile.PublisherID != nil || targetFile.PublisherSource != nil {
+		if targetFile.PublisherID != nil || !emptySlotSettled(targetFile.PublisherSource) {
 			targetFile.PublisherID = nil
 			targetFile.Publisher = nil
-			targetFile.PublisherSource = nil
+			targetFile.PublisherSource = clearedSource()
 			fileColumns = append(fileColumns, "publisher_id", "publisher_source")
 		}
 	} else if publisherName != "" && targetFile != nil && h.enrich.publisherFinder != nil {

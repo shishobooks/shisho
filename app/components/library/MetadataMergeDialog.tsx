@@ -1,5 +1,6 @@
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ import { toastRequestError } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 
 import type { EntityType } from "./MetadataEditDialog";
+import { SidecarRewriteNote } from "./SidecarRewriteNote";
 
 export interface EntityOption {
   id: number;
@@ -60,6 +62,10 @@ interface MetadataMergeDialogProps {
   entityType: EntityType;
   targetName: string;
   targetId: number;
+  /**
+   * Say when a merge rewrites many Books' sidecars (see SidecarRewriteNote).
+   */
+  showSidecarNote?: boolean;
   /** A rejection is toasted here and keeps the dialog open. */
   onMerge: (sourceId: number) => Promise<unknown>;
   isPending: boolean;
@@ -102,6 +108,7 @@ export function MetadataMergeDialog({
   isSearchPending,
   onSearch,
   setChildConfig,
+  showSidecarNote = false,
 }: MetadataMergeDialogProps) {
   // The picked source itself, not its id: a later search can drop it from
   // `entities`, and the picker and Merge must still agree on what merges.
@@ -176,6 +183,11 @@ export function MetadataMergeDialog({
       );
       return;
     }
+    toast.success(
+      setChild
+        ? `"${selectedEntity?.name}" is now under "${targetName}"`
+        : `Merged "${selectedEntity?.name}" into "${targetName}"`,
+    );
     resetDialogState();
   };
 
@@ -349,6 +361,18 @@ export function MetadataMergeDialog({
               </Tooltip>
             </RadioGroup>
           )}
+
+          {selectedEntity &&
+            showSidecarNote &&
+            (!setChildConfig || action === "merge") && (
+              <div className="mt-3">
+                <SidecarRewriteNote
+                  action="Merging"
+                  id={selectedEntity.id}
+                  kind={entityType}
+                />
+              </div>
+            )}
         </DialogBody>
 
         <DialogFooter>

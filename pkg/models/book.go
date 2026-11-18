@@ -49,4 +49,9 @@ type Book struct {
 	// LastReadAt is the latest reading in the Read-through underway, set by the
 	// same listings and just as private. See reading.LastReadExpr.
 	LastReadAt *time.Time `bun:"-" json:"last_read_at,omitempty"`
+
+	// SidecarsStaleAt is when a rename or merge left the Book's sidecars
+	// naming a resource by an old name; nil once they are rewritten (ADR
+	// 0027). Internal: the API never shows it.
+	SidecarsStaleAt *time.Time `bun:",nullzero" json:"-"`
 }

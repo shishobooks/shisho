@@ -255,6 +255,7 @@ export function ResourceDetail({
       {canMutate && !onEditClick && (
         <MetadataEditDialog
           aliases={aliases}
+          entityId={entityId}
           entityName={name}
           entityType={entityType}
           isPending={editConfig.isPending}
@@ -292,6 +293,7 @@ export function ResourceDetail({
                 }
               : undefined
           }
+          showSidecarNote
           targetId={entityId}
           targetName={name}
         />

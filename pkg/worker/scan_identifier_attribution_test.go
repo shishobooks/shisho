@@ -170,11 +170,11 @@ func TestScan_MixedIdentifierCollection_ForceRefreshRewritesChangedEntrySource(t
 
 // Accepting the plugin proposal in Identify replaces the whole collection, so
 // an embedded identifier the plugin did not propose is dropped. The result is
-// plugin-sourced and not protected, so the next ordinary Scan restores the
-// embedded entry. This is intended: the collection converges on what a fresh
-// Scan produces. To keep a set exactly as applied, change it in Identify or
-// Edit so it becomes manual.
-func TestScan_MixedIdentifierCollection_OrdinaryScanRestoresEmbeddedAfterIdentifyAccept(t *testing.T) {
+// plugin-sourced, and an ordinary Scan of the unchanged file never replaces a
+// plugin collection with another plugin-led one, so the set stays as applied.
+// Otherwise a Scan whose automatic search matched a different book would swap
+// in that book's identifiers. Refresh all metadata restores the embedded entry.
+func TestScan_MixedIdentifierCollection_OrdinaryScanKeepsIdentifyAccept(t *testing.T) {
 	t.Parallel()
 	f := newScanIdentifierFixture(t)
 	book, file := f.retrieve(t)
@@ -199,9 +199,8 @@ func TestScan_MixedIdentifierCollection_OrdinaryScanRestoresEmbeddedAfterIdentif
 
 	_, file = f.retrieve(t)
 	assert.Equal(t, map[string]string{
-		"isbn_13|9780316769488":              pluginSource,
-		"asin|B01ABC1234":                    pluginSource,
-		"uuid|" + scanIdentifierEmbeddedUUID: models.DataSourceEPUBMetadata,
+		"isbn_13|9780316769488": pluginSource,
+		"asin|B01ABC1234":       pluginSource,
 	}, identifierSources(file))
 	require.NotNil(t, file.IdentifierSource)
 	assert.Equal(t, pluginSource, *file.IdentifierSource)

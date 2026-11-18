@@ -1,5 +1,5 @@
 import { BadgeCheck, Check, Download, Loader2, Puzzle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -8,7 +8,11 @@ import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { CapabilitiesWarning } from "@/components/plugins/CapabilitiesWarning";
 import { filterPlugins } from "@/components/plugins/discoverFilters";
-import { deriveCapabilityLabels } from "@/components/plugins/pluginCapabilities";
+import { EnrichExistingBooksPrompt } from "@/components/plugins/EnrichExistingBooksPrompt";
+import {
+  deriveCapabilityLabels,
+  isMetadataEnricher,
+} from "@/components/plugins/pluginCapabilities";
 import { PluginRow } from "@/components/plugins/PluginRow";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +31,9 @@ import {
   useUpdatePluginVersion,
   type AvailablePlugin,
 } from "@/hooks/queries/plugins";
+import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
+import { PluginStatusActive } from "@/types";
 
 interface DiscoverTabProps {
   canWrite: boolean;
@@ -45,6 +51,13 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   const [installTarget, setInstallTarget] = useState<AvailablePlugin | null>(
     null,
   );
+  // The metadata enricher just installed, to offer enriching existing Books
+  // to a role that can start the scan (the resync button's permissions).
+  const canScan = useCan(["jobs:read", "jobs:write"]);
+  const [installedEnricher, setInstalledEnricher] = useState<string | null>(
+    null,
+  );
+  const closeEnrichPrompt = useCallback(() => setInstalledEnricher(null), []);
   const [search, setSearch] = useState("");
   const [source, setSource] = useState<string>("all");
 
@@ -90,10 +103,11 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
     if (!installTarget) return;
     const compatibleVersion = installTarget.versions.find((v) => v.compatible);
     if (!compatibleVersion) return;
+    const { name } = installTarget;
     installPlugin.mutate(
       {
         id: installTarget.id,
-        name: installTarget.name,
+        name,
         scope: installTarget.scope,
         version: compatibleVersion.version,
       },
@@ -101,7 +115,15 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
         onError: (err) => {
           toastRequestError(err, "Failed to install plugin");
         },
-        onSuccess: () => setInstallTarget(null),
+        onSuccess: (installed) => {
+          setInstallTarget(null);
+          if (
+            installed.status === PluginStatusActive &&
+            isMetadataEnricher(compatibleVersion.capabilities)
+          ) {
+            setInstalledEnricher(name);
+          }
+        },
       },
     );
   };
@@ -294,6 +316,12 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
         open={!!installTarget}
         plugin={installTarget}
       />
+      {canScan && (
+        <EnrichExistingBooksPrompt
+          onClose={closeEnrichPrompt}
+          pluginName={installedEnricher}
+        />
+      )}
     </>
   );
 };

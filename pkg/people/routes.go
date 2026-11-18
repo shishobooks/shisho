@@ -16,7 +16,7 @@ import (
 // reviewRecomputer is required; pass a books service with app settings
 // attached, or the delete handler's review recompute does nothing.
 // fileOrganizer is optional and can be nil if file organization on person name change is not needed.
-func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer review.BookReviewRecomputer, fileOrganizer FileOrganizer) {
+func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, reviewRecomputer review.BookReviewRecomputer, fileOrganizer FileOrganizer, sidecars SidecarWriter) {
 	personService := NewService(db)
 	aliasService := aliases.NewService(db)
 	searchService := search.NewService(db)
@@ -28,6 +28,7 @@ func RegisterRoutes(g *echo.Group, db *bun.DB, authMiddleware *auth.Middleware, 
 		searchService:    searchService,
 		reviewRecomputer: reviewRecomputer,
 		fileOrganizer:    fileOrganizer,
+		sidecars:         sidecars,
 	}
 
 	g.GET("", h.list)

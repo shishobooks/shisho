@@ -30,6 +30,14 @@ type handler struct {
 	coverCache     *covers.ThumbnailCache
 }
 
+// writeSidecars queues a rewrite of the series' Books' sidecars after a rename
+// or merge changes the name they record (ADR 0027).
+func (h *handler) writeSidecars(ctx context.Context, seriesID int) {
+	if h.bookService != nil {
+		h.bookService.MarkSidecarsStaleForSeries(ctx, seriesID)
+	}
+}
+
 // buildSeriesResponse adds the book count and the flat alias list to a series.
 // retrieve, list, and update all use it, so a failed lookup fails the request
 // instead of rendering a zero count or no aliases.
@@ -184,7 +192,9 @@ func (h *handler) update(c echo.Context) error {
 	// Keep track of what's been changed
 	opts := UpdateSeriesOptions{Columns: []string{}}
 
+	nameChanged := false
 	if params.Name != nil && *params.Name != series.Name {
+		nameChanged = true
 		// A rename onto another Series' name is rejected rather than merged,
 		// so combining two Series stays an explicit merge.
 		existing, err := h.seriesService.RetrieveSeries(ctx, RetrieveSeriesOptions{
@@ -231,6 +241,9 @@ func (h *handler) update(c echo.Context) error {
 	err = h.seriesService.UpdateSeries(ctx, series, opts)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+	if nameChanged {
+		h.writeSidecars(ctx, id)
 	}
 
 	// Sync aliases if provided
@@ -404,9 +417,17 @@ func (h *handler) merge(c echo.Context) error {
 	affected := h.searchService.CollectAffected(ctx, search.Affected{SeriesIDs: []int{id, params.SourceID}})
 	defer h.searchService.ReindexAffected(ctx, affected)
 
+	// Only the source's Books name the source's name.
+	var mergedBooks []int
+	if h.bookService != nil {
+		mergedBooks = h.bookService.SidecarBooksForSeries(ctx, params.SourceID)
+	}
 	// Merge source series into target (this) series
 	if err := h.seriesService.MergeSeries(ctx, id, params.SourceID); err != nil {
 		return errors.WithStack(err)
+	}
+	if h.bookService != nil {
+		h.bookService.MarkBookSidecarsStale(ctx, mergedBooks)
 	}
 
 	return c.NoContent(http.StatusNoContent)

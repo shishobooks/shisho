@@ -90,6 +90,25 @@ describe("useSSE", () => {
     expect(MockEventSource.instances).toHaveLength(0);
   });
 
+  it("waits for a forced password reset, then opens EventSource", () => {
+    // The server refuses the stream until the password is changed, and a
+    // browser EventSource never retries a refused stream.
+    setAuth({ user: { username: "test", must_change_password: true } });
+    const wrapper = ({ children }: { children: ReactNode }) =>
+      createElement(
+        AuthContext.Provider,
+        { value: authValue() },
+        createElement(QueryClientProvider, { client: queryClient }, children),
+      );
+    const { rerender } = renderHook(() => useSSE(), { wrapper });
+    expect(MockEventSource.instances).toHaveLength(0);
+
+    setAuth({ user: { username: "test", must_change_password: false } });
+    rerender();
+
+    expect(MockEventSource.instances).toHaveLength(1);
+  });
+
   it("does not open EventSource in Demo Mode", () => {
     renderHook(() => useSSE(), {
       wrapper: createWrapper(true, queryClient, true),

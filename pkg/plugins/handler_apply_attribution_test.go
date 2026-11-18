@@ -376,7 +376,7 @@ func TestApplyMetadata_Attribution_AbridgedDistinguishesAbsenceFromFalse(t *test
 		{"absent to false is a change", nil, false, boolPtr(false), &manual},
 		{"false to false is a no-op", boolPtr(false), false, boolPtr(false), nil},
 		{"false to true is a change", boolPtr(false), true, boolPtr(true), &manual},
-		{"true to cleared removes value and source", boolPtr(true), nil, nil, nil},
+		{"true to cleared leaves a protected empty slot", boolPtr(true), nil, nil, &manual},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -408,11 +408,20 @@ func TestApplyMetadata_Attribution_AbridgedDistinguishesAbsenceFromFalse(t *test
 	}
 }
 
-// Clearing an already-empty value is a no-op too: it must not write columns.
+// Clearing a protected empty slot (no value, manual source) is a no-op too:
+// it must not write columns.
 func TestApplyMetadata_Attribution_ClearingAbsentValueIsNoOp(t *testing.T) {
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Stored Title", models.FileTypeEPUB)
+	manual := models.DataSourceManual
+	book.SubtitleSource = &manual
+	book.DescriptionSource = &manual
+	file.PublisherSource = &manual
+	file.URLSource = &manual
+	file.ReleaseDateSource = &manual
+	file.LanguageSource = &manual
+	file.AbridgedSource = &manual
 	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
 	h := newApplyTestHandler(store)
 
@@ -454,16 +463,16 @@ func TestApplyMetadata_Attribution_UnchangedNamePreservesStoredSource(t *testing
 	assert.Empty(t, store.updatedFileColumns)
 }
 
-// Before ADR 0006 an Identify clear left the plugin source on the now-absent
-// value, which outranks embedded metadata and blocks Scan repopulation.
-// Clearing such a field again must heal it, even though the value is already
-// absent.
-func TestApplyMetadata_Attribution_ClearingAbsentValueRemovesStaleSource(t *testing.T) {
+// Clearing a field that is already empty but holds a leftover plugin source
+// (from a pre-ADR 0006 clear) stamps manual, so the field becomes a protected
+// empty slot that a Scan leaves alone. An empty field with no source is left
+// as it is: the Identify form selects empty rows in bulk, and protecting
+// those would block every later plugin from filling them.
+func TestApplyMetadata_Attribution_ClearingAbsentValueStampsManual(t *testing.T) {
 	t.Parallel()
 
 	book, file := newApplyTestBookWithFile(t, "Stored Title", models.FileTypeEPUB)
 	stale := applyTestPluginSource
-	book.SubtitleSource = &stale
 	book.DescriptionSource = &stale
 	file.NameSource = &stale
 	file.PublisherSource = &stale
@@ -486,15 +495,18 @@ func TestApplyMetadata_Attribution_ClearingAbsentValueRemovesStaleSource(t *test
 	})
 	require.NoError(t, err)
 
-	assert.Nil(t, book.SubtitleSource)
-	assert.Nil(t, book.DescriptionSource)
-	assert.Nil(t, file.NameSource)
-	assert.Nil(t, file.PublisherSource)
-	assert.Nil(t, file.URLSource)
-	assert.Nil(t, file.ReleaseDateSource)
-	assert.Nil(t, file.LanguageSource)
-	assert.Nil(t, file.AbridgedSource)
+	manual := models.DataSourceManual
+	assert.Nil(t, book.SubtitleSource, "an empty field with no source is a no-op")
+	assert.Equal(t, &manual, book.DescriptionSource)
+	assert.Equal(t, &manual, file.NameSource)
+	assert.Equal(t, &manual, file.PublisherSource)
+	assert.Equal(t, &manual, file.URLSource)
+	assert.Equal(t, &manual, file.ReleaseDateSource)
+	assert.Equal(t, &manual, file.LanguageSource)
+	assert.Equal(t, &manual, file.AbridgedSource)
+	assert.Nil(t, book.Subtitle)
+	assert.Nil(t, file.Name)
 	require.Len(t, store.updatedBookColumns, 1)
-	assert.ElementsMatch(t, []string{"subtitle", "subtitle_source", "description", "description_source"}, store.updatedBookColumns[0])
+	assert.ElementsMatch(t, []string{"description", "description_source"}, store.updatedBookColumns[0])
 	require.Len(t, store.updatedFileColumns, 1)
 }

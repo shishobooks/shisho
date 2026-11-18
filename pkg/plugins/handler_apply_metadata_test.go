@@ -239,7 +239,8 @@ func TestApplyMetadata_WhitespaceFileNameClearsAndOrganizes(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Nil(t, file.Name)
-	assert.Nil(t, file.NameSource)
+	require.NotNil(t, file.NameSource)
+	assert.Equal(t, models.DataSourceManual, *file.NameSource, "a clear leaves a protected empty slot")
 	assert.True(t, store.organizeCalled)
 }
 
@@ -420,14 +421,17 @@ func TestApplyMetadata_SelectedEmptyValuesClearPopulatedMetadata(t *testing.T) {
 	abridged := true
 	releaseDate := time.Date(2024, time.January, 2, 0, 0, 0, 0, time.UTC)
 	publisherID := 9
-	source := models.DataSourceManual
+	source := applyTestPluginSource
 	book.Subtitle = &subtitle
 	book.SubtitleSource = &source
 	book.Description = &description
 	book.DescriptionSource = &source
 	book.Authors = []*models.Author{{BookID: book.ID, PersonID: 1, Person: &models.Person{ID: 1, Name: "Author"}}}
+	book.AuthorSource = source
 	book.BookGenres = []*models.BookGenre{{BookID: book.ID, GenreID: 1, Genre: &models.Genre{ID: 1, Name: "Genre"}}}
+	book.GenreSource = &source
 	book.BookTags = []*models.BookTag{{BookID: book.ID, TagID: 1, Tag: &models.Tag{ID: 1, Name: "Tag"}}}
+	book.TagSource = &source
 	file.Name = &name
 	file.NameSource = &source
 	file.URL = &url
@@ -442,7 +446,9 @@ func TestApplyMetadata_SelectedEmptyValuesClearPopulatedMetadata(t *testing.T) {
 	file.Publisher = &models.Publisher{ID: publisherID, Name: "Publisher"}
 	file.PublisherSource = &source
 	file.Narrators = []*models.Narrator{{FileID: file.ID, PersonID: 2, Person: &models.Person{ID: 2, Name: "Narrator"}}}
+	file.NarratorSource = &source
 	file.Identifiers = []*models.FileIdentifier{{FileID: file.ID, Type: "isbn_13", Value: "9780316769488"}}
+	file.IdentifierSource = &source
 
 	store := &stubBookStoreForApply{stubBookStoreForPersist: stubBookStoreForPersist{book: book}}
 	h, rel := newApplyTestHandlerWithRelStore(store)
@@ -481,28 +487,36 @@ func TestApplyMetadata_SelectedEmptyValuesClearPopulatedMetadata(t *testing.T) {
 	err = h.applyMetadata(c)
 	require.NoError(t, err)
 
+	// Each cleared field is a protected empty slot: no value, manual source.
+	manualSource := models.DataSourceManual
+	manual := &manualSource
 	assert.Nil(t, book.Subtitle)
-	assert.Nil(t, book.SubtitleSource)
+	assert.Equal(t, manual, book.SubtitleSource)
 	assert.Nil(t, book.Description)
-	assert.Nil(t, book.DescriptionSource)
+	assert.Equal(t, manual, book.DescriptionSource)
 	assert.Equal(t, []int{book.ID}, rel.deletedAuthors)
+	assert.Equal(t, models.DataSourceManual, book.AuthorSource)
 	assert.Equal(t, []int{book.ID}, rel.deletedGenres)
+	assert.Equal(t, manual, book.GenreSource)
 	assert.Equal(t, []int{book.ID}, rel.deletedTags)
+	assert.Equal(t, manual, book.TagSource)
 	assert.Nil(t, file.Name)
-	assert.Nil(t, file.NameSource)
+	assert.Equal(t, manual, file.NameSource)
 	assert.Nil(t, file.URL)
-	assert.Nil(t, file.URLSource)
+	assert.Equal(t, manual, file.URLSource)
 	assert.Nil(t, file.Language)
-	assert.Nil(t, file.LanguageSource)
+	assert.Equal(t, manual, file.LanguageSource)
 	assert.Nil(t, file.Abridged)
-	assert.Nil(t, file.AbridgedSource)
+	assert.Equal(t, manual, file.AbridgedSource)
 	assert.Nil(t, file.ReleaseDate)
-	assert.Nil(t, file.ReleaseDateSource)
+	assert.Equal(t, manual, file.ReleaseDateSource)
 	assert.Nil(t, file.PublisherID)
 	assert.Nil(t, file.Publisher)
-	assert.Nil(t, file.PublisherSource)
+	assert.Equal(t, manual, file.PublisherSource)
 	assert.Equal(t, []int{file.ID}, store.deletedNarratorFileIDs)
+	assert.Equal(t, manual, file.NarratorSource)
 	assert.Equal(t, []int{file.ID}, identStore.deleteCalls)
+	assert.Equal(t, manual, file.IdentifierSource)
 }
 
 func TestApplyMetadata_MalformedSelectedValuesDoNotClearMetadata(t *testing.T) {

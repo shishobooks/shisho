@@ -183,7 +183,7 @@ func TestUpgradeEnricherCover_RootLevelFile_SyntheticBookPath(t *testing.T) {
 		},
 	}
 
-	tc.worker.upgradeEnricherCover(tc.ctx, metadata, file, syntheticBookPath, nil)
+	tc.worker.upgradeEnricherCover(tc.ctx, metadata, file, syntheticBookPath, scanRules{}, nil)
 
 	// The upgraded cover must replace the existing one next to the file
 	// (the library dir), not be silently dropped into the nonexistent

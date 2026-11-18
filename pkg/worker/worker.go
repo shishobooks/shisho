@@ -170,6 +170,7 @@ func New(cfg *config.Config, db *bun.DB, pluginService *plugins.Service, pm *plu
 		models.JobTypeBulkDownload:    w.ProcessBulkDownloadJob,
 		models.JobTypeHashGeneration:  w.ProcessHashGenerationJob,
 		models.JobTypeRecomputeReview: w.ProcessRecomputeReviewJob,
+		models.JobTypeSidecarRewrite:  w.ProcessSidecarRewriteJob,
 	}
 
 	if dlCache != nil {
@@ -222,6 +223,7 @@ func (w *Worker) fetchJobs() {
 	// Before picking up jobs, so the rebuild does not interleave with a scan
 	// that fetchJobs is about to resume.
 	w.rebuildSearchAfterIncompleteScan(w.ctx)
+	w.ensureSidecarRewrite(w.ctx)
 
 	duration := 5 * time.Second
 	timer := time.NewTimer(duration)

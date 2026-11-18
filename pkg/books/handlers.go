@@ -998,8 +998,9 @@ func (h *handler) updateFile(c echo.Context) error {
 		if *params.Name != currentName {
 			nameChanged = true
 			if *params.Name == "" {
+				// A cleared field is a protected empty slot (ADR 0027).
 				file.Name = nil
-				file.NameSource = nil
+				file.NameSource = strPtr(models.DataSourceManual)
 			} else {
 				file.Name = params.Name
 				file.NameSource = strPtr(models.DataSourceManual)
@@ -1095,8 +1096,9 @@ func (h *handler) updateFile(c echo.Context) error {
 		}
 		if *params.Language != currentLanguage {
 			if *params.Language == "" {
+				// A cleared field is a protected empty slot (ADR 0027).
 				file.Language = nil
-				file.LanguageSource = nil
+				file.LanguageSource = strPtr(models.DataSourceManual)
 			} else {
 				normalized := mediafile.NormalizeLanguage(*params.Language)
 				if normalized == nil {
@@ -1114,9 +1116,10 @@ func (h *handler) updateFile(c echo.Context) error {
 		switch *params.Abridged {
 		case "":
 			// Clear
+			// A cleared field is a protected empty slot (ADR 0027).
 			if file.Abridged != nil {
 				file.Abridged = nil
-				file.AbridgedSource = nil
+				file.AbridgedSource = strPtr(models.DataSourceManual)
 				opts.Columns = append(opts.Columns, "abridged", "abridged_source")
 			}
 		case "true":
