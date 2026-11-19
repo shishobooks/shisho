@@ -350,14 +350,21 @@ jobs:
       - run: pnpm test:unit
 
   # Each browser runs its own API server and Vite dev server, so neither
-  # needs the production build; Image Build covers that.
+  # needs the production build; Image Build covers that. Each browser runs
+  # on two shards. Playwright splits by test count, not time, and keeps a
+  # file on one shard, so check the shards stay close after moving many
+  # tests between files.
   e2e:
-    name: E2E (${{ matrix.browser }})
+    name: E2E (${{ matrix.browser }}${{ matrix.shards > 1 && format(' {0}/{1}', matrix.shard, matrix.shards) || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        browser: [chromium, firefox]
+        include:
+          - { browser: chromium, shard: 1, shards: 2 }
+          - { browser: chromium, shard: 2, shards: 2 }
+          - { browser: firefox, shard: 1, shards: 2 }
+          - { browser: firefox, shard: 2, shards: 2 }
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-js
@@ -371,7 +378,7 @@ jobs:
           echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
           echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
       - name: Restore Go build cache
-        # The Chromium job saves it on master only.
+        # The first Chromium shard saves it on master only.
         uses: actions/cache/restore@v6
         with:
           path: |
@@ -387,18 +394,19 @@ jobs:
         uses: nick-fields/retry@v4
         env:
           BROWSER: ${{ matrix.browser }}
+          SHARD: ${{ matrix.shard }}/${{ matrix.shards }}
         with:
-          # A backstop for a hung run, well above how long the suite takes
-          # (Firefox, the slower, takes about 11 minutes). Playwright's own
-          # 18-minute globalTimeout (playwright.config.ts) stops a hung suite
-          # first and names the tests still running; a timeout here means even
-          # that failed.
+          # A backstop for a hung run, well above how long a shard takes
+          # (each browser's whole suite takes 8 to 9 minutes).
+          # Playwright's own 18-minute globalTimeout (playwright.config.ts)
+          # stops a hung suite first and names the tests still running; a
+          # timeout here means even that failed.
           timeout_minutes: 20
           max_attempts: 2
           retry_on: timeout
-          command: pnpm "e2e:$BROWSER"
+          command: pnpm "e2e:$BROWSER" --shard="$SHARD"
       - name: Save Go build cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.browser == 'chromium'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master' && matrix.browser == 'chromium' && matrix.shard == 1
         # A re-run on the same SHA finds the key taken.
         continue-on-error: true
         uses: actions/cache/save@v6
@@ -427,7 +435,7 @@ jobs:
           echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
           echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
       - name: Restore Go build cache
-        # The Chromium E2E job saves it on master only.
+        # The first Chromium E2E shard saves it on master only.
         uses: actions/cache/restore@v6
         with:
           path: |
