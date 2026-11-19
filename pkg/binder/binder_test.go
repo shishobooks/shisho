@@ -152,3 +152,66 @@ func TestBind_DateMustBeACalendarDay(t *testing.T) {
 		}
 	}
 }
+
+// A username is letters and numbers in any script plus . _ - @, so it can
+// sign in through HTTP Basic (which splits on the first colon) and can't hide
+// spaces or invisible characters.
+func TestBind_UsernameCharacters(t *testing.T) {
+	t.Parallel()
+	b, err := New()
+	require.NoError(t, err)
+	type account struct {
+		Username string `json:"username" validate:"username"`
+	}
+	for value, ok := range map[string]bool{
+		"robin":            true,
+		"Robin_Joseph-08":  true,
+		"robin.j@mail.com": true,
+		"José":             true,
+		"司書":               true,
+		"राम":              true,
+		"สมชาย":            true,
+		"Jose\u0301":       true,
+		// Invisible characters, marks among them, would let one username
+		// pass for another, and a mark needs a letter to sit on.
+		"blanky\ufe0f":       false,
+		"blan\u034fky":       false,
+		"blanky\u180b":       false,
+		"rob\u3164in":        false,
+		"rob\u1160in":        false,
+		"\u0301\u0301\u0301": false,
+		"1\u20e3ab":          false,
+		"rob:in":             false,
+		"rob in":             false,
+		"rob\\tin":           false,
+		"rob\u200bin":        false,
+		"rob/in":             false,
+		"<robin>":            false,
+	} {
+		err := b.Bind(&account{}, newContext(`{"username":"`+value+`"}`, echo.MIMEApplicationJSON))
+		if ok {
+			assert.NoError(t, err, value)
+		} else {
+			require.Error(t, err, value)
+			assert.Contains(t, err.Error(), "can only contain letters, numbers", value)
+		}
+	}
+}
+
+// A username is stored in its composed (NFC) form, so "José" typed with a
+// combining accent is the same username as "José" typed with a precomposed
+// é, and the two can't both register.
+func TestBind_UsernameIsNormalizedToNFC(t *testing.T) {
+	t.Parallel()
+	b, err := New()
+	require.NoError(t, err)
+	type account struct {
+		Username string  `json:"username" mod:"trim,nfc" validate:"username"`
+		Rename   *string `json:"rename" mod:"trim,nfc" validate:"omitempty,username"`
+	}
+	got := &account{}
+	require.NoError(t, b.Bind(got, newContext(`{"username":" Jose\u0301 ","rename":"Jose\u0301"}`, echo.MIMEApplicationJSON)))
+	assert.Equal(t, "Jos\u00e9", got.Username)
+	require.NotNil(t, got.Rename)
+	assert.Equal(t, "Jos\u00e9", *got.Rename)
+}

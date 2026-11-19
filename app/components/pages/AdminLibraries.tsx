@@ -66,7 +66,7 @@ const AdminLibraries = () => {
   usePageTitle("Libraries");
 
   const navigate = useNavigate();
-  const librariesQuery = useLibraries({});
+  const librariesQuery = useLibraries();
   const { data, isLoading } = librariesQuery;
   const { data: config } = useConfig();
   const createLibraryMutation = useCreateLibrary();

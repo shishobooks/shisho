@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
+	"golang.org/x/text/unicode/norm"
 )
 
 // LoadUserOptions selects the user LoadUser loads. Set exactly one of ID and
@@ -38,7 +39,15 @@ func LoadUser(ctx context.Context, db bun.IDB, opts LoadUserOptions) (*models.Us
 	if opts.ID != nil {
 		q = q.Where("u.id = ?", *opts.ID)
 	} else {
-		q = q.Where("u.username = ? COLLATE NOCASE", *opts.Username)
+		// New usernames are stored composed (NFC), and some keyboards type
+		// accents as separate combining marks, so the composed spelling
+		// matches too. The spelling as typed still matches an older
+		// username stored another way.
+		typed := *opts.Username
+		q = q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Where("u.username = ? COLLATE NOCASE", typed).
+				WhereOr("u.username = ? COLLATE NOCASE", norm.NFC.String(typed))
+		})
 	}
 	if !opts.IncludeInactive {
 		q = q.Where("u.is_active = ?", true)

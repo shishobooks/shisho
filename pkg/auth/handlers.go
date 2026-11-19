@@ -31,8 +31,9 @@ type handler struct {
 	pdfRenderKey string
 }
 
-// buildMeResponse builds a MeResponse from a user model.
-func buildMeResponse(user *models.User) MeResponse {
+// BuildMeResponse builds the signed-in user's MeResponse. The user needs its
+// role's permissions and its Library access loaded.
+func BuildMeResponse(user *models.User) MeResponse {
 	permissions := make([]string, 0)
 	if user.Role != nil {
 		for _, p := range user.Role.Permissions {
@@ -71,24 +72,11 @@ func (h *handler) login(c echo.Context) error {
 		return err
 	}
 
-	token, err := h.authService.GenerateToken(user)
-	if err != nil {
-		return errors.WithStack(err)
+	if err := h.authService.StartSession(c, user); err != nil {
+		return err
 	}
 
-	// Set HTTP-only cookie
-	cookie := &http.Cookie{
-		Name:     h.authService.cookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   int(h.authService.sessionDuration.Seconds()),
-		HttpOnly: true,
-		Secure:   httputil.PublicScheme(c.Request()) == "https",
-		SameSite: http.SameSiteLaxMode,
-	}
-	c.SetCookie(cookie)
-
-	return c.JSON(http.StatusOK, buildMeResponse(user))
+	return c.JSON(http.StatusOK, BuildMeResponse(user))
 }
 
 // logout handles user logout.
@@ -129,7 +117,7 @@ func (h *handler) me(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, buildMeResponse(user))
+	return c.JSON(http.StatusOK, BuildMeResponse(user))
 }
 
 // status returns whether the app needs initial setup.
@@ -171,22 +159,9 @@ func (h *handler) setup(c echo.Context) error {
 		return err
 	}
 
-	token, err := h.authService.GenerateToken(user)
-	if err != nil {
-		return errors.WithStack(err)
+	if err := h.authService.StartSession(c, user); err != nil {
+		return err
 	}
 
-	// Set HTTP-only cookie
-	cookie := &http.Cookie{
-		Name:     h.authService.cookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   int(h.authService.sessionDuration.Seconds()),
-		HttpOnly: true,
-		Secure:   httputil.PublicScheme(c.Request()) == "https",
-		SameSite: http.SameSiteLaxMode,
-	}
-	c.SetCookie(cookie)
-
-	return c.JSON(http.StatusOK, buildMeResponse(user))
+	return c.JSON(http.StatusOK, BuildMeResponse(user))
 }

@@ -3,12 +3,15 @@ package auth
 import (
 	"context"
 	"database/sql"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 	"golang.org/x/crypto/bcrypt"
@@ -239,4 +242,23 @@ func HashPassword(password string) (string, error) {
 func CheckPassword(password, hash string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 	return err == nil
+}
+
+// StartSession signs user in on this browser: it issues a session token and
+// sets it as the HTTP-only session cookie.
+func (s *Service) StartSession(c echo.Context, user *models.User) error {
+	token, err := s.GenerateToken(user)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	c.SetCookie(&http.Cookie{
+		Name:     s.cookieName,
+		Value:    token,
+		Path:     "/",
+		MaxAge:   int(s.sessionDuration.Seconds()),
+		HttpOnly: true,
+		Secure:   httputil.PublicScheme(c.Request()) == "https",
+		SameSite: http.SameSiteLaxMode,
+	})
+	return nil
 }

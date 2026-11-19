@@ -2,45 +2,15 @@ package sharelinks
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/base64"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/linktoken"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
-
-// tokenBytes is the size of a Share Link token before encoding. 256 random
-// bits make guessing unrealistic, so the public routes need no rate limiter.
-const tokenBytes = 32
-
-// tokenLength is the length of an encoded token: unpadded base64url of
-// tokenBytes.
-var tokenLength = base64.RawURLEncoding.EncodedLen(tokenBytes)
-
-// GenerateToken returns a new random Share Link token: 32 bytes from a
-// cryptographically secure source, base64url encoded without padding or a
-// prefix.
-func GenerateToken() (string, error) {
-	b := make([]byte, tokenBytes)
-	if _, err := rand.Read(b); err != nil {
-		return "", errors.WithStack(err)
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-// wellFormedToken reports whether token could have come from GenerateToken,
-// so a mistyped URL is refused without a database lookup.
-func wellFormedToken(token string) bool {
-	if len(token) != tokenLength {
-		return false
-	}
-	_, err := base64.RawURLEncoding.DecodeString(token)
-	return err == nil
-}
 
 type Service struct {
 	db *bun.DB
@@ -61,7 +31,7 @@ type CreateOptions struct {
 // Create inserts a Share Link with a fresh token and returns it with its
 // creator loaded.
 func (svc *Service) Create(ctx context.Context, opts CreateOptions) (*models.ShareLink, error) {
-	token, err := GenerateToken()
+	token, err := linktoken.Generate()
 	if err != nil {
 		return nil, err
 	}

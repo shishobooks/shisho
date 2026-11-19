@@ -50,6 +50,7 @@ const AUTHENTICATED_ONLY: RegExp[] = [
   /^\/events$/,
   /^\/getting-started$/,
   /^\/share\/[^/]+$/,
+  /^\/invites\/[^/]+$/,
 ];
 
 // Paths the server does not register in Demo Mode (pkg/server/server.go)
@@ -134,6 +135,9 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useGenresList: requires("books:read", [{}, on]),
   useGenre: requires("books:read", [1, on]),
   useGenresByIds: requires("books:read", [[1, 2]]),
+  // invites
+  useInviteLinks: requires("users:write", []),
+  useInvite: authenticated(["token"]),
   // jobs
   useJob: authenticated(["1", on]),
   useJobs: requires("jobs:read", [{}, on]),
@@ -141,7 +145,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useJobLogs: requires("jobs:read", ["1", {}, on]),
   // libraries
   useLibrary: requires("libraries:read", ["1", on]),
-  useLibraries: requires(anyOf("libraries:read", "users:write"), [{}, on]),
+  useLibraries: requires(anyOf("libraries:read", "users:write"), [on]),
   useLibraryLanguages: requires("books:read", [1, on]),
   useUserLibraries: authenticated([on]),
   useNavLibraries: requires("books:read", []),
@@ -209,7 +213,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useUpdateCheck: requires("config:read", []),
   // users
   useUser: requires("users:read", ["1", on]),
-  useUsers: requires("users:read", [{}, on]),
+  useUsers: requires("users:read", [on]),
   useRoles: requires("users:read", [on]),
   useUserDirectory: authenticated([on]),
 };

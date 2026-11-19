@@ -39,6 +39,7 @@ func New() (*Binder, error) {
 	formDecoder := schema.NewDecoder()
 	formDecoder.SetAliasTag("form")
 	conform := modifiers.New()
+	conform.Register("nfc", nfcModifier)
 	validate := validator.New()
 	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
 		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
@@ -49,6 +50,7 @@ func New() (*Binder, error) {
 	})
 	_ = validate.RegisterValidation("date", dateValidator)
 	_ = validate.RegisterValidation("url", urlValidator)
+	_ = validate.RegisterValidation("username", usernameValidator)
 
 	return &Binder{queryDecoder, formDecoder, conform, validate}, nil
 }

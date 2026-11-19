@@ -10,16 +10,21 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 )
 
-// deniedDownloads are the explicit download routes. They stay closed to HEAD
+// deniedReads are reads Demo Mode refuses. The explicit download routes stay
+// closed to HEAD
 // as well as GET, since a HEAD still runs the handler and can start a build.
 // The generated download, pages, and audio streaming stay open and still hand
 // out complete files, so this is not copy protection, and supplements are
 // reachable through the generated download: the demo corpus must not include
 // them.
-var deniedDownloads = map[string]bool{
+var deniedReads = map[string]bool{
 	"/api/books/files/:id/download/original":  true,
 	"/api/books/files/:id/download/:fileType": true,
 	"/api/jobs/:id/download":                  true,
+	// The demo has no Invite Links. Its admin password is public, so the
+	// pending list, which carries tokens, is refused along with the lookup.
+	"/api/invites/:token": true,
+	"/api/invite-links":   true,
 }
 
 // demoModeMiddleware must be registered with Use, not Pre, so Path contains
@@ -28,7 +33,7 @@ func demoModeMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		switch c.Request().Method {
 		case http.MethodGet, http.MethodHead:
-			if deniedDownloads[c.Path()] {
+			if deniedReads[c.Path()] {
 				return errcodes.DemoMode()
 			}
 			return next(c)

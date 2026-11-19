@@ -331,4 +331,39 @@ describe("useUnsavedChanges", () => {
       expect(latestResult!.showBlockerDialog).toBe(false);
     });
   });
+
+  describe("allowNavigation", () => {
+    // A page may let some navigations through with unsaved changes, such as
+    // Add User switching between its two forms, which keep their input.
+    it("lets through only the navigations the page allows", () => {
+      let latestResult: ReturnType<typeof useUnsavedChanges>;
+      function TestComponent() {
+        latestResult = useUnsavedChanges(true, {
+          allowNavigation: ({ currentLocation, nextLocation }) =>
+            currentLocation.pathname === nextLocation.pathname,
+        });
+        return null;
+      }
+      const router = createMemoryRouter(
+        [
+          { path: "/", element: <TestComponent /> },
+          { path: "/other", element: <div>Other</div> },
+        ],
+        { initialEntries: ["/"] },
+      );
+      render(<RouterProvider router={router} />);
+
+      act(() => {
+        router.navigate("/?method=password");
+      });
+      expect(latestResult!.showBlockerDialog).toBe(false);
+      expect(router.state.location.search).toBe("?method=password");
+
+      act(() => {
+        router.navigate("/other");
+      });
+      expect(latestResult!.showBlockerDialog).toBe(true);
+      expect(router.state.location.pathname).toBe("/");
+    });
+  });
 });

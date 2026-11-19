@@ -261,3 +261,25 @@ func PluginUpdateRequired() error {
 		"plugin_update_required",
 	}
 }
+
+// UsernameTaken returns the 422 for a new username another user
+// already has, compared without case. Its own code lets a form flag the
+// username field instead of showing a toast.
+func UsernameTaken() error {
+	return &Error{
+		http.StatusUnprocessableEntity,
+		"That username is already taken.",
+		"username_taken",
+	}
+}
+
+// EmailTaken returns the 422 for a new email address another user
+// already has, compared without case. Its own code lets a form flag the
+// email field.
+func EmailTaken() error {
+	return &Error{
+		http.StatusUnprocessableEntity,
+		"That email address is already in use.",
+		"email_taken",
+	}
+}

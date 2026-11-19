@@ -37,6 +37,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/frontend"
 	"github.com/shishobooks/shisho/pkg/genres"
 	"github.com/shishobooks/shisho/pkg/gettingstarted"
+	"github.com/shishobooks/shisho/pkg/invitelinks"
 	"github.com/shishobooks/shisho/pkg/joblogs"
 	"github.com/shishobooks/shisho/pkg/jobs"
 	"github.com/shishobooks/shisho/pkg/kobo"
@@ -183,6 +184,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		users.RegisterDirectoryRoutes(userDirectoryGroup, db)
 	}
 	roles.RegisterRoutes(api, db, authMiddleware)
+	// Invite Links: Users Write manages them, and the public lookup and
+	// accept need no account. Demo Mode refuses all of them, its two reads
+	// by name in deniedReads.
+	invitelinks.RegisterRoutes(api, db, authService, authMiddleware)
 
 	// Each user's Getting Started list, and an admin's Show Getting Started.
 	gettingstarted.RegisterRoutes(api, db, authMiddleware, cfg.DemoMode)

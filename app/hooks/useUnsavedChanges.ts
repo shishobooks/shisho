@@ -1,5 +1,15 @@
 import { useCallback, useEffect } from "react";
-import { useBlocker } from "react-router-dom";
+import { useBlocker, type BlockerFunction } from "react-router-dom";
+
+export interface UseUnsavedChangesOptions {
+  /**
+   * Lets one kind of in-app navigation through even with unsaved changes.
+   * Only for a navigation that keeps the page and everything typed on it,
+   * like Add User switching between its two forms; any other navigation
+   * still asks. Browser close and refresh always ask.
+   */
+  allowNavigation?: (args: Parameters<BlockerFunction>[0]) => boolean;
+}
 
 interface UseUnsavedChangesResult {
   /** Whether the blocker dialog should be shown */
@@ -18,6 +28,7 @@ interface UseUnsavedChangesResult {
  * 2. SPA navigation: Uses react-router's `useBlocker` to show custom dialog
  *
  * @param hasChanges - Whether there are unsaved changes to protect
+ * @param options - `allowNavigation` exempts a navigation that keeps the input
  * @returns Controls for the blocker dialog
  *
  * @example
@@ -36,6 +47,7 @@ interface UseUnsavedChangesResult {
  */
 export function useUnsavedChanges(
   hasChanges: boolean,
+  { allowNavigation }: UseUnsavedChangesOptions = {},
 ): UseUnsavedChangesResult {
   // Handle browser close/refresh with native dialog
   useEffect(() => {
@@ -53,7 +65,11 @@ export function useUnsavedChanges(
   }, [hasChanges]);
 
   // Handle SPA navigation with react-router blocker
-  const blocker = useBlocker(hasChanges);
+  const shouldBlock = useCallback<BlockerFunction>(
+    (args) => hasChanges && !(allowNavigation?.(args) ?? false),
+    [hasChanges, allowNavigation],
+  );
+  const blocker = useBlocker(shouldBlock);
 
   const proceedNavigation = useCallback(() => {
     if (blocker.state === "blocked") {

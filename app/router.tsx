@@ -29,6 +29,7 @@ import FileReader from "@/components/pages/FileReader";
 import GenreDetail from "@/components/pages/GenreDetail";
 import GenresList from "@/components/pages/GenresList";
 import Home from "@/components/pages/Home";
+import { inviteRoutes } from "@/components/pages/inviteRoutes";
 import JobDetail from "@/components/pages/JobDetail";
 import LibraryRedirect from "@/components/pages/LibraryRedirect";
 import LibrarySettings from "@/components/pages/LibrarySettings";
@@ -68,6 +69,7 @@ export const routes: RouteObject[] = [
     Component: Setup,
   },
   ...shareRoutes,
+  ...inviteRoutes,
   // Protected routes (require authentication)
   {
     path: "/",
@@ -123,6 +125,14 @@ export const routes: RouteObject[] = [
           },
           {
             path: "users",
+            element: (
+              <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.adminUsers}>
+                <AdminUsers />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "users/roles",
             element: (
               <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.adminUsers}>
                 <AdminUsers />

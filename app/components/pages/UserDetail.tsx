@@ -39,6 +39,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { isLoadFailure, toastRequestError } from "@/libraries/api";
 import { sortRoles } from "@/utils/roles";
+import { USERNAME_HINT, usernameProblem } from "@/utils/username";
 
 const UserDetail = () => {
   const { id } = useParams<{ id: string }>();
@@ -149,11 +150,20 @@ const UserDetail = () => {
   const handleSave = async () => {
     if (!id) return;
 
+    // Only a new username has to follow the rules; an older one that
+    // doesn't can stay as it is.
+    const usernameChanged = username !== user?.username;
+    const problem = usernameChanged ? usernameProblem(username) : null;
+    if (problem) {
+      toast.error(problem);
+      return;
+    }
+
     try {
       await updateUserMutation.mutateAsync({
         id,
         payload: {
-          username: username !== user?.username ? username : undefined,
+          username: usernameChanged ? username : undefined,
           email: email !== (user?.email ?? "") ? email || undefined : undefined,
           role_id: roleId !== user?.role_id ? (roleId ?? undefined) : undefined,
           all_library_access: allLibraryAccess,
@@ -312,6 +322,9 @@ const UserDetail = () => {
               onChange={(e) => setUsername(e.target.value)}
               value={username}
             />
+            {canWrite && (
+              <p className="text-xs text-muted-foreground">{USERNAME_HINT}</p>
+            )}
           </div>
 
           <div className="space-y-2">

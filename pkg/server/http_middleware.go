@@ -35,7 +35,7 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			clientVersion = "unknown"
 		}
 		log := logger.NewWithLevel(c.Request().Header.Get("X-Log-Level")).ID(id.String()).Root(logger.Data{
-			"method": c.Request().Method, "path": c.Request().URL.Path,
+			"method": c.Request().Method, "path": loggedPath(c),
 			"route": c.Path(), "client_version": clientVersion,
 		})
 		c.SetRequest(c.Request().WithContext(log.WithContext(c.Request().Context())))
@@ -54,10 +54,35 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		logger.FromContext(c.Request().Context()).Root(logger.Data{
 			"status_code": c.Response().Status,
 			"duration":    fmt.Sprintf("%.5f", time.Since(started).Seconds()*1000),
-			"referer":     c.Request().Referer(), "user_agent": c.Request().UserAgent(),
+			"referer":     loggedReferer(c.Request().Referer()), "user_agent": c.Request().UserAgent(),
 		}).Info("request handled")
 		return nil
 	}
+}
+
+// tokenPages are the app pages whose path carries a Share Link or Invite Link
+// token, which works like a password.
+var tokenPages = []string{"/share/", "/invite/"}
+
+// loggedPath is the request path for the access log. A route whose path
+// carries a link token logs its pattern instead, since the log viewer needs
+// only Config Read and the token would let a reader use the link.
+func loggedPath(c echo.Context) string {
+	if strings.Contains(c.Path(), ":token") {
+		return c.Path()
+	}
+	return c.Request().URL.Path
+}
+
+// loggedReferer drops the token from a referer on a page that carries one,
+// for the same reason as loggedPath.
+func loggedReferer(referer string) string {
+	for _, page := range tokenPages {
+		if i := strings.Index(referer, page); i >= 0 {
+			return referer[:i+len(page)] + ":token"
+		}
+	}
+	return referer
 }
 
 // buildHeader names the frontend build the server embeds. The web app compares

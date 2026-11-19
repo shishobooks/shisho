@@ -1,11 +1,4 @@
-import {
-  ArrowLeft,
-  Copy,
-  Pencil,
-  RefreshCw,
-  Tablet,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Pencil, RefreshCw, Tablet, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -16,6 +9,7 @@ import DeviceTypeRadioGroup from "@/components/devices/DeviceTypeRadioGroup";
 import Disclosure from "@/components/devices/Disclosure";
 import KOReaderPluginSetup from "@/components/devices/KOReaderPluginSetup";
 import KOReaderUnrecognizedBooks from "@/components/devices/KOReaderUnrecognizedBooks";
+import CopyField from "@/components/library/CopyField";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import TopNav from "@/components/library/TopNav";
@@ -75,7 +69,6 @@ import {
   type DeviceType,
   type ScopeType,
 } from "@/types/generated/devices";
-import { copyText } from "@/utils/clipboard";
 import {
   CONNECTION_LABELS,
   DEVICE_TYPE_LABELS,
@@ -86,34 +79,6 @@ import {
   shortURL,
 } from "@/utils/devices";
 import { formatDateTime } from "@/utils/format";
-
-const copyToClipboard = async (value: string) => {
-  if (await copyText(value)) {
-    toast.success("Copied to clipboard");
-  } else {
-    toast.error("Could not copy");
-  }
-};
-
-// CopyField shows a value in monospace with a copy button. A long URL
-// wraps rather than scrolling inside a field, so it can be read on a phone.
-const CopyField = ({ label, value }: { label: string; value: string }) => (
-  <div className="flex items-start gap-2">
-    <code
-      aria-label={label}
-      className="min-w-0 flex-1 break-all rounded-md border border-input px-3 py-2 font-mono text-sm"
-    >
-      {value}
-    </code>
-    <Button
-      aria-label={`Copy ${label.toLowerCase()}`}
-      onClick={() => copyToClipboard(value)}
-      variant="outline"
-    >
-      <Copy className="h-4 w-4" />
-    </Button>
-  </div>
-);
 
 const CredentialSection = ({ device }: { device: DeviceResponse }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);

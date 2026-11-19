@@ -1,4 +1,4 @@
-package sharelinks
+package linktoken
 
 import (
 	"encoding/base64"
@@ -8,27 +8,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGenerateToken_LengthAndUniqueness(t *testing.T) {
+func TestGenerate_LengthAndUniqueness(t *testing.T) {
 	t.Parallel()
 	seen := make(map[string]bool)
 	for range 1000 {
-		token, err := GenerateToken()
+		token, err := Generate()
 		require.NoError(t, err)
 		raw, err := base64.RawURLEncoding.DecodeString(token)
 		require.NoError(t, err)
 		assert.Len(t, raw, 32)
 		assert.Len(t, token, 43)
-		assert.True(t, wellFormedToken(token))
+		assert.True(t, WellFormed(token))
 		assert.False(t, seen[token], "duplicate token %s", token)
 		seen[token] = true
 	}
 }
 
-func TestWellFormedToken_RejectsOtherShapes(t *testing.T) {
+func TestWellFormed_RejectsOtherShapes(t *testing.T) {
 	t.Parallel()
-	valid, err := GenerateToken()
+	valid, err := Generate()
 	require.NoError(t, err)
 	for _, token := range []string{"", "abc", valid + "A", valid[:42], valid[:42] + "=", valid[:42] + "+", valid[:42] + "/"} {
-		assert.False(t, wellFormedToken(token), token)
+		assert.False(t, WellFormed(token), token)
 	}
 }

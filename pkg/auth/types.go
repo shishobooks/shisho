@@ -8,7 +8,7 @@ type LoginPayload struct {
 
 // SetupPayload represents the initial setup request body.
 type SetupPayload struct {
-	Username string  `json:"username" validate:"required,min=3,max=50"`
+	Username string  `json:"username" mod:"trim,nfc" validate:"required,min=3,max=50,username"`
 	Email    *string `json:"email" validate:"omitempty,email"`
 	Password string  `json:"password" validate:"required,min=8"`
 }

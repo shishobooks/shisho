@@ -3,7 +3,9 @@ package binder
 import (
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -39,4 +41,46 @@ func urlValidator(fl validator.FieldLevel) bool {
 	}
 	u, err := url.Parse(value)
 	return err == nil && u.Scheme != "" && u.Host != ""
+}
+
+// usernameSymbols are the characters a username may hold besides letters and
+// numbers. "@" and "." keep email-style usernames working.
+const usernameSymbols = "._-@"
+
+// usernameValidator ensures a username is only letters and numbers, in any
+// script, the marks that letters are written with (the vowel signs and
+// accents of scripts such as Devanagari and Thai), and usernameSymbols. A
+// colon would break HTTP Basic sign-in (OPDS, KOReader), which splits on the
+// first one, and spaces or invisible characters would let one username pass
+// for another, so a mark must follow a letter and invisible ones are refused.
+// Length is checked separately. Sign-in doesn't use it, so an older username
+// that breaks the rule still signs in.
+func usernameValidator(fl validator.FieldLevel) bool {
+	afterLetter := false
+	for _, r := range fl.Field().String() {
+		if invisible(r) {
+			return false
+		}
+		switch {
+		case unicode.IsLetter(r):
+			afterLetter = true
+		case unicode.IsMark(r):
+			if !afterLetter {
+				return false
+			}
+		case unicode.IsNumber(r), strings.ContainsRune(usernameSymbols, r):
+			afterLetter = false
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// invisible reports whether r renders as nothing though Unicode files it
+// under letters or marks: variation selectors, the combining grapheme
+// joiner, and fillers such as the Hangul ones.
+func invisible(r rune) bool {
+	return unicode.Is(unicode.Variation_Selector, r) ||
+		unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r)
 }

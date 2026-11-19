@@ -10,13 +10,13 @@ import type {
   CreateLibraryPayload,
   Library,
   LibrarySummary,
-  ListLibrariesQuery,
   ListLibrariesResponse,
   UpdateLibraryPayload,
 } from "@/types";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { invalidateCoverPreviewLists } from "./coverPreviews";
+import { fetchEveryPage } from "./everyPage";
 import { invalidateGettingStarted } from "./gettingStarted";
 import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
 import { anyOf, useRequires } from "./permissions";
@@ -47,8 +47,10 @@ export const useLibrary = (
   });
 };
 
+// Every Library the caller can access. GET /libraries is paged, and the pages
+// that use this (the Libraries list and the access pickers when adding or
+// editing a user) need all of them.
 export const useLibraries = (
-  query: ListLibrariesQuery = {},
   options: Omit<
     UseQueryOptions<ListLibrariesResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
@@ -61,10 +63,8 @@ export const useLibraries = (
       anyOf("libraries:read", "users:write"),
       options.enabled ?? true,
     ),
-    queryKey: [QueryKey.ListLibraries, query],
-    queryFn: ({ signal }) => {
-      return API.request("GET", "/libraries", null, query, signal);
-    },
+    queryKey: [QueryKey.ListLibraries],
+    queryFn: ({ signal }) => fetchEveryPage("/libraries", signal),
   });
 };
 

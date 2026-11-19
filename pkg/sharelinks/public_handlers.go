@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/linktoken"
 	"github.com/shishobooks/shisho/pkg/models"
 )
 
@@ -45,7 +46,7 @@ func errUnavailable() error {
 func (h *publicHandler) resolve(c echo.Context) (*models.ShareLink, *models.Book, error) {
 	ctx := c.Request().Context()
 	token := c.Param("token")
-	if !wellFormedToken(token) {
+	if !linktoken.WellFormed(token) {
 		return nil, nil, errUnavailable()
 	}
 
