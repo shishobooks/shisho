@@ -95,22 +95,53 @@ docker compose logs -f shisho
 
 See [Deployment and Maintenance](./deployment-and-maintenance.md) for updates, backups, reverse proxies, and health check limitations.
 
-## Create the First Admin
+## Set Up Shisho
 
-Open `http://localhost:5173`. On the initial setup screen, enter a username of at least 3 characters and a password of at least 8 characters, then select **Create Admin Account**.
+Open `http://localhost:5173`. Setup walks the first admin through four steps: the account, the library, metadata plugins, and finishing. Your choices are kept in the browser until you finish, so reloading the page returns you to the same step with them intact.
 
-The first account receives the built-in admin role. See [Users and Permissions](./users-and-permissions.md) before adding more users.
+### Create the Admin Account
 
-The **Getting Started** pill in the top nav lists the first steps left, such as setting up a library and inviting someone. See [Getting Started](./users-and-permissions.md#getting-started).
+Enter a username of at least 3 characters and a password of at least 8 characters, then select **Create Admin Account**. The first account receives the built-in admin role. See [Users and Permissions](./users-and-permissions.md) before adding more users.
 
-## Create the First Library
+### Choose Your Library
 
-:::danger[Review File Organization Before Creating the Library]
-**Organize file structure during scans** is enabled by default for every new library. Creating the library immediately queues its first scan. With a writable media mount, that scan can move and rename files into Shisho's organized structure and can write covers and sidecars.
+Give the library a name, and under **Folders** enter `/media`, or select **Browse** to pick folders from the server. Paths are the container side of your media mount. Add more folders with **Add another folder**.
 
-Back up the media first. Clear **Organize file structure during scans** before selecting **Create Library** if you want Shisho to preserve your existing paths.
+:::danger[Review File Organization Before Finishing]
+**Organize file structure during scans** is on by default. With a writable media mount, the first scan can move and rename your files into a folder per book, named `[Author] Title`, and can write covers and sidecars beside them. The animation on this step shows example files being rearranged; it is not a preview of your own files.
+
+Back up the media first. Clear **Organize file structure during scans** before you finish if Shisho must keep your existing paths. You can change it later in the library's settings, but files already moved stay where they are.
 :::
 
-Select **Create Library**, give the library a name, and add `/media` under **Library Paths**.
+Select **Continue**. While you are on this step, Shisho looks through the folders to count the ebooks, audiobooks, and comics in them, going by file extension. On a large library or a slow disk it stops after a few seconds or a few thousand files and says it looked at only part of them.
+
+### Add Metadata Plugins
+
+Plugins fill in covers, descriptions, series, and other metadata from online sources. Shisho recommends plugins from the official repository based on what it found:
+
+| Found | Ticked | Also shown |
+|-------|--------|------------|
+| Ebooks | Goodreads Enricher | Open Library Enricher |
+| Audiobooks | Audible Enricher | |
+| Comics | Manga Enricher | |
+| Nothing | Goodreads Enricher | Open Library, Audible, and Manga Enrichers |
+
+**See all plugins** lists the repository's other plugins, unticked. Each plugin shows a one-line summary of what it can access, such as the sites it connects to, and **What it can access** lists every capability.
+
+:::warning[Ticking a Plugin Approves Its Access]
+A ticked plugin is installed when you finish, with the capabilities its card lists, such as network access to the sites named. Untick any plugin you don't want to run on your server. See [Using Plugins](./plugins/overview.md) before installing plugins from other sources.
+:::
+
+Select **Skip this step** to finish without plugins. If Shisho can't reach the plugin repository, the step says so and **Continue** finishes without them. You can install plugins later under **Administration > Plugins**.
+
+### Finish
+
+**Finish setup** installs the ticked plugins first and then creates the library, so its first scan runs with them. A plugin that fails to install is reported, and setup still creates the library. You land on the library page, which shows the scan's progress while books appear.
+
+**Skip setup**, on the library and plugin steps, leaves setup without creating a library. Setup doesn't come back on its own; **Set up your first library** in [Getting Started](./users-and-permissions.md#getting-started) reopens it at the library step.
+
+## Next Steps
+
+The **Getting Started** pill in the top nav lists what's left, such as inviting someone and connecting a reading device. See [Getting Started](./users-and-permissions.md#getting-started).
 
 For scanning behavior and library settings, continue to [Libraries](./libraries.md). For all server options, see [Configuration](./configuration.md).

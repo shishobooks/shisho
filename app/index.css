@@ -151,3 +151,116 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Setup's organize animation (OrganizeAnimation.tsx). One loop: the messy
+   folder holds, its files move into a folder per book and take their
+   organized names, the result holds, then it all fades back. Each file row
+   sets --from-x/y and --to-x/y; every row shares the loop's length so they
+   stay in step. Reduced motion shows a still instead, so none of this runs. */
+@keyframes setup-file-move {
+  0%,
+  20% {
+    transform: translate(var(--from-x), var(--from-y));
+    opacity: 1;
+  }
+  38%,
+  88% {
+    transform: translate(var(--to-x), var(--to-y));
+    opacity: 1;
+  }
+  92% {
+    transform: translate(var(--to-x), var(--to-y));
+    opacity: 0;
+  }
+  93% {
+    transform: translate(var(--from-x), var(--from-y));
+    opacity: 0;
+  }
+  100% {
+    transform: translate(var(--from-x), var(--from-y));
+    opacity: 1;
+  }
+}
+
+/* Once a file has arrived, its old name fades out before the new one fades
+   in, so the two never overlap. */
+@keyframes setup-name-before {
+  0%,
+  40% {
+    opacity: 1;
+  }
+  43%,
+  92% {
+    opacity: 0;
+  }
+  93%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes setup-name-after {
+  0%,
+  43% {
+    opacity: 0;
+  }
+  47%,
+  92% {
+    opacity: 1;
+  }
+  93%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* A book's folder appears only after the files have moved out of its row. */
+@keyframes setup-folder-in {
+  0%,
+  38% {
+    opacity: 0;
+    transform: translate(calc(var(--x) - 6px), var(--y));
+  }
+  48%,
+  88% {
+    opacity: 1;
+    transform: translate(var(--x), var(--y));
+  }
+  92%,
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), var(--y));
+  }
+}
+
+@keyframes setup-folder-out {
+  0%,
+  14% {
+    opacity: 1;
+  }
+  20%,
+  93% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* The Getting Started pill pulses once when Setup lands on the library. */
+@keyframes getting-started-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 55%, transparent);
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.06);
+  }
+  60% {
+    transform: scale(1);
+  }
+  100% {
+    box-shadow: 0 0 0 12px color-mix(in oklch, var(--primary) 0%, transparent);
+    transform: scale(1);
+  }
+}

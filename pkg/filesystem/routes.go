@@ -12,6 +12,7 @@ func RegisterRoutes(e *echo.Group, authMiddleware *auth.Middleware) {
 
 	h := &handler{
 		filesystemService: filesystemService,
+		detectBudget:      defaultDetectLimits,
 	}
 
 	fsGroup := e.Group("/filesystem")
@@ -19,4 +20,7 @@ func RegisterRoutes(e *echo.Group, authMiddleware *auth.Middleware) {
 	// Filesystem browsing requires libraries:write permission (used when creating/editing libraries)
 	fsGroup.Use(authMiddleware.RequirePermission(models.ResourceLibraries, models.OperationWrite))
 	fsGroup.GET("/browse", h.browse)
+	// Detection reads the same folders the picker browses, so it has the
+	// picker's access rules.
+	fsGroup.POST("/detect", h.detect)
 }

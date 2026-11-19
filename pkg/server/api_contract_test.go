@@ -146,6 +146,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		message string
 	}{
 		{
+			name:   "detecting file types in no folders",
+			method: http.MethodPost, path: "/api/filesystem/detect",
+			body:   `{"paths":[]}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+		},
+		{
 			name:   "pausing a book nobody is reading",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/pause", fileBook.ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book isn't being read.",

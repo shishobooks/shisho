@@ -40,13 +40,15 @@ interface StepCopy {
   to: string;
 }
 
-// Where each step gets done. Later Setup, Invite Link, and Connect a device
-// work replaces some of these targets.
+// Where each step gets done. Later Invite Link and Connect a device work
+// replaces some of these targets.
 const STEP_COPY: Record<GettingStartedStepKey, StepCopy> = {
   library: {
     title: "Set up your first library",
     description: "Point Shisho at the folders that hold your books.",
-    to: "/libraries/create",
+    // Setup, from its library step, so plugins are chosen before the first
+    // scan.
+    to: "/setup/library",
   },
   plugins: {
     title: "Add metadata plugins",
@@ -137,14 +139,24 @@ const ProgressRing = ({ done, total }: { done: number; total: number }) => {
 
 interface PillProps extends ButtonProps {
   progress: Progress;
+  /** Pulses once, as Setup asks when it lands on the new library. */
+  pulse?: boolean;
 }
+
+// How long the pill's one pulse runs; the 1.4s in Pill's animation class
+// matches.
+const PULSE_MS = 1400;
 
 // Forwards its ref and props so PopoverTrigger can anchor to it.
 const Pill = forwardRef<HTMLButtonElement, PillProps>(
-  ({ progress, ...props }, ref) => (
+  ({ progress, pulse, ...props }, ref) => (
     <Button
       aria-label={`Getting Started, ${progress.complete ? "all set" : progressLabel(progress)}`}
-      className="gap-2 rounded-full px-2.5 sm:px-3"
+      className={cn(
+        "gap-2 rounded-full px-2.5 sm:px-3",
+        pulse && "motion-safe:animate-[getting-started-pulse_1.4s_ease-out_1]",
+      )}
+      data-pulse={pulse ? "" : undefined}
       ref={ref}
       variant="outline"
       {...props}
@@ -328,7 +340,7 @@ const PanelBody = ({
 const GettingStarted = () => {
   const query = useGettingStarted();
   const { data, refetch } = query;
-  const { isOpen, setOpen } = useGettingStartedPanel();
+  const { isOpen, setOpen, pulse, clearPulse } = useGettingStartedPanel();
   const isPhone = useIsPhone();
   const titleId = useId();
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -353,6 +365,21 @@ const GettingStarted = () => {
         toastRequestError(error, "Failed to update Getting Started"),
     });
   }, [autoOpen, clearAutoOpen, setOpen]);
+
+  // Setup asks the pill to pulse once on the library it lands on, in place of
+  // opening the panel over the arriving books.
+  const pulsing = visible && pulse;
+  useEffect(() => {
+    if (!pulsing) return;
+    const timer = setTimeout(clearPulse, PULSE_MS);
+    return () => clearTimeout(timer);
+  }, [pulsing, clearPulse]);
+  // With no pill to pulse (the list is off or dismissed), the request is
+  // dropped, so a pill restored later doesn't pulse out of nowhere.
+  const hidden = data !== undefined && !visible;
+  useEffect(() => {
+    if (pulse && hidden) clearPulse();
+  }, [pulse, hidden, clearPulse]);
 
   // The panel closes even when the dismissal fails, so a failing request
   // can't trap the user in the modal sheet.
@@ -418,7 +445,7 @@ const GettingStarted = () => {
     return (
       <Sheet onOpenChange={handleOpenChange} open={isOpen}>
         <SheetTrigger asChild>
-          <Pill progress={progress} />
+          <Pill progress={progress} pulse={pulsing} />
         </SheetTrigger>
         <SheetContent
           className="flex max-h-[85vh] flex-col rounded-t-md px-4 pb-6"
@@ -450,7 +477,7 @@ const GettingStarted = () => {
   return (
     <Popover onOpenChange={handleOpenChange} open={isOpen}>
       <PopoverTrigger asChild>
-        <Pill progress={progress} />
+        <Pill progress={progress} pulse={pulsing} />
       </PopoverTrigger>
       <PopoverContent
         align="end"

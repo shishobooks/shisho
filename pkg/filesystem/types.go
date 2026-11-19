@@ -24,3 +24,20 @@ type BrowseResponse struct {
 	Total       int     `json:"total"`
 	HasMore     bool    `json:"has_more"`
 }
+
+// DetectFileTypesPayload is the body of POST /filesystem/detect: the folders
+// a new library will scan.
+type DetectFileTypesPayload struct {
+	Paths []string `json:"paths" validate:"required,min=1,max=100,dive,required" mod:"dive,trim"`
+}
+
+// DetectFileTypesResponse counts the recognized files found in the paths by
+// category. StoppedEarly says the walk ran out of time or reached its file
+// limit before it looked at everything, so the counts cover part of the
+// folders.
+type DetectFileTypesResponse struct {
+	Ebooks       int  `json:"ebooks"`
+	Audiobooks   int  `json:"audiobooks"`
+	Comics       int  `json:"comics"`
+	StoppedEarly bool `json:"stopped_early"`
+}
