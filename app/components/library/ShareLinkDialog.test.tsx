@@ -204,7 +204,7 @@ describe("ShareLinkDialog", () => {
     renderDialog();
 
     expect(screen.getByRole("note")).toHaveTextContent(
-      "Links copied here start with localhost, which other devices can't reach.",
+      "Links copied here point to localhost, which other devices can't reach.",
     );
   });
 
@@ -215,9 +215,18 @@ describe("ShareLinkDialog", () => {
     unmount();
 
     vi.mocked(pageHostname).mockReturnValue("localhost");
-    mocks.links = [link({ state: "expired" })];
-    renderDialog();
-    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    const warning = () => screen.queryByText(/Links copied here/);
+    // Links whose copy button is off: expired, paused, or sharing turned off.
+    for (const [links, props] of [
+      [[link({ state: "expired" })], {}],
+      [[link({ paused_reason: "creator_deactivated" })], {}],
+      [[link({ label: "for Alice" })], { sharingEnabled: false }],
+    ] as const) {
+      mocks.links = [...links];
+      const view = renderDialog(props);
+      expect(warning()).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 
   it("shows only the list for Shares Read without Shares Write", () => {

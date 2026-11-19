@@ -231,9 +231,9 @@ const UsersTab = ({ canWriteUsers }: { canWriteUsers: boolean }) => {
         <LoopbackNote>
           {(host) => (
             <>
-              Invite links copied here start with {host}, which other devices
-              can&apos;t reach. Open Shisho at the address the people you invite
-              use, then copy them.
+              Invite links copied here point to {host}, which other devices
+              can&apos;t reach. Copy them from the address the people you invite
+              use instead.
             </>
           )}
         </LoopbackNote>

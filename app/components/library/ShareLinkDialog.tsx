@@ -178,11 +178,14 @@ export function ShareLinkDialog({
     ? preset
     : DEFAULT_PRESET;
 
-  // A live link resolves for its recipient, so its copy button works.
-  const isLive = (link: ShareLinkResponse) =>
-    link.state === ShareLinkStateActive &&
-    !link.paused_reason &&
-    sharingEnabled;
+  // A paused link is still active (it can be revoked) but its creator stops
+  // it from resolving. A live link resolves for its recipient, so its copy
+  // button works.
+  const linkStatus = (link: ShareLinkResponse) => {
+    const active = link.state === ShareLinkStateActive;
+    const paused = active && Boolean(link.paused_reason);
+    return { active, paused, live: active && !paused && sharingEnabled };
+  };
 
   const handleCopy = async (token: string) => {
     if (await copyText(shareLinkUrl(token))) {
@@ -331,6 +334,17 @@ export function ShareLinkDialog({
             {canList && (
               <div className="space-y-3">
                 <h3 className="text-sm font-medium">Links</h3>
+                {links.some((link) => linkStatus(link).live) && (
+                  <LoopbackNote>
+                    {(host) => (
+                      <>
+                        Links copied here point to {host}, which other devices
+                        can&apos;t reach. Copy them from the address the people
+                        you share with use instead.
+                      </>
+                    )}
+                  </LoopbackNote>
+                )}
                 {linksQuery.isLoading ? (
                   <LoadingSpinner />
                 ) : linksQuery.error && !linksQuery.data ? (
@@ -343,120 +357,103 @@ export function ShareLinkDialog({
                     This book has no share links yet.
                   </p>
                 ) : (
-                  <>
-                    {links.some(isLive) && (
-                      <LoopbackNote>
-                        {(host) => (
-                          <>
-                            Links copied here start with {host}, which other
-                            devices can&apos;t reach. Open Shisho at the address
-                            the people you share with use, then copy them.
-                          </>
-                        )}
-                      </LoopbackNote>
-                    )}
-                    <ul className="space-y-2">
-                      {links.map((link) => {
-                        // A link that does not resolve keeps its row but recedes:
-                        // no fill, a muted label, and the muted status badge. A
-                        // paused link is still active (it can be revoked) but its
-                        // creator stops it from resolving.
-                        const active = link.state === ShareLinkStateActive;
-                        const paused = active && Boolean(link.paused_reason);
-                        const live = isLive(link);
-                        return (
-                          <li
-                            className={cn(
-                              "flex items-center justify-between gap-2 py-2 px-3 rounded-md border",
-                              live && "bg-muted/50",
-                            )}
-                            key={link.id}
-                          >
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className={cn(
-                                    "font-medium truncate",
-                                    (!link.label || !live) &&
-                                      "text-muted-foreground",
-                                    !link.label && "italic",
-                                  )}
-                                  title={link.label}
-                                >
-                                  {link.label || "No label"}
-                                </span>
-                                <Badge
-                                  className={cn(
-                                    "capitalize",
-                                    !live &&
-                                      "border-transparent bg-muted text-muted-foreground",
-                                  )}
-                                  variant={live ? "success" : "outline"}
-                                >
-                                  {paused ? "paused" : link.state}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                Created by {link.created_by_username} ·{" "}
-                                {expiryText(link)}
-                              </p>
-                              {paused && (
-                                <p className="text-xs text-muted-foreground">
-                                  {pausedText(link)}
-                                </p>
-                              )}
-                              <p className="text-xs text-muted-foreground">
-                                {usageText(link)}
-                              </p>
+                  <ul className="space-y-2">
+                    {links.map((link) => {
+                      // A link that does not resolve keeps its row but recedes:
+                      // no fill, a muted label, and the muted status badge.
+                      const { active, paused, live } = linkStatus(link);
+                      return (
+                        <li
+                          className={cn(
+                            "flex items-center justify-between gap-2 py-2 px-3 rounded-md border",
+                            live && "bg-muted/50",
+                          )}
+                          key={link.id}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "font-medium truncate",
+                                  (!link.label || !live) &&
+                                    "text-muted-foreground",
+                                  !link.label && "italic",
+                                )}
+                                title={link.label}
+                              >
+                                {link.label || "No label"}
+                              </span>
+                              <Badge
+                                className={cn(
+                                  "capitalize",
+                                  !live &&
+                                    "border-transparent bg-muted text-muted-foreground",
+                                )}
+                                variant={live ? "success" : "outline"}
+                              >
+                                {paused ? "paused" : link.state}
+                              </Badge>
                             </div>
-                            <div className="flex items-center shrink-0">
+                            <p className="text-xs text-muted-foreground">
+                              Created by {link.created_by_username} ·{" "}
+                              {expiryText(link)}
+                            </p>
+                            {paused && (
+                              <p className="text-xs text-muted-foreground">
+                                {pausedText(link)}
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground">
+                              {usageText(link)}
+                            </p>
+                          </div>
+                          <div className="flex items-center shrink-0">
+                            <Button
+                              aria-label={`Copy link ${link.label || ""}`.trim()}
+                              className="h-8 w-8"
+                              disabled={!live}
+                              onClick={() => handleCopy(link.token)}
+                              size="icon"
+                              title="Copy link"
+                              variant="ghost"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                            {canWrite && active && (
                               <Button
-                                aria-label={`Copy link ${link.label || ""}`.trim()}
+                                aria-label={`Revoke ${link.label || ""}`.trim()}
                                 className="h-8 w-8"
-                                disabled={!live}
-                                onClick={() => handleCopy(link.token)}
+                                onClick={() => {
+                                  setToRevoke(link);
+                                  setRevokeOpen(true);
+                                }}
                                 size="icon"
-                                title="Copy link"
+                                title="Revoke"
                                 variant="ghost"
                               >
-                                <Copy className="h-4 w-4" />
+                                <Ban className="h-4 w-4" />
                               </Button>
-                              {canWrite && active && (
-                                <Button
-                                  aria-label={`Revoke ${link.label || ""}`.trim()}
-                                  className="h-8 w-8"
-                                  onClick={() => {
-                                    setToRevoke(link);
-                                    setRevokeOpen(true);
-                                  }}
-                                  size="icon"
-                                  title="Revoke"
-                                  variant="ghost"
-                                >
-                                  <Ban className="h-4 w-4" />
-                                </Button>
-                              )}
-                              {canWrite && (
-                                <Button
-                                  aria-label={`Delete ${link.label || ""}`.trim()}
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                  onClick={() => {
-                                    setToDelete(link);
-                                    setDeleteOpen(true);
-                                  }}
-                                  size="icon"
-                                  title="Delete"
-                                  variant="ghost"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </>
+                            )}
+                            {canWrite && (
+                              <Button
+                                aria-label={`Delete ${link.label || ""}`.trim()}
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                  setToDelete(link);
+                                  setDeleteOpen(true);
+                                }}
+                                size="icon"
+                                title="Delete"
+                                variant="ghost"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
               </div>
             )}

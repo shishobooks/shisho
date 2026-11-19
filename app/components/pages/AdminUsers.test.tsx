@@ -267,7 +267,7 @@ describe("AdminUsers", () => {
     renderPage();
 
     expect(await screen.findByRole("note")).toHaveTextContent(
-      "Invite links copied here start with localhost, which other devices can't reach.",
+      "Invite links copied here point to localhost, which other devices can't reach.",
     );
   });
 
@@ -283,6 +283,16 @@ describe("AdminUsers", () => {
     renderPage();
     await usersList();
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
+  });
+
+  it("gives no invite warning to a role that can't see invites", async () => {
+    vi.mocked(pageHostname).mockReturnValue("localhost");
+    setAuth({ permissions: ["users:read"] });
+    mockApi([invite(1)]);
+    renderPage();
+
+    await usersList();
+    expect(screen.queryByText(/Invite links copied here/)).toBeNull();
   });
 
   it("revokes a pending invite after confirming", async () => {

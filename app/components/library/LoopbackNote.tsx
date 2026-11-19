@@ -18,10 +18,13 @@ const LoopbackNote = ({
   if (!isLoopbackHost(host)) return null;
   return (
     <div
-      className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400"
+      className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
       role="note"
     >
-      <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+      <AlertTriangle
+        aria-hidden="true"
+        className="mt-px h-3.5 w-3.5 shrink-0"
+      />
       <p>{children(<code className="break-all font-mono">{host}</code>)}</p>
     </div>
   );

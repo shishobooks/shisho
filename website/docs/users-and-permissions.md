@@ -138,7 +138,7 @@ Until it's used, an invite link works like a password: whoever opens it first ge
 
 4. Select **Create invite link**, then copy the link.
 
-Shisho never sends the link. Pass it on however you like, such as by text or chat. The link uses the address you have Shisho open at, so create it from an address the other person can reach, not `localhost`.
+Shisho never sends the link. Pass it on however you like, such as by text or chat. The link uses the address you have Shisho open at, so create it from an address the other person can reach, not `localhost`. At such an address, the link and the pending invites on the Users page carry a warning.
 
 Opening the link shows a welcome page naming who sent it. The person chooses a username, a password, and optionally an email address. Accepting creates the account with the invite's role and library access, signs them in, and opens their [Getting Started](#getting-started) panel.
 
