@@ -231,6 +231,21 @@ const openFolderStep = (platform: string | undefined): string | null => {
   }
 };
 
+// How the restart step starts: an e-reader plugged in over USB is ejected
+// first, and before the platform is known it might not be one.
+const restartStep = (platform: string | undefined): string => {
+  switch (platform) {
+    case undefined:
+      return "Eject the e-reader if it's connected with USB, then restart";
+    case "Android":
+    case "Linux":
+    case "macOS":
+      return "Restart";
+    default:
+      return "Eject the e-reader and restart";
+  }
+};
+
 // InstallSteps says how to install the downloaded plugin, asking which
 // device KOReader runs on so it names only that device's plugins folder.
 const InstallSteps = () => {
@@ -296,11 +311,8 @@ const InstallSteps = () => {
         )}
       </li>
       <li>
-        {openStep && platform !== "Android"
-          ? "Eject the e-reader and restart"
-          : "Restart"}{" "}
-        KOReader with Wi-Fi on, within 30 minutes of downloading. The plugin
-        signs itself in, with no pairing code.
+        {restartStep(platform)} KOReader with Wi-Fi on, within 30 minutes of
+        downloading. The plugin signs itself in, with no pairing code.
       </li>
       <li>
         Later than that, KOReader asks for a pairing code: get one under

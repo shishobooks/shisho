@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { toastRequestError } from "@/libraries/api";
 import {
+  DeviceTypeKindle,
   type DeviceResponse,
   type DeviceShortURL,
 } from "@/types/generated/devices";
@@ -184,7 +185,11 @@ export const EReaderBrowserSetup = ({ device }: { device: DeviceResponse }) => {
                 : "Get Setup URL"}
           </Button>
         </li>
-        <li>Open the e-reader&apos;s web browser and go to the setup URL.</li>
+        <li>
+          Open the{" "}
+          {device.device_type === DeviceTypeKindle ? "Kindle" : "e-reader"}
+          &apos;s web browser and go to the setup URL.
+        </li>
         <li>Bookmark the page it opens, to come back to your books.</li>
       </ol>
       <div className="space-y-2">

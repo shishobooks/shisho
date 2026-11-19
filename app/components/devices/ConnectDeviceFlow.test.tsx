@@ -246,6 +246,42 @@ describe("Connect a device", () => {
     expect(name).toHaveValue("Bedroom");
   });
 
+  it.each([
+    [/A Kindle's browser/, "Open the Kindle's web browser"],
+    [/Another e-reader's browser/, "Open the e-reader's web browser"],
+  ])("names the device whose browser %s opens", async (label, step) => {
+    stubAPI();
+    const user = setupUser();
+    renderAt("/user/devices?connect");
+
+    const dialog = await choose(user, label);
+    expect(
+      within(dialog).getByRole("list", { name: "eReader browser setup" }),
+    ).toHaveTextContent(step);
+  });
+
+  it("says to eject only a device that was plugged in over USB", async () => {
+    stubAPI();
+    const user = setupUser();
+    renderAt("/user/devices?connect");
+
+    const dialog = await choose(user, /^KOReader/);
+    const steps = () =>
+      within(dialog).getByRole("list", { name: "KOReader plugin setup" });
+    // Before the hardware is known, Android stays possible.
+    expect(steps()).not.toHaveTextContent("Eject the e-reader and restart");
+    expect(steps()).toHaveTextContent(/if it's connected with USB/);
+
+    await user.click(within(dialog).getByRole("radio", { name: "Android" }));
+    expect(steps()).not.toHaveTextContent(/Eject/);
+    expect(steps()).toHaveTextContent(/Restart KOReader with Wi-Fi on/);
+
+    await user.click(within(dialog).getByRole("radio", { name: "Kindle" }));
+    expect(steps()).toHaveTextContent(
+      /Eject the e-reader and restart KOReader with Wi-Fi on/,
+    );
+  });
+
   it("says where a Kobo's hidden .kobo folder is and how to show it", async () => {
     stubAPI();
     const user = setupUser();

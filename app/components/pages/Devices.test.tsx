@@ -326,8 +326,12 @@ describe("DeviceDetail", () => {
     await openAdvanced(user);
     const rules = screen.getByRole("group", { name: "Delivery Rules" });
     await user.click(within(rules).getByRole("button", { name: "Custom" }));
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Advanced" }));
+    // Closed, it still says it holds edits that aren't saved.
+    expect(screen.getByText("Unsaved changes")).toBeVisible();
     await openAdvanced(user);
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
 
     expect(
       within(screen.getByRole("group", { name: "Delivery Rules" })).getByRole(

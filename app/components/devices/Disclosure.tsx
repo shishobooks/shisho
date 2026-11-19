@@ -17,6 +17,7 @@ const Disclosure = ({
   size = "base",
   keepMounted = false,
   heading,
+  badge,
   children,
 }: {
   title: string;
@@ -35,6 +36,9 @@ const Disclosure = ({
   // heading wraps the toggle in a heading of that level, for a Disclosure
   // that is a section of the page in its own right.
   heading?: "h2" | "h3";
+  // badge sits beside the title, outside the toggle's name, to flag what
+  // the content holds while it's closed.
+  badge?: React.ReactNode;
   children: React.ReactNode;
 }) => {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
@@ -69,7 +73,14 @@ const Disclosure = ({
 
   return (
     <div>
-      {Heading ? <Heading>{toggle}</Heading> : toggle}
+      <div className="flex items-center gap-2">
+        {Heading ? (
+          <Heading className="min-w-0 flex-1">{toggle}</Heading>
+        ) : (
+          toggle
+        )}
+        {badge}
+      </div>
       {description && (
         <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       )}

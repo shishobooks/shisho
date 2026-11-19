@@ -670,6 +670,12 @@ const DeviceDetail = () => {
             {/* Kept mounted, so closing it never drops unsaved Delivery
                 Rules edits. */}
             <Disclosure
+              badge={
+                rulesHaveChanges &&
+                !advancedOpen && (
+                  <Badge variant="secondary">Unsaved changes</Badge>
+                )
+              }
               description="This Device's password, which books it reaches, and which files it gets."
               heading="h2"
               keepMounted
