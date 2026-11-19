@@ -555,7 +555,8 @@ const ChapterRow = (props: ChapterRowProps) => {
               aria-label="Start page"
               className={cn(
                 "w-16 text-center",
-                hasPageError && "border-red-500 focus-visible:ring-red-500",
+                hasPageError &&
+                  "border-destructive focus-visible:ring-destructive",
               )}
               onBlur={() => props.onBlur?.()}
               onChange={handlePageInputChange}
@@ -667,7 +668,7 @@ const ChapterRow = (props: ChapterRowProps) => {
                 className={cn(
                   "w-36 text-center font-mono",
                   hasTimestampError &&
-                    "border-red-500 focus-visible:ring-red-500",
+                    "border-destructive focus-visible:ring-destructive",
                 )}
                 onBlur={handleTimestampBlur}
                 onChange={handleTimestampInputChange}
