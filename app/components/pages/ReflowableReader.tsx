@@ -22,6 +22,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
@@ -143,6 +148,44 @@ const flattenToc = (
   }
   return out;
 };
+
+// A Back or Forward button, with a tooltip saying what it does. A disabled
+// button gets no pointer events, so the tooltip hangs from what holds it and
+// explains the button before there's anywhere to go.
+function LocationButton({
+  label,
+  hint,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  hint: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button
+            aria-label={label}
+            disabled={disabled}
+            onClick={onClick}
+            size="icon"
+            variant="ghost"
+          >
+            {children}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-60" collisionPadding={8} side="bottom">
+        {hint}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function ReflowableReader({
   file,
@@ -992,24 +1035,22 @@ export default function ReflowableReader({
         {/* Always shown, and disabled when there's nowhere to go, so they're
             where the reader expects them after paging around a jump. */}
         <div className="flex items-center">
-          <Button
-            aria-label="Back to previous location"
+          <LocationButton
             disabled={!bookReady || !locations.canGoBack}
+            hint="Back to where you were before a jump, such as a link, a chapter, or a search result"
+            label="Back to previous location"
             onClick={locations.goBack}
-            size="icon"
-            variant="ghost"
           >
             <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button
-            aria-label="Forward to next location"
+          </LocationButton>
+          <LocationButton
             disabled={!bookReady || !locations.canGoForward}
+            hint="Forward to where you were when you went back"
+            label="Forward to next location"
             onClick={locations.goForward}
-            size="icon"
-            variant="ghost"
           >
             <Redo2 className="h-4 w-4" />
-          </Button>
+          </LocationButton>
         </div>
         <div className="flex min-w-0 items-center gap-2">
           {toc.length > 0 && (

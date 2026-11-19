@@ -2552,8 +2552,8 @@ describe("ReflowableReader location history", () => {
     expect(back()).toBeDisabled();
   });
 
-  it("doesn't count a jump that stays on the screen", async () => {
-    landsAt["fraction:1"] = ["start-again", 0];
+  it("doesn't count a jump that doesn't move the page", async () => {
+    landsAt["fraction:1"] = ["start", 0];
     await openBook();
     await toTheEnd(user());
     expect(back()).toBeDisabled();
@@ -2591,7 +2591,7 @@ describe("ReflowableReader location history", () => {
       },
     ];
     landsAt = {
-      here: ["start-match", 0],
+      here: ["start", 0],
       there: ["there", 4],
       further: ["further", 6],
     };
@@ -2617,7 +2617,7 @@ describe("ReflowableReader location history", () => {
     expect(view.goTo).toHaveBeenLastCalledWith("further");
 
     await u.click(back());
-    expect(view.goTo).toHaveBeenLastCalledWith("start-match");
+    expect(view.goTo).toHaveBeenLastCalledWith("start");
     expect(back()).toBeDisabled();
   });
 
@@ -2704,5 +2704,104 @@ describe("ReflowableReader location history", () => {
     expect(view.goTo).toHaveBeenLastCalledWith("start");
     expect(back()).toBeEnabled();
     expect(forward()).toBeDisabled();
+  });
+
+  // A section of paragraphs, and what foliate reports showing part of it.
+  const section = () => {
+    const doc = document.implementation.createHTMLDocument("section");
+    doc.body.innerHTML =
+      "<p>Zero zero</p><p>One one</p><p>Two two</p><p>Three three</p>";
+    const text = Array.from(doc.querySelectorAll("p"), (p) => p.firstChild!);
+    const range = (
+      [startNode, startOffset]: [Node, number],
+      [endNode, endOffset]: [Node, number],
+    ) => {
+      const r = doc.createRange();
+      r.setStart(startNode, startOffset);
+      r.setEnd(endNode, endOffset);
+      return r;
+    };
+    return { text, range };
+  };
+  const relocateShowing = (
+    view: HTMLElement,
+    cfi: string,
+    range: Range,
+    reason = "page",
+  ) => {
+    sectionOf[cfi] = 3;
+    act(() => {
+      view.dispatchEvent(
+        new CustomEvent("relocate", {
+          detail: { cfi, section: { current: 3 }, range, reason },
+        }),
+      );
+    });
+  };
+
+  it("counts a short jump that moves the page, though the old place still shows", async () => {
+    const { text, range } = section();
+    const view = await openBook();
+    // The reader was at paragraph one; scrolling up a paragraph to zero
+    // still shows the top of one.
+    relocateShowing(view, "one", range([text[1], 0], [text[3], 5]));
+    Object.assign(view, {
+      resolveNavigation: (cfi: string) => ({
+        index: sectionOf[cfi],
+        anchor: () => range([text[1], 0], [text[1], 0]),
+      }),
+    });
+    view.goToFraction.mockImplementation(() => {
+      relocateShowing(
+        view,
+        "zero",
+        range([text[0], 0], [text[2], 5]),
+        "navigation",
+      );
+      return Promise.resolve();
+    });
+    await toTheEnd(user());
+    expect(back()).toBeEnabled();
+  });
+
+  it("doesn't skip going back to the page just before, which ends where this one begins", async () => {
+    const { text, range } = section();
+    const view = await openBook();
+    // The place the jump left from begins mid-paragraph, at the very point
+    // where the page before it ends.
+    relocateShowing(view, "origin", range([text[2], 3], [text[3], 5]));
+    Object.assign(view, {
+      resolveNavigation: (cfi: string) =>
+        cfi === "origin"
+          ? { index: 3, anchor: () => range([text[2], 3], [text[3], 5]) }
+          : null,
+    });
+    view.goToFraction.mockImplementation(() => {
+      relocate(view, "far", 9, "navigation");
+      return Promise.resolve();
+    });
+    const u = user();
+    await toTheEnd(u);
+    // Paged back by hand to the page before the origin.
+    relocateShowing(view, "page-before", range([text[0], 0], [text[2], 3]));
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("origin");
+  });
+
+  it("explains each button on hover, even before there's anywhere to go", async () => {
+    await openBook();
+    const u = user();
+    expect(back()).toBeDisabled();
+    // A disabled button gets no pointer events, so the tooltip hangs from
+    // what holds it.
+    await u.hover(back().parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Back to where you were before a jump, such as a link, a chapter, or a search result",
+    );
+    await u.unhover(back().parentElement!);
+    await u.hover(forward().parentElement!);
+    expect(
+      await screen.findByRole("tooltip", { name: /Forward to where you were/ }),
+    ).toHaveTextContent("Forward to where you were when you went back");
   });
 });

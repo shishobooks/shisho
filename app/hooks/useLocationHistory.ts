@@ -99,12 +99,19 @@ export function useLocationHistory(view: HTMLElement | null) {
           node.ownerDocument ?? (node as Document),
         );
         if (!target) return false;
-        return "startContainer" in target
-          ? here.range.comparePoint(
-              target.startContainer,
-              target.startOffset,
-            ) === 0
-          : here.range.comparePoint(target, 0) === 0;
+        const [point, offset] =
+          "startContainer" in target
+            ? [target.startContainer, target.startOffset]
+            : [target, 0];
+        // The screen runs up to its end, which is where the next page
+        // begins: a page that starts mid-paragraph starts at the very point
+        // the page before it ends.
+        const end = here.range.cloneRange();
+        end.collapse(false);
+        return (
+          here.range.comparePoint(point, offset) === 0 &&
+          end.comparePoint(point, offset) !== 0
+        );
       } catch {
         return false;
       }
@@ -113,7 +120,7 @@ export function useLocationHistory(view: HTMLElement | null) {
   );
 
   /**
-   * Makes a jump, recording where it left from if it leaves the screen.
+   * Makes a jump, recording where it left from if it moved the page.
    * Jumps in one `group`, such as one search's results, record one entry.
    * A failed jump records nothing and rejects.
    */
@@ -126,12 +133,16 @@ export function useLocationHistory(view: HTMLElement | null) {
         await go();
         // A Book opened again meanwhile has a history of its own.
         if (!origin || historyRef.current !== history) return;
-        // Nothing moved, or the jump stayed on the screen.
-        if (hereRef.current === origin || onScreen(origin.cfi)) return;
+        // A jump that didn't move the view, such as to a search result on
+        // the page shown, leaves nothing to go back to. Any move counts,
+        // however short: the page just before shares a point with this one,
+        // and a short scroll leaves the old place in view.
+        const landed = hereRef.current;
+        if (!landed || landed === origin || landed.cfi === origin.cfi) return;
         history.recordJump(origin.cfi, group);
         sync();
       }),
-    [takeTurn, onScreen, sync],
+    [takeTurn, sync],
   );
 
   const move = useCallback(

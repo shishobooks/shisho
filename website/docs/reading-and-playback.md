@@ -35,7 +35,7 @@ In fixed-layout books, search finds matches and goes to their page but doesn't h
 
 Following a link, choosing a chapter from the menu, selecting a spot or a chapter mark on the progress bar, selecting **Go to note** in a footnote, and going to a search result are jumps. To return to where you were before a jump, select **Back to previous location**, the arrow at the left of the reader's header. It returns there however many pages you've turned since. **Forward to next location**, beside it, returns to where you were when you went back.
 
-Turning pages is never a jump, even into the next chapter, and neither is a jump that stays on the page you're on. A search counts as one jump however many results you step through, so going back returns to the page you were on when a result first took you off it. The places to go back and forward to start over each time you open the book.
+Turning pages is never a jump, even into the next chapter, and neither is going to a place on the page you're already on. A search counts as one jump however many results you step through, so going back returns to the page you were on when a result first took you off it. The places to go back and forward to start over each time you open the book.
 
 ### Display Settings
 

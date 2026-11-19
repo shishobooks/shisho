@@ -12,9 +12,10 @@ export interface LocationHistorySnapshot {
  * what those tickets promise too. The rules:
  *
  * - A jump (a link, a footnote's note, the chapter menu or a chapter mark,
- *   the progress bar, a search result) that leaves the screen records where
- *   it left from. A jump that stays on the screen records nothing; the
- *   caller checks that, since only the renderer knows what's on screen.
+ *   the progress bar, a search result) records where it left from, unless
+ *   it didn't move the page at all; the caller checks that, since only the
+ *   renderer knows. Any move counts, however short: the page just before
+ *   this one, or a short scroll up.
  * - Turning pages records nothing, so going back after paging around where a
  *   jump landed still returns to where the jump left from.
  * - Jumps in one group, such as the results of one search, record only the
