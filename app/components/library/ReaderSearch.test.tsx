@@ -104,10 +104,17 @@ const justGo = async (go: () => Promise<unknown>) => {
   await go();
 };
 
-function Harness({ view }: { view: SearchableBook | null }) {
+function Harness({
+  view,
+  onFocusBook = () => {},
+}: {
+  view: SearchableBook | null;
+  onFocusBook?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <ReaderSearch
+      onFocusBook={onFocusBook}
       onJump={justGo}
       onOpenChange={setOpen}
       open={open}
@@ -118,9 +125,10 @@ function Harness({ view }: { view: SearchableBook | null }) {
 
 const setup = () => {
   const book = fakeBook();
+  const focusBook = vi.fn();
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-  render(<Harness view={book.view} />);
-  return { ...book, user };
+  render(<Harness onFocusBook={focusBook} view={book.view} />);
+  return { ...book, focusBook, user };
 };
 
 const openSearch = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -267,7 +275,7 @@ describe("ReaderSearch", () => {
   });
 
   it("goes to a chosen result and marks it on the page", async () => {
-    const { user, view, runs } = setup();
+    const { user, view, runs, focusBook } = setup();
     await user.type(await openSearch(user), "lantern");
     await startSearch();
     runs[0].push(...TWO_CHAPTERS);
@@ -278,12 +286,10 @@ describe("ReaderSearch", () => {
     expect(view.goTo).toHaveBeenCalledWith("cfi-3");
     expect(view.addAnnotation).toHaveBeenCalledWith({ value: "cfi-3" });
     expect(status()).toHaveTextContent("3 of 3");
-    // The list gets out of the way of the page; the field stays for the next
-    // result.
+    // The list gets out of the way of the page, and the book takes the
+    // keys, so the arrow keys turn its pages.
     expect(screen.queryByRole("button", { name: "No lantern." })).toBeNull();
-    expect(
-      screen.getByRole("searchbox", { name: "Search in book" }),
-    ).toHaveFocus();
+    expect(focusBook).toHaveBeenCalled();
 
     // foliate asks how to draw the chosen match.
     const draw = vi.fn();
@@ -585,5 +591,36 @@ describe("ReaderSearch", () => {
     await user.click(screen.getByRole("button", { name: "A lantern glows." }));
     await flush();
     expect(status()).toHaveTextContent("1 of 2, still searching…");
+  });
+
+  it("keeps the keys in the field when stepping with Enter", async () => {
+    const { user, runs, focusBook } = setup();
+    const field = await openSearch(user);
+    await user.type(field, "lantern");
+    await startSearch();
+    runs[0].push(...TWO_CHAPTERS);
+    await flush();
+    await user.type(field, "{Enter}");
+    await flush();
+    expect(field).toHaveFocus();
+    expect(focusBook).not.toHaveBeenCalled();
+  });
+
+  it("hands the keys to the book after a click on an arrow, not after a key press on it", async () => {
+    const { user, runs, focusBook } = setup();
+    await user.type(await openSearch(user), "lantern");
+    await startSearch();
+    runs[0].push(...TWO_CHAPTERS);
+    await flush();
+    const next = screen.getByRole("button", { name: "Next result" });
+
+    next.focus();
+    await user.keyboard("{Enter}");
+    await flush();
+    expect(focusBook).not.toHaveBeenCalled();
+
+    await user.click(next);
+    await flush();
+    expect(focusBook).toHaveBeenCalledTimes(1);
   });
 });

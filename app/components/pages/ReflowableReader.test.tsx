@@ -86,6 +86,7 @@ beforeAll(() => {
           page: mockPage,
           setStyles: vi.fn(),
           setAttribute: vi.fn(),
+          focusView: vi.fn(),
         };
         lastLocation = { cfi: "epubcfi(/6/2!/4/2)", fraction: 0 };
         getSectionFractions = () => mockFractions;
@@ -2803,5 +2804,161 @@ describe("ReflowableReader location history", () => {
     expect(
       await screen.findByRole("tooltip", { name: /Forward to where you were/ }),
     ).toHaveTextContent("Forward to where you were when you went back");
+  });
+});
+
+describe("ReflowableReader search shortcuts", () => {
+  type ShortcutView = HTMLElement & {
+    goTo: ReturnType<typeof vi.fn>;
+    goRight: ReturnType<typeof vi.fn>;
+    renderer: { focusView: ReturnType<typeof vi.fn> };
+  };
+
+  beforeEach(() => {
+    mockSearchSections = [
+      {
+        label: "Chapter One",
+        subitems: ["first", "second"].map((cfi) => ({
+          cfi,
+          excerpt: { pre: "", match: "lantern", post: ` ${cfi}` },
+        })),
+      },
+    ];
+  });
+
+  const openBook = async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const view = container.querySelector(
+      "foliate-view",
+    ) as unknown as ShortcutView;
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    // A section of the book, whose keys foliate's frame keeps from the page.
+    const doc = document.implementation.createHTMLDocument("section");
+    doc.body.innerHTML = "<p>Text</p>";
+    act(() => {
+      view.dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+    });
+    return { view, doc };
+  };
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  const field = () =>
+    screen.queryByRole("searchbox", { name: "Search in book" });
+  // A key pressed in the book's frame. Returns whether the browser may still
+  // act on it.
+  const pressInBook = (doc: Document, init: KeyboardEventInit) => {
+    let allowed = true;
+    act(() => {
+      allowed = doc.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    });
+    return allowed;
+  };
+
+  it("gives the keys to the book after choosing a result", async () => {
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(
+      await screen.findByRole("button", { name: "lantern second" }),
+    );
+    expect(view.renderer.focusView).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Cmd+F", { key: "f", metaKey: true }],
+    ["Ctrl+F", { key: "f", ctrlKey: true }],
+  ])(
+    "opens search with %s from the book, instead of the browser's find",
+    async (_, init) => {
+      const { doc } = await openBook();
+      expect(pressInBook(doc, init)).toBe(false);
+      await vi.waitFor(() => expect(field()).toHaveFocus());
+    },
+  );
+
+  it("puts the keys back in the field with Cmd+F, the query selected", async () => {
+    const { doc } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    pressInBook(doc, { key: "f", metaKey: true });
+    const input = field() as HTMLInputElement;
+    expect(input).toHaveFocus();
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 7]);
+  });
+
+  it.each([
+    [
+      "Cmd+G",
+      { key: "g", metaKey: true },
+      { key: "G", metaKey: true, shiftKey: true },
+    ],
+    [
+      "Ctrl+G",
+      { key: "g", ctrlKey: true },
+      { key: "G", ctrlKey: true, shiftKey: true },
+    ],
+    ["F3", { key: "F3" }, { key: "F3", shiftKey: true }],
+  ])(
+    "steps through results with %s from the book, leaving it the keys",
+    async (_, nextKey, previousKey) => {
+      const { view, doc } = await openBook();
+      const u = user();
+      await u.click(screen.getByRole("button", { name: "Search" }));
+      await u.type(field()!, "lantern");
+      await u.click(
+        await screen.findByRole("button", { name: "lantern first" }),
+      );
+      view.renderer.focusView.mockClear();
+      await act(async () => {});
+
+      expect(pressInBook(doc, nextKey)).toBe(false);
+      await act(async () => {});
+      expect(view.goTo).toHaveBeenLastCalledWith("second");
+      expect(pressInBook(doc, previousKey)).toBe(false);
+      await act(async () => {});
+      expect(view.goTo).toHaveBeenLastCalledWith("first");
+      // Stepping from the book leaves the keys where they were.
+      expect(field()).not.toHaveFocus();
+      expect(view.goRight).not.toHaveBeenCalled();
+    },
+  );
+
+  it("opens search with Cmd+G when it's closed", async () => {
+    const { doc } = await openBook();
+    pressInBook(doc, { key: "g", metaKey: true });
+    await vi.waitFor(() => expect(field()).toHaveFocus());
+  });
+
+  it("steps with Cmd+G typed in the field, keeping the keys there", async () => {
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await screen.findByRole("button", { name: "lantern first" });
+    await u.keyboard("{Meta>}g{/Meta}");
+    await act(async () => {});
+    expect(view.goTo).toHaveBeenLastCalledWith("first");
+    expect(field()).toHaveFocus();
   });
 });

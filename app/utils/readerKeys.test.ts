@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { pageTurnForKey, turnInDirection } from "@/utils/readerKeys";
+import {
+  pageTurnForKey,
+  searchShortcutForKey,
+  turnInDirection,
+} from "@/utils/readerKeys";
 
 const keyOn = (key: string, target: Element) => {
   const event = new KeyboardEvent("keydown", { key, bubbles: true });
@@ -74,5 +78,33 @@ describe("turnInDirection", () => {
     expect(turnInDirection("next", true)).toBe("prev");
     expect(turnInDirection("prev", true)).toBe("next");
     expect(turnInDirection(null, true)).toBeNull();
+  });
+});
+
+describe("searchShortcutForKey", () => {
+  const shortcut = (init: KeyboardEventInit) =>
+    searchShortcutForKey(new KeyboardEvent("keydown", init));
+
+  it("finds with Cmd+F or Ctrl+F", () => {
+    expect(shortcut({ key: "f", metaKey: true })).toBe("find");
+    expect(shortcut({ key: "f", ctrlKey: true })).toBe("find");
+    expect(shortcut({ key: "F", metaKey: true, shiftKey: true })).toBeNull();
+  });
+
+  it("steps with Cmd+G, Ctrl+G, and F3, and back with Shift", () => {
+    expect(shortcut({ key: "g", metaKey: true })).toBe("next");
+    expect(shortcut({ key: "g", ctrlKey: true })).toBe("next");
+    expect(shortcut({ key: "G", metaKey: true, shiftKey: true })).toBe(
+      "previous",
+    );
+    expect(shortcut({ key: "F3" })).toBe("next");
+    expect(shortcut({ key: "F3", shiftKey: true })).toBe("previous");
+  });
+
+  it("leaves other keys alone", () => {
+    expect(shortcut({ key: "f" })).toBeNull();
+    expect(shortcut({ key: "g" })).toBeNull();
+    expect(shortcut({ key: "f", metaKey: true, altKey: true })).toBeNull();
+    expect(shortcut({ key: "F3", metaKey: true })).toBeNull();
   });
 });

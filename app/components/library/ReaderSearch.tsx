@@ -1,5 +1,12 @@
 import { ChevronDown, ChevronUp, List, Loader2, Search, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type Ref,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,14 +27,26 @@ import { formatCount } from "@/utils/format";
 // query can match tens of thousands of times in a long book.
 const RESULTS_PAGE = 100;
 
+// What the reader's keyboard shortcuts do in an open search panel.
+export interface ReaderSearchHandle {
+  next: () => void;
+  previous: () => void;
+  // Puts the keys in the field, its query selected to type over.
+  focusField: () => void;
+}
+
 interface ReaderSearchProps {
   // The open book, or null until it's ready.
   view: SearchableBook | null;
   // Makes each move to a result, so the reader can count it in its history
   // of jumps. The results of one search share a group.
   onJump: SearchJump;
+  // Gives the keys to the book, so the arrow keys turn its pages.
+  onFocusBook: () => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  // Set while the panel is open.
+  handleRef?: Ref<ReaderSearchHandle>;
 }
 
 /**
@@ -38,6 +57,8 @@ interface ReaderSearchProps {
 export default function ReaderSearch({
   view,
   onJump,
+  onFocusBook,
+  handleRef,
   open,
   onOpenChange,
 }: ReaderSearchProps) {
@@ -64,7 +85,9 @@ export default function ReaderSearch({
       >
         {view && (
           <SearchPanel
+            handleRef={handleRef}
             onClose={() => onOpenChange(false)}
+            onFocusBook={onFocusBook}
             onJump={onJump}
             view={view}
           />
@@ -80,10 +103,14 @@ function SearchPanel({
   view,
   onClose,
   onJump,
+  onFocusBook,
+  handleRef,
 }: {
   view: SearchableBook;
   onClose: () => void;
   onJump: SearchJump;
+  onFocusBook: () => void;
+  handleRef?: Ref<ReaderSearchHandle>;
 }) {
   const search = useBookSearch(view, onJump);
   const { query, results, groups, searching, waiting, current } = search;
@@ -124,9 +151,11 @@ function SearchPanel({
   // there it's for screen readers alone.
   const stillSearching = searching && (current !== null || total > 0);
 
+  // Going to a result gives the keys to the book, so the arrow keys turn
+  // its pages from there. Enter in the field keeps them, to step again.
   const choose = (index: number) => {
     setListOpen(false);
-    fieldRef.current?.focus();
+    onFocusBook();
     search.goToResult(index);
   };
 
@@ -142,6 +171,17 @@ function SearchPanel({
     if (direction === "next") search.next();
     else search.previous();
   };
+
+  // Stepping by shortcut leaves the keys where they are, so a reader in the
+  // book can go on turning pages.
+  useImperativeHandle(handleRef, () => ({
+    next: () => stepTo("next"),
+    previous: () => stepTo("previous"),
+    focusField: () => {
+      fieldRef.current?.focus();
+      fieldRef.current?.select();
+    },
+  }));
 
   return (
     <>
@@ -242,7 +282,12 @@ function SearchPanel({
             </Button>
             <Button
               aria-label="Previous result"
-              onClick={() => stepTo("previous")}
+              onClick={(e) => {
+                // A click, not Enter or Space on the focused arrow, which
+                // keeps the keys there to press it again.
+                if (e.detail > 0) onFocusBook();
+                stepTo("previous");
+              }}
               size="icon-sm"
               variant="ghost"
             >
@@ -250,7 +295,10 @@ function SearchPanel({
             </Button>
             <Button
               aria-label="Next result"
-              onClick={() => stepTo("next")}
+              onClick={(e) => {
+                if (e.detail > 0) onFocusBook();
+                stepTo("next");
+              }}
               size="icon-sm"
               variant="ghost"
             >

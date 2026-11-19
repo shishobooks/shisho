@@ -36,3 +36,23 @@ export const pageTurnForKey = (event: KeyboardEvent): PageTurn | null => {
       return null;
   }
 };
+
+export type SearchShortcut = "find" | "next" | "previous";
+
+// The search a keydown in the reader asks for, or null for none: the
+// browser's own find keys, which can't search a Book, since the reader only
+// ever holds the part of it on screen. Cmd on a Mac, Ctrl elsewhere, and F3
+// as Windows and Linux use it.
+export const searchShortcutForKey = (
+  event: KeyboardEvent,
+): SearchShortcut | null => {
+  if (event.altKey) return null;
+  const key = event.key.toLowerCase();
+  if (event.metaKey || event.ctrlKey) {
+    if (key === "f" && !event.shiftKey) return "find";
+    if (key === "g") return event.shiftKey ? "previous" : "next";
+    return null;
+  }
+  if (event.key === "F3") return event.shiftKey ? "previous" : "next";
+  return null;
+};

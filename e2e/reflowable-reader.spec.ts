@@ -25,6 +25,7 @@ let contentsBookId: number;
 let sectionsBookId: number;
 let searchBookId: number;
 let historyBookId: number;
+let keysBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -149,6 +150,7 @@ test.describe("Reflowable reader", () => {
     });
     searchBookId = await seed("Search Book", "epub", { epubToc: true });
     historyBookId = await seed("History Book", "epub", { epubToc: true });
+    keysBookId = await seed("Keys Book", "epub", { epubToc: true });
     await apiContext.dispose();
   });
 
@@ -676,6 +678,39 @@ test.describe("Reflowable reader", () => {
     await bookFrame(page, "Chapter Three text.");
     await expect(forward).toBeDisabled();
     await expect(back).toBeEnabled();
+  });
+
+  test("search works from the keyboard, and leaves the keys to the book", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, keysBookId);
+    const frame = await bookFrame(page, "Test chapter.");
+
+    // Cmd+F (Ctrl+F elsewhere) in the book opens search, not the browser's.
+    // A click on the text gives the book the keys, as a reader's would.
+    await frame.locator("p").first().click();
+    await page.keyboard.press("ControlOrMeta+f");
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    const field = panel.getByRole("searchbox", { name: "Search in book" });
+    await expect(field).toBeFocused();
+    await field.fill("lantern");
+    await panel.getByRole("button", { name: "A lantern glows." }).click();
+    await bookFrame(page, "Chapter Two text.");
+    await expect(panel.getByRole("status")).toHaveText("1 of 2");
+
+    // The book has the keys: an arrow turns its page, and Cmd+G steps on
+    // without taking them back.
+    await page.keyboard.press("ArrowRight");
+    await bookFrame(page, "Chapter Three text.");
+    await expect(field).not.toBeFocused();
+    await page.keyboard.press("ControlOrMeta+g");
+    await bookFrame(page, "The lantern dims.");
+    await expect(panel.getByRole("status")).toHaveText("2 of 2");
+    await page.keyboard.press("ControlOrMeta+Shift+g");
+    await expect(panel.getByRole("status")).toHaveText("1 of 2");
+    await bookFrame(page, "A lantern glows.");
   });
 
   test("reading to the end marks the book read", async ({ page }) => {

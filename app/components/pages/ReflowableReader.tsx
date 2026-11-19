@@ -11,7 +11,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ProgressMarks from "@/components/library/ProgressMarks";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
-import ReaderSearch from "@/components/library/ReaderSearch";
+import ReaderSearch, {
+  type ReaderSearchHandle,
+} from "@/components/library/ReaderSearch";
 import ReaderSettingsPanel from "@/components/library/ReaderSettingsPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -64,7 +66,7 @@ import {
   withinFirstScreen,
   type EndRenderer,
 } from "@/utils/readerEnd";
-import { pageTurnForKey } from "@/utils/readerKeys";
+import { pageTurnForKey, searchShortcutForKey } from "@/utils/readerKeys";
 import { reflowableOpenTarget } from "@/utils/readingPosition";
 
 import "@/libraries/foliate/view.js";
@@ -99,6 +101,8 @@ type FoliateRenderer = EndRenderer & {
   setAttribute?: (name: string, value: string) => void;
   // Lays the shown section out again, keeping the place.
   render?: () => void;
+  // Gives the keys to the shown section's frame.
+  focusView?: () => void;
 };
 
 // What foliate's resolveHref gives for a link: the section, and a function
@@ -498,8 +502,31 @@ export default function ReflowableReader({
     view?.goRight?.();
   }, []);
 
+  // The open search panel, for the search shortcuts.
+  const searchRef = useRef<ReaderSearchHandle | null>(null);
+  // Gives the keys to the book, so the arrow keys turn its pages. A
+  // fixed-layout book's renderer can't take focus, so the keys go to this
+  // page, which turns pages too.
+  const focusBook = useCallback(() => {
+    const renderer = (
+      viewRef.current as (HTMLElement & { renderer?: FoliateRenderer }) | null
+    )?.renderer;
+    if (renderer?.focusView) renderer.focusView();
+    else (document.activeElement as HTMLElement | null)?.blur?.();
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const shortcut = searchShortcutForKey(e);
+      if (shortcut) {
+        // The browser's own find can't search the book.
+        e.preventDefault();
+        const panel = searchRef.current;
+        if (!panel) setSearchOpen(true);
+        else if (shortcut === "find") panel.focusField();
+        else panel[shortcut]();
+        return;
+      }
       const turn = pageTurnForKey(e);
       if (turn === "next") goNext();
       else if (turn === "prev") goPrev();
@@ -1066,6 +1093,8 @@ export default function ReflowableReader({
             />
           )}
           <ReaderSearch
+            handleRef={searchRef}
+            onFocusBook={focusBook}
             onJump={jump}
             onOpenChange={setSearchOpen}
             open={searchOpen}
