@@ -23,6 +23,7 @@ let settingsBookId: number;
 let longBookId: number;
 let contentsBookId: number;
 let sectionsBookId: number;
+let searchBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -145,6 +146,7 @@ test.describe("Reflowable reader", () => {
     sectionsBookId = await seed("Sections Book", "epub", {
       epubSections: true,
     });
+    searchBookId = await seed("Search Book", "epub", { epubToc: true });
     await apiContext.dispose();
   });
 
@@ -510,6 +512,92 @@ test.describe("Reflowable reader", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await bookFrame(page, "Chapter Three text.");
     await expect(page.getByText("Preparing book…")).toBeHidden();
+  });
+
+  test("searches the book, goes to a result, and saves the place", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, searchBookId);
+    await bookFrame(page, "Test chapter.");
+
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    // Case doesn't matter.
+    await panel
+      .getByRole("searchbox", { name: "Search in book" })
+      .fill("LANTERN");
+    await expect(panel.getByRole("status")).toHaveText("2 results");
+    await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
+      "Chapter Two",
+      "Chapter Four",
+    ]);
+
+    await panel.getByRole("button", { name: "The lantern dims." }).click();
+    const frame = await bookFrame(page, "Chapter Four text.");
+    await expect(panel.getByRole("status")).toHaveText("2 of 2");
+
+    // foliate draws matches in an overlay beside the section's frame, inside
+    // closed shadow roots that only the frame can reach: every match shaded,
+    // the chosen one also outlined.
+    const marks = () =>
+      frame.evaluate(() => {
+        const overlay =
+          window.frameElement?.parentElement?.querySelector(":scope > svg");
+        const count = (selector: string) =>
+          overlay?.querySelectorAll(`${selector} > rect`).length ?? 0;
+        return {
+          shaded: count('g[fill="#facc15"]'),
+          outlined: count('g[stroke="#f97316"]'),
+        };
+      });
+    await expect.poll(marks).toEqual({ shaded: 1, outlined: 1 });
+
+    await panel.getByRole("button", { name: "Close search" }).click();
+    await expect(panel).toBeHidden();
+    await expect.poll(marks).toEqual({ shaded: 0, outlined: 0 });
+
+    // The jump is a move, saved like following a link.
+    const fileId = page.url().match(/\/files\/(\d+)\/read$/)![1];
+    await expect
+      .poll(
+        async () => {
+          const resp = await page.request.get(
+            `/api/reading/files/${fileId}/position`,
+          );
+          const body = (await resp.json()) as {
+            position: { cfi?: string } | null;
+          };
+          return body.position?.cfi ?? null;
+        },
+        { timeout: 10_000 },
+      )
+      .toMatch(/^epubcfi\(\/6\/8/);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await bookFrame(page, "Chapter Four text.");
+  });
+
+  test("search files each match under its own chapter in a file holding several", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, sectionsBookId);
+    await bookFrame(page, "Section 1 begins.");
+
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    await panel
+      .getByRole("searchbox", { name: "Search in book" })
+      .fill("begins");
+    // Every section but the figure's is in the book's first file.
+    await expect(panel.getByRole("status")).toHaveText("25 results");
+    const headings = panel.getByRole("heading", { level: 3 });
+    await expect(headings).toHaveCount(25);
+    await expect(headings.first()).toHaveText("Section 1");
+    await expect(headings.nth(23)).toHaveText("Section 24");
+    await expect(headings.last()).toHaveText("Figure");
   });
 
   test("reading to the end marks the book read", async ({ page }) => {

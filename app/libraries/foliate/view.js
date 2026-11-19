@@ -546,8 +546,13 @@ export class View extends HTMLElement {
         for (const [index, { createDocument }] of sections.entries()) {
             if (!createDocument) continue
             const doc = await createDocument()
+            // Shisho patch: name each match's own chapter. Upstream labels a
+            // section's matches only by the chapter the section starts in,
+            // which files a match under the wrong chapter in a section that
+            // holds several, as many EPUBs and MOBI files do.
             const subitems = Array.from(matcher(doc, query), ({ range, excerpt }) =>
-                ({ cfi: this.getCFI(index, range), excerpt }))
+                ({ cfi: this.getCFI(index, range), excerpt,
+                    label: this.#tocProgress?.getProgress(index, range)?.label }))
             const progress = (index + 1) / sections.length
             yield { progress }
             if (subitems.length) yield { index, subitems }

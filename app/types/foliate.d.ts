@@ -15,6 +15,33 @@ interface FoliateRenderer extends HTMLElement {
   setStyles(styles: string | [string, string]): void;
 }
 
+// A match foliate's search found, with the text on either side of it.
+export interface FoliateSearchExcerpt {
+  pre: string;
+  match: string;
+  post: string;
+}
+
+// What view.search() yields: how far through the book it is, the matches in
+// one section, and "done" at the end. Each match names its own chapter (a
+// Shisho patch in view.js); the section's label is the chapter it starts in.
+export type FoliateSearchYield =
+  | "done"
+  | { progress: number }
+  | {
+      label: string;
+      subitems: Array<{
+        cfi: string;
+        excerpt: FoliateSearchExcerpt;
+        label?: string;
+      }>;
+    };
+
+// An annotation is keyed by the CFI it marks. See view.js:addAnnotation.
+interface FoliateAnnotation {
+  value: string;
+}
+
 interface FoliateViewElement extends HTMLElement {
   // open() accepts a URL string, a Blob/File (anything with arrayBuffer()),
   // or a directory-like object with isDirectory=true. See view.js:open / makeBook.
@@ -26,6 +53,20 @@ interface FoliateViewElement extends HTMLElement {
   goToFraction(fraction: number): Promise<void>;
   next(distance?: number): Promise<void>;
   prev(distance?: number): Promise<void>;
+  // Searches the whole book, shading each match with `draw`. See
+  // view.js:search and search.js for the options.
+  search(opts: {
+    query: string;
+    matchCase?: boolean;
+    matchDiacritics?: boolean;
+    matchWholeWords?: boolean;
+    draw?: unknown;
+    drawOptions?: Record<string, unknown>;
+  }): AsyncIterable<FoliateSearchYield>;
+  clearSearch(): void;
+  // A CFI annotation asks to be drawn with a "draw-annotation" event.
+  addAnnotation(annotation: FoliateAnnotation): Promise<unknown>;
+  deleteAnnotation(annotation: FoliateAnnotation): Promise<unknown>;
   renderer: FoliateRenderer;
   book?: {
     toc?: FoliateTOCItem[];

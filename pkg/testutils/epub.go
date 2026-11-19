@@ -18,7 +18,8 @@ import (
 // colors. It also has a scene break the book centers by class, which
 // justification leaves alone, and a paragraph at a fixed px size for Force
 // font size. The second refers to a note the book marks as one, kept in the
-// third, for the reader's footnote popover. extraParagraphs adds filler text
+// third, for the reader's footnote popover. The second and fourth mention a
+// lantern, for search inside the book. extraParagraphs adds filler text
 // to the first chapter, so a test can turn pages within a chapter as well as
 // across chapters. toc adds a table of contents with an entry per chapter.
 func writeMinimalEPUB(path, title string, extraParagraphs int, toc bool) (err error) {
@@ -63,9 +64,11 @@ func writeMinimalEPUB(path, title string, extraParagraphs int, toc bool) (err er
 		body := `<p>Chapter ` + name + ` text.</p>`
 		switch i {
 		case 0:
-			body = `<p>Chapter Two text.<a epub:type="noteref" href="chapter3.xhtml#note1">1</a></p>`
+			body = `<p>Chapter Two text.<a epub:type="noteref" href="chapter3.xhtml#note1">1</a></p><p>A lantern glows.</p>`
 		case 1:
 			body += `<aside epub:type="endnote" id="note1"><p>The footnote's text.</p></aside>`
+		case 2:
+			body += `<p>The lantern dims.</p>`
 		}
 		entries = append(entries, epubEntry{
 			fmt.Sprintf("OEBPS/chapter%d.xhtml", i+2), `<?xml version="1.0" encoding="UTF-8"?>

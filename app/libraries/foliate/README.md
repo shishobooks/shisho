@@ -35,11 +35,11 @@ view.js
 
 **`pdf.js` is intentionally stubbed — do not re-copy it from upstream.** Upstream foliate's `pdf.js` depends on a vendored pdfjs distribution under `vendor/pdfjs/` that we don't ship. PDFs are handled by the separate `PDFReader` component, so foliate's PDF path is never exercised at runtime — but Vite/Rolldown resolves dynamic imports at build time, so `pdf.js` must still exist *and* all of its own imports must resolve. That's why we keep a stub rather than deleting the file, and why replacing it with upstream's version without also vendoring `vendor/pdfjs/` breaks `pnpm build`.
 
-Some of the other files (e.g. `fb2.js`, `progress.js`, `search.js`, `tts.js`) are not imported directly by our reader either, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
+Some of the other files (e.g. `fb2.js`, `progress.js`, `tts.js`) are not imported directly by our reader either, but are transitive imports pulled in by `view.js` / `epub.js` / the paginator. They must be present for the vendored set to load without module-resolution errors. Do not prune files without first verifying nothing in the closure imports them.
 
 ## Local patches
 
-`fixed-layout.js`, `mobi.js`, `paginator.js`, and `view.js` carry changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the patched `mobi.js` helper and fails when a patch or its call site is missing.
+`fixed-layout.js`, `mobi.js`, `paginator.js`, `search.js`, and `view.js` carry changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the patched `mobi.js` helper and fails when the patch or its call site is missing, and `app/libraries/foliate-search.test.ts` fails when the `search.js` patch is missing.
 
 ## To update
 

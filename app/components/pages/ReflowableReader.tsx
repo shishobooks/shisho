@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ProgressMarks from "@/components/library/ProgressMarks";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
+import ReaderSearch from "@/components/library/ReaderSearch";
 import ReaderSettingsPanel from "@/components/library/ReaderSettingsPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -189,8 +190,12 @@ export default function ReflowableReader({
     readerSettings.font.startsWith(IMPORTED_FONT_PREFIX) &&
     (!importedFontsReady || (chosenImportedFont && !chosenImportedUrl));
 
-  const { chromeVisible, revealChrome, toggleChrome } =
-    useAutoHideChrome(hideChrome);
+  // Search stays open while the reader turns pages, and its panel hangs from
+  // the header, so the controls stay while it's open.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const { chromeVisible, revealChrome, toggleChrome } = useAutoHideChrome(
+    hideChrome && !searchOpen,
+  );
 
   const {
     saved,
@@ -969,7 +974,24 @@ export default function ReflowableReader({
               value={currentTocValue}
             />
           )}
-          <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
+          <ReaderSearch
+            onOpenChange={setSearchOpen}
+            open={searchOpen}
+            view={
+              bookReady
+                ? (viewElement as HTMLElementTagNameMap["foliate-view"] | null)
+                : null
+            }
+          />
+          <Popover
+            onOpenChange={(open) => {
+              setSettingsOpen(open);
+              // Search ignores presses outside it, so it would stay open
+              // under the settings, which hang from the same corner.
+              if (open) setSearchOpen(false);
+            }}
+            open={settingsOpen}
+          >
             <PopoverTrigger asChild>
               <Button aria-label="Settings" size="icon" variant="ghost">
                 <Settings className="h-4 w-4" />

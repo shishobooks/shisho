@@ -59,6 +59,14 @@ const SAVED_AT = "2026-10-01T09:00:00.000Z";
 // What POST /reading/files/:id/position reports it did.
 let saveResult: object = {};
 let positionLoadFails = false;
+// What the mocked foliate search finds, one entry per section with matches.
+let mockSearchSections: Array<{
+  label: string;
+  subitems: Array<{
+    cfi: string;
+    excerpt: { pre: string; match: string; post: string };
+  }>;
+}> = [];
 
 beforeAll(() => {
   if (!customElements.get("foliate-view")) {
@@ -81,6 +89,13 @@ beforeAll(() => {
         };
         lastLocation = { cfi: "epubcfi(/6/2!/4/2)", fraction: 0 };
         getSectionFractions = () => mockFractions;
+        search = vi.fn(async function* () {
+          for (const section of mockSearchSections) yield section;
+          yield "done";
+        });
+        clearSearch = vi.fn();
+        addAnnotation = vi.fn().mockResolvedValue(undefined);
+        deleteAnnotation = vi.fn().mockResolvedValue(undefined);
         get book() {
           return {
             toc: mockToc,
@@ -116,6 +131,7 @@ beforeEach(() => {
   savedPercentageOnly = null;
   saveResult = {};
   positionLoadFails = false;
+  mockSearchSections = [];
   vi.spyOn(API, "request").mockImplementation(((
     method: string,
     endpoint: string,
@@ -2286,5 +2302,94 @@ describe("ReflowableReader footnotes", () => {
     expect(
       screen.queryByRole("dialog", { name: "Footnote" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ReflowableReader search", () => {
+  const openBook = async (hideChrome = false) => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: hideChrome },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const view = container.querySelector(
+      "foliate-view",
+    ) as unknown as HTMLElement & {
+      goLeft: ReturnType<typeof vi.fn>;
+      goRight: ReturnType<typeof vi.fn>;
+      goTo: ReturnType<typeof vi.fn>;
+    };
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    return { view };
+  };
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+  it("goes to a result the search found", async () => {
+    mockSearchSections = [
+      {
+        label: "Chapter Four",
+        subitems: [
+          {
+            cfi: "epubcfi(/6/8!/4/2,/1:3,/1:10)",
+            excerpt: { pre: "No ", match: "lantern", post: "." },
+          },
+        ],
+      },
+    ];
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(
+      screen.getByRole("searchbox", { name: "Search in book" }),
+      "lantern",
+    );
+    await u.click(await screen.findByRole("button", { name: "No lantern." }));
+    expect(view.goTo).toHaveBeenCalledWith("epubcfi(/6/8!/4/2,/1:3,/1:10)");
+  });
+
+  it("doesn't turn pages on keys typed in the search field", async () => {
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(
+      screen.getByRole("searchbox", { name: "Search in book" }),
+      "dad{ArrowLeft}{ArrowRight}",
+    );
+    expect(view.goLeft).not.toHaveBeenCalled();
+    expect(view.goRight).not.toHaveBeenCalled();
+  });
+
+  it("keeps the controls showing while it's open", async () => {
+    await openBook(true);
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByRole("banner")).not.toHaveClass("-translate-y-full");
+
+    await u.click(screen.getByRole("button", { name: "Close search" }));
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByRole("banner")).toHaveClass("-translate-y-full");
+  });
+
+  it("closes when the display settings open, so the two don't overlap", async () => {
+    await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    expect(
+      screen.getByRole("searchbox", { name: "Search in book" }),
+    ).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Settings" }));
+    expect(
+      screen.queryByRole("searchbox", { name: "Search in book" }),
+    ).toBeNull();
   });
 });

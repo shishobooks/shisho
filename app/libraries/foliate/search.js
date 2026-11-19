@@ -9,7 +9,9 @@ const makeExcerpt = (strs, { startIndex, startOffset, endIndex, endOffset }) => 
     const match = start === end
         ? start.slice(startOffset, endOffset)
         : start.slice(startOffset)
-            + strs.slice(start + 1, end).join('')
+            // Shisho patch: slice by index. Upstream passes the strings, so
+            // a match across three or more text nodes lost its middle.
+            + strs.slice(startIndex + 1, endIndex).join('')
             + end.slice(0, endOffset)
     const trimmedStart = normalizeWhitespace(start.slice(0, startOffset)).trimStart()
     const trimmedEnd = normalizeWhitespace(end.slice(endOffset)).trimEnd()
