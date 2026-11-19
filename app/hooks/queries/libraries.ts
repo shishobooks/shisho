@@ -10,13 +10,13 @@ import type {
   CreateLibraryPayload,
   Library,
   LibrarySummary,
-  ListLibrariesQuery,
   ListLibrariesResponse,
   UpdateLibraryPayload,
 } from "@/types";
 
 import { QueryKey as BooksQueryKey } from "./books";
 import { invalidateCoverPreviewLists } from "./coverPreviews";
+import { fetchEveryPage } from "./everyPage";
 import { invalidateGettingStarted } from "./gettingStarted";
 import { QueryKey as LibrarySettingsQueryKey } from "./librarySettings";
 import { anyOf, useRequires } from "./permissions";
@@ -47,13 +47,9 @@ export const useLibrary = (
   });
 };
 
-// The most GET /libraries returns at once.
-const LIBRARIES_PAGE_SIZE = 100;
-
 // Every Library the caller can access. GET /libraries is paged, and the pages
 // that use this (the Libraries list and the access pickers when adding or
-// editing a user) need all of them, so it asks page by page until it has
-// them all.
+// editing a user) need all of them.
 export const useLibraries = (
   options: Omit<
     UseQueryOptions<ListLibrariesResponse, ShishoAPIError>,
@@ -68,31 +64,7 @@ export const useLibraries = (
       options.enabled ?? true,
     ),
     queryKey: [QueryKey.ListLibraries],
-    queryFn: async ({ signal }) => {
-      const items: ListLibrariesResponse["items"] = [];
-      for (;;) {
-        const query: ListLibrariesQuery = {
-          limit: LIBRARIES_PAGE_SIZE,
-          offset: items.length,
-        };
-        const page = await API.request<ListLibrariesResponse>(
-          "GET",
-          "/libraries",
-          null,
-          query,
-          signal,
-        );
-        items.push(...page.items);
-        // A short page is the last, whatever total says, so a Library
-        // deleted meanwhile can't keep the loop going.
-        if (
-          page.items.length < LIBRARIES_PAGE_SIZE ||
-          items.length >= page.total
-        ) {
-          return { items, total: page.total };
-        }
-      }
-    },
+    queryFn: ({ signal }) => fetchEveryPage("/libraries", signal),
   });
 };
 

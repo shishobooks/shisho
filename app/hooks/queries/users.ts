@@ -11,7 +11,6 @@ import type {
   CreateRolePayload,
   CreateUserPayload,
   ListRolesResponse,
-  ListUsersQuery,
   ListUsersResponse,
   ResetPasswordPayload,
   Role,
@@ -21,6 +20,7 @@ import type {
   UserRef,
 } from "@/types";
 
+import { fetchEveryPage } from "./everyPage";
 import { invalidateGettingStarted } from "./gettingStarted";
 import { QueryKey as LibrariesQueryKey } from "./libraries";
 import { useRequires } from "./permissions";
@@ -49,8 +49,9 @@ export const useUser = (
   });
 };
 
+// Every account, for the Users page. GET /users is paged, so it asks page by
+// page until it has them all.
 export const useUsers = (
-  query: ListUsersQuery = {},
   options: Omit<
     UseQueryOptions<ListUsersResponse, ShishoAPIError>,
     "queryKey" | "queryFn"
@@ -59,10 +60,8 @@ export const useUsers = (
   return useQuery<ListUsersResponse, ShishoAPIError>({
     ...options,
     enabled: useRequires("users:read", options.enabled ?? true),
-    queryKey: [QueryKey.ListUsers, query],
-    queryFn: ({ signal }) => {
-      return API.request("GET", "/users", null, query, signal);
-    },
+    queryKey: [QueryKey.ListUsers],
+    queryFn: ({ signal }) => fetchEveryPage("/users", signal),
   });
 };
 

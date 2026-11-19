@@ -213,7 +213,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useUpdateCheck: requires("config:read", []),
   // users
   useUser: requires("users:read", ["1", on]),
-  useUsers: requires("users:read", [{}, on]),
+  useUsers: requires("users:read", [on]),
   useRoles: requires("users:read", [on]),
   useUserDirectory: authenticated([on]),
 };
