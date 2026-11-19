@@ -1,9 +1,19 @@
-import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Redo2,
+  Settings,
+  Undo2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ProgressMarks from "@/components/library/ProgressMarks";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
+import ReaderSearch, {
+  type ReaderSearchHandle,
+} from "@/components/library/ReaderSearch";
 import ReaderSettingsPanel from "@/components/library/ReaderSettingsPanel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,6 +24,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useReflowableBlob } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
@@ -21,6 +36,7 @@ import {
 } from "@/hooks/queries/settings";
 import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { useImportedFonts, useImportedFontUrl } from "@/hooks/useImportedFonts";
+import { useLocationHistory } from "@/hooks/useLocationHistory";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
@@ -50,7 +66,7 @@ import {
   withinFirstScreen,
   type EndRenderer,
 } from "@/utils/readerEnd";
-import { pageTurnForKey } from "@/utils/readerKeys";
+import { pageTurnForKey, searchShortcutForKey } from "@/utils/readerKeys";
 import { reflowableOpenTarget } from "@/utils/readingPosition";
 
 import "@/libraries/foliate/view.js";
@@ -85,6 +101,8 @@ type FoliateRenderer = EndRenderer & {
   setAttribute?: (name: string, value: string) => void;
   // Lays the shown section out again, keeping the place.
   render?: () => void;
+  // Gives the keys to the shown section's frame.
+  focusView?: () => void;
 };
 
 // What foliate's resolveHref gives for a link: the section, and a function
@@ -134,6 +152,51 @@ const flattenToc = (
   }
   return out;
 };
+
+// A Back or Forward button, with a tooltip saying what it does. A disabled
+// button gets no pointer events, so the tooltip hangs from what holds it and
+// explains the button before there's anywhere to go. The 16px keeps it in the
+// page gutter on a phone.
+function LocationButton({
+  label,
+  hint,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  hint: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* A disabled button can't take focus either, so while it's
+            disabled its wrapper does, letting the keyboard reach the
+            tooltip too. */}
+        <span
+          className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          tabIndex={disabled ? 0 : undefined}
+        >
+          <Button
+            aria-label={label}
+            disabled={disabled}
+            onClick={onClick}
+            size="icon"
+            variant="ghost"
+          >
+            {children}
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-60" collisionPadding={16} side="bottom">
+        {hint}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function ReflowableReader({
   file,
@@ -189,8 +252,15 @@ export default function ReflowableReader({
     readerSettings.font.startsWith(IMPORTED_FONT_PREFIX) &&
     (!importedFontsReady || (chosenImportedFont && !chosenImportedUrl));
 
+  // Search stays open while the reader turns pages, and its panel hangs from
+  // the header, so the controls stay while it's open.
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Auto-hide lays the controls over the book. While searching they stay,
+  // and sit beside the book instead, so the search panel hanging from them
+  // covers only the page's top margin.
+  const overlayChrome = hideChrome && !searchOpen;
   const { chromeVisible, revealChrome, toggleChrome } =
-    useAutoHideChrome(hideChrome);
+    useAutoHideChrome(overlayChrome);
 
   const {
     saved,
@@ -238,6 +308,18 @@ export default function ReflowableReader({
     viewRef.current = el;
     setViewElement(el);
   }, []);
+  // Back and forward through the places the reader jumped from. Every jump
+  // below goes through `jump`.
+  const locations = useLocationHistory(viewElement);
+  const { jump, reset: resetLocations } = locations;
+  const jumpTo = useCallback(
+    (go: () => unknown) => {
+      jump(go).catch((err: unknown) => {
+        console.warn("ReflowableReader: couldn't jump", err);
+      });
+    },
+    [jump],
+  );
   // The section and page foliate last reported.
   const placeRef = useRef("");
   const headerRef = useRef<HTMLElement | null>(null);
@@ -310,6 +392,7 @@ export default function ReflowableReader({
 
     let cancelled = false;
     setBookReady(false);
+    resetLocations();
     setRtl(false);
     setLoadError(null);
 
@@ -416,7 +499,7 @@ export default function ReflowableReader({
         // no-op
       }
     };
-  }, [blob, fileType, positionSettled, opened]);
+  }, [blob, fileType, positionSettled, opened, resetLocations]);
 
   const goPrev = useCallback(() => {
     const view = viewRef.current as
@@ -429,13 +512,57 @@ export default function ReflowableReader({
     view?.goRight?.();
   }, []);
 
+  // The open search panel, for the search shortcuts.
+  const searchRef = useRef<ReaderSearchHandle | null>(null);
+  // Gives the keys to the book, so the arrow keys turn its pages. A
+  // fixed-layout book's renderer can't take focus, so the keys go to this
+  // page, which turns pages too.
+  const focusBook = useCallback(() => {
+    const renderer = (
+      viewRef.current as (HTMLElement & { renderer?: FoliateRenderer }) | null
+    )?.renderer;
+    if (!renderer?.focusView) {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      return;
+    }
+    // A frame given focus gives it back to what last had it there, and
+    // foliate scrolls to whatever takes focus: a link tabbed to earlier
+    // would pull the page back from where the result went.
+    for (const { doc } of renderer.getContents?.() ?? []) {
+      (doc.activeElement as HTMLElement | null)?.blur?.();
+    }
+    renderer.focusView();
+  }, []);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      const target = e.target as (Node & Partial<Element>) | null;
+      // The search panel closes itself on Escape, but a key pressed in the
+      // book's frame, where a chosen result leaves the keys, never reaches it.
+      const fromBook =
+        !!target && (target.ownerDocument ?? target) !== document;
+      if (e.key === "Escape" && fromBook) {
+        setSearchOpen(false);
+        return;
+      }
+      // An open menu, such as the chapter list, keeps its keys.
+      const inMenu = !!target?.closest?.('[role="listbox"]');
+      const shortcut = inMenu ? null : searchShortcutForKey(e);
+      if (shortcut) {
+        // The browser's own find can't search the book.
+        e.preventDefault();
+        // The panel stays mounted while it fades out after closing.
+        const panel = searchOpen ? searchRef.current : null;
+        if (!panel) setSearchOpen(true);
+        else if (shortcut === "find") panel.focusField();
+        else panel[shortcut]();
+        return;
+      }
       const turn = pageTurnForKey(e);
       if (turn === "next") goNext();
       else if (turn === "prev") goPrev();
     },
-    [goNext, goPrev],
+    [goNext, goPrev, searchOpen],
   );
 
   // Keyboard navigation (only when a book is loaded).
@@ -684,9 +811,11 @@ export default function ReflowableReader({
         // The chapter's own link, so a click lands on its first page rather
         // than wherever the fraction falls.
         onSelect: () =>
-          (viewRef.current as FoliateBookView | null)?.goTo?.(mark.href),
+          jumpTo(() =>
+            (viewRef.current as FoliateBookView | null)?.goTo?.(mark.href),
+          ),
       })),
-    [chapterMarks],
+    [chapterMarks, jumpTo],
   );
 
   // A link to a footnote opens the note in a popover instead of jumping
@@ -699,7 +828,7 @@ export default function ReflowableReader({
 
     const showFootnote = async (a: Element, href: string) => {
       const request = ++latest;
-      const goToNote = () => view.goTo?.(href);
+      const goToNote = () => jumpTo(() => view.goTo?.(href));
       const resolved = await view.book?.resolveHref?.(href);
       if (request !== latest) return;
       if (!resolved || resolved.index < 0) {
@@ -758,11 +887,16 @@ export default function ReflowableReader({
       }
       const { a, href } = (evt as CustomEvent<{ a: Element; href: string }>)
         .detail;
-      if (!isFootnoteReference(a)) return;
       evt.preventDefault();
+      // The reader follows a link itself, so going back can return to where
+      // it was followed from.
+      if (!isFootnoteReference(a)) {
+        jumpTo(() => view.goTo?.(href));
+        return;
+      }
       showFootnote(a, href).catch((err: unknown) => {
         console.warn("ReflowableReader: couldn't show the footnote", err);
-        view.goTo?.(href);
+        jumpTo(() => view.goTo?.(href));
       });
     };
     // A link out of the book opens a new tab, which a tap that closed a
@@ -777,7 +911,7 @@ export default function ReflowableReader({
       view.removeEventListener("link", handleLink);
       view.removeEventListener("external-link", handleExternalLink);
     };
-  }, [viewElement]);
+  }, [viewElement, jumpTo]);
 
   // Wire the relocate event for progress tracking.
   useEffect(() => {
@@ -890,24 +1024,24 @@ export default function ReflowableReader({
     const href = toc[Number(value)]?.href;
     if (!href) return;
     const view = viewRef.current as
-      (HTMLElement & { goTo?: (target: string) => void }) | null;
-    view?.goTo?.(href);
+      (HTMLElement & { goTo?: (target: string) => unknown }) | null;
+    jumpTo(() => view?.goTo?.(href));
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const target = (e.clientX - rect.left) / rect.width;
     const view = viewRef.current as
-      (HTMLElement & { goToFraction?: (f: number) => void }) | null;
-    view?.goToFraction?.(Math.max(0, Math.min(1, target)));
+      (HTMLElement & { goToFraction?: (f: number) => unknown }) | null;
+    jumpTo(() => view?.goToFraction?.(Math.max(0, Math.min(1, target))));
   };
 
   const handleProgressKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Home" && e.key !== "End") return;
     e.preventDefault();
     const view = viewRef.current as
-      (HTMLElement & { goToFraction?: (f: number) => void }) | null;
-    view?.goToFraction?.(e.key === "Home" ? 0 : 1);
+      (HTMLElement & { goToFraction?: (f: number) => unknown }) | null;
+    jumpTo(() => view?.goToFraction?.(e.key === "Home" ? 0 : 1));
   };
 
   // To a tenth of a percent, so the bar and the number move with each page
@@ -949,14 +1083,34 @@ export default function ReflowableReader({
     <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col">
       <header
         className={cn(
-          "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-          hideChrome &&
+          "flex items-center justify-between gap-2 px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          overlayChrome &&
             "fixed top-[var(--banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
-          hideChrome && !chromeVisible && "-translate-y-full",
+          overlayChrome && !chromeVisible && "-translate-y-full",
         )}
         ref={headerRef}
       >
-        <div className="flex items-center gap-2">
+        {/* Always shown, and disabled when there's nowhere to go, so they're
+            where the reader expects them after paging around a jump. */}
+        <div className="flex items-center">
+          <LocationButton
+            disabled={!bookReady || !locations.canGoBack}
+            hint="Back to where you were before a jump, such as a link, a chapter, or a search result"
+            label="Back to previous location"
+            onClick={locations.goBack}
+          >
+            <Undo2 className="h-4 w-4" />
+          </LocationButton>
+          <LocationButton
+            disabled={!bookReady || !locations.canGoForward}
+            hint="Forward to where you were when you went back"
+            label="Forward to next location"
+            onClick={locations.goForward}
+          >
+            <Redo2 className="h-4 w-4" />
+          </LocationButton>
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
           {toc.length > 0 && (
             <ReaderChapterSelect
               entries={toc.map((entry, index) => ({
@@ -969,7 +1123,27 @@ export default function ReflowableReader({
               value={currentTocValue}
             />
           )}
-          <Popover onOpenChange={setSettingsOpen} open={settingsOpen}>
+          <ReaderSearch
+            handleRef={searchRef}
+            onFocusBook={focusBook}
+            onJump={jump}
+            onOpenChange={setSearchOpen}
+            open={searchOpen}
+            view={
+              bookReady
+                ? (viewElement as HTMLElementTagNameMap["foliate-view"] | null)
+                : null
+            }
+          />
+          <Popover
+            onOpenChange={(open) => {
+              setSettingsOpen(open);
+              // Search ignores presses outside it, so it would stay open
+              // under the settings, which hang from the same corner.
+              if (open) setSearchOpen(false);
+            }}
+            open={settingsOpen}
+          >
             <PopoverTrigger asChild>
               <Button aria-label="Settings" size="icon" variant="ghost">
                 <Settings className="h-4 w-4" />
@@ -1006,7 +1180,7 @@ export default function ReflowableReader({
       <main
         className={cn(
           "relative bg-background",
-          hideChrome
+          overlayChrome
             ? "fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)]"
             : "flex-1",
         )}
@@ -1025,7 +1199,7 @@ export default function ReflowableReader({
 
         {/* Tapping the page toggles the controls; keyboard users get a button
             that shows on focus and doesn't otherwise cover the book. */}
-        {hideChrome && flow !== "scrolled" && (
+        {overlayChrome && flow !== "scrolled" && (
           <Button
             className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:bottom-24 focus-visible:left-1/2 focus-visible:z-30 focus-visible:-translate-x-1/2"
             onClick={toggleChrome}
@@ -1082,7 +1256,8 @@ export default function ReflowableReader({
               onClick={() => {
                 if (!footnote) return;
                 const view = viewRef.current as FoliateBookView | null;
-                view?.goTo?.(footnote.href);
+                const href = footnote.href;
+                jumpTo(() => view?.goTo?.(href));
                 closeFootnote();
               }}
               style={noteStyle ? { color: noteStyle.link } : undefined}
@@ -1097,9 +1272,9 @@ export default function ReflowableReader({
       <footer
         className={cn(
           "border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-          hideChrome &&
+          overlayChrome &&
             "fixed bottom-0 inset-x-0 z-20 transition-transform duration-300",
-          hideChrome && !chromeVisible && "translate-y-full",
+          overlayChrome && !chromeVisible && "translate-y-full",
         )}
         ref={footerRef}
       >

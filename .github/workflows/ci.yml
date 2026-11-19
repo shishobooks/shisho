@@ -388,9 +388,12 @@ jobs:
         env:
           BROWSER: ${{ matrix.browser }}
         with:
-          # Catches a run that hung, so it sits well above how long the suite
-          # takes. A timeout here means no test failed.
-          timeout_minutes: 10
+          # A backstop for a hung run, well above how long the suite takes
+          # (Firefox, the slower, takes about 11 minutes). Playwright's own
+          # 18-minute globalTimeout (playwright.config.ts) stops a hung suite
+          # first and names the tests still running; a timeout here means even
+          # that failed.
+          timeout_minutes: 20
           max_attempts: 2
           retry_on: timeout
           command: pnpm "e2e:$BROWSER"

@@ -11,6 +11,8 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 - Table-of-contents navigation
 - Previous and next page controls
 - A progress bar that can jump within the book, marked where each chapter in the book's table of contents starts. Point at a mark to see the chapter's name, or select it to go to the start of that chapter.
+- [Search](#searching-inside-a-book) for a word or phrase anywhere in the book
+- [Back and forward](#going-back-after-a-jump) to where you were before following a link, choosing a chapter, or going to a search result
 - [Display settings](#display-settings) for the font, size, spacing, margins, theme, and layout
 - Footnotes that open in a popover beside the text, in the page's theme and in the font chosen under [display settings](#display-settings). With **Book's font**, a book's embedded fonts may show as a standard serif font in the popover. Select **Go to note** in the popover to jump to the full note.
 - Optional automatic hiding of the header and footer
@@ -18,6 +20,32 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 In paginated mode, click or tap the left and right sides to change pages, or swipe from anywhere on the page. Fixed-layout books always turn this way, whatever the layout setting. The Left Arrow or `A` moves back; the Right Arrow or `D` moves forward. In a book that reads right to left, such as many Arabic, Hebrew, and Japanese books, the sides swap: the left side, the Left Arrow, and the left footer button move forward. When controls are hidden automatically, move the pointer to show them, or tap the middle of the page or its top or bottom edge (paginated) or the text (scrolled).
 
 Reopening a book returns to where you left off. See [Resuming Where You Left Off](./reading-tracking.md#resuming-where-you-left-off).
+
+### Searching Inside a Book
+
+Select the **Search** button in the reader's header and type a word or phrase. Search ignores capitalization and accents, so `cafe` also finds "café", and it matches inside longer words, so `lantern` also finds "lanterns". A single character searches only when you press Enter. Results are listed in book order under the chapter they're in.
+
+Select a result to go to it. Every match on the page is shaded, and the one you went to is shaded more strongly. Press Enter in the search field for the next result and Shift+Enter for the previous one, or use the arrows beside the count. Select the list button beside the arrows to show the list again. Selecting a result or clicking an arrow returns the keyboard to the book, so the arrow keys turn pages; Enter in the search field keeps it there to step again.
+
+The reader takes over the browser's find shortcuts, which can't search a whole book:
+
+| Shortcut | Action |
+| --- | --- |
+| Ctrl+F, or Cmd+F on a Mac or iPad | Open search, or return to its field |
+| Ctrl+G or F3, or Cmd+G on a Mac or iPad | Next result |
+| Ctrl+Shift+G or Shift+F3, or Cmd+Shift+G on a Mac or iPad | Previous result |
+
+They work even when the search field doesn't have the keyboard, so you can step through results while reading. If search is closed, each of them opens it. Press Escape to close search.
+
+Search stays open while you turn pages. Closing it removes the highlights. Going to a result moves your place in the book, as following a link does, so reopening the book returns there, and [going back](#going-back-after-a-jump) returns to where you were before the search.
+
+In fixed-layout books, search finds matches and goes to their page but doesn't highlight them.
+
+### Going Back After a Jump
+
+Following a link, choosing a chapter from the menu, selecting a spot or a chapter mark on the progress bar, selecting **Go to note** in a footnote, and going to a search result are jumps. To return to where you were before a jump, select **Back to previous location**, the arrow at the left of the reader's header. It returns there however many pages you've turned since. **Forward to next location**, beside it, returns to where you were when you went back.
+
+Turning pages is never a jump, even into the next chapter. In Paginated layout, neither is going to a place on the page you're already on. A search counts as one jump however many results you step through, so going back returns to the page you were on when a result first took you off it. The places to go back and forward to start over each time you open the book.
 
 ### Display Settings
 

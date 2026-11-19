@@ -23,6 +23,9 @@ let settingsBookId: number;
 let longBookId: number;
 let contentsBookId: number;
 let sectionsBookId: number;
+let searchBookId: number;
+let historyBookId: number;
+let keysBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -145,6 +148,9 @@ test.describe("Reflowable reader", () => {
     sectionsBookId = await seed("Sections Book", "epub", {
       epubSections: true,
     });
+    searchBookId = await seed("Search Book", "epub", { epubToc: true });
+    historyBookId = await seed("History Book", "epub", { epubToc: true });
+    keysBookId = await seed("Keys Book", "epub", { epubToc: true });
     await apiContext.dispose();
   });
 
@@ -223,6 +229,55 @@ test.describe("Reflowable reader", () => {
 
   test.describe("on a phone-sized screen", () => {
     test.use({ viewport: { width: 390, height: 844 } });
+
+    for (const hideChrome of [false, true]) {
+      test(`search folded to one row leaves the page's first line clear${hideChrome ? ", with auto-hide on" : ""}`, async ({
+        page,
+      }) => {
+        await login(page);
+        await setPaginatedReader(page);
+        const put = await page.request.put("/api/settings/user", {
+          data: { viewer_hide_chrome: hideChrome },
+        });
+        expect(put.ok()).toBe(true);
+        await openReader(page, longBookId);
+        await bookFrame(page, "Test chapter.");
+        // A page of filler, whose text starts at the top of the page.
+        await page.keyboard.press("ArrowRight");
+        await bookFrame(page, "Filler text");
+        // Auto-hide may have hidden the controls; moving the pointer shows
+        // them.
+        await page.mouse.move(200, 400);
+        await page.mouse.move(210, 410);
+
+        await page.getByRole("button", { name: "Search", exact: true }).click();
+        const panel = page.getByRole("dialog", { name: "Search in book" });
+        await panel
+          .getByRole("searchbox", { name: "Search in book" })
+          .fill("The end");
+        await panel.getByRole("button", { name: "The end." }).click();
+        const frame = await bookFrame(page, "The end.");
+        await expect(panel.getByRole("status")).toHaveText("1 of 1");
+
+        const firstLineTop = async () => {
+          const frameBox = (await (await frame.frameElement()).boundingBox())!;
+          // The frame scrolls sideways through the chapter, so the topmost
+          // text on the screen is the topmost of the paragraphs shown.
+          const top = await frame.evaluate(() =>
+            Math.min(
+              ...Array.from(document.querySelectorAll("p"), (p) =>
+                p.getBoundingClientRect(),
+              )
+                .filter((r) => r.right > 0 && r.left < window.innerWidth)
+                .map((r) => r.top),
+            ),
+          );
+          return frameBox.y + top;
+        };
+        const panelBox = (await panel.boundingBox())!;
+        expect(panelBox.y + panelBox.height).toBeLessThan(await firstLineTop());
+      });
+    }
 
     test("a footnote's popover keeps clear of the screen's edges", async ({
       page,
@@ -510,6 +565,163 @@ test.describe("Reflowable reader", () => {
     await page.reload({ waitUntil: "domcontentloaded" });
     await bookFrame(page, "Chapter Three text.");
     await expect(page.getByText("Preparing book…")).toBeHidden();
+  });
+
+  test("searches the book, goes to a result, and saves the place", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, searchBookId);
+    await bookFrame(page, "Test chapter.");
+
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    // Case doesn't matter.
+    await panel
+      .getByRole("searchbox", { name: "Search in book" })
+      .fill("LANTERN");
+    await expect(panel.getByRole("status")).toHaveText("2 results");
+    await expect(panel.getByRole("heading", { level: 3 })).toHaveText([
+      "Chapter Two",
+      "Chapter Four",
+    ]);
+
+    await panel.getByRole("button", { name: "The lantern dims." }).click();
+    const frame = await bookFrame(page, "Chapter Four text.");
+    await expect(panel.getByRole("status")).toHaveText("2 of 2");
+
+    // foliate draws matches in an overlay beside the section's frame, inside
+    // closed shadow roots that only the frame can reach: every match shaded,
+    // the chosen one also marked more strongly.
+    const marks = () =>
+      frame.evaluate(() => {
+        const overlay =
+          window.frameElement?.parentElement?.querySelector(":scope > svg");
+        const count = (selector: string) =>
+          overlay?.querySelectorAll(`${selector} > rect`).length ?? 0;
+        return {
+          shaded: count('g[data-search-mark="match"]'),
+          chosen: count('g[data-search-mark="chosen"]'),
+        };
+      });
+    await expect.poll(marks).toEqual({ shaded: 1, chosen: 1 });
+
+    await panel.getByRole("button", { name: "Close search" }).click();
+    await expect(panel).toBeHidden();
+    await expect.poll(marks).toEqual({ shaded: 0, chosen: 0 });
+
+    // The jump is a move, saved like following a link.
+    const fileId = page.url().match(/\/files\/(\d+)\/read$/)![1];
+    await expect
+      .poll(
+        async () => {
+          const resp = await page.request.get(
+            `/api/reading/files/${fileId}/position`,
+          );
+          const body = (await resp.json()) as {
+            position: { cfi?: string } | null;
+          };
+          return body.position?.cfi ?? null;
+        },
+        { timeout: 10_000 },
+      )
+      .toMatch(/^epubcfi\(\/6\/8/);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await bookFrame(page, "Chapter Four text.");
+  });
+
+  test("search files each match under its own chapter in a file holding several", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, sectionsBookId);
+    await bookFrame(page, "Section 1 begins.");
+
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    await panel
+      .getByRole("searchbox", { name: "Search in book" })
+      .fill("begins");
+    // Every section but the figure's is in the book's first file.
+    await expect(panel.getByRole("status")).toHaveText("25 results");
+    const headings = panel.getByRole("heading", { level: 3 });
+    await expect(headings).toHaveCount(25);
+    await expect(headings.first()).toHaveText("Section 1");
+    await expect(headings.nth(23)).toHaveText("Section 24");
+    await expect(headings.last()).toHaveText("Figure");
+  });
+
+  test("goes back to where a jump left from, however far the reader paged", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, historyBookId);
+    await bookFrame(page, "Test chapter.");
+    const back = page.getByRole("button", {
+      name: "Back to previous location",
+    });
+    const forward = page.getByRole("button", {
+      name: "Forward to next location",
+    });
+    await expect(back).toBeDisabled();
+    await expect(forward).toBeDisabled();
+
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    await panel
+      .getByRole("searchbox", { name: "Search in book" })
+      .fill("lantern");
+    await panel.getByRole("button", { name: "The lantern dims." }).click();
+    await bookFrame(page, "Chapter Four text.");
+    await panel.getByRole("button", { name: "Close search" }).click();
+
+    // Paging back into the chapter before isn't a jump of its own.
+    await page.getByRole("button", { name: "Previous page" }).click();
+    await bookFrame(page, "Chapter Three text.");
+
+    await back.click();
+    await bookFrame(page, "Test chapter.");
+    await expect(back).toBeDisabled();
+    await forward.click();
+    await bookFrame(page, "Chapter Three text.");
+    await expect(forward).toBeDisabled();
+    await expect(back).toBeEnabled();
+  });
+
+  test("search works from the keyboard, and leaves the keys to the book", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, keysBookId);
+    const frame = await bookFrame(page, "Test chapter.");
+
+    // Cmd+F (Ctrl+F elsewhere) in the book opens search, not the browser's.
+    // A click on the text gives the book the keys, as a reader's would.
+    await frame.locator("p").first().click();
+    await page.keyboard.press("ControlOrMeta+f");
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    const field = panel.getByRole("searchbox", { name: "Search in book" });
+    await expect(field).toBeFocused();
+    await field.fill("lantern");
+    await panel.getByRole("button", { name: "A lantern glows." }).click();
+    await bookFrame(page, "Chapter Two text.");
+    await expect(panel.getByRole("status")).toHaveText("1 of 2");
+
+    // The book has the keys: an arrow turns its page, and Cmd+G steps on
+    // without taking them back.
+    await page.keyboard.press("ArrowRight");
+    await bookFrame(page, "Chapter Three text.");
+    await expect(field).not.toBeFocused();
+    await page.keyboard.press("ControlOrMeta+g");
+    await bookFrame(page, "The lantern dims.");
+    await expect(panel.getByRole("status")).toHaveText("2 of 2");
+    await page.keyboard.press("ControlOrMeta+Shift+g");
+    await expect(panel.getByRole("status")).toHaveText("1 of 2");
+    await bookFrame(page, "A lantern glows.");
   });
 
   test("reading to the end marks the book read", async ({ page }) => {

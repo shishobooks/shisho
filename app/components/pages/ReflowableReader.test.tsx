@@ -59,6 +59,14 @@ const SAVED_AT = "2026-10-01T09:00:00.000Z";
 // What POST /reading/files/:id/position reports it did.
 let saveResult: object = {};
 let positionLoadFails = false;
+// What the mocked foliate search finds, one entry per section with matches.
+let mockSearchSections: Array<{
+  label: string;
+  subitems: Array<{
+    cfi: string;
+    excerpt: { pre: string; match: string; post: string };
+  }>;
+}> = [];
 
 beforeAll(() => {
   if (!customElements.get("foliate-view")) {
@@ -78,9 +86,17 @@ beforeAll(() => {
           page: mockPage,
           setStyles: vi.fn(),
           setAttribute: vi.fn(),
+          focusView: vi.fn(),
         };
         lastLocation = { cfi: "epubcfi(/6/2!/4/2)", fraction: 0 };
         getSectionFractions = () => mockFractions;
+        search = vi.fn(async function* () {
+          for (const section of mockSearchSections) yield section;
+          yield "done";
+        });
+        clearSearch = vi.fn();
+        addAnnotation = vi.fn().mockResolvedValue(undefined);
+        deleteAnnotation = vi.fn().mockResolvedValue(undefined);
         get book() {
           return {
             toc: mockToc,
@@ -116,6 +132,7 @@ beforeEach(() => {
   savedPercentageOnly = null;
   saveResult = {};
   positionLoadFails = false;
+  mockSearchSections = [];
   vi.spyOn(API, "request").mockImplementation(((
     method: string,
     endpoint: string,
@@ -790,18 +807,21 @@ describe("ReflowableReader", () => {
       tapBook(150);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
-      // Enter on a focused link: a click with no press before it.
-      let follow = false;
+      // Enter on a focused link: a click with no press before it. The
+      // reader follows links itself, for its history of jumps.
       act(() => {
-        follow = view.dispatchEvent(
+        view.dispatchEvent(
           new CustomEvent("link", {
             detail: { a: doc.querySelector("a")!, href: "#n" },
             cancelable: true,
           }),
         );
       });
+      await act(async () => {});
 
-      expect(follow).toBe(true);
+      expect(
+        (view as unknown as { goTo: ReturnType<typeof vi.fn> }).goTo,
+      ).toHaveBeenCalledWith("#n");
     });
 
     it("replace the overlay buttons", () => {
@@ -2215,6 +2235,30 @@ describe("ReflowableReader footnotes", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("counts going to the note as a jump", async () => {
+    const doc = xhtml(NOTE_DOC);
+    const view = await openBook(doc);
+    const relocate = (cfi: string, section: number) =>
+      view.dispatchEvent(
+        new CustomEvent("relocate", {
+          detail: { cfi, section: { current: section }, reason: "navigation" },
+        }),
+      );
+    act(() => relocate("reading", 1));
+    view.goTo.mockImplementation(() => {
+      relocate("notes", 2);
+      return Promise.resolve();
+    });
+    clickLink(view, doc.querySelector("a")!, "chapter2.xhtml#n1");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.click(await screen.findByRole("button", { name: "Go to note" }));
+
+    expect(
+      screen.getByRole("button", { name: "Back to previous location" }),
+    ).toBeEnabled();
+  });
+
   it.each(["page", "anchor"])(
     "closes the popover when the page moves or lays out again (%s)",
     async (reason) => {
@@ -2258,17 +2302,14 @@ describe("ReflowableReader footnotes", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("lets foliate follow an ordinary link", async () => {
+  it("follows an ordinary link", async () => {
     const doc = xhtml(NOTE_DOC);
     const view = await openBook(doc);
 
-    const follow = clickLink(
-      view,
-      doc.querySelectorAll("a")[1],
-      "chapter2.xhtml#end",
-    );
+    clickLink(view, doc.querySelectorAll("a")[1], "chapter2.xhtml#end");
+    await act(async () => {});
 
-    expect(follow).toBe(true);
+    expect(view.goTo).toHaveBeenCalledWith("chapter2.xhtml#end");
     expect(
       screen.queryByRole("dialog", { name: "Footnote" }),
     ).not.toBeInTheDocument();
@@ -2286,5 +2327,687 @@ describe("ReflowableReader footnotes", () => {
     expect(
       screen.queryByRole("dialog", { name: "Footnote" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ReflowableReader search", () => {
+  const openBook = async (hideChrome = false) => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: hideChrome },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const view = container.querySelector(
+      "foliate-view",
+    ) as unknown as HTMLElement & {
+      goLeft: ReturnType<typeof vi.fn>;
+      goRight: ReturnType<typeof vi.fn>;
+      goTo: ReturnType<typeof vi.fn>;
+    };
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    return { view };
+  };
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+  it("goes to a result the search found", async () => {
+    mockSearchSections = [
+      {
+        label: "Chapter Four",
+        subitems: [
+          {
+            cfi: "epubcfi(/6/8!/4/2,/1:3,/1:10)",
+            excerpt: { pre: "No ", match: "lantern", post: "." },
+          },
+        ],
+      },
+    ];
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(
+      screen.getByRole("searchbox", { name: "Search in book" }),
+      "lantern",
+    );
+    await u.click(await screen.findByRole("button", { name: "No lantern." }));
+    expect(view.goTo).toHaveBeenCalledWith("epubcfi(/6/8!/4/2,/1:3,/1:10)");
+  });
+
+  it("doesn't turn pages on keys typed in the search field", async () => {
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(
+      screen.getByRole("searchbox", { name: "Search in book" }),
+      "dad{ArrowLeft}{ArrowRight}",
+    );
+    expect(view.goLeft).not.toHaveBeenCalled();
+    expect(view.goRight).not.toHaveBeenCalled();
+  });
+
+  it("keeps the controls showing while it's open", async () => {
+    await openBook(true);
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByRole("banner")).not.toHaveClass("-translate-y-full");
+
+    await u.click(screen.getByRole("button", { name: "Close search" }));
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByRole("banner")).toHaveClass("-translate-y-full");
+  });
+
+  it("closes when the display settings open, so the two don't overlap", async () => {
+    await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    expect(
+      screen.getByRole("searchbox", { name: "Search in book" }),
+    ).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Settings" }));
+    expect(
+      screen.queryByRole("searchbox", { name: "Search in book" }),
+    ).toBeNull();
+  });
+});
+
+describe("ReflowableReader location history", () => {
+  type HistoryView = HTMLElement & {
+    goTo: ReturnType<typeof vi.fn>;
+    goToFraction: ReturnType<typeof vi.fn>;
+    init: ReturnType<typeof vi.fn>;
+  };
+
+  // foliate reports where it is with each move. A place's section stands
+  // for its screen: the mocked renderer always shows the same page number.
+  const relocate = (
+    view: HTMLElement,
+    cfi: string,
+    section: number,
+    reason = "page",
+  ) =>
+    act(() => {
+      view.dispatchEvent(
+        new CustomEvent("relocate", {
+          detail: {
+            cfi,
+            fraction: section / 10,
+            section: { current: section },
+            reason,
+          },
+        }),
+      );
+    });
+
+  // Where each target of a jump lands.
+  let landsAt: Record<string, [string, number]> = {};
+
+  const openBook = async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const view = container.querySelector(
+      "foliate-view",
+    ) as unknown as HistoryView;
+    await vi.waitFor(() => expect(view.init).toHaveBeenCalled());
+    await act(async () => {});
+    const land = (target: string) => {
+      const [cfi, section] = landsAt[target] ?? [target, 99];
+      relocate(view, cfi, section, "navigation");
+      return Promise.resolve();
+    };
+    view.goTo.mockImplementation(land);
+    view.goToFraction.mockImplementation((f: number) => land(`fraction:${f}`));
+    // Where the book opened.
+    relocate(view, "start", 0, "anchor");
+    return view;
+  };
+
+  const back = () =>
+    screen.getByRole("button", { name: "Back to previous location" });
+  const forward = () =>
+    screen.getByRole("button", { name: "Forward to next location" });
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  const toTheEnd = async (u: ReturnType<typeof user>) => {
+    screen.getByRole("slider", { name: "Reading progress" }).focus();
+    await u.keyboard("{End}");
+  };
+
+  beforeEach(() => {
+    landsAt = { "fraction:1": ["end", 9] };
+  });
+
+  it("goes back to where a jump left from, then forward to where back left", async () => {
+    const view = await openBook();
+    const u = user();
+    expect(back()).toBeDisabled();
+    expect(forward()).toBeDisabled();
+
+    await toTheEnd(u);
+    expect(back()).toBeEnabled();
+    expect(forward()).toBeDisabled();
+
+    // Paging around where the jump landed.
+    relocate(view, "end-later", 9);
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("start");
+    expect(back()).toBeDisabled();
+    expect(forward()).toBeEnabled();
+
+    await u.click(forward());
+    expect(view.goTo).toHaveBeenLastCalledWith("end-later");
+    expect(back()).toBeEnabled();
+    expect(forward()).toBeDisabled();
+  });
+
+  it("saves going back as the reading position", async () => {
+    landsAt.start = ["start", 0];
+    await openBook();
+    const u = user();
+    await toTheEnd(u);
+    await u.click(back());
+    await act(async () => {
+      vi.advanceTimersByTime(POSITION_SAVE_DELAY_MS);
+    });
+    const saves = vi
+      .mocked(API.request)
+      .mock.calls.filter(
+        ([method, endpoint]) =>
+          method === "POST" && endpoint === "/reading/files/7/position",
+      )
+      .map(([, , payload]) => (payload as UpdatePositionPayload).cfi);
+    expect(saves[saves.length - 1]).toBe("start");
+  });
+
+  it("doesn't count turning pages, even into the next chapter", async () => {
+    const view = await openBook();
+    relocate(view, "page-2", 0);
+    // foliate reports reaching the next section as a navigation too.
+    relocate(view, "chapter-2", 1, "navigation");
+    relocate(view, "chapter-2-page-2", 1, "scroll");
+    expect(back()).toBeDisabled();
+  });
+
+  it("doesn't count a jump that doesn't move the page", async () => {
+    landsAt["fraction:1"] = ["start", 0];
+    await openBook();
+    await toTheEnd(user());
+    expect(back()).toBeDisabled();
+  });
+
+  it("counts following a link in the book", async () => {
+    landsAt["chapter3.xhtml"] = ["chapter-3", 3];
+    const view = await openBook();
+    const doc = document.implementation.createHTMLDocument("section");
+    doc.body.innerHTML = '<p><a href="chapter3.xhtml">On</a></p>';
+    let followedByFoliate = true;
+    act(() => {
+      followedByFoliate = view.dispatchEvent(
+        new CustomEvent("link", {
+          detail: { a: doc.querySelector("a"), href: "chapter3.xhtml" },
+          cancelable: true,
+        }),
+      );
+    });
+    // The reader follows it itself, to know where it left from.
+    expect(followedByFoliate).toBe(false);
+    await act(async () => {});
+    expect(view.goTo).toHaveBeenCalledWith("chapter3.xhtml");
+    expect(back()).toBeEnabled();
+  });
+
+  it("counts one search as one jump, from where it moved off the page", async () => {
+    mockSearchSections = [
+      {
+        label: "Chapter One",
+        subitems: ["here", "there", "further"].map((cfi) => ({
+          cfi,
+          excerpt: { pre: "", match: "lantern", post: ` ${cfi}` },
+        })),
+      },
+    ];
+    landsAt = {
+      here: ["start", 0],
+      there: ["there", 4],
+      further: ["further", 6],
+    };
+    const view = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    const field = screen.getByRole("searchbox", { name: "Search in book" });
+    await u.type(field, "lantern");
+    await screen.findByRole("button", { name: "lantern here" });
+
+    // The first result is on the page the search started from.
+    await u.type(field, "{Enter}");
+    await act(async () => {});
+    expect(view.goTo).toHaveBeenLastCalledWith("here");
+    expect(back()).toBeDisabled();
+
+    await u.type(field, "{Enter}");
+    await act(async () => {});
+    expect(view.goTo).toHaveBeenLastCalledWith("there");
+    expect(back()).toBeEnabled();
+    await u.type(field, "{Enter}");
+    await act(async () => {});
+    expect(view.goTo).toHaveBeenLastCalledWith("further");
+
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("start");
+    expect(back()).toBeDisabled();
+  });
+
+  it("skips going back to where the reader already is", async () => {
+    const view = await openBook();
+    const u = user();
+    relocate(view, "shown", 7);
+    await toTheEnd(u);
+    // Paged back by hand to the very place the jump left from.
+    relocate(view, "shown", 7);
+    await u.click(back());
+    expect(view.goTo).not.toHaveBeenCalledWith("shown");
+    expect(back()).toBeDisabled();
+  });
+
+  it("counts a new search as a new jump", async () => {
+    mockSearchSections = [
+      {
+        label: "Chapter One",
+        subitems: ["there"].map((cfi) => ({
+          cfi,
+          excerpt: { pre: "", match: "lantern", post: ` ${cfi}` },
+        })),
+      },
+    ];
+    landsAt = { there: ["there", 4] };
+    const view = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    const field = screen.getByRole("searchbox", { name: "Search in book" });
+    await u.type(field, "lantern");
+    await screen.findByRole("button", { name: "lantern there" });
+    await u.type(field, "{Enter}");
+    await act(async () => {});
+
+    // Paged on, then searched again.
+    relocate(view, "elsewhere", 6);
+    await u.clear(field);
+    await u.type(field, "lanterns");
+    await screen.findByRole("button", { name: "lantern there" });
+    await u.type(field, "{Enter}");
+    await act(async () => {});
+
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("elsewhere");
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("start");
+  });
+
+  it("keeps the way back when a move doesn't happen", async () => {
+    const view = await openBook();
+    const u = user();
+    await toTheEnd(u);
+    // foliate ignores a move just after a page turn.
+    view.goTo.mockImplementation(() => Promise.resolve());
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("start");
+    expect(back()).toBeEnabled();
+    expect(forward()).toBeDisabled();
+  });
+
+  it("goes back after a short jump that moves the page, though the old place still shows", async () => {
+    const view = await openBook();
+    // Scrolled half a screen up: the place the jump left from still shows,
+    // but the view moved.
+    relocate(view, "one", 3);
+    view.goToFraction.mockImplementation(() => {
+      relocate(view, "half-a-screen-up", 3, "navigation");
+      return Promise.resolve();
+    });
+    const u = user();
+    await toTheEnd(u);
+    expect(back()).toBeEnabled();
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("one");
+  });
+
+  it("goes back from the page just before, which ends where this one begins", async () => {
+    const view = await openBook();
+    relocate(view, "origin", 3);
+    const u = user();
+    await toTheEnd(u);
+    // Paged back by hand to the page before the origin.
+    relocate(view, "page-before", 3);
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("origin");
+  });
+
+  it("counts going to a chapter by its mark on the progress bar", async () => {
+    mockToc = [
+      { label: "Chapter 1", href: "ch1.xhtml" },
+      { label: "Chapter 2", href: "ch2.xhtml" },
+    ];
+    mockSectionOf = { "ch1.xhtml": 0, "ch2.xhtml": 1 };
+    mockFractions = [0, 0.4, 1];
+    landsAt["ch2.xhtml"] = ["chapter-2", 1];
+    try {
+      const view = await openBook();
+      const u = user();
+      await u.click(await screen.findByTestId("chapter-mark"));
+      expect(view.goTo).toHaveBeenCalledWith("ch2.xhtml");
+      expect(back()).toBeEnabled();
+    } finally {
+      mockToc = [];
+    }
+  });
+
+  it("counts a click on the progress bar", async () => {
+    const view = await openBook();
+    const bar = screen.getByRole("slider", { name: "Reading progress" });
+    bar.getBoundingClientRect = () =>
+      ({ left: 0, width: 200, top: 0, height: 6 }) as DOMRect;
+    fireEvent.click(bar, { clientX: 100 });
+    await act(async () => {});
+    expect(view.goToFraction).toHaveBeenCalledWith(0.5);
+    expect(back()).toBeEnabled();
+  });
+
+  it("starts over when the book opens again", async () => {
+    const view = await openBook();
+    const u = user();
+    await toTheEnd(u);
+    expect(back()).toBeEnabled();
+    // The file arrives again, as after a retry, and the book reopens.
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["again"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    await u.click(screen.getByRole("button", { name: "Settings" }));
+    await vi.waitFor(() => expect(view.init).toHaveBeenCalledTimes(2));
+    // Once the book is ready again, not while it opens.
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    expect(back()).toBeDisabled();
+  });
+
+  it("lets the keyboard reach the explanation of a disabled button", async () => {
+    await openBook();
+    const u = user();
+    expect(back()).toBeDisabled();
+    // A disabled button can't take focus, so what holds it does.
+    act(() => back().parentElement!.focus());
+    expect(back().parentElement).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Back to where you were before a jump",
+    );
+    await toTheEnd(u);
+    // Once it works, the button takes focus itself: one stop, not two.
+    expect(back()).toBeEnabled();
+    expect(back().parentElement).not.toHaveAttribute("tabindex");
+  });
+
+  it("explains each button on hover, even before there's anywhere to go", async () => {
+    await openBook();
+    const u = user();
+    expect(back()).toBeDisabled();
+    // A disabled button gets no pointer events, so the tooltip hangs from
+    // what holds it.
+    await u.hover(back().parentElement!);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Back to where you were before a jump, such as a link, a chapter, or a search result",
+    );
+    await u.unhover(back().parentElement!);
+    await u.hover(forward().parentElement!);
+    expect(
+      await screen.findByRole("tooltip", { name: /Forward to where you were/ }),
+    ).toHaveTextContent("Forward to where you were when you went back");
+  });
+});
+
+describe("ReflowableReader search shortcuts", () => {
+  type ShortcutView = HTMLElement & {
+    goTo: ReturnType<typeof vi.fn>;
+    goRight: ReturnType<typeof vi.fn>;
+    renderer: { focusView: ReturnType<typeof vi.fn> };
+  };
+
+  beforeEach(() => {
+    mockSearchSections = [
+      {
+        label: "Chapter One",
+        subitems: ["first", "second"].map((cfi) => ({
+          cfi,
+          excerpt: { pre: "", match: "lantern", post: ` ${cfi}` },
+        })),
+      },
+    ];
+  });
+
+  const openBook = async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: false },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    const { container } = renderReader();
+    const view = container.querySelector(
+      "foliate-view",
+    ) as unknown as ShortcutView;
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    // A section of the book, whose keys foliate's frame keeps from the page.
+    const doc = document.implementation.createHTMLDocument("section");
+    doc.body.innerHTML = "<p>Text</p>";
+    act(() => {
+      view.dispatchEvent(new CustomEvent("load", { detail: { doc } }));
+    });
+    return { view, doc };
+  };
+  const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  const field = () =>
+    screen.queryByRole("searchbox", { name: "Search in book" });
+  // A key pressed in the book's frame. Returns whether the browser may still
+  // act on it.
+  const pressInBook = (doc: Document, init: KeyboardEventInit) => {
+    let allowed = true;
+    act(() => {
+      allowed = doc.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    });
+    return allowed;
+  };
+
+  it("gives the keys to the book after choosing a result", async () => {
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(
+      await screen.findByRole("button", { name: "lantern second" }),
+    );
+    expect(view.renderer.focusView).toHaveBeenCalled();
+  });
+
+  // jsdom isn't an Apple platform, so the shortcuts here take Ctrl, as on
+  // Windows and Linux. readerKeys.test.ts covers Cmd on Apple devices.
+  it("opens search with Ctrl+F from the book, instead of the browser's find", async () => {
+    const { doc } = await openBook();
+    expect(pressInBook(doc, { key: "f", ctrlKey: true })).toBe(false);
+    await vi.waitFor(() => expect(field()).toHaveFocus());
+  });
+
+  it("puts the keys back in the field with Ctrl+F, the query selected", async () => {
+    const { doc } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    pressInBook(doc, { key: "f", ctrlKey: true });
+    const input = field() as HTMLInputElement;
+    expect(input).toHaveFocus();
+    expect([input.selectionStart, input.selectionEnd]).toEqual([0, 7]);
+  });
+
+  it.each([
+    [
+      "Ctrl+G",
+      { key: "g", ctrlKey: true },
+      { key: "G", ctrlKey: true, shiftKey: true },
+    ],
+    ["F3", { key: "F3" }, { key: "F3", shiftKey: true }],
+  ])(
+    "steps through results with %s from the book, leaving it the keys",
+    async (_, nextKey, previousKey) => {
+      const { view, doc } = await openBook();
+      const u = user();
+      await u.click(screen.getByRole("button", { name: "Search" }));
+      await u.type(field()!, "lantern");
+      await u.click(
+        await screen.findByRole("button", { name: "lantern first" }),
+      );
+      view.renderer.focusView.mockClear();
+      await act(async () => {});
+
+      expect(pressInBook(doc, nextKey)).toBe(false);
+      await act(async () => {});
+      expect(view.goTo).toHaveBeenLastCalledWith("second");
+      expect(pressInBook(doc, previousKey)).toBe(false);
+      await act(async () => {});
+      expect(view.goTo).toHaveBeenLastCalledWith("first");
+      // Stepping from the book leaves the keys where they were.
+      expect(field()).not.toHaveFocus();
+      expect(view.goRight).not.toHaveBeenCalled();
+    },
+  );
+
+  it("opens search with Ctrl+G when it's closed", async () => {
+    const { doc } = await openBook();
+    pressInBook(doc, { key: "g", ctrlKey: true });
+    await vi.waitFor(() => expect(field()).toHaveFocus());
+  });
+
+  it("steps with Ctrl+G typed in the field, keeping the keys there", async () => {
+    const { view } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await screen.findByRole("button", { name: "lantern first" });
+    await u.keyboard("{Control>}g{/Control}");
+    await act(async () => {});
+    expect(view.goTo).toHaveBeenLastCalledWith("first");
+    expect(field()).toHaveFocus();
+  });
+
+  it("closes search with Escape pressed in the book", async () => {
+    const { doc } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    pressInBook(doc, { key: "Escape" });
+    await vi.waitFor(() => expect(field()).toBeNull());
+  });
+
+  it("drops a link's focus in the book before giving it the keys", async () => {
+    const { view, doc } = await openBook();
+    // A link the reader tabbed to: foliate scrolls to whatever has focus,
+    // and a frame given focus gives it back to what last had it. (A document
+    // jsdom doesn't render can't take focus, so this stands in for it.)
+    const link = doc.createElement("a");
+    link.blur = vi.fn();
+    Object.defineProperty(doc, "activeElement", { get: () => link });
+    Object.assign(view.renderer, { getContents: () => [{ doc, index: 0 }] });
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    expect(link.blur).toHaveBeenCalled();
+    expect(vi.mocked(link.blur).mock.invocationCallOrder[0]).toBeLessThan(
+      view.renderer.focusView.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("gives a fixed-layout book the keys by leaving the search", async () => {
+    const { view } = await openBook();
+    // A fixed-layout book's renderer can't take focus; the page turns its
+    // pages instead.
+    Object.assign(view.renderer, { focusView: undefined });
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("leaves the shortcuts to another open menu", async () => {
+    await openBook();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "listbox");
+    const option = document.createElement("div");
+    option.tabIndex = -1;
+    menu.append(option);
+    document.body.append(menu);
+    option.focus();
+    fireEvent.keyDown(option, { key: "f", ctrlKey: true });
+    expect(field()).toBeNull();
+    menu.remove();
+  });
+
+  it("keeps the book clear of the controls while search is open, with auto-hide on", async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: true },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    renderReader();
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    // Auto-hide lays the controls over the book.
+    expect(screen.getByRole("banner")).toHaveClass("fixed");
+    await user().click(screen.getByRole("button", { name: "Search" }));
+    // While searching they sit beside it, so the panel's row covers only the
+    // page's top margin, as it does with auto-hide off.
+    expect(screen.getByRole("banner")).not.toHaveClass("fixed");
+    expect(screen.getByRole("main")).not.toHaveClass("fixed");
   });
 });
