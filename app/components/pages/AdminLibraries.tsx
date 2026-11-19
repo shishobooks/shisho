@@ -110,6 +110,12 @@ const AdminLibraries = () => {
   }
 
   const libraries = data?.items ?? [];
+  // With no library on the server yet, both create buttons open Setup, so the
+  // first one gets its plugins before its first scan.
+  const createTo =
+    data?.total === 0 && hasAllLibraryAccess
+      ? "/setup/library"
+      : "/libraries/create";
 
   return (
     <div>
@@ -137,7 +143,7 @@ const AdminLibraries = () => {
           )}
           {canCreateLibraries && (
             <Button aria-label="Add Library" asChild size="sm">
-              <Link to="/libraries/create">
+              <Link to={createTo}>
                 <Plus className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Add Library</span>
               </Link>
@@ -160,18 +166,19 @@ const AdminLibraries = () => {
       ) : libraries.length === 0 ? (
         <EmptyState
           action={
+            // As Getting Started's step does.
             canCreateLibraries && (
               <Button asChild size="sm">
-                <Link to="/libraries/create">
+                <Link to={createTo}>
                   <Plus aria-hidden="true" className="h-4 w-4" />
-                  Create Library
+                  Set up a library
                 </Link>
               </Button>
             )
           }
           description={
             canCreateLibraries
-              ? "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Create one and point it at your books to get started."
+              ? "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Set one up and point it at your books to get started."
               : "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Libraries show up here once one is created."
           }
           icon={LibraryIcon}

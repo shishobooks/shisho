@@ -129,6 +129,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useTagItemCounts: requires("books:read", [1, ["Favorite"]]),
   // filesystem
   useFilesystemBrowse: requires("libraries:write", [{}, on]),
+  useDetectFileTypes: requires("libraries:write", [["/media"]]),
   // genres
   useGenresList: requires("books:read", [{}, on]),
   useGenre: requires("books:read", [1, on]),

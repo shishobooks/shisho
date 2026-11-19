@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useEffect } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GettingStartedPanelProvider } from "@/contexts/GettingStarted";
+import {
+  GettingStartedPanelProvider,
+  useGettingStartedPanel,
+} from "@/contexts/GettingStarted";
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
 import type {
@@ -175,7 +179,7 @@ describe("GettingStarted", () => {
     expect(within(list).queryByText("Invite someone")).toBeNull();
   });
 
-  it("links the admin steps to today's pages", async () => {
+  it("links the admin steps to where they get done, the library step to Setup", async () => {
     serve({ steps: steps([...ADMIN_STEPS, "plugins"]) });
     const user = setupUser();
     renderNav();
@@ -184,13 +188,43 @@ describe("GettingStarted", () => {
     const dialog = await panel();
     expect(
       within(dialog).getByRole("link", { name: "Set up your first library" }),
-    ).toHaveAttribute("href", "/libraries/create");
+    ).toHaveAttribute("href", "/setup/library");
     expect(
       within(dialog).getByRole("link", { name: "Add metadata plugins" }),
     ).toHaveAttribute("href", "/admin/plugins/discover");
     expect(
       within(dialog).getByRole("link", { name: "Invite someone" }),
     ).toHaveAttribute("href", "/admin/users/create");
+  });
+
+  it("pulses the pill once when Setup asks, without opening the panel", async () => {
+    serve({});
+    // What Setup does before it lands on the new library.
+    const RequestPulse = () => {
+      const { requestPulse } = useGettingStartedPanel();
+      useEffect(() => requestPulse(), [requestPulse]);
+      return null;
+    };
+    render(
+      <QueryClientProvider client={newClient()}>
+        <MemoryRouter>
+          <GettingStartedPanelProvider>
+            <RequestPulse />
+            <GettingStarted />
+          </GettingStartedPanelProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const button = await pill();
+    expect(button).toHaveAttribute("data-pulse");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(button).not.toHaveAttribute("data-pulse");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("refetches the list each time the panel opens", async () => {

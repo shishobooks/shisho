@@ -113,7 +113,7 @@ User accounts follow these requirements:
 - Email is optional.
 - Usernames and email addresses must be unique without regard to letter case.
 
-The initial setup screen creates the first user with the built-in admin role. That admin starts with the [Getting Started](#getting-started) pill in the top nav.
+The initial setup screen creates the first user with the built-in admin role, then continues into [Setup](./getting-started.md#set-up-shisho). That admin starts with the [Getting Started](#getting-started) pill in the top nav.
 
 ## Create and Edit Users
 
@@ -153,6 +153,7 @@ Getting Started is each user's short list of first steps, behind the **Getting S
 - **Not for me** on a step takes it out of the count, and **Undo** puts it back.
 - **Dismiss this list** hides the pill without asking. **Getting Started** in the user menu brings it back. A hidden list also comes back on its own when a step that didn't apply when it was hidden starts to apply, such as **Add a book to To Read** once the user has access to a library, and stays until it's hidden again.
 - When every step is done or marked **Not for me**, the panel shows **You're all set**, and closing it hides the list the same way.
+- **Set up your first library** opens [Setup](./getting-started.md#set-up-shisho) at its library step, so metadata plugins are chosen before the first scan.
 - The panel opens on its own the first time a user added with **Add User** signs in. The first admin gets the pill, but the panel stays closed.
 - A user it isn't on for can turn it on with **Getting Started** in the user menu.
 - Getting Started never appears in [Demo Mode](./configuration.md#demo-mode).

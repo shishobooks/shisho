@@ -26,6 +26,7 @@ func RegisterRoutes(e *echo.Group, db *bun.DB, manager *plugins.Manager, install
 	test.POST("/series", h.createSeries)
 	test.POST("/devices", h.createDevice)
 	test.DELETE("/ereader", h.deleteAllEReaderData)
+	test.POST("/media-folder", h.createMediaFolder)
 
 	// Plugin fixture endpoints — serve the fixture plugin as a zip so the
 	// real install flow can download it from localhost during E2E tests.

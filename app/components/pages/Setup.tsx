@@ -4,7 +4,8 @@ import { Navigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
-import Logo from "@/components/library/Logo";
+import { storedSetupDraft } from "@/components/setup/setupDraft";
+import { SetupLayout } from "@/components/setup/SetupLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,6 +18,9 @@ import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { API, toastRequestError } from "@/libraries/api";
 import type { MeResponse } from "@/types";
 
+// Setup continues from the account to the library.
+const SETUP_NEXT_STEP = "/setup/library";
+
 // Initial values for the setup form - stored once to compare against
 const INITIAL_VALUES = {
   username: "",
@@ -28,7 +32,7 @@ const INITIAL_VALUES = {
 const Setup = () => {
   usePageTitle("Setup");
 
-  const { needsSetup, isLoading: authLoading, setAuthUser } = useAuth();
+  const { needsSetup, isLoading: authLoading, setAuthUser, user } = useAuth();
 
   const [username, setUsername] = useState(INITIAL_VALUES.username);
   const [email, setEmail] = useState(INITIAL_VALUES.email);
@@ -94,10 +98,9 @@ const Setup = () => {
         password,
       });
 
-      toast.success("Admin account created successfully!");
       setAuthUser(userData);
       setChangesSaved(true);
-      requestNavigate("/");
+      requestNavigate(SETUP_NEXT_STEP);
     } catch (error) {
       toastRequestError(error, "Setup failed. Please try again.");
     } finally {
@@ -114,10 +117,9 @@ const Setup = () => {
         password: "adminadmin",
       });
 
-      toast.success("Dev admin account created (admin / adminadmin)");
       setAuthUser(userData);
       setChangesSaved(true);
-      requestNavigate("/");
+      requestNavigate(SETUP_NEXT_STEP);
     } catch (error) {
       toastRequestError(error, "Setup failed. Please try again.");
     } finally {
@@ -133,123 +135,118 @@ const Setup = () => {
     );
   }
 
-  // Redirect if setup is not needed (user may already be authenticated)
+  // Once the account exists, an admin partway through Setup (back on this
+  // page, or reloading it) carries on; anyone else goes into the app.
   if (!needsSetup) {
-    return <Navigate replace to="/" />;
+    // The account just made here counts too: auth updates before the
+    // navigation after saving runs.
+    const resume = changesSaved || (user && storedSetupDraft(user.id));
+    return <Navigate replace to={resume ? SETUP_NEXT_STEP : "/"} />;
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <SetupLayout
+      description="Create your admin account to get started"
+      narrow
+      step="account"
+      title="Welcome!"
+    >
       <Toaster richColors />
-      <div className="w-full max-w-md p-8">
-        <div className="flex flex-col items-center mb-6 md:mb-8">
-          <Logo className="mb-2" size="lg" />
-          <h1 className="text-xl font-semibold mb-1">Welcome!</h1>
-          <p className="text-muted-foreground text-center">
-            Create your admin account to get started
-          </p>
+      <form className="space-y-6" onSubmit={handleSubmit}>
+        <div className="space-y-2">
+          <Label htmlFor="username">Username</Label>
+          <Input
+            autoComplete="username"
+            autoFocus
+            id="username"
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="Choose a username"
+            type="text"
+            value={username}
+          />
+          <p className="text-xs text-muted-foreground">At least 3 characters</p>
         </div>
 
-        <form className="space-y-6" onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              autoComplete="username"
-              autoFocus
-              id="username"
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Choose a username"
-              type="text"
-              value={username}
-            />
-            <p className="text-xs text-muted-foreground">
-              At least 3 characters
-            </p>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">
+            Email <span className="text-muted-foreground">(optional)</span>
+          </Label>
+          <Input
+            autoComplete="email"
+            id="email"
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="Enter your email"
+            type="email"
+            value={email}
+          />
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">
-              Email <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              autoComplete="email"
-              id="email"
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter your email"
-              type="email"
-              value={email}
-            />
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            autoComplete="new-password"
+            id="password"
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Choose a password"
+            type="password"
+            value={password}
+          />
+          <p className="text-xs text-muted-foreground">At least 8 characters</p>
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              autoComplete="new-password"
-              id="password"
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Choose a password"
-              type="password"
-              value={password}
-            />
-            <p className="text-xs text-muted-foreground">
-              At least 8 characters
-            </p>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="confirm-password">Confirm Password</Label>
+          <Input
+            autoComplete="new-password"
+            id="confirm-password"
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Confirm your password"
+            type="password"
+            value={confirmPassword}
+          />
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm Password</Label>
-            <Input
-              autoComplete="new-password"
-              id="confirm-password"
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm your password"
-              type="password"
-              value={confirmPassword}
-            />
-          </div>
+        <Button
+          className="w-full"
+          disabled={isLoading || isDevLoading}
+          type="submit"
+        >
+          {isLoading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating account...
+            </>
+          ) : (
+            "Create Admin Account"
+          )}
+        </Button>
 
+        {isDevelopment && (
           <Button
             className="w-full"
             disabled={isLoading || isDevLoading}
-            type="submit"
+            onClick={handleCreateDevAdmin}
+            type="button"
+            variant="outline"
           >
-            {isLoading ? (
+            {isDevLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating account...
+                Creating dev admin...
               </>
             ) : (
-              "Create Admin Account"
+              "Create dev admin (admin / adminadmin)"
             )}
           </Button>
-
-          {isDevelopment && (
-            <Button
-              className="w-full"
-              disabled={isLoading || isDevLoading}
-              onClick={handleCreateDevAdmin}
-              type="button"
-              variant="outline"
-            >
-              {isDevLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating dev admin...
-                </>
-              ) : (
-                "Create dev admin (admin / adminadmin)"
-              )}
-            </Button>
-          )}
-        </form>
-      </div>
+        )}
+      </form>
 
       <UnsavedChangesDialog
         onDiscard={proceedNavigation}
         onStay={cancelNavigation}
         open={showBlockerDialog}
       />
-    </div>
+    </SetupLayout>
   );
 };
 

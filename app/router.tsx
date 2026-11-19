@@ -48,6 +48,7 @@ import Root from "@/components/pages/Root";
 import SeriesDetail from "@/components/pages/SeriesDetail";
 import SeriesList from "@/components/pages/SeriesList";
 import Setup from "@/components/pages/Setup";
+import SetupFlow from "@/components/pages/SetupFlow";
 import { shareRoutes } from "@/components/pages/shareRoutes";
 import TagDetail from "@/components/pages/TagDetail";
 import TagsList from "@/components/pages/TagsList";
@@ -351,6 +352,16 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute>
             <DeviceDetail />
+          </ProtectedRoute>
+        ),
+      },
+      // Setup after the account: inside Root, so it shares the Getting
+      // Started state the page it lands on reads, but with no nav of its own.
+      {
+        path: "setup/:step",
+        element: (
+          <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.setup}>
+            <SetupFlow />
           </ProtectedRoute>
         ),
       },

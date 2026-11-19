@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/internal/mobigen"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -125,4 +127,56 @@ func tempFilePath(root, title string) (string, error) {
 	}
 	name := strings.NewReplacer("/", "_", string(filepath.Separator), "_").Replace(title)
 	return filepath.Join(dir, name), nil
+}
+
+type createMediaFolderBook struct {
+	Title    string `json:"title" validate:"required"`
+	FileType string `json:"fileType" validate:"required,oneof=epub mobi cbz"`
+}
+
+type createMediaFolderRequest struct {
+	Books []createMediaFolderBook `json:"books" validate:"required,min=1,dive"`
+}
+
+type createMediaFolderResponse struct {
+	Path string `json:"path"`
+}
+
+// createMediaFolder writes a fresh folder of small valid books, all side by
+// side as a messy download folder would hold them, for a test to point a
+// library at. DELETE /test/ereader removes it with the other files.
+func (h *handler) createMediaFolder(c echo.Context) error {
+	var req createMediaFolderRequest
+	if err := c.Bind(&req); err != nil {
+		return errors.WithStack(err)
+	}
+	if h.fileRoot == "" {
+		return errors.New("no directory configured for test files")
+	}
+	if err := os.MkdirAll(h.fileRoot, 0o755); err != nil {
+		return errors.WithStack(err)
+	}
+	dir, err := os.MkdirTemp(h.fileRoot, "media-")
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	for _, book := range req.Books {
+		name := strings.NewReplacer("/", "_", string(filepath.Separator), "_").Replace(book.Title)
+		path := filepath.Join(dir, name+"."+book.FileType)
+		var err error
+		switch book.FileType {
+		case models.FileTypeEPUB:
+			err = writeMinimalEPUB(path, book.Title, 0, false)
+		case models.FileTypeMOBI:
+			err = writeMinimalMOBI(path, book.Title)
+		case models.FileTypeCBZ:
+			err = writeMinimalCBZ(path, pageSpec{count: 3, width: 600, height: 900})
+		default:
+			return errcodes.ValidationError("fileType must be epub, mobi, or cbz")
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return errors.WithStack(c.JSON(http.StatusCreated, createMediaFolderResponse{Path: dir}))
 }

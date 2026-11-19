@@ -532,3 +532,23 @@ func TestShareLinkManagement_SharesOnlyRole(t *testing.T) {
 	// The rest of the books family still requires Books Read.
 	f.expect(sharer, http.MethodGet, fmt.Sprintf("/api/books/%d", book.ID), "", http.StatusForbidden)
 }
+
+// Setup's file type detection reads the folders the directory picker
+// browses, so it takes the picker's permission: Libraries Write.
+func TestFilesystemDetect_LibrariesWrite(t *testing.T) {
+	t.Parallel()
+	f := newRoutePermissionsFixture(t)
+	root := t.TempDir()
+	body := fmt.Sprintf(`{"paths":[%q]}`, root)
+
+	f.expect(nil, http.MethodPost, "/api/filesystem/detect", body, http.StatusUnauthorized)
+	viewer := f.user("viewer", models.RoleViewer)
+	f.expect(viewer, http.MethodPost, "/api/filesystem/detect", body, http.StatusForbidden)
+	reader := f.user("librarian", f.role("librarian", "libraries:read"))
+	f.expect(reader, http.MethodPost, "/api/filesystem/detect", body, http.StatusForbidden)
+
+	writer := f.user("writer", f.role("writer", "libraries:write"))
+	assert.JSONEq(t,
+		`{"ebooks":0,"audiobooks":0,"comics":0,"stopped_early":false}`,
+		f.expect(writer, http.MethodPost, "/api/filesystem/detect", body, http.StatusOK))
+}

@@ -202,3 +202,29 @@ func TestCreateBookWithFileOnDiskWritesACBZ(t *testing.T) {
 		assert.Equal(t, 1000, cfg.Height, page.Name)
 	}
 }
+
+// The first-run e2e journey points Setup at a folder of real books, which
+// the scan then imports.
+func TestCreateMediaFolderWritesBooks(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	e := echo.New()
+	RegisterRoutes(e.Group("/api"), db, nil, nil, t.TempDir())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/test/media-folder",
+		strings.NewReader(`{"books":[{"title":"First Book","fileType":"epub"},{"title":"A Comic","fileType":"cbz"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+
+	var resp createMediaFolderResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	entries, err := os.ReadDir(resp.Path)
+	require.NoError(t, err)
+	var names []string
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	assert.ElementsMatch(t, []string{"First Book.epub", "A Comic.cbz"}, names)
+}

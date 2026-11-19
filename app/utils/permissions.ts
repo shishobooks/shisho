@@ -90,6 +90,9 @@ export const ROUTE_PERMISSIONS = {
   libraryPeople: ["books:read", "people:read"],
   librarySettings: ["libraries:read", "libraries:write"],
   createLibrary: "libraries:write",
+  // Setup's library and enrichment steps; installing plugins is offered only
+  // to a role that can.
+  setup: "libraries:write",
   adminConfig: "config:read",
   adminLibraries: "libraries:read",
   adminUsers: "users:read",
