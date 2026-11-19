@@ -62,7 +62,7 @@ describe("OrganizeAnimation", () => {
     );
   });
 
-  it("holds the messy folder for 3 seconds before anything moves", () => {
+  it("holds the messy folder for 2 seconds before anything moves", () => {
     const { container } = render(<OrganizeAnimation />);
 
     const animated = [
@@ -70,7 +70,7 @@ describe("OrganizeAnimation", () => {
     ];
     expect(animated.length).toBeGreaterThan(0);
     for (const el of animated) {
-      expect(parseFloat(el.style.animationDelay)).toBeGreaterThanOrEqual(3);
+      expect(parseFloat(el.style.animationDelay)).toBeGreaterThanOrEqual(2);
     }
   });
 

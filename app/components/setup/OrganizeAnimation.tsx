@@ -43,7 +43,7 @@ const PAUSED = "[&_*]:[animation-play-state:paused]";
 const STAGGER_S = 0.15;
 // How long the messy folder shows before anything moves, on every play, so
 // the admin sees what it looked like first.
-const START_DELAY_S = 3;
+const START_DELAY_S = 2;
 
 type FileKind = "ebook" | "audiobook" | "comic";
 type Kind = "folder" | FileKind;
