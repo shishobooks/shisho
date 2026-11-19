@@ -4,6 +4,8 @@ import * as React from "react";
 
 import { cn } from "@/libraries/utils";
 
+// RadioGroup lays its items out as a grid. Space them with gap-*, never
+// space-y-*, whose margins add to the gap (app/tailwindSyntax.test.ts).
 const RadioGroup = React.forwardRef<
   React.ElementRef<typeof RadioGroupPrimitive.Root>,
   React.ComponentPropsWithoutRef<typeof RadioGroupPrimitive.Root>

@@ -486,14 +486,43 @@ func (s *Service) AuthenticateOwner(ctx context.Context, device *Device) (*model
 	return user, nil
 }
 
-// TouchLastAccessed updates the last_accessed_at timestamp for a Device.
-func (s *Service) TouchLastAccessed(ctx context.Context, id string) error {
-	_, err := s.db.NewUpdate().
-		Model((*Device)(nil)).
-		Set("last_accessed_at = ?", time.Now()).
-		Where("id = ?", id).
-		Exec(ctx)
-	return errors.WithStack(err)
+// TouchLastAccessed updates the last_accessed_at timestamp for device,
+// and reports whether this was its first authenticated request. Of several
+// first requests arriving at once, only one reports first.
+func (s *Service) TouchLastAccessed(ctx context.Context, device *Device) (bool, error) {
+	return s.touchFirst(ctx, device.ID, "last_accessed_at", device.LastAccessedAt != nil, nil)
+}
+
+// touchFirst sets column to now for Device id, along with what set adds,
+// and reports whether column was unset before. seen says the caller's copy
+// of the Device already has column set, so it can't be the first and costs
+// one plain update. Otherwise the update that finds column unset is the one
+// that reports first, however many run at once.
+func (s *Service) touchFirst(ctx context.Context, id, column string, seen bool, set func(*bun.UpdateQuery) *bun.UpdateQuery) (bool, error) {
+	update := func() *bun.UpdateQuery {
+		q := s.db.NewUpdate().Model((*Device)(nil)).
+			Set("? = ?", bun.Ident(column), time.Now()).
+			Where("id = ?", id)
+		if set != nil {
+			q = set(q)
+		}
+		return q
+	}
+	if !seen {
+		result, err := update().Where("? IS NULL", bun.Ident(column)).Exec(ctx)
+		if err != nil {
+			return false, errors.WithStack(err)
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return false, errors.WithStack(err)
+		}
+		if rows > 0 {
+			return true, nil
+		}
+	}
+	_, err := update().Exec(ctx)
+	return false, errors.WithStack(err)
 }
 
 // koboSyncPoint mirrors the kobo.SyncPoint model for deletion purposes.
@@ -523,16 +552,13 @@ func (s *Service) libraryExists(ctx context.Context, id int) (bool, error) {
 	return exists, errors.WithStack(err)
 }
 
-// RecordPluginConnection notes that Device id reached Shisho through the
-// KOReader plugin now, reporting pluginVersion.
-func (s *Service) RecordPluginConnection(ctx context.Context, id, pluginVersion string) error {
-	_, err := s.db.NewUpdate().
-		Model((*Device)(nil)).
-		Set("plugin_last_connected_at = ?", time.Now()).
-		Set("plugin_version = ?", pluginVersion).
-		Where("id = ?", id).
-		Exec(ctx)
-	return errors.WithStack(err)
+// RecordPluginConnection notes that device reached Shisho through the
+// KOReader plugin now, reporting pluginVersion, and reports whether it was
+// the plugin's first connection.
+func (s *Service) RecordPluginConnection(ctx context.Context, device *Device, pluginVersion string) (bool, error) {
+	return s.touchFirst(ctx, device.ID, "plugin_last_connected_at", device.PluginLastConnectedAt != nil, func(q *bun.UpdateQuery) *bun.UpdateQuery {
+		return q.Set("plugin_version = ?", pluginVersion)
+	})
 }
 
 // RecordPluginSync notes that Device id uploaded its reading through the

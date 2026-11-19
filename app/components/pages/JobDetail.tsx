@@ -28,21 +28,7 @@ import {
   LogLevelWarn,
 } from "@/types";
 import { formatElapsed } from "@/utils/format";
-
-const getLevelColor = (level: string) => {
-  switch (level) {
-    case LogLevelInfo:
-      return "bg-blue-500/20 text-blue-400";
-    case LogLevelWarn:
-      return "bg-yellow-500/20 text-yellow-400";
-    case LogLevelError:
-      return "bg-red-500/20 text-red-400";
-    case LogLevelFatal:
-      return "bg-red-700/30 text-red-300";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-};
+import { logLevelColor } from "@/utils/logLevels";
 
 const getStatusColor = (status: string) => {
   switch (status) {
@@ -205,7 +191,7 @@ const JobDetail = () => {
               <Button
                 aria-pressed={levelFilter.includes(level)}
                 className={
-                  levelFilter.includes(level) ? getLevelColor(level) : ""
+                  levelFilter.includes(level) ? logLevelColor(level) : ""
                 }
                 key={level}
                 onClick={() => toggleLevelFilter(level)}

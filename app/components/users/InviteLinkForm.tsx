@@ -103,7 +103,11 @@ const InviteLinkForm = ({ onHasChangesChange }: InviteLinkFormProps) => {
             you. It works once and expires {formatDateTime(created.expires_at)}.
           </p>
         </div>
-        <CopyField label="Invite link" value={inviteLinkUrl(created.token)} />
+        <CopyField
+          label="Invite link"
+          url
+          value={inviteLinkUrl(created.token)}
+        />
         <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
           <Button onClick={reset} variant="outline">
             Invite someone else

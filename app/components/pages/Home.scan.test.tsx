@@ -13,10 +13,15 @@ import {
   vi,
 } from "vitest";
 
-import { useSSE } from "@/hooks/useSSE";
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
+import {
+  flush,
+  MockEventSource,
+  eventStream as stream,
+} from "@/testing/eventSource";
 import { emulatePhoneWidth } from "@/testing/phoneWidth";
+import { WithSSE } from "@/testing/WithSSE";
 import {
   StepPlugins,
   type GettingStartedResponse,
@@ -45,52 +50,6 @@ vi.mock("@/components/library/SelectionToolbar", () => ({
 vi.mock("@/components/library/LibraryLayout", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-
-const flush = () =>
-  act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  });
-
-class MockEventSource {
-  static instances: MockEventSource[] = [];
-  url: string;
-  onerror: (() => void) | null = null;
-  onopen: (() => void) | null = null;
-  listeners: Record<string, ((event: MessageEvent) => void)[]> = {};
-  close = vi.fn();
-
-  constructor(url: string) {
-    this.url = url;
-    MockEventSource.instances.push(this);
-  }
-
-  addEventListener(type: string, listener: (event: MessageEvent) => void) {
-    (this.listeners[type] ??= []).push(listener);
-  }
-
-  removeEventListener(type: string, listener: (event: MessageEvent) => void) {
-    this.listeners[type] = (this.listeners[type] ?? []).filter(
-      (l) => l !== listener,
-    );
-  }
-
-  // Query cache updates reach components on a timer, so this flushes too.
-  async emit(type: string, data: object) {
-    const event = new MessageEvent(type, { data: JSON.stringify(data) });
-    act(() => {
-      this.listeners[type]?.forEach((l) => l(event));
-    });
-    await flush();
-  }
-}
-
-const stream = () => MockEventSource.instances[0];
-
-// The app mounts useSSE once at the root; the page reads what it receives.
-const WithSSE = ({ children }: { children: ReactNode }) => {
-  useSSE();
-  return <>{children}</>;
-};
 
 interface ServerState {
   gettingStarted?: GettingStartedResponse;

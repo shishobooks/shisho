@@ -1,8 +1,7 @@
 import { Plus, TabletSmartphone } from "lucide-react";
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
-import CreateDeviceDialog from "@/components/devices/CreateDeviceDialog";
+import ConnectDeviceFlow from "@/components/devices/ConnectDeviceFlow";
 import EmptyState from "@/components/library/EmptyState";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
@@ -53,12 +52,29 @@ const DeviceRow = ({ device }: { device: DeviceResponse }) => {
   );
 };
 
+// The search param that opens the Connect a device flow, so Getting Started
+// can link straight to it. Once the flow creates a Device, it holds the
+// Device's id, so a reload resumes that Device's setup.
+const CONNECT_PARAM = "connect";
+
 const Devices = () => {
   usePageTitle("Devices");
-  const navigate = useNavigate();
   const devicesQuery = useDevices();
   const { data: devices, isLoading } = devicesQuery;
-  const [createOpen, setCreateOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const connectParam = searchParams.get(CONNECT_PARAM);
+  const connectOpen = connectParam !== null;
+  const setConnectParam = (value: string | null, replace: boolean) =>
+    setSearchParams(
+      (params) => {
+        if (value === null) params.delete(CONNECT_PARAM);
+        else params.set(CONNECT_PARAM, value);
+        return params;
+      },
+      { preventScrollReset: true, replace },
+    );
+  const setConnectOpen = (open: boolean) =>
+    setConnectParam(open ? "" : null, !open);
 
   return (
     <div>
@@ -68,18 +84,18 @@ const Devices = () => {
           <div>
             <h1 className="mb-1 text-2xl font-semibold md:mb-2">Devices</h1>
             <p className="text-sm text-muted-foreground md:text-base">
-              Add a Device for each reading app that connects to Shisho. Kobo
-              sync and the eReader browser sign in with the Device's credential.
+              Each e-reader or reading app you read on, and how it gets your
+              books from Shisho.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Button
-              aria-label="Add Device"
-              onClick={() => setCreateOpen(true)}
+              aria-label="Connect Device"
+              onClick={() => setConnectOpen(true)}
               size="sm"
             >
               <Plus className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Add Device</span>
+              <span className="hidden sm:inline">Connect Device</span>
             </Button>
           </div>
         </div>
@@ -95,12 +111,12 @@ const Devices = () => {
           ) : !devices?.length ? (
             <EmptyState
               action={
-                <Button onClick={() => setCreateOpen(true)} size="sm">
+                <Button onClick={() => setConnectOpen(true)} size="sm">
                   <Plus aria-hidden="true" className="h-4 w-4" />
-                  Add Device
+                  Connect Device
                 </Button>
               }
-              description="Add a Device for each e-reader or reading app you use: a Kobo, KOReader on any device, or an e-reader's web browser. Your books then sync to it or download right on it."
+              description="Connect each e-reader or reading app you use: a Kobo, KOReader on any device, an e-reader's web browser, or a reading app on your phone. Your books then sync to it or download right on it."
               icon={TabletSmartphone}
               title="No devices yet"
             />
@@ -114,10 +130,11 @@ const Devices = () => {
         </div>
       </div>
 
-      <CreateDeviceDialog
-        onCreated={(device) => navigate(`/user/devices/${device.id}`)}
-        onOpenChange={setCreateOpen}
-        open={createOpen}
+      <ConnectDeviceFlow
+        deviceId={connectParam || undefined}
+        onDeviceIdChange={(id) => setConnectParam(id ?? "", true)}
+        onOpenChange={setConnectOpen}
+        open={connectOpen}
       />
     </div>
   );

@@ -17,10 +17,17 @@ const EventTypeLogEntry = "log.entry"
 // through one library.
 const EventTypeScanProgress = "scan.progress"
 
+// EventTypeDeviceConnected is the type of events saying a Device reached
+// Shisho for the first time. Only the Device's owner receives them.
+const EventTypeDeviceConnected = "device.connected"
+
 // Event represents a server-sent event with a named type and JSON data.
 type Event struct {
 	Type string
 	Data string
+	// UserID addresses the event to one user, who alone receives it. Zero
+	// leaves it to the stream's permission filter.
+	UserID int
 }
 
 // EventFilter reports whether a subscriber receives an event. A nil filter
@@ -125,6 +132,14 @@ func NewJobEvent(eventType string, jobID int, status, jobType string, libraryID 
 		data = fmt.Sprintf(`{"job_id":%d,"status":"%s","type":"%s","library_id":%d}`, jobID, status, jobType, *libraryID)
 	}
 	return Event{Type: eventType, Data: data}
+}
+
+// NewDeviceConnectedEvent builds the event that tells userID that their
+// Device deviceID reached Shisho for the first time.
+func NewDeviceConnectedEvent(deviceID string, userID int) Event {
+	// A struct of one string always marshals.
+	data, _ := json.Marshal(models.DeviceConnected{DeviceID: deviceID})
+	return Event{Type: EventTypeDeviceConnected, Data: string(data), UserID: userID}
 }
 
 // NewScanProgressEvent builds a progress event for a scan job's pass over one

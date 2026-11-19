@@ -27,11 +27,17 @@ func insertTestUser(t *testing.T, db *bun.DB, id int, username string) {
 // credential, and returns the Device the handler saw, or the error.
 func runDeviceAuth(t *testing.T, service *Service, connection, credential string) (*Device, error) {
 	t.Helper()
+	return runDeviceAuthWith(t, NewMiddleware(service, nil), connection, credential)
+}
+
+// runDeviceAuthWith runs mw's DeviceAuth(connection) as runDeviceAuth does.
+func runDeviceAuthWith(t *testing.T, mw *Middleware, connection, credential string) (*Device, error) {
+	t.Helper()
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", nil), httptest.NewRecorder())
 	c.SetParamNames("credential")
 	c.SetParamValues(credential)
 	var seen *Device
-	err := NewMiddleware(service).DeviceAuth(connection)(func(c echo.Context) error {
+	err := mw.DeviceAuth(connection)(func(c echo.Context) error {
 		device, err := RequireDevice(c)
 		require.NoError(t, err)
 		owner, err := auth.RequireUser(c)

@@ -149,7 +149,7 @@ const SetPasswordForm = ({ onHasChangesChange }: SetPasswordFormProps) => {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <p className="text-sm font-medium">Server URL</p>
-            <CopyField label="Server URL" value={window.location.origin} />
+            <CopyField label="Server URL" url value={window.location.origin} />
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-medium">Username</p>

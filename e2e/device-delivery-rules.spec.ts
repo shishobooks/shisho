@@ -77,16 +77,21 @@ test.describe("Device Delivery Rules", () => {
     await login(page);
 
     // Add a Browser Device, which follows the default: EPUB as EPUB.
-    await page.goto("/user/devices", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: "Add Device" }).first().click();
-    const dialog = page.getByRole("dialog", { name: "Add Device" });
-    await dialog.getByLabel("Name").fill(DEVICE);
-    await dialog.getByRole("radio", { name: /^Browser/ }).click();
-    await dialog.getByRole("button", { name: "Add Device" }).click();
-    await page.waitForURL(/\/user\/devices\/[^/]+$/);
-    const devicePage = page.url();
+    await page.goto("/user/devices?connect", { waitUntil: "domcontentloaded" });
+    const flow = page.getByRole("dialog");
+    await flow
+      .getByRole("radio", { name: /Another e-reader's browser/ })
+      .click();
+    await flow.getByLabel("Name").fill(DEVICE);
+    await flow.getByRole("button", { name: "Continue" }).click();
+    // The flow keeps the new Device in the URL, so a reload resumes it.
+    await page.waitForURL(/[?&]connect=[^&]+/);
+    const deviceId = new URL(page.url()).searchParams.get("connect");
+    const devicePage = `/user/devices/${deviceId}`;
+    await page.goto(devicePage, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Advanced" }).click();
     const credential = (await page
-      .getByLabel("Credential", { exact: true })
+      .getByLabel("Device password", { exact: true })
       .textContent())!;
     expect(credential).toMatch(/^[a-z]{16}$/);
 
@@ -103,6 +108,7 @@ test.describe("Device Delivery Rules", () => {
 
     // Give the Device its own rules: EPUB as KePub.
     await page.goto(devicePage, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: "Advanced" }).click();
     await page
       .getByRole("group", { name: "Delivery Rules" })
       .getByRole("button", { name: "Custom" })

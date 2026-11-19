@@ -27,7 +27,7 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	authMw := auth.NewMiddleware(auth.NewService(db, "test-secret", time.Hour))
 
 	e := echo.New()
-	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db, appsettings.NewService(db)))
+	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db, appsettings.NewService(db)), nil)
 
 	methods := map[string]map[string]bool{}
 	for _, r := range e.Routes() {

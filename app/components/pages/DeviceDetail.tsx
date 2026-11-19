@@ -1,8 +1,24 @@
-import { ArrowLeft, Pencil, RefreshCw, Tablet, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CircleCheck,
+  CircleDashed,
+  Pencil,
+  RefreshCw,
+  Tablet,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import {
+  EReaderBrowserSetup,
+  KoboSyncSetup,
+  KOReaderSyncSetup,
+  LoopbackWarning,
+  NotWorkingLink,
+  OPDSSetup,
+} from "@/components/devices/ConnectionSetups";
 import DeviceRulesSection from "@/components/devices/DeviceRulesSection";
 import DeviceSection from "@/components/devices/DeviceSection";
 import DeviceTypeRadioGroup from "@/components/devices/DeviceTypeRadioGroup";
@@ -35,16 +51,13 @@ import {
 } from "@/components/ui/select";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import {
-  useClearKoboSync,
   useDeleteDevice,
   useDevice,
-  useGenerateDeviceShortUrl,
   useRegenerateDeviceCredential,
   useUpdateDevice,
 } from "@/hooks/queries/devices";
 import { useUserLibraries } from "@/hooks/queries/libraries";
 import { useListLists } from "@/hooks/queries/lists";
-import { useAuth } from "@/hooks/useAuth";
 import { useFormDialogClose } from "@/hooks/useFormDialogClose";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
@@ -65,18 +78,13 @@ import {
   ScopeList,
   type Connection,
   type DeviceResponse,
-  type DeviceShortURL,
   type DeviceType,
   type ScopeType,
 } from "@/types/generated/devices";
 import {
+  connectChoiceFor,
   CONNECTION_LABELS,
   DEVICE_TYPE_LABELS,
-  eReaderBrowserURL,
-  koboSyncURL,
-  koreaderSyncURL,
-  opdsCatalogURL,
-  shortURL,
 } from "@/utils/devices";
 import { formatDateTime } from "@/utils/format";
 
@@ -87,35 +95,35 @@ const CredentialSection = ({ device }: { device: DeviceResponse }) => {
   const handleRegenerate = async () => {
     try {
       await regenerate.mutateAsync(device.id);
-      toast.success("Credential regenerated");
+      toast.success("Password regenerated");
       setConfirmOpen(false);
     } catch (error) {
       // Demo Mode already toasted the rejection; nothing will change, so
       // there is nothing left to confirm.
       if (isDemoModeError(error)) setConfirmOpen(false);
-      toastRequestError(error, "Failed to regenerate credential");
+      toastRequestError(error, "Failed to regenerate password");
     }
   };
 
   return (
     <DeviceSection
-      description="Every connection signs in with this credential. Type it exactly as shown."
+      description="However this Device connects, it signs in with this password, which is also part of its URLs. Type it exactly as shown."
       id="credential-heading"
-      title="Credential"
+      title="Device password"
     >
-      <CopyField label="Credential" value={device.credential} />
+      <CopyField label="Device password" value={device.credential} />
       <Button onClick={() => setConfirmOpen(true)} size="sm" variant="outline">
         <RefreshCw className="mr-2 h-4 w-4" />
         Regenerate
       </Button>
       <ConfirmDialog
         confirmLabel="Regenerate"
-        description="Every URL with the current credential stops working, including the Kobo sync URL and eReader browser bookmarks. You'll need to set this Device up again with the new one."
+        description="Every URL with the current password stops working, including the Kobo sync URL and eReader browser bookmarks. You'll need to set this Device up again with the new one."
         isPending={regenerate.isPending}
         onConfirm={handleRegenerate}
         onOpenChange={setConfirmOpen}
         open={confirmOpen}
-        title="Regenerate Credential"
+        title="Regenerate Password"
       />
     </DeviceSection>
   );
@@ -154,10 +162,13 @@ const ScopeSection = ({ device }: { device: DeviceResponse }) => {
         id: device.id,
         payload: { scope: payload },
       });
-      toast.success("Scope saved");
+      toast.success("Saved which books this Device reaches");
     } catch (error) {
       setScopeType(device.scope_type);
-      toastRequestError(error, "Failed to save scope");
+      toastRequestError(
+        error,
+        "Failed to save which books this Device reaches",
+      );
     }
   };
 
@@ -184,14 +195,14 @@ const ScopeSection = ({ device }: { device: DeviceResponse }) => {
 
   return (
     <DeviceSection
-      description="Which books this Device reaches, through every connection."
+      description="The books this Device can reach, however it connects."
       id="scope-heading"
-      title="Scope"
+      title="Which books"
     >
       {device.url_scope_pending && (
         <p className="text-sm text-muted-foreground">
-          This Kobo was set up before Devices. Its next sync sets the scope from
-          the scope in its sync URL, unless you choose one here first.
+          This Kobo was set up before Devices. Its next sync picks its books
+          from its old sync URL, unless you choose here first.
         </p>
       )}
       <div
@@ -266,194 +277,11 @@ const ScopeSection = ({ device }: { device: DeviceResponse }) => {
         !device.scope_list_id &&
         scopeType === device.scope_type && (
           <p className="text-sm text-destructive">
-            The {device.scope_type} this Device was scoped to no longer exists,
-            so it reaches no books. Choose another.
+            The {device.scope_type} this Device used no longer exists, so it
+            reaches no books. Choose another.
           </p>
         )}
     </DeviceSection>
-  );
-};
-
-const KoboSyncSetup = ({ device }: { device: DeviceResponse }) => {
-  const clearKoboSync = useClearKoboSync();
-
-  const handleResetSync = async () => {
-    try {
-      await clearKoboSync.mutateAsync(device.id);
-      toast.success("Sync history cleared. The next sync is a fresh sync.");
-    } catch (error) {
-      toastRequestError(error, "Failed to clear sync history");
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <CopyField label="Kobo sync URL" value={koboSyncURL(device.credential)} />
-      <ol
-        aria-label="Kobo sync setup"
-        className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
-      >
-        <li>Connect your Kobo to your computer with USB.</li>
-        <li>
-          Open{" "}
-          <code className="rounded bg-muted px-1">
-            .kobo/Kobo/Kobo eReader.conf
-          </code>
-          .
-        </li>
-        <li>
-          Find{" "}
-          <code className="break-all rounded bg-muted px-1">
-            api_endpoint=https://storeapi.kobo.com
-          </code>{" "}
-          and replace the URL with the one above.
-        </li>
-        <li>
-          Delete the <code className="rounded bg-muted px-1">image_host</code>,{" "}
-          <code className="rounded bg-muted px-1">image_url_template</code>, and{" "}
-          <code className="break-all rounded bg-muted px-1">
-            image_url_quality_template
-          </code>{" "}
-          lines if they are there, so covers load from Shisho.
-        </li>
-        <li>Eject the Kobo and sync.</li>
-      </ol>
-      <p className="text-sm text-muted-foreground">
-        Not working? See{" "}
-        <a
-          className="underline underline-offset-2 hover:text-foreground"
-          href="https://www.shishobooks.com/docs/kobo-sync#troubleshooting"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          Kobo sync troubleshooting
-        </a>
-        .
-      </p>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          Clear the sync history to send everything again on the next sync.
-        </p>
-        <Button
-          disabled={clearKoboSync.isPending}
-          onClick={handleResetSync}
-          size="sm"
-          variant="outline"
-        >
-          {clearKoboSync.isPending ? "Resetting..." : "Reset Sync"}
-        </Button>
-      </div>
-    </div>
-  );
-};
-
-const EReaderBrowserSetup = ({ device }: { device: DeviceResponse }) => {
-  const generateShortUrl = useGenerateDeviceShortUrl();
-  const [short, setShort] = useState<DeviceShortURL | null>(null);
-
-  const handleGenerate = async () => {
-    try {
-      setShort(await generateShortUrl.mutateAsync(device.id));
-    } catch (error) {
-      toastRequestError(error, "Failed to generate setup URL");
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Open the setup URL in the e-reader's web browser, then bookmark the page
-        it opens.
-      </p>
-      {short && (
-        <>
-          <CopyField label="Setup URL" value={shortURL(short.short_code)} />
-          <p className="text-sm text-muted-foreground">
-            The setup URL expires in 30 minutes, or when you get a new one. The
-            page it opens keeps working.
-          </p>
-        </>
-      )}
-      <Button
-        disabled={generateShortUrl.isPending}
-        onClick={handleGenerate}
-        size="sm"
-        variant="outline"
-      >
-        {generateShortUrl.isPending
-          ? "Generating..."
-          : short
-            ? "Get New Setup URL"
-            : "Get Setup URL"}
-      </Button>
-      <div className="space-y-2">
-        <p className="text-sm font-medium">Or bookmark this URL</p>
-        <CopyField
-          label="eReader browser URL"
-          value={eReaderBrowserURL(device.credential)}
-        />
-      </div>
-    </div>
-  );
-};
-
-const OPDSSetup = ({ device }: { device: DeviceResponse }) => {
-  const { user } = useAuth();
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        Add an OPDS catalog in the reading app with this URL, your username, and
-        this Device's credential as the password. Signing in with your account
-        password instead follows your default Delivery Rules.
-      </p>
-      <CopyField label="OPDS URL" value={opdsCatalogURL()} />
-      {user && <CopyField label="Username" value={user.username} />}
-      <CopyField label="Password" value={device.credential} />
-    </div>
-  );
-};
-
-const KOReaderSyncSetup = ({ device }: { device: DeviceResponse }) => {
-  const { user } = useAuth();
-  return (
-    <div className="space-y-4">
-      <CopyField label="Custom sync server" value={koreaderSyncURL()} />
-      {user && <CopyField label="Sync username" value={user.username} />}
-      <CopyField label="Sync password" value={device.credential} />
-      <ol
-        aria-label="KOReader progress sync setup"
-        className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
-      >
-        <li>
-          Open any book in KOReader, go to Tools &gt; Progress sync &gt; Custom
-          sync server, and enter the server above.
-        </li>
-        <li>
-          Choose Register / Login, enter the username and password above, and
-          tap Login. Register doesn't work here: this Device is your account.
-        </li>
-        <li>
-          Turn on Automatically keep documents in sync, so your position syncs
-          when a book opens or closes and when the device sleeps or wakes.
-          KOReader turns on Wi-Fi to sync, which uses some battery. On an
-          e-reader, first set Settings &gt; Network &gt; Action when Wi-Fi is
-          off to Turn on.
-        </li>
-        <li>Keep Document matching method on Binary, the default.</li>
-      </ol>
-      <p className="text-sm text-muted-foreground">
-        This is a one-time setup: it applies to every book in KOReader. See the{" "}
-        <a
-          className="underline underline-offset-2 hover:text-foreground"
-          href="https://www.shishobooks.com/docs/koreader"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          KOReader setup guide
-        </a>{" "}
-        for which books sync and how positions move between readers.
-      </p>
-    </div>
   );
 };
 
@@ -490,11 +318,53 @@ const ConnectionSetups = ({
     );
   });
 
-// ConnectionsSection shows setup instructions for each connection the
-// Device's type uses. A KOReader Device leads with the KOReader plugin and
-// keeps the connections it replaces in a collapsed section, for anyone who
-// doesn't want the plugin.
-const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
+// StatusSection says whether the Device has reached Shisho yet, and when it
+// was last used, with where to look if it never has.
+const StatusSection = ({ device }: { device: DeviceResponse }) => {
+  const lastUsed = device.last_accessed_at ?? device.plugin_last_connected_at;
+  return (
+    <DeviceSection id="status-heading" title="Status">
+      {lastUsed ? (
+        <p
+          className="flex items-center gap-2 text-sm"
+          data-testid="device-status"
+        >
+          <CircleCheck
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-primary"
+          />
+          Connected. Last used {formatDateTime(lastUsed)}.
+        </p>
+      ) : (
+        <div className="space-y-1">
+          <p
+            className="flex items-center gap-2 text-sm"
+            data-testid="device-status"
+          >
+            <CircleDashed
+              aria-hidden="true"
+              className="h-4 w-4 shrink-0 text-muted-foreground"
+            />
+            Not connected yet. Follow the setup steps below on your device.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            <NotWorkingLink
+              href={connectChoiceFor(device.device_type).troubleshootingURL}
+            >
+              Not working?
+            </NotWorkingLink>{" "}
+            See what usually goes wrong and how to fix it.
+          </p>
+        </div>
+      )}
+    </DeviceSection>
+  );
+};
+
+// SetupSection shows setup steps for each way the Device's type connects. A
+// KOReader Device leads with the KOReader plugin and keeps the ways it
+// replaces in a collapsed section, for anyone who doesn't want the plugin.
+const SetupSection = ({ device }: { device: DeviceResponse }) => {
   const hasPlugin = device.connections.includes(ConnectionKOReaderPlugin);
   const others = device.connections.filter(
     (connection) => connection !== ConnectionKOReaderPlugin,
@@ -502,10 +372,11 @@ const ConnectionsSection = ({ device }: { device: DeviceResponse }) => {
 
   return (
     <DeviceSection
-      description="How this Device connects to Shisho."
-      id="connections-heading"
-      title="Connections"
+      description="How to connect this Device to Shisho."
+      id="setup-heading"
+      title="Setup"
     >
+      <LoopbackWarning />
       {hasPlugin ? (
         <>
           <ConnectionSetups
@@ -657,9 +528,9 @@ const ChangeTypeDialog = ({
             {hasChanges && (
               <p className="text-sm text-muted-foreground">
                 Its Delivery Rules go back to what a{" "}
-                {DEVICE_TYPE_LABELS[deviceType]} Device starts with, and its
-                connections change to the ones that type uses. The credential
-                stays the same.
+                {DEVICE_TYPE_LABELS[deviceType]} Device starts with, and the
+                ways it connects change to that type&apos;s. Its password stays
+                the same.
               </p>
             )}
           </DialogBody>
@@ -691,6 +562,7 @@ const DeviceDetail = () => {
   const [changeTypeOpen, setChangeTypeOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [rulesHaveChanges, setRulesHaveChanges] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   // Unrecognized Books goes at the top when books are waiting to be linked
   // as the page loads, since they're the one thing on it to act on, and
   // stays there for the visit, so linking the last one doesn't move the
@@ -747,8 +619,6 @@ const DeviceDetail = () => {
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               Added {formatDateTime(device.created_at)}
-              {device.last_accessed_at &&
-                ` · Last used ${formatDateTime(device.last_accessed_at)}`}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -763,7 +633,12 @@ const DeviceDetail = () => {
             </Button>
             <Button
               aria-label="Change Type"
-              onClick={() => setChangeTypeOpen(true)}
+              onClick={() => {
+                // Change Type waits on unsaved Delivery Rules edits, so they
+                // show where it says to save or discard them.
+                if (rulesHaveChanges) setAdvancedOpen(true);
+                setChangeTypeOpen(true);
+              }}
               size="sm"
               variant="outline"
             >
@@ -782,32 +657,48 @@ const DeviceDetail = () => {
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="max-w-4xl space-y-6">
           {hasPlugin && unrecognizedAtTop && (
             <KOReaderUnrecognizedBooks device={device} />
           )}
-          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-            <div className="min-w-0 space-y-6">
-              <CredentialSection device={device} />
-              <ScopeSection device={device} />
-              <DeviceSection
-                description="Which File Types this Device receives, and as what. For each book, the earliest rule matching one of its files decides what goes."
-                id="delivery-rules-heading"
-                title="Delivery Rules"
-              >
-                <DeviceRulesSection
-                  device={device}
-                  onHasChangesChange={setRulesHaveChanges}
-                />
-              </DeviceSection>
-            </div>
-            <div className="min-w-0 space-y-6">
-              <ConnectionsSection device={device} />
-              {hasPlugin && !unrecognizedAtTop && (
-                <KOReaderUnrecognizedBooks device={device} />
-              )}
-            </div>
-          </div>
+          <StatusSection device={device} />
+          <SetupSection device={device} />
+          {hasPlugin && !unrecognizedAtTop && (
+            <KOReaderUnrecognizedBooks device={device} />
+          )}
+          <section className="pt-2">
+            {/* Kept mounted, so closing it never drops unsaved Delivery
+                Rules edits. */}
+            <Disclosure
+              badge={
+                rulesHaveChanges &&
+                !advancedOpen && (
+                  <Badge variant="secondary">Unsaved changes</Badge>
+                )
+              }
+              description="This Device's password, which books it reaches, and which files it gets."
+              heading="h2"
+              keepMounted
+              onOpenChange={setAdvancedOpen}
+              open={advancedOpen}
+              title="Advanced"
+            >
+              <div className="space-y-6">
+                <CredentialSection device={device} />
+                <ScopeSection device={device} />
+                <DeviceSection
+                  description="Which kinds of files this Device gets, and in what format. When a book has several files, the first rule that fits one of them decides what's sent."
+                  id="delivery-rules-heading"
+                  title="Delivery Rules"
+                >
+                  <DeviceRulesSection
+                    device={device}
+                    onHasChangesChange={setRulesHaveChanges}
+                  />
+                </DeviceSection>
+              </div>
+            </Disclosure>
+          </section>
         </div>
 
         <RenameDeviceDialog

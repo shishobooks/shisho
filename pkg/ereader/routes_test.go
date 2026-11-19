@@ -21,7 +21,7 @@ func TestRegisterRoutes_DownloadAcceptsHEAD(t *testing.T) {
 	db := testdb.New(t)
 
 	e := echo.New()
-	RegisterRoutes(e, db, nil, books.NewService(db, appsettings.NewService(db)))
+	RegisterRoutes(e, db, nil, books.NewService(db, appsettings.NewService(db)), nil)
 
 	methods := map[string]map[string]bool{}
 	for _, r := range e.Routes() {

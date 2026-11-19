@@ -6,11 +6,11 @@ The eReader Browser is a lightweight, server-rendered interface for downloading 
 
 ### 1. Add a Device
 
-Open the user menu and select **Devices**. Click **Add Device**, enter a name, select the type that matches the e-reader (**Kobo**, **Kindle**, or **Browser** for any other e-reader), and click **Add Device**. Shisho opens the new Device's page. A Kobo that already syncs with [Kobo Sync](./kobo-sync.md) can use its existing Kobo Device. The type decides what the browser delivers, so pick the one that matches the hardware. See [Devices](./users-and-permissions.md#devices) for types, credentials, scope, and Delivery Rules.
+Open the user menu and select **Devices**. Click **Connect Device**, choose **A Kindle's browser** or, for any other e-reader, **Another e-reader's browser**, keep or change the name, and click **Continue**. Shisho shows the setup steps, the same ones as under **Setup** on the Device's page. A Kobo that already syncs with [Kobo Sync](./kobo-sync.md) can use its existing Kobo Device. The type decides what the browser delivers, so pick the one that matches the hardware. See [Devices](./users-and-permissions.md#devices) for types, Device passwords, which books a Device reaches, and Delivery Rules.
 
 ### 2. Generate the Setup URL
 
-Under **eReader browser** on the Device's page, click **Get Setup URL**. Shisho displays a short URL such as:
+In the setup steps, or under **Setup > eReader browser** on the Device's page, click **Get Setup URL**. Shisho displays a short URL such as:
 
 ```text
 https://your-server/e/abc123
@@ -24,7 +24,7 @@ The short URL is reusable for 30 minutes, until you get another one for the same
 The redirected full URL contains the Device's credential. Treat it like a password. Do not share it, publish it, include it in screenshots, or bookmark it on a device you do not control. Deleting the Device revokes the URL and cannot be undone. If access may be needed later, keep the Device and protect its URL instead.
 :::
 
-Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL. Bookmarks saved before Devices existed keep working. A key that had only eReader browser access became a **Browser** Device, so on a Kindle, change its type to **Kindle** with **Change Type** on its page.
+Open the short URL in the eReader's browser. After the redirect, bookmark the resulting full `/ereader/key/...` URL. If you clicked **Next** in Shisho, its waiting screen switches to **Connected!** as the page opens on the e-reader. Bookmarks saved before Devices existed keep working. A key that had only eReader browser access became a **Browser** Device, so on a Kindle, change its type to **Kindle** with **Change Type** on its page.
 
 ### How Long the URL Works
 
@@ -40,7 +40,7 @@ The short setup URL refuses to redirect in the same cases.
 
 The current browser provides:
 
-- A list of the libraries the Device's [scope](./users-and-permissions.md#scope) reaches that have something the Device's rules deliver. A Device scoped to one library shows only that library. A Device scoped to a list shows the libraries that have books on the list, and only those books, with the series and authors they belong to.
+- A list of the libraries the Device's [scope](./users-and-permissions.md#which-books) reaches that have something the Device's rules deliver. A Device scoped to one library shows only that library. A Device scoped to a list shows the libraries that have books on the list, and only those books, with the series and authors they belong to.
 - Per-library **All Books**, **Series**, **Authors**, and **Search** pages. **Series** or **Authors** is left out when none of them has anything to deliver.
 - Books the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) deliver something from. Books, series, and authors with nothing to deliver are left out of the lists.
 - A type filter for each file type the page's books are sent as, when there is more than one. A filter shows the books the Device's rules send in that format, so with the built-in rules a book with an EPUB and a CBZ is only under EPUB, and with a rule that sends CBZ as EPUB, a CBZ-only book is under EPUB too. A filter link saved for a format nothing is sent as any more shows every book.
@@ -108,6 +108,6 @@ To use it, follow [Setup](#setup) in the Kindle's web browser and bookmark the f
 
 **Likely cause:** The Device's scope leaves it out, its Delivery Rules have no rule for the book's file types, the owning user lacks library access, a file-type filter is active, or the expected file is a supplement. A book or file outside the scope or in a library the user cannot access returns **not found**, the same as one that does not exist, so the URL does not reveal whether it exists.
 
-**Verify:** Check **Scope**, **Delivery Rules**, and the type on the Device's page and the user's library access, clear the filter, and confirm the book has a main file.
+**Verify:** Check **Which books** and **Delivery Rules** under **Advanced**, and the type on the Device's page and the user's library access, clear the filter, and confirm the book has a main file.
 
-**Fix:** Change the Device's [scope](./users-and-permissions.md#scope) or [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), grant the intended [library access](./users-and-permissions.md#library-access), or select a matching main-file type. Supplements are not offered.
+**Fix:** Change the Device's [scope](./users-and-permissions.md#which-books) or [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device), grant the intended [library access](./users-and-permissions.md#library-access), or select a matching main-file type. Supplements are not offered.

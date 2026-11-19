@@ -164,6 +164,25 @@ func TestEventFilterFor(t *testing.T) {
 	}
 }
 
+// An event addressed to one user, such as a Device connecting for the first
+// time, reaches only that user, whatever their permissions.
+func TestEventFilterFor_UserEventsReachOnlyTheirUser(t *testing.T) {
+	t.Parallel()
+
+	admin := &models.User{ID: 1, Role: &models.Role{Permissions: []*models.Permission{
+		{Resource: models.ResourceConfig, Operation: models.OperationRead},
+		{Resource: models.ResourceUsers, Operation: models.OperationRead},
+	}}}
+	owner := &models.User{ID: 2}
+	connected := NewDeviceConnectedEvent("device-1", owner.ID)
+
+	assert.Equal(t, EventTypeDeviceConnected, connected.Type)
+	assert.JSONEq(t, `{"device_id":"device-1"}`, connected.Data)
+	assert.True(t, eventFilterFor(owner)(connected), "the owner hears it")
+	assert.False(t, eventFilterFor(admin)(connected), "an admin does not")
+	assert.False(t, eventFilterFor(nil)(connected))
+}
+
 // The stream refuses a request with no authenticated user before it writes
 // any headers, rather than streaming with a filter built from a nil user.
 func TestStream_NoUserInContext_Returns401(t *testing.T) {

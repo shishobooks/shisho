@@ -40,8 +40,7 @@ interface StepCopy {
   to: string;
 }
 
-// Where each step gets done. Later Invite Link and Connect a device work
-// replaces some of these targets.
+// Where each step gets done.
 const STEP_COPY: Record<GettingStartedStepKey, StepCopy> = {
   library: {
     title: "Set up your first library",
@@ -63,7 +62,7 @@ const STEP_COPY: Record<GettingStartedStepKey, StepCopy> = {
   device: {
     title: "Connect a reading device",
     description: "Read on your e-reader or a reading app on your phone.",
-    to: "/user/devices",
+    to: "/user/devices?connect",
   },
   to_read: {
     title: "Add a book to To Read",

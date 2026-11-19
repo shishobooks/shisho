@@ -76,7 +76,7 @@ func newKoboScopeFixture(t *testing.T) *koboScopeFixture {
 	// A download's generation outlives its request; it must end before the
 	// cache directory is removed.
 	t.Cleanup(cache.Wait)
-	RegisterRoutes(f.e, db, cache, books.NewService(db, appsettings.NewService(db)))
+	RegisterRoutes(f.e, db, cache, books.NewService(db, appsettings.NewService(db)), nil)
 
 	return f
 }

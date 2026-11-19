@@ -5,16 +5,18 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers all Kobo sync routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache, bookService *books.Service) {
+// Each Device's first connection is announced on broker.
+func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache, bookService *books.Service, broker *events.Broker) {
 	deviceService := devices.NewService(db)
 	syncService := NewService(db)
 
-	deviceAuth := devices.NewMiddleware(deviceService).DeviceAuth(devices.ConnectionKoboSync)
+	deviceAuth := devices.NewMiddleware(deviceService, broker).DeviceAuth(devices.ConnectionKoboSync)
 	h := newHandler(syncService, bookService, downloadCache, &readingStates{db: db, reading: reading.NewService(db)})
 
 	// /kobo/:credential/v1/... syncs the Device's scope.

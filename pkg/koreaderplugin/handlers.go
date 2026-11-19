@@ -11,6 +11,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/fingerprints"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/koreader"
@@ -111,28 +112,34 @@ func listCapabilities(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 type handler struct {
-	db        *bun.DB
-	devices   *devices.Service
-	reading   *reading.Service
-	documents *koreader.Documents
-	hashes    *fingerprints.Service
-	reach     *reach.Service
-	search    *search.Service
-	bundle    *Bundle
-	limiter   *addressLimiter
+	db      *bun.DB
+	devices *devices.Service
+	// connections records the plugin's connections and announces its first.
+	connections *devices.Connections
+	reading     *reading.Service
+	documents   *koreader.Documents
+	hashes      *fingerprints.Service
+	reach       *reach.Service
+	search      *search.Service
+	bundle      *Bundle
+	limiter     *addressLimiter
 }
 
-func newHandler(db *bun.DB, bundle *Bundle, bookService *books.Service) *handler {
+// newHandler builds the plugin's handler. broker hears of each Device's
+// first connection; nil announces nothing.
+func newHandler(db *bun.DB, bundle *Bundle, bookService *books.Service, broker *events.Broker) *handler {
+	deviceService := devices.NewService(db)
 	return &handler{
-		db:        db,
-		devices:   devices.NewService(db),
-		reading:   reading.NewService(db),
-		documents: koreader.NewDocuments(db, bookService),
-		hashes:    fingerprints.NewService(db),
-		reach:     reach.NewService(db, bookService),
-		search:    search.NewService(db),
-		bundle:    bundle,
-		limiter:   newAddressLimiter(),
+		db:          db,
+		devices:     deviceService,
+		connections: devices.NewConnections(deviceService, broker),
+		reading:     reading.NewService(db),
+		documents:   koreader.NewDocuments(db, bookService),
+		hashes:      fingerprints.NewService(db),
+		reach:       reach.NewService(db, bookService),
+		search:      search.NewService(db),
+		bundle:      bundle,
+		limiter:     newAddressLimiter(),
 	}
 }
 
@@ -201,7 +208,7 @@ func (h *handler) pair(c echo.Context) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if err := h.devices.RecordPluginConnection(ctx, device.ID, reportedVersion(c)); err != nil {
+	if err := h.connections.RecordPluginConnection(ctx, device, reportedVersion(c)); err != nil {
 		return errors.WithStack(err)
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, SignInResponse{
@@ -221,7 +228,7 @@ func (h *handler) status(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.devices.RecordPluginConnection(c.Request().Context(), device.ID, reportedVersion(c)); err != nil {
+	if err := h.connections.RecordPluginConnection(c.Request().Context(), device, reportedVersion(c)); err != nil {
 		return errors.WithStack(err)
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, StatusResponse{
@@ -239,7 +246,7 @@ func (h *handler) download(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.devices.RecordPluginConnection(c.Request().Context(), device.ID, reportedVersion(c)); err != nil {
+	if err := h.connections.RecordPluginConnection(c.Request().Context(), device, reportedVersion(c)); err != nil {
 		return errors.WithStack(err)
 	}
 	return sendZip(c, h.bundle.Zip())

@@ -4,7 +4,7 @@ Kobo Sync sends books from Shisho to a Kobo eReader over Wi-Fi, and keeps your r
 
 ## What Syncs
 
-A Kobo receives what its Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) select, from the books in the Device's [scope](./users-and-permissions.md#scope). Change them under **Delivery Rules** on the Device's page. A new Kobo Device follows the [Kobo preset](./users-and-permissions.md#device-types).
+A Kobo receives what its Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) select, from the books in the Device's [scope](./users-and-permissions.md#which-books). Change them under **Advanced > Delivery Rules** on the Device's page. A new Kobo Device follows the [Kobo preset](./users-and-permissions.md#device-types).
 
 - For each book, the earliest rule that matches one of its main files decides what goes, and every file of that rule's type is delivered. Under the preset, a book with a KePub and an EPUB sends only the KePub, as it is, a book with an EPUB and a CBZ sends only the EPUB, as a KePub, and a book with only an AZW3 or MOBI sends it as a KePub. Two EPUB editions of one book each appear on the Kobo as their own book.
 - A Kobo can receive KePub or EPUB, so only KePub, EPUB, CBZ, AZW3, and MOBI files can sync. A rule can send each of them as KePub or as EPUB. A CBZ sent as EPUB is a fixed-layout EPUB that opens with its pages in order. A Kindle file that cannot be converted, such as a damaged one, fails to download. See [Conversions](./supported-formats.md#conversions).
@@ -53,33 +53,33 @@ For the books Shisho sends it, a Kobo and Shisho share your [reading status](./r
 
 ### 1. Add a Kobo Device
 
-Open the user menu and select **Devices**. Click **Add Device**, enter a name, select **Kobo**, and click **Add Device**. Shisho opens the new Device's page. See [Devices](./users-and-permissions.md#device-types) for what a Device is.
+Open the user menu and select **Devices**. Click **Connect Device**, choose **A Kobo**, keep or change the name, and click **Continue**. Choose **KOReader** instead if you read in KOReader on the Kobo. Shisho shows the setup steps for Kobo sync, the same ones as under **Setup** on the Device's page. See [Devices](./users-and-permissions.md#device-types) for what a Device is.
 
-### 2. Choose a Scope
-
-Under **Scope** on the Device's page, choose **All Books**, **Library**, or **List**, and for the last two, choose the library or list. The scope is saved on the Device, so you can change it later from Shisho without touching the Kobo; the next sync adds and removes books to match. See [Scope](./users-and-permissions.md#scope) for which books each scope reaches.
-
-Book downloads, covers, and metadata follow the same scope, so a Kobo cannot fetch a book outside it.
-
-### 3. Configure the Kobo
+### 2. Configure the Kobo
 
 :::warning
 The **Kobo sync URL** contains the Device's credential. Treat the complete URL like a password. Do not publish it, include it in screenshots or logs, or copy it to a device you do not control.
 :::
 
-1. Under **Connections** on the Device's page, copy the **Kobo sync URL**. It has the form `https://your-server/kobo/<credential>`.
+1. Copy the **Kobo sync URL** from the setup steps. It has the form `https://your-server/kobo/<credential>`.
 2. Connect the Kobo to your computer with USB.
-3. Open `.kobo/Kobo/Kobo eReader.conf` on the device.
-4. Find `api_endpoint=https://storeapi.kobo.com`.
-5. Replace the value with the complete **Kobo sync URL**.
+3. On the Kobo's drive, open the `.kobo` folder. It is hidden: press `Cmd+Shift+.` in Finder on a Mac, or choose **View > Show > Hidden items** in File Explorer on Windows.
+4. Open `Kobo/Kobo eReader.conf` in a text editor.
+5. Find `api_endpoint=https://storeapi.kobo.com` and replace the value with the complete **Kobo sync URL**.
 6. Delete the `image_host`, `image_url_template`, and `image_url_quality_template` lines if they are there, so covers load from Shisho. The Kobo writes them again from Shisho on the next sync; see [Covers Are Missing After Changing the Sync URL](#covers-are-missing-after-changing-the-sync-url).
-7. Safely eject the Kobo and start a sync.
+7. Save the file, safely eject the Kobo, and start a sync.
 
-If `.kobo` is hidden, enable hidden files in your file manager. On macOS, press `Cmd+Shift+.` in Finder.
+Click **Next** in Shisho to wait for the Kobo. The screen switches to **Connected!** when its first sync reaches Shisho. If it doesn't, **Not working?** opens [Troubleshooting](#troubleshooting). The Device's **Status** shows the same once you close the screen.
+
+### 3. Choose Which Books
+
+By default a Kobo gets books from every library you can access. To narrow it, open the Device's page and, under **Advanced > Which books**, choose **All Books**, **Library**, or **List**, and for the last two, choose the library or list. The scope is saved on the Device, so you can change it later from Shisho without touching the Kobo; the next sync adds and removes books to match. See [Scope](./users-and-permissions.md#which-books) for which books each scope reaches.
+
+Book downloads, covers, and metadata follow the same scope, so a Kobo cannot fetch a book outside it.
 
 ### Kobos Set Up Before Devices
 
-A Kobo set up with an older Shisho has a sync URL that ends in a scope, such as `/all` or `/library/3`. Upgrading turned its API key into a Kobo Device with the same credential, so the URL keeps working and the books already on the Kobo stay. Its first sync after the upgrade copies the scope from the URL onto the Device, unless you change the Device's **Scope** first. After that, the scope in the URL is ignored, and the Device's **Scope** setting applies. You do not need to change the URL on the Kobo.
+A Kobo set up with an older Shisho has a sync URL that ends in a scope, such as `/all` or `/library/3`. Upgrading turned its API key into a Kobo Device with the same credential, so the URL keeps working and the books already on the Kobo stay. Its first sync after the upgrade copies the scope from the URL onto the Device, unless you change the Device's **Which books** setting first. After that, the scope in the URL is ignored, and the Device's **Which books** setting applies. You do not need to change the URL on the Kobo.
 
 A Device has one scope. If several Kobos shared one sync URL credential with different scopes, the first to sync after the upgrade sets the scope for all of them. Add a Kobo Device for each of the others, choose its scope, and update its `api_endpoint` with the new **Kobo sync URL**.
 
@@ -89,8 +89,8 @@ The **Kobo sync URL** follows the same rules as an [eReader Browser URL](./eread
 
 ## Reset or Remove Sync
 
-- **Reset:** On the Device's page, click **Reset Sync** under **Kobo sync**. This clears Shisho's sync history. The next sync is a fresh sync and resends every book in scope that its Delivery Rules select.
-- **Change scope:** Change **Scope** on the Device's page and sync. The Kobo keeps its URL.
+- **Reset:** On the Device's page, click **Reset Sync** under **Setup > Kobo sync**. It appears once the Kobo has synced. This clears Shisho's sync history. The next sync is a fresh sync and resends every book in scope that its Delivery Rules select.
+- **Change which books sync:** Change **Advanced > Which books** on the Device's page and sync. The Kobo keeps its URL.
 - **Stop using Shisho:** Restore `api_endpoint=https://storeapi.kobo.com` on the Kobo, then delete the Device in Shisho to revoke its credential. Deleting cannot be undone, so restore Kobo's store endpoint first when you want to keep normal Kobo service.
 
 ## Network Requirements
@@ -133,9 +133,9 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Symptom:** Removed books remain, metadata is old, or the device shows the wrong scope.
 
-**Likely cause:** The Device's **Scope** is not the one you expect, or its incremental sync history no longer matches the desired state.
+**Likely cause:** The Device's **Which books** setting is not the one you expect, or its incremental sync history no longer matches the desired state.
 
-**Verify:** Check **Scope** on the Device's page. A scope whose library or list was deleted reaches no books.
+**Verify:** Check **Advanced > Which books** on the Device's page. A scope whose library or list was deleted reaches no books.
 
 **Fix:** Choose the intended scope and sync. If the books are still wrong, click **Reset Sync** on the Device's page, then sync again.
 
@@ -147,7 +147,7 @@ The Kobo must be able to reach the public or local Shisho URL in `api_endpoint`.
 
 **Verify:** Open the book's page and read the Kobo Device's line in the **Devices** tab. It says what the Kobo receives, or why it receives nothing.
 
-**Fix:** Change the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) or [scope](./users-and-permissions.md#scope), then sync. Read the rules editor's warnings before saving, because some changes move books on the Kobo to a different edition or remove and re-add them.
+**Fix:** Change the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) or [scope](./users-and-permissions.md#which-books), then sync. Read the rules editor's warnings before saving, because some changes move books on the Kobo to a different edition or remove and re-add them.
 
 ### A Book Fails to Download
 

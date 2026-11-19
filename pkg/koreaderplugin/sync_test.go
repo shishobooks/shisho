@@ -353,10 +353,12 @@ func TestUpload_DaysAreInTheUsersTimeZone(t *testing.T) {
 func TestUpload_PlacesASessionByItsTime(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
-	// A Read-through started today on the web: reading from three days ago
-	// arriving now didn't happen during it.
-	today := time.Now().UTC().Format(time.DateOnly)
-	require.NoError(t, f.reading.Start(f.ctx, f.user.ID, f.file.BookID, today))
+	// A Read-through started yesterday on the web: reading from three days
+	// ago arriving now didn't happen during it. Yesterday, not today, so the
+	// reading from five minutes ago below falls inside it even just after
+	// midnight UTC.
+	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
+	require.NoError(t, f.reading.Start(f.ctx, f.user.ID, f.file.BookID, yesterday))
 
 	f.upload(UploadPayload{Pages: pages(syncHash, 2, 6, f.day1)})
 
@@ -365,7 +367,7 @@ func TestUpload_PlacesASessionByItsTime(t *testing.T) {
 	assert.Nil(t, sessions[0].ReadThroughID, "it counts toward time on no Read-through")
 	require.Len(t, f.readThroughs(f.file), 1, "nor does it start one")
 
-	// Reading today belongs to the one underway.
+	// Reading from just now belongs to the one underway.
 	f.upload(UploadPayload{Pages: pages(syncHash, 7, 8, time.Now().Add(-5*time.Minute))})
 	sessions = f.sessions(f.user)
 	require.Len(t, sessions, 2)

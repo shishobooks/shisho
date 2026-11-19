@@ -174,7 +174,7 @@ describe("GettingStarted", () => {
     expect(items).toHaveLength(3);
     expect(
       within(list).getByRole("link", { name: "Connect a reading device" }),
-    ).toHaveAttribute("href", "/user/devices");
+    ).toHaveAttribute("href", "/user/devices?connect");
     expect(within(list).queryByText("Set up your first library")).toBeNull();
     expect(within(list).queryByText("Invite someone")).toBeNull();
   });

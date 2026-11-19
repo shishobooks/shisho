@@ -2,6 +2,7 @@ import { Download, Eye, Info, type LucideIcon } from "lucide-react";
 import type { SVGProps } from "react";
 
 import { Button } from "@/components/ui/button";
+import { DOCS_URL } from "@/constants/docs";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/libraries/utils";
 
@@ -25,7 +26,7 @@ interface DemoLink {
 
 const links: DemoLink[] = [
   {
-    href: "https://www.shishobooks.com/docs/demo",
+    href: `${DOCS_URL}/demo`,
     label: "About this library",
     text: [
       { value: "About", className: "hidden sm:inline lg:hidden" },
@@ -42,7 +43,7 @@ const links: DemoLink[] = [
     variant: "ghost",
   },
   {
-    href: "https://www.shishobooks.com/docs/getting-started",
+    href: `${DOCS_URL}/getting-started`,
     label: "Install Shisho",
     text: [
       { value: "Install", className: "sm:hidden" },

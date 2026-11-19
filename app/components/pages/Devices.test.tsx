@@ -202,6 +202,11 @@ const setupUser = () =>
 const calls = (request: ReturnType<typeof stubAPI>, method: string) =>
   request.mock.calls.filter((call) => call[0] === method);
 
+// openAdvanced opens the Device page's Advanced section, where its password,
+// which books it reaches, and its Delivery Rules are.
+const openAdvanced = async (user: ReturnType<typeof setupUser>) =>
+  user.click(await screen.findByRole("button", { name: "Advanced" }));
+
 describe("Devices", () => {
   // Devices need no permission: any signed-in user manages their own.
   beforeEach(() => setAuth());
@@ -230,12 +235,12 @@ describe("Devices", () => {
     expect(emptyState).toHaveTextContent(/web browser/);
 
     await user.click(
-      within(emptyState).getByRole("button", { name: "Add Device" }),
+      within(emptyState).getByRole("button", { name: "Connect Device" }),
     );
     expect(
-      within(await screen.findByRole("dialog")).getByRole("heading", {
-        name: "Add Device",
-      }),
+      within(await screen.findByRole("dialog")).getByText(
+        "What do you read on?",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -254,43 +259,6 @@ describe("Devices", () => {
     const link = await screen.findByRole("link", { name: /Libra KOReader/ });
     expect(link).not.toHaveTextContent("to link");
   });
-
-  it("offers KOReader as a Device type", async () => {
-    stubAPI(kobo());
-    const user = setupUser();
-    renderAt("/user/devices");
-
-    await user.click(await screen.findByRole("button", { name: "Add Device" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByRole("radio", { name: /KOReader/ }),
-    ).toBeInTheDocument();
-  });
-
-  it("creates a Device with a name and type, then opens it", async () => {
-    const request = stubAPI(kobo());
-    const user = setupUser();
-    renderAt("/user/devices");
-
-    await user.click(await screen.findByRole("button", { name: "Add Device" }));
-    const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText("Name"), "Bedroom Kindle");
-    await user.click(within(dialog).getByRole("radio", { name: /Kindle/ }));
-    await user.click(
-      within(dialog).getByRole("button", { name: "Add Device" }),
-    );
-
-    await waitFor(() =>
-      expect(calls(request, "POST")).toContainEqual([
-        "POST",
-        "/user/devices",
-        { name: "Bedroom Kindle", device_type: "kindle" },
-      ]),
-    );
-    expect(
-      await screen.findByRole("heading", { name: "Bedroom Kindle" }),
-    ).toBeInTheDocument();
-  });
 });
 
 describe("DeviceDetail", () => {
@@ -301,20 +269,107 @@ describe("DeviceDetail", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("shows the credential unbroken, copies it, and gives a Kobo sync URL with no scope segment", async () => {
+  it("leads with status and setup, and keeps the password, which books, and Delivery Rules under Advanced", async () => {
+    stubAPI(kobo());
+    const user = setupUser();
+    renderAt("/user/devices/kobo-1");
+
+    const headings = (await screen.findAllByRole("heading")).map(
+      (h) => h.textContent,
+    );
+    expect(headings.indexOf("Status")).toBeLessThan(headings.indexOf("Setup"));
+    expect(headings.indexOf("Setup")).toBeLessThan(
+      headings.indexOf("Advanced"),
+    );
+    const advanced = screen.getByRole("button", { name: "Advanced" });
+    expect(advanced).toHaveAttribute("aria-expanded", "false");
+    expect(
+      screen.queryByRole("heading", { name: "Device password" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(advanced);
+    for (const name of ["Device password", "Which books", "Delivery Rules"]) {
+      expect(screen.getByRole("heading", { name })).toBeVisible();
+    }
+  });
+
+  it("says a Device that never connected isn't connected yet, and where to get help", async () => {
+    stubAPI(kobo());
+    renderAt("/user/devices/kobo-1");
+
+    expect(await screen.findByTestId("device-status")).toHaveTextContent(
+      "Not connected yet.",
+    );
+    expect(screen.getByRole("link", { name: "Not working?" })).toHaveAttribute(
+      "href",
+      "https://www.shishobooks.com/docs/kobo-sync#troubleshooting",
+    );
+  });
+
+  it("says when a connected Device was last used", async () => {
+    stubAPI(kobo({ last_accessed_at: "2026-03-04T15:00:00Z" }));
+    renderAt("/user/devices/kobo-1");
+
+    expect(await screen.findByTestId("device-status")).toHaveTextContent(
+      /^Connected\. Last used .*2026/,
+    );
+    expect(
+      screen.queryByRole("link", { name: "Not working?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps unsaved Delivery Rules edits when Advanced closes", async () => {
+    stubAPI(kobo());
+    const user = setupUser();
+    renderAt("/user/devices/kobo-1");
+
+    await openAdvanced(user);
+    const rules = screen.getByRole("group", { name: "Delivery Rules" });
+    await user.click(within(rules).getByRole("button", { name: "Custom" }));
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    // Closed, it still says it holds edits that aren't saved.
+    expect(screen.getByText("Unsaved changes")).toBeVisible();
+    await openAdvanced(user);
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+
+    expect(
+      within(screen.getByRole("group", { name: "Delivery Rules" })).getByRole(
+        "button",
+        { name: "Custom" },
+      ),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("speaks plainly: no credential, scope, or earliest rule matching", async () => {
+    stubAPI(kobo({ url_scope_pending: true }));
+    const user = setupUser();
+    const { container } = renderAt("/user/devices/kobo-1");
+
+    await openAdvanced(user);
+    expect(container).not.toHaveTextContent(/credential/i);
+    expect(container).not.toHaveTextContent(/\bscope/i);
+    expect(container).not.toHaveTextContent(/earliest rule/i);
+    expect(container).not.toHaveTextContent(/connections/i);
+  });
+
+  it("shows the Device password unbroken, copies it, and gives a Kobo sync URL with no scope segment", async () => {
     stubAPI(kobo());
     vi.mocked(copyText).mockResolvedValue(true);
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
-    expect(await screen.findByLabelText("Credential")).toHaveTextContent(
-      "abcdefghjkmnpqrs",
-    );
-    expect(screen.getByLabelText("Kobo sync URL")).toHaveTextContent(
+    expect(await screen.findByLabelText("Kobo sync URL")).toHaveTextContent(
       `${window.location.origin}/kobo/abcdefghjkmnpqrs`,
     );
+    await openAdvanced(user);
+    expect(screen.getByLabelText("Device password")).toHaveTextContent(
+      "abcdefghjkmnpqrs",
+    );
 
-    await user.click(screen.getByRole("button", { name: "Copy credential" }));
+    await user.click(
+      screen.getByRole("button", { name: "Copy device password" }),
+    );
     expect(copyText).toHaveBeenCalledWith("abcdefghjkmnpqrs");
   });
 
@@ -409,8 +464,12 @@ describe("DeviceDetail", () => {
     expect(
       screen.getByRole("button", { name: "Install steps" }),
     ).toHaveAttribute("aria-expanded", "true");
-    const folders = screen.getByText("Kobo", { selector: "dt" });
-    expect(folders.nextElementSibling).toHaveTextContent(
+    // Which plugins folder depends on where KOReader runs, so it asks.
+    expect(
+      screen.queryByLabelText("KOReader plugins folder"),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Kobo" }));
+    expect(screen.getByLabelText("KOReader plugins folder")).toHaveTextContent(
       ".adds/koreader/plugins",
     );
     // Kobo's folder starts with a dot, which computers hide.
@@ -639,7 +698,7 @@ describe("DeviceDetail", () => {
     expect(
       before(
         await screen.findByRole("heading", { name: "Unrecognized Books" }),
-        screen.getByRole("heading", { name: "Credential" }),
+        screen.getByRole("heading", { name: "Status" }),
       ),
     ).toBe(true);
     waiting.unmount();
@@ -650,7 +709,7 @@ describe("DeviceDetail", () => {
     expect(
       before(
         await screen.findByRole("heading", { name: "Unrecognized Books" }),
-        screen.getByRole("heading", { name: "Credential" }),
+        screen.getByRole("heading", { name: "Status" }),
       ),
     ).toBe(false);
   });
@@ -661,7 +720,7 @@ describe("DeviceDetail", () => {
     renderAt("/user/devices/kobo-1");
 
     expect(
-      await screen.findByRole("heading", { name: "Connections" }),
+      await screen.findByRole("heading", { name: "Setup" }),
     ).toBeInTheDocument();
     expect(
       request.mock.calls.filter(([, path]) =>
@@ -677,8 +736,9 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
+    await openAdvanced(user);
     await user.click(
-      await screen.findByRole("button", { name: "Copy credential" }),
+      screen.getByRole("button", { name: "Copy device password" }),
     );
 
     await waitFor(() =>
@@ -692,10 +752,11 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
+    await openAdvanced(user);
     expect(
-      await screen.findByText(/Its next sync sets the scope/),
+      await screen.findByText(/Its next sync picks its books/),
     ).toBeInTheDocument();
-    const scope = screen.getByRole("group", { name: "Scope" });
+    const scope = screen.getByRole("group", { name: "Which books" });
     await user.click(within(scope).getByRole("button", { name: "All Books" }));
 
     await waitFor(() =>
@@ -707,12 +768,13 @@ describe("DeviceDetail", () => {
     );
   });
 
-  it("regenerates the credential after confirming", async () => {
+  it("regenerates the Device password after confirming", async () => {
     const request = stubAPI(kobo());
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
-    await user.click(await screen.findByRole("button", { name: "Regenerate" }));
+    await openAdvanced(user);
+    await user.click(screen.getByRole("button", { name: "Regenerate" }));
     const dialog = await screen.findByRole("dialog");
     expect(calls(request, "POST")).toHaveLength(0);
     await user.click(
@@ -720,7 +782,7 @@ describe("DeviceDetail", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Credential")).toHaveTextContent(
+      expect(screen.getByLabelText("Device password")).toHaveTextContent(
         "zyxwvutsrqpnmkjh",
       ),
     );
@@ -738,13 +800,13 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
-    await screen.findByLabelText("Credential");
+    await openAdvanced(user);
     expect(request.mock.calls.map((call) => call[1])).not.toContain(
       "/user/libraries",
     );
     expect(request.mock.calls.map((call) => call[1])).not.toContain("/lists");
 
-    const scope = screen.getByRole("group", { name: "Scope" });
+    const scope = screen.getByRole("group", { name: "Which books" });
     await user.click(within(scope).getByRole("button", { name: "Library" }));
     expect(calls(request, "PATCH")).toHaveLength(0);
 
@@ -771,7 +833,8 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
-    const scope = await screen.findByRole("group", { name: "Scope" });
+    await openAdvanced(user);
+    const scope = screen.getByRole("group", { name: "Which books" });
     await user.click(within(scope).getByRole("button", { name: "All Books" }));
 
     await waitFor(() =>
@@ -865,7 +928,8 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
-    const rules = await screen.findByRole("group", { name: "Delivery Rules" });
+    await openAdvanced(user);
+    const rules = screen.getByRole("group", { name: "Delivery Rules" });
     await user.click(within(rules).getByRole("button", { name: "Custom" }));
     await user.click(screen.getByRole("button", { name: "Change Type" }));
     const dialog = await screen.findByRole("dialog");
@@ -924,14 +988,15 @@ describe("DeviceDetail", () => {
     const user = setupUser();
     renderAt("/user/devices/kobo-1");
 
-    await user.click(await screen.findByRole("button", { name: "Regenerate" }));
+    await openAdvanced(user);
+    await user.click(screen.getByRole("button", { name: "Regenerate" }));
     const dialog = await screen.findByRole("dialog");
     await user.click(
       within(dialog).getByRole("button", { name: "Regenerate" }),
     );
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByLabelText("Credential")).toHaveTextContent(
+    expect(screen.getByLabelText("Device password")).toHaveTextContent(
       "abcdefghjkmnpqrs",
     );
   });

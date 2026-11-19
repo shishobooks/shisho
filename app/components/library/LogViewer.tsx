@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/libraries/utils";
+import { logLevelColor } from "@/utils/logLevels";
 
 /**
  * Normalized log entry that both JobDetail and AdminLogs map into.
@@ -23,14 +24,6 @@ export interface LogViewerEntry {
   error?: string | null;
   stackTrace?: string | null;
 }
-
-const levelColors: Record<string, string> = {
-  debug: "bg-muted text-muted-foreground",
-  info: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  warn: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  error: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-  fatal: "bg-red-200 text-red-900 dark:bg-red-900/50 dark:text-red-300",
-};
 
 const formatTimestamp = (ts: string): string => {
   try {
@@ -123,7 +116,7 @@ const LogRow = ({ entry, searchTerm }: LogRowProps) => {
         </span>
         <Badge
           className={cn(
-            levelColors[entry.level] ?? levelColors.info,
+            logLevelColor(entry.level),
             "text-[10px] px-1.5 py-0 flex-shrink-0 font-mono uppercase",
           )}
           variant="secondary"
@@ -147,12 +140,12 @@ const LogRow = ({ entry, searchTerm }: LogRowProps) => {
             </pre>
           )}
           {entry.error && (
-            <div className="text-red-500 dark:text-red-400 text-xs">
+            <div className="text-destructive text-xs">
               error: {highlightText(entry.error, searchTerm)}
             </div>
           )}
           {entry.stackTrace && (
-            <pre className="bg-red-950/20 p-2 rounded text-xs overflow-x-auto text-red-400 whitespace-pre-wrap">
+            <pre className="bg-destructive/10 p-2 rounded text-xs overflow-x-auto text-destructive whitespace-pre-wrap">
               {highlightText(entry.stackTrace, searchTerm)}
             </pre>
           )}
