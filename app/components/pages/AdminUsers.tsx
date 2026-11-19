@@ -68,6 +68,12 @@ const RoleBadge = ({ name }: { name: string }) => (
   </Badge>
 );
 
+// The first character of a username as it's read: the first code point
+// (whole even outside the Basic Multilingual Plane) with the marks written
+// on it, such as a vowel sign or an accent. Usernames hold only letters,
+// marks, numbers, and a few symbols, so that is the whole character.
+const firstCharacter = (text: string) => text.match(/^\P{M}\p{M}*/u)?.[0] ?? "";
+
 // The first letter of a username in a circle, or a dashed circle with a link
 // icon for an invite nobody has accepted yet.
 const Avatar = ({ username }: { username?: string }) => (
@@ -81,9 +87,7 @@ const Avatar = ({ username }: { username?: string }) => (
     )}
   >
     {username ? (
-      // The first character, whole even outside the Basic Multilingual
-      // Plane, where charAt would split it.
-      Array.from(username)[0]?.toUpperCase()
+      firstCharacter(username).toUpperCase()
     ) : (
       <Link2 className="h-4 w-4" />
     )}

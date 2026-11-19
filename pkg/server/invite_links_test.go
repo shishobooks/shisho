@@ -454,13 +454,33 @@ func TestInviteLinks_UsernamesThatLookAlikeAreOne(t *testing.T) {
 	t.Parallel()
 	f := newInviteLinksFixture(t, false)
 	first := f.viewerInvite(f.admin)
-	require.Equal(t, http.StatusCreated, f.accept(first.Token, "José").Code)
+	require.Equal(t, http.StatusCreated, f.accept(first.Token, "Jose\u0301").Code)
 
 	second := f.viewerInvite(f.admin)
-	rec := f.accept(second.Token, "José")
+	rec := f.accept(second.Token, "Jos\u00e9")
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
 	assert.Contains(t, rec.Body.String(), `"code":"username_taken"`)
 
 	// Scripts written with marks are letters too.
-	require.Equal(t, http.StatusCreated, f.accept(second.Token, "राम").Code)
+	require.Equal(t, http.StatusCreated, f.accept(second.Token, "\u0930\u093e\u092e").Code)
+}
+
+// Add User and renaming store the composed spelling too, so a look-alike
+// can't come in through either.
+func TestUsers_CreateAndRenameStoreComposedUsernames(t *testing.T) {
+	t.Parallel()
+	f := newInviteLinksFixture(t, false)
+	viewer := f.roleID(models.RoleViewer)
+
+	rec := f.do(f.admin, http.MethodPost, "/api/users", fmt.Sprintf(`{"username":"Jose\u0301","password":"password123","role_id":%d}`, viewer))
+	require.Equal(t, http.StatusCreated, rec.Code, rec.Body.String())
+	rec = f.do(f.admin, http.MethodPost, "/api/users", fmt.Sprintf(`{"username":"Jos\u00e9","password":"password123","role_id":%d}`, viewer))
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), `"code":"username_taken"`)
+
+	rec = f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/users/%d", f.viewer.ID), `{"username":"Rene\u0301e"}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var renamed models.User
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &renamed))
+	assert.Equal(t, "Ren\u00e9e", renamed.Username)
 }

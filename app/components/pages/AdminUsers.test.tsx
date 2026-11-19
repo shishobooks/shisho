@@ -184,6 +184,26 @@ describe("AdminUsers", () => {
     expect(within(rows[1]).getByText("1 library")).toBeVisible();
   });
 
+  // The initial is the first character as it's read, with its vowel sign
+  // or accent, never half of one.
+  it("starts each user's avatar with their first whole character", async () => {
+    mockApi(
+      [],
+      [
+        {
+          id: 6,
+          username: "\u0915\u093f\u0930\u0923",
+          is_active: true,
+          library_access: [],
+        },
+      ],
+    );
+    renderPage();
+
+    const [row] = within(await usersList()).getAllByRole("listitem");
+    expect(within(row).getByText("\u0915\u093f")).toBeInTheDocument();
+  });
+
   it("puts pending invites at the top of the same list, with their role, access, and expiry", async () => {
     mockApi([
       invite(1),

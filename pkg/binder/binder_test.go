@@ -172,12 +172,21 @@ func TestBind_UsernameCharacters(t *testing.T) {
 		"राम":              true,
 		"สมชาย":            true,
 		"Jose\u0301":       true,
-		"rob:in":           false,
-		"rob in":           false,
-		"rob\\tin":         false,
-		"rob\u200bin":      false,
-		"rob/in":           false,
-		"<robin>":          false,
+		// Invisible characters, marks among them, would let one username
+		// pass for another, and a mark needs a letter to sit on.
+		"blanky\ufe0f":       false,
+		"blan\u034fky":       false,
+		"blanky\u180b":       false,
+		"rob\u3164in":        false,
+		"rob\u1160in":        false,
+		"\u0301\u0301\u0301": false,
+		"1\u20e3ab":          false,
+		"rob:in":             false,
+		"rob in":             false,
+		"rob\\tin":           false,
+		"rob\u200bin":        false,
+		"rob/in":             false,
+		"<robin>":            false,
 	} {
 		err := b.Bind(&account{}, newContext(`{"username":"`+value+`"}`, echo.MIMEApplicationJSON))
 		if ok {

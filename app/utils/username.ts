@@ -7,9 +7,15 @@
 export const USERNAME_HINT =
   "3 to 50 characters: letters, numbers, and . _ - @";
 
-// Letters with their marks (the vowel signs and accents of scripts such as
-// Devanagari and Thai), numbers, and a few symbols.
-const ALLOWED = /^[\p{L}\p{M}\p{N}._@-]*$/u;
+// Letters, each with any marks it's written with (the vowel signs and
+// accents of scripts such as Devanagari and Thai), numbers, and a few
+// symbols. A mark must follow a letter.
+const ALLOWED = /^(?:\p{L}\p{M}*|[\p{N}._@-])*$/u;
+
+// Characters that render as nothing though Unicode files some under letters
+// or marks (variation selectors, the combining grapheme joiner, Hangul
+// fillers): they would let one username pass for another.
+const INVISIBLE = /\p{Default_Ignorable_Code_Point}/u;
 
 /** Why `username` can't be used, or null when it can. */
 export const usernameProblem = (username: string): string | null => {
@@ -20,7 +26,7 @@ export const usernameProblem = (username: string): string | null => {
   if (length === 0) return "Username is required";
   if (length < 3) return "A username needs at least 3 characters";
   if (length > 50) return "A username can't be longer than 50 characters";
-  if (!ALLOWED.test(composed)) {
+  if (!ALLOWED.test(composed) || INVISIBLE.test(composed)) {
     return "A username can only contain letters, numbers, and . _ - @";
   }
   return null;

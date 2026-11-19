@@ -1,17 +1,13 @@
 package binder
 
 import (
-	"context"
 	"net/url"
-	"reflect"
 	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
-	"github.com/go-playground/mold/v4"
 	"github.com/go-playground/validator/v10"
-	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -51,30 +47,40 @@ func urlValidator(fl validator.FieldLevel) bool {
 // numbers. "@" and "." keep email-style usernames working.
 const usernameSymbols = "._-@"
 
-// usernameValidator ensures a username is only letters (with their marks)
-// and numbers, in any script, and usernameSymbols. A colon would break HTTP Basic sign-in (OPDS,
-// KOReader), which splits on the first one, and spaces or invisible
-// characters would let one username pass for another. Length is checked
-// separately. Sign-in doesn't use it, so an older username that breaks the
-// rule still signs in.
+// usernameValidator ensures a username is only letters and numbers, in any
+// script, the marks that letters are written with (the vowel signs and
+// accents of scripts such as Devanagari and Thai), and usernameSymbols. A
+// colon would break HTTP Basic sign-in (OPDS, KOReader), which splits on the
+// first one, and spaces or invisible characters would let one username pass
+// for another, so a mark must follow a letter and invisible ones are refused.
+// Length is checked separately. Sign-in doesn't use it, so an older username
+// that breaks the rule still signs in.
 func usernameValidator(fl validator.FieldLevel) bool {
+	afterLetter := false
 	for _, r := range fl.Field().String() {
-		// Marks are the vowel signs and accents many scripts write letters
-		// with, such as Devanagari and Thai.
-		if !unicode.IsLetter(r) && !unicode.IsMark(r) && !unicode.IsNumber(r) && !strings.ContainsRune(usernameSymbols, r) {
+		if invisible(r) {
+			return false
+		}
+		switch {
+		case unicode.IsLetter(r):
+			afterLetter = true
+		case unicode.IsMark(r):
+			if !afterLetter {
+				return false
+			}
+		case unicode.IsNumber(r), strings.ContainsRune(usernameSymbols, r):
+			afterLetter = false
+		default:
 			return false
 		}
 	}
 	return true
 }
 
-// nfcModifier puts a string in Unicode composed form (NFC), so text that
-// looks the same is stored the same way: "é" typed as one character or as
-// "e" plus a combining accent. Usernames use it, so two that look alike
-// can't both register.
-func nfcModifier(_ context.Context, fl mold.FieldLevel) error {
-	if fl.Field().Kind() == reflect.String {
-		fl.Field().SetString(norm.NFC.String(fl.Field().String()))
-	}
-	return nil
+// invisible reports whether r renders as nothing though Unicode files it
+// under letters or marks: variation selectors, the combining grapheme
+// joiner, and fillers such as the Hangul ones.
+func invisible(r rune) bool {
+	return unicode.Is(unicode.Variation_Selector, r) ||
+		unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r)
 }
