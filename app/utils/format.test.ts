@@ -20,6 +20,7 @@ import {
   formatShortDay,
   formatShowingRange,
   formatTimeOfDay,
+  formatTotalDuration,
   formatYear,
 } from "./format";
 
@@ -280,6 +281,18 @@ describe("formatDuration", () => {
     expect(formatDuration(600)).toBe("10m");
     expect(formatDuration(30)).toBe("<1m");
     expect(formatDuration(0)).toBe("0m");
+  });
+});
+
+describe("formatTotalDuration", () => {
+  it("counts whole days once a total reaches one", () => {
+    expect(formatTotalDuration(146 * 3600 + 20 * 60)).toBe("6d 2h 20m");
+    expect(formatTotalDuration(86400)).toBe("1d 0h 0m");
+  });
+
+  it("reads like formatDuration under a day", () => {
+    expect(formatTotalDuration(23 * 3600 + 59 * 60)).toBe("23h 59m");
+    expect(formatTotalDuration(30)).toBe("<1m");
   });
 });
 

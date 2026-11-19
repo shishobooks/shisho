@@ -29,6 +29,8 @@ import {
   formatLongDay,
   formatMonthName,
   formatShortDay,
+  formatTotalDuration,
+  formatTotalHours,
 } from "@/utils/format";
 import {
   assignBookColors,
@@ -66,8 +68,8 @@ const HEAT_SHADES = [
 // Heatmap squares grow to fill the card up to this size, so a wide screen
 // isn't left with the year bunched at one side.
 const HEAT_CELL_MAX = "1.375rem";
-const HEAT_CELL_MIN = "0.6875rem";
 const HEAT_GAP = "3px";
+
 // Months are labelled at least this many weeks apart, so a short first
 // month doesn't run into the next label.
 const MONTH_LABEL_GAP = 3;
@@ -102,6 +104,7 @@ export const ReadingHeatmap = ({
 }) => {
   const hoverTip = useHoverTip();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const weekdaysRef = useRef<HTMLDivElement>(null);
   const byDay = useMemo(
     () =>
       new Map(
@@ -113,13 +116,17 @@ export const ReadingHeatmap = ({
   const weeks = useMemo(() => heatmapWeeks(from, to), [from, to]);
   const heatmapMaxWidth = `calc(2rem + ${weeks.length} * (${HEAT_CELL_MAX} + ${HEAT_GAP}))`;
   const total = [...byDay.values()].reduce((sum, s) => sum + s, 0);
+  const totalHours = formatTotalHours(total);
   const busiest = [...byDay.entries()].sort((a, b) => b[1] - a[1])[0];
 
   const labels: { col: number; text: string }[] = [];
   weeks.forEach((week, w) => {
     const first = week.find((d) => d?.endsWith("-01"));
     const last = labels[labels.length - 1];
-    if (first && (!last || w - last.col >= MONTH_LABEL_GAP)) {
+    // A label in the last week has no weeks after it to run over, so it
+    // would run past the grid and scroll the card a few pixels.
+    const lastWeek = w === weeks.length - 1;
+    if (first && !lastWeek && (!last || w - last.col >= MONTH_LABEL_GAP)) {
       labels.push({
         col: w,
         text: formatMonthName(
@@ -137,14 +144,18 @@ export const ReadingHeatmap = ({
     selectedDay && selectedDay >= from && selectedDay <= to
       ? selectedDay
       : lastSoFar;
+  // A day already in view stays put, so tapping a square doesn't slide the
+  // year out from under the finger and take its tip down with the scroll.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el || el.scrollWidth <= el.clientWidth) return;
     const cell = el.querySelector(`[data-day="${focus}"]`);
     if (!cell) return;
-    const offset =
-      cell.getBoundingClientRect().left - el.getBoundingClientRect().left;
-    el.scrollLeft += offset - el.clientWidth / 2;
+    const box = el.getBoundingClientRect();
+    const rect = cell.getBoundingClientRect();
+    const weekdays = weekdaysRef.current?.getBoundingClientRect().width ?? 0;
+    if (rect.left >= box.left + weekdays && rect.right <= box.right) return;
+    el.scrollLeft += rect.left - box.left - el.clientWidth / 2;
   }, [focus]);
 
   // Hovering shows a tip, which re-renders the heatmap; the squares, a year
@@ -208,27 +219,36 @@ export const ReadingHeatmap = ({
     <div>
       <p className="mb-3 text-xs text-muted-foreground">
         {total > 0
-          ? `${formatDuration(total)} in ${period}`
+          ? `${formatTotalDuration(total)}${totalHours ? ` (${totalHours})` : ""} in ${period}`
           : `No reading in ${period}`}
       </p>
-      <div className="overflow-x-auto pb-1" ref={scrollRef}>
+      <div className="@container overflow-x-auto pb-1" ref={scrollRef}>
         <div
           aria-hidden="true"
           // As wide as its squares, so the pinned weekday labels can follow
           // a phone's scroll; on a wide screen, the card's width up to the
-          // squares' largest size.
-          className="grid w-max"
+          // squares' largest size. The padding on the right keeps the last
+          // week's outline inside the scroller, which would clip it. A finger
+          // pressing a square is asking for its tip, so a long press
+          // mustn't select text or open the callout menu.
+          // Below the largest size, the squares shrink to fit the whole
+          // year (--heat-cell-min, from 50rem, where 54 weeks and the
+          // weekday labels fit at the smallest). A card narrower than that,
+          // like a phone's, scrolls the year at a size a finger can tap.
+          className="grid w-max select-none pr-px [--heat-cell-min:1.25rem] [-webkit-touch-callout:none] @min-[50rem]:[--heat-cell-min:0.6875rem]"
           onPointerLeave={hoverTip.hide}
           style={{
             gap: HEAT_GAP,
-            gridTemplateColumns: `auto repeat(${weeks.length}, minmax(${HEAT_CELL_MIN}, 1fr))`,
+            gridTemplateColumns: `auto repeat(${weeks.length}, minmax(var(--heat-cell-min), 1fr))`,
             minWidth: `min(100%, ${heatmapMaxWidth})`,
             maxWidth: heatmapMaxWidth,
           }}
         >
           {labels.map(({ col, text }) => (
+            // No width of its own, so a label runs over the next weeks
+            // rather than widening its week's column.
             <span
-              className="whitespace-nowrap text-[10px] leading-4 text-muted-foreground"
+              className="w-0 whitespace-nowrap text-[10px] leading-4 text-muted-foreground"
               key={`${col}-${text}`}
               style={{ gridColumn: col + 2, gridRow: 1 }}
             >
@@ -239,6 +259,7 @@ export const ReadingHeatmap = ({
               scrolls the year, its rows the heatmap's own. */}
           <div
             className="sticky left-0 z-10 grid grid-rows-subgrid bg-background pr-1"
+            ref={weekdaysRef}
             style={{ gridColumn: 1, gridRow: "2 / 9" }}
           >
             {Object.entries(WEEKDAY_LABELS).map(([row, text]) => (
@@ -651,7 +672,7 @@ const DayTimeline = ({
   return (
     <div
       aria-hidden="true"
-      className="mb-4"
+      className="mb-4 select-none [-webkit-touch-callout:none]"
       data-timeline=""
       onPointerLeave={hoverTip.hide}
     >

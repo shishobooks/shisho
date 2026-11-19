@@ -435,6 +435,7 @@ describe("AdminServerStats", () => {
     ).toHaveTextContent("2026");
     const tile = (name: string) =>
       within(readingSection).getByRole("group", { name });
+    expect(tile("Reading time")).toHaveTextContent("1d 12h 0m");
     expect(tile("Reading time")).toHaveTextContent("36h 0m");
     expect(tile("Listening time")).toHaveTextContent("12h 30m");
     expect(tile("Read-throughs finished")).toHaveTextContent("41");

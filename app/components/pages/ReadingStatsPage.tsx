@@ -55,8 +55,9 @@ import { cn } from "@/libraries/utils";
 import type { ReadingStatsKind, ReadingStatsResponse } from "@/types";
 import {
   formatCount,
-  formatDuration,
   formatShowingRange,
+  formatTotalDuration,
+  formatTotalHours,
 } from "@/utils/format";
 import {
   countRows,
@@ -160,11 +161,13 @@ const StatsBody = ({
         />
         <StatTile
           label="Reading time"
-          value={formatDuration(totals.reading_seconds)}
+          note={formatTotalHours(totals.reading_seconds)}
+          value={formatTotalDuration(totals.reading_seconds)}
         />
         <StatTile
           label="Listening time"
-          value={formatDuration(totals.listening_seconds)}
+          note={formatTotalHours(totals.listening_seconds)}
+          value={formatTotalDuration(totals.listening_seconds)}
         />
         <StatTile
           label="Median days to finish"
