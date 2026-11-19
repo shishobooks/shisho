@@ -1,9 +1,9 @@
-import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import HiddenFolderHelp from "@/components/devices/HiddenFolderHelp";
 import CopyField from "@/components/library/CopyField";
+import LoopbackNote from "@/components/library/LoopbackNote";
 import { Button } from "@/components/ui/button";
 import { DOCS_URL } from "@/constants/docs";
 import {
@@ -24,29 +24,21 @@ import {
   opdsCatalogURL,
   shortURL,
 } from "@/utils/devices";
-import { isLoopbackHost, pageHostname } from "@/utils/location";
 
 /**
  * LoopbackWarning says, while the page is open at localhost or another
  * loopback address, that a device can't reach the URLs the setup steps give.
  */
-export const LoopbackWarning = () => {
-  const loopback = isLoopbackHost(pageHostname());
-  if (!loopback) return null;
-  return (
-    <div
-      className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400"
-      role="note"
-    >
-      <AlertTriangle aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
-      <p>
-        Your device can't reach{" "}
-        <code className="break-all font-mono">{pageHostname()}</code>. Open
-        Shisho at the address your devices use and set up the device from there.
-      </p>
-    </div>
-  );
-};
+export const LoopbackWarning = () => (
+  <LoopbackNote>
+    {(host) => (
+      <>
+        Your device can&apos;t reach {host}. Open Shisho at the address your
+        devices use and set up the device from there.
+      </>
+    )}
+  </LoopbackNote>
+);
 
 const Code = ({ children }: { children: React.ReactNode }) => (
   <code className="break-all rounded bg-muted px-1">{children}</code>

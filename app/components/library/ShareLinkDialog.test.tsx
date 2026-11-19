@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ShareLinkResponse } from "@/types";
 import { formatDateTime } from "@/utils/format";
+import { pageHostname } from "@/utils/location";
 
 import { ShareLinkDialog } from "./ShareLinkDialog";
 
@@ -17,6 +18,10 @@ const mocks = vi.hoisted(() => ({
 
 // ShareLinkDialog.permissions.test.tsx checks which requests the real hooks
 // send.
+vi.mock("@/utils/location", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/location")>()),
+  pageHostname: vi.fn(() => "shisho.example.com"),
+}));
 vi.mock("@/hooks/queries/sharing", () => ({
   useBookShareLinks: () => ({ data: mocks.links, isLoading: false }),
   useCreateShareLink: () => ({ mutateAsync: mocks.create, isPending: false }),
@@ -72,6 +77,7 @@ afterEach(() => {
 
 beforeEach(() => {
   mocks.links = [];
+  vi.mocked(pageHostname).mockReturnValue("shisho.example.com");
   mocks.create.mockReset().mockResolvedValue(link({}));
   mocks.revoke.mockReset().mockResolvedValue(link({ state: "revoked" }));
   mocks.remove.mockReset().mockResolvedValue(undefined);
@@ -190,6 +196,37 @@ describe("ShareLinkDialog", () => {
     expect(writeText).toHaveBeenCalledWith(
       `${window.location.origin}/share/tok-active`,
     );
+  });
+
+  it("warns that links copied at localhost can't be opened elsewhere", () => {
+    vi.mocked(pageHostname).mockReturnValue("localhost");
+    mocks.links = [link({ label: "for Alice" })];
+    renderDialog();
+
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Links copied here point to localhost, which other devices can't reach.",
+    );
+  });
+
+  it("gives no warning at an address others can reach, or with no link to copy", () => {
+    mocks.links = [link({ label: "for Alice" })];
+    const { unmount } = renderDialog();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    unmount();
+
+    vi.mocked(pageHostname).mockReturnValue("localhost");
+    const warning = () => screen.queryByText(/Links copied here/);
+    // Links whose copy button is off: expired, paused, or sharing turned off.
+    for (const [links, props] of [
+      [[link({ state: "expired" })], {}],
+      [[link({ paused_reason: "creator_deactivated" })], {}],
+      [[link({ label: "for Alice" })], { sharingEnabled: false }],
+    ] as const) {
+      mocks.links = [...links];
+      const view = renderDialog(props);
+      expect(warning()).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 
   it("shows only the list for Shares Read without Shares Write", () => {

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import LoopbackNote from "@/components/library/LoopbackNote";
 import QueryError from "@/components/library/QueryError";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -177,6 +178,15 @@ export function ShareLinkDialog({
     ? preset
     : DEFAULT_PRESET;
 
+  // A paused link is still active (it can be revoked) but its creator stops
+  // it from resolving. A live link resolves for its recipient, so its copy
+  // button works.
+  const linkStatus = (link: ShareLinkResponse) => {
+    const active = link.state === ShareLinkStateActive;
+    const paused = active && Boolean(link.paused_reason);
+    return { active, paused, live: active && !paused && sharingEnabled };
+  };
+
   const handleCopy = async (token: string) => {
     if (await copyText(shareLinkUrl(token))) {
       toast.success("Copied to clipboard");
@@ -324,6 +334,17 @@ export function ShareLinkDialog({
             {canList && (
               <div className="space-y-3">
                 <h3 className="text-sm font-medium">Links</h3>
+                {links.some((link) => linkStatus(link).live) && (
+                  <LoopbackNote>
+                    {(host) => (
+                      <>
+                        Links copied here point to {host}, which other devices
+                        can&apos;t reach. Copy them from the address the people
+                        you share with use instead.
+                      </>
+                    )}
+                  </LoopbackNote>
+                )}
                 {linksQuery.isLoading ? (
                   <LoadingSpinner />
                 ) : linksQuery.error && !linksQuery.data ? (
@@ -339,12 +360,8 @@ export function ShareLinkDialog({
                   <ul className="space-y-2">
                     {links.map((link) => {
                       // A link that does not resolve keeps its row but recedes:
-                      // no fill, a muted label, and the muted status badge. A
-                      // paused link is still active (it can be revoked) but its
-                      // creator stops it from resolving.
-                      const active = link.state === ShareLinkStateActive;
-                      const paused = active && Boolean(link.paused_reason);
-                      const live = active && !paused && sharingEnabled;
+                      // no fill, a muted label, and the muted status badge.
+                      const { active, paused, live } = linkStatus(link);
                       return (
                         <li
                           className={cn(
