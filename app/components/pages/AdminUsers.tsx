@@ -87,7 +87,7 @@ const UserRow = ({
     >
       <Avatar username={user.username} />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-medium text-foreground text-sm md:text-base break-all">
             {user.username}
           </span>
@@ -116,7 +116,7 @@ const InviteRow = ({
     <li className={ROW_CLASS}>
       <Avatar />
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <span className="font-medium text-foreground text-sm md:text-base">
             Invite link
           </span>
@@ -136,7 +136,7 @@ const InviteRow = ({
           · Created by {link.created_by_username}
         </p>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center gap-0.5">
         <Button
           aria-label={`Copy invite link for ${roleName}`}
           onClick={() =>
@@ -145,7 +145,7 @@ const InviteRow = ({
               "Could not copy the link",
             )
           }
-          size="icon"
+          size="icon-sm"
           variant="ghost"
         >
           <Copy className="h-4 w-4" />
@@ -153,7 +153,7 @@ const InviteRow = ({
         <Button
           aria-label={`Revoke invite for ${roleName}`}
           onClick={() => onRevoke(link)}
-          size="icon"
+          size="icon-sm"
           variant="ghost"
         >
           <Ban className="h-4 w-4" />
