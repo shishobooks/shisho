@@ -8,6 +8,7 @@ import RoleDialog from "@/components/library/RoleDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import PendingInvites from "@/components/users/PendingInvites";
+import { useInviteLinks } from "@/hooks/queries/invites";
 import { useRoles, useUsers } from "@/hooks/queries/users";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -82,6 +83,12 @@ const AdminUsers = () => {
 
   // Creating users and managing roles both need Users Write.
   const canWriteUsers = useCan("users:write");
+  // The same query PendingInvites shows, which renders while it has invites
+  // or failed to load them.
+  const invitesQuery = useInviteLinks();
+  const showsPendingInvites =
+    (invitesQuery.data?.length ?? 0) > 0 ||
+    Boolean(invitesQuery.error && !invitesQuery.data);
 
   const handleOpenRoleDialog = (role?: Role) => {
     setSelectedRole(role ?? null);
@@ -127,19 +134,32 @@ const AdminUsers = () => {
 
         {canWriteUsers && <PendingInvites />}
 
-        {usersQuery.error && !usersData ? (
-          <QueryError fallback="Failed to load users" query={usersQuery} />
-        ) : users.length === 0 ? (
-          <div className="border border-border rounded-md p-8 text-center">
-            <p className="text-muted-foreground">No users found.</p>
-          </div>
-        ) : (
-          <div className="border border-border rounded-md divide-y divide-border">
-            {users.map((user) => (
-              <UserRow key={user.id} user={user} />
-            ))}
-          </div>
-        )}
+        <section
+          aria-labelledby={
+            showsPendingInvites ? "users-list-heading" : undefined
+          }
+        >
+          {/* The page title already says Users, so the list gets its own
+              heading only to set it apart from pending invites above it. */}
+          {showsPendingInvites && (
+            <h2 className="text-lg font-medium mb-3" id="users-list-heading">
+              Users
+            </h2>
+          )}
+          {usersQuery.error && !usersData ? (
+            <QueryError fallback="Failed to load users" query={usersQuery} />
+          ) : users.length === 0 ? (
+            <div className="border border-border rounded-md p-8 text-center">
+              <p className="text-muted-foreground">No users found.</p>
+            </div>
+          ) : (
+            <div className="border border-border rounded-md divide-y divide-border">
+              {users.map((user) => (
+                <UserRow key={user.id} user={user} />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
       {/* Roles Section */}

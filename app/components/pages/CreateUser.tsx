@@ -8,7 +8,10 @@ import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
 import InviteLinkForm from "@/components/users/InviteLinkForm";
 import SetPasswordForm from "@/components/users/SetPasswordForm";
 import { usePageTitle } from "@/hooks/usePageTitle";
-import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
+import {
+  useUnsavedChanges,
+  type UseUnsavedChangesOptions,
+} from "@/hooks/useUnsavedChanges";
 import { cn } from "@/libraries/utils";
 
 type Method = "invite" | "password";
@@ -34,6 +37,25 @@ const METHODS: {
   },
 ];
 
+// Switching between the two forms changes only `method` in the URL, and both
+// forms keep their input, so it doesn't count as leaving the page with
+// unsaved changes. Any other navigation still asks.
+const onlySwitchesMethod: NonNullable<
+  UseUnsavedChangesOptions["allowNavigation"]
+> = ({ currentLocation, nextLocation }) => {
+  if (
+    currentLocation.pathname !== nextLocation.pathname ||
+    currentLocation.hash !== nextLocation.hash
+  ) {
+    return false;
+  }
+  const current = new URLSearchParams(currentLocation.search);
+  const next = new URLSearchParams(nextLocation.search);
+  current.delete("method");
+  next.delete("method");
+  return current.toString() === next.toString();
+};
+
 // Add User. An Invite Link is the default; setting a password is the other
 // path. The chosen path is kept in the URL (`?method=password`), and both
 // forms stay mounted so switching between them keeps what was typed.
@@ -57,7 +79,9 @@ const CreateUser = () => {
     [],
   );
   const { showBlockerDialog, proceedNavigation, cancelNavigation } =
-    useUnsavedChanges(inviteChanges || passwordChanges);
+    useUnsavedChanges(inviteChanges || passwordChanges, {
+      allowNavigation: onlySwitchesMethod,
+    });
 
   return (
     <div>

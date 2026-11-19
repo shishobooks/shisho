@@ -88,6 +88,27 @@ describe("AdminUsers pending invites", () => {
     expect(within(rows[1]).getByText("All libraries")).toBeVisible();
   });
 
+  it("heads the user list apart from pending invites only while there are some", async () => {
+    mockApi([invite(1)]);
+    const { unmount } = renderPage();
+    const users = await screen.findByRole("heading", {
+      level: 2,
+      name: "Users",
+    });
+    expect(users).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: "Users" })).getByText("admin"),
+    ).toBeVisible();
+    unmount();
+
+    mockApi([]);
+    renderPage();
+    expect(await screen.findByText("admin")).toBeVisible();
+    expect(
+      screen.queryByRole("heading", { level: 2, name: "Users" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("copies a pending invite's link again", async () => {
     mockApi([invite(1)]);
     // userEvent.setup installs its own clipboard, so replace it afterwards.
