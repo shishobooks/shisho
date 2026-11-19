@@ -1,4 +1,11 @@
-import { AlertCircle, ChevronLeft, ChevronRight, Settings } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Redo2,
+  Settings,
+  Undo2,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -22,6 +29,7 @@ import {
 } from "@/hooks/queries/settings";
 import { isMouseMove, useAutoHideChrome } from "@/hooks/useAutoHideChrome";
 import { useImportedFonts, useImportedFontUrl } from "@/hooks/useImportedFonts";
+import { useLocationHistory } from "@/hooks/useLocationHistory";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
@@ -243,6 +251,18 @@ export default function ReflowableReader({
     viewRef.current = el;
     setViewElement(el);
   }, []);
+  // Back and forward through the places the reader jumped from. Every jump
+  // below goes through `jump`.
+  const locations = useLocationHistory(viewElement);
+  const { jump, reset: resetLocations } = locations;
+  const jumpTo = useCallback(
+    (go: () => unknown) => {
+      jump(go).catch((err: unknown) => {
+        console.warn("ReflowableReader: couldn't jump", err);
+      });
+    },
+    [jump],
+  );
   // The section and page foliate last reported.
   const placeRef = useRef("");
   const headerRef = useRef<HTMLElement | null>(null);
@@ -315,6 +335,7 @@ export default function ReflowableReader({
 
     let cancelled = false;
     setBookReady(false);
+    resetLocations();
     setRtl(false);
     setLoadError(null);
 
@@ -421,7 +442,7 @@ export default function ReflowableReader({
         // no-op
       }
     };
-  }, [blob, fileType, positionSettled, opened]);
+  }, [blob, fileType, positionSettled, opened, resetLocations]);
 
   const goPrev = useCallback(() => {
     const view = viewRef.current as
@@ -689,9 +710,11 @@ export default function ReflowableReader({
         // The chapter's own link, so a click lands on its first page rather
         // than wherever the fraction falls.
         onSelect: () =>
-          (viewRef.current as FoliateBookView | null)?.goTo?.(mark.href),
+          jumpTo(() =>
+            (viewRef.current as FoliateBookView | null)?.goTo?.(mark.href),
+          ),
       })),
-    [chapterMarks],
+    [chapterMarks, jumpTo],
   );
 
   // A link to a footnote opens the note in a popover instead of jumping
@@ -704,7 +727,7 @@ export default function ReflowableReader({
 
     const showFootnote = async (a: Element, href: string) => {
       const request = ++latest;
-      const goToNote = () => view.goTo?.(href);
+      const goToNote = () => jumpTo(() => view.goTo?.(href));
       const resolved = await view.book?.resolveHref?.(href);
       if (request !== latest) return;
       if (!resolved || resolved.index < 0) {
@@ -763,11 +786,16 @@ export default function ReflowableReader({
       }
       const { a, href } = (evt as CustomEvent<{ a: Element; href: string }>)
         .detail;
-      if (!isFootnoteReference(a)) return;
       evt.preventDefault();
+      // The reader follows a link itself, so going back can return to where
+      // it was followed from.
+      if (!isFootnoteReference(a)) {
+        jumpTo(() => view.goTo?.(href));
+        return;
+      }
       showFootnote(a, href).catch((err: unknown) => {
         console.warn("ReflowableReader: couldn't show the footnote", err);
-        view.goTo?.(href);
+        jumpTo(() => view.goTo?.(href));
       });
     };
     // A link out of the book opens a new tab, which a tap that closed a
@@ -782,7 +810,7 @@ export default function ReflowableReader({
       view.removeEventListener("link", handleLink);
       view.removeEventListener("external-link", handleExternalLink);
     };
-  }, [viewElement]);
+  }, [viewElement, jumpTo]);
 
   // Wire the relocate event for progress tracking.
   useEffect(() => {
@@ -895,24 +923,24 @@ export default function ReflowableReader({
     const href = toc[Number(value)]?.href;
     if (!href) return;
     const view = viewRef.current as
-      (HTMLElement & { goTo?: (target: string) => void }) | null;
-    view?.goTo?.(href);
+      (HTMLElement & { goTo?: (target: string) => unknown }) | null;
+    jumpTo(() => view?.goTo?.(href));
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const target = (e.clientX - rect.left) / rect.width;
     const view = viewRef.current as
-      (HTMLElement & { goToFraction?: (f: number) => void }) | null;
-    view?.goToFraction?.(Math.max(0, Math.min(1, target)));
+      (HTMLElement & { goToFraction?: (f: number) => unknown }) | null;
+    jumpTo(() => view?.goToFraction?.(Math.max(0, Math.min(1, target))));
   };
 
   const handleProgressKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "Home" && e.key !== "End") return;
     e.preventDefault();
     const view = viewRef.current as
-      (HTMLElement & { goToFraction?: (f: number) => void }) | null;
-    view?.goToFraction?.(e.key === "Home" ? 0 : 1);
+      (HTMLElement & { goToFraction?: (f: number) => unknown }) | null;
+    jumpTo(() => view?.goToFraction?.(e.key === "Home" ? 0 : 1));
   };
 
   // To a tenth of a percent, so the bar and the number move with each page
@@ -954,14 +982,36 @@ export default function ReflowableReader({
     <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col">
       <header
         className={cn(
-          "flex items-center justify-end px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          "flex items-center justify-between gap-2 px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           hideChrome &&
             "fixed top-[var(--banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           hideChrome && !chromeVisible && "-translate-y-full",
         )}
         ref={headerRef}
       >
-        <div className="flex items-center gap-2">
+        {/* Always shown, and disabled when there's nowhere to go, so they're
+            where the reader expects them after paging around a jump. */}
+        <div className="flex items-center">
+          <Button
+            aria-label="Back to previous location"
+            disabled={!bookReady || !locations.canGoBack}
+            onClick={locations.goBack}
+            size="icon"
+            variant="ghost"
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button
+            aria-label="Forward to next location"
+            disabled={!bookReady || !locations.canGoForward}
+            onClick={locations.goForward}
+            size="icon"
+            variant="ghost"
+          >
+            <Redo2 className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
           {toc.length > 0 && (
             <ReaderChapterSelect
               entries={toc.map((entry, index) => ({
@@ -975,6 +1025,7 @@ export default function ReflowableReader({
             />
           )}
           <ReaderSearch
+            onJump={jump}
             onOpenChange={setSearchOpen}
             open={searchOpen}
             view={
@@ -1104,7 +1155,8 @@ export default function ReflowableReader({
               onClick={() => {
                 if (!footnote) return;
                 const view = viewRef.current as FoliateBookView | null;
-                view?.goTo?.(footnote.href);
+                const href = footnote.href;
+                jumpTo(() => view?.goTo?.(href));
                 closeFootnote();
               }}
               style={noteStyle ? { color: noteStyle.link } : undefined}

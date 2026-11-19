@@ -8,7 +8,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { useBookSearch, type SearchableBook } from "@/hooks/useBookSearch";
+import {
+  useBookSearch,
+  type SearchableBook,
+  type SearchJump,
+} from "@/hooks/useBookSearch";
 import { cn } from "@/libraries/utils";
 import { formatCount } from "@/utils/format";
 
@@ -19,6 +23,9 @@ const RESULTS_PAGE = 100;
 interface ReaderSearchProps {
   // The open book, or null until it's ready.
   view: SearchableBook | null;
+  // Makes each move to a result, so the reader can count it in its history
+  // of jumps. The results of one search share a group.
+  onJump: SearchJump;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -30,6 +37,7 @@ interface ReaderSearchProps {
  */
 export default function ReaderSearch({
   view,
+  onJump,
   open,
   onOpenChange,
 }: ReaderSearchProps) {
@@ -55,7 +63,11 @@ export default function ReaderSearch({
         onInteractOutside={(e) => e.preventDefault()}
       >
         {view && (
-          <SearchPanel onClose={() => onOpenChange(false)} view={view} />
+          <SearchPanel
+            onClose={() => onOpenChange(false)}
+            onJump={onJump}
+            view={view}
+          />
         )}
       </PopoverContent>
     </Popover>
@@ -67,11 +79,13 @@ export default function ReaderSearch({
 function SearchPanel({
   view,
   onClose,
+  onJump,
 }: {
   view: SearchableBook;
   onClose: () => void;
+  onJump: SearchJump;
 }) {
-  const search = useBookSearch(view);
+  const search = useBookSearch(view, onJump);
   const { query, results, groups, searching, waiting, current } = search;
   const fieldRef = useRef<HTMLInputElement>(null);
   // The list folds away once a result is chosen, so it doesn't cover the

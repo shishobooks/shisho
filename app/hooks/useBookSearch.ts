@@ -34,6 +34,13 @@ export type SearchableBook = Pick<
   | "removeEventListener"
 >;
 
+// Makes a move to a result. One search's results share a `group`, so the
+// reader's history of jumps counts them as one.
+export type SearchJump = (
+  go: () => Promise<unknown>,
+  group: object,
+) => Promise<void>;
+
 export interface SearchResult {
   cfi: string;
   excerpt: FoliateSearchExcerpt;
@@ -74,7 +81,7 @@ const warn = (what: string) => (err: unknown) =>
  * pauses, and a new one cancels the last. Matches are highlighted on the
  * page, and the chosen one is outlined. Unmounting clears every highlight.
  */
-export function useBookSearch(view: SearchableBook | null) {
+export function useBookSearch(view: SearchableBook | null, jump: SearchJump) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -88,6 +95,8 @@ export function useBookSearch(view: SearchableBook | null) {
   const queryRef = useRef("");
   const startedRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The group the current query's moves share, new for each query.
+  const groupRef = useRef<object>({});
   // The chosen result, outlined on the page.
   const chosenRef = useRef<string | null>(null);
   // Enter came before any result did, so the first one found is chosen.
@@ -118,14 +127,14 @@ export function useBookSearch(view: SearchableBook | null) {
           if (chosenRef.current !== cfi) return;
           // A move, like following a link: the reader saves it as a Reading
           // Position when foliate reports it.
-          await view.goTo(cfi);
+          await jump(() => view.goTo(cfi), groupRef.current);
           if (chosenRef.current === cfi) {
             await view.addAnnotation({ value: cfi });
           }
         })
         .catch(warn("go to result failed"));
     },
-    [view, unmarkChosen],
+    [view, unmarkChosen, jump],
   );
 
   const run = useCallback(
@@ -188,6 +197,7 @@ export function useBookSearch(view: SearchableBook | null) {
       if (trimmed === queryRef.current) return;
       queryRef.current = trimmed;
       startedRef.current = false;
+      groupRef.current = {};
       cancel();
       unmarkChosen().catch(warn("unmark failed"));
       setCurrent(null);

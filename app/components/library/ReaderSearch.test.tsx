@@ -99,9 +99,21 @@ const TWO_CHAPTERS: SearchYield[] = [
   "done",
 ];
 
+// Moves without a history of jumps, which the reader's tests cover.
+const justGo = async (go: () => Promise<unknown>) => {
+  await go();
+};
+
 function Harness({ view }: { view: SearchableBook | null }) {
   const [open, setOpen] = useState(false);
-  return <ReaderSearch onOpenChange={setOpen} open={open} view={view} />;
+  return (
+    <ReaderSearch
+      onJump={justGo}
+      onOpenChange={setOpen}
+      open={open}
+      view={view}
+    />
+  );
 }
 
 const setup = () => {

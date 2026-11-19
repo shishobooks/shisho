@@ -24,6 +24,7 @@ let longBookId: number;
 let contentsBookId: number;
 let sectionsBookId: number;
 let searchBookId: number;
+let historyBookId: number;
 
 async function login(page: Page) {
   await page.goto("/login", { waitUntil: "domcontentloaded" });
@@ -147,6 +148,7 @@ test.describe("Reflowable reader", () => {
       epubSections: true,
     });
     searchBookId = await seed("Search Book", "epub", { epubToc: true });
+    historyBookId = await seed("History Book", "epub", { epubToc: true });
     await apiContext.dispose();
   });
 
@@ -598,6 +600,44 @@ test.describe("Reflowable reader", () => {
     await expect(headings.first()).toHaveText("Section 1");
     await expect(headings.nth(23)).toHaveText("Section 24");
     await expect(headings.last()).toHaveText("Figure");
+  });
+
+  test("goes back to where a jump left from, however far the reader paged", async ({
+    page,
+  }) => {
+    await login(page);
+    await setPaginatedReader(page);
+    await openReader(page, historyBookId);
+    await bookFrame(page, "Test chapter.");
+    const back = page.getByRole("button", {
+      name: "Back to previous location",
+    });
+    const forward = page.getByRole("button", {
+      name: "Forward to next location",
+    });
+    await expect(back).toBeDisabled();
+    await expect(forward).toBeDisabled();
+
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    const panel = page.getByRole("dialog", { name: "Search in book" });
+    await panel
+      .getByRole("searchbox", { name: "Search in book" })
+      .fill("lantern");
+    await panel.getByRole("button", { name: "The lantern dims." }).click();
+    await bookFrame(page, "Chapter Four text.");
+    await panel.getByRole("button", { name: "Close search" }).click();
+
+    // Paging back into the chapter before isn't a jump of its own.
+    await page.getByRole("button", { name: "Previous page" }).click();
+    await bookFrame(page, "Chapter Three text.");
+
+    await back.click();
+    await bookFrame(page, "Test chapter.");
+    await expect(back).toBeDisabled();
+    await forward.click();
+    await bookFrame(page, "Chapter Three text.");
+    await expect(forward).toBeDisabled();
+    await expect(back).toBeEnabled();
   });
 
   test("reading to the end marks the book read", async ({ page }) => {

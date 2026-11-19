@@ -12,6 +12,7 @@ EPUB, KePub, MOBI, and AZW3 files open in the same reader, which provides:
 - Previous and next page controls
 - A progress bar that can jump within the book, marked where each chapter in the book's table of contents starts. Point at a mark to see the chapter's name, or select it to go to the start of that chapter.
 - [Search](#searching-inside-a-book) for a word or phrase anywhere in the book
+- [Back and forward](#going-back-after-a-jump) to where you were before following a link, choosing a chapter, or going to a search result
 - [Display settings](#display-settings) for the font, size, spacing, margins, theme, and layout
 - Footnotes that open in a popover beside the text, in the page's theme and in the font chosen under [display settings](#display-settings). With **Book's font**, a book's embedded fonts may show as a standard serif font in the popover. Select **Go to note** in the popover to jump to the full note.
 - Optional automatic hiding of the header and footer
@@ -26,9 +27,15 @@ Select the **Search** button in the reader's header and type a word or phrase. S
 
 Select a result to go to it. Every match on the page is shaded, and the one you went to is also outlined. Press Enter in the search field for the next result and Shift+Enter for the previous one, or use the arrows beside the count. Select **Results** to show the list again.
 
-Search stays open while you turn pages. Closing it removes the highlights. Going to a result moves your place in the book, as following a link does, so reopening the book returns there.
+Search stays open while you turn pages. Closing it removes the highlights. Going to a result moves your place in the book, as following a link does, so reopening the book returns there, and [going back](#going-back-after-a-jump) returns to where you were before the search.
 
 In fixed-layout books, search finds matches and goes to their page but doesn't highlight them.
+
+### Going Back After a Jump
+
+Following a link, choosing a chapter from the menu, selecting a spot or a chapter mark on the progress bar, selecting **Go to note** in a footnote, and going to a search result are jumps. To return to where you were before a jump, select **Back to previous location**, the arrow at the left of the reader's header. It returns there however many pages you've turned since. **Forward to next location**, beside it, returns to where you were when you went back.
+
+Turning pages is never a jump, even into the next chapter, and neither is a jump that stays on the page you're on. A search counts as one jump however many results you step through, so going back returns to the page you were on when a result first took you off it. The places to go back and forward to start over each time you open the book.
 
 ### Display Settings
 
