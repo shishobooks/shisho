@@ -21,17 +21,21 @@ const organizeExamplePath = "../../app/components/setup/organizeExample.json"
 const updateOrganizeExampleEnv = "UPDATE_ORGANIZE_EXAMPLE"
 
 type organizeExampleFile struct {
+	// Type is the icon the animation shows: ebook, audiobook, or comic.
 	Type          string `json:"type"`
-	MessyName     string `json:"messyName"`
-	OrganizedName string `json:"organizedName"`
+	MessyName     string `json:"messy_name"`
+	OrganizedName string `json:"organized_name"`
 }
 
 type organizeExampleBook struct {
-	Author          string                `json:"author"`
-	Title           string                `json:"title"`
-	SeriesNumber    *float64              `json:"seriesNumber,omitempty"`
-	MessyFolder     *string               `json:"messyFolder"`
-	OrganizedFolder string                `json:"organizedFolder"`
+	Author       string   `json:"author"`
+	Title        string   `json:"title"`
+	SeriesNumber *float64 `json:"series_number,omitempty"`
+	// MessyFolder holds the book's files on the messy side; files in one
+	// folder are one book, so it names a single book. Nil leaves the files
+	// loose in the root, where each is a book of its own.
+	MessyFolder     *string               `json:"messy_folder"`
+	OrganizedFolder string                `json:"organized_folder"`
 	Files           []organizeExampleFile `json:"files"`
 }
 
@@ -40,23 +44,45 @@ type organizeExample struct {
 	Books []organizeExampleBook `json:"books"`
 }
 
+// exampleFileType is the icon a file type shows in the animation.
+func exampleFileType(fileType string) string {
+	switch {
+	case fileType == models.FileTypeCBZ:
+		return "comic"
+	case models.IsAudiobookFileType(fileType):
+		return "audiobook"
+	default:
+		return "ebook"
+	}
+}
+
 // organizedNames runs a book through the naming functions a scan uses: the
-// folder is named for the book's first file, and each file for itself.
+// folder takes CBZ naming when the book has a CBZ, as books.Service names
+// it, and each file is named for itself.
 func organizedNames(t *testing.T, book organizeExampleBook) (string, []string) {
 	t.Helper()
 	require.NotEmpty(t, book.Files, "%s has no files", book.Title)
-	opts := func(path string) OrganizedNameOptions {
+	opts := func(fileType string) OrganizedNameOptions {
 		return OrganizedNameOptions{
 			AuthorNames:  []string{book.Author},
 			Title:        book.Title,
 			SeriesNumber: book.SeriesNumber,
-			FileType:     models.FileTypeForPath(path),
+			FileType:     fileType,
 		}
 	}
-	folder := GenerateOrganizedFolderName(opts(book.Files[0].MessyName))
+	folderType := models.FileTypeForPath(book.Files[0].MessyName)
+	for _, file := range book.Files {
+		fileType := models.FileTypeForPath(file.MessyName)
+		require.True(t, models.IsBuiltInFileType(fileType), "%s isn't a file Shisho scans", file.MessyName)
+		require.Equal(t, exampleFileType(fileType), file.Type, "%s's icon type", file.MessyName)
+		if fileType == models.FileTypeCBZ {
+			folderType = models.FileTypeCBZ
+		}
+	}
+	folder := GenerateOrganizedFolderName(opts(folderType))
 	files := make([]string, len(book.Files))
 	for i, file := range book.Files {
-		files[i] = GenerateOrganizedFileName(opts(file.MessyName), file.MessyName)
+		files[i] = GenerateOrganizedFileName(opts(models.FileTypeForPath(file.MessyName)), file.MessyName)
 	}
 	return folder, files
 }
@@ -70,7 +96,10 @@ func TestOrganizeExampleMatchesNaming(t *testing.T) {
 	raw, err := os.ReadFile(organizeExamplePath)
 	require.NoError(t, err)
 	var example organizeExample
-	require.NoError(t, json.Unmarshal(raw, &example))
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	// A field the struct doesn't know would be dropped by an update.
+	dec.DisallowUnknownFields()
+	require.NoError(t, dec.Decode(&example))
 
 	if os.Getenv(updateOrganizeExampleEnv) != "" {
 		for i, book := range example.Books {
@@ -86,7 +115,6 @@ func TestOrganizeExampleMatchesNaming(t *testing.T) {
 		enc.SetIndent("", "  ")
 		require.NoError(t, enc.Encode(example))
 		require.NoError(t, os.WriteFile(organizeExamplePath, out.Bytes(), 0o644)) //nolint:gosec // a checked-in source file
-		return
 	}
 
 	for _, book := range example.Books {

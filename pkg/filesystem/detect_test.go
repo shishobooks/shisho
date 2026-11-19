@@ -177,7 +177,7 @@ func TestDetect_NamesFoldersThatDontExist(t *testing.T) {
 	assert.Equal(t, DetectFileTypesResponse{Ebooks: 1, MissingPaths: []string{missing, notAFolder}}, resp)
 }
 
-func TestDetect_NamesAFolderThatCantBeOpened(t *testing.T) {
+func TestDetect_NamesAFolderInsideOneThatCantBeOpened(t *testing.T) {
 	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root opens every folder")
@@ -193,6 +193,46 @@ func TestDetect_NamesAFolderThatCantBeOpened(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, status, body)
 	assert.Equal(t, []string{inside}, resp.MissingPaths)
+}
+
+// A folder the server finds but can't read, as when a container runs as a
+// user the folder doesn't let in, never scans either.
+func TestDetect_NamesAFolderThatCantBeRead(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads every folder")
+	}
+	locked := filepath.Join(t.TempDir(), "books")
+	require.NoError(t, os.Mkdir(locked, 0o755))
+	touch(t, locked, "a.epub")
+	require.NoError(t, os.Chmod(locked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	status, resp, body := detect(t, newDetectHandler(), pathsBody(t, locked))
+
+	require.Equal(t, http.StatusOK, status, body)
+	assert.Equal(t, DetectFileTypesResponse{MissingPaths: []string{locked}}, resp)
+}
+
+// Checking the folders alone answers without walking them, so Setup can
+// check them on Continue without waiting on a large library.
+func TestDetect_FoldersOnlySkipsTheWalk(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	touch(t, root, "a.epub")
+	missing := filepath.Join(root, "missing")
+	h := newDetectHandler()
+	h.detectBudget.walk = func(string, fs.WalkDirFunc) error {
+		t.Error("the folders-only check walked a folder")
+		return nil
+	}
+
+	body, err := json.Marshal(DetectFileTypesPayload{Paths: []string{root, missing}, FoldersOnly: true})
+	require.NoError(t, err)
+	status, resp, raw := detect(t, h, string(body))
+
+	require.Equal(t, http.StatusOK, status, raw)
+	assert.Equal(t, DetectFileTypesResponse{MissingPaths: []string{missing}}, resp)
 }
 
 func TestDetect_FollowsASymlinkedPath(t *testing.T) {

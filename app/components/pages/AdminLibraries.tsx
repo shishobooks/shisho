@@ -110,6 +110,12 @@ const AdminLibraries = () => {
   }
 
   const libraries = data?.items ?? [];
+  // With no library on the server yet, both create buttons open Setup, so the
+  // first one gets its plugins before its first scan.
+  const createTo =
+    data?.total === 0 && hasAllLibraryAccess
+      ? "/setup/library"
+      : "/libraries/create";
 
   return (
     <div>
@@ -137,7 +143,7 @@ const AdminLibraries = () => {
           )}
           {canCreateLibraries && (
             <Button aria-label="Add Library" asChild size="sm">
-              <Link to="/libraries/create">
+              <Link to={createTo}>
                 <Plus className="h-4 w-4 sm:mr-2" />
                 <span className="hidden sm:inline">Add Library</span>
               </Link>
@@ -160,11 +166,10 @@ const AdminLibraries = () => {
       ) : libraries.length === 0 ? (
         <EmptyState
           action={
-            // The first library goes through Setup, as Getting Started's
-            // step does, so its plugins are chosen before its first scan.
+            // As Getting Started's step does.
             canCreateLibraries && (
               <Button asChild size="sm">
-                <Link to="/setup/library">
+                <Link to={createTo}>
                   <Plus aria-hidden="true" className="h-4 w-4" />
                   Set up a library
                 </Link>

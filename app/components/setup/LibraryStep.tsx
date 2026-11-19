@@ -100,11 +100,12 @@ export const LibraryStep = ({
               <div className="flex items-center gap-2">
                 <Input
                   aria-describedby={
-                    missing
-                      ? missingId
-                      : errors.paths
-                        ? "setup-folders-error"
-                        : undefined
+                    [
+                      missing && missingId,
+                      errors.paths && "setup-folders-error",
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined
                   }
                   aria-invalid={missing || errors.paths ? true : undefined}
                   aria-label={`Folder ${index + 1}`}

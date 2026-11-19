@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -22,6 +23,8 @@ type detectLimits struct {
 	Duration time.Duration
 	// Files is how many recognized files the walk counts before it stops.
 	Files int
+	// foldersOnly resolves the paths and walks none of them.
+	foldersOnly bool
 	// now reads the clock and walk walks one root; tests replace them.
 	now  func() time.Time
 	walk func(root string, fn fs.WalkDirFunc) error
@@ -52,9 +55,10 @@ func (c *detectCounts) snapshot(stoppedEarly bool) *DetectFileTypesResponse {
 // DetectFileTypes walks paths and counts the files the scanner would
 // recognize by their extension, by category. It opens no files. Each path is
 // resolved as the directory picker resolves it, symlinks included. A path
-// that isn't a folder the server can open is named in MissingPaths, since a
-// library made from it never scans. A folder inside one that can't be read
-// is skipped, and the scan reports it itself.
+// that isn't a folder the server can open and read is named in MissingPaths,
+// since a library made from it never scans. A folder inside one that can't
+// be read is skipped, and the scan reports it itself. With foldersOnly it
+// stops after checking the paths.
 //
 // The walk checks its budget between entries, but one folder's read can
 // take any time on a hung network mount, so the walk runs on its own and the
@@ -118,6 +122,9 @@ func detectWalk(ctx context.Context, paths []string, limits detectLimits, counts
 		}
 		roots = append(roots, root)
 	}
+	if limits.foldersOnly {
+		return nil
+	}
 
 	for i, root := range roots {
 		// A path inside another is walked with it.
@@ -174,8 +181,9 @@ func detectWalk(ctx context.Context, paths []string, limits detectLimits, counts
 	return nil
 }
 
-// resolveDir resolves a path the way Browse does and reports whether it is an
-// existing directory.
+// resolveDir resolves a path the way Browse does and reports whether it is a
+// directory the server can read. Reading one entry tells a folder the server
+// may list from one it can only see, such as one owned by another user.
 func resolveDir(path string) (string, bool) {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -187,6 +195,14 @@ func resolveDir(path string) (string, bool) {
 	}
 	info, err := os.Stat(realPath)
 	if err != nil || !info.IsDir() {
+		return "", false
+	}
+	dir, err := os.Open(realPath)
+	if err != nil {
+		return "", false
+	}
+	defer dir.Close()
+	if _, err := dir.ReadDir(1); err != nil && !errors.Is(err, io.EOF) {
 		return "", false
 	}
 	return realPath, true

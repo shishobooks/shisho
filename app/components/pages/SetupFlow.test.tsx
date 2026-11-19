@@ -121,6 +121,8 @@ interface Server {
   failCreate?: boolean;
   /** Installs wait on this before they answer. */
   holdInstalls?: Promise<void>;
+  /** Continue's folder check waits on this before it answers. */
+  holdFolderCheck?: Promise<void>;
   calls: { method: string; path: string; body: unknown }[];
 }
 
@@ -151,7 +153,20 @@ const stubAPI = (server: Server) =>
       }
       return { id, scope, name, status: "active", version: "1.2.0" };
     }
-    if (path === "/filesystem/detect") return server.detected;
+    if (path === "/filesystem/detect") {
+      // Continue's check only names the folders the server can't open.
+      if ((body as { folders_only?: boolean }).folders_only) {
+        await server.holdFolderCheck;
+        return {
+          ebooks: 0,
+          audiobooks: 0,
+          comics: 0,
+          stopped_early: false,
+          missing_paths: server.detected.missing_paths,
+        };
+      }
+      return server.detected;
+    }
     if (method === "POST" && path === "/libraries") {
       if (server.failCreate) {
         throw new ShishoAPIError(
@@ -363,6 +378,78 @@ describe("Setup", () => {
       await user.click(screen.getByRole("button", { name: "Continue" }));
 
       expect(router.state.location.pathname).toBe("/setup/plugins");
+    });
+  });
+
+  describe("Continue's folder check", () => {
+    it("only checks the folders, without counting them again", async () => {
+      const server = newServer();
+      stubAPI(server);
+      const user = createUser();
+      renderSetup();
+      await fillLibraryStep(user);
+
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      await flush();
+
+      expect(server.calls).toContainEqual({
+        method: "POST",
+        path: "/filesystem/detect",
+        body: { paths: ["/media/books"], folders_only: true },
+      });
+    });
+
+    it("doesn't carry on once the admin has skipped Setup", async () => {
+      let release!: () => void;
+      const server = newServer({
+        holdFolderCheck: new Promise<void>((resolve) => (release = resolve)),
+      });
+      stubAPI(server);
+      const user = createUser();
+      const { router } = renderSetup();
+      await fillLibraryStep(user);
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      expect(
+        screen.getByRole("button", { name: /checking folders/i }),
+      ).toBeDisabled();
+
+      await user.click(screen.getByRole("button", { name: "Skip setup" }));
+      release();
+      await flush();
+
+      expect(router.state.location.pathname).toBe("/");
+      expect(storedDraft()).toBeNull();
+    });
+
+    it("sends a reload on the enrichment step back when a folder has gone", async () => {
+      window.localStorage.setItem(
+        "shisho:setup",
+        JSON.stringify({
+          userId: 1,
+          name: "Books",
+          paths: ["/media/gone"],
+          organize: true,
+          plugins: null,
+        }),
+      );
+      stubAPI(
+        newServer({
+          detected: {
+            ebooks: 0,
+            audiobooks: 0,
+            comics: 0,
+            stopped_early: false,
+            missing_paths: ["/media/gone"],
+          },
+        }),
+      );
+      const { router } = renderSetup("/setup/plugins");
+      await flush();
+
+      expect(router.state.location.pathname).toBe("/setup/library");
+      expect(screen.getByLabelText("Folder 1")).toHaveAccessibleDescription(
+        /can't find or open this folder/i,
+      );
     });
   });
 

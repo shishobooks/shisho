@@ -52,7 +52,9 @@ func (h *handler) detect(c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
-	resp, err := h.filesystemService.DetectFileTypes(c.Request().Context(), payload.Paths, h.detectBudget)
+	limits := h.detectBudget
+	limits.foldersOnly = payload.FoldersOnly
+	resp, err := h.filesystemService.DetectFileTypes(c.Request().Context(), payload.Paths, limits)
 	if err != nil {
 		return errors.WithStack(err)
 	}

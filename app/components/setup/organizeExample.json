@@ -4,45 +4,45 @@
     {
       "author": "Mary Shelley",
       "title": "Frankenstein",
-      "messyFolder": null,
-      "organizedFolder": "[Mary Shelley] Frankenstein",
+      "messy_folder": null,
+      "organized_folder": "[Mary Shelley] Frankenstein",
       "files": [
         {
           "type": "ebook",
-          "messyName": "frankenstein (1).epub",
-          "organizedName": "Frankenstein.epub"
+          "messy_name": "frankenstein (1).epub",
+          "organized_name": "Frankenstein.epub"
         }
       ]
     },
     {
       "author": "Jane Austen",
       "title": "Pride and Prejudice",
-      "messyFolder": "pride and prejudice",
-      "organizedFolder": "[Jane Austen] Pride and Prejudice",
+      "messy_folder": "pride and prejudice",
+      "organized_folder": "[Jane Austen] Pride and Prejudice",
       "files": [
         {
           "type": "ebook",
-          "messyName": "pride_and_prejudice_FINAL.epub",
-          "organizedName": "Pride and Prejudice.epub"
+          "messy_name": "pride_and_prejudice_FINAL.epub",
+          "organized_name": "Pride and Prejudice.epub"
         },
         {
           "type": "audiobook",
-          "messyName": "P&P audiobook.m4b",
-          "organizedName": "Pride and Prejudice.m4b"
+          "messy_name": "P&P audiobook.m4b",
+          "organized_name": "Pride and Prejudice.m4b"
         }
       ]
     },
     {
       "author": "Winsor McCay",
       "title": "Little Nemo",
-      "seriesNumber": 1,
-      "messyFolder": "comics",
-      "organizedFolder": "[Winsor McCay] Little Nemo v001",
+      "series_number": 1,
+      "messy_folder": "little nemo",
+      "organized_folder": "[Winsor McCay] Little Nemo v001",
       "files": [
         {
           "type": "comic",
-          "messyName": "little_nemo_vol01.cbz",
-          "organizedName": "Little Nemo.cbz"
+          "messy_name": "little_nemo_vol01.cbz",
+          "organized_name": "Little Nemo.cbz"
         }
       ]
     }

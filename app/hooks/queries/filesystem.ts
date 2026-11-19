@@ -36,16 +36,17 @@ export const useFilesystemBrowse = (
   });
 };
 
-/**
- * The query that counts the ebooks, audiobooks, and comics in folders a new
- * library will scan, and names any folder the server can't open. The server
- * stops after a few seconds on a large library and says so. Nothing changes
- * on the server, so the answer is cached per set of paths.
- */
-export const detectFileTypesQuery = (paths: string[]) => ({
-  queryKey: [QueryKey.FilesystemDetect, paths],
+// Counts the ebooks, audiobooks, and comics in folders a new library will
+// scan, and names any folder the server can't open and read. The server
+// stops after a few seconds on a large library and says so. With
+// foldersOnly it only checks the folders, which answers at once. Nothing
+// changes on the server, so each answer is cached per set of paths.
+const detectFileTypesOptions = (paths: string[], foldersOnly = false) => ({
+  queryKey: [QueryKey.FilesystemDetect, paths, { foldersOnly }],
   queryFn: ({ signal }: { signal: AbortSignal }) => {
-    const payload: DetectFileTypesPayload = { paths };
+    const payload: DetectFileTypesPayload = foldersOnly
+      ? { paths, folders_only: true }
+      : { paths };
     return API.request<DetectFileTypesResponse>(
       "POST",
       "/filesystem/detect",
@@ -56,22 +57,20 @@ export const detectFileTypesQuery = (paths: string[]) => ({
   },
 });
 
-/** Runs `detectFileTypesQuery` for the paths; an empty set asks nothing. */
+/** Detects the file types in the paths; an empty set asks nothing. */
 export const useDetectFileTypes = (paths: string[]) => {
   return useQuery<DetectFileTypesResponse, ShishoAPIError>({
-    ...detectFileTypesQuery(paths),
+    ...detectFileTypesOptions(paths),
     enabled: useRequires("libraries:write", paths.length > 0),
   });
 };
 
-// Asks the server about the folders now, never from the cache, such as when
-// Setup checks them before going on. Callers sit behind a route that needs
-// Libraries Write, the endpoint's permission.
-export const fetchDetectFileTypes = (
-  queryClient: QueryClient,
-  paths: string[],
-) =>
+// Asks the server now, never from the cache, whether it can open and read
+// each folder, without counting what's in them, such as when Setup checks the
+// folders before going on. Callers sit behind a route that needs Libraries
+// Write, the endpoint's permission.
+export const fetchFolderCheck = (queryClient: QueryClient, paths: string[]) =>
   queryClient.fetchQuery<DetectFileTypesResponse, ShishoAPIError>({
-    ...detectFileTypesQuery(paths),
+    ...detectFileTypesOptions(paths, true),
     staleTime: 0,
   });

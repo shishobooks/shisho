@@ -166,7 +166,7 @@ func (h *handler) createMediaFolder(c echo.Context) error {
 		var err error
 		switch book.FileType {
 		case models.FileTypeEPUB:
-			err = writeMinimalEPUB(path, book.Title, 0)
+			err = writeMinimalEPUB(path, book.Title, 0, false)
 		case models.FileTypeMOBI:
 			err = writeMinimalMOBI(path, book.Title)
 		case models.FileTypeCBZ:

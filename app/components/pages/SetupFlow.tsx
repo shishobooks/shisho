@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { useGettingStartedPanel } from "@/contexts/GettingStarted";
 import { useConfig } from "@/hooks/queries/config";
 import {
-  fetchDetectFileTypes,
+  fetchFolderCheck,
   useDetectFileTypes,
 } from "@/hooks/queries/filesystem";
 import { useCreateLibrary } from "@/hooks/queries/libraries";
@@ -282,29 +282,42 @@ const SetupFlow = () => {
       selected.has(pluginKey(p)),
     );
 
+  // Counts Continue clicks, so a folder check that answers after the admin
+  // has skipped Setup or left the page doesn't carry them on.
+  const continueRun = useRef(0);
+  useEffect(
+    () => () => {
+      continueRun.current += 1;
+    },
+    [],
+  );
+
   const skipSetup = () => {
+    continueRun.current += 1;
     forgetDraft();
     navigate("/");
   };
 
   // A library made from a folder the server can't open never scans, so
-  // going on waits for the server to look at the folders. Detection only
-  // advises otherwise, so a failed check doesn't hold the admin here.
+  // going on waits for the server to check the folders, which it does
+  // without counting what's in them. The check only advises otherwise, so a
+  // failed one doesn't hold the admin here.
   const handleLibraryContinue = async () => {
     if (!libraryReady) {
       setShowErrors(true);
       return;
     }
+    const run = ++continueRun.current;
     setCheckingFolders(true);
     let missing: string[] = [];
     try {
-      const result = await fetchDetectFileTypes(queryClient, paths);
+      const result = await fetchFolderCheck(queryClient, paths);
       missing = result.missing_paths ?? [];
     } catch {
-      // Detection failed; the enrichment step falls back as it does then.
-    } finally {
-      setCheckingFolders(false);
+      // The check failed; carry on as if the folders were fine.
     }
+    if (run !== continueRun.current) return;
+    setCheckingFolders(false);
     setMissingPaths(missing);
     if (missing.length > 0) {
       setShowErrors(true);
@@ -379,8 +392,10 @@ const SetupFlow = () => {
     return <Navigate replace to="/setup/library" />;
   }
 
+  // Only an answer for these folders counts; one kept from before a failed
+  // request doesn't.
   const missingOnPluginsStep =
-    step === "plugins" && detectionCurrent
+    step === "plugins" && detectionCurrent && !detection.isError
       ? (detection.data?.missing_paths ?? [])
       : [];
   if (missingOnPluginsStep.length > 0) {

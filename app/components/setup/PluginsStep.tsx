@@ -77,9 +77,9 @@ export const PluginsStep = ({
               We couldn't load plugins from the plugin repository
             </p>
             <p className="text-sm text-muted-foreground">
-              This server may be offline, or the repository may be unreachable
-              from it. You can add plugins later from Administration &gt;
-              Plugins.
+              The server may be offline, or the repository may have nothing for
+              this version of Shisho. You can add plugins later from
+              Administration &gt; Plugins.
             </p>
           </div>
         </div>

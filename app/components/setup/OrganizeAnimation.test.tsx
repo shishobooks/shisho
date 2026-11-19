@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -62,16 +62,71 @@ describe("OrganizeAnimation", () => {
     );
   });
 
-  it("holds the messy folder for 2 seconds before anything moves", () => {
+  it("holds the messy folder for 2 seconds before anything changes", () => {
     const { container } = render(<OrganizeAnimation />);
 
-    const animated = [
+    // When each animation (app/index.css) first changes what's on screen, as
+    // a share of its 3s: the messy folders start fading, files start moving,
+    // names start swapping, book folders start appearing.
+    const firstChange: Record<string, number> = {
+      "setup-folder-out": 0.12,
+      "setup-file-move": 0.2,
+      "setup-name-before": 0.55,
+      "setup-name-after": 0.62,
+      "setup-folder-in": 0.55,
+    };
+    const changes = [
       ...container.querySelectorAll<HTMLElement>("[class*='animate-[setup-']"),
-    ];
-    expect(animated.length).toBeGreaterThan(0);
-    for (const el of animated) {
-      expect(parseFloat(el.style.animationDelay)).toBeGreaterThanOrEqual(2);
+    ].map((el) => {
+      const name = /animate-\[(setup-[a-z-]+)_/.exec(el.className)?.[1] ?? "";
+      expect(firstChange[name], name).toBeDefined();
+      return parseFloat(el.style.animationDelay) + firstChange[name] * 3;
+    });
+    expect(changes.length).toBeGreaterThan(0);
+    expect(Math.min(...changes)).toBeCloseTo(2, 5);
+  });
+
+  it("waits until it's in view to play", () => {
+    let report: IntersectionObserverCallback = () => {};
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        constructor(callback: IntersectionObserverCallback) {
+          report = callback;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      render(<OrganizeAnimation />);
+      const example = screen.getByRole("img", {
+        name: /files in a messy folder move/i,
+      });
+      expect(example.className).toContain("animation-play-state:paused");
+
+      act(() =>
+        report(
+          [{ isIntersecting: true } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        ),
+      );
+      expect(example.className).not.toContain("animation-play-state:paused");
+    } finally {
+      vi.unstubAllGlobals();
     }
+  });
+
+  it("gives the focus back to Replay once a replay ends", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { container } = render(<OrganizeAnimation />);
+    finishPlaying(container);
+
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+    expect(document.body).not.toHaveFocus();
+    finishPlaying(container);
+
+    expect(screen.getByRole("button", { name: "Replay" })).toHaveFocus();
   });
 
   it("has nothing to replay with reduced motion", () => {

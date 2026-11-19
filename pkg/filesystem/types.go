@@ -29,13 +29,16 @@ type BrowseResponse struct {
 // a new library will scan.
 type DetectFileTypesPayload struct {
 	Paths []string `json:"paths" validate:"required,min=1,max=100,dive,required" mod:"dive,trim"`
+	// FoldersOnly checks that the server can open each path and counts
+	// nothing, which answers at once however large the folders are.
+	FoldersOnly bool `json:"folders_only,omitempty"`
 }
 
 // DetectFileTypesResponse counts the recognized files found in the paths by
 // category. StoppedEarly says the walk ran out of time or reached its file
 // limit before it looked at everything, so the counts cover part of the
 // folders. MissingPaths lists, as given, each path that isn't a folder the
-// server can open, which a library can't scan.
+// server can open and read, which a library can't scan.
 type DetectFileTypesResponse struct {
 	Ebooks       int      `json:"ebooks"`
 	Audiobooks   int      `json:"audiobooks"`

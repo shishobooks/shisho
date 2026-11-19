@@ -88,6 +88,12 @@ describe("AdminLibraries", () => {
       expect(
         screen.getByRole("link", { name: "Set up a library" }),
       ).toHaveAttribute("href", "/setup/library");
+      // The header's Add Library goes the same way, so the page offers one
+      // route to the first library.
+      expect(screen.getByRole("link", { name: "Add Library" })).toHaveAttribute(
+        "href",
+        "/setup/library",
+      );
     });
 
     it("says a user limited to some libraries has no access, not that none exist", async () => {

@@ -41,9 +41,13 @@ const PAUSED = "[&_*]:[animation-play-state:paused]";
 // Rows that start together move a beat apart, so they read as files moving
 // one after another rather than the list jumping.
 const STAGGER_S = 0.15;
-// How long the messy folder shows before anything moves, on every play, so
-// the admin sees what it looked like first.
-const START_DELAY_S = 2;
+// How long the messy folder shows before anything changes, on every play,
+// so the admin sees what it looked like first. The keyframes hold their
+// first frame too: setup-folder-out starts fading at 12% of its 3s, so the
+// delay is shortened by that much.
+const MESSY_HOLD_S = 2;
+const KEYFRAME_LEAD_S = 0.12 * 3;
+const START_DELAY_S = MESSY_HOLD_S - KEYFRAME_LEAD_S;
 
 type FileKind = "ebook" | "audiobook" | "comic";
 type Kind = "folder" | FileKind;
@@ -55,6 +59,8 @@ interface Place {
 }
 
 interface MovingFile {
+  /** Unique across the example, for React keys. */
+  key: string;
   kind: FileKind;
   before: Place;
   after: Place;
@@ -66,8 +72,11 @@ interface Layout {
   root: string;
   /** Folders only the messy side has. */
   messyFolders: Place[];
-  /** A folder per book, with the index of its first file. */
-  bookFolders: (Place & { firstFile: number })[];
+  /**
+   * A folder per book, with the stagger index it appears at: after every
+   * file that started on its row has moved away.
+   */
+  bookFolders: (Place & { key: string; appearsAt: number })[];
   files: MovingFile[];
   rows: number;
 }
@@ -86,30 +95,44 @@ const layOut = (example: typeof organizeExample): Layout => {
   };
   let messyRow = 1;
   let organizedRow = 1;
-  for (const book of example.books) {
+  example.books.forEach((book, b) => {
     let level = 1;
-    if (book.messyFolder) {
+    if (book.messy_folder) {
       layout.messyFolders.push({
-        name: book.messyFolder,
+        name: book.messy_folder,
         level,
         row: messyRow++,
       });
       level = 2;
     }
     layout.bookFolders.push({
-      name: book.organizedFolder,
+      key: `book-${b}`,
+      name: book.organized_folder,
       level: 1,
       row: organizedRow++,
-      firstFile: layout.files.length,
+      // Its own first file, at least, so books land one after another.
+      appearsAt: layout.files.length,
     });
-    for (const file of book.files) {
+    book.files.forEach((file, f) => {
       layout.files.push({
+        key: `book-${b}-file-${f}`,
+        // The Go test checks each type against its file's extension.
         kind: file.type as FileKind,
-        before: { name: file.messyName, level, row: messyRow++ },
-        after: { name: file.organizedName, level: 2, row: organizedRow++ },
+        before: { name: file.messy_name, level, row: messyRow++ },
+        after: { name: file.organized_name, level: 2, row: organizedRow++ },
         index: layout.files.length,
       });
-    }
+    });
+  });
+  // A book's folder fades in on a row a messy file may still be leaving, so
+  // it waits for the last file that started there, whatever the example's
+  // shape.
+  for (const folder of layout.bookFolders) {
+    const leaving = layout.files.filter((f) => f.before.row === folder.row);
+    folder.appearsAt = Math.max(
+      folder.appearsAt,
+      ...leaving.map((f) => f.index),
+    );
   }
   layout.rows = Math.max(messyRow, organizedRow);
   return layout;
@@ -159,7 +182,8 @@ interface AnimatedProps {
 }
 
 const Animated = ({ playing, onDone }: AnimatedProps) => {
-  // A native listener, which hears the event wherever it comes from.
+  // A native listener: React's onAnimationEnd never hears the event jsdom
+  // fires, so a test couldn't finish the example through it.
   const lastStepRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     const el = lastStepRef.current;
@@ -188,7 +212,7 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
           return (
             <div
               className={cn(rowClass, FOLDER_OUT)}
-              key={folder.name}
+              key={folder.row}
               style={{
                 transform: `translate(${x}, ${y})`,
                 animationDelay: stagger(0),
@@ -203,13 +227,12 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
           return (
             <div
               className={cn(rowClass, FOLDER_IN)}
-              key={folder.name}
+              key={folder.key}
               style={
                 {
                   "--x": x,
                   "--y": y,
-                  // A book's folder waits for its first file to leave the row.
-                  animationDelay: stagger(folder.firstFile),
+                  animationDelay: stagger(folder.appearsAt),
                 } as CSSProperties
               }
             >
@@ -224,7 +247,7 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
           return (
             <div
               className={cn(rowClass, FILE_MOVE)}
-              key={file.after.name}
+              key={file.key}
               style={
                 {
                   "--from-x": from.x,
@@ -300,10 +323,10 @@ const StillTree = ({ label, rows }: { label: string; rows: StillRow[] }) => {
         {label}
       </figcaption>
       <ul className="font-mono text-xs text-foreground">
-        {rows.map((row) => (
+        {rows.map((row, i) => (
           <li
             className="flex h-7 min-w-0 items-center gap-1.5"
-            key={`${row.level}-${row.name}`}
+            key={i}
             style={{ paddingLeft: row.level * INDENT }}
           >
             <Entry kind={row.kind} name={row.name} />
@@ -368,21 +391,33 @@ export const OrganizeAnimation = ({ className }: { className?: string }) => {
   const seen = usePlayWhenSeen(frameRef);
   const [run, setRun] = useState(0);
   const [done, setDone] = useState(false);
+  const replayRef = useRef<HTMLButtonElement>(null);
+  // Replay hides its button while the example plays, so the frame holds the
+  // focus meanwhile and hands it back to the button when it returns.
+  const focusReplay = useRef(false);
 
   const markDone = useCallback(() => setDone(true), []);
   const replay = () => {
+    focusReplay.current = document.activeElement === replayRef.current;
+    if (focusReplay.current) frameRef.current?.focus();
     setDone(false);
     // A new key mounts the rows afresh, which starts every animation over.
     setRun((n) => n + 1);
   };
+  useEffect(() => {
+    if (!done || !focusReplay.current) return;
+    focusReplay.current = false;
+    if (document.activeElement === frameRef.current) replayRef.current?.focus();
+  }, [done]);
 
   return (
     <div
       className={cn(
-        "relative overflow-x-auto rounded-md border border-border bg-muted/40 p-3 sm:p-4",
+        "relative overflow-x-auto rounded-md border border-border bg-muted/40 p-3 focus:outline-none sm:p-4",
         className,
       )}
       ref={frameRef}
+      tabIndex={-1}
     >
       {reducedMotion ? (
         <Still />
@@ -393,6 +428,7 @@ export const OrganizeAnimation = ({ className }: { className?: string }) => {
             <Button
               className="absolute right-2 top-2 text-muted-foreground"
               onClick={replay}
+              ref={replayRef}
               size="sm"
               variant="ghost"
             >
