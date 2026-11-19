@@ -73,7 +73,7 @@ describe("AdminLibraries", () => {
   });
 
   describe("with no libraries", () => {
-    it("explains what a Library is and offers to create one", async () => {
+    it("explains what a Library is and offers Setup, so the first one gets its plugins", async () => {
       setAuth({ permissions: ["libraries:read", "libraries:write"] });
       vi.spyOn(API, "request").mockResolvedValue({ items: [], total: 0 });
 
@@ -86,8 +86,8 @@ describe("AdminLibraries", () => {
         screen.getByText(/A Library is a set of folders/),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("link", { name: "Create Library" }),
-      ).toHaveAttribute("href", "/libraries/create");
+        screen.getByRole("link", { name: "Set up a library" }),
+      ).toHaveAttribute("href", "/setup/library");
     });
 
     it("says a user limited to some libraries has no access, not that none exist", async () => {
@@ -121,7 +121,9 @@ describe("AdminLibraries", () => {
       expect(
         screen.getByText(/A Library is a set of folders/),
       ).toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "Create Library" })).toBeNull();
+      expect(
+        screen.queryByRole("link", { name: "Set up a library" }),
+      ).toBeNull();
     });
   });
 

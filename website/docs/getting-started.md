@@ -138,7 +138,7 @@ Select **Skip this step** to finish without plugins. If Shisho can't reach the p
 
 **Finish setup** installs the ticked plugins first and then creates the library, so its first scan runs with them. A plugin that fails to install is reported, and setup still creates the library. You land on the library page, which shows the scan's progress while books appear.
 
-**Skip setup**, on the library and plugin steps, leaves setup without creating a library. Setup doesn't come back on its own; **Set up your first library** in [Getting Started](./users-and-permissions.md#getting-started) reopens it at the library step.
+**Skip setup**, on the library and plugin steps, leaves setup without creating a library. Setup doesn't come back on its own. To return to it at the library step, select **Set up a library** on the empty **Administration > Libraries** page, or **Set up your first library** in [Getting Started](./users-and-permissions.md#getting-started).
 
 ## Next Steps
 

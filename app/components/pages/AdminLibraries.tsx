@@ -160,18 +160,20 @@ const AdminLibraries = () => {
       ) : libraries.length === 0 ? (
         <EmptyState
           action={
+            // The first library goes through Setup, as Getting Started's
+            // step does, so its plugins are chosen before its first scan.
             canCreateLibraries && (
               <Button asChild size="sm">
-                <Link to="/libraries/create">
+                <Link to="/setup/library">
                   <Plus aria-hidden="true" className="h-4 w-4" />
-                  Create Library
+                  Set up a library
                 </Link>
               </Button>
             )
           }
           description={
             canCreateLibraries
-              ? "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Create one and point it at your books to get started."
+              ? "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Set one up and point it at your books to get started."
               : "A Library is a set of folders on your server that Shisho scans for ebooks, audiobooks, and comics. Libraries show up here once one is created."
           }
           icon={LibraryIcon}
