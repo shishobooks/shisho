@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import RoleDialog from "@/components/library/RoleDialog";
+import TruncatedText from "@/components/library/TruncatedText";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -53,6 +54,14 @@ const inviteAccessText = (link: InviteLinkResponse) => {
   return link.libraries.map((library) => library.name).join(", ");
 };
 
+// A custom role's name can be long, so its badge shrinks to fit the row and
+// cuts the name off there, with the whole name on hover.
+const RoleBadge = ({ name }: { name: string }) => (
+  <Badge className="min-w-0 max-w-full shrink" variant="secondary">
+    <TruncatedText className="truncate">{name}</TruncatedText>
+  </Badge>
+);
+
 // The first letter of a username in a circle, or a dashed circle with a link
 // icon for an invite nobody has accepted yet.
 const Avatar = ({ username }: { username?: string }) => (
@@ -91,7 +100,7 @@ const UserRow = ({
           <span className="font-medium text-foreground text-sm md:text-base break-all">
             {user.username}
           </span>
-          {user.role && <Badge variant="secondary">{user.role.name}</Badge>}
+          {user.role && <RoleBadge name={user.role.name} />}
           {!user.is_active && <Badge variant="destructive">Inactive</Badge>}
         </div>
         <p className="mt-0.5 text-xs md:text-sm text-muted-foreground break-words">
@@ -126,7 +135,7 @@ const InviteRow = ({
           >
             Pending
           </Badge>
-          {link.role && <Badge variant="secondary">{link.role.name}</Badge>}
+          {link.role && <RoleBadge name={link.role.name} />}
         </div>
         <p className="mt-0.5 text-xs md:text-sm text-muted-foreground break-words">
           {inviteAccessText(link)} ·{" "}
