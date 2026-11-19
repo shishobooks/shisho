@@ -152,33 +152,19 @@
   }
 }
 
-/* Setup's organize animation (OrganizeAnimation.tsx). One loop: the messy
-   folder holds, its files move into a folder per book and take their
-   organized names, the result holds, then it all fades back. Each file row
-   sets --from-x/y and --to-x/y; every row shares the loop's length so they
-   stay in step. Reduced motion shows a still instead, so none of this runs. */
+/* Setup's organize animation (OrganizeAnimation.tsx). It plays once and holds
+   the organized result: the messy folder shows for a moment, its files move
+   into a folder per book, then take their organized names. Each file row sets
+   --from-x/y and --to-x/y; every row shares one duration so they stay in step.
+   Reduced motion shows a still instead, so none of this runs. */
 @keyframes setup-file-move {
   0%,
   20% {
     transform: translate(var(--from-x), var(--from-y));
-    opacity: 1;
   }
-  38%,
-  88% {
-    transform: translate(var(--to-x), var(--to-y));
-    opacity: 1;
-  }
-  92% {
-    transform: translate(var(--to-x), var(--to-y));
-    opacity: 0;
-  }
-  93% {
-    transform: translate(var(--from-x), var(--from-y));
-    opacity: 0;
-  }
+  55%,
   100% {
-    transform: translate(var(--from-x), var(--from-y));
-    opacity: 1;
+    transform: translate(var(--to-x), var(--to-y));
   }
 }
 
@@ -186,64 +172,48 @@
    in, so the two never overlap. */
 @keyframes setup-name-before {
   0%,
-  40% {
+  55% {
     opacity: 1;
   }
-  43%,
-  92% {
-    opacity: 0;
-  }
-  93%,
+  62%,
   100% {
-    opacity: 1;
+    opacity: 0;
   }
 }
 
 @keyframes setup-name-after {
   0%,
-  43% {
+  62% {
     opacity: 0;
   }
-  47%,
-  92% {
-    opacity: 1;
-  }
-  93%,
+  72%,
   100% {
-    opacity: 0;
+    opacity: 1;
   }
 }
 
 /* A book's folder appears only after the files have moved out of its row. */
 @keyframes setup-folder-in {
   0%,
-  38% {
+  55% {
     opacity: 0;
     transform: translate(calc(var(--x) - 6px), var(--y));
   }
-  48%,
-  88% {
-    opacity: 1;
-    transform: translate(var(--x), var(--y));
-  }
-  92%,
+  75%,
   100% {
-    opacity: 0;
+    opacity: 1;
     transform: translate(var(--x), var(--y));
   }
 }
 
 @keyframes setup-folder-out {
   0%,
-  14% {
+  12% {
     opacity: 1;
   }
-  20%,
-  93% {
-    opacity: 0;
-  }
+  22%,
   100% {
-    opacity: 1;
+    opacity: 0;
   }
 }
 

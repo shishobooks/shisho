@@ -4,9 +4,18 @@ import {
   FileText,
   Folder,
   Headphones,
+  RotateCcw,
 } from "lucide-react";
-import { useId, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 
+import { Button } from "@/components/ui/button";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/libraries/utils";
 
@@ -16,13 +25,15 @@ import { cn } from "@/libraries/utils";
 const ROW = 28; // px, the height of one row
 const INDENT = 18; // px per folder level
 // Tailwind reads class names from the source, so each animation is spelled
-// out in full. Every one runs on the same 10s loop.
-const FOLDER_OUT = "animate-[setup-folder-out_10s_ease-in-out_infinite_both]";
-const FOLDER_IN = "animate-[setup-folder-in_10s_ease-out_infinite_both]";
+// out in full. Every one plays once over the same 3s and holds its end.
+const FOLDER_OUT = "animate-[setup-folder-out_3s_ease-in-out_both]";
+const FOLDER_IN = "animate-[setup-folder-in_3s_ease-out_both]";
 const FILE_MOVE =
-  "animate-[setup-file-move_10s_cubic-bezier(0.65,0,0.35,1)_infinite_both]";
-const NAME_BEFORE = "animate-[setup-name-before_10s_linear_infinite_both]";
-const NAME_AFTER = "animate-[setup-name-after_10s_linear_infinite_both]";
+  "animate-[setup-file-move_3s_cubic-bezier(0.65,0,0.35,1)_both]";
+const NAME_BEFORE = "animate-[setup-name-before_3s_linear_both]";
+const NAME_AFTER = "animate-[setup-name-after_3s_linear_both]";
+// Holds every animation at its start until the example scrolls into view.
+const PAUSED = "[&_*]:[animation-play-state:paused]";
 
 type Kind = "folder" | "ebook" | "audiobook";
 
@@ -90,14 +101,31 @@ const at = (level: number, row: number) => ({
   y: `${row * ROW}px`,
 });
 
-const Animated = () => {
+interface AnimatedProps {
+  playing: boolean;
+  /** Called when the last file has its organized name. */
+  onDone: () => void;
+}
+
+const Animated = ({ playing, onDone }: AnimatedProps) => {
+  // A native listener, which hears the event wherever it comes from.
+  const lastStepRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const el = lastStepRef.current;
+    if (!el) return;
+    el.addEventListener("animationend", onDone);
+    return () => el.removeEventListener("animationend", onDone);
+  }, [onDone]);
   // Rows that start together move a beat apart, so they read as files moving
   // one after another rather than the list jumping.
-  const stagger = (i: number) => `${i * 0.25}s`;
+  const stagger = (i: number) => `${i * 0.15}s`;
   return (
     <div
       aria-label="Example: files in a messy folder move into a folder per book, named for its author and title."
-      className="relative overflow-hidden font-mono text-xs text-foreground"
+      className={cn(
+        "relative overflow-hidden font-mono text-xs text-foreground",
+        !playing && PAUSED,
+      )}
       role="img"
       style={{ height: ROWS * ROW }}
     >
@@ -164,6 +192,11 @@ const Animated = () => {
                     "absolute left-0 top-0 flex items-center gap-1.5",
                     NAME_AFTER,
                   )}
+                  // The last file's new name is the example's final step.
+                  data-organize-last-step={
+                    i === FILES.length - 1 ? "" : undefined
+                  }
+                  ref={i === FILES.length - 1 ? lastStepRef : undefined}
                   style={{ animationDelay: stagger(i) }}
                 >
                   <Entry kind={file.kind} name={file.after.name} />
@@ -243,20 +276,76 @@ const Still = () => (
 );
 
 /**
+ * Plays the example once the frame is mostly in view, so on a phone it isn't
+ * over before the admin scrolls to it. Without IntersectionObserver it plays
+ * at once.
+ */
+const usePlayWhenSeen = (ref: React.RefObject<HTMLElement | null>) => {
+  const [seen, setSeen] = useState(
+    () => typeof IntersectionObserver === "undefined",
+  );
+  useEffect(() => {
+    const el = ref.current;
+    if (seen || !el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) setSeen(true);
+      },
+      { threshold: 0.6 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, seen]);
+  return seen;
+};
+
+/**
  * Shows what organizing does, with example files rather than the admin's own:
- * a loop of a messy folder rearranging into a folder per book. With reduced
- * motion it is a still before and after.
+ * a messy folder rearranging into a folder per book. It plays once and holds
+ * the result, with a button to play it again. With reduced motion it is a
+ * still before and after.
  */
 export const OrganizeAnimation = ({ className }: { className?: string }) => {
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const frameRef = useRef<HTMLDivElement>(null);
+  const seen = usePlayWhenSeen(frameRef);
+  const [run, setRun] = useState(0);
+  const [done, setDone] = useState(false);
+
+  const markDone = useCallback(() => setDone(true), []);
+  const replay = () => {
+    setDone(false);
+    // A new key mounts the rows afresh, which starts every animation over.
+    setRun((n) => n + 1);
+  };
+
   return (
     <div
       className={cn(
-        "overflow-x-auto rounded-md border border-border bg-muted/40 p-3 sm:p-4",
+        "relative overflow-x-auto rounded-md border border-border bg-muted/40 p-3 sm:p-4",
         className,
       )}
+      ref={frameRef}
     >
-      {reducedMotion ? <Still /> : <Animated />}
+      {reducedMotion ? (
+        <Still />
+      ) : (
+        <>
+          <Animated key={run} onDone={markDone} playing={seen} />
+          {done && (
+            <Button
+              aria-label="Replay the example"
+              className="absolute right-2 top-2 text-muted-foreground"
+              onClick={replay}
+              size="icon-sm"
+              title="Replay"
+              variant="ghost"
+            >
+              <RotateCcw aria-hidden="true" />
+            </Button>
+          )}
+        </>
+      )}
     </div>
   );
 };
