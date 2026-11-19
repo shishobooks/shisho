@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Overlayer } from "@/libraries/foliate/overlayer.js";
+import { drawChosenMatch, drawMatch } from "@/libraries/searchMarks";
 import type { FoliateSearchExcerpt } from "@/types/foliate";
 
 // How long typing pauses before the search starts. Each search reads the
@@ -15,12 +15,6 @@ export const SEARCH_OPTIONS = {
   matchDiacritics: false,
   matchWholeWords: false,
 } as const;
-
-// Every match is shaded; the chosen one is also outlined, so it stands out
-// on a page with several. Fixed colors, since they sit over the book's own
-// colors in every reader theme.
-const MATCH_COLOR = "#facc15";
-const CHOSEN_COLOR = "#f97316";
 
 // The parts of foliate's <foliate-view> that search uses.
 export type SearchableBook = Pick<
@@ -79,7 +73,7 @@ const warn = (what: string) => (err: unknown) =>
 /**
  * Search inside a Book open in foliate. The query searches once typing
  * pauses, and a new one cancels the last. Matches are highlighted on the
- * page, and the chosen one is outlined. Unmounting clears every highlight.
+ * page, and the chosen one more strongly. Unmounting clears every highlight.
  */
 export function useBookSearch(view: SearchableBook | null, jump: SearchJump) {
   const [query, setQuery] = useState("");
@@ -97,7 +91,7 @@ export function useBookSearch(view: SearchableBook | null, jump: SearchJump) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The group the current query's moves share, new for each query.
   const groupRef = useRef<object>({});
-  // The chosen result, outlined on the page.
+  // The chosen result, marked more strongly on the page.
   const chosenRef = useRef<string | null>(null);
   // Enter came before any result did, so the first one found is chosen.
   const goToFirstRef = useRef(false);
@@ -149,8 +143,8 @@ export function useBookSearch(view: SearchableBook | null, jump: SearchJump) {
         const found = view.search({
           ...SEARCH_OPTIONS,
           query: trimmed,
-          draw: Overlayer.highlight,
-          drawOptions: { color: MATCH_COLOR },
+          // Every match is shaded, and the chosen one marked more strongly.
+          draw: drawMatch,
         });
         let count = 0;
         // Leaving the loop stops foliate's search, which reads no further.
@@ -256,12 +250,12 @@ export function useBookSearch(view: SearchableBook | null, jump: SearchJump) {
     const handleDraw = (evt: Event) => {
       const { draw, annotation } = (
         evt as CustomEvent<{
-          draw: (func: unknown, opts: Record<string, unknown>) => void;
+          draw: (func: unknown, opts?: Record<string, unknown>) => void;
           annotation: { value: string };
         }>
       ).detail;
       if (annotation.value !== chosenRef.current) return;
-      draw(Overlayer.outline, { color: CHOSEN_COLOR, width: 2 });
+      draw(drawChosenMatch);
     };
     const handleOverlay = () => {
       const chosen = chosenRef.current;

@@ -25,7 +25,7 @@ Reopening a book returns to where you left off. See [Resuming Where You Left Off
 
 Select the **Search** button in the reader's header and type a word or phrase. Search ignores capitalization and accents, so `cafe` also finds "café", and it matches inside longer words, so `lantern` also finds "lanterns". A single character searches only when you press Enter. Results are listed in book order under the chapter they're in.
 
-Select a result to go to it. Every match on the page is shaded, and the one you went to is also outlined. Press Enter in the search field for the next result and Shift+Enter for the previous one, or use the arrows beside the count. Select **Results** to show the list again.
+Select a result to go to it. Every match on the page is shaded, and the one you went to is shaded more strongly. Press Enter in the search field for the next result and Shift+Enter for the previous one, or use the arrows beside the count. Select **Results** to show the list again.
 
 Search stays open while you turn pages. Closing it removes the highlights. Going to a result moves your place in the book, as following a link does, so reopening the book returns there, and [going back](#going-back-after-a-jump) returns to where you were before the search.
 

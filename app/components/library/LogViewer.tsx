@@ -51,7 +51,10 @@ function highlightText(text: string, searchTerm?: string): React.ReactNode {
     const parts = text.split(regex);
     return parts.map((part, i) =>
       regex.test(part) ? (
-        <mark className="bg-yellow-300 dark:bg-yellow-700" key={i}>
+        <mark
+          className="bg-yellow-300 text-foreground dark:bg-yellow-700"
+          key={i}
+        >
           {part}
         </mark>
       ) : (

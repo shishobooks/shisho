@@ -4,7 +4,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { SEARCH_DELAY_MS, type SearchableBook } from "@/hooks/useBookSearch";
-import { Overlayer } from "@/libraries/foliate/overlayer.js";
+import { drawChosenMatch } from "@/libraries/searchMarks";
 
 import ReaderSearch from "./ReaderSearch";
 
@@ -186,7 +186,11 @@ describe("ReaderSearch", () => {
 
     runs[0].push(TWO_CHAPTERS[0], TWO_CHAPTERS[1]);
     await flush();
-    expect(status()).toHaveTextContent("2 results, still searching…");
+    // One run of text: the status row spaces its items apart, which would
+    // put a gap before the comma.
+    expect(
+      within(status()).getByText("2 results, still searching…"),
+    ).toBeInTheDocument();
     expect(
       screen
         .getAllByRole("button", { name: /lantern/ })
@@ -288,7 +292,7 @@ describe("ReaderSearch", () => {
         detail: { draw, annotation: { value: "cfi-3" } },
       }),
     );
-    expect(draw).toHaveBeenCalledWith(Overlayer.outline, expect.anything());
+    expect(draw).toHaveBeenCalledWith(drawChosenMatch);
 
     // The list comes back on demand, showing the chosen result.
     await user.click(screen.getByRole("button", { name: "Results" }));

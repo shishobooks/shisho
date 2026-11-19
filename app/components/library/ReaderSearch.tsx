@@ -149,7 +149,14 @@ function SearchPanel({
           and arrows, or, with a result chosen and the list folded, a single
           row like a browser's find bar, so the panel covers as little of the
           page as it can. */}
-      <div className="flex flex-wrap items-center gap-1 p-3">
+      {/* The single row is slim enough to end above the 48px foliate keeps
+          above a page's text, so it never covers the first line. */}
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-1",
+          compact ? "px-3 py-1.5" : "p-3",
+        )}
+      >
         <div
           className={cn(
             "relative order-1 min-w-0",
@@ -161,7 +168,10 @@ function SearchPanel({
             aria-label="Search in book"
             // The browser's own clear button doesn't follow the app's colors,
             // and Firefox has none, so the field gets its own.
-            className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+            className={cn(
+              "pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden",
+              compact && "h-8",
+            )}
             enterKeyHint="search"
             onChange={(e) => changeQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -203,10 +213,15 @@ function SearchPanel({
           {searching && (
             <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
           )}
-          {statusText}
-          {stillSearching && (
-            <span className={cn(compact && "sr-only")}>, still searching…</span>
-          )}
+          {/* One run of text, or the row's gap would space out the comma. */}
+          <span>
+            {stillSearching && !compact
+              ? `${statusText}, still searching…`
+              : statusText}
+            {stillSearching && compact && (
+              <span className="sr-only">, still searching…</span>
+            )}
+          </span>
         </p>
         {total > 0 && (
           <div
@@ -247,7 +262,7 @@ function SearchPanel({
           aria-label="Close search"
           className={compact ? "order-4" : "order-2"}
           onClick={onClose}
-          size="icon"
+          size={compact ? "icon-sm" : "icon"}
           variant="ghost"
         >
           <X className="h-4 w-4" />
@@ -282,7 +297,7 @@ function SearchPanel({
                       >
                         <span>
                           {result.excerpt.pre}
-                          <mark className="bg-yellow-300 dark:bg-yellow-700">
+                          <mark className="bg-yellow-300 text-foreground dark:bg-yellow-700">
                             {result.excerpt.match}
                           </mark>
                           {result.excerpt.post}

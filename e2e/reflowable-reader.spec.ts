@@ -228,6 +228,44 @@ test.describe("Reflowable reader", () => {
   test.describe("on a phone-sized screen", () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
+    test("search folded to one row leaves the page's first line clear", async ({
+      page,
+    }) => {
+      await login(page);
+      await setPaginatedReader(page);
+      await openReader(page, longBookId);
+      await bookFrame(page, "Test chapter.");
+      // A page of filler, whose text starts at the top of the page.
+      await page.getByRole("button", { name: "Next page" }).click();
+
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+      const panel = page.getByRole("dialog", { name: "Search in book" });
+      await panel
+        .getByRole("searchbox", { name: "Search in book" })
+        .fill("The end");
+      await panel.getByRole("button", { name: "The end." }).click();
+      const frame = await bookFrame(page, "The end.");
+      await expect(panel.getByRole("status")).toHaveText("1 of 1");
+
+      const firstLineTop = async () => {
+        const frameBox = (await (await frame.frameElement()).boundingBox())!;
+        // The frame scrolls sideways through the chapter, so the topmost
+        // text on the screen is the topmost of the paragraphs shown.
+        const top = await frame.evaluate(() =>
+          Math.min(
+            ...Array.from(document.querySelectorAll("p"), (p) =>
+              p.getBoundingClientRect(),
+            )
+              .filter((r) => r.right > 0 && r.left < window.innerWidth)
+              .map((r) => r.top),
+          ),
+        );
+        return frameBox.y + top;
+      };
+      const panelBox = (await panel.boundingBox())!;
+      expect(panelBox.y + panelBox.height).toBeLessThan(await firstLineTop());
+    });
+
     test("a footnote's popover keeps clear of the screen's edges", async ({
       page,
     }) => {
@@ -542,7 +580,7 @@ test.describe("Reflowable reader", () => {
 
     // foliate draws matches in an overlay beside the section's frame, inside
     // closed shadow roots that only the frame can reach: every match shaded,
-    // the chosen one also outlined.
+    // the chosen one also marked more strongly.
     const marks = () =>
       frame.evaluate(() => {
         const overlay =
@@ -550,15 +588,15 @@ test.describe("Reflowable reader", () => {
         const count = (selector: string) =>
           overlay?.querySelectorAll(`${selector} > rect`).length ?? 0;
         return {
-          shaded: count('g[fill="#facc15"]'),
-          outlined: count('g[stroke="#f97316"]'),
+          shaded: count('g[data-search-mark="match"]'),
+          chosen: count('g[data-search-mark="chosen"]'),
         };
       });
-    await expect.poll(marks).toEqual({ shaded: 1, outlined: 1 });
+    await expect.poll(marks).toEqual({ shaded: 1, chosen: 1 });
 
     await panel.getByRole("button", { name: "Close search" }).click();
     await expect(panel).toBeHidden();
-    await expect.poll(marks).toEqual({ shaded: 0, outlined: 0 });
+    await expect.poll(marks).toEqual({ shaded: 0, chosen: 0 });
 
     // The jump is a move, saved like following a link.
     const fileId = page.url().match(/\/files\/(\d+)\/read$/)![1];
