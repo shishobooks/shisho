@@ -6,11 +6,14 @@ import { cn } from "@/libraries/utils";
 
 // unstyled is for a row or card that wraps its control (a checkbox or radio
 // with its text), which the caller styles itself, as Button's unstyled is.
+// The default is a block: a <label> is inline, and an inline element takes
+// no vertical margin, so in a space-y-* stack it would sit right on top of
+// the field below it.
 const labelVariants = cva("", {
   variants: {
     variant: {
       default:
-        "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+        "block text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
       unstyled: "",
     },
   },

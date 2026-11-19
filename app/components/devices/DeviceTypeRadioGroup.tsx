@@ -16,11 +16,11 @@ const DeviceTypeRadioGroup = ({
   value,
   onChange,
 }: DeviceTypeRadioGroupProps) => (
-  <div className="space-y-2">
+  <div className="space-y-3">
     <Label id={`${id}-label`}>Type</Label>
     <RadioGroup
       aria-labelledby={`${id}-label`}
-      className="space-y-2"
+      className="gap-3"
       name={id}
       onValueChange={(next) => onChange(next as DeviceType)}
       value={value}

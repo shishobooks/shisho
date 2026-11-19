@@ -295,7 +295,7 @@ export function MetadataMergeDialog({
           {selectedEntity && setChildConfig && (
             <RadioGroup
               aria-label="Action"
-              className="mt-4 space-y-3"
+              className="mt-4 gap-3"
               onValueChange={(v) => setAction(v as "merge" | "set-child")}
               value={action}
             >
