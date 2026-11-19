@@ -190,3 +190,29 @@ func TestHandler_Me_Errors(t *testing.T) {
 		assert.NotErrorAs(t, err, &codeErr, "want a server fault, got %v", err)
 	})
 }
+
+// The first admin's username follows the same character rules as every new
+// username. Sign-in doesn't check them, so an older username still works.
+func TestHandler_Setup_RejectsUsernameCharacters(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	h := &handler{authService: NewService(db, "test-jwt-secret", 30*24*time.Hour)}
+
+	c, _ := newTestContext(t, `{"username":"ad:min","password":"securepassword123"}`, http.MethodPost, "/auth/setup")
+	err := h.setup(c)
+	var errResp *errcodes.Error
+	require.ErrorAs(t, err, &errResp)
+	assert.Equal(t, http.StatusUnprocessableEntity, errResp.HTTPCode)
+
+	count, err := h.authService.CountUsers(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, count)
+
+	hashedPassword, err := HashPassword("securepassword123")
+	require.NoError(t, err)
+	_, err = db.Exec(`INSERT INTO users (username, password_hash, role_id, is_active) VALUES (?, ?, 1, 1)`, "old user", hashedPassword)
+	require.NoError(t, err)
+	c, rr := newTestContext(t, `{"username":"old user","password":"securepassword123"}`, http.MethodPost, "/auth/login")
+	require.NoError(t, h.login(c))
+	assert.Equal(t, http.StatusOK, rr.Code)
+}

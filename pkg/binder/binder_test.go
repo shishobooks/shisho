@@ -152,3 +152,36 @@ func TestBind_DateMustBeACalendarDay(t *testing.T) {
 		}
 	}
 }
+
+// A username is letters and numbers in any script plus . _ - @, so it can
+// sign in through HTTP Basic (which splits on the first colon) and can't hide
+// spaces or invisible characters.
+func TestBind_UsernameCharacters(t *testing.T) {
+	t.Parallel()
+	b, err := New()
+	require.NoError(t, err)
+	type account struct {
+		Username string `json:"username" validate:"username"`
+	}
+	for value, ok := range map[string]bool{
+		"robin":            true,
+		"Robin_Joseph-08":  true,
+		"robin.j@mail.com": true,
+		"José":             true,
+		"司書":               true,
+		"rob:in":           false,
+		"rob in":           false,
+		"rob\\tin":         false,
+		"rob\u200bin":      false,
+		"rob/in":           false,
+		"<robin>":          false,
+	} {
+		err := b.Bind(&account{}, newContext(`{"username":"`+value+`"}`, echo.MIMEApplicationJSON))
+		if ok {
+			assert.NoError(t, err, value)
+		} else {
+			require.Error(t, err, value)
+			assert.Contains(t, err.Error(), "can only contain letters, numbers", value)
+		}
+	}
+}

@@ -108,7 +108,7 @@ When creating or editing a user, choose one of these options under **Library Acc
 
 User accounts follow these requirements:
 
-- Username is required and must contain 3 to 50 characters.
+- Username is required and must contain 3 to 50 characters. It can hold letters and numbers in any language, plus `.`, `_`, `-`, and `@`, but no spaces or other symbols, so it works for signing in to [OPDS](./opds.md) and [KOReader](./koreader.md) clients. An existing username that doesn't follow these rules still signs in, and has to follow them only when it's changed.
 - Password is required and must contain at least 8 characters.
 - Email is optional.
 - Usernames and email addresses must be unique without regard to letter case.

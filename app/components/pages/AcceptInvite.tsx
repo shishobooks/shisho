@@ -22,6 +22,7 @@ import {
 } from "@/libraries/api";
 import { cn } from "@/libraries/utils";
 import type { MeResponse } from "@/types";
+import { USERNAME_HINT, usernameProblem } from "@/utils/username";
 
 const INITIAL_VALUES = {
   username: "",
@@ -114,8 +115,9 @@ const AcceptForm = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (username.trim().length < 3) {
-      toast.error("Username must be at least 3 characters");
+    const problem = usernameProblem(username.trim());
+    if (problem) {
+      setUsernameError(problem);
       return;
     }
     if (password.length < 8) {
@@ -186,9 +188,7 @@ const AcceptForm = ({
               {usernameError}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">
-              At least 3 characters
-            </p>
+            <p className="text-xs text-muted-foreground">{USERNAME_HINT}</p>
           )}
         </div>
 

@@ -180,6 +180,26 @@ describe("AcceptInvite", () => {
     ).toBeVisible();
   });
 
+  it("flags a username with characters it can't hold before sending it", async () => {
+    const request = mockApi({ valid: true, invited_by: "robin" });
+    const user = setupUser();
+    renderPage();
+
+    await fillForm(user, "rob:in");
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+
+    const username = screen.getByLabelText("Username");
+    expect(username).toHaveAttribute("aria-invalid", "true");
+    expect(username).toHaveAccessibleDescription(
+      "A username can only contain letters, numbers, and . _ - @",
+    );
+    expect(request).not.toHaveBeenCalledWith(
+      "POST",
+      `/invites/${TOKEN}/accept`,
+      expect.anything(),
+    );
+  });
+
   it("flags a taken email address on the form", async () => {
     mockApi({ valid: true, invited_by: "robin" }, () => {
       throw new ShishoAPIError(

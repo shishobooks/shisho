@@ -10,7 +10,7 @@ type ListUsersResponse struct {
 
 // CreateUserPayload represents the request body for creating a user.
 type CreateUserPayload struct {
-	Username             string  `json:"username" validate:"required,min=3,max=50"`
+	Username             string  `json:"username" validate:"required,min=3,max=50,username"`
 	Email                *string `json:"email" validate:"omitempty,email"`
 	Password             string  `json:"password" validate:"required,min=8"`
 	RoleID               int     `json:"role_id" validate:"required"`
@@ -21,7 +21,7 @@ type CreateUserPayload struct {
 
 // UpdateUserPayload represents the request body for updating a user.
 type UpdateUserPayload struct {
-	Username         *string `json:"username" validate:"omitempty,min=3,max=50"`
+	Username         *string `json:"username" validate:"omitempty,min=3,max=50,username"`
 	Email            *string `json:"email" validate:"omitempty,email"`
 	RoleID           *int    `json:"role_id"`
 	IsActive         *bool   `json:"is_active"`

@@ -24,6 +24,7 @@ const (
 	oneof    = "oneof"
 	required = "required"
 	urlTag   = "url"
+	username = "username"
 )
 
 var (
@@ -121,6 +122,8 @@ func formatValidationError(err validator.FieldError) string {
 		return fmt.Sprintf("%q is required", field)
 	case urlTag:
 		return fmt.Sprintf("%q is not a valid URL", field)
+	case username:
+		return fmt.Sprintf("%q can only contain letters, numbers, and . _ - @", field)
 	default:
 		// these print statements aid in determining how to construct
 		// the error messages for validation functions that haven't been

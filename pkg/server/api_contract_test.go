@@ -757,6 +757,27 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusUnprocessableEntity, code: "validation_error", message: "That role doesn't exist.",
 		},
 		{
+			name:   "Add User with a colon in the username",
+			method: http.MethodPost, path: "/api/users",
+			body:   `{"username":"rob:in","password":"password123","role_id":1}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+			message: `"username" can only contain letters, numbers, and . _ - @`,
+		},
+		{
+			name:   "renaming a user to a username with a space",
+			method: http.MethodPost, path: fmt.Sprintf("/api/users/%d", f.admin.ID),
+			body:   `{"username":"rob in"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+			message: `"username" can only contain letters, numbers, and . _ - @`,
+		},
+		{
+			name:   "accepting an Invite Link with a colon in the username",
+			method: http.MethodPost, path: "/api/invites/not-a-token/accept",
+			body:   `{"username":"rob:in","password":"password123"}`,
+			status: http.StatusUnprocessableEntity, code: "validation_error",
+			message: `"username" can only contain letters, numbers, and . _ - @`,
+		},
+		{
 			name:   "Add User with a username another user has",
 			method: http.MethodPost, path: "/api/users",
 			body:   `{"username":"ADMIN","password":"password123","role_id":1}`,

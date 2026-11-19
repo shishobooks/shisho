@@ -36,7 +36,7 @@ type InviteResponse struct {
 // AcceptInvitePayload is the request body for POST /invites/:token/accept:
 // the account the person chooses for themselves.
 type AcceptInvitePayload struct {
-	Username string `json:"username" mod:"trim" validate:"required,min=3,max=50"`
+	Username string `json:"username" mod:"trim" validate:"required,min=3,max=50,username"`
 	// Email is optional; blank means none.
 	Email    string `json:"email,omitempty" mod:"trim" validate:"omitempty,email"`
 	Password string `json:"password" validate:"required,min=8"`

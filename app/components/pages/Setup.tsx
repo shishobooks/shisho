@@ -17,6 +17,7 @@ import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { API, toastRequestError } from "@/libraries/api";
 import type { MeResponse } from "@/types";
+import { USERNAME_HINT, usernameProblem } from "@/utils/username";
 
 // Setup continues from the account to the library.
 const SETUP_NEXT_STEP = "/setup/library";
@@ -65,13 +66,9 @@ const Setup = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!username.trim()) {
-      toast.error("Username is required");
-      return;
-    }
-
-    if (username.length < 3) {
-      toast.error("Username must be at least 3 characters");
+    const problem = usernameProblem(username);
+    if (problem) {
+      toast.error(problem);
       return;
     }
 
@@ -164,7 +161,7 @@ const Setup = () => {
             type="text"
             value={username}
           />
-          <p className="text-xs text-muted-foreground">At least 3 characters</p>
+          <p className="text-xs text-muted-foreground">{USERNAME_HINT}</p>
         </div>
 
         <div className="space-y-2">

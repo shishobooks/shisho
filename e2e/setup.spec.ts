@@ -52,7 +52,7 @@ test.describe("Setup Flow", () => {
     await page.getByLabel("Confirm Password").fill("password123");
     await page.getByRole("button", { name: "Create Admin Account" }).click();
     await expect(
-      page.getByText("Username must be at least 3 characters"),
+      page.getByText("A username needs at least 3 characters"),
     ).toBeVisible();
     await expect(page).toHaveURL("/setup");
   });

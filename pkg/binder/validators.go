@@ -3,7 +3,9 @@ package binder
 import (
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-playground/validator/v10"
 )
@@ -39,4 +41,23 @@ func urlValidator(fl validator.FieldLevel) bool {
 	}
 	u, err := url.Parse(value)
 	return err == nil && u.Scheme != "" && u.Host != ""
+}
+
+// usernameSymbols are the characters a username may hold besides letters and
+// numbers. "@" and "." keep email-style usernames working.
+const usernameSymbols = "._-@"
+
+// usernameValidator ensures a username is only letters and numbers, in any
+// script, and usernameSymbols. A colon would break HTTP Basic sign-in (OPDS,
+// KOReader), which splits on the first one, and spaces or invisible
+// characters would let one username pass for another. Length is checked
+// separately. Sign-in doesn't use it, so an older username that breaks the
+// rule still signs in.
+func usernameValidator(fl validator.FieldLevel) bool {
+	for _, r := range fl.Field().String() {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && !strings.ContainsRune(usernameSymbols, r) {
+			return false
+		}
+	}
+	return true
 }

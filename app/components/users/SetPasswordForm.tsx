@@ -16,6 +16,7 @@ import UserAccessFields, {
 import { useCreateUser } from "@/hooks/queries/users";
 import { toastRequestError } from "@/libraries/api";
 import type { User } from "@/types";
+import { USERNAME_HINT, usernameProblem } from "@/utils/username";
 
 const INITIAL_VALUES = {
   username: "",
@@ -94,12 +95,9 @@ const SetPasswordForm = ({ onHasChangesChange }: SetPasswordFormProps) => {
   };
 
   const handleCreate = async () => {
-    if (!username.trim()) {
-      toast.error("Username is required");
-      return;
-    }
-    if (username.length < 3) {
-      toast.error("Username must be at least 3 characters");
+    const problem = usernameProblem(username);
+    if (problem) {
+      toast.error(problem);
       return;
     }
     if (!password) {
@@ -183,7 +181,7 @@ const SetPasswordForm = ({ onHasChangesChange }: SetPasswordFormProps) => {
             placeholder="Enter username"
             value={username}
           />
-          <p className="text-xs text-muted-foreground">At least 3 characters</p>
+          <p className="text-xs text-muted-foreground">{USERNAME_HINT}</p>
         </div>
 
         <div className="space-y-2">
