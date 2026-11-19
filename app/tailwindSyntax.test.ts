@@ -38,19 +38,27 @@ describe("Tailwind classes", () => {
 // `text-destructive-foreground` before --destructive-foreground existed,
 // compiles to nothing, so the element falls back to the inherited color.
 const FOREGROUND_COLOR =
-  /\b(?:bg|text|border|ring|fill|stroke)-([a-z-]+-foreground)\b/g;
+  /\b(?:bg|text|border|ring|ring-offset|outline|divide|fill|stroke|placeholder|caret|accent|decoration|shadow|from|via|to)-([a-z-]+-foreground)\b/g;
 
 describe("Theme colors", () => {
   it("are defined for every foreground color a class names", () => {
     // Vitest loads CSS as an empty string, so the stylesheet is read from
     // disk.
-    const css = readFileSync(path.resolve(__dirname, "index.css"), "utf8");
+    const css = readFileSync(
+      path.resolve(import.meta.dirname, "index.css"),
+      "utf8",
+    );
+    // --<name> must be set twice, in :root and in .dark, and mapped once
+    // under @theme inline.
+    const defined = (name: string) =>
+      css.includes(`--color-${name}:`) &&
+      css.split(`\n  --${name}:`).length - 1 >= 2;
     const missing = new Set<string>();
     for (const [file, source] of Object.entries(sources)) {
       if (!file.endsWith(".tsx") && !file.endsWith(".ts")) continue;
       if (file.endsWith("tailwindSyntax.test.ts")) continue;
       for (const [, name] of source.matchAll(FOREGROUND_COLOR)) {
-        if (!css.includes(`--color-${name}:`)) missing.add(`${file}: ${name}`);
+        if (!defined(name)) missing.add(`${file}: ${name}`);
       }
     }
     expect(
@@ -62,12 +70,20 @@ describe("Theme colors", () => {
 
 // RadioGroup lays its items out as a grid with a gap, and space-y-* adds a
 // margin on top of it, so the items end up twice as far apart as intended.
-const RADIO_GROUP_SPACE_Y = /<RadioGroup\b[^>]*\bspace-y-/g;
+// A RadioGroup's props run from its tag to the next element, its first item,
+// which a prop's arrow function (`=>`) can't end early, as a search to the
+// first ">" would.
+const RADIO_GROUP_PROPS = /<RadioGroup\b[^<]*/g;
 
 describe("RadioGroup", () => {
   it("is spaced with gap, not space-y", () => {
     const offenders = Object.entries(sources).flatMap(([file, source]) =>
-      file.endsWith(".tsx") && source.match(RADIO_GROUP_SPACE_Y) ? [file] : [],
+      file.endsWith(".tsx") &&
+      [...source.matchAll(RADIO_GROUP_PROPS)].some(([props]) =>
+        /\bspace-y-/.test(props),
+      )
+        ? [file]
+        : [],
     );
     expect(
       offenders,

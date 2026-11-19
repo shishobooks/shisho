@@ -204,7 +204,7 @@ export const LibraryStep = ({
             }
           />
           <div className="space-y-1">
-            <Label className="cursor-pointer" htmlFor="setup-organize">
+            <Label className="w-fit cursor-pointer" htmlFor="setup-organize">
               Organize file structure during scans
             </Label>
             <p

@@ -215,34 +215,50 @@ const KOReaderPluginSetup = ({
   );
 };
 
-// Which steps connect the plugin's folder on each platform: an e-reader over
-// USB, Android in its own file manager, and a computer needs neither.
-const openFolderStep = (platform: string | undefined): string | null => {
+// How each platform KOReader runs on reaches its plugins folder: an
+// e-reader over USB, Android in its own file manager, and a computer
+// directly. Undefined until the user says which.
+type FolderAccess = "usb" | "android" | "local";
+const folderAccess = (
+  platform: string | undefined,
+): FolderAccess | undefined => {
   switch (platform) {
+    case undefined:
+      return undefined;
     case "Android":
-      return "Open a file manager on the Android device.";
+      return "android";
     case "Linux":
     case "macOS":
-      return null;
-    case undefined:
-      return "Connect the e-reader to your computer with USB, or on Android open a file manager.";
+      return "local";
     default:
+      return "usb";
+  }
+};
+
+// The step that opens the plugins folder, if the platform needs one.
+const openFolderStep = (access: FolderAccess | undefined): string | null => {
+  switch (access) {
+    case "android":
+      return "Open a file manager on the Android device.";
+    case "local":
+      return null;
+    case "usb":
       return "Connect the e-reader to your computer with USB.";
+    default:
+      return "Connect the e-reader to your computer with USB, or on Android open a file manager.";
   }
 };
 
 // How the restart step starts: an e-reader plugged in over USB is ejected
 // first, and before the platform is known it might not be one.
-const restartStep = (platform: string | undefined): string => {
-  switch (platform) {
+const restartStep = (access: FolderAccess | undefined): string => {
+  switch (access) {
+    case "usb":
+      return "Eject the e-reader and restart";
     case undefined:
       return "Eject the e-reader if it's connected with USB, then restart";
-    case "Android":
-    case "Linux":
-    case "macOS":
-      return "Restart";
     default:
-      return "Eject the e-reader and restart";
+      return "Restart";
   }
 };
 
@@ -254,7 +270,8 @@ const InstallSteps = () => {
   const folder = KOREADER_PLUGIN_FOLDERS.find(
     (f) => f.platform === platform,
   )?.folder;
-  const openStep = openFolderStep(platform);
+  const access = folderAccess(platform);
+  const openStep = openFolderStep(access);
 
   return (
     <ol
@@ -311,7 +328,7 @@ const InstallSteps = () => {
         )}
       </li>
       <li>
-        {restartStep(platform)} KOReader with Wi-Fi on, within 30 minutes of
+        {restartStep(access)} KOReader with Wi-Fi on, within 30 minutes of
         downloading. The plugin signs itself in, with no pairing code.
       </li>
       <li>

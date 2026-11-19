@@ -358,7 +358,6 @@ const ConnectDeviceFlow = ({
           </Label>
           <RadioGroup
             aria-labelledby={`${groupId}-label`}
-
             name="connect-device-choice"
             onValueChange={(value) => choose(value as DeviceType)}
             value={deviceType ?? ""}

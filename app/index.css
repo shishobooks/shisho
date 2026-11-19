@@ -34,8 +34,9 @@
   --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.145 0 0);
-  /* A deep, less saturated red, with white text on destructive buttons. */
-  --destructive: oklch(0.55 0.19 25);
+  /* A deep, less saturated red, with white text on destructive buttons.
+     Dark enough that the text keeps 4.5:1 on the button's lighter hover. */
+  --destructive: oklch(0.53 0.19 25);
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);

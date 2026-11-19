@@ -173,7 +173,7 @@ export function CreateListDialog({
               onCheckedChange={(checked) => setIsOrdered(checked === true)}
             />
             <div className="space-y-1">
-              <Label className="cursor-pointer" htmlFor="list-ordered">
+              <Label className="w-fit cursor-pointer" htmlFor="list-ordered">
                 Ordered list
               </Label>
               <p className="text-sm text-muted-foreground">

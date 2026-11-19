@@ -36,8 +36,8 @@ const Disclosure = ({
   // heading wraps the toggle in a heading of that level, for a Disclosure
   // that is a section of the page in its own right.
   heading?: "h2" | "h3";
-  // badge sits beside the title, outside the toggle's name, to flag what
-  // the content holds while it's closed.
+  // badge sits at the end of the title's row, outside the toggle's name,
+  // to flag what the content holds while it's closed.
   badge?: React.ReactNode;
   children: React.ReactNode;
 }) => {
