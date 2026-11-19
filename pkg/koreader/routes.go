@@ -7,17 +7,20 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
 
 // RegisterRoutes registers the protocol under the prefix users enter as
 // KOReader's custom sync server.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, bookService *books.Service) {
+// Each Device's first connection is announced on broker.
+func RegisterRoutes(e *echo.Echo, db *bun.DB, bookService *books.Service, broker *events.Broker) {
 	deviceService := devices.NewService(db)
 	readingService := reading.NewService(db)
 	h := &handler{
 		deviceService:  deviceService,
+		connections:    devices.NewConnections(deviceService, broker),
 		readingService: readingService,
 		docs:           NewDocuments(db, bookService),
 		pulls:          &pullStore{db: db, readingService: readingService},

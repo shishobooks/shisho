@@ -198,9 +198,13 @@ A user with Users Write can open an account under **Administration > Users** and
 
 A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra, KOReader on that same Kobo, or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md), [KOReader](./koreader.md), the [eReader Browser](./ereader-browser.md), and the [OPDS Catalog](./opds.md#sign-in-as-a-device) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
 
+**Connect Device** on that page adds one in three steps. It asks what you read on, shows the setup steps for that one way of connecting, and then waits, switching to **Connected!** the first time the device reaches Shisho. A Device's page leads with its **Status**, which says whether it has connected and when it was last used, and its **Setup** steps. Its password, which books it reaches, and its Delivery Rules are under **Advanced**.
+
+Set a device up from Shisho opened at the address your devices use, not `localhost` or another address only the server's own machine reaches. The setup steps warn when the page is open at such an address, because the URLs they give would not work on the device.
+
 ### Device Types
 
-Choose the type when adding a Device. It decides which connections the Device can use, which file types it can receive, and the [Delivery Rules](#delivery-rules-of-a-device) it starts with:
+**Connect Device** picks the type from what you read on: **A Kobo** adds a Kobo Device, **KOReader** a KOReader Device (on any hardware, a Kobo included), **A Kindle's browser** a Kindle Device, **A reading app on a phone or tablet** an OPDS app Device, and **Another e-reader's browser** a Browser Device. The type decides which connections the Device can use, which file types it can receive, and the [Delivery Rules](#delivery-rules-of-a-device) it starts with:
 
 | Type | Connections | Can receive | Starts with |
 |------|-------------|-------------|-------------|
@@ -210,23 +214,23 @@ Choose the type when adding a Device. It decides which connections the Device ca
 | **OPDS app** | OPDS, for other reading apps such as Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 
-The type alone decides how a Device connects, and the Device's page shows setup instructions for each of its connections. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response; an OPDS client given a credential from a Device without OPDS, or KOReader's progress sync given one from a Device that isn't a KOReader Device, gets `401 Unauthorized`.
+The type alone decides how a Device connects, and the Device's page shows setup steps for each of its connections under **Setup**. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response; an OPDS client given a credential from a Device without OPDS, or KOReader's progress sync given one from a Device that isn't a KOReader Device, gets `401 Unauthorized`.
 
 **Change Type** on a Device's page switches its type and keeps its credential and scope. Its connections change to the new type's, and its Delivery Rules go back to what the new type starts with, so a custom list is discarded.
 
-### Credential
+### Device Password
 
-Each Device has one credential that all its connections use. It is 16 lowercase letters with no `l`, `i`, or `o`, so it can be typed on an e-ink keyboard. Shisho accepts it only exactly as shown: no spaces, hyphens, or capital letters. The Device's page always shows the credential, with a copy button.
+Each Device has one password, its credential, that all its connections use. It is 16 lowercase letters with no `l`, `i`, or `o`, so it can be typed on an e-ink keyboard. Shisho accepts it only exactly as shown: no spaces, hyphens, or capital letters. The Device's page shows it as **Device password** under **Advanced**, with a copy button.
 
-:::warning[Regenerating a Credential]
-**Regenerate** on a Device's page replaces its credential immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, KOReader's progress sync, OPDS, and the KOReader plugin stop signing in with it, and any unexpired setup URL stops redirecting. Set up each connection again with the new credential. Regenerate when a credential may have leaked; delete the Device when the hardware is lost for good.
+:::warning[Regenerating a Device Password]
+**Regenerate** on a Device's page replaces its password immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, KOReader's progress sync, OPDS, and the KOReader plugin stop signing in with it, and any unexpired setup URL stops redirecting. Set up each connection again with the new password. Regenerate when a password may have leaked; delete the Device when the hardware is lost for good.
 :::
 
-Treat the credential, and every URL that contains it, like a password.
+Treat the Device password, and every URL that contains it, like your account password.
 
-### Scope
+### Which Books
 
-A Device's scope decides which books it reaches, through every connection:
+A Device's scope, under **Advanced > Which books** on its page, decides which books it reaches, through every connection:
 
 | Scope | Books |
 |-------|-------|
@@ -238,7 +242,7 @@ A list shared with you can hold books from libraries you cannot access; those bo
 
 ### Delivery Rules of a Device
 
-Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer and what [Kobo Sync](./kobo-sync.md#what-syncs) sends. Under **Delivery Rules** on its page, choose one:
+Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules), which decide what its eReader browser and OPDS catalog offer and what [Kobo Sync](./kobo-sync.md#what-syncs) sends. Under **Advanced > Delivery Rules** on its page, choose one:
 
 - **My default**: your default rules from **Preferences > Delivery Rules**, without any rule that delivers a file type the Device can't receive. A later edit to your default reaches the Device too. A Kindle following a default that has no rule delivering AZW3 or MOBI receives nothing, and its page says so.
 - **Kobo preset** or **Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.

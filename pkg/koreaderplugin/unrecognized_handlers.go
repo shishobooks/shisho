@@ -41,7 +41,7 @@ func (h *handler) lookup(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := h.devices.RecordPluginConnection(ctx, device.ID, reportedVersion(c)); err != nil {
+	if err := h.connections.RecordPluginConnection(ctx, device, reportedVersion(c)); err != nil {
 		return errors.WithStack(err)
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, LookupResponse{Server: h.serverInfo(), Documents: documents, Undescribed: undescribed}))

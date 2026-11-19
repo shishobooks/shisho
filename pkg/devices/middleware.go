@@ -1,7 +1,6 @@
 package devices
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -9,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/events"
 )
 
 // deviceContextKey is the echo context key DeviceAuth stores the Device under.
@@ -23,20 +23,22 @@ var connectionDeniedMessages = map[string]string{
 // Middleware authenticates the device routes (Kobo and eReader) that carry a
 // Device credential in the URL.
 type Middleware struct {
-	service *Service
+	service     *Service
+	connections *Connections
 }
 
-// NewMiddleware creates Device middleware backed by service.
-func NewMiddleware(service *Service) *Middleware {
-	return &Middleware{service: service}
+// NewMiddleware creates Device middleware backed by service, which announces
+// each Device's first connection on broker.
+func NewMiddleware(service *Service, broker *events.Broker) *Middleware {
+	return &Middleware{service: service, connections: NewConnections(service, broker)}
 }
 
 // DeviceAuth validates the credential in c.Param("credential"), checks that
 // its Device's type uses connection, and loads its owner with AuthenticateOwner,
 // which rejects a missing or deactivated owner (401) and one without
-// books:read (403). It touches the Device's last accessed time without
-// waiting, stores the Device for RequireDevice, and stores the owner with
-// auth.SetUser, so handlers read it with auth.RequireUser and
+// books:read (403). It records the request through Connections without
+// waiting for the write, stores the Device for RequireDevice, and stores the
+// owner with auth.SetUser, so handlers read it with auth.RequireUser and
 // auth.RequireLibraryAccessFor like every other route.
 func (m *Middleware) DeviceAuth(connection string) echo.MiddlewareFunc {
 	deniedMessage, ok := connectionDeniedMessages[connection]
@@ -68,9 +70,7 @@ func (m *Middleware) DeviceAuth(connection string) echo.MiddlewareFunc {
 				return errors.WithStack(err)
 			}
 
-			go func() {
-				_ = m.service.TouchLastAccessed(context.Background(), device.ID)
-			}()
+			m.connections.RecordAccess(device)
 
 			SetDevice(c, device)
 			auth.SetUser(c, user)
@@ -117,9 +117,7 @@ func (m *Middleware) OPDSAuth(passwordAuth echo.MiddlewareFunc) echo.MiddlewareF
 				return errors.WithStack(err)
 			}
 
-			go func() {
-				_ = m.service.TouchLastAccessed(context.Background(), device.ID)
-			}()
+			m.connections.RecordAccess(device)
 
 			SetDevice(c, device)
 			auth.SetUser(c, user)
@@ -133,8 +131,8 @@ func (m *Middleware) OPDSAuth(passwordAuth echo.MiddlewareFunc) echo.MiddlewareF
 // credential of one of that user's Devices whose type uses connection, as
 // the KOReader plugin sends them. Any other username and password is a 401,
 // a Device whose type doesn't use connection a 403, and the owner is checked
-// with AuthenticateOwner. Like DeviceAuth, it touches the Device's last
-// accessed time and stores the Device and its owner.
+// with AuthenticateOwner. Like DeviceAuth, it records the request and stores
+// the Device and its owner.
 func (m *Middleware) BasicAuth(connection string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -158,9 +156,7 @@ func (m *Middleware) BasicAuth(connection string) echo.MiddlewareFunc {
 				return errors.WithStack(err)
 			}
 
-			go func() {
-				_ = m.service.TouchLastAccessed(context.Background(), device.ID)
-			}()
+			m.connections.RecordAccess(device)
 
 			SetDevice(c, device)
 			auth.SetUser(c, user)

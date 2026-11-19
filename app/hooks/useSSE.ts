@@ -7,6 +7,7 @@ import {
 } from "@/contexts/BulkDownload";
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
 import { invalidateCoverPreviewLists } from "@/hooks/queries/coverPreviews";
+import { invalidateConnectedDevice } from "@/hooks/queries/devices";
 import { QueryKey as JobsQueryKey } from "@/hooks/queries/jobs";
 import { QueryKey as LibrariesQueryKey } from "@/hooks/queries/libraries";
 import { QueryKey as LogsQueryKey } from "@/hooks/queries/logs";
@@ -14,7 +15,7 @@ import { invalidateReadingRecords } from "@/hooks/queries/reading";
 import { applyScanProgress, markScanEnded } from "@/hooks/queries/scanProgress";
 import { useAuth } from "@/hooks/useAuth";
 import { checkServerBuild } from "@/libraries/build";
-import type { JobScanProgress, ListBooksQuery } from "@/types";
+import type { DeviceConnected, JobScanProgress, ListBooksQuery } from "@/types";
 
 // The least time between two gallery refetches for a library while a scan
 // imports into it. Progress events come about once a second; each refetch
@@ -203,6 +204,19 @@ export function useSSE() {
       }
     };
 
+    // Only the Device's owner hears that it connected for the first time.
+    // Refreshing it is what switches the Connect a device flow's waiting
+    // screen to "Connected!".
+    const handleDeviceConnected = (event: MessageEvent) => {
+      let data: DeviceConnected;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      invalidateConnectedDevice(queryClient, data.device_id);
+    };
+
     let logInvalidateTimeout: ReturnType<typeof setTimeout> | undefined;
     const handleLogEntry = () => {
       clearTimeout(logInvalidateTimeout);
@@ -216,6 +230,7 @@ export function useSSE() {
     es.addEventListener("bulk_download.progress", handleBulkDownloadProgress);
     es.addEventListener("log.entry", handleLogEntry);
     es.addEventListener("scan.progress", handleScanProgress);
+    es.addEventListener("device.connected", handleDeviceConnected);
 
     return () => {
       clearTimeout(logInvalidateTimeout);
@@ -228,6 +243,7 @@ export function useSSE() {
       );
       es.removeEventListener("log.entry", handleLogEntry);
       es.removeEventListener("scan.progress", handleScanProgress);
+      es.removeEventListener("device.connected", handleDeviceConnected);
       es.close();
     };
   }, [demoMode, isAuthenticated, passwordResetPending, queryClient]);

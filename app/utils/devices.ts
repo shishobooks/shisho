@@ -1,3 +1,4 @@
+import { DOCS_URL } from "@/constants/docs";
 import {
   ConnectionEReaderBrowser,
   ConnectionKoboSync,
@@ -25,7 +26,7 @@ export const DEVICE_TYPE_LABELS: Record<DeviceType, string> = {
   [DeviceTypeBrowser]: "Browser",
 };
 
-// The order the create dialog offers the types in, with what each one is for.
+// The order Change Type offers the types in, with what each one is for.
 export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
   [
     {
@@ -54,6 +55,74 @@ export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
     },
   ];
 
+/** One answer to "What do you read on?" in the Connect a device flow. */
+export interface ConnectChoice {
+  type: DeviceType;
+  label: string;
+  description: string;
+  /** The name a new Device starts with. */
+  name: string;
+  /** The troubleshooting docs for this way of connecting. */
+  troubleshootingURL: string;
+}
+
+// What the Connect a device flow offers, in plain words, each mapped to the
+// Device type it creates.
+export const CONNECT_CHOICES: ConnectChoice[] = [
+  {
+    type: DeviceTypeKobo,
+    label: "A Kobo",
+    description:
+      "Kobo's own built-in reader. Books sync to it over Wi-Fi. Using KOReader on your Kobo? Choose KOReader.",
+    name: "Kobo",
+    troubleshootingURL: `${DOCS_URL}/kobo-sync#troubleshooting`,
+  },
+  {
+    type: DeviceTypeKOReader,
+    label: "KOReader",
+    description: "On a Kobo, Kindle, Android, PocketBook, and others.",
+    name: "KOReader",
+    troubleshootingURL: `${DOCS_URL}/koreader#troubleshooting`,
+  },
+  {
+    type: DeviceTypeKindle,
+    label: "A Kindle's browser",
+    description: "Download books in the Kindle's web browser.",
+    name: "Kindle",
+    troubleshootingURL: `${DOCS_URL}/ereader-browser#troubleshooting`,
+  },
+  {
+    type: DeviceTypeOPDS,
+    label: "A reading app on a phone or tablet",
+    description:
+      "An app that can add an OPDS catalog, such as Panels or Thorium.",
+    name: "Reading app",
+    troubleshootingURL: `${DOCS_URL}/opds#troubleshooting`,
+  },
+  {
+    type: DeviceTypeBrowser,
+    label: "Another e-reader's browser",
+    description:
+      "Download books in the web browser of a Boox, PocketBook, or other e-reader.",
+    name: "E-reader",
+    troubleshootingURL: `${DOCS_URL}/ereader-browser#troubleshooting`,
+  },
+];
+
+/** The Connect a device choice that creates a Device of type. */
+export const connectChoiceFor = (type: DeviceType): ConnectChoice =>
+  CONNECT_CHOICES.find((choice) => choice.type === type) ?? CONNECT_CHOICES[0];
+
+// uniqueName returns name, or name with the first number after it that no
+// Device in taken uses, so a second Kobo starts as "Kobo 2".
+export const uniqueName = (name: string, taken: string[]): string => {
+  const used = new Set(taken.map((t) => t.toLowerCase()));
+  if (!used.has(name.toLowerCase())) return name;
+  let n = 2;
+  while (used.has(`${name} ${n}`.toLowerCase())) n++;
+  return `${name} ${n}`;
+};
+
 export const CONNECTION_LABELS: Record<Connection, string> = {
   [ConnectionKoboSync]: "Kobo sync",
   [ConnectionEReaderBrowser]: "eReader browser",
@@ -63,7 +132,8 @@ export const CONNECTION_LABELS: Record<Connection, string> = {
 };
 
 // Where to unzip the KOReader plugin on each platform KOReader runs on, as
-// the device shows its storage over USB or in a file manager.
+// the device shows its storage over USB or in a file manager. The setup
+// asks which one KOReader runs on and shows only its folder.
 export const KOREADER_PLUGIN_FOLDERS: { platform: string; folder: string }[] = [
   { platform: "Kobo", folder: ".adds/koreader/plugins" },
   { platform: "Kindle", folder: "koreader/plugins" },

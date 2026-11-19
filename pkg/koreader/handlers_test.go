@@ -62,7 +62,7 @@ func newSyncFixture(t *testing.T) *syncFixture {
 	require.NoError(t, err)
 	e.Binder = b
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
-	RegisterRoutes(e, db, books.NewService(db, appsettings.NewService(db)))
+	RegisterRoutes(e, db, books.NewService(db, appsettings.NewService(db)), nil)
 
 	f := &syncFixture{
 		t: t, ctx: context.Background(), db: db, e: e,

@@ -4,7 +4,7 @@ In-memory pub/sub broker and the `GET /api/events` stream. The frontend consumer
 
 ## Permissions
 
-The route requires authentication only; per-event permission is the subscription filter built by `eventFilterFor(user)`. Every event it does not gate goes to every authenticated user, so an ungated payload carries only ids, status, type, library id, and progress counts: never log text or other permission-gated data.
+The route requires authentication only; per-event permission is the subscription filter built by `eventFilterFor(user)`. An event that concerns one user's own data sets `Event.UserID`, which delivers it to that user alone. Every event it does not gate goes to every authenticated user, so an ungated payload carries only ids, status, type, library id, and progress counts: never log text or other permission-gated data.
 
 ## Adding an event type
 

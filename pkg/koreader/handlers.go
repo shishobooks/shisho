@@ -53,6 +53,7 @@ const (
 
 type handler struct {
 	deviceService  *devices.Service
+	connections    *devices.Connections
 	readingService *reading.Service
 	docs           *Documents
 	pulls          *pullStore
@@ -84,9 +85,7 @@ func (h *handler) authenticate(next echo.HandlerFunc) echo.HandlerFunc {
 			return err
 		}
 
-		go func() {
-			_ = h.deviceService.TouchLastAccessed(context.Background(), device.ID)
-		}()
+		h.connections.RecordAccess(device)
 
 		devices.SetDevice(c, device)
 		auth.SetUser(c, user)

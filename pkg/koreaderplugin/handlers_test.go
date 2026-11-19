@@ -47,8 +47,8 @@ func newPluginFixture(t *testing.T) *pluginFixture {
 
 	bundle, err := NewBundle(pluginFS("return 1\n"), "v0.7.0")
 	require.NoError(t, err)
-	h := newHandler(db, bundle, books.NewService(db, appsettings.NewService(db)))
-	registerPluginRoutes(e, h, devices.NewMiddleware(h.devices))
+	h := newHandler(db, bundle, books.NewService(db, appsettings.NewService(db)), nil)
+	registerPluginRoutes(e, h, devices.NewMiddleware(h.devices, nil))
 
 	f := &pluginFixture{t: t, ctx: context.Background(), db: db, e: e, h: h, devices: h.devices}
 	f.user = f.addUser("reader", true)

@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
   type QueryClient,
+  type UseQueryOptions,
 } from "@tanstack/react-query";
 
 import { API, ShishoAPIError } from "@/libraries/api";
@@ -68,8 +69,15 @@ export const fetchDevices = (queryClient: QueryClient) =>
       API.request("GET", "/user/devices", null, null, signal),
   });
 
-export const useDevice = (id?: string) => {
+export const useDevice = (
+  id?: string,
+  options: Pick<
+    UseQueryOptions<DeviceResponse, ShishoAPIError>,
+    "refetchInterval"
+  > = {},
+) => {
   return useQuery<DeviceResponse, ShishoAPIError>({
+    ...options,
     enabled: Boolean(id),
     queryKey: [QueryKey.RetrieveDevice, id],
     queryFn: ({ signal }) =>
@@ -84,6 +92,19 @@ export const useAllDevices = () => {
     queryKey: [QueryKey.ListAllDevices],
     queryFn: ({ signal }) => API.request("GET", "/devices", null, null, signal),
   });
+};
+
+// invalidateConnectedDevice refreshes what a device.connected event changes:
+// the Device's last use, which the Connect a device flow waits on.
+export const invalidateConnectedDevice = (
+  queryClient: QueryClient,
+  deviceId: string,
+) => {
+  queryClient.invalidateQueries({ queryKey: [QueryKey.ListDevices] });
+  queryClient.invalidateQueries({
+    queryKey: [QueryKey.RetrieveDevice, deviceId],
+  });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.ListAllDevices] });
 };
 
 const useInvalidateDevices = () => {
@@ -101,10 +122,15 @@ const useInvalidateDevices = () => {
 };
 
 export const useCreateDevice = () => {
+  const queryClient = useQueryClient();
   const invalidate = useInvalidateDevices();
   return useMutation<DeviceResponse, ShishoAPIError, CreateDevicePayload>({
     mutationFn: (payload) => API.request("POST", "/user/devices", payload),
-    onSuccess: invalidate,
+    // The new Device shows at once, with no request to wait on.
+    onSuccess: (device) => {
+      queryClient.setQueryData([QueryKey.RetrieveDevice, device.id], device);
+      invalidate();
+    },
   });
 };
 

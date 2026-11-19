@@ -203,7 +203,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		return nil, errors.Wrap(err, "build the KOReader plugin")
 	}
 	koreaderplugin.RegisterUserRoutes(api, db, pluginBundle, svcs.books, authMiddleware)
-	koreaderplugin.RegisterRoutes(e, db, pluginBundle, svcs.books)
+	koreaderplugin.RegisterRoutes(e, db, pluginBundle, svcs.books, broker)
 	delivery.RegisterRoutes(api, db, authMiddleware)
 
 	// Register protected API routes
@@ -216,16 +216,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 
 	if !cfg.DemoMode {
 		// Register OPDS routes with Basic Auth
-		opds.RegisterRoutes(e, db, authMiddleware, svcs.dlCache, svcs.books)
+		opds.RegisterRoutes(e, db, authMiddleware, svcs.dlCache, svcs.books, broker)
 
 		// Register eReader routes (Device credential auth for stock browser support)
-		ereader.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
+		ereader.RegisterRoutes(e, db, svcs.dlCache, svcs.books, broker)
 
 		// Register Kobo sync routes (Device credential auth for Kobo sync)
-		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books)
+		kobo.RegisterRoutes(e, db, svcs.dlCache, svcs.books, broker)
 
 		// Register KOReader's progress sync (Device credential auth)
-		koreader.RegisterRoutes(e, db, svcs.books)
+		koreader.RegisterRoutes(e, db, svcs.books, broker)
 
 		// Register the anonymous Share Link recipient routes
 		sharelinks.RegisterPublicRoutes(api, svcs.shareLinks, svcs.books, svcs.dlCache, svcs.coverCache)

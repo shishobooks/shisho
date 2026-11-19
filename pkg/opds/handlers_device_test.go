@@ -37,7 +37,7 @@ func serveOPDSFrom(t *testing.T, db *bun.DB, userAgent, username, password, path
 	e := echo.New()
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 	authMw := auth.NewMiddleware(auth.NewService(db, "test-secret", time.Hour))
-	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db, appsettings.NewService(db)))
+	RegisterRoutes(e, db, authMw, downloadcache.NewCache(t.TempDir(), 1<<30), books.NewService(db, appsettings.NewService(db)), nil)
 
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(username+":"+password)))

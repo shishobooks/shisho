@@ -6,6 +6,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -14,7 +15,8 @@ import (
 )
 
 // RegisterRoutes registers all OPDS routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, cache *downloadcache.Cache, bookService *books.Service) {
+// Each Device's first connection is announced on broker.
+func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, cache *downloadcache.Cache, bookService *books.Service, broker *events.Broker) {
 	opdsService := NewService(db, bookService)
 	deviceService := devices.NewService(db)
 
@@ -31,7 +33,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authMiddleware *auth.Middleware, c
 	// Every OPDS route requires Basic Auth and books:read, the permission
 	// Kobo and eReader Devices require of their owners too. Basic Auth takes
 	// the account password or an OPDS app Device's credential.
-	basicAuth := devices.NewMiddleware(deviceService).OPDSAuth(authMiddleware.BasicAuth)
+	basicAuth := devices.NewMiddleware(deviceService, broker).OPDSAuth(authMiddleware.BasicAuth)
 	requireBooksRead := authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead)
 
 	// One feed tree. What each feed lists and links follows the signed-in

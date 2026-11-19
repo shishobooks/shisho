@@ -17,12 +17,16 @@ type handler struct {
 	broker *Broker
 }
 
-// eventFilterFor returns which events a connected user may receive. Log
-// lines follow the permission of GET /api/logs (Config Read). Every other
-// event, including job events, goes to every authenticated user.
+// eventFilterFor returns which events a connected user may receive. An
+// event addressed to a user goes to that user alone. Log lines follow the
+// permission of GET /api/logs (Config Read). Every other event, including
+// job events, goes to every authenticated user.
 func eventFilterFor(user *models.User) EventFilter {
 	canReadLogs := user != nil && user.HasPermission(models.ResourceConfig, models.OperationRead)
 	return func(evt Event) bool {
+		if evt.UserID != 0 {
+			return user != nil && user.ID == evt.UserID
+		}
 		return evt.Type != EventTypeLogEntry || canReadLogs
 	}
 }

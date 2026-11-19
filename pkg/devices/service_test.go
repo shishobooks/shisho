@@ -3,6 +3,8 @@ package devices
 import (
 	"context"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -228,4 +230,65 @@ func TestService_GenerateShortURL_ReplacesThePreviousOne(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resolved)
 	assert.Equal(t, device.ID, resolved.ID)
+}
+
+// Only the first authenticated request from a Device reports that it is the
+// first, however many arrive at once.
+func TestService_TouchLastAccessed_ReportsOnlyTheFirst(t *testing.T) {
+	t.Parallel()
+	db := testdb.NewShared(t)
+	service := NewService(db)
+	insertTestUser(t, db, 1, "reader")
+	ctx := context.Background()
+	device, err := service.Create(ctx, 1, "Browser", DeviceTypeBrowser)
+	require.NoError(t, err)
+
+	const requests = 8
+	var firsts atomic.Int32
+	var wg sync.WaitGroup
+	for range requests {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// Each request loads the Device before any has touched it.
+			first, err := service.TouchLastAccessed(ctx, device)
+			assert.NoError(t, err)
+			if first {
+				firsts.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	assert.Equal(t, int32(1), firsts.Load())
+
+	touched, err := service.Retrieve(ctx, 1, device.ID)
+	require.NoError(t, err)
+	require.NotNil(t, touched.LastAccessedAt)
+	first, err := service.TouchLastAccessed(ctx, touched)
+	require.NoError(t, err)
+	assert.False(t, first)
+}
+
+func TestService_RecordPluginConnection_ReportsOnlyTheFirst(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	service := NewService(db)
+	insertTestUser(t, db, 1, "reader")
+	ctx := context.Background()
+	device, err := service.Create(ctx, 1, "KOReader", DeviceTypeKOReader)
+	require.NoError(t, err)
+
+	first, err := service.RecordPluginConnection(ctx, device, "1.0.0")
+	require.NoError(t, err)
+	assert.True(t, first)
+
+	// A request that loaded the Device before the first connection landed
+	// still learns it wasn't the first.
+	first, err = service.RecordPluginConnection(ctx, device, "1.0.1")
+	require.NoError(t, err)
+	assert.False(t, first)
+	recorded, err := service.Retrieve(ctx, 1, device.ID)
+	require.NoError(t, err)
+	require.NotNil(t, recorded.PluginVersion)
+	assert.Equal(t, "1.0.1", *recorded.PluginVersion)
 }

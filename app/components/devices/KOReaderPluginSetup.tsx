@@ -2,7 +2,10 @@ import { Download, KeyRound } from "lucide-react";
 import { Fragment, useEffect, useId, useState } from "react";
 
 import Disclosure from "@/components/devices/Disclosure";
+import HiddenFolderHelp from "@/components/devices/HiddenFolderHelp";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   useDownloadKOReaderPlugin,
   useGenerateDeviceShortUrl,
@@ -72,11 +75,18 @@ const PairingCode = ({ short }: { short: DeviceShortURL }) => {
 };
 
 /**
- * KOReaderPluginSetup leads a KOReader Device's connections: downloading
- * and installing the KOReader plugin, pairing it, and when it last
- * connected.
+ * KOReaderPluginSetup leads a KOReader Device's setup: downloading and
+ * installing the KOReader plugin, pairing it, and when it last connected.
+ * In the Connect a device flow (inFlow), it's only the steps: the flow says
+ * when the plugin connects.
  */
-const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
+const KOReaderPluginSetup = ({
+  device,
+  inFlow = false,
+}: {
+  device: DeviceResponse;
+  inFlow?: boolean;
+}) => {
   const { demoMode } = useAuth();
   const download = useDownloadKOReaderPlugin();
   const pair = useGenerateDeviceShortUrl();
@@ -110,11 +120,11 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Recommended. The plugin signs in to Shisho once, sets up this server's
-        OPDS catalog, syncs your reading time, position, status, and Rating, and
-        keeps itself up to date.
+        {inFlow ? "" : "Recommended. "}The plugin signs in to Shisho once, sets
+        up this server&apos;s OPDS catalog, syncs your reading time, position,
+        status, and Rating, and keeps itself up to date.
       </p>
-      <PluginStatus device={device} />
+      {!inFlow && <PluginStatus device={device} />}
       {/* Demo Mode hides downloads. */}
       {!demoMode && (
         <div className="space-y-1">
@@ -133,6 +143,20 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
             </p>
           )}
         </div>
+      )}
+      {/* Once the plugin has connected, it's installed: the steps are there
+          for a reinstall, out of the way. While connecting, they're the
+          point, so they're always open. */}
+      {inFlow ? (
+        <InstallSteps />
+      ) : (
+        <Disclosure
+          defaultOpen={!device.plugin_last_connected_at}
+          size="sm"
+          title="Install steps"
+        >
+          <InstallSteps />
+        </Disclosure>
       )}
       {/* A download signs itself in, so pairing is for later sign-ins and
           stays out of the way until KOReader asks for a code. */}
@@ -166,76 +190,123 @@ const KOReaderPluginSetup = ({ device }: { device: DeviceResponse }) => {
           </div>
         )}
       </div>
-      {/* Once the plugin has connected, it's installed: the steps are there
-          for a reinstall, out of the way. */}
-      <Disclosure
-        defaultOpen={!device.plugin_last_connected_at}
-        size="sm"
-        title="Install steps"
-      >
-        <ol
-          aria-label="KOReader plugin setup"
-          className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground"
+      {!inFlow && (
+        <Disclosure size="sm" title="Why use the plugin?">
+          <p className="text-sm text-muted-foreground">
+            With the plugin, you sign in once with a pairing code instead of
+            typing this Device's password into KOReader twice, the OPDS catalog
+            is set up for you, and the plugin updates itself from Shisho. Your
+            reading time comes from KOReader's own statistics, page by page, and
+            reading done offline arrives on the days you did it, however long
+            the e-reader stays offline. Finishing, pausing, and rating a book in
+            KOReader carry over to Shisho, and the same changes made here show
+            up in KOReader. One e-reader can sync with several Shisho servers,
+            and a copy Shisho doesn't recognize, such as one downloaded before
+            v0.7.0, can be linked to its book here. Progress sync is built into
+            KOReader and syncs your position in the open book, but Shisho can
+            only estimate your reading time from it, offline reading is dated
+            when the e-reader next connects, and a book counts as read only once
+            you reach its last pages. Once the plugin syncs, turn progress sync
+            off.
+          </p>
+        </Disclosure>
+      )}
+    </div>
+  );
+};
+
+// Which steps connect the plugin's folder on each platform: an e-reader over
+// USB, Android in its own file manager, and a computer needs neither.
+const openFolderStep = (platform: string | undefined): string | null => {
+  switch (platform) {
+    case "Android":
+      return "Open a file manager on the Android device.";
+    case "Linux":
+    case "macOS":
+      return null;
+    case undefined:
+      return "Connect the e-reader to your computer with USB, or on Android open a file manager.";
+    default:
+      return "Connect the e-reader to your computer with USB.";
+  }
+};
+
+// InstallSteps says how to install the downloaded plugin, asking which
+// device KOReader runs on so it names only that device's plugins folder.
+const InstallSteps = () => {
+  const [platform, setPlatform] = useState<string>();
+  const groupId = useId();
+  const folder = KOREADER_PLUGIN_FOLDERS.find(
+    (f) => f.platform === platform,
+  )?.folder;
+  const openStep = openFolderStep(platform);
+
+  return (
+    <ol
+      aria-label="KOReader plugin setup"
+      className="list-decimal space-y-3 pl-5 text-sm text-muted-foreground"
+    >
+      <li className="space-y-2">
+        <p id={`${groupId}-label`}>Which device runs KOReader?</p>
+        <RadioGroup
+          aria-labelledby={`${groupId}-label`}
+          className="grid grid-cols-2 gap-2 sm:grid-cols-3"
+          name="koreader-platform"
+          onValueChange={setPlatform}
+          value={platform ?? ""}
         >
-          <li>
-            Connect the e-reader to your computer with USB, or on Android open a
-            file manager.
-          </li>
-          <li>
-            Unzip the download into KOReader's plugins folder, so a{" "}
-            <code className="rounded bg-muted px-1">shisho.koplugin</code>{" "}
-            folder sits inside it. The folder for each platform is below.
-          </li>
-          <li>
-            Eject the e-reader and restart KOReader with Wi-Fi on, within 30
-            minutes of downloading. The plugin signs itself in, with no pairing
-            code.
-          </li>
-          <li>
-            Later than that, KOReader asks for a pairing code: get one under
-            &quot;KOReader asking for a pairing code?&quot; above and enter it.
-          </li>
-        </ol>
-        <dl
-          aria-label="KOReader plugins folders"
-          className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm"
-        >
-          {KOREADER_PLUGIN_FOLDERS.map(({ platform, folder }) => (
-            <div className="contents" key={platform}>
-              <dt className="text-muted-foreground">{platform}</dt>
-              <dd className="min-w-0">
-                <code className="rounded bg-muted px-1">
-                  <FolderPath path={folder} />
-                </code>
-              </dd>
+          {KOREADER_PLUGIN_FOLDERS.map((option) => (
+            <div className="flex items-center gap-2" key={option.platform}>
+              <RadioGroupItem
+                id={`${groupId}-${option.platform}`}
+                value={option.platform}
+              />
+              <Label
+                className="cursor-pointer font-normal text-foreground"
+                htmlFor={`${groupId}-${option.platform}`}
+              >
+                {option.platform}
+              </Label>
             </div>
           ))}
-        </dl>
-        <p className="text-sm text-muted-foreground">
-          Folders whose names start with a dot are hidden. To show them, press
-          Cmd+Shift+. in Finder on a Mac, or choose View &gt; Show &gt; Hidden
-          items in File Explorer on Windows.
+        </RadioGroup>
+      </li>
+      {openStep && <li>{openStep}</li>}
+      <li className="space-y-1">
+        <p>
+          Unzip the download into{" "}
+          {folder ? (
+            <code
+              aria-label="KOReader plugins folder"
+              className="rounded bg-muted px-1 text-foreground"
+            >
+              <FolderPath path={folder} />
+            </code>
+          ) : (
+            "KOReader's plugins folder"
+          )}
+          , so a <code className="rounded bg-muted px-1">shisho.koplugin</code>{" "}
+          folder sits inside it.
         </p>
-      </Disclosure>
-      <Disclosure size="sm" title="Why use the plugin?">
-        <p className="text-sm text-muted-foreground">
-          With the plugin, you sign in once with a pairing code instead of
-          typing this Device's password into KOReader twice, the OPDS catalog is
-          set up for you, and the plugin updates itself from Shisho. Your
-          reading time comes from KOReader's own statistics, page by page, and
-          reading done offline arrives on the days you did it, however long the
-          e-reader stays offline. Finishing, pausing, and rating a book in
-          KOReader carry over to Shisho, and the same changes made here show up
-          in KOReader. One e-reader can sync with several Shisho servers, and a
-          copy Shisho doesn't recognize, such as one downloaded before v0.7.0,
-          can be linked to its book here. Progress sync is built into KOReader
-          and syncs your position in the open book, but Shisho can only estimate
-          your reading time from it, offline reading is dated when the e-reader
-          next connects, and a book counts as read only once you reach its last
-          pages. Once the plugin syncs, turn progress sync off.
-        </p>
-      </Disclosure>
-    </div>
+        {folder?.startsWith(".") && (
+          <p>
+            Folders whose names start with a dot are hidden.{" "}
+            <HiddenFolderHelp />
+          </p>
+        )}
+      </li>
+      <li>
+        {openStep && platform !== "Android"
+          ? "Eject the e-reader and restart"
+          : "Restart"}{" "}
+        KOReader with Wi-Fi on, within 30 minutes of downloading. The plugin
+        signs itself in, with no pairing code.
+      </li>
+      <li>
+        Later than that, KOReader asks for a pairing code: get one under
+        &quot;KOReader asking for a pairing code?&quot; below and enter it.
+      </li>
+    </ol>
   );
 };
 

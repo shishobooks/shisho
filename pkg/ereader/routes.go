@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/libraries"
 	"github.com/shishobooks/shisho/pkg/people"
 	"github.com/shishobooks/shisho/pkg/reach"
@@ -14,13 +15,14 @@ import (
 )
 
 // RegisterRoutes registers all eReader routes.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache, bookService *books.Service) {
+// Each Device's first connection is announced on broker.
+func RegisterRoutes(e *echo.Echo, db *bun.DB, downloadCache *downloadcache.Cache, bookService *books.Service, broker *events.Broker) {
 	deviceService := devices.NewService(db)
 	libraryService := libraries.NewService(db)
 	seriesService := series.NewService(db)
 	peopleService := people.NewService(db)
 
-	mw := devices.NewMiddleware(deviceService)
+	mw := devices.NewMiddleware(deviceService, broker)
 	h := newHandler(libraryService, bookService, seriesService, peopleService, downloadCache, settings.NewService(db), reach.NewService(db, bookService))
 
 	// Short URL resolution (no auth required - the short code IS the auth)

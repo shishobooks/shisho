@@ -64,7 +64,7 @@ func newEReaderAccessFixture(t *testing.T) *eReaderAccessFixture {
 
 	f.e = echo.New()
 	f.e.HTTPErrorHandler = errcodes.NewHandler().Handle
-	RegisterRoutes(f.e, db, nil, books.NewService(db, appsettings.NewService(db)))
+	RegisterRoutes(f.e, db, nil, books.NewService(db, appsettings.NewService(db)), nil)
 	return f
 }
 

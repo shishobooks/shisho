@@ -5,6 +5,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/devices"
+	"github.com/shishobooks/shisho/pkg/events"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -12,9 +13,10 @@ import (
 // RegisterRoutes registers the KOReader plugin's API at the root, beside
 // KOReader's progress sync. Every route is a POST, so Demo Mode refuses
 // them all as writes. The address limiter on pairing is this family's own.
-func RegisterRoutes(e *echo.Echo, db *bun.DB, bundle *Bundle, bookService *books.Service) {
-	h := newHandler(db, bundle, bookService)
-	registerPluginRoutes(e, h, devices.NewMiddleware(h.devices))
+// Each Device's first connection is announced on broker.
+func RegisterRoutes(e *echo.Echo, db *bun.DB, bundle *Bundle, bookService *books.Service, broker *events.Broker) {
+	h := newHandler(db, bundle, bookService, broker)
+	registerPluginRoutes(e, h, devices.NewMiddleware(h.devices, broker))
 }
 
 func registerPluginRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
@@ -39,7 +41,9 @@ func registerPluginRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 // Only the Device's owner reaches them, and the unrecognized books, which
 // name the library's Books, need permission to read them.
 func RegisterUserRoutes(api *echo.Group, db *bun.DB, bundle *Bundle, bookService *books.Service, authMiddleware *auth.Middleware) {
-	h := newHandler(db, bundle, bookService)
+	// These routes are the owner's, in the web app, never a Device's
+	// connection, so they announce nothing.
+	h := newHandler(db, bundle, bookService, nil)
 	api.POST("/user/devices/:id/koreader-plugin", h.ownerDownload, authMiddleware.Authenticate)
 	g := api.Group("/user/devices/:id/koreader-unrecognized",
 		authMiddleware.Authenticate, authMiddleware.RequirePermission(models.ResourceBooks, models.OperationRead))

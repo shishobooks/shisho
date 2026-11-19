@@ -17,18 +17,18 @@ Without the plugin, KOReader's built-in [progress sync](#turn-on-progress-sync) 
 
 Add one Device for each copy of KOReader, even when it runs on a Kobo: Kobo's own reader and KOReader are separate Devices.
 
-1. Open the user menu, select **Devices**, and click **Add Device**.
-2. Name it, choose **KOReader**, and click **Add Device**.
+1. Open the user menu, select **Devices**, and click **Connect Device**.
+2. Choose **KOReader**, not **A Kobo**, even on a Kobo. Keep or change the name, and click **Continue**.
 
-The Device's page shows everything to enter below. A new KOReader Device follows your default [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) until you change its rules on its page. Deliver EPUBs as EPUB: KOReader renders a KePub the same as an EPUB, so converting gains nothing and costs a wait on each first download.
+Shisho shows the plugin's setup steps, the same ones as under **Setup** on the Device's page, which also has everything to enter for [OPDS](#browse-over-opds) and [progress sync](#turn-on-progress-sync) without the plugin. A new KOReader Device follows your default [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) until you change its rules on its page. Deliver EPUBs as EPUB: KOReader renders a KePub the same as an EPUB, so converting gains nothing and costs a wait on each first download.
 
 ## Install the KOReader Plugin
 
 KOReader can't install a plugin by itself, so the first install is by hand. Every later update comes from Shisho.
 
-1. On the Device's page, click **Download Plugin**. The zip it downloads signs itself in to this server for the next 30 minutes, with no pairing code, and the page shows until when.
+1. In the setup steps, or under **Setup** on the Device's page, click **Download Plugin**. The zip it downloads signs itself in to this server for the next 30 minutes, with no pairing code, and the page shows until when.
 2. Connect the e-reader to your computer with USB, or on Android open a file manager.
-3. Unzip the download into KOReader's plugins folder, so a `shisho.koplugin` folder sits inside it. The folder is:
+3. Unzip the download into KOReader's plugins folder, so a `shisho.koplugin` folder sits inside it. The setup steps ask which device runs KOReader and show its folder:
 
    | Platform   | Plugins folder                                   |
    | ---------- | ------------------------------------------------ |
@@ -42,6 +42,8 @@ KOReader can't install a plugin by itself, so the first install is by hand. Ever
    Folders whose names start with a dot, such as Kobo's `.adds`, are hidden. To show them, press `Cmd+Shift+.` in Finder on a Mac, or choose **View > Show > Hidden items** in File Explorer on Windows.
 
 4. Eject the e-reader and restart KOReader.
+
+Click **Next** in Shisho to wait for KOReader. The screen switches to **Connected!** when the plugin first signs in, and lists what's left: turn off KOReader's own [progress sync](#turn-off-progress-sync) if you set it up before, link any [books Shisho doesn't recognize](#books-shisho-doesnt-recognize), and find your books in KOReader under **Search > OPDS catalog > Shisho**. If it never connects, **Not working?** opens [Troubleshooting](#troubleshooting).
 
 Each Shisho release also attaches the plugin as `shisho.koplugin.zip` on its [GitHub release](https://github.com/shishobooks/shisho/releases). That zip knows no server, so after installing it, sign in with **Add a server** in the [plugin's menu](#sign-in-with-the-plugin).
 
@@ -197,7 +199,7 @@ Regenerating the Device's credential, or deleting the Device, marks the server *
 
 The plugin can bring in a copy Shisho doesn't [recognize](#which-books-sync), such as one downloaded before v0.7.0 or edited elsewhere. When no server you're signed in to recognizes a book you read, the plugin sends each of them its reading history anyway: its reading sessions, status, Rating, and place, with what KOReader knows of it, such as its title, authors, identifiers, and language. Each server holds that history, counting it toward nothing yet, and lists the book under **Unrecognized Books** on the KOReader Device's page, at the top of the page while any are waiting to be linked. The **Devices** page shows how many are waiting on each Device.
 
-For each book, the page suggests books from your libraries: ones with a matching identifier, such as an ISBN, first, and then ones whose title and author match. Each book shows its best match, to link in one click, and **Dismiss**; **More**, beside its title, shows the other suggestions and a search. The books you've linked fold away under **Linked**, and the ones you've dismissed under **Dismissed**. Suggestions and search cover only the libraries you can access and the Device's [scope](./users-and-permissions.md#scope), and never audiobooks. Only you see your Devices' unrecognized books, and a link is yours alone: another user with an identical copy links their own.
+For each book, the page suggests books from your libraries: ones with a matching identifier, such as an ISBN, first, and then ones whose title and author match. Each book shows its best match, to link in one click, and **Dismiss**; **More**, beside its title, shows the other suggestions and a search. The books you've linked fold away under **Linked**, and the ones you've dismissed under **Dismissed**. Suggestions and search cover only the libraries you can access and the Device's [scope](./users-and-permissions.md#which-books), and never audiobooks. Only you see your Devices' unrecognized books, and a link is yours alone: another user with an identical copy links their own.
 
 - **Link** links the copy to the file you choose, from a suggestion or a search. Everything held for it is added at once, without waiting for the e-reader to sync: its reading sessions, its status, its Rating, and its place. [History](#send-your-existing-reading-history) you sent for it follows history's rules, so it fills in only what Shisho has none of. From then on, the copy syncs like any other book.
 - **Unlink**, on a book under **Linked**, undoes a link made to the wrong book, after you confirm. The copy stops syncing with that book on all your Devices and is listed to link again, and its reading sessions from then on are held until you do. What the link already added stays, so delete any wrong [reading sessions](./reading-stats.md#calendar) or Read-throughs, and change the book's status, Rating, or place, by hand.
@@ -251,7 +253,7 @@ This applies to the plugin and to progress sync alike. KOReader identifies a boo
 - **Downloaded from Shisho**, over OPDS or from the web interface, individually or in a bulk download. A copy keeps syncing after you edit the book's metadata, without downloading it again.
 - **Copied over by hand**, as long as it is an unmodified copy of the file in your library.
 
-A book in a library you can't access, or outside the Device's [scope](./users-and-permissions.md#scope), syncs as if Shisho didn't have it.
+A book in a library you can't access, or outside the Device's [scope](./users-and-permissions.md#which-books), syncs as if Shisho didn't have it.
 
 A copy that differs from those by even one byte does not sync, such as one edited elsewhere, unless you [link it](#books-shisho-doesnt-recognize) with the plugin. KOReader also remembers a book's hash, so a file replaced in place on the device keeps reporting the hash of the copy it replaced. Delete the book and its metadata from KOReader, then download it again.
 

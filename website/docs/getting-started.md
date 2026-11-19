@@ -149,3 +149,7 @@ For scanning behavior and library settings, continue to [Libraries](./libraries.
 ## Invite People
 
 To give someone their own account, open **Administration > Users**, select **Add User**, and send them the invite link it creates. They choose their own username and password. See [Invite Links](./users-and-permissions.md#invite-links).
+
+## Connect a Device
+
+To read on an e-reader or a reading app, choose **Connect a reading device** in **Getting Started**, or click **Connect Device** under **Devices** in the user menu. Open Shisho at the address your devices use before you start, not `http://localhost:5173`, which a device can't reach. [Devices](./users-and-permissions.md#devices) covers how the flow works, and each way of connecting has its own page: [Kobo Sync](./kobo-sync.md), [KOReader](./koreader.md), the [eReader Browser](./ereader-browser.md), and the [OPDS Catalog](./opds.md#sign-in-as-a-device).
