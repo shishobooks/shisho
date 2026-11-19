@@ -1,6 +1,7 @@
 import {
   ArrowDown,
   ArrowRight,
+  BookImage,
   FileText,
   Folder,
   Headphones,
@@ -19,9 +20,12 @@ import { Button } from "@/components/ui/button";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/libraries/utils";
 
-// The example is canned: three books in a messy folder, and where organizing
-// puts them. Shisho names a book's folder "[Author] Title" and its files
-// "Title.ext" (pkg/fileutils/naming.go).
+import organizeExample from "./organizeExample.json";
+
+// The example is canned: a few books in a messy folder, and where organizing
+// puts them. Their organized names come from organizeExample.json, which a Go
+// test (pkg/fileutils/organize_example_test.go) checks against the naming
+// functions a scan uses, so a change to the naming can't leave it behind.
 const ROW = 28; // px, the height of one row
 const INDENT = 18; // px per folder level
 // Tailwind reads class names from the source, so each animation is spelled
@@ -34,44 +38,88 @@ const NAME_BEFORE = "animate-[setup-name-before_3s_linear_both]";
 const NAME_AFTER = "animate-[setup-name-after_3s_linear_both]";
 // Holds every animation at its start until the example scrolls into view.
 const PAUSED = "[&_*]:[animation-play-state:paused]";
+// Rows that start together move a beat apart, so they read as files moving
+// one after another rather than the list jumping.
+const STAGGER_S = 0.15;
 
-type Kind = "folder" | "ebook" | "audiobook";
+type FileKind = "ebook" | "audiobook" | "comic";
+type Kind = "folder" | FileKind;
 
-interface MovingFile {
-  kind: Kind;
-  before: { name: string; level: number; row: number };
-  after: { name: string; level: number; row: number };
+interface Place {
+  name: string;
+  level: number;
+  row: number;
 }
 
-const FILES: MovingFile[] = [
-  {
-    kind: "ebook",
-    before: { name: "pride_and_prejudice_FINAL.epub", level: 1, row: 1 },
-    after: { name: "Pride and Prejudice.epub", level: 2, row: 2 },
-  },
-  {
-    kind: "ebook",
-    before: { name: "frankenstein (1).epub", level: 1, row: 2 },
-    after: { name: "Frankenstein.epub", level: 2, row: 4 },
-  },
-  {
-    kind: "audiobook",
-    before: { name: "TimeMachine-audiobook.m4b", level: 2, row: 4 },
-    after: { name: "The Time Machine.m4b", level: 2, row: 6 },
-  },
-];
+interface MovingFile {
+  kind: FileKind;
+  before: Place;
+  after: Place;
+  /** Its place in the order files move, for the stagger. */
+  index: number;
+}
 
-// Folders only the messy side has, and those organizing creates.
-const MESSY_FOLDERS = [{ name: "misc", level: 1, row: 3 }];
-const BOOK_FOLDERS = [
-  { name: "[Jane Austen] Pride and Prejudice", level: 1, row: 1 },
-  { name: "[Mary Shelley] Frankenstein", level: 1, row: 3 },
-  { name: "[H. G. Wells] The Time Machine", level: 1, row: 5 },
-];
-const ROOT = "books";
-const ROWS = 7;
+interface Layout {
+  root: string;
+  /** Folders only the messy side has. */
+  messyFolders: Place[];
+  /** A folder per book, with the index of its first file. */
+  bookFolders: (Place & { firstFile: number })[];
+  files: MovingFile[];
+  rows: number;
+}
 
-const ICONS = { folder: Folder, ebook: FileText, audiobook: Headphones };
+// Lays the books out as two trees in the same order. In the messy one a
+// book's files sit loose in the root or together in a folder of their own,
+// which is what makes them one book; in the organized one each book has its
+// folder, named for its author and title.
+const layOut = (example: typeof organizeExample): Layout => {
+  const layout: Layout = {
+    root: example.root,
+    messyFolders: [],
+    bookFolders: [],
+    files: [],
+    rows: 0,
+  };
+  let messyRow = 1;
+  let organizedRow = 1;
+  for (const book of example.books) {
+    let level = 1;
+    if (book.messyFolder) {
+      layout.messyFolders.push({
+        name: book.messyFolder,
+        level,
+        row: messyRow++,
+      });
+      level = 2;
+    }
+    layout.bookFolders.push({
+      name: book.organizedFolder,
+      level: 1,
+      row: organizedRow++,
+      firstFile: layout.files.length,
+    });
+    for (const file of book.files) {
+      layout.files.push({
+        kind: file.type as FileKind,
+        before: { name: file.messyName, level, row: messyRow++ },
+        after: { name: file.organizedName, level: 2, row: organizedRow++ },
+        index: layout.files.length,
+      });
+    }
+  }
+  layout.rows = Math.max(messyRow, organizedRow);
+  return layout;
+};
+
+const LAYOUT = layOut(organizeExample);
+
+const ICONS = {
+  folder: Folder,
+  ebook: FileText,
+  audiobook: Headphones,
+  comic: BookImage,
+};
 
 const Entry = ({ kind, name }: { kind: Kind; name: string }) => {
   const Icon = ICONS[kind];
@@ -116,9 +164,8 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
     el.addEventListener("animationend", onDone);
     return () => el.removeEventListener("animationend", onDone);
   }, [onDone]);
-  // Rows that start together move a beat apart, so they read as files moving
-  // one after another rather than the list jumping.
-  const stagger = (i: number) => `${i * 0.15}s`;
+  const stagger = (i: number) => `${i * STAGGER_S}s`;
+  const lastFile = LAYOUT.files.length - 1;
   return (
     <div
       aria-label="Example: files in a messy folder move into a folder per book, named for its author and title."
@@ -127,13 +174,13 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
         !playing && PAUSED,
       )}
       role="img"
-      style={{ height: ROWS * ROW }}
+      style={{ height: LAYOUT.rows * ROW }}
     >
       <div aria-hidden="true">
         <div className={rowClass}>
-          <Entry kind="folder" name={ROOT} />
+          <Entry kind="folder" name={LAYOUT.root} />
         </div>
-        {MESSY_FOLDERS.map((folder) => {
+        {LAYOUT.messyFolders.map((folder) => {
           const { x, y } = at(folder.level, folder.row);
           return (
             <div
@@ -145,7 +192,7 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
             </div>
           );
         })}
-        {BOOK_FOLDERS.map((folder, i) => {
+        {LAYOUT.bookFolders.map((folder) => {
           const { x, y } = at(folder.level, folder.row);
           return (
             <div
@@ -155,7 +202,8 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
                 {
                   "--x": x,
                   "--y": y,
-                  animationDelay: stagger(i),
+                  // A book's folder waits for its first file to leave the row.
+                  animationDelay: stagger(folder.firstFile),
                 } as CSSProperties
               }
             >
@@ -163,7 +211,8 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
             </div>
           );
         })}
-        {FILES.map((file, i) => {
+        {LAYOUT.files.map((file) => {
+          const i = file.index;
           const from = at(file.before.level, file.before.row);
           const to = at(file.after.level, file.after.row);
           return (
@@ -193,10 +242,8 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
                     NAME_AFTER,
                   )}
                   // The last file's new name is the example's final step.
-                  data-organize-last-step={
-                    i === FILES.length - 1 ? "" : undefined
-                  }
-                  ref={i === FILES.length - 1 ? lastStepRef : undefined}
+                  data-organize-last-step={i === lastFile ? "" : undefined}
+                  ref={i === lastFile ? lastStepRef : undefined}
                   style={{ animationDelay: stagger(i) }}
                 >
                   <Entry kind={file.kind} name={file.after.name} />
@@ -216,21 +263,25 @@ interface StillRow {
   level: number;
 }
 
-const BEFORE: StillRow[] = [
-  { kind: "folder", name: ROOT, level: 0 },
-  { kind: "ebook", name: FILES[0].before.name, level: 1 },
-  { kind: "ebook", name: FILES[1].before.name, level: 1 },
-  { kind: "folder", name: MESSY_FOLDERS[0].name, level: 1 },
-  { kind: "audiobook", name: FILES[2].before.name, level: 2 },
-];
+// The still is the two trees the animation moves between.
+const stillRows = (side: "before" | "after"): StillRow[] => {
+  const places: (StillRow & { row: number })[] = [
+    { kind: "folder", name: LAYOUT.root, level: 0, row: 0 },
+    ...LAYOUT.files.map((file) => ({ kind: file.kind, ...file[side] })),
+    ...(side === "before" ? LAYOUT.messyFolders : LAYOUT.bookFolders).map(
+      (folder) => ({
+        kind: "folder" as const,
+        name: folder.name,
+        level: folder.level,
+        row: folder.row,
+      }),
+    ),
+  ];
+  return places.sort((a, b) => a.row - b.row);
+};
 
-const AFTER: StillRow[] = [
-  { kind: "folder", name: ROOT, level: 0 },
-  ...BOOK_FOLDERS.flatMap((folder, i): StillRow[] => [
-    { kind: "folder", name: folder.name, level: 1 },
-    { kind: FILES[i].kind, name: FILES[i].after.name, level: 2 },
-  ]),
-];
+const BEFORE = stillRows("before");
+const AFTER = stillRows("after");
 
 const StillTree = ({ label, rows }: { label: string; rows: StillRow[] }) => {
   const captionId = useId();
@@ -334,13 +385,12 @@ export const OrganizeAnimation = ({ className }: { className?: string }) => {
           <Animated key={run} onDone={markDone} playing={seen} />
           {done && (
             <Button
-              aria-label="Replay the example"
               className="absolute right-2 top-2 text-muted-foreground"
               onClick={replay}
-              size="icon-sm"
-              title="Replay"
+              size="sm"
               variant="ghost"
             >
+              Replay
               <RotateCcw aria-hidden="true" />
             </Button>
           )}

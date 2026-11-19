@@ -26,25 +26,37 @@ describe("OrganizeAnimation", () => {
     delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
+  it("shows every example file, a comic and a book with two files among them", () => {
+    reducedMotion = true;
+    render(<OrganizeAnimation />);
+
+    const after = screen.getByRole("figure", { name: "After" });
+    // One book's EPUB and M4B land in its one folder.
+    expect(after).toHaveTextContent("[Jane Austen] Pride and Prejudice/");
+    expect(after).toHaveTextContent("Pride and Prejudice.epub");
+    expect(after).toHaveTextContent("Pride and Prejudice.m4b");
+    expect(after).toHaveTextContent("[Winsor McCay] Little Nemo v001/");
+    expect(after).toHaveTextContent("Little Nemo.cbz");
+    const before = screen.getByRole("figure", { name: "Before" });
+    expect(before).toHaveTextContent("little_nemo_vol01.cbz");
+    expect(before).toHaveTextContent("P&P audiobook.m4b");
+  });
+
   it("plays once, then offers to play it again", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     const { container } = render(<OrganizeAnimation />);
     expect(
       screen.getByRole("img", { name: /files in a messy folder move/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Replay the example" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
 
     finishPlaying(container);
-    const replay = screen.getByRole("button", { name: "Replay the example" });
+    const replay = screen.getByRole("button", { name: "Replay" });
 
     // Replaying starts the example over from the messy folder.
     const before = container.querySelector("[data-organize-last-step]");
     await user.click(replay);
-    expect(
-      screen.queryByRole("button", { name: "Replay the example" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
     expect(container.querySelector("[data-organize-last-step]")).not.toBe(
       before,
     );
@@ -55,8 +67,6 @@ describe("OrganizeAnimation", () => {
     render(<OrganizeAnimation />);
 
     expect(screen.getByRole("figure", { name: "Before" })).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Replay the example" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Replay" })).toBeNull();
   });
 });
