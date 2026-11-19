@@ -39,4 +39,16 @@ describe("search marks", () => {
       { x: -2, y: 38, width: 34, height: 20 },
     ]);
   });
+
+  it("draws nothing for an empty box, which the padding would turn into a pill", () => {
+    // Browsers report empty boxes for a break between columns, and Firefox
+    // for other spots too.
+    const boxes = [
+      { left: 10, top: 20, width: 0, height: 16 },
+      { left: 10, top: 40, width: 30, height: 0 },
+      ...RECTS,
+    ];
+    expect(rects(drawChosenMatch(boxes))).toHaveLength(2);
+    expect(rects(drawMatch(boxes))).toHaveLength(2);
+  });
 });

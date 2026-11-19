@@ -27,6 +27,8 @@ const draw = (
   g.setAttribute("fill", color);
   g.style.opacity = String(opacity);
   for (const { left, top, width, height } of boxes) {
+    // An empty box marks nothing.
+    if (!width || !height) continue;
     const rect = document.createElementNS(SVG_NS, "rect");
     rect.setAttribute("x", String(left - pad));
     rect.setAttribute("y", String(top - pad));

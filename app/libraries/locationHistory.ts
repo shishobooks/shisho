@@ -23,10 +23,12 @@ export interface LocationHistorySnapshot {
  * - Going back saves the place it left for going forward again, so forward
  *   returns to where the reader had paged to. A new jump forgets the way
  *   forward, as a browser does.
- * - A place already on screen is skipped, since going there would do
- *   nothing.
+ * - Going back or forward skips the place the reader is already at, since
+ *   going there would do nothing: the same CFI, which in a paginated book
+ *   means the same page.
  *
- * Places are CFIs. The history lasts while the Book is open in the reader.
+ * Places are CFIs of what the screen shows, as the renderer reports it. The
+ * history lasts while the Book is open in the reader.
  */
 export class LocationHistory {
   #back: string[] = [];
@@ -70,29 +72,23 @@ export class LocationHistory {
    * Takes the place to go back to from `current`, or null for none, keeping
    * `current` for going forward again.
    */
-  back(current: string, onScreen: (place: string) => boolean): string | null {
-    return this.#move(this.#back, this.#forward, current, onScreen);
+  back(current: string): string | null {
+    return this.#move(this.#back, this.#forward, current);
   }
 
   /**
    * Takes the place to go forward to from `current`, or null for none,
    * keeping `current` for going back again.
    */
-  forward(
-    current: string,
-    onScreen: (place: string) => boolean,
-  ): string | null {
-    return this.#move(this.#forward, this.#back, current, onScreen);
+  forward(current: string): string | null {
+    return this.#move(this.#forward, this.#back, current);
   }
 
-  #move(
-    from: string[],
-    to: string[],
-    current: string,
-    onScreen: (place: string) => boolean,
-  ): string | null {
+  // Going to the place the reader is already at would do nothing, so it's
+  // skipped.
+  #move(from: string[], to: string[], current: string): string | null {
     let target = from.pop();
-    while (target !== undefined && onScreen(target)) target = from.pop();
+    while (target !== undefined && target === current) target = from.pop();
     if (target === undefined) return null;
     to.push(current);
     this.#group = undefined;

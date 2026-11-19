@@ -2435,7 +2435,6 @@ describe("ReflowableReader location history", () => {
     reason = "page",
   ) =>
     act(() => {
-      sectionOf[cfi] = section;
       view.dispatchEvent(
         new CustomEvent("relocate", {
           detail: {
@@ -2450,8 +2449,6 @@ describe("ReflowableReader location history", () => {
 
   // Where each target of a jump lands.
   let landsAt: Record<string, [string, number]> = {};
-  // The section of each place foliate reported, for resolving it again.
-  let sectionOf: Record<string, number> = {};
 
   const openBook = async () => {
     vi.mocked(useUserSettings).mockReturnValue({
@@ -2477,10 +2474,6 @@ describe("ReflowableReader location history", () => {
       return Promise.resolve();
     };
     view.goTo.mockImplementation(land);
-    Object.assign(view, {
-      resolveNavigation: (cfi: string) =>
-        cfi in sectionOf ? { index: sectionOf[cfi] } : null,
-    });
     view.goToFraction.mockImplementation((f: number) => land(`fraction:${f}`));
     // Where the book opened.
     relocate(view, "start", 0, "anchor");
@@ -2499,7 +2492,6 @@ describe("ReflowableReader location history", () => {
 
   beforeEach(() => {
     landsAt = { "fraction:1": ["end", 9] };
-    sectionOf = {};
   });
 
   it("goes back to where a jump left from, then forward to where back left", async () => {
@@ -2622,40 +2614,13 @@ describe("ReflowableReader location history", () => {
     expect(back()).toBeDisabled();
   });
 
-  it("skips going back to a place already on screen", async () => {
-    landsAt = { a: ["a", 3], b: ["b", 5] };
+  it("skips going back to where the reader already is", async () => {
     const view = await openBook();
-    // A section of four paragraphs, of which the screen shows the last two.
-    const doc = document.implementation.createHTMLDocument("section");
-    doc.body.innerHTML = "<p>1</p><p>2</p><p>3</p><p>4</p>";
-    const paragraphs = doc.querySelectorAll("p");
-    const screenRange = doc.createRange();
-    screenRange.setStartBefore(paragraphs[2]);
-    screenRange.setEndAfter(paragraphs[3]);
-    Object.assign(view, {
-      resolveNavigation: (cfi: string) => ({
-        index: cfi in sectionOf ? sectionOf[cfi] : 7,
-        anchor: () => paragraphs[cfi === "shown" ? 3 : 0],
-      }),
-    });
     const u = user();
-    // Jump from the shown place to b, then from b on.
     relocate(view, "shown", 7);
     await toTheEnd(u);
-    act(() =>
-      view.dispatchEvent(
-        new CustomEvent("relocate", {
-          detail: {
-            cfi: "shown-again",
-            section: { current: 7 },
-            range: screenRange,
-            reason: "page",
-          },
-        }),
-      ),
-    );
-    sectionOf["shown-again"] = 7;
-    // Paged back to where the jump left from: Back has nowhere new to go.
+    // Paged back by hand to the very place the jump left from.
+    relocate(view, "shown", 7);
     await u.click(back());
     expect(view.goTo).not.toHaveBeenCalledWith("shown");
     expect(back()).toBeDisabled();
@@ -2707,86 +2672,99 @@ describe("ReflowableReader location history", () => {
     expect(forward()).toBeDisabled();
   });
 
-  // A section of paragraphs, and what foliate reports showing part of it.
-  const section = () => {
-    const doc = document.implementation.createHTMLDocument("section");
-    doc.body.innerHTML =
-      "<p>Zero zero</p><p>One one</p><p>Two two</p><p>Three three</p>";
-    const text = Array.from(doc.querySelectorAll("p"), (p) => p.firstChild!);
-    const range = (
-      [startNode, startOffset]: [Node, number],
-      [endNode, endOffset]: [Node, number],
-    ) => {
-      const r = doc.createRange();
-      r.setStart(startNode, startOffset);
-      r.setEnd(endNode, endOffset);
-      return r;
-    };
-    return { text, range };
-  };
-  const relocateShowing = (
-    view: HTMLElement,
-    cfi: string,
-    range: Range,
-    reason = "page",
-  ) => {
-    sectionOf[cfi] = 3;
-    act(() => {
-      view.dispatchEvent(
-        new CustomEvent("relocate", {
-          detail: { cfi, section: { current: 3 }, range, reason },
-        }),
-      );
-    });
-  };
-
-  it("counts a short jump that moves the page, though the old place still shows", async () => {
-    const { text, range } = section();
+  it("goes back after a short jump that moves the page, though the old place still shows", async () => {
     const view = await openBook();
-    // The reader was at paragraph one; scrolling up a paragraph to zero
-    // still shows the top of one.
-    relocateShowing(view, "one", range([text[1], 0], [text[3], 5]));
-    Object.assign(view, {
-      resolveNavigation: (cfi: string) => ({
-        index: sectionOf[cfi],
-        anchor: () => range([text[1], 0], [text[1], 0]),
-      }),
-    });
+    // Scrolled half a screen up: the place the jump left from still shows,
+    // but the view moved.
+    relocate(view, "one", 3);
     view.goToFraction.mockImplementation(() => {
-      relocateShowing(
-        view,
-        "zero",
-        range([text[0], 0], [text[2], 5]),
-        "navigation",
-      );
-      return Promise.resolve();
-    });
-    await toTheEnd(user());
-    expect(back()).toBeEnabled();
-  });
-
-  it("doesn't skip going back to the page just before, which ends where this one begins", async () => {
-    const { text, range } = section();
-    const view = await openBook();
-    // The place the jump left from begins mid-paragraph, at the very point
-    // where the page before it ends.
-    relocateShowing(view, "origin", range([text[2], 3], [text[3], 5]));
-    Object.assign(view, {
-      resolveNavigation: (cfi: string) =>
-        cfi === "origin"
-          ? { index: 3, anchor: () => range([text[2], 3], [text[3], 5]) }
-          : null,
-    });
-    view.goToFraction.mockImplementation(() => {
-      relocate(view, "far", 9, "navigation");
+      relocate(view, "half-a-screen-up", 3, "navigation");
       return Promise.resolve();
     });
     const u = user();
     await toTheEnd(u);
+    expect(back()).toBeEnabled();
+    await u.click(back());
+    expect(view.goTo).toHaveBeenLastCalledWith("one");
+  });
+
+  it("goes back from the page just before, which ends where this one begins", async () => {
+    const view = await openBook();
+    relocate(view, "origin", 3);
+    const u = user();
+    await toTheEnd(u);
     // Paged back by hand to the page before the origin.
-    relocateShowing(view, "page-before", range([text[0], 0], [text[2], 3]));
+    relocate(view, "page-before", 3);
     await u.click(back());
     expect(view.goTo).toHaveBeenLastCalledWith("origin");
+  });
+
+  it("counts going to a chapter by its mark on the progress bar", async () => {
+    mockToc = [
+      { label: "Chapter 1", href: "ch1.xhtml" },
+      { label: "Chapter 2", href: "ch2.xhtml" },
+    ];
+    mockSectionOf = { "ch1.xhtml": 0, "ch2.xhtml": 1 };
+    mockFractions = [0, 0.4, 1];
+    landsAt["ch2.xhtml"] = ["chapter-2", 1];
+    try {
+      const view = await openBook();
+      const u = user();
+      await u.click(await screen.findByTestId("chapter-mark"));
+      expect(view.goTo).toHaveBeenCalledWith("ch2.xhtml");
+      expect(back()).toBeEnabled();
+    } finally {
+      mockToc = [];
+    }
+  });
+
+  it("counts a click on the progress bar", async () => {
+    const view = await openBook();
+    const bar = screen.getByRole("slider", { name: "Reading progress" });
+    bar.getBoundingClientRect = () =>
+      ({ left: 0, width: 200, top: 0, height: 6 }) as DOMRect;
+    fireEvent.click(bar, { clientX: 100 });
+    await act(async () => {});
+    expect(view.goToFraction).toHaveBeenCalledWith(0.5);
+    expect(back()).toBeEnabled();
+  });
+
+  it("starts over when the book opens again", async () => {
+    const view = await openBook();
+    const u = user();
+    await toTheEnd(u);
+    expect(back()).toBeEnabled();
+    // The file arrives again, as after a retry, and the book reopens.
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["again"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    await u.click(screen.getByRole("button", { name: "Settings" }));
+    await vi.waitFor(() => expect(view.init).toHaveBeenCalledTimes(2));
+    // Once the book is ready again, not while it opens.
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    expect(back()).toBeDisabled();
+  });
+
+  it("lets the keyboard reach the explanation of a disabled button", async () => {
+    await openBook();
+    const u = user();
+    expect(back()).toBeDisabled();
+    // A disabled button can't take focus, so what holds it does.
+    act(() => back().parentElement!.focus());
+    expect(back().parentElement).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Back to where you were before a jump",
+    );
+    await toTheEnd(u);
+    // Once it works, the button takes focus itself: one stop, not two.
+    expect(back()).toBeEnabled();
+    expect(back().parentElement).not.toHaveAttribute("tabindex");
   });
 
   it("explains each button on hover, even before there's anywhere to go", async () => {
@@ -2883,36 +2861,27 @@ describe("ReflowableReader search shortcuts", () => {
     expect(view.renderer.focusView).toHaveBeenCalled();
   });
 
-  it.each([
-    ["Cmd+F", { key: "f", metaKey: true }],
-    ["Ctrl+F", { key: "f", ctrlKey: true }],
-  ])(
-    "opens search with %s from the book, instead of the browser's find",
-    async (_, init) => {
-      const { doc } = await openBook();
-      expect(pressInBook(doc, init)).toBe(false);
-      await vi.waitFor(() => expect(field()).toHaveFocus());
-    },
-  );
+  // jsdom isn't an Apple platform, so the shortcuts here take Ctrl, as on
+  // Windows and Linux. readerKeys.test.ts covers Cmd on Apple devices.
+  it("opens search with Ctrl+F from the book, instead of the browser's find", async () => {
+    const { doc } = await openBook();
+    expect(pressInBook(doc, { key: "f", ctrlKey: true })).toBe(false);
+    await vi.waitFor(() => expect(field()).toHaveFocus());
+  });
 
-  it("puts the keys back in the field with Cmd+F, the query selected", async () => {
+  it("puts the keys back in the field with Ctrl+F, the query selected", async () => {
     const { doc } = await openBook();
     const u = user();
     await u.click(screen.getByRole("button", { name: "Search" }));
     await u.type(field()!, "lantern");
     await u.click(await screen.findByRole("button", { name: "lantern first" }));
-    pressInBook(doc, { key: "f", metaKey: true });
+    pressInBook(doc, { key: "f", ctrlKey: true });
     const input = field() as HTMLInputElement;
     expect(input).toHaveFocus();
     expect([input.selectionStart, input.selectionEnd]).toEqual([0, 7]);
   });
 
   it.each([
-    [
-      "Cmd+G",
-      { key: "g", metaKey: true },
-      { key: "G", metaKey: true, shiftKey: true },
-    ],
     [
       "Ctrl+G",
       { key: "g", ctrlKey: true },
@@ -2944,21 +2913,101 @@ describe("ReflowableReader search shortcuts", () => {
     },
   );
 
-  it("opens search with Cmd+G when it's closed", async () => {
+  it("opens search with Ctrl+G when it's closed", async () => {
     const { doc } = await openBook();
-    pressInBook(doc, { key: "g", metaKey: true });
+    pressInBook(doc, { key: "g", ctrlKey: true });
     await vi.waitFor(() => expect(field()).toHaveFocus());
   });
 
-  it("steps with Cmd+G typed in the field, keeping the keys there", async () => {
+  it("steps with Ctrl+G typed in the field, keeping the keys there", async () => {
     const { view } = await openBook();
     const u = user();
     await u.click(screen.getByRole("button", { name: "Search" }));
     await u.type(field()!, "lantern");
     await screen.findByRole("button", { name: "lantern first" });
-    await u.keyboard("{Meta>}g{/Meta}");
+    await u.keyboard("{Control>}g{/Control}");
     await act(async () => {});
     expect(view.goTo).toHaveBeenLastCalledWith("first");
     expect(field()).toHaveFocus();
+  });
+
+  it("closes search with Escape pressed in the book", async () => {
+    const { doc } = await openBook();
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    pressInBook(doc, { key: "Escape" });
+    await vi.waitFor(() => expect(field()).toBeNull());
+  });
+
+  it("drops a link's focus in the book before giving it the keys", async () => {
+    const { view, doc } = await openBook();
+    // A link the reader tabbed to: foliate scrolls to whatever has focus,
+    // and a frame given focus gives it back to what last had it. (A document
+    // jsdom doesn't render can't take focus, so this stands in for it.)
+    const link = doc.createElement("a");
+    link.blur = vi.fn();
+    Object.defineProperty(doc, "activeElement", { get: () => link });
+    Object.assign(view.renderer, { getContents: () => [{ doc, index: 0 }] });
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    expect(link.blur).toHaveBeenCalled();
+    expect(vi.mocked(link.blur).mock.invocationCallOrder[0]).toBeLessThan(
+      view.renderer.focusView.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("gives a fixed-layout book the keys by leaving the search", async () => {
+    const { view } = await openBook();
+    // A fixed-layout book's renderer can't take focus; the page turns its
+    // pages instead.
+    Object.assign(view.renderer, { focusView: undefined });
+    const u = user();
+    await u.click(screen.getByRole("button", { name: "Search" }));
+    await u.type(field()!, "lantern");
+    await u.click(await screen.findByRole("button", { name: "lantern first" }));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("leaves the shortcuts to another open menu", async () => {
+    await openBook();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "listbox");
+    const option = document.createElement("div");
+    option.tabIndex = -1;
+    menu.append(option);
+    document.body.append(menu);
+    option.focus();
+    fireEvent.keyDown(option, { key: "f", ctrlKey: true });
+    expect(field()).toBeNull();
+    menu.remove();
+  });
+
+  it("keeps the book clear of the controls while search is open, with auto-hide on", async () => {
+    vi.mocked(useUserSettings).mockReturnValue({
+      data: { viewer_hide_chrome: true },
+      isLoading: false,
+    } as never);
+    vi.mocked(useReflowableBlob).mockReturnValue({
+      data: new Blob(["x"], { type: "application/epub+zip" }),
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    } as never);
+    renderReader();
+    await vi.waitFor(() =>
+      expect(screen.getByRole("button", { name: "Search" })).toBeEnabled(),
+    );
+    // Auto-hide lays the controls over the book.
+    expect(screen.getByRole("banner")).toHaveClass("fixed");
+    await user().click(screen.getByRole("button", { name: "Search" }));
+    // While searching they sit beside it, so the panel's row covers only the
+    // page's top margin, as it does with auto-hide off.
+    expect(screen.getByRole("banner")).not.toHaveClass("fixed");
+    expect(screen.getByRole("main")).not.toHaveClass("fixed");
   });
 });

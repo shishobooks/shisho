@@ -5,19 +5,12 @@ import { LocationHistory } from "@/libraries/locationHistory";
 // The parts of foliate's <foliate-view> the history uses.
 type HistoryBook = HTMLElement & {
   goTo?: (target: string) => unknown;
-  resolveNavigation?: (target: string) => {
-    index?: number;
-    anchor?: (doc: Document) => Range | Node | null;
-  } | null;
 };
 
-// Where the reader is, as foliate last reported it.
+// Where the reader is, as foliate last reported it: the CFI of what the
+// screen shows.
 interface Here {
   cfi: string;
-  section?: number;
-  // What the screen shows. A fixed-layout book's renderer doesn't say, and
-  // there a section is a page.
-  range?: Range | null;
 }
 
 const warn = (err: unknown) =>
@@ -65,59 +58,12 @@ export function useLocationHistory(view: HTMLElement | null) {
   useEffect(() => {
     if (!view) return;
     const handleRelocate = (evt: Event) => {
-      const detail = (
-        evt as CustomEvent<{
-          cfi?: string;
-          range?: Range | null;
-          section?: { current?: number } | null;
-        }>
-      ).detail;
-      if (!detail?.cfi) return;
-      hereRef.current = {
-        cfi: detail.cfi,
-        section: detail.section?.current,
-        range: detail.range,
-      };
+      const cfi = (evt as CustomEvent<{ cfi?: string }>).detail?.cfi;
+      if (cfi) hereRef.current = { cfi };
     };
     view.addEventListener("relocate", handleRelocate);
     return () => view.removeEventListener("relocate", handleRelocate);
   }, [view]);
-
-  // Whether a place is on the screen the reader shows now. In a fixed-layout
-  // book that's its page, so a jump between the two pages of a spread counts
-  // as leaving the screen.
-  const onScreen = useCallback(
-    (cfi: string) => {
-      const here = hereRef.current;
-      if (!here) return false;
-      try {
-        const resolved = (view as HistoryBook | null)?.resolveNavigation?.(cfi);
-        if (!resolved || resolved.index !== here.section) return false;
-        if (!here.range) return true;
-        const node = here.range.startContainer;
-        const target = resolved.anchor?.(
-          node.ownerDocument ?? (node as Document),
-        );
-        if (!target) return false;
-        const [point, offset] =
-          "startContainer" in target
-            ? [target.startContainer, target.startOffset]
-            : [target, 0];
-        // The screen runs up to its end, which is where the next page
-        // begins: a page that starts mid-paragraph starts at the very point
-        // the page before it ends.
-        const end = here.range.cloneRange();
-        end.collapse(false);
-        return (
-          here.range.comparePoint(point, offset) === 0 &&
-          end.comparePoint(point, offset) !== 0
-        );
-      } catch {
-        return false;
-      }
-    },
-    [view],
-  );
 
   /**
    * Makes a jump, recording where it left from if it moved the page.
@@ -135,8 +81,8 @@ export function useLocationHistory(view: HTMLElement | null) {
         if (!origin || historyRef.current !== history) return;
         // A jump that didn't move the view, such as to a search result on
         // the page shown, leaves nothing to go back to. Any move counts,
-        // however short: the page just before shares a point with this one,
-        // and a short scroll leaves the old place in view.
+        // however short, such as to the page just before or a short scroll
+        // up, so going back has somewhere to return to.
         const landed = hereRef.current;
         if (!landed || landed === origin || landed.cfi === origin.cfi) return;
         history.recordJump(origin.cfi, group);
@@ -154,8 +100,8 @@ export function useLocationHistory(view: HTMLElement | null) {
         const before = history.save();
         const target =
           direction === "back"
-            ? history.back(here.cfi, onScreen)
-            : history.forward(here.cfi, onScreen);
+            ? history.back(here.cfi)
+            : history.forward(here.cfi);
         sync();
         if (target === null) return;
         try {
@@ -171,7 +117,7 @@ export function useLocationHistory(view: HTMLElement | null) {
           }
         }
       }).catch(warn),
-    [view, takeTurn, onScreen, sync],
+    [view, takeTurn, sync],
   );
 
   return {

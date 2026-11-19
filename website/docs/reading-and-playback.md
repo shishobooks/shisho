@@ -25,17 +25,17 @@ Reopening a book returns to where you left off. See [Resuming Where You Left Off
 
 Select the **Search** button in the reader's header and type a word or phrase. Search ignores capitalization and accents, so `cafe` also finds "café", and it matches inside longer words, so `lantern` also finds "lanterns". A single character searches only when you press Enter. Results are listed in book order under the chapter they're in.
 
-Select a result to go to it. Every match on the page is shaded, and the one you went to is shaded more strongly. Press Enter in the search field for the next result and Shift+Enter for the previous one, or use the arrows beside the count. Select **Results** to show the list again. After you select a result, the arrow keys turn pages again.
+Select a result to go to it. Every match on the page is shaded, and the one you went to is shaded more strongly. Press Enter in the search field for the next result and Shift+Enter for the previous one, or use the arrows beside the count. Select the list button beside the arrows to show the list again. Selecting a result or clicking an arrow returns the keyboard to the book, so the arrow keys turn pages; Enter in the search field keeps it there to step again.
 
 The reader takes over the browser's find shortcuts, which can't search a whole book:
 
 | Shortcut | Action |
 | --- | --- |
-| Ctrl+F (⌘F on a Mac) | Open search, or return to its field |
-| Ctrl+G (⌘G), F3 | Next result |
-| Ctrl+Shift+G (⇧⌘G), Shift+F3 | Previous result |
+| Ctrl+F, or Cmd+F on a Mac or iPad | Open search, or return to its field |
+| Ctrl+G or F3, or Cmd+G on a Mac or iPad | Next result |
+| Ctrl+Shift+G or Shift+F3, or Cmd+Shift+G on a Mac or iPad | Previous result |
 
-They work anywhere in the reader, including while you read, so you can step through results without leaving the page.
+They work even when the search field doesn't have the keyboard, so you can step through results while reading. If search is closed, each of them opens it. Press Escape to close search.
 
 Search stays open while you turn pages. Closing it removes the highlights. Going to a result moves your place in the book, as following a link does, so reopening the book returns there, and [going back](#going-back-after-a-jump) returns to where you were before the search.
 
@@ -45,7 +45,7 @@ In fixed-layout books, search finds matches and goes to their page but doesn't h
 
 Following a link, choosing a chapter from the menu, selecting a spot or a chapter mark on the progress bar, selecting **Go to note** in a footnote, and going to a search result are jumps. To return to where you were before a jump, select **Back to previous location**, the arrow at the left of the reader's header. It returns there however many pages you've turned since. **Forward to next location**, beside it, returns to where you were when you went back.
 
-Turning pages is never a jump, even into the next chapter, and neither is going to a place on the page you're already on. A search counts as one jump however many results you step through, so going back returns to the page you were on when a result first took you off it. The places to go back and forward to start over each time you open the book.
+Turning pages is never a jump, even into the next chapter. In Paginated layout, neither is going to a place on the page you're already on. A search counts as one jump however many results you step through, so going back returns to the page you were on when a result first took you off it. The places to go back and forward to start over each time you open the book.
 
 ### Display Settings
 

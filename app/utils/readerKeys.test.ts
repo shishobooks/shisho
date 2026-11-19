@@ -82,29 +82,46 @@ describe("turnInDirection", () => {
 });
 
 describe("searchShortcutForKey", () => {
-  const shortcut = (init: KeyboardEventInit) =>
-    searchShortcutForKey(new KeyboardEvent("keydown", init));
+  const onMac = (init: KeyboardEventInit) =>
+    searchShortcutForKey(new KeyboardEvent("keydown", init), true);
+  const elsewhere = (init: KeyboardEventInit) =>
+    searchShortcutForKey(new KeyboardEvent("keydown", init), false);
 
-  it("finds with Cmd+F or Ctrl+F", () => {
-    expect(shortcut({ key: "f", metaKey: true })).toBe("find");
-    expect(shortcut({ key: "f", ctrlKey: true })).toBe("find");
-    expect(shortcut({ key: "F", metaKey: true, shiftKey: true })).toBeNull();
+  it("finds with Cmd+F on Apple devices and Ctrl+F elsewhere", () => {
+    expect(onMac({ key: "f", metaKey: true })).toBe("find");
+    expect(elsewhere({ key: "f", ctrlKey: true })).toBe("find");
+    expect(onMac({ key: "F", metaKey: true, shiftKey: true })).toBeNull();
   });
 
-  it("steps with Cmd+G, Ctrl+G, and F3, and back with Shift", () => {
-    expect(shortcut({ key: "g", metaKey: true })).toBe("next");
-    expect(shortcut({ key: "g", ctrlKey: true })).toBe("next");
-    expect(shortcut({ key: "G", metaKey: true, shiftKey: true })).toBe(
+  it("leaves Ctrl+F to a Mac's text fields, which move the cursor with it", () => {
+    expect(onMac({ key: "f", ctrlKey: true })).toBeNull();
+    expect(onMac({ key: "g", ctrlKey: true })).toBeNull();
+    expect(elsewhere({ key: "f", metaKey: true })).toBeNull();
+  });
+
+  it("steps with Cmd+G or Ctrl+G and F3, and back with Shift", () => {
+    expect(onMac({ key: "g", metaKey: true })).toBe("next");
+    expect(onMac({ key: "G", metaKey: true, shiftKey: true })).toBe("previous");
+    expect(elsewhere({ key: "g", ctrlKey: true })).toBe("next");
+    expect(elsewhere({ key: "G", ctrlKey: true, shiftKey: true })).toBe(
       "previous",
     );
-    expect(shortcut({ key: "F3" })).toBe("next");
-    expect(shortcut({ key: "F3", shiftKey: true })).toBe("previous");
+    expect(elsewhere({ key: "F3" })).toBe("next");
+    expect(onMac({ key: "F3", shiftKey: true })).toBe("previous");
+  });
+
+  it("knows the keys by where they are on a layout without Latin letters", () => {
+    expect(elsewhere({ key: "а", code: "KeyF", ctrlKey: true })).toBe("find");
+    expect(elsewhere({ key: "п", code: "KeyG", ctrlKey: true })).toBe("next");
+    // A Latin layout that puts another letter there means that letter.
+    expect(elsewhere({ key: "z", code: "KeyF", ctrlKey: true })).toBeNull();
   });
 
   it("leaves other keys alone", () => {
-    expect(shortcut({ key: "f" })).toBeNull();
-    expect(shortcut({ key: "g" })).toBeNull();
-    expect(shortcut({ key: "f", metaKey: true, altKey: true })).toBeNull();
-    expect(shortcut({ key: "F3", metaKey: true })).toBeNull();
+    expect(elsewhere({ key: "f" })).toBeNull();
+    expect(elsewhere({ key: "g" })).toBeNull();
+    // AltGr on Windows is Ctrl+Alt.
+    expect(elsewhere({ key: "f", ctrlKey: true, altKey: true })).toBeNull();
+    expect(elsewhere({ key: "F3", ctrlKey: true })).toBeNull();
   });
 });

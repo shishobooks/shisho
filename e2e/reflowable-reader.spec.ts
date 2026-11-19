@@ -230,43 +230,54 @@ test.describe("Reflowable reader", () => {
   test.describe("on a phone-sized screen", () => {
     test.use({ viewport: { width: 390, height: 844 } });
 
-    test("search folded to one row leaves the page's first line clear", async ({
-      page,
-    }) => {
-      await login(page);
-      await setPaginatedReader(page);
-      await openReader(page, longBookId);
-      await bookFrame(page, "Test chapter.");
-      // A page of filler, whose text starts at the top of the page.
-      await page.getByRole("button", { name: "Next page" }).click();
+    for (const hideChrome of [false, true]) {
+      test(`search folded to one row leaves the page's first line clear${hideChrome ? ", with auto-hide on" : ""}`, async ({
+        page,
+      }) => {
+        await login(page);
+        await setPaginatedReader(page);
+        const put = await page.request.put("/api/settings/user", {
+          data: { viewer_hide_chrome: hideChrome },
+        });
+        expect(put.ok()).toBe(true);
+        await openReader(page, longBookId);
+        await bookFrame(page, "Test chapter.");
+        // A page of filler, whose text starts at the top of the page.
+        await page.keyboard.press("ArrowRight");
+        await bookFrame(page, "Filler text");
+        // Auto-hide may have hidden the controls; moving the pointer shows
+        // them.
+        await page.mouse.move(200, 400);
+        await page.mouse.move(210, 410);
 
-      await page.getByRole("button", { name: "Search", exact: true }).click();
-      const panel = page.getByRole("dialog", { name: "Search in book" });
-      await panel
-        .getByRole("searchbox", { name: "Search in book" })
-        .fill("The end");
-      await panel.getByRole("button", { name: "The end." }).click();
-      const frame = await bookFrame(page, "The end.");
-      await expect(panel.getByRole("status")).toHaveText("1 of 1");
+        await page.getByRole("button", { name: "Search", exact: true }).click();
+        const panel = page.getByRole("dialog", { name: "Search in book" });
+        await panel
+          .getByRole("searchbox", { name: "Search in book" })
+          .fill("The end");
+        await panel.getByRole("button", { name: "The end." }).click();
+        const frame = await bookFrame(page, "The end.");
+        await expect(panel.getByRole("status")).toHaveText("1 of 1");
 
-      const firstLineTop = async () => {
-        const frameBox = (await (await frame.frameElement()).boundingBox())!;
-        // The frame scrolls sideways through the chapter, so the topmost
-        // text on the screen is the topmost of the paragraphs shown.
-        const top = await frame.evaluate(() =>
-          Math.min(
-            ...Array.from(document.querySelectorAll("p"), (p) =>
-              p.getBoundingClientRect(),
-            )
-              .filter((r) => r.right > 0 && r.left < window.innerWidth)
-              .map((r) => r.top),
-          ),
-        );
-        return frameBox.y + top;
-      };
-      const panelBox = (await panel.boundingBox())!;
-      expect(panelBox.y + panelBox.height).toBeLessThan(await firstLineTop());
-    });
+        const firstLineTop = async () => {
+          const frameBox = (await (await frame.frameElement()).boundingBox())!;
+          // The frame scrolls sideways through the chapter, so the topmost
+          // text on the screen is the topmost of the paragraphs shown.
+          const top = await frame.evaluate(() =>
+            Math.min(
+              ...Array.from(document.querySelectorAll("p"), (p) =>
+                p.getBoundingClientRect(),
+              )
+                .filter((r) => r.right > 0 && r.left < window.innerWidth)
+                .map((r) => r.top),
+            ),
+          );
+          return frameBox.y + top;
+        };
+        const panelBox = (await panel.boundingBox())!;
+        expect(panelBox.y + panelBox.height).toBeLessThan(await firstLineTop());
+      });
+    }
 
     test("a footnote's popover keeps clear of the screen's edges", async ({
       page,

@@ -155,7 +155,8 @@ const flattenToc = (
 
 // A Back or Forward button, with a tooltip saying what it does. A disabled
 // button gets no pointer events, so the tooltip hangs from what holds it and
-// explains the button before there's anywhere to go.
+// explains the button before there's anywhere to go. The 16px keeps it in the
+// page gutter on a phone.
 function LocationButton({
   label,
   hint,
@@ -172,7 +173,13 @@ function LocationButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="inline-flex">
+        {/* A disabled button can't take focus either, so while it's
+            disabled its wrapper does, letting the keyboard reach the
+            tooltip too. */}
+        <span
+          className="inline-flex rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          tabIndex={disabled ? 0 : undefined}
+        >
           <Button
             aria-label={label}
             disabled={disabled}
@@ -184,7 +191,7 @@ function LocationButton({
           </Button>
         </span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-60" collisionPadding={8} side="bottom">
+      <TooltipContent className="max-w-60" collisionPadding={16} side="bottom">
         {hint}
       </TooltipContent>
     </Tooltip>
@@ -248,9 +255,12 @@ export default function ReflowableReader({
   // Search stays open while the reader turns pages, and its panel hangs from
   // the header, so the controls stay while it's open.
   const [searchOpen, setSearchOpen] = useState(false);
-  const { chromeVisible, revealChrome, toggleChrome } = useAutoHideChrome(
-    hideChrome && !searchOpen,
-  );
+  // Auto-hide lays the controls over the book. While searching they stay,
+  // and sit beside the book instead, so the search panel hanging from them
+  // covers only the page's top margin.
+  const overlayChrome = hideChrome && !searchOpen;
+  const { chromeVisible, revealChrome, toggleChrome } =
+    useAutoHideChrome(overlayChrome);
 
   const {
     saved,
@@ -511,17 +521,38 @@ export default function ReflowableReader({
     const renderer = (
       viewRef.current as (HTMLElement & { renderer?: FoliateRenderer }) | null
     )?.renderer;
-    if (renderer?.focusView) renderer.focusView();
-    else (document.activeElement as HTMLElement | null)?.blur?.();
+    if (!renderer?.focusView) {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+      return;
+    }
+    // A frame given focus gives it back to what last had it there, and
+    // foliate scrolls to whatever takes focus: a link tabbed to earlier
+    // would pull the page back from where the result went.
+    for (const { doc } of renderer.getContents?.() ?? []) {
+      (doc.activeElement as HTMLElement | null)?.blur?.();
+    }
+    renderer.focusView();
   }, []);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      const shortcut = searchShortcutForKey(e);
+      const target = e.target as (Node & Partial<Element>) | null;
+      // The search panel closes itself on Escape, but a key pressed in the
+      // book's frame, where a chosen result leaves the keys, never reaches it.
+      const fromBook =
+        !!target && (target.ownerDocument ?? target) !== document;
+      if (e.key === "Escape" && fromBook) {
+        setSearchOpen(false);
+        return;
+      }
+      // An open menu, such as the chapter list, keeps its keys.
+      const inMenu = !!target?.closest?.('[role="listbox"]');
+      const shortcut = inMenu ? null : searchShortcutForKey(e);
       if (shortcut) {
         // The browser's own find can't search the book.
         e.preventDefault();
-        const panel = searchRef.current;
+        // The panel stays mounted while it fades out after closing.
+        const panel = searchOpen ? searchRef.current : null;
         if (!panel) setSearchOpen(true);
         else if (shortcut === "find") panel.focusField();
         else panel[shortcut]();
@@ -531,7 +562,7 @@ export default function ReflowableReader({
       if (turn === "next") goNext();
       else if (turn === "prev") goPrev();
     },
-    [goNext, goPrev],
+    [goNext, goPrev, searchOpen],
   );
 
   // Keyboard navigation (only when a book is loaded).
@@ -1053,9 +1084,9 @@ export default function ReflowableReader({
       <header
         className={cn(
           "flex items-center justify-between gap-2 px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-          hideChrome &&
+          overlayChrome &&
             "fixed top-[var(--banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
-          hideChrome && !chromeVisible && "-translate-y-full",
+          overlayChrome && !chromeVisible && "-translate-y-full",
         )}
         ref={headerRef}
       >
@@ -1149,7 +1180,7 @@ export default function ReflowableReader({
       <main
         className={cn(
           "relative bg-background",
-          hideChrome
+          overlayChrome
             ? "fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)]"
             : "flex-1",
         )}
@@ -1168,7 +1199,7 @@ export default function ReflowableReader({
 
         {/* Tapping the page toggles the controls; keyboard users get a button
             that shows on focus and doesn't otherwise cover the book. */}
-        {hideChrome && flow !== "scrolled" && (
+        {overlayChrome && flow !== "scrolled" && (
           <Button
             className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:bottom-24 focus-visible:left-1/2 focus-visible:z-30 focus-visible:-translate-x-1/2"
             onClick={toggleChrome}
@@ -1241,9 +1272,9 @@ export default function ReflowableReader({
       <footer
         className={cn(
           "border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
-          hideChrome &&
+          overlayChrome &&
             "fixed bottom-0 inset-x-0 z-20 transition-transform duration-300",
-          hideChrome && !chromeVisible && "translate-y-full",
+          overlayChrome && !chromeVisible && "translate-y-full",
         )}
         ref={footerRef}
       >
