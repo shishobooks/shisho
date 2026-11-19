@@ -233,6 +233,10 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 30000,
   retries: process.env.CI ? 1 : 0,
+  // A suite that runs this long in CI has hung. Stopping it here, under the
+  // workflow's 20-minute step timeout, reports which tests were still
+  // running, where the step timeout would kill it without a word.
+  globalTimeout: process.env.CI ? 18 * 60_000 : undefined,
   // Single worker ensures all tests run sequentially, avoiding database
   // race conditions between test files. Browsers run one after another.
   workers: 1,
