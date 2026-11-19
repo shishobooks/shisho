@@ -81,6 +81,8 @@ export const clearSetupDraft = () => {
 export interface LibraryStepErrors {
   name?: string;
   paths?: string;
+  /** Folders, as typed, that the server can't find or open. */
+  missingPaths?: string[];
 }
 
 /** What's missing before the library step can move on. */

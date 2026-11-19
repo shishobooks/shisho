@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, CircleCheck, CircleDashed, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
@@ -22,7 +23,10 @@ import { SetupLayout } from "@/components/setup/SetupLayout";
 import { Button } from "@/components/ui/button";
 import { useGettingStartedPanel } from "@/contexts/GettingStarted";
 import { useConfig } from "@/hooks/queries/config";
-import { useDetectFileTypes } from "@/hooks/queries/filesystem";
+import {
+  fetchDetectFileTypes,
+  useDetectFileTypes,
+} from "@/hooks/queries/filesystem";
 import { useCreateLibrary } from "@/hooks/queries/libraries";
 import {
   useInstallPlugin,
@@ -90,6 +94,21 @@ const STATUS_TEXT: Record<TaskStatus, string> = {
 };
 
 /**
+ * Sends the enrichment step back to the library step, with the folders the
+ * server can't open marked there.
+ */
+const MissingFolders = ({
+  missing,
+  onShow,
+}: {
+  missing: string[];
+  onShow: (missing: string[]) => void;
+}) => {
+  useEffect(() => onShow(missing), [missing, onShow]);
+  return <Navigate replace to="/setup/library" />;
+};
+
+/**
  * Setup after the admin account: the Library step, then the enrichment step,
  * then Finish, which installs the chosen plugins and only then creates the
  * library, so its first scan runs with them. The step is in the URL and the
@@ -125,6 +144,11 @@ const SetupFlow = () => {
   const [showErrors, setShowErrors] = useState(false);
   const errors: LibraryStepErrors = libraryStepErrors(draft);
   const libraryReady = !errors.name && !errors.paths;
+  // Folders the server couldn't open when the admin last tried to go on. A
+  // row stops showing its error as soon as its path changes.
+  const [missingPaths, setMissingPaths] = useState<string[]>([]);
+  const [checkingFolders, setCheckingFolders] = useState(false);
+  const queryClient = useQueryClient();
 
   // Detection starts as soon as there are folders, so its answer is usually
   // ready by the time the enrichment step opens.
@@ -140,8 +164,9 @@ const SetupFlow = () => {
   const detection = useDetectFileTypes(detectPaths);
   const detectionCurrent = detectPaths.join("\n") === paths.join("\n");
 
-  // The repository is fetched in the background too.
-  const availableQuery = usePluginsAvailable();
+  // The repository is fetched in the background too. The step offers a way
+  // on without it, so a failure shows at once instead of after retries.
+  const availableQuery = usePluginsAvailable({ retry: false });
   const installedQuery = usePluginsInstalled();
   const installedKeys = useMemo(
     () => new Set((installedQuery.data ?? []).map(pluginKey)),
@@ -262,8 +287,26 @@ const SetupFlow = () => {
     navigate("/");
   };
 
-  const handleLibraryContinue = () => {
+  // A library made from a folder the server can't open never scans, so
+  // going on waits for the server to look at the folders. Detection only
+  // advises otherwise, so a failed check doesn't hold the admin here.
+  const handleLibraryContinue = async () => {
     if (!libraryReady) {
+      setShowErrors(true);
+      return;
+    }
+    setCheckingFolders(true);
+    let missing: string[] = [];
+    try {
+      const result = await fetchDetectFileTypes(queryClient, paths);
+      missing = result.missing_paths ?? [];
+    } catch {
+      // Detection failed; the enrichment step falls back as it does then.
+    } finally {
+      setCheckingFolders(false);
+    }
+    setMissingPaths(missing);
+    if (missing.length > 0) {
       setShowErrors(true);
       return;
     }
@@ -336,6 +379,17 @@ const SetupFlow = () => {
     return <Navigate replace to="/setup/library" />;
   }
 
+  const missingOnPluginsStep =
+    step === "plugins" && detectionCurrent
+      ? (detection.data?.missing_paths ?? [])
+      : [];
+  if (missingOnPluginsStep.length > 0) {
+    // Reloaded here after a folder went away: back to where it's fixed.
+    return (
+      <MissingFolders missing={missingOnPluginsStep} onShow={setMissingPaths} />
+    );
+  }
+
   if (step === "plugins") {
     // The enrichment step needs a library to make and a role that installs
     // plugins.
@@ -382,11 +436,12 @@ const SetupFlow = () => {
     >
       <LibraryStep
         continueLabel={canInstall ? "Continue" : "Finish setup"}
+        continuePending={checkingFolders}
         devLibraryPath={devLibraryPath}
         draft={draft}
-        errors={showErrors ? errors : {}}
+        errors={{ ...(showErrors ? errors : {}), missingPaths }}
         onChange={update}
-        onContinue={handleLibraryContinue}
+        onContinue={() => void handleLibraryContinue()}
       />
     </SetupLayout>
   );

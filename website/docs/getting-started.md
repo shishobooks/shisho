@@ -113,7 +113,7 @@ Give the library a name, and under **Folders** enter `/media`, or select **Brows
 Back up the media first. Clear **Organize file structure during scans** before you finish if Shisho must keep your existing paths. You can change it later in the library's settings, but files already moved stay where they are.
 :::
 
-Select **Continue**. While you are on this step, Shisho looks through the folders to count the ebooks, audiobooks, and comics in them, going by file extension. On a large library or a slow disk it stops after a few seconds or a few thousand files and says it looked at only part of them.
+Select **Continue**. Setup checks that the server can open each folder and marks any it can't find, such as a mistyped path or a mount missing from the container, before it goes on. While you are on this step, Shisho looks through the folders to count the ebooks, audiobooks, and comics in them, going by file extension. On a large library or a slow disk it stops after a few seconds or a few thousand files and says it looked at only part of them.
 
 ### Add Metadata Plugins
 

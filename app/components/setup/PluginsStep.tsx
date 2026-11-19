@@ -74,11 +74,12 @@ export const PluginsStep = ({
           />
           <div className="space-y-1">
             <p className="text-sm font-medium">
-              We couldn't reach the plugin repository
+              We couldn't load plugins from the plugin repository
             </p>
             <p className="text-sm text-muted-foreground">
-              Plugins can't be installed right now. You can add them later from
-              Administration &gt; Plugins.
+              This server may be offline, or the repository may be unreachable
+              from it. You can add plugins later from Administration &gt;
+              Plugins.
             </p>
           </div>
         </div>

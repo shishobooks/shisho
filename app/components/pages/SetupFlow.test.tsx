@@ -180,7 +180,8 @@ const Landing = () => {
   );
 };
 
-const renderSetup = (path = "/setup/library") => {
+// `retries` keeps TanStack Query's default retries, as the app has them.
+const renderSetup = (path = "/setup/library", { retries = false } = {}) => {
   const router = createMemoryRouter(
     [
       { path: "/setup/:step", element: <SetupFlow /> },
@@ -193,10 +194,12 @@ const renderSetup = (path = "/setup/library") => {
     <QueryClientProvider
       client={
         new QueryClient({
-          defaultOptions: {
-            queries: { retry: false },
-            mutations: { retry: false },
-          },
+          defaultOptions: retries
+            ? {}
+            : {
+                queries: { retry: false },
+                mutations: { retry: false },
+              },
         })
       }
     >
@@ -243,6 +246,41 @@ describe("Setup", () => {
   });
 
   describe("Library step", () => {
+    it("won't go on with a folder the server can't open", async () => {
+      const server = newServer({
+        detected: {
+          ebooks: 0,
+          audiobooks: 0,
+          comics: 0,
+          stopped_early: false,
+          missing_paths: ["/media/typo"],
+        },
+      });
+      stubAPI(server);
+      const user = createUser();
+      const { router } = renderSetup();
+      await fillLibraryStep(user, { path: "/media/typo" });
+
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      await flush();
+
+      expect(router.state.location.pathname).toBe("/setup/library");
+      const folder = screen.getByLabelText("Folder 1");
+      expect(folder).toHaveAttribute("aria-invalid", "true");
+      expect(folder).toHaveAccessibleDescription(
+        /can't find or open this folder/i,
+      );
+
+      // Fixing the path clears the error.
+      server.detected = { ...server.detected, ebooks: 3, missing_paths: [] };
+      await user.clear(folder);
+      await user.type(folder, "/media/books");
+      expect(screen.queryByText(/can't find or open this folder/i)).toBeNull();
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      await flush();
+      expect(router.state.location.pathname).toBe("/setup/plugins");
+    });
+
     it("asks for a name and folders, with organizing on by default", async () => {
       stubAPI(newServer());
       renderSetup();
@@ -568,19 +606,20 @@ describe("Setup", () => {
       ).toBeInTheDocument();
     });
 
-    it("says when the repository can't be reached and still finishes", async () => {
+    it("says at once when the repository can't be reached, and still finishes", async () => {
       const server = newServer({
         available: new ShishoAPIError("Bad gateway", "upstream_error", 502),
       });
       stubAPI(server);
       const user = createUser();
-      const { router } = renderSetup();
+      // Retrying the repository would keep the admin waiting for seconds.
+      const { router } = renderSetup("/setup/library", { retries: true });
       await fillLibraryStep(user);
       await user.click(screen.getByRole("button", { name: "Continue" }));
       await flush();
 
       expect(
-        screen.getByText(/couldn't reach the plugin repository/i),
+        screen.getByText(/couldn't load plugins from the plugin repository/i),
       ).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Continue" }));
       await flush();
@@ -602,7 +641,7 @@ describe("Setup", () => {
       await flush();
 
       expect(
-        screen.getByText(/couldn't reach the plugin repository/i),
+        screen.getByText(/couldn't load plugins from the plugin repository/i),
       ).toBeInTheDocument();
     });
 

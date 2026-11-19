@@ -1,4 +1,4 @@
-import { FolderOpen, Plus, Trash2 } from "lucide-react";
+import { FolderOpen, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import DirectoryPickerDialog from "@/components/library/DirectoryPickerDialog";
@@ -20,6 +20,8 @@ interface LibraryStepProps {
   errors: LibraryStepErrors;
   onContinue: () => void;
   continueLabel: string;
+  /** The server is looking at the folders before Setup goes on. */
+  continuePending?: boolean;
   /** The dev server's sample library, offered as a shortcut in development. */
   devLibraryPath?: string;
 }
@@ -30,6 +32,7 @@ export const LibraryStep = ({
   errors,
   onContinue,
   continueLabel,
+  continuePending,
   devLibraryPath,
 }: LibraryStepProps) => {
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
@@ -87,43 +90,61 @@ export const LibraryStep = ({
             comics. Shisho looks inside every folder below them.
           </p>
         </div>
-        {paths.map((path, index) => (
-          <div className="flex items-center gap-2" key={index}>
-            <Input
-              aria-describedby={
-                errors.paths ? "setup-folders-error" : undefined
-              }
-              aria-invalid={errors.paths ? true : undefined}
-              aria-label={`Folder ${index + 1}`}
-              className="min-w-0 flex-1"
-              onChange={(e) => setPath(index, e.target.value)}
-              placeholder="/media"
-              value={path}
-            />
-            <Button
-              aria-label={`Browse for folder ${index + 1}`}
-              className="shrink-0"
-              onClick={() => setPickerIndex(index)}
-              variant="outline"
-            >
-              <FolderOpen aria-hidden="true" className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Browse</span>
-            </Button>
-            {paths.length > 1 && (
-              <Button
-                aria-label={`Remove folder ${index + 1}`}
-                className="shrink-0"
-                onClick={() =>
-                  onChange({ paths: paths.filter((_, i) => i !== index) })
-                }
-                size="icon"
-                variant="outline"
-              >
-                <Trash2 aria-hidden="true" className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        ))}
+        {paths.map((path, index) => {
+          const missing =
+            path.trim() !== "" &&
+            (errors.missingPaths ?? []).includes(path.trim());
+          const missingId = `setup-folder-${index}-missing`;
+          return (
+            <div className="space-y-1" key={index}>
+              <div className="flex items-center gap-2">
+                <Input
+                  aria-describedby={
+                    missing
+                      ? missingId
+                      : errors.paths
+                        ? "setup-folders-error"
+                        : undefined
+                  }
+                  aria-invalid={missing || errors.paths ? true : undefined}
+                  aria-label={`Folder ${index + 1}`}
+                  className="min-w-0 flex-1"
+                  onChange={(e) => setPath(index, e.target.value)}
+                  placeholder="/media"
+                  value={path}
+                />
+                <Button
+                  aria-label={`Browse for folder ${index + 1}`}
+                  className="shrink-0"
+                  onClick={() => setPickerIndex(index)}
+                  variant="outline"
+                >
+                  <FolderOpen aria-hidden="true" className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Browse</span>
+                </Button>
+                {paths.length > 1 && (
+                  <Button
+                    aria-label={`Remove folder ${index + 1}`}
+                    className="shrink-0"
+                    onClick={() =>
+                      onChange({ paths: paths.filter((_, i) => i !== index) })
+                    }
+                    size="icon"
+                    variant="outline"
+                  >
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {missing && (
+                <p className="text-sm text-destructive" id={missingId}>
+                  Shisho can't find or open this folder on the server. Check the
+                  path, or choose the folder with Browse.
+                </p>
+              )}
+            </div>
+          );
+        })}
         {errors.paths && (
           <p className="text-sm text-destructive" id="setup-folders-error">
             {errors.paths}
@@ -198,8 +219,19 @@ export const LibraryStep = ({
       </section>
 
       <div className="flex justify-end">
-        <Button className="w-full sm:w-auto" type="submit">
-          {continueLabel}
+        <Button
+          className="w-full sm:w-auto"
+          disabled={continuePending}
+          type="submit"
+        >
+          {continuePending ? (
+            <>
+              <Loader2 aria-hidden="true" className="animate-spin" />
+              Checking folders…
+            </>
+          ) : (
+            continueLabel
+          )}
         </Button>
       </div>
 

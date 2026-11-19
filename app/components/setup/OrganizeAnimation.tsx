@@ -73,7 +73,9 @@ const Entry = ({ kind, name }: { kind: Kind; name: string }) => {
           kind === "folder" ? "text-primary" : "text-muted-foreground",
         )}
       />
-      <span className={cn(kind === "folder" && "font-medium")}>
+      <span
+        className={cn("whitespace-nowrap", kind === "folder" && "font-medium")}
+      >
         {kind === "folder" ? `${name}/` : name}
       </span>
     </>
@@ -222,16 +224,19 @@ const StillTree = ({ label, rows }: { label: string; rows: StillRow[] }) => {
   );
 };
 
+// Side by side only where both trees fit unwrapped; names never wrap, and
+// the frame scrolls rather than squeeze them. The trees share a top edge so
+// their rows line up.
 const Still = () => (
-  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+  <div className="grid gap-3 md:grid-cols-[auto_auto_auto] md:items-start md:justify-between">
     <StillTree label="Before" rows={BEFORE} />
     <ArrowRight
       aria-hidden="true"
-      className="hidden h-4 w-4 text-muted-foreground sm:block"
+      className="hidden h-4 w-4 self-center text-muted-foreground md:block"
     />
     <ArrowDown
       aria-hidden="true"
-      className="h-4 w-4 justify-self-center text-muted-foreground sm:hidden"
+      className="h-4 w-4 justify-self-center text-muted-foreground md:hidden"
     />
     <StillTree label="After" rows={AFTER} />
   </div>

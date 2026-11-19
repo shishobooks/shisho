@@ -161,17 +161,38 @@ func TestDetect_TimeBudgetStopsEarly(t *testing.T) {
 	assert.Less(t, resp.Ebooks, 5, "the walk stopped before the last file")
 }
 
-func TestDetect_MissingPathCountsNothing(t *testing.T) {
+func TestDetect_NamesFoldersThatDontExist(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	touch(t, root, "a.epub")
+	touch(t, root, "file.txt")
+	missing := filepath.Join(root, "missing")
+	notAFolder := filepath.Join(root, "file.txt")
 
-	// A folder that isn't mounted yet is what the enrichment step's "nothing
-	// found" outcome is for, so it is not an error.
-	status, resp, body := detect(t, newDetectHandler(), pathsBody(t, filepath.Join(root, "missing"), root))
+	// A library made from a path that isn't a folder never scans, so Setup
+	// names each one; the others are still counted.
+	status, resp, body := detect(t, newDetectHandler(), pathsBody(t, missing, root, notAFolder))
 
 	require.Equal(t, http.StatusOK, status, body)
-	assert.Equal(t, DetectFileTypesResponse{Ebooks: 1}, resp)
+	assert.Equal(t, DetectFileTypesResponse{Ebooks: 1, MissingPaths: []string{missing, notAFolder}}, resp)
+}
+
+func TestDetect_NamesAFolderThatCantBeOpened(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root opens every folder")
+	}
+	parent := t.TempDir()
+	locked := filepath.Join(parent, "locked")
+	inside := filepath.Join(locked, "books")
+	require.NoError(t, os.MkdirAll(inside, 0o755))
+	require.NoError(t, os.Chmod(locked, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	status, resp, body := detect(t, newDetectHandler(), pathsBody(t, inside))
+
+	require.Equal(t, http.StatusOK, status, body)
+	assert.Equal(t, []string{inside}, resp.MissingPaths)
 }
 
 func TestDetect_FollowsASymlinkedPath(t *testing.T) {

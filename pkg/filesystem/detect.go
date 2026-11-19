@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -44,15 +45,16 @@ func (c *detectCounts) snapshot(stoppedEarly bool) *DetectFileTypesResponse {
 	defer c.mu.Unlock()
 	resp := c.resp
 	resp.StoppedEarly = resp.StoppedEarly || stoppedEarly
+	resp.MissingPaths = slices.Clone(resp.MissingPaths)
 	return &resp
 }
 
 // DetectFileTypes walks paths and counts the files the scanner would
 // recognize by their extension, by category. It opens no files. Each path is
 // resolved as the directory picker resolves it, symlinks included. A path
-// that doesn't exist, or a folder that can't be read, counts nothing, since
-// Setup treats an empty result as "nothing found" and the scan reports
-// unreadable folders itself.
+// that isn't a folder the server can open is named in MissingPaths, since a
+// library made from it never scans. A folder inside one that can't be read
+// is skipped, and the scan reports it itself.
 //
 // The walk checks its budget between entries, but one folder's read can
 // take any time on a hung network mount, so the walk runs on its own and the
@@ -109,6 +111,9 @@ func detectWalk(ctx context.Context, paths []string, limits detectLimits, counts
 		}
 		root, ok := resolveDir(path)
 		if !ok {
+			counts.mu.Lock()
+			counts.resp.MissingPaths = append(counts.resp.MissingPaths, path)
+			counts.mu.Unlock()
 			continue
 		}
 		roots = append(roots, root)

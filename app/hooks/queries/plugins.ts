@@ -114,8 +114,11 @@ export const usePluginsInstalled = () => {
   });
 };
 
-export const usePluginsAvailable = () => {
+// `retry: false` suits a page that offers a way on without the repository,
+// rather than keeping the admin waiting through retries.
+export const usePluginsAvailable = ({ retry }: { retry?: boolean } = {}) => {
   return useQuery<AvailablePlugin[], ShishoAPIError>({
+    ...(retry === undefined ? {} : { retry }),
     enabled: usePluginRouteEnabled("config:read"),
     queryKey: [QueryKey.PluginsAvailable],
     queryFn: ({ signal }) => {

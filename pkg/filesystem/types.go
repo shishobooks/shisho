@@ -34,10 +34,12 @@ type DetectFileTypesPayload struct {
 // DetectFileTypesResponse counts the recognized files found in the paths by
 // category. StoppedEarly says the walk ran out of time or reached its file
 // limit before it looked at everything, so the counts cover part of the
-// folders.
+// folders. MissingPaths lists, as given, each path that isn't a folder the
+// server can open, which a library can't scan.
 type DetectFileTypesResponse struct {
-	Ebooks       int  `json:"ebooks"`
-	Audiobooks   int  `json:"audiobooks"`
-	Comics       int  `json:"comics"`
-	StoppedEarly bool `json:"stopped_early"`
+	Ebooks       int      `json:"ebooks"`
+	Audiobooks   int      `json:"audiobooks"`
+	Comics       int      `json:"comics"`
+	StoppedEarly bool     `json:"stopped_early"`
+	MissingPaths []string `json:"missing_paths,omitempty"`
 }
