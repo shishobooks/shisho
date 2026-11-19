@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import LoadingSpinner from "@/components/library/LoadingSpinner";
+import LoopbackNote from "@/components/library/LoopbackNote";
 import QueryError from "@/components/library/QueryError";
 import RoleDialog from "@/components/library/RoleDialog";
 import TruncatedText from "@/components/library/TruncatedText";
@@ -225,6 +226,17 @@ const UsersTab = ({ canWriteUsers }: { canWriteUsers: boolean }) => {
     <div className="space-y-4">
       {canWriteUsers && invitesQuery.error && !invitesQuery.data && (
         <QueryError fallback="Failed to load invites" query={invitesQuery} />
+      )}
+      {invites.length > 0 && (
+        <LoopbackNote>
+          {(host) => (
+            <>
+              Invite links copied here start with {host}, which other devices
+              can&apos;t reach. Open Shisho at the address the people you invite
+              use, then copy them.
+            </>
+          )}
+        </LoopbackNote>
       )}
       <ul
         aria-label="Users"

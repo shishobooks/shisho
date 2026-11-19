@@ -6,10 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { API } from "@/libraries/api";
 import { setAuth } from "@/testing/auth";
+import { pageHostname } from "@/utils/location";
 
 import AdminUsers from "./AdminUsers";
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
+vi.mock("@/utils/location", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/utils/location")>()),
+  pageHostname: vi.fn(() => "shisho.example.com"),
+}));
 
 const invite = (id: number, overrides = {}) => ({
   id,
@@ -113,6 +118,7 @@ afterEach(() => {
 describe("AdminUsers", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(pageHostname).mockReturnValue("shisho.example.com");
     setAuth({ permissions: ["users:read", "users:write"] });
   });
 
@@ -253,6 +259,30 @@ describe("AdminUsers", () => {
     expect(writeText).toHaveBeenCalledWith(
       `${window.location.origin}/invite/token-1`,
     );
+  });
+
+  it("warns that invite links copied at localhost can't be opened elsewhere", async () => {
+    vi.mocked(pageHostname).mockReturnValue("localhost");
+    mockApi([invite(1)]);
+    renderPage();
+
+    expect(await screen.findByRole("note")).toHaveTextContent(
+      "Invite links copied here start with localhost, which other devices can't reach.",
+    );
+  });
+
+  it("gives no warning at an address others can reach, or with no invites pending", async () => {
+    mockApi([invite(1)]);
+    const { unmount } = renderPage();
+    await screen.findByRole("button", { name: "Copy invite link for viewer" });
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    unmount();
+
+    vi.mocked(pageHostname).mockReturnValue("localhost");
+    mockApi([]);
+    renderPage();
+    await usersList();
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
   it("revokes a pending invite after confirming", async () => {
