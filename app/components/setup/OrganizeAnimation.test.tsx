@@ -62,6 +62,18 @@ describe("OrganizeAnimation", () => {
     );
   });
 
+  it("holds the messy folder for 3 seconds before anything moves", () => {
+    const { container } = render(<OrganizeAnimation />);
+
+    const animated = [
+      ...container.querySelectorAll<HTMLElement>("[class*='animate-[setup-']"),
+    ];
+    expect(animated.length).toBeGreaterThan(0);
+    for (const el of animated) {
+      expect(parseFloat(el.style.animationDelay)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
   it("has nothing to replay with reduced motion", () => {
     reducedMotion = true;
     render(<OrganizeAnimation />);

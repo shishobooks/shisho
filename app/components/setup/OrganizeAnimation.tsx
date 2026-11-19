@@ -41,6 +41,9 @@ const PAUSED = "[&_*]:[animation-play-state:paused]";
 // Rows that start together move a beat apart, so they read as files moving
 // one after another rather than the list jumping.
 const STAGGER_S = 0.15;
+// How long the messy folder shows before anything moves, on every play, so
+// the admin sees what it looked like first.
+const START_DELAY_S = 3;
 
 type FileKind = "ebook" | "audiobook" | "comic";
 type Kind = "folder" | FileKind;
@@ -164,7 +167,7 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
     el.addEventListener("animationend", onDone);
     return () => el.removeEventListener("animationend", onDone);
   }, [onDone]);
-  const stagger = (i: number) => `${i * STAGGER_S}s`;
+  const stagger = (i: number) => `${START_DELAY_S + i * STAGGER_S}s`;
   const lastFile = LAYOUT.files.length - 1;
   return (
     <div
@@ -186,7 +189,10 @@ const Animated = ({ playing, onDone }: AnimatedProps) => {
             <div
               className={cn(rowClass, FOLDER_OUT)}
               key={folder.name}
-              style={{ transform: `translate(${x}, ${y})` }}
+              style={{
+                transform: `translate(${x}, ${y})`,
+                animationDelay: stagger(0),
+              }}
             >
               <Entry kind="folder" name={folder.name} />
             </div>
