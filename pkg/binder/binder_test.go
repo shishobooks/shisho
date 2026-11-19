@@ -169,6 +169,9 @@ func TestBind_UsernameCharacters(t *testing.T) {
 		"robin.j@mail.com": true,
 		"José":             true,
 		"司書":               true,
+		"राम":              true,
+		"สมชาย":            true,
+		"Jose\u0301":       true,
 		"rob:in":           false,
 		"rob in":           false,
 		"rob\\tin":         false,
@@ -184,4 +187,22 @@ func TestBind_UsernameCharacters(t *testing.T) {
 			assert.Contains(t, err.Error(), "can only contain letters, numbers", value)
 		}
 	}
+}
+
+// A username is stored in its composed (NFC) form, so "José" typed with a
+// combining accent is the same username as "José" typed with a precomposed
+// é, and the two can't both register.
+func TestBind_UsernameIsNormalizedToNFC(t *testing.T) {
+	t.Parallel()
+	b, err := New()
+	require.NoError(t, err)
+	type account struct {
+		Username string  `json:"username" mod:"trim,nfc" validate:"username"`
+		Rename   *string `json:"rename" mod:"trim,nfc" validate:"omitempty,username"`
+	}
+	got := &account{}
+	require.NoError(t, b.Bind(got, newContext(`{"username":" Jose\u0301 ","rename":"Jose\u0301"}`, echo.MIMEApplicationJSON)))
+	assert.Equal(t, "Jos\u00e9", got.Username)
+	require.NotNil(t, got.Rename)
+	assert.Equal(t, "Jos\u00e9", *got.Rename)
 }

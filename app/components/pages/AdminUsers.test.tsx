@@ -56,10 +56,10 @@ const ROLES = [
   { id: 3, name: "viewer", is_system: true, permissions: [{}] },
 ];
 
-const mockApi = (invites: unknown[]) =>
+const mockApi = (invites: unknown[], users: unknown[] = USERS) =>
   vi.spyOn(API, "request").mockImplementation(async (method, path) => {
     if (method === "GET" && path === "/users") {
-      return { items: USERS, total: USERS.length };
+      return { items: users, total: users.length };
     }
     if (method === "GET" && path === "/roles") {
       return { items: ROLES, total: ROLES.length };
@@ -152,6 +152,36 @@ describe("AdminUsers", () => {
     expect(
       within(rows[1]).getByRole("link", { name: /bobby/ }),
     ).toHaveAttribute("href", "/admin/users/2");
+  });
+
+  // GET /libraries lists only the Libraries the viewer can access, so an
+  // admin limited to some can't name the rest; they're counted instead.
+  it("counts the Libraries it can't name", async () => {
+    mockApi(
+      [],
+      [
+        {
+          id: 4,
+          username: "dana",
+          is_active: true,
+          library_access: [
+            { id: 4, user_id: 4, library_id: 7 },
+            { id: 5, user_id: 4, library_id: 9 },
+          ],
+        },
+        {
+          id: 5,
+          username: "eve",
+          is_active: true,
+          library_access: [{ id: 6, user_id: 5, library_id: 9 }],
+        },
+      ],
+    );
+    renderPage();
+
+    const rows = within(await usersList()).getAllByRole("listitem");
+    expect(await within(rows[0]).findByText("Comics and 1 more")).toBeVisible();
+    expect(within(rows[1]).getByText("1 library")).toBeVisible();
   });
 
   it("puts pending invites at the top of the same list, with their role, access, and expiry", async () => {

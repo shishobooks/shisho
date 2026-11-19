@@ -1,13 +1,17 @@
 package binder
 
 import (
+	"context"
 	"net/url"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
 	"unicode"
 
+	"github.com/go-playground/mold/v4"
 	"github.com/go-playground/validator/v10"
+	"golang.org/x/text/unicode/norm"
 )
 
 var (
@@ -47,17 +51,30 @@ func urlValidator(fl validator.FieldLevel) bool {
 // numbers. "@" and "." keep email-style usernames working.
 const usernameSymbols = "._-@"
 
-// usernameValidator ensures a username is only letters and numbers, in any
-// script, and usernameSymbols. A colon would break HTTP Basic sign-in (OPDS,
+// usernameValidator ensures a username is only letters (with their marks)
+// and numbers, in any script, and usernameSymbols. A colon would break HTTP Basic sign-in (OPDS,
 // KOReader), which splits on the first one, and spaces or invisible
 // characters would let one username pass for another. Length is checked
 // separately. Sign-in doesn't use it, so an older username that breaks the
 // rule still signs in.
 func usernameValidator(fl validator.FieldLevel) bool {
 	for _, r := range fl.Field().String() {
-		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && !strings.ContainsRune(usernameSymbols, r) {
+		// Marks are the vowel signs and accents many scripts write letters
+		// with, such as Devanagari and Thai.
+		if !unicode.IsLetter(r) && !unicode.IsMark(r) && !unicode.IsNumber(r) && !strings.ContainsRune(usernameSymbols, r) {
 			return false
 		}
 	}
 	return true
+}
+
+// nfcModifier puts a string in Unicode composed form (NFC), so text that
+// looks the same is stored the same way: "é" typed as one character or as
+// "e" plus a combining accent. Usernames use it, so two that look alike
+// can't both register.
+func nfcModifier(_ context.Context, fl mold.FieldLevel) error {
+	if fl.Field().Kind() == reflect.String {
+		fl.Field().SetString(norm.NFC.String(fl.Field().String()))
+	}
+	return nil
 }

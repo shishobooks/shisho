@@ -447,3 +447,20 @@ func TestInviteLinks_LookupFaultIsServerError(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, f.do(f.admin, http.MethodGet, "/api/invite-links", "").Code)
 	assert.Equal(t, http.StatusInternalServerError, f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/invite-links/%d/revoke", link.ID), "").Code)
 }
+
+// Usernames are stored composed, so "José" typed with a combining accent and
+// "José" typed with a precomposed é are one username.
+func TestInviteLinks_UsernamesThatLookAlikeAreOne(t *testing.T) {
+	t.Parallel()
+	f := newInviteLinksFixture(t, false)
+	first := f.viewerInvite(f.admin)
+	require.Equal(t, http.StatusCreated, f.accept(first.Token, "José").Code)
+
+	second := f.viewerInvite(f.admin)
+	rec := f.accept(second.Token, "José")
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), `"code":"username_taken"`)
+
+	// Scripts written with marks are letters too.
+	require.Equal(t, http.StatusCreated, f.accept(second.Token, "राम").Code)
+}

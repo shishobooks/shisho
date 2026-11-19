@@ -54,4 +54,29 @@ describe("useLibraries", () => {
       expect.anything(),
     );
   });
+
+  // A Library deleted between pages leaves total too high; the short page
+  // still ends the loop.
+  it("stops at a short page even when total says there are more", async () => {
+    const request = vi
+      .spyOn(API, "request")
+      .mockImplementation(async (_method, _path, _body, query) => {
+        const { limit, offset } = query as { limit: number; offset: number };
+        return {
+          items: LIBRARIES.slice(0, 150).slice(offset, offset + limit),
+          total: 230,
+        };
+      });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const { result } = renderHook(() => useLibraries(), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client }, children),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.items).toHaveLength(150);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
 });

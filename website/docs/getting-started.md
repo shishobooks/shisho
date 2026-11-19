@@ -101,7 +101,7 @@ Open `http://localhost:5173`. Setup walks the first admin through four steps: th
 
 ### Create the Admin Account
 
-Enter a username of at least 3 characters and a password of at least 8 characters, then select **Create Admin Account**. The first account receives the built-in admin role. See [Users and Permissions](./users-and-permissions.md) before adding more users.
+Enter a username of 3 to 50 letters, numbers, or `.` `_` `-` `@` and a password of at least 8 characters, then select **Create Admin Account**. The first account receives the built-in admin role. See [Users and Permissions](./users-and-permissions.md) before adding more users.
 
 ### Choose Your Library
 

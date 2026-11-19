@@ -28,8 +28,9 @@ type Tab = "users" | "roles";
 
 const ROW_CLASS = "flex items-center gap-3 py-3 px-4 md:px-6";
 
-// A user's Library access in words. Names need the Library list, which only
-// roles that can assign access can read, so other roles see a count.
+// A user's Library access in words. Names come from the Library list, which
+// holds only the Libraries the viewer can access and which only roles that
+// can assign access can read; any Library it can't name is counted.
 const userAccessText = (
   user: User,
   libraryNames: Map<number, string> | null,
@@ -40,12 +41,17 @@ const userAccessText = (
     a.library_id == null ? [] : [a.library_id],
   );
   if (ids.length === 0) return "No libraries";
-  if (!libraryNames) return formatCount(ids.length, "library", "libraries");
-  return ids
-    .map((id) => libraryNames.get(id))
+  const names = ids
+    .map((id) => libraryNames?.get(id))
     .filter((name): name is string => Boolean(name))
-    .sort((a, b) => a.localeCompare(b))
-    .join(", ");
+    .sort((a, b) => a.localeCompare(b));
+  if (names.length === 0) {
+    return formatCount(ids.length, "library", "libraries");
+  }
+  const unnamed = ids.length - names.length;
+  return unnamed > 0
+    ? `${names.join(", ")} and ${unnamed.toLocaleString()} more`
+    : names.join(", ");
 };
 
 const inviteAccessText = (link: InviteLinkResponse) => {
@@ -75,7 +81,9 @@ const Avatar = ({ username }: { username?: string }) => (
     )}
   >
     {username ? (
-      username.charAt(0).toUpperCase()
+      // The first character, whole even outside the Basic Multilingual
+      // Plane, where charAt would split it.
+      Array.from(username)[0]?.toUpperCase()
     ) : (
       <Link2 className="h-4 w-4" />
     )}
@@ -315,8 +323,12 @@ const AdminUsers = () => {
     if (!open) setSelectedRole(null);
   };
 
+  // Each tab has a fixed route rather than an optional /:tab? param, which
+  // would collide with /admin/users/:id.
   const handleTabChange = (value: string) =>
-    navigate(value === "roles" ? "/admin/users/roles" : "/admin/users");
+    navigate(value === "roles" ? "/admin/users/roles" : "/admin/users", {
+      preventScrollReset: true,
+    });
 
   const userCount =
     usersData &&
