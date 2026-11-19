@@ -68,7 +68,11 @@ test.describe("Invite Links", () => {
     // The Users page lists it as pending.
     await page.getByRole("link", { name: "Done" }).click();
     await expect(
-      page.getByRole("region", { name: "Pending invites" }).getByText("viewer"),
+      page
+        .getByRole("list", { name: "Users" })
+        .getByRole("listitem")
+        .filter({ hasText: "Pending" })
+        .getByText("viewer"),
     ).toBeVisible();
 
     // A fresh context has no session cookie.

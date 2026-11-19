@@ -20,6 +20,7 @@ import {
   formatShortDay,
   formatShowingRange,
   formatTimeOfDay,
+  formatTimeUntil,
   formatTotalDuration,
   formatYear,
 } from "./format";
@@ -321,5 +322,20 @@ describe("calendar days", () => {
       "May 31, 11:30 PM",
     );
     expect(formatDayTime(instant, "2026-06-01", "UTC")).toBe("4:30 AM");
+  });
+});
+
+describe("formatTimeUntil", () => {
+  const now = new Date("2026-11-19T12:00:00Z");
+
+  it("says how long until a future instant", () => {
+    expect(formatTimeUntil("2026-11-26T12:00:00Z", now)).toBe("in 7 days");
+    expect(formatTimeUntil("2026-11-19T15:00:00Z", now)).toBe(
+      "in about 3 hours",
+    );
+  });
+
+  it("says how long ago a past one was", () => {
+    expect(formatTimeUntil("2026-11-18T12:00:00Z", now)).toBe("1 day ago");
   });
 });

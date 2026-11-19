@@ -249,6 +249,15 @@ export const formatDaysAgo = (instant: string, now = new Date()): string => {
 };
 
 /**
+ * How far an instant is from now, for something due later such as an
+ * expiry, and how long ago once it has passed.
+ * @example formatTimeUntil(inAWeek) // "in 7 days"
+ * @example formatTimeUntil(yesterday) // "1 day ago"
+ */
+export const formatTimeUntil = (instant: string, now = new Date()): string =>
+  formatDistance(new Date(instant), now, { addSuffix: true });
+
+/**
  * A Rating as a number of stars.
  * @example formatRating(4.25) // "4.25"
  * @example formatRating(4) // "4"

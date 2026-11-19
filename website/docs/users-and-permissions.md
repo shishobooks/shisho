@@ -2,7 +2,7 @@
 
 Shisho combines role permissions with a per-user library access list. Both checks must allow an action.
 
-Open **Administration > Users** to manage accounts and roles. Access to this page and its actions depends on the current user's Users permissions.
+Open **Administration > Users** to manage accounts on its **Users** tab and roles on its **Roles** tab. Access to this page and its actions depends on the current user's Users permissions.
 
 ## Built-In Roles
 
@@ -84,7 +84,7 @@ Shisho hides pages and links that a role cannot read, rather than showing an err
 
 ## Custom Roles
 
-On **Administration > Users**, select **Add Role** to create a named role with a custom permission matrix. Select an existing role in the **Roles** section to edit it. Non-system roles can also be renamed or deleted, but you must reassign every user before deleting an assigned role.
+On the **Roles** tab of **Administration > Users**, select **Add Role** to create a named role with a custom permission matrix. Select an existing role there to edit it. Non-system roles can also be renamed or deleted, but you must reassign every user before deleting an assigned role.
 
 A user has one role. Assign the narrowest permissions needed for that person's work.
 
@@ -142,7 +142,7 @@ Shisho never sends the link. Pass it on however you like, such as by text or cha
 
 Opening the link shows a welcome page naming who sent it. The person chooses a username, a password, and optionally an email address. Accepting creates the account with the invite's role and library access, signs them in, and opens their [Getting Started](#getting-started) panel.
 
-Pending invites are listed at the top of the **Users** page with their role, library access, and expiry. Select the copy button on one to copy its link again, or the revoke button to stop it.
+Pending invites are listed at the top of the **Users** tab, marked **Pending**, with their role, library access, and expiry. Select the copy button on one to copy its link again, or the revoke button to stop it.
 
 An invite works once. After that, and once it expires or is revoked, the link shows **This invite link is no longer valid** and asks the person to request a new one, without saying which happened. An invite also stops working when the user who created it is deleted, deactivated, or loses Users Write. Library access in a pending invite follows the libraries: deleting a library removes it from the invite.
 

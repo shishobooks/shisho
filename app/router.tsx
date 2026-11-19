@@ -132,6 +132,14 @@ export const routes: RouteObject[] = [
             ),
           },
           {
+            path: "users/roles",
+            element: (
+              <ProtectedRoute requiredPermission={ROUTE_PERMISSIONS.adminUsers}>
+                <AdminUsers />
+              </ProtectedRoute>
+            ),
+          },
+          {
             path: "users/create",
             element: (
               <ProtectedRoute
