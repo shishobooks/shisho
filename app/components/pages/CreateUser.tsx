@@ -93,7 +93,7 @@ const CreateUser = () => {
       </div>
 
       <div className="max-w-2xl space-y-6">
-        <div className="space-y-2">
+        <div className="space-y-3">
           <Label id="add-user-method-label">How do you want to add them?</Label>
           <RadioGroup
             aria-labelledby="add-user-method-label"
