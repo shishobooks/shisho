@@ -676,3 +676,39 @@ func TestHandlers_RequireASignedInUser(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, codeErr.HTTPCode)
 	}
 }
+
+// "Invite someone" is done as soon as a pending Invite Link exists, before
+// anyone accepts it. One that was used, revoked, or has expired doesn't
+// count on its own.
+func TestRetrieve_InviteDoneWhileAnInviteIsPending(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	h := newHandler(db, false)
+	admin := newUser(t, db, allPermissions...)
+	invite := func(change func(*models.InviteLink)) {
+		t.Helper()
+		token := fmt.Sprintf("token-%d", roleCounter.Add(1))
+		link := &models.InviteLink{
+			CreatedAt: time.Now(), UpdatedAt: time.Now(), Token: token,
+			CreatedByUserID: admin.ID, RoleID: admin.RoleID, ExpiresAt: time.Now().Add(time.Hour),
+		}
+		change(link)
+		insert(t, db, link)
+	}
+
+	past := time.Now().Add(-time.Minute)
+	invite(func(l *models.InviteLink) { l.ExpiresAt = past })
+	invite(func(l *models.InviteLink) { l.RevokedAt = &past })
+	invite(func(l *models.InviteLink) { l.UsedAt = &past })
+	assert.False(t, step(t, status(t, h, admin), StepInvite).Done)
+
+	// One whose creator can't add users doesn't work, so it doesn't count.
+	creator := newUser(t, db, allPermissions...)
+	_, err := db.NewUpdate().Model((*models.User)(nil)).Set("is_active = FALSE").Where("id = ?", creator.ID).Exec(context.Background())
+	require.NoError(t, err)
+	invite(func(l *models.InviteLink) { l.CreatedByUserID = creator.ID })
+	assert.False(t, step(t, status(t, h, admin), StepInvite).Done)
+
+	invite(func(*models.InviteLink) {})
+	assert.True(t, step(t, status(t, h, admin), StepInvite).Done)
+}

@@ -7,6 +7,7 @@ import QueryError from "@/components/library/QueryError";
 import RoleDialog from "@/components/library/RoleDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import PendingInvites from "@/components/users/PendingInvites";
 import { useRoles, useUsers } from "@/hooks/queries/users";
 import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
@@ -123,6 +124,8 @@ const AdminUsers = () => {
             </div>
           )}
         </div>
+
+        {canWriteUsers && <PendingInvites />}
 
         {usersQuery.error && !usersData ? (
           <QueryError fallback="Failed to load users" query={usersQuery} />

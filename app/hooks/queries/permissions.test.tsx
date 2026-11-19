@@ -50,6 +50,7 @@ const AUTHENTICATED_ONLY: RegExp[] = [
   /^\/events$/,
   /^\/getting-started$/,
   /^\/share\/[^/]+$/,
+  /^\/invites\/[^/]+$/,
 ];
 
 // Paths the server does not register in Demo Mode (pkg/server/server.go)
@@ -134,6 +135,9 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useGenresList: requires("books:read", [{}, on]),
   useGenre: requires("books:read", [1, on]),
   useGenresByIds: requires("books:read", [[1, 2]]),
+  // invites
+  useInviteLinks: requires("users:write", []),
+  useInvite: authenticated(["token"]),
   // jobs
   useJob: authenticated(["1", on]),
   useJobs: requires("jobs:read", [{}, on]),

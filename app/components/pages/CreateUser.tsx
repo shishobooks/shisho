@@ -1,341 +1,131 @@
-import { Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
+import { KeyRound, Link2 } from "lucide-react";
+import { useCallback, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Separator } from "@/components/ui/separator";
 import { UnsavedChangesDialog } from "@/components/ui/unsaved-changes-dialog";
-import { useLibraries } from "@/hooks/queries/libraries";
-import { useCreateUser, useRoles } from "@/hooks/queries/users";
-import { useNavigateAfterSave } from "@/hooks/useNavigateAfterSave";
+import InviteLinkForm from "@/components/users/InviteLinkForm";
+import SetPasswordForm from "@/components/users/SetPasswordForm";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
-import { toastRequestError } from "@/libraries/api";
-import { sortRoles } from "@/utils/roles";
+import { cn } from "@/libraries/utils";
 
-// Initial values for the create form - stored once to compare against
-const INITIAL_VALUES = {
-  username: "",
-  email: "",
-  password: "",
-  confirmPassword: "",
-  requirePasswordReset: false,
-  roleId: null as number | null,
-  allLibraryAccess: true,
-  selectedLibraries: [] as number[],
-};
+type Method = "invite" | "password";
 
+const METHODS: {
+  value: Method;
+  label: string;
+  description: string;
+  icon: typeof Link2;
+}[] = [
+  {
+    value: "invite",
+    label: "Invite link",
+    description:
+      "Send them a link. They choose their own username and password.",
+    icon: Link2,
+  },
+  {
+    value: "password",
+    label: "Set a password",
+    description: "Create the account yourself and pass on its password.",
+    icon: KeyRound,
+  },
+];
+
+// Add User. An Invite Link is the default; setting a password is the other
+// path. The chosen path is kept in the URL (`?method=password`), and both
+// forms stay mounted so switching between them keeps what was typed.
 const CreateUser = () => {
-  usePageTitle("Create User");
+  usePageTitle("Add User");
 
-  const createUserMutation = useCreateUser();
-  const { data: rolesData } = useRoles();
-  const { data: librariesData } = useLibraries();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const method: Method =
+    searchParams.get("method") === "password" ? "password" : "invite";
+  const setMethod = (value: string) =>
+    setSearchParams(value === "password" ? { method: value } : {}, {
+      preventScrollReset: true,
+      replace: true,
+    });
 
-  const [username, setUsername] = useState(INITIAL_VALUES.username);
-  const [email, setEmail] = useState(INITIAL_VALUES.email);
-  const [password, setPassword] = useState(INITIAL_VALUES.password);
-  const [confirmPassword, setConfirmPassword] = useState(
-    INITIAL_VALUES.confirmPassword,
+  const [inviteChanges, setInviteChanges] = useState(false);
+  const [passwordChanges, setPasswordChanges] = useState(false);
+  const onInviteChanges = useCallback((v: boolean) => setInviteChanges(v), []);
+  const onPasswordChanges = useCallback(
+    (v: boolean) => setPasswordChanges(v),
+    [],
   );
-  const [requirePasswordReset, setRequirePasswordReset] = useState(
-    INITIAL_VALUES.requirePasswordReset,
-  );
-  const [roleId, setRoleId] = useState<number | null>(INITIAL_VALUES.roleId);
-  const [allLibraryAccess, setAllLibraryAccess] = useState(
-    INITIAL_VALUES.allLibraryAccess,
-  );
-  const [selectedLibraries, setSelectedLibraries] = useState<number[]>([
-    ...INITIAL_VALUES.selectedLibraries,
-  ]);
-  const [changesSaved, setChangesSaved] = useState(false);
-
-  // Track whether user has unsaved changes by comparing against initial values
-  const hasUnsavedChanges = useMemo(() => {
-    if (changesSaved) return false;
-    return (
-      username.trim() !== INITIAL_VALUES.username ||
-      email.trim() !== INITIAL_VALUES.email ||
-      password !== INITIAL_VALUES.password ||
-      confirmPassword !== INITIAL_VALUES.confirmPassword ||
-      requirePasswordReset !== INITIAL_VALUES.requirePasswordReset ||
-      roleId !== INITIAL_VALUES.roleId ||
-      allLibraryAccess !== INITIAL_VALUES.allLibraryAccess ||
-      selectedLibraries.length > INITIAL_VALUES.selectedLibraries.length
-    );
-  }, [
-    username,
-    email,
-    password,
-    confirmPassword,
-    requirePasswordReset,
-    roleId,
-    allLibraryAccess,
-    selectedLibraries,
-    changesSaved,
-  ]);
-
   const { showBlockerDialog, proceedNavigation, cancelNavigation } =
-    useUnsavedChanges(hasUnsavedChanges);
-
-  const { requestNavigate } = useNavigateAfterSave(hasUnsavedChanges);
-
-  const handleLibraryToggle = (libraryId: number) => {
-    setSelectedLibraries((prev) =>
-      prev.includes(libraryId)
-        ? prev.filter((id) => id !== libraryId)
-        : [...prev, libraryId],
-    );
-  };
-
-  const handleCreate = async () => {
-    if (!username.trim()) {
-      toast.error("Username is required");
-      return;
-    }
-
-    if (username.length < 3) {
-      toast.error("Username must be at least 3 characters");
-      return;
-    }
-
-    if (!password) {
-      toast.error("Password is required");
-      return;
-    }
-
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
-      return;
-    }
-
-    if (!roleId) {
-      toast.error("Please select a role");
-      return;
-    }
-
-    try {
-      const user = await createUserMutation.mutateAsync({
-        username,
-        email: email.trim() || undefined,
-        password,
-        role_id: roleId,
-        require_password_reset: requirePasswordReset,
-        all_library_access: allLibraryAccess,
-        library_ids: allLibraryAccess ? [] : selectedLibraries,
-      });
-
-      toast.success("User created successfully!");
-      setChangesSaved(true);
-      requestNavigate(`/admin/users/${user.id}`);
-    } catch (error) {
-      toastRequestError(error, "Failed to create user");
-    }
-  };
-
-  const roles = sortRoles(rolesData?.items ?? []);
-  const libraries = librariesData?.items ?? [];
+    useUnsavedChanges(inviteChanges || passwordChanges);
 
   return (
     <div>
       <div className="mb-6 md:mb-8">
-        <h1 className="text-2xl font-semibold mb-2">Create User</h1>
-        <p className="text-muted-foreground">Add a new user to the system</p>
+        <h1 className="text-2xl font-semibold mb-2">Add User</h1>
+        <p className="text-muted-foreground">
+          Give someone their own account on this server.
+        </p>
       </div>
 
-      <div className="max-w-2xl space-y-6 border border-border rounded-md p-4 md:p-6">
-        {/* Basic Info */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-medium">Account Information</h2>
-
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <Input
-              id="username"
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
-              value={username}
-            />
-            <p className="text-xs text-muted-foreground">
-              At least 3 characters
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email">
-              Email <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              id="email"
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="Enter email"
-              type="email"
-              value={email}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              type="password"
-              value={password}
-            />
-            <p className="text-xs text-muted-foreground">
-              At least 8 characters
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm Password</Label>
-            <Input
-              id="confirm-password"
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm password"
-              type="password"
-              value={confirmPassword}
-            />
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              checked={requirePasswordReset}
-              id="require-password-reset"
-              onCheckedChange={(checked) =>
-                setRequirePasswordReset(Boolean(checked))
-              }
-            />
-            <Label
-              className="text-sm font-normal cursor-pointer"
-              htmlFor="require-password-reset"
-            >
-              Require password reset on first login
-            </Label>
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Role */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-medium">Role</h2>
-          <div className="space-y-2">
-            <Label id="select-role-label">Select Role</Label>
-            <RadioGroup
-              aria-labelledby="select-role-label"
-              onValueChange={(value) => setRoleId(Number(value))}
-              value={roleId === null ? "" : String(roleId)}
-            >
-              {roles.map((role) => (
-                <div className="flex items-center space-x-2" key={role.id}>
-                  <RadioGroupItem
-                    id={`role-${role.id}`}
-                    value={String(role.id)}
-                  />
-                  <Label
-                    className="text-sm font-normal cursor-pointer"
-                    htmlFor={`role-${role.id}`}
-                  >
-                    {role.name}
-                    {role.is_system && (
-                      <span className="text-muted-foreground ml-1">
-                        (system)
-                      </span>
-                    )}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          </div>
-        </div>
-
-        <Separator />
-
-        {/* Library Access */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-medium">Library Access</h2>
-
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              checked={allLibraryAccess}
-              id="all-library-access"
-              onCheckedChange={(checked) =>
-                setAllLibraryAccess(checked as boolean)
-              }
-            />
-            <Label
-              className="text-sm font-normal cursor-pointer"
-              htmlFor="all-library-access"
-            >
-              Access to all libraries
-            </Label>
-          </div>
-
-          {!allLibraryAccess && (
-            <div className="space-y-2 pl-6">
-              <Label id="select-libraries-label">Select Libraries</Label>
-              {libraries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No libraries available. Create a library first.
-                </p>
-              ) : (
-                <div
-                  aria-labelledby="select-libraries-label"
-                  className="grid gap-2"
-                  role="group"
-                >
-                  {libraries.map((library) => (
-                    <div
-                      className="flex items-center space-x-2"
-                      key={library.id}
-                    >
-                      <Checkbox
-                        checked={selectedLibraries.includes(library.id)}
-                        id={`library-${library.id}`}
-                        onCheckedChange={() => handleLibraryToggle(library.id)}
-                      />
-                      <Label
-                        className="text-sm font-normal cursor-pointer"
-                        htmlFor={`library-${library.id}`}
-                      >
-                        {library.name}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Create Button */}
-        <div className="flex justify-end pt-4">
-          <Button
-            disabled={createUserMutation.isPending}
-            onClick={handleCreate}
+      <div className="max-w-2xl space-y-6">
+        <div className="space-y-2">
+          <Label id="add-user-method-label">How do you want to add them?</Label>
+          <RadioGroup
+            aria-labelledby="add-user-method-label"
+            className="grid gap-3 sm:grid-cols-2"
+            name="add-user-method"
+            onValueChange={setMethod}
+            value={method}
           >
-            {createUserMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              "Create User"
-            )}
-          </Button>
+            {METHODS.map((option) => {
+              const Icon = option.icon;
+              return (
+                <Label
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-md border border-border p-4 font-normal transition-colors hover:bg-muted/50",
+                    method === option.value && "border-primary bg-primary/5",
+                  )}
+                  htmlFor={`add-user-method-${option.value}`}
+                  key={option.value}
+                >
+                  {/* The card is the label, so all of it selects; the radio
+                      is named by its title alone and described by the rest. */}
+                  <RadioGroupItem
+                    aria-describedby={`add-user-method-${option.value}-description`}
+                    aria-labelledby={`add-user-method-${option.value}-title`}
+                    className="mt-0.5"
+                    id={`add-user-method-${option.value}`}
+                    value={option.value}
+                  />
+                  <span className="min-w-0 space-y-1">
+                    <span
+                      className="flex items-center gap-2 text-sm font-medium"
+                      id={`add-user-method-${option.value}-title`}
+                    >
+                      <Icon aria-hidden="true" className="h-4 w-4" />
+                      {option.label}
+                    </span>
+                    <span
+                      className="block text-sm text-muted-foreground"
+                      id={`add-user-method-${option.value}-description`}
+                    >
+                      {option.description}
+                    </span>
+                  </span>
+                </Label>
+              );
+            })}
+          </RadioGroup>
+        </div>
+
+        <div className="border border-border rounded-md p-4 md:p-6">
+          <div hidden={method !== "invite"}>
+            <InviteLinkForm onHasChangesChange={onInviteChanges} />
+          </div>
+          <div hidden={method !== "password"}>
+            <SetPasswordForm onHasChangesChange={onPasswordChanges} />
+          </div>
         </div>
       </div>
 

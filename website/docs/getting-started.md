@@ -145,3 +145,7 @@ Select **Skip this step** to finish without plugins. If Shisho can't reach the p
 The **Getting Started** pill in the top nav lists what's left, such as inviting someone and connecting a reading device. See [Getting Started](./users-and-permissions.md#getting-started).
 
 For scanning behavior and library settings, continue to [Libraries](./libraries.md). For all server options, see [Configuration](./configuration.md).
+
+## Invite People
+
+To give someone their own account, open **Administration > Users**, select **Add User**, and send them the invite link it creates. They choose their own username and password. See [Invite Links](./users-and-permissions.md#invite-links).

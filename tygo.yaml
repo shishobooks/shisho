@@ -12,6 +12,7 @@ type_mappings:
   models.Person: "Person"
   models.List: "List"
   models.ShareLink: "ShareLink"
+  models.InviteLink: "InviteLink"
   # A model returned by name (not embedded, not field-level `tstype`-overridden)
   # also needs a mapping so tygo emits the bare interface name instead of `any`.
   # books.ts's MoveFilesResponse / MergeBooksResponse return a *models.Book.
@@ -84,6 +85,12 @@ packages:
     output_path: "app/types/generated/users.ts"
     frontmatter: |
       import { User } from "@/types";
+    include_files:
+      - types.go
+  - path: "github.com/shishobooks/shisho/pkg/invitelinks"
+    output_path: "app/types/generated/invitelinks.ts"
+    frontmatter: |
+      import { InviteLink } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/roles"

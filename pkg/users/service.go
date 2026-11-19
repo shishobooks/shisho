@@ -33,60 +33,76 @@ type CreateUserOptions struct {
 	RequirePasswordReset bool
 }
 
-// Create creates a new user.
+// Create creates a new user and returns it with its role and Library access
+// loaded. A taken username or email is errcodes.UsernameTaken or
+// errcodes.EmailTaken.
 func (s *Service) Create(ctx context.Context, opts CreateUserOptions) (*models.User, error) {
-	// Check if username already exists
-	exists, err := s.db.NewSelect().
+	// Hash before the transaction: bcrypt takes a while, and the database
+	// has a single connection that every other request waits on.
+	passwordHash, err := auth.HashPassword(opts.Password)
+	if err != nil {
+		return nil, err
+	}
+	var userID int
+	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		id, err := s.CreateInTx(ctx, tx, opts, passwordHash)
+		userID = id
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.Retrieve(ctx, userID)
+}
+
+// CreateInTx creates a new user and its Library access through db, which may
+// be a transaction the caller commits, and returns the new user's id. The
+// caller hashes opts.Password with auth.HashPassword before opening the
+// transaction and passes the hash, so the slow hash never holds the
+// database's one connection.
+func (s *Service) CreateInTx(ctx context.Context, db bun.IDB, opts CreateUserOptions, passwordHash string) (int, error) {
+	exists, err := db.NewSelect().
 		Model((*models.User)(nil)).
 		Where("username = ? COLLATE NOCASE", opts.Username).
 		Exists(ctx)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return 0, errors.WithStack(err)
 	}
 	if exists {
-		return nil, errcodes.ValidationError("Username already exists")
+		return 0, errcodes.UsernameTaken()
 	}
 
-	// Check if email already exists (if provided)
 	if opts.Email != nil && *opts.Email != "" {
-		exists, err = s.db.NewSelect().
+		exists, err = db.NewSelect().
 			Model((*models.User)(nil)).
 			Where("email = ? COLLATE NOCASE", *opts.Email).
 			Exists(ctx)
 		if err != nil {
-			return nil, errors.WithStack(err)
+			return 0, errors.WithStack(err)
 		}
 		if exists {
-			return nil, errcodes.ValidationError("Email already exists")
+			return 0, errcodes.EmailTaken()
 		}
 	}
 
-	// Verify role exists
-	roleExists, err := s.db.NewSelect().
+	roleExists, err := db.NewSelect().
 		Model((*models.Role)(nil)).
 		Where("id = ?", opts.RoleID).
 		Exists(ctx)
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return 0, errors.WithStack(err)
 	}
 	if !roleExists {
-		return nil, errcodes.ValidationError("Invalid role ID")
+		return 0, errcodes.ValidationError("Invalid role ID")
 	}
 
-	// Hash password
-	hashedPassword, err := auth.HashPassword(opts.Password)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create user
 	now := time.Now()
 	user := &models.User{
 		CreatedAt:          now,
 		UpdatedAt:          now,
 		Username:           opts.Username,
 		Email:              opts.Email,
-		PasswordHash:       hashedPassword,
+		PasswordHash:       passwordHash,
 		RoleID:             opts.RoleID,
 		IsActive:           true,
 		MustChangePassword: opts.RequirePasswordReset,
@@ -95,38 +111,26 @@ func (s *Service) Create(ctx context.Context, opts CreateUserOptions) (*models.U
 		GettingStartedEnabled:  true,
 		GettingStartedAutoOpen: true,
 	}
-
-	_, err = s.db.NewInsert().Model(user).Exec(ctx)
-	if err != nil {
-		return nil, errors.WithStack(err)
+	if _, err := db.NewInsert().Model(user).Exec(ctx); err != nil {
+		return 0, errors.WithStack(err)
 	}
 
-	// Create library access
+	access := []*models.UserLibraryAccess{}
 	if opts.AllLibraryAccess {
-		access := &models.UserLibraryAccess{
-			UserID:    user.ID,
-			LibraryID: nil, // null = all libraries
-		}
-		_, err = s.db.NewInsert().Model(access).Exec(ctx)
-		if err != nil {
-			return nil, errors.WithStack(err)
-		}
+		// A null library id means every Library.
+		access = append(access, &models.UserLibraryAccess{UserID: user.ID})
 	} else {
 		for _, libraryID := range opts.LibraryIDs {
 			id := libraryID
-			access := &models.UserLibraryAccess{
-				UserID:    user.ID,
-				LibraryID: &id,
-			}
-			_, err = s.db.NewInsert().Model(access).Exec(ctx)
-			if err != nil {
-				return nil, errors.WithStack(err)
-			}
+			access = append(access, &models.UserLibraryAccess{UserID: user.ID, LibraryID: &id})
 		}
 	}
-
-	// Reload with relations
-	return s.Retrieve(ctx, user.ID)
+	for _, a := range access {
+		if _, err := db.NewInsert().Model(a).Exec(ctx); err != nil {
+			return 0, errors.WithStack(err)
+		}
+	}
+	return user.ID, nil
 }
 
 // Retrieve gets a user by ID, active or not.

@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/invitelinks"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/uptrace/bun"
 )
@@ -149,10 +150,7 @@ func (s *Service) done(ctx context.Context, user *models.User, keys []string) (m
 				Where("phc.hook_type = ?", models.PluginHookMetadataEnricher).
 				Exists(ctx)
 		case StepInvite:
-			exists, err = s.db.NewSelect().Model((*models.User)(nil)).
-				Where("u.id != ?", user.ID).
-				Where("u.is_active = ?", true).
-				Exists(ctx)
+			exists, err = s.hasInvitedSomeone(ctx, user.ID)
 		case StepDevice:
 			exists, err = s.db.NewSelect().Model((*devices.Device)(nil)).
 				Where("d.user_id = ?", user.ID).
@@ -168,6 +166,24 @@ func (s *Service) done(ctx context.Context, user *models.User, keys []string) (m
 		done[key] = exists
 	}
 	return done, nil
+}
+
+// hasInvitedSomeone reports whether another active user exists or an Invite
+// Link is pending: one that could be accepted now, as the Users page lists
+// them.
+func (s *Service) hasInvitedSomeone(ctx context.Context, userID int) (bool, error) {
+	other, err := s.db.NewSelect().Model((*models.User)(nil)).
+		Where("u.id != ?", userID).
+		Where("u.is_active = ?", true).
+		Exists(ctx)
+	if err != nil || other {
+		return other, errors.WithStack(err)
+	}
+	pending, err := invitelinks.NewService(s.db).ListPending(ctx)
+	if err != nil {
+		return false, err
+	}
+	return len(pending) > 0, nil
 }
 
 // canReachLibrary reports whether a library the user has access to exists.

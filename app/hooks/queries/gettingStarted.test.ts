@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { useCreateDevice } from "./devices";
 import { QueryKey } from "./gettingStarted";
+import { useCreateInviteLink, useRevokeInviteLink } from "./invites";
 import { useCreateLibrary, useDeleteLibrary } from "./libraries";
 import { useCopyListToToRead } from "./lists";
 import { useInstallPlugin, useUninstallPlugin } from "./plugins";
@@ -35,6 +36,8 @@ const MUTATIONS: Record<
   useCreateUser: { hook: useCreateUser, vars: {} },
   useUpdateUser: { hook: useUpdateUser, vars: { id: "1", payload: {} } },
   useDeactivateUser: { hook: useDeactivateUser, vars: "1" },
+  useCreateInviteLink: { hook: useCreateInviteLink, vars: { role_id: 1 } },
+  useRevokeInviteLink: { hook: useRevokeInviteLink, vars: 1 },
   useCreateDevice: { hook: useCreateDevice, vars: {} },
   useSetOnToRead: { hook: useSetOnToRead, vars: { bookId: 1, onToRead: true } },
   useCopyListToToRead: { hook: useCopyListToToRead, vars: { listId: 1 } },

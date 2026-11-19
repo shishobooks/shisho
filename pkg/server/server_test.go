@@ -266,6 +266,10 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/getting-started", "POST /api/getting-started/dismiss", "POST /api/getting-started/restore",
 				"DELETE /api/getting-started/auto-open", "POST /api/getting-started/steps/:step/not-for-me",
 				"DELETE /api/getting-started/steps/:step/not-for-me", "POST /api/users/:id/show-getting-started",
+				// Invite Links stay registered; the middleware refuses all
+				// of them in Demo Mode, the two reads included.
+				"GET /api/invite-links", "POST /api/invite-links", "POST /api/invite-links/:id/revoke",
+				"GET /api/invites/:token", "POST /api/invites/:token/accept",
 			} {
 				assert.True(t, routes[route], route)
 			}
@@ -320,6 +324,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				{http.MethodPost, "/api/getting-started/steps/device/not-for-me"},
 				{http.MethodDelete, "/api/getting-started/steps/device/not-for-me"},
 				{http.MethodPost, "/api/users/42/show-getting-started"},
+				{http.MethodPost, "/api/invite-links"},
+				{http.MethodPost, "/api/invite-links/42/revoke"},
 			} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(request.method, request.path, nil))

@@ -115,19 +115,51 @@ User accounts follow these requirements:
 
 The initial setup screen creates the first user with the built-in admin role, then continues into [Setup](./getting-started.md#set-up-shisho). That admin starts with the [Getting Started](#getting-started) pill in the top nav.
 
-## Create and Edit Users
+## Add Users
 
-To create an account:
+Open **Administration > Users** and select **Add User**. It offers two ways to add someone:
 
-1. Open **Administration > Users**.
-2. Select **Add User**.
-3. Enter the account information.
-4. Optionally select **Require password reset on first login**.
-5. Select a role.
-6. Configure **Library Access**.
-7. Select **Create User**.
+- **Invite link**, the default: you choose the role and library access, and Shisho gives you a link. The person opens it and chooses their own username, password, and optional email. See [Invite Links](#invite-links).
+- **Set a password**: you create the account yourself, including its password, and pass the details on.
+
+Both forms warn when **Access to all libraries** is cleared and no library is selected. Such a user can sign in but sees no books until you give them access to a library.
+
+### Invite Links
+
+An Invite Link adds one user. To create one:
+
+1. Under **Add User**, keep **Invite link** selected.
+2. Select a role and configure **Library Access**.
+3. Choose how long the link works under **Link expires after**: 1, 7, or 30 days. The default is 7 days.
+
+:::warning[Anyone With the Link Can Create the Account]
+Until it's used, an invite link works like a password: whoever opens it first gets an account with the role and library access you chose. Send it only to the person it's for.
+:::
+
+4. Select **Create invite link**, then copy the link.
+
+Shisho never sends the link. Pass it on however you like, such as by text or chat. The link uses the address you have Shisho open at, so create it from an address the other person can reach, not `localhost`.
+
+Opening the link shows a welcome page naming who sent it. The person chooses a username, a password, and optionally an email address. Accepting creates the account with the invite's role and library access, signs them in, and opens their [Getting Started](#getting-started) panel.
+
+Pending invites are listed at the top of the **Users** page with their role, library access, and expiry. Select the copy button on one to copy its link again, or the revoke button to stop it.
+
+An invite works once. After that, and once it expires or is revoked, the link shows **This invite link is no longer valid** and asks the person to request a new one, without saying which happened. An invite also stops working when the user who created it is deleted, deactivated, or loses Users Write. Library access in a pending invite follows the libraries: deleting a library removes it from the invite.
+
+Someone who opens an invite while already signed in to Shisho is asked to sign out first, so accepting never switches accounts by accident.
+
+### Set a Password
+
+1. Under **Add User**, select **Set a password**.
+2. Enter the account information. **Require password reset on first login** is selected by default, so the password you choose is temporary. Clear it to let them keep that password.
+3. Select a role and configure **Library Access**.
+4. Select **Create User**.
+
+Shisho then shows **Send these to them**: the address you're using Shisho at and the new username, each with a copy button. Give them those and the password you set. If you reach Shisho at an address other devices can't use, such as `localhost`, send the address they should use instead.
 
 The first time the new user signs in, after choosing a new password if a reset was required, their [Getting Started](#getting-started) panel opens on its own.
+
+## Edit Users
 
 Select a username on the **Users** list to edit its username, optional email, role, and library access.
 
@@ -145,7 +177,7 @@ Getting Started is each user's short list of first steps, behind the **Getting S
 |------|---------------------|-----------|
 | **Set up your first library** | Libraries Write | Any library exists |
 | **Add metadata plugins** | Config Write, once a library exists | An installed plugin provides a metadata enricher |
-| **Invite someone** | Users Write | Another active user exists |
+| **Invite someone** | Users Write | Another active user exists or an [Invite Link](#invite-links) is pending |
 | **Connect a reading device** | Books Read | The user has a [Device](#devices) |
 | **Add a book to To Read** | Books Read, once they have access to a library | The user's To Read holds a book, or held one they then started |
 | **Start reading something** | Books Read, once they have access to a library | The user has a place saved in any book, or any [reading history](./reading-tracking.md) |
@@ -154,7 +186,7 @@ Getting Started is each user's short list of first steps, behind the **Getting S
 - **Dismiss this list** hides the pill without asking. **Getting Started** in the user menu brings it back. A hidden list also comes back on its own when a step that didn't apply when it was hidden starts to apply, such as **Add a book to To Read** once the user has access to a library, and stays until it's hidden again.
 - When every step is done or marked **Not for me**, the panel shows **You're all set**, and closing it hides the list the same way.
 - **Set up your first library** opens [Setup](./getting-started.md#set-up-shisho) at its library step, so metadata plugins are chosen before the first scan.
-- The panel opens on its own the first time a user added with **Add User** signs in. The first admin gets the pill, but the panel stays closed.
+- The panel opens on its own the first time a user added with **Add User** signs in, whether through an invite or a password you set. The first admin gets the pill, but the panel stays closed.
 - A user it isn't on for can turn it on with **Getting Started** in the user menu.
 - Getting Started never appears in [Demo Mode](./configuration.md#demo-mode).
 

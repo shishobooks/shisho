@@ -210,3 +210,39 @@ func TestBuildHeaderMiddlewareSendsNothingWithoutABuild(t *testing.T) {
 	_, sent := rec.Header()[buildHeader]
 	assert.False(t, sent)
 }
+
+// An Invite Link or Share Link token works like a password, and the log
+// viewer needs only Config Read, so neither the path nor the referer of a
+// request logs one.
+func TestRequestLoggingRedactsLinkTokens(t *testing.T) {
+	// This test changes the process-wide logger output.
+	var output bytes.Buffer
+	previous := logger.Output()
+	logger.SetOutput(&output)
+	t.Cleanup(func() { logger.SetOutput(previous) })
+	e := echo.New()
+	e.Use(requestLoggerMiddleware)
+	ok := func(c echo.Context) error { return c.NoContent(http.StatusNotFound) }
+	e.GET("/api/invites/:token", ok)
+	e.POST("/api/invites/:token/accept", ok)
+	e.GET("/api/share/:token/files/:fileId/download", ok)
+	e.GET("/api/auth/me", ok)
+
+	const secret = "s3cr3tT0k3nValue"
+	for _, request := range []struct{ method, path, referer string }{
+		{http.MethodGet, "/api/invites/" + secret, ""},
+		{http.MethodPost, "/api/invites/" + secret + "/accept", ""},
+		{http.MethodGet, "/api/share/" + secret + "/files/4/download", ""},
+		{http.MethodGet, "/api/auth/me", "http://shisho.local/invite/" + secret},
+		{http.MethodGet, "/api/auth/me", "http://shisho.local/share/" + secret + "?x=1"},
+	} {
+		output.Reset()
+		req := httptest.NewRequest(request.method, request.path, nil)
+		if request.referer != "" {
+			req.Header.Set("Referer", request.referer)
+		}
+		e.ServeHTTP(httptest.NewRecorder(), req)
+		assert.Contains(t, output.String(), "request handled", request.path)
+		assert.NotContains(t, output.String(), secret, "%s %s", request.path, request.referer)
+	}
+}

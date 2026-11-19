@@ -148,6 +148,7 @@ export {
   type PutReviewCriteriaPayload,
 } from "./generated/settings";
 export * from "./generated/sharelinks";
+export * from "./generated/invitelinks";
 export {
   type CreateListPayload,
   type UpdateListPayload,

@@ -57,7 +57,7 @@ const STEP_COPY: Record<GettingStartedStepKey, StepCopy> = {
   },
   invite: {
     title: "Invite someone",
-    description: "Give someone an account to share your library with.",
+    description: "Send someone an invite link to share your library with.",
     to: "/admin/users/create",
   },
   device: {
