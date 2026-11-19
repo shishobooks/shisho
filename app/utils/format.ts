@@ -146,6 +146,30 @@ export const formatDuration = (seconds: number): string => {
 };
 
 /**
+ * Formats a headline total of time spent, like a year's reading time, in
+ * days once it reaches one. A day here is 24 hours of time spent, not a day
+ * on the calendar, so show `formatTotalHours` beside it. Smaller figures in
+ * breakdowns, and lengths like an audiobook's, stay in `formatDuration`.
+ * @example formatTotalDuration(526800) // "6d 2h 20m"
+ * @example formatTotalDuration(3661) // "1h 1m"
+ */
+export const formatTotalDuration = (seconds: number): string => {
+  if (seconds < 86400) return formatDuration(seconds);
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return `${days}d ${hours}h ${minutes}m`;
+};
+
+/**
+ * The hours to show beside a `formatTotalDuration` that went to days, or
+ * undefined when it didn't.
+ * @example formatTotalHours(526800) // "146h 20m"
+ */
+export const formatTotalHours = (seconds: number): string | undefined =>
+  seconds >= 86400 ? formatDuration(seconds) : undefined;
+
+/**
  * Formats the time between two ISO timestamps, or from `start` until now when
  * `end` is omitted, as milliseconds, seconds, or minutes and seconds.
  * @example formatElapsed("2024-01-01T00:00:00Z", "2024-01-01T00:03:05Z") // "3m 5s"

@@ -36,8 +36,9 @@ import type {
 import {
   fileTypeLabel,
   formatCount,
-  formatDuration,
   formatFileSize,
+  formatTotalDuration,
+  formatTotalHours,
 } from "@/utils/format";
 
 interface SectionProps {
@@ -81,7 +82,7 @@ const Section = ({ title, description, action, children }: SectionProps) => {
 interface StatProps {
   label: string;
   value: string;
-  /** Qualifies the figure, under it ("Last 30 days"). */
+  /** Qualifies or restates the figure, under it ("Last 30 days"). */
   note?: string;
 }
 
@@ -211,11 +212,13 @@ const Reading = ({
       >
         <Stat
           label="Reading time"
-          value={formatDuration(reading.reading_seconds)}
+          note={formatTotalHours(reading.reading_seconds)}
+          value={formatTotalDuration(reading.reading_seconds)}
         />
         <Stat
           label="Listening time"
-          value={formatDuration(reading.listening_seconds)}
+          note={formatTotalHours(reading.listening_seconds)}
+          value={formatTotalDuration(reading.listening_seconds)}
         />
         <Stat
           label="Read-throughs finished"

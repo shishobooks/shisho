@@ -340,6 +340,18 @@ describe("ReadingStatsPage", () => {
     ).toHaveAttribute("href", "/reading-history");
   });
 
+  it("writes a time total of a day or more in days, with its hours under it", async () => {
+    renderPage({
+      stats: (year) => ({
+        ...busyStats(year),
+        totals: { ...busyStats(year).totals, reading_seconds: 90000 },
+      }),
+    });
+    const tile = await screen.findByRole("group", { name: "Reading time" });
+    expect(tile).toHaveTextContent("1d 1h 0m");
+    expect(tile).toHaveTextContent("25h 0m");
+  });
+
   it("offers the years with activity and all time", async () => {
     const { fetchMock, user } = renderPage();
     await screen.findByText("Did Not Finish");
@@ -848,6 +860,22 @@ describe("ReadingStatsPage", () => {
       expect(
         await screen.findByRole("heading", { name: "March 2026" }),
       ).toBeInTheDocument();
+    });
+
+    it("writes a total of a day or more in days, with its hours beside it", async () => {
+      renderPage({
+        initialEntry: CALENDAR,
+        heatmap: heatmapFor([
+          {
+            day: "2026-03-01",
+            reading_seconds: 100 * 3600,
+            listening_seconds: 46 * 3600 + 20 * 60,
+          },
+        ]),
+      });
+      expect(
+        await screen.findByRole("region", { name: "Reading by day" }),
+      ).toHaveTextContent("6d 2h 20m (146h 20m) in the last 12 months");
     });
 
     it("shows a past year's heatmap from the picker beside it", async () => {
