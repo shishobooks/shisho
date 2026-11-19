@@ -1,7 +1,10 @@
 package invitelinks
 
 import (
+	"cmp"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -17,7 +20,15 @@ type handler struct {
 }
 
 func buildInviteLinkResponse(link *models.InviteLink) InviteLinkResponse {
-	resp := InviteLinkResponse{InviteLink: *link, LibraryIDs: link.LibraryIDs()}
+	resp := InviteLinkResponse{InviteLink: *link, Libraries: make([]InviteLinkLibraryRef, 0, len(link.Libraries))}
+	for _, granted := range link.Libraries {
+		if granted.Library != nil {
+			resp.Libraries = append(resp.Libraries, InviteLinkLibraryRef{ID: granted.LibraryID, Name: granted.Library.Name})
+		}
+	}
+	slices.SortFunc(resp.Libraries, func(a, b InviteLinkLibraryRef) int {
+		return cmp.Or(strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)), cmp.Compare(a.ID, b.ID))
+	})
 	if link.CreatedByUser != nil {
 		resp.CreatedByUsername = link.CreatedByUser.Username
 	}

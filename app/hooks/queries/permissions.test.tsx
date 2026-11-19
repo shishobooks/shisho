@@ -145,7 +145,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   useJobLogs: requires("jobs:read", ["1", {}, on]),
   // libraries
   useLibrary: requires("libraries:read", ["1", on]),
-  useLibraries: requires(anyOf("libraries:read", "users:write"), [{}, on]),
+  useLibraries: requires(anyOf("libraries:read", "users:write"), [on]),
   useLibraryLanguages: requires("books:read", [1, on]),
   useUserLibraries: authenticated([on]),
   useNavLibraries: requires("books:read", []),

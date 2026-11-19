@@ -15,12 +15,22 @@ type CreateInviteLinkPayload struct {
 }
 
 // InviteLinkResponse is one pending Invite Link as an admin sees it: the
-// model with its role, the Libraries it grants, and who created it. The list
-// endpoint returns a bare array of these, and create returns one.
+// model with its role, the Libraries it grants by name, and who created it.
+// The list endpoint returns a bare array of these, and create returns one.
 type InviteLinkResponse struct {
 	models.InviteLink `tstype:",extends"`
-	LibraryIDs        []int  `json:"library_ids"`
-	CreatedByUsername string `json:"created_by_username"`
+	// Libraries are sorted by name, and empty when the invite grants all of
+	// them or none.
+	Libraries         []InviteLinkLibraryRef `json:"libraries"`
+	CreatedByUsername string                 `json:"created_by_username"`
+}
+
+// InviteLinkLibraryRef names one Library an Invite Link grants. The names
+// come with the invite so the Users page can show them without listing every
+// Library itself.
+type InviteLinkLibraryRef struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
 }
 
 // InviteResponse is what GET /invites/:token tells whoever opened an invite.

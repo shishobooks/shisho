@@ -17,7 +17,7 @@ const invite = (id: number, overrides = {}) => ({
   role_id: 3,
   role: { id: 3, name: "viewer" },
   all_library_access: false,
-  library_ids: [7],
+  libraries: [{ id: 7, name: "Comics" }],
   expires_at: "2026-11-25T12:00:00Z",
   created_by_username: "admin",
   ...overrides,
@@ -32,9 +32,6 @@ const mockApi = (invites: unknown[]) =>
       };
     }
     if (method === "GET" && path === "/roles") return { items: [], total: 0 };
-    if (method === "GET" && path === "/libraries") {
-      return { items: [{ id: 7, name: "Comics" }], total: 1 };
-    }
     if (method === "GET" && path === "/invite-links") return invites;
     return undefined;
   });
@@ -73,7 +70,7 @@ describe("AdminUsers pending invites", () => {
       invite(1),
       invite(2, {
         all_library_access: true,
-        library_ids: [],
+        libraries: [],
         role: { id: 2, name: "editor" },
       }),
     ]);

@@ -49,6 +49,7 @@ func (l *InviteLink) LibraryIDs() []int {
 type InviteLinkLibrary struct {
 	bun.BaseModel `bun:"table:invite_link_libraries,alias:ill" tstype:"-"`
 
-	InviteLinkID int `bun:",pk" json:"invite_link_id"`
-	LibraryID    int `bun:",pk" json:"library_id"`
+	InviteLinkID int      `bun:",pk" json:"invite_link_id"`
+	LibraryID    int      `bun:",pk" json:"library_id"`
+	Library      *Library `bun:"rel:belongs-to,join:library_id=id" json:"-"`
 }

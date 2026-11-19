@@ -255,7 +255,7 @@ func (svc *Service) selectWithRelations(db bun.IDB, model any) *bun.SelectQuery 
 	return db.NewSelect().
 		Model(model).
 		Relation("Role").
-		Relation("Libraries").
+		Relation("Libraries.Library").
 		Relation("CreatedByUser").
 		Relation("CreatedByUser.Role").
 		Relation("CreatedByUser.Role.Permissions")

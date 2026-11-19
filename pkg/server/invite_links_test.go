@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -142,7 +143,7 @@ func TestInviteLinks_CreateListAndRevoke(t *testing.T) {
 	assert.Equal(t, f.roleID(models.RoleViewer), link.RoleID)
 	require.NotNil(t, link.Role)
 	assert.Equal(t, models.RoleViewer, link.Role.Name)
-	assert.Equal(t, []int{f.libA.ID}, link.LibraryIDs)
+	assert.Equal(t, []invitelinks.InviteLinkLibraryRef{{ID: f.libA.ID, Name: "Library A"}}, link.Libraries)
 	assert.False(t, link.AllLibraryAccess)
 	assert.Equal(t, "admin", link.CreatedByUsername)
 	// Seven days unless the admin picks another expiry.
@@ -150,14 +151,14 @@ func TestInviteLinks_CreateListAndRevoke(t *testing.T) {
 
 	everything := f.mustCreate(f.admin, fmt.Sprintf(`{"role_id":%d,"all_library_access":true,"library_ids":[%d],"expires_in_days":1}`, f.roleID(models.RoleEditor), f.libA.ID))
 	assert.True(t, everything.AllLibraryAccess)
-	assert.Empty(t, everything.LibraryIDs)
+	assert.Empty(t, everything.Libraries)
 	assert.WithinDuration(t, before.AddDate(0, 0, 1), everything.ExpiresAt, time.Minute)
 
 	listed := f.pending()
 	require.Len(t, listed, 2)
 	assert.Equal(t, everything.ID, listed[0].ID, "newest first")
 	assert.Equal(t, link.Token, listed[1].Token, "a pending link can be copied again")
-	assert.Equal(t, []int{f.libA.ID}, listed[1].LibraryIDs)
+	assert.Equal(t, []invitelinks.InviteLinkLibraryRef{{ID: f.libA.ID, Name: "Library A"}}, listed[1].Libraries)
 
 	rec := f.do(f.admin, http.MethodPost, fmt.Sprintf("/api/invite-links/%d/revoke", link.ID), "")
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
@@ -169,6 +170,27 @@ func TestInviteLinks_CreateListAndRevoke(t *testing.T) {
 	assert.Equal(t, everything.ID, listed[0].ID)
 
 	assert.Equal(t, http.StatusNotFound, f.do(f.admin, http.MethodPost, "/api/invite-links/9999/revoke", "").Code)
+}
+
+// The Users page names each Library an invite grants, however many
+// Libraries the server has, so the names come with the invite.
+func TestInviteLinks_ListNamesEveryLibrary(t *testing.T) {
+	t.Parallel()
+	f := newInviteLinksFixture(t, false)
+	ids := []string{}
+	want := []invitelinks.InviteLinkLibraryRef{}
+	for i := range 12 {
+		lib := &models.Library{Name: fmt.Sprintf("Shelf %02d", 12-i), CoverAspectRatio: "book"}
+		_, err := f.db.NewInsert().Model(lib).Exec(context.Background())
+		require.NoError(t, err)
+		ids = append(ids, strconv.Itoa(lib.ID))
+		want = append([]invitelinks.InviteLinkLibraryRef{{ID: lib.ID, Name: lib.Name}}, want...)
+	}
+	f.mustCreate(f.admin, fmt.Sprintf(`{"role_id":%d,"library_ids":[%s]}`, f.roleID(models.RoleViewer), strings.Join(ids, ",")))
+
+	listed := f.pending()
+	require.Len(t, listed, 1)
+	assert.Equal(t, want, listed[0].Libraries, "every Library, by name")
 }
 
 func TestInviteLinks_CreateValidation(t *testing.T) {

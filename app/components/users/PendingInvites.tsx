@@ -7,20 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useInviteLinks, useRevokeInviteLink } from "@/hooks/queries/invites";
-import { useLibraries } from "@/hooks/queries/libraries";
 import { toastRequestError } from "@/libraries/api";
-import type { InviteLinkResponse, Library } from "@/types";
+import type { InviteLinkResponse } from "@/types";
 import { copyTextWithToast } from "@/utils/copyWithToast";
 import { formatDateTime } from "@/utils/format";
 import { inviteLinkUrl } from "@/utils/inviteUrl";
 
-const accessText = (link: InviteLinkResponse, libraries: Library[]) => {
+const accessText = (link: InviteLinkResponse) => {
   if (link.all_library_access) return "All libraries";
-  if (link.library_ids.length === 0) return "No libraries";
-  const names = link.library_ids.map(
-    (id) => libraries.find((library) => library.id === id)?.name ?? `#${id}`,
-  );
-  return names.join(", ");
+  if (link.libraries.length === 0) return "No libraries";
+  return link.libraries.map((library) => library.name).join(", ");
 };
 
 /**
@@ -30,11 +26,9 @@ const accessText = (link: InviteLinkResponse, libraries: Library[]) => {
  */
 const PendingInvites = () => {
   const invitesQuery = useInviteLinks();
-  const { data: librariesData } = useLibraries();
   const revokeMutation = useRevokeInviteLink();
   const [toRevoke, setToRevoke] = useState<InviteLinkResponse | null>(null);
 
-  const libraries = librariesData?.items ?? [];
   const invites = invitesQuery.data ?? [];
 
   const handleRevoke = async () => {
@@ -68,7 +62,7 @@ const PendingInvites = () => {
       </h2>
       <ul className="border border-border rounded-md divide-y divide-border">
         {invites.map((link) => {
-          const access = accessText(link, libraries);
+          const access = accessText(link);
           return (
             <li
               className="flex items-center justify-between gap-3 py-3 px-4 md:px-6"
