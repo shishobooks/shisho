@@ -46,7 +46,7 @@ const editionLabel = (file: File, files: File[]): string => {
 // whyNot says why a Device gets nothing of the book.
 const whyNot = (line: BookDevice, mainFiles: File[]): string => {
   if (line.not_delivered_reason === NotDeliveredOutsideScope) {
-    return "Outside its scope";
+    return "Not among the books it can reach";
   }
   const types = [...new Set(mainFiles.map((f) => fileTypeLabel(f.file_type)))];
   return types.length > 0

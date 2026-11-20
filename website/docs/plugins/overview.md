@@ -7,7 +7,7 @@ Plugins extend Shisho with file conversion, file parsing, and metadata lookup. T
 Go to **Administration > Plugins**. The page has two tabs:
 
 - **Installed** lists plugins already on this Shisho server, their versions, capabilities, status, source repository, and available updates.
-- **Discover** fetches the current indexes from configured repositories. Use search, capability, and source filters to find a plugin.
+- **Discover** fetches the current indexes from configured repositories. Use search, capability, and source filters to find a plugin. Until a metadata enricher is installed, a user with Config Write sees **Recommended for your library** at the top: the official metadata enrichers that suit the books in your libraries' folders, as [Setup recommends them](../getting-started.md#add-metadata-plugins). Installed ones drop off the list, and it's hidden while you search or filter.
 
 Viewing this page, including installed plugins, their settings, and the Discover tab, requires the Config Read permission. The **Order** view under **Advanced plugin settings** also needs Books Read, because the identify dialog on book pages reads the same order. Installing, updating, configuring, reordering, and removing plugins, and managing repositories, require Config Write. Manual book identification requires Books Write and access to the relevant library.
 

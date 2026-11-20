@@ -31,7 +31,10 @@ vi.mock("@/hooks/queries/plugins", () => ({
     isLoading: false,
     error: null,
   }),
-  usePluginsInstalled: () => ({ data: mockInstalled }),
+  // Recommendations have their own tests; with an enricher installed,
+  // there are none here.
+  usePluginOrder: () => ({ data: [{}], isSuccess: true }),
+  usePluginsInstalled: () => ({ data: mockInstalled, isSuccess: true }),
   useUpdatePluginVersion: () => ({
     isPending: false,
     mutate: mockUpdateMutate,

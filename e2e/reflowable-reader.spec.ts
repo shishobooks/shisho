@@ -7,7 +7,7 @@
  *   pnpm e2e:chromium e2e/reflowable-reader.spec.ts
  */
 
-import type { Frame, Page } from "@playwright/test";
+import type { Frame, Locator, Page } from "@playwright/test";
 
 import { expect, getApiBaseURL, request, test } from "./fixtures";
 
@@ -93,6 +93,21 @@ async function turnPageTo(page: Page, text: string) {
   const next = page.getByRole("button", { name: "Next page" });
   await expect(async () => {
     await next.click();
+    await bookFrame(page, text, 2_000);
+  }).toPass({ timeout: 30_000 });
+}
+
+// Clicks Back or Forward until text shows. foliate ignores a move for a
+// moment after a page turn lands, and the reader keeps its history as it was
+// for another try, so a click can be dropped. It clicks only while the text
+// isn't showing, so a move that lands slowly isn't made twice.
+async function moveTo(page: Page, button: Locator, text: string) {
+  await expect(async () => {
+    const shown = await bookFrame(page, text, 500).then(
+      () => true,
+      () => false,
+    );
+    if (!shown) await button.click({ timeout: 2_000 });
     await bookFrame(page, text, 2_000);
   }).toPass({ timeout: 30_000 });
 }
@@ -679,14 +694,13 @@ test.describe("Reflowable reader", () => {
     await panel.getByRole("button", { name: "Close search" }).click();
 
     // Paging back into the chapter before isn't a jump of its own.
+    // One click: retrying a turn that lands slowly would turn two pages.
     await page.getByRole("button", { name: "Previous page" }).click();
     await bookFrame(page, "Chapter Three text.");
 
-    await back.click();
-    await bookFrame(page, "Test chapter.");
+    await moveTo(page, back, "Test chapter.");
     await expect(back).toBeDisabled();
-    await forward.click();
-    await bookFrame(page, "Chapter Three text.");
+    await moveTo(page, forward, "Chapter Three text.");
     await expect(forward).toBeDisabled();
     await expect(back).toBeEnabled();
   });

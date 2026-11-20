@@ -137,7 +137,7 @@ The reverse proxy must pass all of these public route families without rewriting
 
 Do not strip `/api` before forwarding it. Also pass `/health` if your external monitor uses it. Pass Shisho's `X-Shisho-*` response headers through unchanged; the KOReader plugin uses them to tell which features a server supports and when the plugin needs an update. Avoid response buffering for streaming API responses. The browser interface and API must share an origin; Shisho does not send CORS permission headers for cross-origin browser access.
 
-Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publishing them. Treat device URLs and [Device credentials](./users-and-permissions.md#device-password) as secrets.
+Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publishing them. Treat device URLs and [Device passwords](./users-and-permissions.md#device-password) as secrets.
 
 ### Device URLs
 

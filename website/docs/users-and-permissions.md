@@ -204,41 +204,41 @@ Set a device up from Shisho opened at the address your devices use, not `localho
 
 ### Device Types
 
-**Connect Device** picks the type from what you read on: **A Kobo** adds a Kobo Device, **KOReader** a KOReader Device (on any hardware, a Kobo included), **A Kindle's browser** a Kindle Device, **A reading app on a phone or tablet** an OPDS app Device, and **Another e-reader's browser** a Browser Device. The type decides which connections the Device can use, which file types it can receive, and the [Delivery Rules](#delivery-rules-of-a-device) it starts with:
+**Connect Device** picks the type from what you read on: **A Kobo** adds a Kobo Device, **KOReader** a KOReader Device (on any hardware, a Kobo included), **A Kindle's browser** a Kindle Device, **A reading app on a phone or tablet** an OPDS app Device, and **Another e-reader's browser** a Browser Device. The type decides how the Device connects, which file types it can receive, and the [Delivery Rules](#delivery-rules-of-a-device) it starts with:
 
-| Type | Connections | Can receive | Starts with |
-|------|-------------|-------------|-------------|
+| Type | Connects through | Can receive | Starts with |
+|------|------------------|-------------|-------------|
 | **Kobo** | Kobo sync and the eReader browser | KePub, EPUB | Its preset: KePub as KePub, then EPUB as KePub, then CBZ as KePub, then AZW3 as KePub, then MOBI as KePub |
 | **Kindle** | eReader browser | AZW3, MOBI | Its preset: AZW3 as AZW3, then MOBI as MOBI, then EPUB as AZW3, then KePub as AZW3, then CBZ as AZW3 |
 | **KOReader** | The [KOReader plugin](./koreader.md#install-the-koreader-plugin), OPDS, and KOReader's progress sync | Any file type except M4B, since KOReader can't play audiobooks | Your default Delivery Rules |
 | **OPDS app** | OPDS, for other reading apps such as Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
 
-The type alone decides how a Device connects, and the Device's page shows setup steps for each of its connections under **Setup**. A Device used through a connection its type does not have, such as a Browser Device's credential in a Kobo sync URL, gets a forbidden response; an OPDS client given a credential from a Device without OPDS, or KOReader's progress sync given one from a Device that isn't a KOReader Device, gets `401 Unauthorized`.
+The type alone decides how a Device connects, and the Device's page shows setup steps for each way it connects under **Setup**. A Device used in a way its type does not connect, such as a Browser Device's password in a Kobo sync URL, gets a forbidden response; an OPDS client given the password of a Device without OPDS, or KOReader's progress sync given one from a Device that isn't a KOReader Device, gets `401 Unauthorized`.
 
-**Change Type** on a Device's page switches its type and keeps its credential and scope. Its connections change to the new type's, and its Delivery Rules go back to what the new type starts with, so a custom list is discarded.
+**Change Type** on a Device's page switches its type and keeps its password and which books it reaches. The ways it connects change to the new type's, and its Delivery Rules go back to what the new type starts with, so a custom list is discarded.
 
 ### Device Password
 
-Each Device has one password, its credential, that all its connections use. It is 16 lowercase letters with no `l`, `i`, or `o`, so it can be typed on an e-ink keyboard. Shisho accepts it only exactly as shown: no spaces, hyphens, or capital letters. The Device's page shows it as **Device password** under **Advanced**, with a copy button.
+Each Device has one password, which it signs in with however it connects and which is also part of its URLs. It is 16 lowercase letters with no `l`, `i`, or `o`, so it can be typed on an e-ink keyboard. Shisho accepts it only exactly as shown: no spaces, hyphens, or capital letters. The Device's page shows it as **Device password** under **Advanced**, with a copy button.
 
 :::warning[Regenerating a Device Password]
-**Regenerate** on a Device's page replaces its password immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old credential stops working, KOReader's progress sync, OPDS, and the KOReader plugin stop signing in with it, and any unexpired setup URL stops redirecting. Set up each connection again with the new password. Regenerate when a password may have leaked; delete the Device when the hardware is lost for good.
+**Regenerate** on a Device's page replaces its password immediately, and cannot be undone. Every Kobo sync URL and eReader browser bookmark with the old password stops working, KOReader's progress sync, OPDS, and the KOReader plugin stop signing in with it, and any unexpired setup URL stops redirecting. Set the Device up again with the new password, everywhere it connects. Regenerate when a password may have leaked; delete the Device when the hardware is lost for good.
 :::
 
 Treat the Device password, and every URL that contains it, like your account password.
 
 ### Which Books
 
-A Device's scope, under **Advanced > Which books** on its page, decides which books it reaches, through every connection:
+**Advanced > Which books** on a Device's page decides which books it reaches, however it connects:
 
-| Scope | Books |
-|-------|-------|
+| Choice | Books |
+|--------|-------|
 | **All Books** | Books in every library the Device's owner can access |
 | **Library** | Books in one library the owner can access |
 | **List** | Books on one list the owner owns or that is shared with them, in libraries the owner can access |
 
-A list shared with you can hold books from libraries you cannot access; those books stay out of the scope. If the scope's library or list is deleted, or the list stops being shared with you, the Device reaches no books until you choose another scope. A scope change applies on the Device's next request, without changing anything on the device itself.
+A list shared with you can hold books from libraries you cannot access; the Device does not reach those books. If the chosen library or list is deleted, or the list stops being shared with you, the Device reaches no books until you choose another. A change here applies on the Device's next request, without changing anything on the device itself.
 
 ### Delivery Rules of a Device
 
@@ -248,17 +248,17 @@ Each Device has its own [Delivery Rules](./supported-formats.md#delivery-rules),
 - **Kobo preset** or **Kindle preset**: the type's preset from the table above, for Kobo and Kindle Devices. A Shisho release that changes a preset changes it for every Device following it.
 - **Custom**: the Device's own list, which starts as a copy of what it followed and is saved with **Save**. It needs at least one rule, and a rule can only deliver a file type the Device can receive, so a Kindle can't have a rule that sends EPUB, though one can send EPUB as AZW3. Choosing **My default** or the preset again discards the list. While a Device follows your default, **Edit your default** under its rules opens **Preferences > Delivery Rules**.
 
-Under the rules, the Device's page previews how many books in its scope the Device receives, and how many it receives nothing of, counted by the file types those books have. A book with files of two types counts under both. The preview updates while you edit a custom list. For a Kobo, the preview also says how many books on it the rules would move to a different edition, and Shisho asks before saving a change that switches books on it between KePub and EPUB; see [Kobo Sync](./kobo-sync.md#moving-to-a-different-edition).
+Under the rules, the Device's page previews how many of the books it reaches the Device receives, and how many it receives nothing of, counted by the file types those books have. A book with files of two types counts under both. The preview updates while you edit a custom list. For a Kobo, the preview also says how many books on it the rules would move to a different edition, and Shisho asks before saving a change that switches books on it between KePub and EPUB; see [Kobo Sync](./kobo-sync.md#moving-to-a-different-edition).
 
-The **Devices** tab on each book's page has a row for each of your Devices: the file type each of the book's files goes out as, such as EPUB to KePub, or why it receives nothing, such as no rule for the book's file types or the book being outside its scope. For a Kobo, the row also warns when its next sync would move the book to a different edition or switch it between KePub and EPUB.
+The **Devices** tab on each book's page has a row for each of your Devices: the file type each of the book's files goes out as, such as EPUB to KePub, or why it receives nothing, such as no rule for the book's file types or the book not being among those the Device reaches. For a Kobo, the row also warns when its next sync would move the book to a different edition or switch it between KePub and EPUB.
 
 ### Delete a Device
 
-Deleting a Device under **Devices** cannot be undone. Every connection stops working immediately, and Shisho forgets what it has synced to the Device. To use the hardware again, add a new Device and set it up again.
+Deleting a Device under **Devices** cannot be undone. The Device stops working immediately, however it connects, and Shisho forgets what it has synced to the Device. To use the hardware again, add a new Device and set it up again.
 
 ### Manage Every User's Devices
 
-A user with Users Read can open **Administration > Devices** to see every user's Devices: their names, types, connections, owners, and when each was last used. The list never shows credentials, so an administrator cannot sign in as another user's Device. A user with Users Write can **Revoke** a Device, which deletes it as above, for example to cut off a lost device for someone.
+A user with Users Read can open **Administration > Devices** to see every user's Devices: their names, types, the ways each connects, owners, and when each was last used. The list never shows Device passwords, so an administrator cannot sign in as another user's Device. A user with Users Write can **Revoke** a Device, which deletes it as above, for example to cut off a lost device for someone.
 
 ## Deactivate Users
 

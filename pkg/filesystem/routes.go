@@ -4,15 +4,22 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/plugins"
 )
 
-// RegisterRoutes registers filesystem routes with authentication.
-func RegisterRoutes(e *echo.Group, authMiddleware *auth.Middleware) {
+// RegisterRoutes registers filesystem routes with authentication. pm, which
+// may be nil, lets detection count the file types plugins add.
+func RegisterRoutes(e *echo.Group, authMiddleware *auth.Middleware, pm *plugins.Manager) {
 	filesystemService := NewService()
 
 	h := &handler{
 		filesystemService: filesystemService,
 		detectBudget:      defaultDetectLimits,
+	}
+	// Only set plugins if it's not nil to avoid an interface holding a nil
+	// pointer.
+	if pm != nil {
+		h.plugins = pm
 	}
 
 	fsGroup := e.Group("/filesystem")

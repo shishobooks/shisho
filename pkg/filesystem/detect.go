@@ -58,13 +58,14 @@ func (c *detectCounts) snapshot(stoppedEarly bool) *DetectFileTypesResponse {
 // that isn't a folder the server can open and read is named in MissingPaths,
 // since a library made from it never scans. A folder inside one that can't
 // be read is skipped, and the scan reports it itself. With foldersOnly it
-// stops after checking the paths.
+// stops after checking the paths. pluginTypes adds the file types plugins
+// parse, which the scanner also imports.
 //
 // The walk checks its budget between entries, but one folder's read can
 // take any time on a hung network mount, so the walk runs on its own and the
 // request returns what it has counted once the time is up. The walk then
 // stops at its next entry.
-func (s *Service) DetectFileTypes(ctx context.Context, paths []string, limits detectLimits) (*DetectFileTypesResponse, error) {
+func (s *Service) DetectFileTypes(ctx context.Context, paths []string, limits detectLimits, pluginTypes map[string]bookCategory) (*DetectFileTypesResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -73,7 +74,7 @@ func (s *Service) DetectFileTypes(ctx context.Context, paths []string, limits de
 
 	counts := &detectCounts{}
 	done := make(chan error, 1)
-	go func() { done <- detectWalk(walkCtx, paths, limits, counts) }()
+	go func() { done <- detectWalk(walkCtx, paths, limits, pluginTypes, counts) }()
 
 	timer := time.NewTimer(limits.Duration)
 	defer timer.Stop()
@@ -90,7 +91,7 @@ func (s *Service) DetectFileTypes(ctx context.Context, paths []string, limits de
 	}
 }
 
-func detectWalk(ctx context.Context, paths []string, limits detectLimits, counts *detectCounts) error {
+func detectWalk(ctx context.Context, paths []string, limits detectLimits, pluginTypes map[string]bookCategory, counts *detectCounts) error {
 	now := limits.now
 	if now == nil {
 		now = time.Now
@@ -150,8 +151,8 @@ func detectWalk(ctx context.Context, paths []string, limits detectLimits, counts
 			if d.IsDir() || strings.HasPrefix(d.Name(), "._") {
 				return nil
 			}
-			fileType := models.FileTypeForPath(path)
-			if !models.IsBuiltInFileType(fileType) {
+			category, ok := categoryForFileType(models.FileTypeForPath(path), pluginTypes)
+			if !ok {
 				return nil
 			}
 			if counted >= limits.Files {
@@ -160,12 +161,12 @@ func detectWalk(ctx context.Context, paths []string, limits detectLimits, counts
 			counted++
 			counts.mu.Lock()
 			defer counts.mu.Unlock()
-			switch {
-			case fileType == models.FileTypeCBZ:
+			switch category {
+			case categoryComic:
 				counts.resp.Comics++
-			case models.IsAudiobookFileType(fileType):
+			case categoryAudiobook:
 				counts.resp.Audiobooks++
-			default:
+			case categoryEbook:
 				counts.resp.Ebooks++
 			}
 			return nil
@@ -179,6 +180,101 @@ func detectWalk(ctx context.Context, paths []string, limits detectLimits, counts
 		// A root that turns unreadable mid-walk keeps what was found.
 	}
 	return nil
+}
+
+// bookCategory is the kind of book a file holds, as detection counts it.
+type bookCategory int
+
+const (
+	categoryEbook bookCategory = iota
+	categoryAudiobook
+	categoryComic
+)
+
+// pluginManager reports the file types plugins add to what the scanner
+// imports: those their file parsers read, each with the MIME types its parser
+// declares, and those their input converters read, each with the type it's
+// converted to. *plugins.Manager implements it.
+type pluginManager interface {
+	FileParserMIMETypes() map[string][]string
+	ConverterTargetTypes() map[string]string
+}
+
+// pluginCategories sorts the file types plugins add into categories. Keys
+// are the types exactly as manifests spell them, as the scanner matches them.
+// plugins may be nil.
+func pluginCategories(plugins pluginManager) map[string]bookCategory {
+	if plugins == nil {
+		return nil
+	}
+	categories := map[string]bookCategory{}
+	for fileType, target := range plugins.ConverterTargetTypes() {
+		categories[fileType] = categoryForTarget(fileType, target)
+	}
+	// A parser reads the file itself, so its MIME types say more than a
+	// converter's target does.
+	for fileType, mimeTypes := range plugins.FileParserMIMETypes() {
+		categories[fileType] = categoryForMIMETypes(fileType, mimeTypes)
+	}
+	return categories
+}
+
+// isComicArchive reports whether a file type is a comic book archive by its
+// cb* extension, such as CBR or CB7, whatever MIME type its plugin declares
+// for it: a plain RAR, 7z, or tar type is just as likely.
+func isComicArchive(fileType string) bool {
+	return len(fileType) == 3 && strings.HasPrefix(fileType, "cb")
+}
+
+// categoryForTarget reads a converted file type's category from the type it
+// becomes.
+func categoryForTarget(fileType, target string) bookCategory {
+	switch {
+	case isComicArchive(fileType), target == models.FileTypeCBZ:
+		return categoryComic
+	case models.IsAudiobookFileType(target):
+		return categoryAudiobook
+	default:
+		return categoryEbook
+	}
+}
+
+// categoryForMIMETypes reads a parsed file type's category from the family
+// of the MIME types its parser declares: audio is an audiobook, a comic book
+// archive is a comic, and anything else, or nothing declared, is an ebook. It
+// compares families, not exact types, so it doesn't use (*mimetype.MIME).Is.
+func categoryForMIMETypes(fileType string, mimeTypes []string) bookCategory {
+	category := categoryEbook
+	if isComicArchive(fileType) {
+		category = categoryComic
+	}
+	for _, mt := range mimeTypes {
+		base, _, _ := strings.Cut(mt, ";")
+		base = strings.ToLower(strings.TrimSpace(base))
+		switch {
+		case strings.HasPrefix(base, "audio/"):
+			return categoryAudiobook
+		case strings.HasPrefix(base, "application/vnd.comicbook"),
+			strings.HasPrefix(base, "application/x-cb"):
+			category = categoryComic
+		}
+	}
+	return category
+}
+
+// categoryForFileType reports a file type's category, and false for one the
+// scanner doesn't import: neither built in nor parsed by a plugin.
+func categoryForFileType(fileType string, pluginTypes map[string]bookCategory) (bookCategory, bool) {
+	switch {
+	case fileType == models.FileTypeCBZ:
+		return categoryComic, true
+	case models.IsAudiobookFileType(fileType):
+		return categoryAudiobook, true
+	case models.IsBuiltInFileType(fileType):
+		return categoryEbook, true
+	}
+	category, ok := pluginTypes[fileType]
+	return category, ok
 }
 
 // resolveDir resolves a path the way Browse does and reports whether it is a

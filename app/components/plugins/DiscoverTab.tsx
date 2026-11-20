@@ -1,5 +1,5 @@
 import { BadgeCheck, Check, Download, Loader2, Puzzle } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -14,6 +14,12 @@ import {
   isMetadataEnricher,
 } from "@/components/plugins/pluginCapabilities";
 import { PluginRow } from "@/components/plugins/PluginRow";
+import { detectionSummary } from "@/components/setup/detectionSummary";
+import {
+  pluginChoices,
+  pluginKey,
+  recommendPlugins,
+} from "@/components/setup/pluginRecommendations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,7 +30,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DETECT_MAX_PATHS,
+  useDetectFileTypes,
+} from "@/hooks/queries/filesystem";
+import { useLibraries } from "@/hooks/queries/libraries";
+import {
   useInstallPlugin,
+  usePluginOrder,
   usePluginRepositories,
   usePluginsAvailable,
   usePluginsInstalled,
@@ -33,7 +45,7 @@ import {
 } from "@/hooks/queries/plugins";
 import { useCan } from "@/hooks/useCan";
 import { toastRequestError } from "@/libraries/api";
-import { PluginStatusActive } from "@/types";
+import { PluginHookMetadataEnricher, PluginStatusActive } from "@/types";
 
 interface DiscoverTabProps {
   canWrite: boolean;
@@ -42,7 +54,8 @@ interface DiscoverTabProps {
 export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   const availableQuery = usePluginsAvailable();
   const { data: available = [], isLoading } = availableQuery;
-  const { data: installed = [] } = usePluginsInstalled();
+  const installedQuery = usePluginsInstalled();
+  const { data: installed = [] } = installedQuery;
   const { data: repos = [] } = usePluginRepositories();
   const installPlugin = useInstallPlugin();
   const updatePluginVersion = useUpdatePluginVersion();
@@ -62,7 +75,7 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
   const [source, setSource] = useState<string>("all");
 
   const installedByKey = useMemo(
-    () => new Map(installed.map((p) => [`${p.scope}/${p.id}`, p])),
+    () => new Map(installed.map((p) => [pluginKey(p), p])),
     [installed],
   );
 
@@ -99,6 +112,76 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
     [available, capability, search, source],
   );
 
+  // Setup's plugin recommendations, for as long as Getting Started's "Add
+  // metadata plugins" step is open (until a metadata enricher is installed),
+  // since the step leads here. They're worked out from what the libraries'
+  // folders hold, as Setup works them out from the folders it's given.
+  // Hook order lists each installed enricher, the same rule the step uses.
+  const enricherOrder = usePluginOrder(PluginHookMetadataEnricher);
+  const noEnricher =
+    installedQuery.isSuccess &&
+    enricherOrder.isSuccess &&
+    enricherOrder.data.length === 0;
+  const filtering = search !== "" || capability !== "all" || source !== "all";
+  const offerRecommendations = canWrite && !filtering && noEnricher;
+  const librariesQuery = useLibraries({ enabled: offerRecommendations });
+  const { libraryPaths, truncated } = useMemo(() => {
+    const paths = [
+      ...new Set(
+        (librariesQuery.data?.items ?? []).flatMap((library) =>
+          (library.library_paths ?? []).map((path) => path.filepath),
+        ),
+      ),
+    ];
+    return {
+      libraryPaths: paths.slice(0, DETECT_MAX_PATHS),
+      truncated: paths.length > DETECT_MAX_PATHS,
+    };
+  }, [librariesQuery.data]);
+  // A role that can't list libraries gets the main plugins, as Setup gives
+  // when it can't look through the folders. One that can, with none, has
+  // nothing to recommend for: Setup covers a server's first library.
+  const listsLibraries = librariesQuery.isEnabled;
+  const hasLibrary = !listsLibraries || libraryPaths.length > 0;
+  const detection = useDetectFileTypes(
+    offerRecommendations && libraryPaths.length > 0 ? libraryPaths : [],
+  );
+  const detecting =
+    (listsLibraries && librariesQuery.isPending) ||
+    (detection.isEnabled && detection.isPending);
+  // With more folders than one detection takes, it counted only some, which
+  // the summary says as it does for a walk that stopped early.
+  const detected = useMemo(
+    () =>
+      detection.data && truncated
+        ? { ...detection.data, stopped_early: true }
+        : detection.data,
+    [detection.data, truncated],
+  );
+  const recommended = useMemo(() => {
+    if (!offerRecommendations || !hasLibrary || detecting) return [];
+    return pluginChoices(
+      available,
+      recommendPlugins(detected),
+    ).recommended.filter((p) => !installedByKey.has(pluginKey(p)));
+  }, [
+    available,
+    detected,
+    detecting,
+    hasLibrary,
+    installedByKey,
+    offerRecommendations,
+  ]);
+  const showRecommendations =
+    offerRecommendations && hasLibrary && (detecting || recommended.length > 0);
+  const rest = useMemo(() => {
+    if (!showRecommendations) return filtered;
+    const keys = new Set(recommended.map(pluginKey));
+    return filtered.filter((p) => !keys.has(pluginKey(p)));
+  }, [filtered, recommended, showRecommendations]);
+  const recommendedId = useId();
+  const restId = useId();
+
   const handleInstallConfirm = () => {
     if (!installTarget) return;
     const compatibleVersion = installTarget.versions.find((v) => v.compatible);
@@ -125,6 +208,96 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
           }
         },
       },
+    );
+  };
+
+  const renderRow = (p: AvailablePlugin) => {
+    const key = pluginKey(p);
+    const installedPlugin = installedByKey.get(key);
+    const isInstalled = !!installedPlugin;
+    const updateAvailable =
+      installedPlugin?.update_available_version ?? undefined;
+    const incompatible = p.compatible === false;
+    const caps = deriveCapabilityLabels(p.versions[0]?.capabilities);
+    const isThisInstalling =
+      installPlugin.isPending &&
+      installTarget?.scope === p.scope &&
+      installTarget?.id === p.id;
+    const isThisUpdating =
+      updatePluginVersion.isPending &&
+      updatePluginVersion.variables?.scope === p.scope &&
+      updatePluginVersion.variables?.id === p.id;
+
+    return (
+      <PluginRow
+        actions={
+          canWrite ? (
+            updateAvailable ? (
+              <Button
+                disabled={updatePluginVersion.isPending}
+                onClick={() =>
+                  updatePluginVersion.mutate(
+                    { id: p.id, scope: p.scope },
+                    {
+                      onError: (err) =>
+                        toastRequestError(err, "Failed to update plugin"),
+                      onSuccess: (updated) =>
+                        toast.success(
+                          `Updated ${updated.name} to v${updated.version}`,
+                        ),
+                    },
+                  )
+                }
+                size="sm"
+                variant="outline"
+              >
+                {isThisUpdating ? (
+                  <Loader2
+                    aria-hidden="true"
+                    className="h-3 w-3 animate-spin"
+                  />
+                ) : (
+                  <Download aria-hidden="true" className="mr-1 h-3 w-3" />
+                )}
+                Update
+              </Button>
+            ) : isInstalled ? (
+              <Button
+                className="border-transparent bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-400 dark:hover:bg-green-900/40"
+                disabled
+                size="sm"
+                variant="outline"
+              >
+                <Check aria-hidden="true" className="mr-1 h-3 w-3" />
+                Installed
+              </Button>
+            ) : incompatible ? (
+              <Button disabled size="sm" variant="outline">
+                Incompatible
+              </Button>
+            ) : (
+              <Button
+                disabled={installPlugin.isPending}
+                onClick={() => setInstallTarget(p)}
+              >
+                {isThisInstalling ? "Installing…" : "Install"}
+              </Button>
+            )
+          ) : null
+        }
+        capabilities={caps}
+        description={p.description || undefined}
+        href={`/admin/plugins/${p.scope}/${p.id}`}
+        id={p.id}
+        imageUrl={p.imageUrl || null}
+        isOfficial={p.is_official}
+        key={key}
+        name={p.name}
+        repoName={repoNameByScope.get(p.scope)}
+        scope={p.scope}
+        updateAvailable={updateAvailable}
+        version={installedPlugin?.version ?? p.versions[0]?.version}
+      />
     );
   };
 
@@ -204,106 +377,52 @@ export const DiscoverTab = ({ canWrite }: DiscoverTabProps) => {
           </Select>
         </div>
 
+        {showRecommendations && (
+          <section
+            aria-labelledby={recommendedId}
+            className="space-y-2"
+            role="group"
+          >
+            <h2 className="text-sm font-medium" id={recommendedId}>
+              Recommended for your library
+            </h2>
+            {detecting ? (
+              <div className="flex flex-col items-center gap-3 py-6 text-center">
+                <LoadingSpinner />
+                <p className="text-sm text-muted-foreground">
+                  Looking through your libraries…
+                </p>
+              </div>
+            ) : (
+              <>
+                {detection.isEnabled && (
+                  <p className="text-sm text-muted-foreground">
+                    {detectionSummary(detected, "libraries")}
+                  </p>
+                )}
+                {recommended.map(renderRow)}
+              </>
+            )}
+          </section>
+        )}
+
         {filtered.length === 0 ? (
           <NoMatchesState itemLabel="plugins" />
+        ) : showRecommendations ? (
+          rest.length > 0 && (
+            <section
+              aria-labelledby={restId}
+              className="space-y-2"
+              role="group"
+            >
+              <h2 className="text-sm font-medium" id={restId}>
+                All plugins
+              </h2>
+              {rest.map(renderRow)}
+            </section>
+          )
         ) : (
-          <div className="space-y-2">
-            {filtered.map((p) => {
-              const key = `${p.scope}/${p.id}`;
-              const installedPlugin = installedByKey.get(key);
-              const isInstalled = !!installedPlugin;
-              const updateAvailable =
-                installedPlugin?.update_available_version ?? undefined;
-              const incompatible = p.compatible === false;
-              const caps = deriveCapabilityLabels(p.versions[0]?.capabilities);
-              const isThisInstalling =
-                installPlugin.isPending &&
-                installTarget?.scope === p.scope &&
-                installTarget?.id === p.id;
-              const isThisUpdating =
-                updatePluginVersion.isPending &&
-                updatePluginVersion.variables?.scope === p.scope &&
-                updatePluginVersion.variables?.id === p.id;
-
-              return (
-                <PluginRow
-                  actions={
-                    canWrite ? (
-                      updateAvailable ? (
-                        <Button
-                          disabled={updatePluginVersion.isPending}
-                          onClick={() =>
-                            updatePluginVersion.mutate(
-                              { id: p.id, scope: p.scope },
-                              {
-                                onError: (err) =>
-                                  toastRequestError(
-                                    err,
-                                    "Failed to update plugin",
-                                  ),
-                                onSuccess: (updated) =>
-                                  toast.success(
-                                    `Updated ${updated.name} to v${updated.version}`,
-                                  ),
-                              },
-                            )
-                          }
-                          size="sm"
-                          variant="outline"
-                        >
-                          {isThisUpdating ? (
-                            <Loader2
-                              aria-hidden="true"
-                              className="h-3 w-3 animate-spin"
-                            />
-                          ) : (
-                            <Download
-                              aria-hidden="true"
-                              className="mr-1 h-3 w-3"
-                            />
-                          )}
-                          Update
-                        </Button>
-                      ) : isInstalled ? (
-                        <Button
-                          className="border-transparent bg-green-100 text-green-700 hover:bg-green-100 dark:bg-green-900/40 dark:text-green-400 dark:hover:bg-green-900/40"
-                          disabled
-                          size="sm"
-                          variant="outline"
-                        >
-                          <Check aria-hidden="true" className="mr-1 h-3 w-3" />
-                          Installed
-                        </Button>
-                      ) : incompatible ? (
-                        <Button disabled size="sm" variant="outline">
-                          Incompatible
-                        </Button>
-                      ) : (
-                        <Button
-                          disabled={installPlugin.isPending}
-                          onClick={() => setInstallTarget(p)}
-                        >
-                          {isThisInstalling ? "Installing…" : "Install"}
-                        </Button>
-                      )
-                    ) : null
-                  }
-                  capabilities={caps}
-                  description={p.description || undefined}
-                  href={`/admin/plugins/${p.scope}/${p.id}`}
-                  id={p.id}
-                  imageUrl={p.imageUrl || null}
-                  isOfficial={p.is_official}
-                  key={key}
-                  name={p.name}
-                  repoName={repoNameByScope.get(p.scope)}
-                  scope={p.scope}
-                  updateAvailable={updateAvailable}
-                  version={installedPlugin?.version ?? p.versions[0]?.version}
-                />
-              );
-            })}
-          </div>
+          <div className="space-y-2">{rest.map(renderRow)}</div>
         )}
       </div>
 

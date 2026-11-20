@@ -345,6 +345,15 @@ describe("Preferences Delivery Rules", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Following Shisho's defaults")).toBeInTheDocument();
   });
+
+  it("explains rule order in plain words, as the Device page does", () => {
+    const { container } = renderPage();
+
+    expect(container).not.toHaveTextContent(/rule matching/i);
+    expect(
+      screen.getByText(/the first rule that fits one of them decides/),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("Preferences – Delivery Rules link target", () => {

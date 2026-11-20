@@ -142,8 +142,8 @@ interface PillProps extends ButtonProps {
   pulse?: boolean;
 }
 
-// How long the pill's one pulse runs; the 1.4s in Pill's animation class
-// matches.
+// How long the pill's one pulse runs; the 1.4s in Pill's animation classes
+// matches. With reduced motion it glows in place instead of growing.
 const PULSE_MS = 1400;
 
 // Forwards its ref and props so PopoverTrigger can anchor to it.
@@ -153,7 +153,8 @@ const Pill = forwardRef<HTMLButtonElement, PillProps>(
       aria-label={`Getting Started, ${progress.complete ? "all set" : progressLabel(progress)}`}
       className={cn(
         "gap-2 rounded-full px-2.5 sm:px-3",
-        pulse && "motion-safe:animate-[getting-started-pulse_1.4s_ease-out_1]",
+        pulse &&
+          "motion-safe:animate-[getting-started-pulse_1.4s_ease-out_1] motion-reduce:animate-[getting-started-glow_1.4s_ease-out_1]",
       )}
       data-pulse={pulse ? "" : undefined}
       ref={ref}

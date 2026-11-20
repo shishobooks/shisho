@@ -113,7 +113,7 @@ Give the library a name, and under **Folders** enter `/media`, or select **Brows
 Back up the media first. Clear **Organize file structure during scans** before you finish if Shisho must keep your existing paths. You can change it later in the library's settings, but files already moved stay where they are.
 :::
 
-Select **Continue**. Setup checks that the server can find and read each folder, and marks any it can't, such as a mistyped path, a mount missing from the container, or a folder the container's user isn't allowed to read, before it goes on. While you are on this step, Shisho looks through the folders to count the ebooks, audiobooks, and comics in them, going by file extension. On a large library or a slow disk it stops after a few seconds or a few thousand files and says it looked at only part of them.
+Select **Continue**. Setup checks that the server can find and read each folder, and marks any it can't, such as a mistyped path, a mount missing from the container, or a folder the container's user isn't allowed to read, before it goes on. While you are on this step, Shisho looks through the folders to count the ebooks, audiobooks, and comics in them, going by file extension, including the file types your installed plugins can read or convert. On a large library or a slow disk it stops after a few seconds or a few thousand files and says it looked at only part of them.
 
 ### Add Metadata Plugins
 
@@ -132,7 +132,7 @@ Plugins fill in covers, descriptions, series, and other metadata from online sou
 A ticked plugin is installed when you finish, with the capabilities its card lists, such as network access to the sites named. Untick any plugin you don't want to run on your server. See [Using Plugins](./plugins/overview.md) before installing plugins from other sources.
 :::
 
-Select **Skip this step** to finish without plugins. If Shisho can't reach the plugin repository, the step says so and **Continue** finishes without them. You can install plugins later under **Administration > Plugins**.
+Select **Skip this step** to finish without plugins. If Shisho can't reach the plugin repository, the step says so and **Continue** finishes without them. You can install plugins later under **Administration > Plugins**, where **Discover** recommends the same plugins based on what your libraries hold until a metadata enricher is installed.
 
 ### Finish
 

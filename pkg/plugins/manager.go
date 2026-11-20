@@ -375,6 +375,39 @@ func (m *Manager) RegisteredFileExtensions() map[string]struct{} {
 	return result
 }
 
+// FileParserMIMETypes returns each file extension RegisteredFileExtensions
+// lists with the MIME types its parsers declare, so callers can tell what kind
+// of book a plugin's file type holds.
+func (m *Manager) FileParserMIMETypes() map[string][]string {
+	result := make(map[string][]string)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, rt := range m.plugins {
+		parser := rt.manifest.Capabilities.FileParser
+		if parser == nil {
+			continue
+		}
+		for _, t := range parser.Types {
+			if models.IsBuiltInFileExtension(t) {
+				continue
+			}
+			mimeTypes := result[t]
+			if mimeTypes == nil {
+				mimeTypes = []string{}
+			}
+			for _, mt := range parser.MIMETypes {
+				if !slices.Contains(mimeTypes, mt) {
+					mimeTypes = append(mimeTypes, mt)
+				}
+			}
+			result[t] = mimeTypes
+		}
+	}
+	return result
+}
+
 // SkippedFileParser is a loaded plugin whose file parser declares extensions
 // Shisho parses itself, so it is not used for them.
 type SkippedFileParser struct {
@@ -426,6 +459,27 @@ func (m *Manager) RegisteredConverterExtensions() map[string]struct{} {
 		}
 		for _, t := range rt.manifest.Capabilities.InputConverter.SourceTypes {
 			result[t] = struct{}{}
+		}
+	}
+	return result
+}
+
+// ConverterTargetTypes returns each file extension RegisteredConverterExtensions
+// lists with the file type its converter turns it into, so callers can tell
+// what kind of book a converted file becomes.
+func (m *Manager) ConverterTargetTypes() map[string]string {
+	result := make(map[string]string)
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, rt := range m.plugins {
+		converter := rt.manifest.Capabilities.InputConverter
+		if converter == nil {
+			continue
+		}
+		for _, t := range converter.SourceTypes {
+			result[t] = converter.TargetType
 		}
 	}
 	return result

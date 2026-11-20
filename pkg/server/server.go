@@ -235,7 +235,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	config.RegisterRoutes(api, cfg, authMiddleware)
 
 	// Filesystem routes (require authentication)
-	filesystem.RegisterRoutes(api, authMiddleware)
+	filesystem.RegisterRoutes(api, authMiddleware, pm)
 
 	// Settings routes (require authentication)
 	settings.RegisterRoutes(api, db, authMiddleware, svcs.appSettings)
