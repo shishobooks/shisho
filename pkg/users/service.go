@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"time"
 
 	"github.com/pkg/errors"
@@ -61,19 +62,12 @@ func (s *Service) Create(ctx context.Context, opts CreateUserOptions) (*models.U
 // transaction and passes the hash, so the slow hash never holds the
 // database's one connection.
 func (s *Service) CreateInTx(ctx context.Context, db bun.IDB, opts CreateUserOptions, passwordHash string) (int, error) {
-	exists, err := db.NewSelect().
-		Model((*models.User)(nil)).
-		Where("username = ? COLLATE NOCASE", opts.Username).
-		Exists(ctx)
-	if err != nil {
-		return 0, errors.WithStack(err)
-	}
-	if exists {
-		return 0, errcodes.UsernameTaken()
+	if err := checkUsernameFree(ctx, db, opts.Username, 0); err != nil {
+		return 0, err
 	}
 
 	if opts.Email != nil && *opts.Email != "" {
-		exists, err = db.NewSelect().
+		exists, err := db.NewSelect().
 			Model((*models.User)(nil)).
 			Where("email = ? COLLATE NOCASE", *opts.Email).
 			Exists(ctx)
@@ -131,6 +125,31 @@ func (s *Service) CreateInTx(ctx context.Context, db bun.IDB, opts CreateUserOpt
 		}
 	}
 	return user.ID, nil
+}
+
+// checkUsernameFree returns errcodes.UsernameTaken when a user other than
+// exceptID has a username with the same key as username
+// (models.UsernameKey), so two usernames differing only in case can't both
+// exist. Users without a key, kept from before keys existed, are folded here
+// rather than in SQL, which can't fold every letter's case.
+func checkUsernameFree(ctx context.Context, db bun.IDB, username string, exceptID int) error {
+	key := models.UsernameKey(username)
+	var others []string
+	err := db.NewSelect().
+		Model((*models.User)(nil)).
+		Column("u.username").
+		Where("u.username_key = ? OR u.username_key IS NULL", key).
+		Where("u.id != ?", exceptID).
+		Scan(ctx, &others)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	for _, other := range others {
+		if models.UsernameKey(other) == key {
+			return errcodes.UsernameTaken()
+		}
+	}
+	return nil
 }
 
 // Retrieve gets a user by ID, active or not.
@@ -203,8 +222,16 @@ type UpdateOptions struct {
 	LibraryIDs          []int
 }
 
-// Update updates a user.
+// Update updates a user. A new username taken by another user, in any case,
+// is errcodes.UsernameTaken.
 func (s *Service) Update(ctx context.Context, user *models.User, opts UpdateOptions) error {
+	if slices.Contains(opts.Columns, "username") {
+		if err := checkUsernameFree(ctx, s.db, user.Username, user.ID); err != nil {
+			return err
+		}
+		user.UsernameKey = models.UsernameKey(user.Username)
+		opts.Columns = append(opts.Columns, "username_key")
+	}
 	// Library access is part of the user, so changing it alone still bumps
 	// updated_at.
 	if len(opts.Columns) > 0 || opts.UpdateLibraryAccess {
