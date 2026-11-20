@@ -56,7 +56,7 @@ struct CoverView: View {
         .accessibilityHidden(true)
         .task(id: "\(book.id)-\(book.coverVersion)-\(size)") {
             guard let covers = model.session?.covers else { return }
-            if let cached = covers.cachedImage(bookID: book.id, version: book.coverVersion, size: size) {
+            if let cached = covers.memoryImage(bookID: book.id, version: book.coverVersion, size: size) {
                 image = cached
             } else {
                 let fetched = await covers.image(bookID: book.id, version: book.coverVersion, size: size)

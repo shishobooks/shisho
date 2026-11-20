@@ -75,7 +75,7 @@ func runIOS(ctx context.Context, args []string) error {
 		return err
 	}
 	defer srv.Stop()
-	if err := srv.seed(ctx, library); err != nil {
+	if err := srv.seed(ctx, library, harnessPassword); err != nil {
 		return err
 	}
 

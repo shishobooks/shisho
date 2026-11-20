@@ -17,6 +17,18 @@ final class APIErrorTests: XCTestCase {
         XCTAssertEqual(error(500, "internal_server_error"), .server(status: 500, message: "m"))
     }
 
+    /// Only Shisho's own refusal signs the device out. A 401 or 403 from
+    /// something in front of the server, such as an authentication proxy,
+    /// keeps the credential and says what answered.
+    func testRefusalsWithoutShishosBodyCameFromAProxy() {
+        let response = { (status: Int) in HTTPURLResponse(url: URL(string: "https://example.com")!, statusCode: status, httpVersion: nil, headerFields: nil)! }
+        let page = Data("<html><body>Sign in to Authelia</body></html>".utf8)
+        XCTAssertEqual(APIClient.error(status: 401, response: response(401), body: page), .blockedByProxy)
+        XCTAssertEqual(APIClient.error(status: 403, response: response(403), body: page), .blockedByProxy)
+        XCTAssertEqual(APIClient.error(status: 401, response: response(401), body: Data(#"{"message":"Unauthorized"}"#.utf8)), .blockedByProxy)
+        XCTAssertEqual(error(403, "forbidden"), .noAccess)
+    }
+
     func testMessagesNameBothVersions() {
         let tooOld = Messages.signIn(.serverTooOld(serverVersion: "v0.10.0"))
         XCTAssertTrue(tooOld.contains("v0.10.0"), tooOld)

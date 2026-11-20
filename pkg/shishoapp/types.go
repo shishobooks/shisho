@@ -158,6 +158,9 @@ type FeedFile struct {
 	FileType  string `json:"file_type" tstype:"FileType"`
 	FileRole  string `json:"file_role" tstype:"FileRole"`
 	SizeBytes int64  `json:"size_bytes"`
+	// DisplayName labels the File among its Book's Files, as the web app
+	// does: its name, or its filename (File.ResolveDisplayName).
+	DisplayName string `json:"display_name"`
 	// The Library's release date, page count, and duration sorts read the
 	// Book's newest File that has each.
 	ReleaseDate              *time.Time `json:"release_date"`

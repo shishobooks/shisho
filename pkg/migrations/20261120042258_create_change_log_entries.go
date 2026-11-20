@@ -100,15 +100,17 @@ func init() {
 
 		// Book: its own columns, then each part of its document.
 		trigger("books_insert", "INSERT", "books", "", record("book", "NEW.id", "NEW.library_id", false)),
-		trigger("books_update", "UPDATE", "books", differs("title", "subtitle", "sort_title", "library_id"), record("book", "NEW.id", "NEW.library_id", false)),
+		trigger("books_update", "UPDATE", "books", differs("title", "subtitle", "sort_title", "created_at", "library_id"), record("book", "NEW.id", "NEW.library_id", false)),
 		trigger("books_delete", "DELETE", "books", "", record("book", "OLD.id", "OLD.library_id", true)),
 
-		// Files: File Type, role, and size, what the Library sorts by
+		// Files: File Type, role, size, what the display name is made of
+		// (name, its source, and the path), what the Library sorts by
 		// (release date, page count, duration), and what the cover version is
 		// made of (which File's cover is chosen, and that File's updated_at).
 		trigger("files_insert", "INSERT", "files", "", moveBooks("NEW.book_id")),
 		trigger("files_update", "UPDATE", "files",
-			differs("book_id", "file_type", "file_role", "filesize_bytes", "release_date", "page_count", "audiobook_duration_seconds",
+			differs("book_id", "file_type", "file_role", "filesize_bytes", "name", "name_source", "filepath",
+				"release_date", "page_count", "audiobook_duration_seconds",
 				"cover_image_filename", "is_preferred_cover", "updated_at"),
 			moveBooks("OLD.book_id, NEW.book_id")),
 		trigger("files_delete", "DELETE", "files", "", moveBooks("OLD.book_id")),

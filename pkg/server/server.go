@@ -88,7 +88,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	e.Use(securityHeadersMiddleware)
 	e.Use(buildHeaderMiddleware(frontend.EmbeddedBuildID()))
 	e.Use(compressionMiddleware())
-	// Every /app and /api response lists the Shisho app capabilities for the
+	// Every /mobile and /api response lists the Shisho app capabilities for the
 	// protocol it names, Demo Mode refusals included (ADR 0020).
 	appContract, err := shishoapp.NewContract(cfg.DevAppProtocols)
 	if err != nil {

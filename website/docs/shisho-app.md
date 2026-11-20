@@ -40,7 +40,7 @@ The app calls these paths on your server. A reverse proxy has to pass them, as [
 
 ## Local Network and Certificates
 
-The app connects over HTTPS. It also connects over plain HTTP to a server on your local network: a private IP address such as `192.168.1.20`, a `.local` name, or a name without dots. Typing an address without `http://` or `https://` picks HTTP for those and HTTPS for anything else. The app refuses plain HTTP to any other address, since your password would cross the internet unencrypted. The first time it connects to the local network, iOS asks to allow it.
+The app connects over HTTPS. It also connects over plain HTTP to a server on your local network: a private IP address such as `192.168.1.20`, a Tailscale address (`100.64.0.0` to `100.127.255.255`), a `.local` or `.localhost` name, or a name without dots. Typing an address without `http://` or `https://` picks HTTP for those and HTTPS for anything else. The app refuses plain HTTP to any other address, since your password would cross the internet unencrypted. The first time it connects to the local network, iOS asks to allow it.
 
 A server with a certificate from your own certificate authority works once the authority's profile is installed on the iPhone or iPad and turned on under **Settings > General > About > Certificate Trust Settings**. The app trusts what iOS trusts.
 
@@ -68,9 +68,9 @@ A server with a certificate from your own certificate authority works once the a
 
 ### Signing In Fails Behind an Authentication Proxy
 
-**Symptom:** Signing in fails away from home, where an authentication proxy guards the server, while the web app works after the proxy's login.
+**Symptom:** Signing in or syncing fails away from home, where an authentication proxy guards the server, while the web app works after the proxy's login. The app says something in front of the server turned it away, or that the server's Shisho is too old.
 
-**Likely cause:** The proxy answers `/mobile/*` with its own login page.
+**Likely cause:** The proxy answers `/mobile/*` with its own login page or refusal.
 
 **Verify:** While signed out of the proxy, open `https://your-server/mobile/server` in a browser. Shisho answers with a short JSON document; a login page means the proxy caught it.
 

@@ -459,7 +459,7 @@ func TestFeed_BookDocument(t *testing.T) {
 		},
 		Series: []FeedSeriesMembership{{SeriesID: 1, Name: "Dune Chronicles", SortName: "Dune Chronicles", Number: &one}},
 		Files: []FeedFile{{
-			ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345,
+			ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345, DisplayName: "dune.epub",
 			ReleaseDate: &released, PageCount: &pages, AudiobookDurationSeconds: &duration,
 		}},
 		// covers.CacheKey: the File's id and its updated_at.
@@ -485,6 +485,7 @@ func TestFeed_JoinTableChangesMoveTheBook(t *testing.T) {
 		write string
 		want  []string
 	}{
+		{"date added", `UPDATE books SET created_at = '2020-01-01 00:00:00' WHERE id = 1`, []string{"book:1"}},
 		{"author added", `INSERT INTO authors (id, book_id, person_id, sort_order) VALUES (1, 1, 1, 1)`, []string{"book:1"}},
 		{"author reordered", `UPDATE authors SET sort_order = 2 WHERE id = 1`, []string{"book:1"}},
 		{"person renamed", `UPDATE persons SET name = 'F. Herbert' WHERE id = 1`, []string{"book:1"}},
@@ -496,6 +497,8 @@ func TestFeed_JoinTableChangesMoveTheBook(t *testing.T) {
 		{"series removed", `DELETE FROM book_series WHERE id = 1`, []string{"book:1"}},
 		{"file added", `INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (1, 1, 1, '/f.epub', 'epub', 1)`, []string{"book:1"}},
 		{"file resized", `UPDATE files SET filesize_bytes = 2 WHERE id = 1`, []string{"book:1"}},
+		{"file named", `UPDATE files SET name = 'Special Edition', name_source = 'manual' WHERE id = 1`, []string{"book:1"}},
+		{"file moved on disk", `UPDATE files SET filepath = '/g.epub' WHERE id = 1`, []string{"book:1"}},
 		{"release date", `UPDATE files SET release_date = '2001-01-01 00:00:00' WHERE id = 1`, []string{"book:1"}},
 		{"page count", `UPDATE files SET page_count = 10 WHERE id = 1`, []string{"book:1"}},
 		{"duration", `UPDATE files SET audiobook_duration_seconds = 60 WHERE id = 1`, []string{"book:1"}},
@@ -537,6 +540,7 @@ func TestFeed_WritesThatChangeNothingRecordNothing(t *testing.T) {
 		`UPDATE persons SET name = 'Frank Herbert', updated_at = '2030-01-01 00:00:00'`,
 		`UPDATE libraries SET name = 'Fiction', organize_file_structure = FALSE`,
 		`UPDATE files SET release_date = release_date, page_count = page_count, audiobook_duration_seconds = audiobook_duration_seconds`,
+		`UPDATE files SET name = name, name_source = name_source, filepath = filepath`,
 	} {
 		f.exec(write)
 		assert.Empty(t, f.changes(credential, cursor, 0).Entries, write)

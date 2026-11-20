@@ -32,6 +32,9 @@ struct BookDetail: Hashable, Sendable {
         let fileType: String
         let fileRole: String
         let sizeBytes: Int
+        /// The File's label among its Book's Files: its name, or its
+        /// filename. Empty from a server that doesn't send one.
+        let displayName: String
     }
 
     let summary: BookSummary
@@ -142,6 +145,7 @@ final class CatalogStore: Sendable {
                 t.column("file_type", .text).notNull()
                 t.column("file_role", .text).notNull()
                 t.column("size_bytes", .integer).notNull()
+                t.column("display_name", .text).notNull()
                 t.column("release_date", .double)
                 t.column("page_count", .integer)
                 t.column("duration_seconds", .double)
@@ -262,15 +266,16 @@ final class CatalogStore: Sendable {
         for (position, file) in book.files.enumerated() {
             try db.execute(
                 sql: """
-                INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes, release_date, page_count, duration_seconds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes, display_name, release_date, page_count, duration_seconds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, position = excluded.position,
                     file_type = excluded.file_type, file_role = excluded.file_role, size_bytes = excluded.size_bytes,
+                    display_name = excluded.display_name,
                     release_date = excluded.release_date, page_count = excluded.page_count,
                     duration_seconds = excluded.duration_seconds
                 """,
                 arguments: [file.id, book.id, position, file.fileType.rawValue, file.fileRole.rawValue, file.sizeBytes,
-                            file.releaseDate.map(CatalogStore.timestamp), file.pageCount, file.audiobookDurationSeconds]
+                            file.displayName, file.releaseDate.map(CatalogStore.timestamp), file.pageCount, file.audiobookDurationSeconds]
             )
         }
     }
@@ -316,7 +321,7 @@ final class CatalogStore: Sendable {
         }
         sql += " ORDER BY " + LibrarySort.orderBy(spec)
         let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
-        let fileTypes = try mainFileTypes(db)
+        let fileTypes = try mainFileTypes(db, libraryID: libraryID)
         return rows.map { summary($0, fileTypes: fileTypes[$0["id"]] ?? []) }
     }
 
@@ -335,17 +340,25 @@ final class CatalogStore: Sendable {
         let series = try Row.fetchAll(db, sql: "SELECT name, number, number_end FROM book_series WHERE book_id = ? ORDER BY position", arguments: [id]).map {
             BookDetail.Series(name: $0["name"], number: $0["number"], numberEnd: $0["number_end"])
         }
-        let files = try Row.fetchAll(db, sql: "SELECT id, file_type, file_role, size_bytes FROM book_files WHERE book_id = ? ORDER BY position", arguments: [id]).map {
-            BookDetail.File(id: $0["id"], fileType: $0["file_type"], fileRole: $0["file_role"], sizeBytes: $0["size_bytes"])
+        let files = try Row.fetchAll(db, sql: "SELECT id, file_type, file_role, size_bytes, display_name FROM book_files WHERE book_id = ? ORDER BY position", arguments: [id]).map {
+            BookDetail.File(id: $0["id"], fileType: $0["file_type"], fileRole: $0["file_role"], sizeBytes: $0["size_bytes"], displayName: $0["display_name"])
         }
         let fileTypes = orderedUnique(files.filter { $0.fileRole != "supplement" }.map(\.fileType))
         return BookDetail(summary: summary(row, fileTypes: fileTypes), subtitle: row["subtitle"], authors: authors, series: series, files: files)
     }
 
     /// Each Book's main File Types, in order, each once.
-    private static func mainFileTypes(_ db: Database) throws -> [Int: [String]] {
+    /// The main File Types of each Book in libraryID, or in every Library.
+    private static func mainFileTypes(_ db: Database, libraryID: Int?) throws -> [Int: [String]] {
         var byBook: [Int: [String]] = [:]
-        let rows = try Row.fetchAll(db, sql: "SELECT book_id, file_type FROM book_files WHERE file_role != 'supplement' ORDER BY book_id, position")
+        var sql = "SELECT f.book_id, f.file_type FROM book_files f"
+        var arguments: StatementArguments = []
+        if let libraryID {
+            sql += " JOIN books b ON b.id = f.book_id AND b.library_id = ?"
+            arguments = [libraryID]
+        }
+        sql += " WHERE f.file_role != 'supplement' ORDER BY f.book_id, f.position"
+        let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
         for row in rows {
             let bookID: Int = row["book_id"]
             let fileType: String = row["file_type"]

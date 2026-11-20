@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,9 +12,9 @@ import (
 	"github.com/shishobooks/shisho/internal/devtool"
 )
 
-// qaPort is where a QA server looks for a port first. Each worktree keeps
-// the one it finds while it runs, as `mise start` does, so a phone can keep
-// the same address between runs.
+// qaPort is where a QA server looks for a port first. It takes the first
+// free one from here, as `mise start` does, so a phone usually keeps the same
+// address between runs.
 const qaPort = 3789
 
 // runServe starts the harness's seeded server and keeps it running until
@@ -47,7 +49,13 @@ func runServe(ctx context.Context) error {
 		return err
 	}
 	defer srv.Stop()
-	if err := srv.seed(ctx, library); err != nil {
+	// The admin listens on the whole network, so its password is new each
+	// run rather than one anyone can read in the repository.
+	password, err := randomPassword()
+	if err != nil {
+		return err
+	}
+	if err := srv.seed(ctx, library, password); err != nil {
 		return err
 	}
 	fmt.Printf("Server:   http://localhost:%s\n", srv.port)
@@ -55,9 +63,17 @@ func runServe(ctx context.Context) error {
 		fmt.Printf("LAN:      http://%s:%s (a phone on this network)\n", lan, srv.port)
 	}
 	fmt.Printf("Username: %s\nPassword: %s\nLog:      %s\nCtrl-C stops it and deletes its data.\n",
-		harnessUsername, harnessPassword, filepath.Join(dir, "server.log"))
+		harnessUsername, password, filepath.Join(dir, "server.log"))
 	<-ctx.Done()
 	return nil
+}
+
+func randomPassword() (string, error) {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "", errors.WithStack(err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // qaCookieNamespace names the QA server's session cookie: the worktree's

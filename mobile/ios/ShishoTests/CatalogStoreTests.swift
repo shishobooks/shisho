@@ -20,7 +20,7 @@ final class CatalogStoreTests: XCTestCase {
     private func book(_ id: Int, _ title: String, library: Int = 1, added: String = "2026-01-01T00:00:00Z") -> String {
         """
         {"kind":"book","id":\(id),"library_id":\(library),"book":{"id":\(id),"library_id":\(library),"title":"\(title)","sort_title":"\(title)","created_at":"\(added)",
-         "authors":[{"person_id":1,"name":"Ann Author","sort_name":"Author, Ann"}],"files":[{"id":\(id * 10),"file_type":"epub","file_role":"main","size_bytes":10}],"cover_version":"\(id)-1"}}
+         "authors":[{"person_id":1,"name":"Ann Author","sort_name":"Author, Ann"}],"files":[{"id":\(id * 10),"file_type":"epub","file_role":"main","size_bytes":10,"display_name":"\(title).epub"}],"cover_version":"\(id)-1"}}
         """
     }
 
@@ -37,6 +37,7 @@ final class CatalogStoreTests: XCTestCase {
         let detail = try XCTUnwrap(store.book(id: 1))
         XCTAssertEqual(detail.authors.map(\.name), ["Ann Author"])
         XCTAssertEqual(detail.files.map(\.fileType), ["epub"])
+        XCTAssertEqual(detail.files.map(\.displayName), ["Anathem.epub"])
         XCTAssertNil(try store.book(id: 2))
     }
 

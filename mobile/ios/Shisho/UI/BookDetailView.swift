@@ -227,7 +227,9 @@ private struct FileCard: View {
         HStack(alignment: .center, spacing: 14) {
             CoverView(book: book, width: 46)
             VStack(alignment: .leading, spacing: 6) {
-                Text(book.title)
+                // Each File by its own label, as the web app's file list does;
+                // the Book's title would name every File the same.
+                Text(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)
                     .font(.geist(.subheadline, weight: .semibold))
                     .lineLimit(2)
                 if FileTypes.isKnown(file.fileType) {

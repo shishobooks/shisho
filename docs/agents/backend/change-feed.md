@@ -13,7 +13,7 @@ A transaction that reads before it writes can't take SQLite's write lock once an
 
 ## A new table or column
 
-`pkg/migrations/change_log_invariants_test.go` fails until every table is in the feed or excused, and every column of a table in the feed is compared or excused, each with a reason. Triggers are created in migrations and never edited: a column joins the feed through a new migration that drops and recreates its table's update trigger.
+`pkg/migrations/change_log_invariants_test.go` fails until every table is in the feed or excused, and every column of a table in the feed is compared or excused, each with a reason. Triggers are created in migrations and never edited once released: a column joins the feed through a new migration that drops and recreates its table's update trigger.
 
 ## The Device surface is a contract
 

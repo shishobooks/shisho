@@ -46,7 +46,8 @@ final class AppModel {
 
     private(set) var session: AccountSession?
     private(set) var syncStatus: SyncStatus = .idle
-    private(set) var isSyncing = false
+    private let syncs = SyncRunner()
+    var isSyncing: Bool { syncs.isRunning }
     /// False while the device has no network at all, as in airplane mode
     /// without Wi-Fi, so a sync says so at once instead of waiting on a
     /// request that can't go anywhere.
@@ -91,7 +92,8 @@ final class AppModel {
             )
         }
 
-        var account = accounts.account(serverURL: address.url, userID: response.user.id) ?? Account(
+        let known = accounts.account(serverURL: address.url, userID: response.user.id)
+        var account = known ?? Account(
             id: UUID().uuidString.lowercased(), serverURL: address.url, username: response.user.username,
             userID: response.user.id, deviceID: response.deviceId, serverVersion: response.serverVersion,
             thumbnailRenderKey: response.server.thumbnailRenderKey, capabilities: response.server.capabilities,
@@ -113,7 +115,15 @@ final class AppModel {
         }
         accounts.save(account)
         do {
-            session = try openSession(account: account, credential: response.credential)
+            let opened = try openSession(account: account, credential: response.credential)
+            // A copy kept from an earlier sign-in may be from a server since
+            // reinstalled or restored at the same address, whose log has
+            // reused its cursor. It downloads again from the start, and stays
+            // on screen until that finishes.
+            if known != nil {
+                try opened.store.startOverIfNeeded(serverSaidSo: true)
+            }
+            session = opened
         } catch {
             throw SignInError(message: String(localized: "The app couldn't open its storage on this device. \(error.localizedDescription)"))
         }
@@ -126,6 +136,7 @@ final class AppModel {
     /// the catalog stays for signing in again.
     func signOut() async {
         guard let session else { return }
+        syncs.stop()
         await session.client.signOut()
         Keychain.removeCredential(for: session.account.id)
         accounts.leaveCurrent()
@@ -137,6 +148,7 @@ final class AppModel {
     /// The server ended the sign-in. Its data stays, waiting for the same
     /// user to sign in again.
     private func handleSignedOut() {
+        syncs.stop()
         guard var account = session?.account else { return }
         account.signedOut = true
         Keychain.removeCredential(for: account.id)
@@ -151,43 +163,52 @@ final class AppModel {
     /// Brings the catalog up to date. Failing to reach the server leaves the
     /// copy on the device as it is.
     func syncNow() async {
-        guard let session, !isSyncing else { return }
+        guard let session else { return }
         guard networkAvailable else {
             syncStatus = .offline
             return
         }
-        isSyncing = true
-        let task = Task { await sync(session) }
-        syncTask = task
-        await task.value
-        syncTask = nil
-        isSyncing = false
+        await syncs.run { [weak self] isCurrent in
+            await self?.sync(session, isCurrent: isCurrent)
+        }
     }
 
-    /// The sync in flight, which losing the network cancels, so it says
-    /// Offline at once instead of waiting for its request to time out.
-    private var syncTask: Task<Void, Never>?
-
-    private func sync(_ session: AccountSession) async {
+    /// One sync of session's catalog. A result the runner has since
+    /// dropped, after a sign-out or the network going, changes nothing.
+    private func sync(_ session: AccountSession, isCurrent: @MainActor () -> Bool) async {
+        guard networkAvailable else {
+            syncStatus = .offline
+            return
+        }
         do {
             try await session.sync.run()
+            guard isCurrent() else { return }
             syncStatus = .idle
-        } catch APIError.signedOut {
-            handleSignedOut()
-        } catch APIError.unreachable {
-            syncStatus = .offline
-        } catch APIError.localNetworkDenied {
-            syncStatus = .localNetworkDenied
-        } catch let error as APIError {
-            switch error {
-            case .appTooOld, .serverTooOld, .serverPredatesApp:
-                syncStatus = .versionGap(Messages.signIn(error, serverVersion: session.account.serverVersion),
-                                         appTooOld: Messages.isAppTooOld(error))
-            default:
-                syncStatus = .failed(Messages.signIn(error))
-            }
         } catch {
+            guard isCurrent() else { return }
+            record(error, for: session)
+        }
+    }
+
+    /// What a failed sync tells the user. Only the server's own refusal of
+    /// the credential signs the device out.
+    private func record(_ error: Error, for session: AccountSession) {
+        guard let error = error as? APIError else {
             syncStatus = .failed(error.localizedDescription)
+            return
+        }
+        switch error {
+        case .signedOut:
+            handleSignedOut()
+        case .unreachable:
+            syncStatus = .offline
+        case .localNetworkDenied:
+            syncStatus = .localNetworkDenied
+        case .appTooOld, .serverTooOld, .serverPredatesApp:
+            syncStatus = .versionGap(Messages.signIn(error, serverVersion: session.account.serverVersion),
+                                     appTooOld: Messages.isAppTooOld(error))
+        default:
+            syncStatus = .failed(Messages.signIn(error))
         }
     }
 
@@ -207,7 +228,8 @@ final class AppModel {
         if available {
             Task { await syncNow() }
         } else if session != nil {
-            syncTask?.cancel()
+            // The sync in flight can't finish; it would only time out.
+            syncs.stop()
             syncStatus = .offline
         }
     }
@@ -250,7 +272,7 @@ enum Messages {
         let needed = Installation.minimumServerVersion
         switch error {
         case .serverPredatesApp:
-            return String(localized: "This server's Shisho is too old for this version of the app (\(app)). The app needs Shisho \(needed) or newer. Ask the server's owner to update Shisho.")
+            return String(localized: "This server's Shisho is too old for this version of the app (\(app)). The app needs Shisho \(needed) or newer. Ask the server's owner to update Shisho, or, if an authentication proxy guards the server, to let the app through it.")
         case .serverTooOld(let version):
             let running = version ?? serverVersion ?? String(localized: "an older release")
             return String(localized: "This server runs Shisho \(running), which is too old for this version of the app (\(app)). Ask the server's owner to update Shisho.")
@@ -271,6 +293,8 @@ enum Messages {
             return String(localized: "Couldn't reach the server. Check the address and your connection. (\(detail))")
         case .localNetworkDenied:
             return localNetworkDenied
+        case .blockedByProxy:
+            return String(localized: "Something in front of your Shisho server, such as an authentication proxy, turned the app away. Its owner can let the app through; Shisho's documentation on the Shisho app explains how.")
         case .server(_, let message):
             return message
         }

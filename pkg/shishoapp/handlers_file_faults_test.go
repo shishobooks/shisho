@@ -25,14 +25,16 @@ func TestCover_FaultsAreServerErrors(t *testing.T) {
 	f.addUser()
 	credential := f.signIn()
 
-	require.NoError(t, os.Chmod(cover, 0o000))
-	t.Cleanup(func() { _ = os.Chmod(cover, 0o600) })
-	rec := f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential})
-	assertServerFault(t, rec)
+	// Permission bits don't restrict root, so only the database fault runs
+	// there.
+	if os.Geteuid() != 0 {
+		require.NoError(t, os.Chmod(cover, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(cover, 0o600) })
+		assertServerFault(t, f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential}))
+	}
 
 	f.exec(`DROP TABLE files`)
-	rec = f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential})
-	assertServerFault(t, rec)
+	assertServerFault(t, f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential}))
 }
 
 func assertServerFault(t *testing.T, rec interface {

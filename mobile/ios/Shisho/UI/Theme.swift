@@ -232,6 +232,17 @@ struct NoticeCard<Action: View>: View {
     }
 }
 
+/// Opens where the app is updated, for a server too new for this version.
+struct UpdateAppLink: View {
+    var body: some View {
+        Link(destination: Installation.updateURL) {
+            Label("Update the app", systemImage: "arrow.up.forward")
+                .font(.geist(.subheadline, weight: .semibold))
+        }
+        .accessibilityIdentifier("update.link")
+    }
+}
+
 /// Opens the app's page in Settings, where its permissions are.
 struct SettingsLink: View {
     var body: some View {

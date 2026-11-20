@@ -131,7 +131,7 @@ func (s *server) Stop() {
 
 // seed makes the first admin, a Library on the fixtures, and waits for the
 // scan to find every fixture.
-func (s *server) seed(ctx context.Context, library string) error {
+func (s *server) seed(ctx context.Context, library, password string) error {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
 	post := func(path string, body any) error {
@@ -149,10 +149,10 @@ func (s *server) seed(ctx context.Context, library string) error {
 		}
 		return nil
 	}
-	if err := post("/api/auth/setup", map[string]string{"username": harnessUsername, "password": harnessPassword}); err != nil {
+	if err := post("/api/auth/setup", map[string]string{"username": harnessUsername, "password": password}); err != nil {
 		return err
 	}
-	if err := post("/api/auth/login", map[string]string{"username": harnessUsername, "password": harnessPassword}); err != nil {
+	if err := post("/api/auth/login", map[string]string{"username": harnessUsername, "password": password}); err != nil {
 		return err
 	}
 	if err := post("/api/libraries", map[string]any{

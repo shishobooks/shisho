@@ -68,10 +68,7 @@ struct SignInView: View {
                 if let error {
                     NoticeCard(text: error.message, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive) {
                         if error.offersUpdate {
-                            Link(destination: Installation.updateURL) {
-                                Label("Update the app", systemImage: "arrow.up.forward")
-                                    .font(.geist(.subheadline, weight: .semibold))
-                            }
+                            UpdateAppLink()
                         }
                         if error.offersSettings {
                             SettingsLink()
@@ -114,15 +111,19 @@ struct SignInView: View {
                 Button { moveFocus(by: -1) } label: { Image(systemName: "chevron.up") }
                     .disabled(focus == Field.allCases.first)
                     .accessibilityLabel("Previous field")
+                    .accessibilityIdentifier("keyboard.previous")
                 Button { moveFocus(by: 1) } label: { Image(systemName: "chevron.down") }
                     .disabled(focus == Field.allCases.last)
                     .accessibilityLabel("Next field")
+                    .accessibilityIdentifier("keyboard.next")
                 Spacer()
                 if #available(iOS 26, *) {
                     Button(role: .confirm) { focus = nil }
+                        .accessibilityIdentifier("keyboard.done")
                 } else {
                     Button("Done") { focus = nil }
                         .fontWeight(.semibold)
+                        .accessibilityIdentifier("keyboard.done")
                 }
             }
         }

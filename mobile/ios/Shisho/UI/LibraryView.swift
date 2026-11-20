@@ -323,10 +323,7 @@ struct SyncBanner: View {
             case .versionGap(let message, let appTooOld):
                 NoticeCard(text: message, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive) {
                     if appTooOld {
-                        Link(destination: Installation.updateURL) {
-                            Label("Update the app", systemImage: "arrow.up.forward")
-                                .font(.geist(.subheadline, weight: .semibold))
-                        }
+                        UpdateAppLink()
                     }
                 }
             case .failed(let message):

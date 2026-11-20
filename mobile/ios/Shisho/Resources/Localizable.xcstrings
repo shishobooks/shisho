@@ -112,6 +112,9 @@
     "Signing out removes this device from your account on the server. The library on it stays until you sign in again." : {
 
     },
+    "Something in front of your Shisho server, such as an authentication proxy, turned the app away. Its owner can let the app through; Shisho's documentation on the Shisho app explains how." : {
+
+    },
     "Supplement" : {
 
     },
@@ -145,8 +148,15 @@
     "This server runs Shisho %@, which is too old for this version of the app (%@). Ask the server's owner to update Shisho." : {
 
     },
-    "This server's Shisho is too old for this version of the app (%@). The app needs Shisho %@ or newer. Ask the server's owner to update Shisho." : {
-
+    "This server's Shisho is too old for this version of the app (%@). The app needs Shisho %@ or newer. Ask the server's owner to update Shisho, or, if an authentication proxy guards the server, to let the app through it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This server's Shisho is too old for this version of the app (%1$@). The app needs Shisho %2$@ or newer. Ask the server's owner to update Shisho, or, if an authentication proxy guards the server, to let the app through it."
+          }
+        }
+      }
     },
     "This version of the app (%@) is too old for this server, which runs Shisho %@. Update the Shisho app to keep syncing." : {
 

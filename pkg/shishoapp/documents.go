@@ -177,6 +177,7 @@ func bookDocument(book *models.Book) *FeedBook {
 			FileType:                 file.FileType,
 			FileRole:                 file.FileRole,
 			SizeBytes:                file.FilesizeBytes,
+			DisplayName:              file.ResolveDisplayName(),
 			ReleaseDate:              file.ReleaseDate,
 			PageCount:                file.PageCount,
 			AudiobookDurationSeconds: file.AudiobookDurationSeconds,

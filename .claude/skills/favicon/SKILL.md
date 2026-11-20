@@ -98,7 +98,8 @@ At 16px and 24px the overlays collapse into the silhouette, so the favicon still
 - `website/static/img/logo-mark.svg` (`currentColor`, fixed ids)
 - `assets/splash.html` and `assets/patreon/cover.html` (fixed colors)
 - `assets/favicon-gen.html` (preview page)
-- `mobile/ios/Shisho/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` and `Logo.imageset/Logo.png`, the iOS app's icon: the full-bleed variant rendered at 1024x1024, like `apple-touch-icon.png`
+- `mobile/ios/Shisho/Resources/AppIcon.icon/`, the iOS app's icon: an Icon Composer document whose SVG layers redraw the mark at 1024x1024 for iOS's Liquid Glass. Edit it in Icon Composer, then render `Assets.xcassets/Logo.imageset/Logo.png` from it with Icon Composer's `ictool`.
+- `mobile/ios/Shisho/Resources/Assets.xcassets/LogoMark.imageset` and `LogoMarkDetails.imageset`, the mark beside the app's wordmark: the silhouette, tinted with the theme color, and its highlights and shading over it.
 
 `website/static/img/favicon.ico` is a copy of `public/favicon.ico`; copy it over after regenerating.
 

@@ -21,6 +21,9 @@ enum APIError: Error, Equatable {
     case noAccess
     /// The Device was revoked, or its user deactivated: sign in again.
     case signedOut
+    /// Something in front of the server, such as an authentication proxy,
+    /// refused the request. The credential is still good.
+    case blockedByProxy
     /// The server couldn't be reached.
     case unreachable(String)
     /// iOS keeps the app off the local network, where the server is: its
@@ -57,10 +60,6 @@ final class APIClient: Sendable {
     }
 
     // MARK: - Requests
-
-    func serverInfo() async throws -> Shishoapp.ServerInfo {
-        try await json("mobile/server")
-    }
 
     func signIn(username: String, password: String, deviceName: String) async throws -> Shishoapp.SignInResponse {
         let payload = Shishoapp.SignInPayload(
@@ -172,6 +171,12 @@ final class APIClient: Sendable {
         let code = parsed?.error?.code ?? ""
         let message = parsed?.error?.message ?? HTTPURLResponse.localizedString(forStatusCode: status)
         let serverVersion = response.value(forHTTPHeaderField: "X-Shisho-Server-Version").flatMap { $0.isEmpty ? nil : $0 }
+        // Shisho answers every refusal with its error body. A 401 or 403
+        // without one came from something in front of it, and must not sign
+        // the device out.
+        if code.isEmpty, status == 401 || status == 403 {
+            return .blockedByProxy
+        }
         switch (status, code) {
         case (403, "demo_mode"):
             return .demoMode

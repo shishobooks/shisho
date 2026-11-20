@@ -36,6 +36,7 @@ struct AccountSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                         .font(.geist(.body, weight: .semibold))
+                        .accessibilityIdentifier("account.done")
                 }
             }
             .confirmationDialog("Sign out of \(model.session?.account.serverURL.host() ?? "this server")?", isPresented: $confirmingSignOut, titleVisibility: .visible) {

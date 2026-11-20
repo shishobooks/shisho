@@ -284,7 +284,7 @@ public enum JSONValue: Codable, Hashable, Sendable {
 }
 
 /// Boxes a struct that would otherwise contain itself.
-public final class Indirect<Value: Codable & Hashable & Sendable>: Codable, Hashable, @unchecked Sendable {
+public final class Indirect<Value: Codable & Hashable & Sendable>: Codable, Hashable, Sendable {
     public let value: Value
 
     public init(_ value: Value) {
