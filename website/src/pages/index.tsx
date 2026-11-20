@@ -37,6 +37,7 @@ const formatCategories = [
     category: "Ebooks",
     formats: [
       { name: "EPUB" },
+      { name: "KePub" },
       { name: "PDF" },
       { name: "MOBI" },
       { name: "AZW3" },
@@ -44,7 +45,7 @@ const formatCategories = [
   },
   {
     category: "Audiobooks",
-    formats: [{ name: "M4B" }],
+    formats: [{ name: "M4B" }, { name: "M4A" }],
   },
   {
     category: "Comics",
