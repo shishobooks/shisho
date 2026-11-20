@@ -181,6 +181,15 @@ packages:
     output_path: "app/types/generated/koreaderplugin.ts"
     include_files:
       - types.go
+  # The Shisho app's Device surface. The web app doesn't call it; its types
+  # are here because the Swift and Kotlin generator reads this file's
+  # packages too (ADR 0021).
+  - path: "github.com/shishobooks/shisho/pkg/shishoapp"
+    output_path: "app/types/generated/shishoapp.ts"
+    frontmatter: |
+      import { AuthorRole, CoverAspectRatio, FileRole, FileType, SeriesNumberUnit } from "@/types";
+    include_files:
+      - types.go
   - path: "github.com/shishobooks/shisho/pkg/reading"
     output_path: "app/types/generated/reading.ts"
     frontmatter: |

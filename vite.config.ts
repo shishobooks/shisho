@@ -100,6 +100,12 @@ export default defineConfig({
       "/e": {
         target: `http://localhost:${getApiPort()}`,
       },
+      // The Shisho app's Device surface, so a phone can sign in at the web
+      // port that `mise start` prints as the LAN URL. Only its own paths:
+      // Vite serves the web app's source from /app/ too.
+      "^/app/(server|sign-in|device|changes|books/\\d+/cover)(\\?|$)": {
+        target: `http://localhost:${getApiPort()}`,
+      },
       // KOReader progress sync (Device credential auth)
       "/koreader": {
         target: `http://localhost:${getApiPort()}`,

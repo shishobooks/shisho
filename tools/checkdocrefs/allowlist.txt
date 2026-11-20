@@ -9,3 +9,5 @@ setupTestDB          # AGENTS.md: "don't copy a setupTestDB into a package"
 useLatestVersion()   # website/AGENTS.md: Docusaurus API for a future hook
 CONTEXT-MAP.md       # domain.md: read it "if it exists"
 X.permissions.test.tsx  # app/AGENTS.md: placeholder file name
+ios/ShishoAPI/Sources/ShishoAPI/Generated/  # mobile/AGENTS.md: gitignored output of mise tygo
+android/api/src/main/kotlin/generated/  # mobile/AGENTS.md: gitignored output of mise tygo

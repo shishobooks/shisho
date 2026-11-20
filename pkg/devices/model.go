@@ -42,6 +42,12 @@ type Device struct {
 	// through the KOReader plugin. Once it has, its progress sync pushes are
 	// ignored, since the plugin reports the same reading.
 	PluginLastSyncedAt *time.Time `bun:"plugin_last_synced_at" json:"plugin_last_synced_at"`
+	// InstallationID names the Shisho app installation that signed in as a
+	// Shisho app Device. The installation keeps it across signing out and
+	// back in. AppVersion is the app version it last reported. Both are nil
+	// for other Device types.
+	InstallationID *string `bun:"installation_id" json:"-"`
+	AppVersion     *string `bun:"app_version" json:"app_version"`
 
 	Owner        *models.UserRef `bun:"rel:belongs-to,join:user_id=id" json:"-"`
 	ScopeLibrary *models.Library `bun:"rel:belongs-to,join:scope_library_id=id" json:"-"`
@@ -74,22 +80,28 @@ type DeviceDeliveryRule struct {
 }
 
 const (
-	//tygo:emit export type DeviceType = typeof DeviceTypeKobo | typeof DeviceTypeKindle | typeof DeviceTypeKOReader | typeof DeviceTypeOPDS | typeof DeviceTypeBrowser;
+	//tygo:emit export type DeviceType = typeof DeviceTypeKobo | typeof DeviceTypeKindle | typeof DeviceTypeKOReader | typeof DeviceTypeOPDS | typeof DeviceTypeBrowser | typeof DeviceTypeShishoApp;
 	DeviceTypeKobo     = "kobo"
 	DeviceTypeKindle   = "kindle"
 	DeviceTypeKOReader = "koreader"
 	DeviceTypeOPDS     = "opds"
 	DeviceTypeBrowser  = "browser"
+	// DeviceTypeShishoApp is one installation of the Shisho app, made by
+	// signing in from the app, never on the web. It has no scope or
+	// Delivery Rules: it reaches every Library its owner can (ADR 0022).
+	DeviceTypeShishoApp = "shisho_app"
 )
 
 const (
-	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser | typeof ConnectionOPDS | typeof ConnectionKOReaderSync | typeof ConnectionKOReaderPlugin;
+	//tygo:emit export type Connection = typeof ConnectionKoboSync | typeof ConnectionEReaderBrowser | typeof ConnectionOPDS | typeof ConnectionKOReaderSync | typeof ConnectionKOReaderPlugin | typeof ConnectionShishoApp;
 	ConnectionKoboSync       = "kobo_sync"
 	ConnectionEReaderBrowser = "ereader_browser"
 	ConnectionOPDS           = "opds"
 	ConnectionKOReaderSync   = "koreader_sync"
 	// ConnectionKOReaderPlugin is the KOReader plugin's own API (ADR 0016).
 	ConnectionKOReaderPlugin = "koreader_plugin"
+	// ConnectionShishoApp is the Shisho app's Device surface (ADR 0020).
+	ConnectionShishoApp = "shisho_app"
 )
 
 const (

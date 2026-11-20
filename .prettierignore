@@ -25,3 +25,9 @@ CHANGELOG.md
 pnpm-lock.yaml
 website/pnpm-lock.yaml
 .superpowers/
+# The Shisho app's build output, and its generated Xcode project.
+mobile/ios/build/
+mobile/ios/*.xcodeproj/
+mobile/android/**/build/
+mobile/android/.gradle/
+mobile/android/.kotlin/

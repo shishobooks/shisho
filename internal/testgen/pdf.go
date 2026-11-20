@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
@@ -23,7 +22,7 @@ type PDFOptions struct {
 // GeneratePDF writes a minimal valid PDF with the given page count to the
 // specified directory. The resulting file is parseable by pdfcpu and
 // renderable by go-pdfium, so it can be used in scanner and cover-page tests.
-func GeneratePDF(t *testing.T, dir, filename string, opts PDFOptions) string {
+func GeneratePDF(t TB, dir, filename string, opts PDFOptions) string {
 	t.Helper()
 	pageCount := opts.PageCount
 	if pageCount <= 0 {

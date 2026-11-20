@@ -38,6 +38,7 @@ import {
   DeviceTypeKobo,
   DeviceTypeKOReader,
   DeviceTypeOPDS,
+  DeviceTypeShishoApp,
   type DeviceResponse,
   type DeviceType,
 } from "@/types/generated/devices";
@@ -63,6 +64,8 @@ const WAITING_FOR: Record<DeviceType, string> = {
   [DeviceTypeKindle]: "Open the setup URL in the Kindle's web browser.",
   [DeviceTypeOPDS]: "Open the catalog in the reading app.",
   [DeviceTypeBrowser]: "Open the setup URL in the e-reader's web browser.",
+  // Never offered here: the app makes its own Device by signing in.
+  [DeviceTypeShishoApp]: "Sign in from the Shisho app.",
 };
 
 const SetupSteps = ({ device }: { device: DeviceResponse }) => {
@@ -102,6 +105,7 @@ const CONNECTED_NEXT: Record<Exclude<DeviceType, "koreader">, string> = {
   [DeviceTypeOPDS]: "Browse and download your books in the reading app.",
   [DeviceTypeBrowser]:
     "Bookmark the page the setup URL opened, to come back to your books.",
+  [DeviceTypeShishoApp]: "Your books are in the Shisho app.",
 };
 
 // What to do once a Device has connected. KOReader has a few things left to

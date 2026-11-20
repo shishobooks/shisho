@@ -1,0 +1,4 @@
+# Maestro reads this from the flows' folder: only top-level flows run, and
+# subflows/ holds pieces they share.
+flows:
+  - "*"

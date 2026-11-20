@@ -1,0 +1,81 @@
+name: Mobile
+
+# The Shisho app's checks: the generated API types' decode tests on both
+# platforms, the iOS unit tests and build, and the Maestro flows against a
+# seeded server. They run for pull requests that touch the apps, the
+# harness, the Device surface, or the API types the apps are generated from.
+on:
+  push:
+    branches: [master]
+    paths:
+      - "mobile/**"
+      - "tools/apptypes/**"
+      - "tools/appharness/**"
+      - "internal/testgen/**"
+      - "tygo.yaml"
+      # What `mise tygo` reads (its sources in mise.toml).
+      - "pkg/**/types.go"
+      - "pkg/**/config.go"
+      - "pkg/**/model.go"
+      - "pkg/models/**"
+      - "pkg/mediafile/mediafile.go"
+      - "pkg/shishoapp/**"
+      - "pkg/changefeed/**"
+      - "pkg/devices/**"
+      - "pkg/migrations/**"
+      - "mise.toml"
+      - ".github/workflows/mobile.yml"
+  pull_request:
+    branches: [master]
+    paths:
+      - "mobile/**"
+      - "tools/apptypes/**"
+      - "tools/appharness/**"
+      - "internal/testgen/**"
+      - "tygo.yaml"
+      # What `mise tygo` reads (its sources in mise.toml).
+      - "pkg/**/types.go"
+      - "pkg/**/config.go"
+      - "pkg/**/model.go"
+      - "pkg/models/**"
+      - "pkg/mediafile/mediafile.go"
+      - "pkg/shishoapp/**"
+      - "pkg/changefeed/**"
+      - "pkg/devices/**"
+      - "pkg/migrations/**"
+      - "mise.toml"
+      - ".github/workflows/mobile.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  android:
+    name: Android API types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: mise android:test
+
+  ios:
+    name: iOS
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      # The harness makes its M4B fixture with ffmpeg.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+      - run: mise ios:test
+      - name: Run the Maestro flows
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
+      - name: Keep the harness output
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-output
+          path: ${{ runner.temp }}/harness
+          if-no-files-found: ignore

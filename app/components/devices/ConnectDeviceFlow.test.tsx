@@ -32,6 +32,7 @@ const CONNECTIONS: Record<DeviceType, DeviceResponse["connections"]> = {
   kindle: ["ereader_browser"],
   opds: ["opds"],
   browser: ["ereader_browser"],
+  shisho_app: ["shisho_app"],
 };
 
 const newDevice = (

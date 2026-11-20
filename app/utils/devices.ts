@@ -5,11 +5,13 @@ import {
   ConnectionKOReaderPlugin,
   ConnectionKOReaderSync,
   ConnectionOPDS,
+  ConnectionShishoApp,
   DeviceTypeBrowser,
   DeviceTypeKindle,
   DeviceTypeKobo,
   DeviceTypeKOReader,
   DeviceTypeOPDS,
+  DeviceTypeShishoApp,
   ScopeLibrary,
   ScopeList,
   type Connection,
@@ -24,7 +26,16 @@ export const DEVICE_TYPE_LABELS: Record<DeviceType, string> = {
   [DeviceTypeKOReader]: "KOReader",
   [DeviceTypeOPDS]: "OPDS app",
   [DeviceTypeBrowser]: "Browser",
+  [DeviceTypeShishoApp]: "Shisho app",
 };
+
+/**
+ * Whether device is a Shisho app installation. The app made it by signing
+ * in, and owns its type and credential; it reaches every Library its owner
+ * can, with no Delivery Rules (ADR 0022).
+ */
+export const isShishoApp = (device: Pick<DeviceResponse, "device_type">) =>
+  device.device_type === DeviceTypeShishoApp;
 
 // The order Change Type offers the types in, with what each one is for.
 export const DEVICE_TYPE_OPTIONS: { type: DeviceType; description: string }[] =
@@ -129,6 +140,7 @@ export const CONNECTION_LABELS: Record<Connection, string> = {
   [ConnectionOPDS]: "OPDS",
   [ConnectionKOReaderSync]: "KOReader progress sync",
   [ConnectionKOReaderPlugin]: "KOReader plugin",
+  [ConnectionShishoApp]: "Shisho app",
 };
 
 // Where to unzip the KOReader plugin on each platform KOReader runs on, as
@@ -163,6 +175,18 @@ export const koreaderSyncURL = () => `${window.location.origin}/koreader`;
 
 export const shortURL = (shortCode: string) =>
   `${window.location.origin}/e/${shortCode}`;
+
+// deviceSummary describes a Device for lists of Devices: which books it
+// reaches and how it connects, or, for a Shisho app Device, its version.
+export const deviceSummary = (device: DeviceResponse): string => {
+  if (isShishoApp(device)) {
+    return device.app_version ? `App ${device.app_version}` : "Shisho app";
+  }
+  const connections = device.connections
+    .map((connection) => CONNECTION_LABELS[connection])
+    .join(" · ");
+  return `${scopeLabel(device)} · ${connections}`;
+};
 
 // scopeLabel describes which books a Device reaches, for lists of Devices.
 export const scopeLabel = (device: DeviceResponse): string => {

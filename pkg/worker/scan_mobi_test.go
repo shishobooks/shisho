@@ -513,13 +513,14 @@ func TestScanFileByID_ManualChaptersSurviveRescanWithoutSidecar(t *testing.T) {
 	// The state saving the Chapters tab leaves (pkg/chapters handler,
 	// covered by its own test): the edited chapters, marked manual. The
 	// sidecar that would also hold them is gone.
-	require.NoError(t, tc.worker.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{{Title: "Renamed One"}}))
+	_, err := tc.worker.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{{Title: "Renamed One"}})
+	require.NoError(t, err)
 	manual := models.DataSourceManual
 	file.ChapterSource = &manual
 	require.NoError(t, tc.bookService.UpdateFile(tc.ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}))
 	require.NoError(t, os.Remove(sidecar.FileSidecarPath(file.Filepath)))
 
-	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID}, nil)
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID}, nil)
 	require.NoError(t, err)
 	chapters, err := tc.worker.chapterService.ListChapters(tc.ctx, file.ID)
 	require.NoError(t, err)

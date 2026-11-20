@@ -30,9 +30,15 @@ func SkipIfNoFFmpeg(t *testing.T) {
 // This function requires ffmpeg to be installed. Use SkipIfNoFFmpeg() to skip
 // tests when ffmpeg is not available. The generated M4B contains a short audio
 // track, iTunes-style metadata, and optionally a cover image.
-func GenerateM4B(t *testing.T, dir, filename string, opts M4BOptions) string {
+func GenerateM4B(t TB, dir, filename string, opts M4BOptions) string {
 	t.Helper()
-	SkipIfNoFFmpeg(t)
+	if !FFmpegAvailable() {
+		// A test skips; a tool without ffmpeg can't make the file.
+		if skipper, ok := t.(interface{ Skip(args ...any) }); ok {
+			skipper.Skip("ffmpeg not available, skipping M4B test")
+		}
+		t.Fatalf("ffmpeg is needed to make an M4B")
+	}
 
 	path := filepath.Join(dir, filename)
 

@@ -119,6 +119,34 @@ func TestStartWebReservesOnlyTheWebPort(t *testing.T) {
 	assert.Equal(t, 5174, processes.webPort)
 }
 
+func TestStartPrintsTheLANURL(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		mode, want string
+	}{
+		{"all", "LAN: http://192.168.1.20:5174"},
+		{"web", "LAN: http://192.168.1.20:5174"},
+		{"api", "LAN: http://192.168.1.20:3690"},
+	} {
+		ports := &fakePorts{ports: []int{3690, 5174}}
+		if tc.mode == "web" {
+			ports.ports = []int{5174}
+		}
+		app := testApp(ports, &fakeProcesses{})
+		app.LANAddress = func() string { return "192.168.1.20" }
+
+		require.NoError(t, app.Run(context.Background(), []string{"start", tc.mode}))
+		assert.Contains(t, app.Stdout.(*bytes.Buffer).String(), tc.want, tc.mode)
+	}
+
+	// No LAN address, no line.
+	app := testApp(&fakePorts{ports: []int{3690, 5174}}, &fakeProcesses{})
+	app.LANAddress = func() string { return "" }
+	require.NoError(t, app.Run(context.Background(), []string{"start"}))
+	assert.NotContains(t, app.Stdout.(*bytes.Buffer).String(), "LAN:")
+}
+
 func TestDocsReservesTheDocsPort(t *testing.T) {
 	t.Parallel()
 

@@ -1,0 +1,6 @@
+.gradle/
+build/
+.kotlin/
+local.properties
+# Written by `mise tygo` from the Go API types.
+api/src/main/kotlin/generated/

@@ -19,6 +19,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
@@ -112,6 +113,8 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		ID string `json:"id"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, "/api/user/devices", `{"name":"Kindle","device_type":"kindle"}`, http.StatusCreated)), &kindle))
+	appDevice, err := devices.NewService(f.db).CreateAppDevice(f.ctx, f.admin.ID, devices.AppDeviceOptions{Name: "iPhone", InstallationID: "i", AppVersion: "1.0.0"})
+	require.NoError(t, err)
 	var koreader struct {
 		ID string `json:"id"`
 	}
@@ -378,6 +381,17 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			method: http.MethodPatch, path: "/api/user/devices/missing",
 			body:   `{"name":"Renamed"}`,
 			status: http.StatusNotFound, code: "not_found", message: "Device not found.",
+		},
+		{
+			name:   "Shisho app device's type",
+			method: http.MethodPatch, path: "/api/user/devices/" + appDevice.ID,
+			body:   `{"device_type":"kobo"}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
+		},
+		{
+			name:   "Shisho app device's credential",
+			method: http.MethodPost, path: "/api/user/devices/" + appDevice.ID + "/credential",
+			status: http.StatusUnprocessableEntity, code: "invalid_state",
 		},
 		{
 			name:   "device rules delivering a File Type its type can't receive",

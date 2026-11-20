@@ -67,6 +67,22 @@ const koreader = (overrides: Partial<DeviceResponse> = {}): DeviceResponse =>
     ...overrides,
   });
 
+// A Shisho app installation, which signed in from the app. Its credential
+// stays in the app, so the web never gets it.
+const shishoApp = (overrides: Partial<DeviceResponse> = {}): DeviceResponse =>
+  kobo({
+    id: "app-1",
+    name: "iPhone",
+    device_type: "shisho_app",
+    delivery_rules_mode: "default",
+    has_preset: false,
+    credential: "",
+    connections: ["shisho_app"],
+    app_version: "1.2.0 (34)",
+    last_accessed_at: "2026-03-04T15:00:00Z",
+    ...overrides,
+  });
+
 // stubAPI answers the Device routes from an in-memory Device, applying
 // each change the page sends, and records every request.
 const stubAPI = (initial: DeviceResponse) => {
@@ -252,6 +268,16 @@ describe("Devices", () => {
     expect(link).toHaveTextContent("3 books to link");
   });
 
+  it("lists a Shisho app Device with its app version, not a scope", async () => {
+    stubAPI(shishoApp());
+    renderAt("/user/devices");
+
+    const link = await screen.findByRole("link", { name: /iPhone/ });
+    expect(link).toHaveTextContent("Shisho app");
+    expect(link).toHaveTextContent(/App 1\.2\.0 \(34\) · Last used .*2026/);
+    expect(link).not.toHaveTextContent("All books");
+  });
+
   it("says nothing of books to link when none are waiting", async () => {
     stubAPI(koreader());
     renderAt("/user/devices");
@@ -303,6 +329,31 @@ describe("DeviceDetail", () => {
     expect(screen.getByRole("link", { name: "Not working?" })).toHaveAttribute(
       "href",
       "https://www.shishobooks.com/docs/kobo-sync#troubleshooting",
+    );
+  });
+
+  it("shows a Shisho app Device's version, with nothing to set up or change", async () => {
+    stubAPI(shishoApp());
+    const user = setupUser();
+    renderAt("/user/devices/app-1");
+
+    expect(await screen.findByTestId("device-status")).toHaveTextContent(
+      /^Connected\. Last used .*2026/,
+    );
+    expect(screen.getByTestId("app-version")).toHaveTextContent(
+      "Shisho app 1.2.0 (34)",
+    );
+    // The app owns its type, credential, and reach (ADR 0022).
+    for (const name of ["Change Type", "Advanced"]) {
+      expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("heading", { name: "Setup" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      /signs this installation of the Shisho app out/,
     );
   });
 

@@ -94,6 +94,14 @@ type Config struct {
 	// left out of the public docs and the example config on purpose.
 	TestMode bool `koanf:"shisho_test_mode" json:"test_mode"`
 
+	// DevAppProtocols replaces the Shisho app protocols the server accepts
+	// with a range such as "2-2", so a developer can try an app against a
+	// server too new for it ("2-2" for an app on protocol 1) or too old for
+	// it ("0-0"). Empty keeps the server's own range. It's development-only
+	// and, like TestMode, left out of the public docs, the example config,
+	// and the config API; the server refuses to start on a malformed range.
+	DevAppProtocols string `koanf:"shisho_dev_app_protocols" json:"-"`
+
 	// CookieNamespace is appended to the session cookie name. Browsers scope
 	// cookies by host but not port, so `mise start` sets it per worktree to
 	// keep sessions on localhost apart. It is development-only and, like

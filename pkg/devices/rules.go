@@ -58,6 +58,9 @@ var typeRules = map[string]deviceTypeRules{
 	DeviceTypeKOReader: {allowed: models.EbookFileTypes},
 	DeviceTypeOPDS:     {},
 	DeviceTypeBrowser:  {},
+	// The Shisho app downloads Original Files of any File Type and follows
+	// no Delivery Rules (ADR 0022).
+	DeviceTypeShishoApp: {},
 }
 
 // AllowsFileType reports whether a Device of deviceType can receive a File

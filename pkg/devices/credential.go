@@ -17,10 +17,20 @@ const credentialAlphabet = "abcdefghjkmnpqrstuvwxyz"
 // credentialLength gives 23^16, about 2^72, possible credentials.
 const credentialLength = 16
 
+// appCredentialLength gives 23^32, about 2^144, possible credentials. The
+// Shisho app keeps its credential in the Keychain and never shows it, so
+// nobody types it, and it never expires, so it's longer than the others.
+const appCredentialLength = 32
+
 // generateCredential returns a new random Device credential.
 func generateCredential() (string, error) {
+	return generateCredentialOfLength(credentialLength)
+}
+
+// generateCredentialOfLength returns a random credential of length letters.
+func generateCredentialOfLength(length int) (string, error) {
 	alphabetSize := big.NewInt(int64(len(credentialAlphabet)))
-	b := make([]byte, credentialLength)
+	b := make([]byte, length)
 	for i := range b {
 		n, err := rand.Int(rand.Reader, alphabetSize)
 		if err != nil {

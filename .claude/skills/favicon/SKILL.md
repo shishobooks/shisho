@@ -98,6 +98,7 @@ At 16px and 24px the overlays collapse into the silhouette, so the favicon still
 - `website/static/img/logo-mark.svg` (`currentColor`, fixed ids)
 - `assets/splash.html` and `assets/patreon/cover.html` (fixed colors)
 - `assets/favicon-gen.html` (preview page)
+- `mobile/ios/Shisho/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon.png` and `Logo.imageset/Logo.png`, the iOS app's icon: the full-bleed variant rendered at 1024x1024, like `apple-touch-icon.png`
 
 `website/static/img/favicon.ico` is a copy of `public/favicon.ico`; copy it over after regenerating.
 
