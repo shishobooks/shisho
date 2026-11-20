@@ -10,9 +10,6 @@ struct BookSummary: Identifiable, Hashable, Sendable {
     let authors: String
     let coverVersion: String
     let coverAspectRatio: String
-    /// The Book's first Series membership, when it has one.
-    let seriesName: String?
-    let seriesNumber: Double?
     /// The File Types of its main Files, in their order, each once.
     let fileTypes: [String]
 }
@@ -64,7 +61,9 @@ struct SyncState: Equatable, Sendable {
 /// network only updates it (ADR 0021, ADR 0023).
 ///
 /// Schema changes are GRDB migrations, registered in order in `migrator`
-/// and never edited once released: a change is a new migration. The catalog
+/// and never edited once released: a change is a new migration. Until then,
+/// edit them in place; debug builds rebuild a database whose migrations
+/// changed. The catalog
 /// can always be downloaded again, but later tables (the journal of changes
 /// made offline) can't, so every change migrates rather than wipes.
 final class CatalogStore: Sendable {
@@ -84,6 +83,9 @@ final class CatalogStore: Sendable {
 
     static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
+        #if DEBUG
+        migrator.eraseDatabaseOnSchemaChange = true
+        #endif
         migrator.registerMigration("v1: catalog") { db in
             try db.create(table: "sync_state") { t in
                 t.primaryKey("id", .integer).check { $0 == 1 }
@@ -98,6 +100,7 @@ final class CatalogStore: Sendable {
                 t.primaryKey("id", .integer)
                 t.column("name", .text).notNull()
                 t.column("cover_aspect_ratio", .text).notNull()
+                t.column("sort_spec", .text).notNull().defaults(to: "")
                 t.column("generation", .integer).notNull()
             }
             try db.create(table: "books") { t in
@@ -108,8 +111,10 @@ final class CatalogStore: Sendable {
                 t.column("sort_title", .text).notNull()
                 t.column("authors", .text).notNull()
                 t.column("cover_version", .text).notNull()
+                t.column("created_at", .double).notNull()
                 t.column("generation", .integer).notNull()
             }
+            try db.create(index: "books_by_date_added", on: "books", columns: ["created_at", "id"])
             try db.create(table: "book_authors") { t in
                 t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
                 t.column("position", .integer).notNull()
@@ -137,6 +142,9 @@ final class CatalogStore: Sendable {
                 t.column("file_type", .text).notNull()
                 t.column("file_role", .text).notNull()
                 t.column("size_bytes", .integer).notNull()
+                t.column("release_date", .double)
+                t.column("page_count", .integer)
+                t.column("duration_seconds", .double)
             }
         }
         return migrator
@@ -199,11 +207,12 @@ final class CatalogStore: Sendable {
                     } else if let library = entry.library {
                         try db.execute(
                             sql: """
-                            INSERT INTO libraries (id, name, cover_aspect_ratio, generation) VALUES (?, ?, ?, ?)
+                            INSERT INTO libraries (id, name, cover_aspect_ratio, sort_spec, generation) VALUES (?, ?, ?, ?, ?)
                             ON CONFLICT (id) DO UPDATE SET name = excluded.name,
-                                cover_aspect_ratio = excluded.cover_aspect_ratio, generation = excluded.generation
+                                cover_aspect_ratio = excluded.cover_aspect_ratio, sort_spec = excluded.sort_spec,
+                                generation = excluded.generation
                             """,
-                            arguments: [library.id, library.name, library.coverAspectRatio.rawValue, generation]
+                            arguments: [library.id, library.name, library.coverAspectRatio.rawValue, library.sortSpec, generation]
                         )
                     }
                 case .unknown:
@@ -223,14 +232,15 @@ final class CatalogStore: Sendable {
     private static func upsert(_ book: Shishoapp.FeedBook, generation: Int, in db: Database) throws {
         try db.execute(
             sql: """
-            INSERT INTO books (id, library_id, title, subtitle, sort_title, authors, cover_version, generation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO books (id, library_id, title, subtitle, sort_title, authors, cover_version, created_at, generation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET library_id = excluded.library_id, title = excluded.title,
                 subtitle = excluded.subtitle, sort_title = excluded.sort_title, authors = excluded.authors,
-                cover_version = excluded.cover_version, generation = excluded.generation
+                cover_version = excluded.cover_version, created_at = excluded.created_at, generation = excluded.generation
             """,
             arguments: [book.id, book.libraryId, book.title, book.subtitle, book.sortTitle,
-                        book.authors.map(\.name).joined(separator: ", "), book.coverVersion, generation]
+                        book.authors.map(\.name).joined(separator: ", "), book.coverVersion,
+                        CatalogStore.timestamp(book.createdAt) ?? 0, generation]
         )
         for table in ["book_authors", "book_series", "book_files"] {
             try db.execute(sql: "DELETE FROM \(table) WHERE book_id = ?", arguments: [book.id])
@@ -252,13 +262,25 @@ final class CatalogStore: Sendable {
         for (position, file) in book.files.enumerated() {
             try db.execute(
                 sql: """
-                INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes) VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes, release_date, page_count, duration_seconds)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, position = excluded.position,
-                    file_type = excluded.file_type, file_role = excluded.file_role, size_bytes = excluded.size_bytes
+                    file_type = excluded.file_type, file_role = excluded.file_role, size_bytes = excluded.size_bytes,
+                    release_date = excluded.release_date, page_count = excluded.page_count,
+                    duration_seconds = excluded.duration_seconds
                 """,
-                arguments: [file.id, book.id, position, file.fileType.rawValue, file.fileRole.rawValue, file.sizeBytes]
+                arguments: [file.id, book.id, position, file.fileType.rawValue, file.fileRole.rawValue, file.sizeBytes,
+                            file.releaseDate.map(CatalogStore.timestamp), file.pageCount, file.audiobookDurationSeconds]
             )
         }
+    }
+
+    /// Seconds since 1970 of an RFC 3339 time from the server, which writes
+    /// fractional seconds only when there are any; nil when it can't be read.
+    static func timestamp(_ value: String) -> Double? {
+        let withFraction = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+        let date = (try? withFraction.parse(value)) ?? (try? Date.ISO8601FormatStyle().parse(value))
+        return date?.timeIntervalSince1970
     }
 
     // MARK: - Reading
@@ -272,21 +294,27 @@ final class CatalogStore: Sendable {
         }
     }
 
-    /// The Books of libraryID, or of every Library, by sort title.
+    /// The Books of libraryID, or of every Library, in the user's saved sort
+    /// for it, as the web app shows them. Every Library together sorts by
+    /// the sort they share, as a single Library does, or newest first.
     static func books(_ db: Database, libraryID: Int?) throws -> [BookSummary] {
         var sql = """
         SELECT b.id, b.library_id, b.title, b.authors, b.cover_version,
-            COALESCE(l.cover_aspect_ratio, 'book') AS aspect, s.name AS series_name, s.number AS series_number
+            COALESCE(l.cover_aspect_ratio, 'book') AS aspect
         FROM books b
         LEFT JOIN libraries l ON l.id = b.library_id
-        LEFT JOIN book_series s ON s.book_id = b.id AND s.position = 0
         """
         var arguments: StatementArguments = []
+        var spec = ""
         if let libraryID {
             sql += " WHERE b.library_id = ?"
             arguments = [libraryID]
+            spec = try String.fetchOne(db, sql: "SELECT sort_spec FROM libraries WHERE id = ?", arguments: [libraryID]) ?? ""
+        } else {
+            let specs = try String.fetchAll(db, sql: "SELECT DISTINCT sort_spec FROM libraries")
+            spec = specs.count == 1 ? specs[0] : ""
         }
-        sql += " ORDER BY b.sort_title COLLATE NOCASE, b.id"
+        sql += " ORDER BY " + LibrarySort.orderBy(spec)
         let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
         let fileTypes = try mainFileTypes(db)
         return rows.map { summary($0, fileTypes: fileTypes[$0["id"]] ?? []) }
@@ -295,10 +323,9 @@ final class CatalogStore: Sendable {
     static func book(_ db: Database, id: Int) throws -> BookDetail? {
         guard let row = try Row.fetchOne(db, sql: """
             SELECT b.id, b.library_id, b.title, b.authors, b.cover_version, b.subtitle,
-                COALESCE(l.cover_aspect_ratio, 'book') AS aspect, s.name AS series_name, s.number AS series_number
+                COALESCE(l.cover_aspect_ratio, 'book') AS aspect
             FROM books b
             LEFT JOIN libraries l ON l.id = b.library_id
-            LEFT JOIN book_series s ON s.book_id = b.id AND s.position = 0
             WHERE b.id = ?
             """, arguments: [id])
         else { return nil }
@@ -336,8 +363,7 @@ final class CatalogStore: Sendable {
 
     private static func summary(_ row: Row, fileTypes: [String]) -> BookSummary {
         BookSummary(id: row["id"], libraryID: row["library_id"], title: row["title"], authors: row["authors"],
-                    coverVersion: row["cover_version"], coverAspectRatio: row["aspect"],
-                    seriesName: row["series_name"], seriesNumber: row["series_number"], fileTypes: fileTypes)
+                    coverVersion: row["cover_version"], coverAspectRatio: row["aspect"], fileTypes: fileTypes)
     }
 
     // Conveniences for code that reads once rather than observing.

@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 import ShishoAPI
 import UIKit
@@ -22,12 +23,15 @@ final class AccountSession {
     }
 }
 
-/// What the last sync found, shown above the Library.
+/// What the last sync found, shown above the Library until the next one
+/// finishes.
 enum SyncStatus: Equatable {
     case idle
-    case syncing
-    /// The server couldn't be reached; the copy on the device still works.
+    /// The device has no network, or the server couldn't be reached; the
+    /// copy on the device still works.
     case offline
+    /// iOS keeps the app off the local network, where the server is.
+    case localNetworkDenied
     /// The server and the app don't share a protocol. Syncing waits for an
     /// update; everything on the device keeps working (ADR 0020).
     /// appTooOld says the update is the app's.
@@ -42,6 +46,11 @@ final class AppModel {
 
     private(set) var session: AccountSession?
     private(set) var syncStatus: SyncStatus = .idle
+    private(set) var isSyncing = false
+    /// False while the device has no network at all, as in airplane mode
+    /// without Wi-Fi, so a sync says so at once instead of waiting on a
+    /// request that can't go anywhere.
+    private var networkAvailable = true
     /// Set when the server ended this installation's sign-in, for the
     /// sign-in screen to explain.
     private(set) var signedOutAccount: Account?
@@ -52,6 +61,11 @@ final class AppModel {
                 signedOutAccount = current
             } else if let credential = Keychain.credential(for: current.id) {
                 session = try? openSession(account: current, credential: credential)
+            }
+        }
+        Task { [weak self] in
+            for await path in NWPathMonitor() {
+                self?.networkChanged(available: path.status != .unsatisfied)
             }
         }
     }
@@ -71,7 +85,10 @@ final class AppModel {
         do {
             response = try await client.signIn(username: username, password: password, deviceName: Installation.deviceName)
         } catch let error as APIError {
-            throw SignInError(message: Messages.signIn(error), offersUpdate: Messages.isAppTooOld(error))
+            throw SignInError(
+                message: Messages.signIn(error), offersUpdate: Messages.isAppTooOld(error),
+                offersSettings: error == .localNetworkDenied, retriesWhenActive: Messages.isUnreachable(error)
+            )
         }
 
         var account = accounts.account(serverURL: address.url, userID: response.user.id) ?? Account(
@@ -134,8 +151,13 @@ final class AppModel {
     /// Brings the catalog up to date. Failing to reach the server leaves the
     /// copy on the device as it is.
     func syncNow() async {
-        guard let session, syncStatus != .syncing else { return }
-        syncStatus = .syncing
+        guard let session, !isSyncing else { return }
+        guard networkAvailable else {
+            syncStatus = .offline
+            return
+        }
+        isSyncing = true
+        defer { isSyncing = false }
         do {
             try await session.sync.run()
             syncStatus = .idle
@@ -143,6 +165,8 @@ final class AppModel {
             handleSignedOut()
         } catch APIError.unreachable {
             syncStatus = .offline
+        } catch APIError.localNetworkDenied {
+            syncStatus = .localNetworkDenied
         } catch let error as APIError {
             switch error {
             case .appTooOld, .serverTooOld, .serverPredatesApp:
@@ -164,6 +188,18 @@ final class AppModel {
         }
     }
 
+    /// Coming back online syncs; going offline says so without waiting for
+    /// a request to fail.
+    private func networkChanged(available: Bool) {
+        guard available != networkAvailable else { return }
+        networkAvailable = available
+        if available {
+            Task { await syncNow() }
+        } else if session != nil {
+            syncStatus = .offline
+        }
+    }
+
     private func recordCapabilities(_ listed: [String], accountID: String) {
         guard var account = session?.account, account.id == accountID, account.capabilities != listed else { return }
         account.capabilities = listed
@@ -175,6 +211,12 @@ struct SignInError: LocalizedError {
     let message: String
     /// The fix is updating the app, so the screen links to the update.
     var offersUpdate = false
+    /// The fix is a permission in Settings, so the screen links there.
+    var offersSettings = false
+    /// The request couldn't get through, perhaps because iOS was asking for
+    /// the Local Network permission: try again when the app is back in
+    /// front.
+    var retriesWhenActive = false
     var errorDescription: String? { message }
 }
 
@@ -215,8 +257,19 @@ enum Messages {
             return String(localized: "This device was signed out of your account. Sign in again.")
         case .unreachable(let detail):
             return String(localized: "Couldn't reach the server. Check the address and your connection. (\(detail))")
+        case .localNetworkDenied:
+            return localNetworkDenied
         case .server(_, let message):
             return message
+        }
+    }
+
+    static let localNetworkDenied = String(localized: "Shisho isn't allowed on your local network, where this server is. Turn on Local Network for Shisho in Settings.")
+
+    static func isUnreachable(_ error: APIError) -> Bool {
+        switch error {
+        case .unreachable, .localNetworkDenied: true
+        default: false
         }
     }
 

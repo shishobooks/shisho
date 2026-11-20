@@ -430,13 +430,15 @@ func TestFeed_BookDocument(t *testing.T) {
 	f := newFixture(t)
 	f.addLibrary(1, "Fiction")
 	f.addBook(1, 1, "Dune")
-	f.exec(`UPDATE books SET subtitle = 'A Novel' WHERE id = 1`)
+	f.exec(`UPDATE books SET subtitle = 'A Novel', created_at = '2025-03-04 05:06:07' WHERE id = 1`)
 	f.exec(`INSERT INTO persons (id, library_id, name, sort_name, sort_name_source) VALUES (1, 1, 'Frank Herbert', 'Herbert, Frank', 'file'), (2, 1, 'Ann Artist', 'Artist, Ann', 'file')`)
 	f.exec(`INSERT INTO authors (book_id, person_id, sort_order, role) VALUES (1, 2, 2, 'penciller'), (1, 1, 1, NULL)`)
 	f.exec(`INSERT INTO series (id, library_id, name, name_source, sort_name, sort_name_source) VALUES (1, 1, 'Dune Chronicles', 'file', 'Dune Chronicles', 'file')`)
 	f.exec(`INSERT INTO book_series (book_id, series_id, series_number, sort_order) VALUES (1, 1, 1, 1)`)
-	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, cover_image_filename, updated_at)
-		VALUES (7, 1, 1, '/library/1/dune.epub', 'epub', 12345, 'dune.epub.cover.jpg', '2026-01-02 03:04:05')`)
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, cover_image_filename, updated_at,
+		release_date, page_count, audiobook_duration_seconds)
+		VALUES (7, 1, 1, '/library/1/dune.epub', 'epub', 12345, 'dune.epub.cover.jpg', '2026-01-02 03:04:05',
+		'1965-08-01 00:00:00', 412, 1.5)`)
 	f.addUser()
 
 	resp := f.changes(f.signIn(), 0, 0)
@@ -445,14 +447,21 @@ func TestFeed_BookDocument(t *testing.T) {
 	subtitle := "A Novel"
 	one := 1.0
 	penciller := "penciller"
+	released := time.Date(1965, 8, 1, 0, 0, 0, 0, time.UTC)
+	pages := 412
+	duration := 1.5
 	assert.Equal(t, &FeedBook{
 		ID: 1, LibraryID: 1, Title: "Dune", Subtitle: &subtitle, SortTitle: "Dune",
+		CreatedAt: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
 		Authors: []FeedAuthor{
 			{PersonID: 1, Name: "Frank Herbert", SortName: "Herbert, Frank"},
 			{PersonID: 2, Name: "Ann Artist", SortName: "Artist, Ann", Role: &penciller},
 		},
 		Series: []FeedSeriesMembership{{SeriesID: 1, Name: "Dune Chronicles", SortName: "Dune Chronicles", Number: &one}},
-		Files:  []FeedFile{{ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345}},
+		Files: []FeedFile{{
+			ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345,
+			ReleaseDate: &released, PageCount: &pages, AudiobookDurationSeconds: &duration,
+		}},
 		// covers.CacheKey: the File's id and its updated_at.
 		CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),
 	}, book)
@@ -467,8 +476,9 @@ func TestFeed_JoinTableChangesMoveTheBook(t *testing.T) {
 	f.addBook(2, 1, "Emma")
 	f.exec(`INSERT INTO persons (id, library_id, name, sort_name, sort_name_source) VALUES (1, 1, 'Frank Herbert', 'Herbert, Frank', 'file'), (2, 1, 'Jane Austen', 'Austen, Jane', 'file')`)
 	f.exec(`INSERT INTO series (id, library_id, name, name_source, sort_name, sort_name_source) VALUES (1, 1, 'Dune Chronicles', 'file', 'Dune Chronicles', 'file')`)
-	f.addUser()
+	userID := f.addUser()
 	credential := f.signIn()
+	saveSort := fmt.Sprintf(`INSERT INTO user_library_settings (user_id, library_id, sort_spec) VALUES (%d, 1, 'title:asc')`, userID)
 
 	steps := []struct {
 		name  string
@@ -486,10 +496,16 @@ func TestFeed_JoinTableChangesMoveTheBook(t *testing.T) {
 		{"series removed", `DELETE FROM book_series WHERE id = 1`, []string{"book:1"}},
 		{"file added", `INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (1, 1, 1, '/f.epub', 'epub', 1)`, []string{"book:1"}},
 		{"file resized", `UPDATE files SET filesize_bytes = 2 WHERE id = 1`, []string{"book:1"}},
+		{"release date", `UPDATE files SET release_date = '2001-01-01 00:00:00' WHERE id = 1`, []string{"book:1"}},
+		{"page count", `UPDATE files SET page_count = 10 WHERE id = 1`, []string{"book:1"}},
+		{"duration", `UPDATE files SET audiobook_duration_seconds = 60 WHERE id = 1`, []string{"book:1"}},
 		{"cover changed", `UPDATE files SET updated_at = '2030-01-01 00:00:00' WHERE id = 1`, []string{"book:1"}},
 		{"file moved", `UPDATE files SET book_id = 2 WHERE id = 1`, []string{"book:1", "book:2"}},
 		{"file deleted", `DELETE FROM files WHERE id = 1`, []string{"book:2"}},
 		{"cover aspect", `UPDATE libraries SET cover_aspect_ratio = 'audiobook' WHERE id = 1`, []string{"library:1", "book:1", "book:2"}},
+		{"sort saved", saveSort, []string{"library:1"}},
+		{"sort changed", `UPDATE user_library_settings SET sort_spec = 'author:desc'`, []string{"library:1"}},
+		{"sort cleared", `DELETE FROM user_library_settings`, []string{"library:1"}},
 	}
 	cursor := f.changes(credential, 0, 0).Cursor
 	for _, step := range steps {
@@ -520,10 +536,52 @@ func TestFeed_WritesThatChangeNothingRecordNothing(t *testing.T) {
 		`UPDATE authors SET sort_order = 1`,
 		`UPDATE persons SET name = 'Frank Herbert', updated_at = '2030-01-01 00:00:00'`,
 		`UPDATE libraries SET name = 'Fiction', organize_file_structure = FALSE`,
+		`UPDATE files SET release_date = release_date, page_count = page_count, audiobook_duration_seconds = audiobook_duration_seconds`,
 	} {
 		f.exec(write)
 		assert.Empty(t, f.changes(credential, cursor, 0).Entries, write)
 	}
+}
+
+// A Library's document carries the reading user's own saved sort for it,
+// so the app's Library is in the order the web app shows them.
+func TestFeed_LibraryDocumentCarriesTheUsersSort(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Fiction")
+	f.addLibrary(2, "Comics")
+	f.addLibrary(3, "Audiobooks")
+	userID := f.addUser()
+	var otherID int
+	require.NoError(t, f.db.QueryRowContext(f.ctx,
+		`INSERT INTO users (username, password_hash, role_id, is_active) VALUES ('other', 'x', 1, TRUE) RETURNING id`).Scan(&otherID))
+	f.exec(`INSERT INTO user_library_settings (user_id, library_id, sort_spec) VALUES (?, 1, 'author:asc,date_added:desc'), (?, 1, 'title:desc'), (?, 2, 'not a spec')`,
+		userID, otherID, userID)
+
+	sorts := map[int]string{}
+	for _, entry := range f.changes(f.signIn(), 0, 0).Entries {
+		require.NotNil(t, entry.Library)
+		sorts[entry.ID] = entry.Library.SortSpec
+	}
+	// Library 2's spec doesn't parse, and Library 3 has none: both are the
+	// default, which is empty.
+	assert.Equal(t, map[int]string{1: "author:asc,date_added:desc", 2: "", 3: ""}, sorts)
+}
+
+// Deleting a Library deletes its saved sorts too, and that mustn't hide
+// the Library's deletion.
+func TestFeed_DeletedLibraryWithASavedSortIsDeleted(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Fiction")
+	f.addLibrary(2, "Comics")
+	userID := f.addUser()
+	f.exec(`INSERT INTO user_library_settings (user_id, library_id, sort_spec) VALUES (?, 1, 'title:asc')`, userID)
+	credential := f.signIn()
+	cursor := f.changes(credential, 0, 0).Cursor
+
+	f.exec(`DELETE FROM libraries WHERE id = 1`)
+	assert.Equal(t, []string{"library:1-"}, summary(f.changes(credential, cursor, 0)))
 }
 
 func TestFeed_FiltersByLibraryAccess(t *testing.T) {

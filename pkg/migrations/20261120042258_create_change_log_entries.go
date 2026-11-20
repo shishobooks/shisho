@@ -32,6 +32,13 @@ func init() {
 			INSERT INTO change_log_entries (kind, record_id, library_id, deleted, changed_at)
 			VALUES ('%[1]s', %[2]s, %[3]s, %[4]t, %[5]s);`, kind, id, library, deleted, now)
 	}
+	// moveLibraries moves the entries of the Libraries whose ids the
+	// expressions list, skipping any that no longer exist.
+	moveLibraries := func(ids string) string {
+		return fmt.Sprintf(`DELETE FROM change_log_entries WHERE kind = 'library' AND record_id IN (SELECT id FROM libraries WHERE id IN (%[1]s));
+			INSERT INTO change_log_entries (kind, record_id, library_id, deleted, changed_at)
+			SELECT 'library', id AS record_id, id AS library_id, FALSE, %[2]s FROM libraries WHERE id IN (%[1]s);`, ids, now)
+	}
 	// moveBooks moves the entries of the Books whose ids the expressions
 	// list, skipping any that no longer exist.
 	moveBooks := func(ids string) string {
@@ -81,16 +88,28 @@ func init() {
 		trigger("libraries_update_covers", "UPDATE", "libraries", differs("cover_aspect_ratio"), moveBooks("SELECT id FROM books WHERE library_id = NEW.id")),
 		trigger("libraries_delete", "DELETE", "libraries", "", record("library", "OLD.id", "OLD.id", true)),
 
+		// A user's saved sort for a Library is part of the Library's
+		// document, so every user reads the Library again, each with their
+		// own sort. A Library's delete cascades to its saved sorts with the
+		// Library's row already gone, and before the Library's own delete
+		// trigger records the deletion, so the cascade writes nothing.
+		trigger("user_library_settings_insert", "INSERT", "user_library_settings", "", moveLibraries("NEW.library_id")),
+		trigger("user_library_settings_update", "UPDATE", "user_library_settings", differs("user_id", "library_id", "sort_spec"),
+			moveLibraries("OLD.library_id, NEW.library_id")),
+		trigger("user_library_settings_delete", "DELETE", "user_library_settings", "", moveLibraries("OLD.library_id")),
+
 		// Book: its own columns, then each part of its document.
 		trigger("books_insert", "INSERT", "books", "", record("book", "NEW.id", "NEW.library_id", false)),
 		trigger("books_update", "UPDATE", "books", differs("title", "subtitle", "sort_title", "library_id"), record("book", "NEW.id", "NEW.library_id", false)),
 		trigger("books_delete", "DELETE", "books", "", record("book", "OLD.id", "OLD.library_id", true)),
 
-		// Files: File Type, role, and size, and what the cover version is
+		// Files: File Type, role, and size, what the Library sorts by
+		// (release date, page count, duration), and what the cover version is
 		// made of (which File's cover is chosen, and that File's updated_at).
 		trigger("files_insert", "INSERT", "files", "", moveBooks("NEW.book_id")),
 		trigger("files_update", "UPDATE", "files",
-			differs("book_id", "file_type", "file_role", "filesize_bytes", "cover_image_filename", "is_preferred_cover", "updated_at"),
+			differs("book_id", "file_type", "file_role", "filesize_bytes", "release_date", "page_count", "audiobook_duration_seconds",
+				"cover_image_filename", "is_preferred_cover", "updated_at"),
 			moveBooks("OLD.book_id, NEW.book_id")),
 		trigger("files_delete", "DELETE", "files", "", moveBooks("OLD.book_id")),
 

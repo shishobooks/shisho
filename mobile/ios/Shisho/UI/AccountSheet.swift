@@ -78,15 +78,15 @@ struct AccountSheet: View {
         VStack(spacing: 0) {
             row("Server", value: account.serverURL.absoluteString)
             Divider().overlay(Theme.border)
-            row("Shisho", value: account.serverVersion)
+            row("Server version", value: account.serverVersion)
             Divider().overlay(Theme.border)
-            row("This app", value: Installation.appVersion)
+            row("App version", value: Installation.appVersion)
             Divider().overlay(Theme.border)
             HStack {
                 Text("Last synced")
                     .foregroundStyle(Theme.mutedForeground)
                 Spacer()
-                if model.syncStatus == .syncing {
+                if model.isSyncing {
                     ProgressView().controlSize(.small)
                 } else if let date = syncState?.lastSyncedAt {
                     Text(date, format: .relative(presentation: .named))
@@ -125,7 +125,7 @@ struct AccountSheet: View {
                 Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
             }
             .buttonStyle(OutlineButtonStyle())
-            .disabled(model.syncStatus == .syncing)
+            .disabled(model.isSyncing)
             .accessibilityIdentifier("account.sync")
 
             Button(role: .destructive) {

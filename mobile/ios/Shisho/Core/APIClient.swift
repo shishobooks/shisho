@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import ShishoAPI
 
 /// Why a request to a Shisho server didn't succeed, in the terms the app
@@ -22,6 +23,9 @@ enum APIError: Error, Equatable {
     case signedOut
     /// The server couldn't be reached.
     case unreachable(String)
+    /// iOS keeps the app off the local network, where the server is: its
+    /// Local Network permission is off, or still being asked for.
+    case localNetworkDenied
     /// Anything else the server said.
     case server(status: Int, message: String)
 }
@@ -130,7 +134,7 @@ final class APIClient: Sendable {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw APIError.unreachable(error.localizedDescription)
+            throw APIClient.transportError(error)
         }
         guard let http = response as? HTTPURLResponse else {
             throw APIError.unreachable("No response")
@@ -151,6 +155,16 @@ final class APIClient: Sendable {
         }
 
         let error: Inner?
+    }
+
+    /// Why a request never got a response. URLSession says the local
+    /// network was refused only in the path it attaches to the error.
+    static func transportError(_ error: Error) -> APIError {
+        if let path = (error as NSError).userInfo["_NSURLErrorNWPathKey"] as? NWPath,
+           path.unsatisfiedReason == .localNetworkDenied {
+            return .localNetworkDenied
+        }
+        return .unreachable(error.localizedDescription)
     }
 
     static func error(status: Int, response: HTTPURLResponse, body: Data) -> APIError {

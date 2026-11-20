@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SignInView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.scenePhase) private var scenePhase
     @State private var server = ""
     @State private var username = ""
     @State private var password = ""
@@ -10,7 +11,7 @@ struct SignInView: View {
     @State private var failures = 0
     @FocusState private var focus: Field?
 
-    private enum Field { case server, username, password }
+    private enum Field: CaseIterable { case server, username, password }
 
     private var canSubmit: Bool {
         !busy && !server.isEmpty && !username.isEmpty && !password.isEmpty
@@ -72,6 +73,9 @@ struct SignInView: View {
                                     .font(.geist(.subheadline, weight: .semibold))
                             }
                         }
+                        if error.offersSettings {
+                            SettingsLink()
+                        }
                     }
                     .accessibilityIdentifier("signin.error")
                     .transition(.move(edge: .top).combined(with: .opacity))
@@ -105,6 +109,30 @@ struct SignInView: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: error?.message)
         }
         .scrollDismissesKeyboard(.interactively)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Button { moveFocus(by: -1) } label: { Image(systemName: "chevron.up") }
+                    .disabled(focus == Field.allCases.first)
+                    .accessibilityLabel("Previous field")
+                Button { moveFocus(by: 1) } label: { Image(systemName: "chevron.down") }
+                    .disabled(focus == Field.allCases.last)
+                    .accessibilityLabel("Next field")
+                Spacer()
+                if #available(iOS 26, *) {
+                    Button(role: .confirm) { focus = nil }
+                } else {
+                    Button("Done") { focus = nil }
+                        .fontWeight(.semibold)
+                }
+            }
+        }
+        // A sign-in that couldn't get through while iOS asked for the Local
+        // Network permission tries again once the prompt is answered.
+        .onChange(of: scenePhase) { old, phase in
+            if old == .inactive, phase == .active, error?.retriesWhenActive == true {
+                submit()
+            }
+        }
         .background(backdrop)
         .sensoryFeedback(.error, trigger: failures)
         .onAppear {
@@ -140,6 +168,14 @@ struct SignInView: View {
         }
         .ignoresSafeArea()
         .accessibilityHidden(true)
+    }
+
+    private func moveFocus(by step: Int) {
+        guard let focus, let index = Field.allCases.firstIndex(of: focus) else { return }
+        let next = index + step
+        if Field.allCases.indices.contains(next) {
+            self.focus = Field.allCases[next]
+        }
     }
 
     private func submit() {

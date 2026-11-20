@@ -167,7 +167,7 @@ func (h *handler) changes(c echo.Context) error {
 		if err != nil {
 			return err
 		}
-		entries, err := buildEntries(ctx, tx, page.Entries)
+		entries, err := buildEntries(ctx, tx, user.ID, page.Entries)
 		if err != nil {
 			return err
 		}

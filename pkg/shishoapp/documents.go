@@ -7,14 +7,15 @@ import (
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/sortspec"
 	"github.com/uptrace/bun"
 )
 
-// buildEntries turns log entries into the feed's entries, reading each
-// record as it is now in tx, the snapshot the entries came from. A record
-// the entry doesn't mark deleted always exists in that snapshot, since its
-// delete would have moved its entry.
-func buildEntries(ctx context.Context, tx bun.IDB, entries []*changefeed.Entry) ([]FeedEntry, error) {
+// buildEntries turns log entries into the feed's entries for userID,
+// reading each record as it is now in tx, the snapshot the entries came
+// from. A record the entry doesn't mark deleted always exists in that
+// snapshot, since its delete would have moved its entry.
+func buildEntries(ctx context.Context, tx bun.IDB, userID int, entries []*changefeed.Entry) ([]FeedEntry, error) {
 	var bookIDs, libraryIDs []int
 	for _, entry := range entries {
 		if entry.Deleted {
@@ -31,7 +32,7 @@ func buildEntries(ctx context.Context, tx bun.IDB, entries []*changefeed.Entry) 
 	if err != nil {
 		return nil, err
 	}
-	libraries, err := loadLibraries(ctx, tx, libraryIDs)
+	libraries, err := loadLibraries(ctx, tx, userID, libraryIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +67,7 @@ func buildEntries(ctx context.Context, tx bun.IDB, entries []*changefeed.Entry) 
 	return out, nil
 }
 
-func loadLibraries(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedLibrary, error) {
+func loadLibraries(ctx context.Context, tx bun.IDB, userID int, ids []int) (map[int]*FeedLibrary, error) {
 	out := map[int]*FeedLibrary{}
 	if len(ids) == 0 {
 		return out, nil
@@ -75,8 +76,29 @@ func loadLibraries(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedLib
 	if err := tx.NewSelect().Model(&libraries).Where("l.id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
 		return nil, errors.WithStack(err)
 	}
+	var settings []*models.UserLibrarySettings
+	err := tx.NewSelect().Model(&settings).
+		Where("uls.user_id = ?", userID).
+		Where("uls.library_id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	sorts := map[int]string{}
+	for _, setting := range settings {
+		// A spec the web app wouldn't apply is no sort at all.
+		if setting.SortSpec == nil {
+			continue
+		}
+		if _, err := sortspec.Parse(*setting.SortSpec); err == nil {
+			sorts[setting.LibraryID] = *setting.SortSpec
+		}
+	}
 	for _, library := range libraries {
-		out[library.ID] = &FeedLibrary{ID: library.ID, Name: library.Name, CoverAspectRatio: library.CoverAspectRatio}
+		out[library.ID] = &FeedLibrary{
+			ID: library.ID, Name: library.Name, CoverAspectRatio: library.CoverAspectRatio,
+			SortSpec: sorts[library.ID],
+		}
 	}
 	return out, nil
 }
@@ -120,6 +142,7 @@ func bookDocument(book *models.Book) *FeedBook {
 		Title:     book.Title,
 		Subtitle:  book.Subtitle,
 		SortTitle: book.SortTitle,
+		CreatedAt: book.CreatedAt,
 		Authors:   []FeedAuthor{},
 		Series:    []FeedSeriesMembership{},
 		Files:     []FeedFile{},
@@ -150,10 +173,13 @@ func bookDocument(book *models.Book) *FeedBook {
 	}
 	for _, file := range book.Files {
 		doc.Files = append(doc.Files, FeedFile{
-			ID:        file.ID,
-			FileType:  file.FileType,
-			FileRole:  file.FileRole,
-			SizeBytes: file.FilesizeBytes,
+			ID:                       file.ID,
+			FileType:                 file.FileType,
+			FileRole:                 file.FileRole,
+			SizeBytes:                file.FilesizeBytes,
+			ReleaseDate:              file.ReleaseDate,
+			PageCount:                file.PageCount,
+			AudiobookDurationSeconds: file.AudiobookDurationSeconds,
 		})
 	}
 	aspect := ""

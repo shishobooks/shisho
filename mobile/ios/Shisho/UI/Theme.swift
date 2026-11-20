@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The web app's design language (`app/index.css`): its colors, in the asset
 /// catalog with light and dark variants, its typeface, Geist, scaled with
@@ -86,19 +87,21 @@ struct Wordmark: View {
 
 // MARK: - Small pieces
 
-/// A File Type, as the web app's secondary badge draws it.
+/// A File Type, as the web app's secondary badge draws it: a rounded
+/// rectangle, not a pill.
 struct FileTypeChip: View {
     let fileType: String
     var outlined = false
+    private let shape = RoundedRectangle(cornerRadius: 5, style: .continuous)
 
     var body: some View {
         Text(FileTypes.label(fileType))
             .font(.geist(.caption, weight: .medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(outlined ? Color.clear : Theme.secondary, in: Capsule())
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(outlined ? Color.clear : Theme.secondary, in: shape)
             .overlay {
-                if outlined { Capsule().strokeBorder(Theme.border) }
+                if outlined { shape.strokeBorder(Theme.border) }
             }
             .foregroundStyle(Theme.foreground)
     }
@@ -220,6 +223,17 @@ struct NoticeCard<Action: View>: View {
         .padding(14)
         .cardStyle()
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Opens the app's page in Settings, where its permissions are.
+struct SettingsLink: View {
+    var body: some View {
+        Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
+            Label("Open Settings", systemImage: "arrow.up.forward")
+                .font(.geist(.subheadline, weight: .semibold))
+        }
+        .accessibilityIdentifier("settings.link")
     }
 }
 

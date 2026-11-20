@@ -7,6 +7,8 @@ package shishoapp
 // leniently, ignoring fields it doesn't know and mapping unknown enum values
 // to an unknown case (ADR 0021).
 
+import "time"
+
 // ServerInfo is what the server accepts and offers, for any app protocol.
 type ServerInfo struct {
 	// ProtocolMin and ProtocolMax are the app protocols the server accepts.
@@ -105,6 +107,11 @@ type FeedLibrary struct {
 	ID               int    `json:"id"`
 	Name             string `json:"name"`
 	CoverAspectRatio string `json:"cover_aspect_ratio" tstype:"CoverAspectRatio"`
+	// SortSpec is the reading user's saved sort for the Library, in the web
+	// app's sort parameter form ("author:asc,date_added:desc"), or empty
+	// for the default, newest first. A field the app doesn't know is
+	// skipped.
+	SortSpec string `json:"sort_spec"`
 }
 
 // FeedBook is a Book as the app keeps it.
@@ -114,6 +121,9 @@ type FeedBook struct {
 	Title     string  `json:"title"`
 	Subtitle  *string `json:"subtitle"`
 	SortTitle string  `json:"sort_title"`
+	// CreatedAt is when the Book was added, which the Library sorts by,
+	// newest first, as the web app does by default.
+	CreatedAt time.Time `json:"created_at"`
 	// Authors and Series are in the Book's order.
 	Authors []FeedAuthor           `json:"authors"`
 	Series  []FeedSeriesMembership `json:"series"`
@@ -148,4 +158,9 @@ type FeedFile struct {
 	FileType  string `json:"file_type" tstype:"FileType"`
 	FileRole  string `json:"file_role" tstype:"FileRole"`
 	SizeBytes int64  `json:"size_bytes"`
+	// The Library's release date, page count, and duration sorts read the
+	// Book's newest File that has each.
+	ReleaseDate              *time.Time `json:"release_date"`
+	PageCount                *int       `json:"page_count"`
+	AudiobookDurationSeconds *float64   `json:"audiobook_duration_seconds"`
 }

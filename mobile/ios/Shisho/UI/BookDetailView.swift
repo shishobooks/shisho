@@ -37,6 +37,8 @@ struct BookDetailView: View {
             .frame(maxWidth: 680)
             .frame(maxWidth: .infinity)
         }
+        .refreshable { await model.syncNow() }
+        .background(PullDownKeepsPage())
         .coordinateSpace(name: "book")
         .onPreferenceChange(ScrollOffsetKey.self) { offset in
             let collapsed = offset < -200
