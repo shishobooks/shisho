@@ -299,7 +299,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	spa := echo.WrapHandler(frontend.Handler())
 	e.RouteNotFound("/*", func(c echo.Context) error {
 		path := c.Request().URL.Path
-		for _, prefix := range []string{"/api", "/app", "/opds", "/kobo", "/koreader", "/ereader", "/e"} {
+		for _, prefix := range []string{"/api", "/mobile", "/opds", "/kobo", "/koreader", "/ereader", "/e"} {
 			if path == prefix || strings.HasPrefix(path, prefix+"/") {
 				return notFoundHandler(c)
 			}

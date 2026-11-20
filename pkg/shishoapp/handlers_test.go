@@ -152,7 +152,7 @@ func signInBody(username, password string) string {
 // signIn signs the user in and returns the credential.
 func (f *fixture) signIn() string {
 	f.t.Helper()
-	rec := f.do(call{method: http.MethodPost, path: "/app/sign-in", body: signInBody("reader", testPassword)})
+	rec := f.do(call{method: http.MethodPost, path: "/mobile/sign-in", body: signInBody("reader", testPassword)})
 	require.Equal(f.t, http.StatusOK, rec.Code, rec.Body.String())
 	var resp SignInResponse
 	require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &resp))
@@ -169,7 +169,7 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 // changes reads one page of the feed after cursor.
 func (f *fixture) changes(credential string, cursor int64, limit int) FeedResponse {
 	f.t.Helper()
-	path := fmt.Sprintf("/app/changes?cursor=%d", cursor)
+	path := fmt.Sprintf("/mobile/changes?cursor=%d", cursor)
 	if limit > 0 {
 		path += fmt.Sprintf("&limit=%d", limit)
 	}
@@ -198,7 +198,7 @@ func TestSignIn_CreatesAnAppDevice(t *testing.T) {
 	f := newFixture(t)
 	userID := f.addUser()
 
-	rec := f.do(call{method: http.MethodPost, path: "/app/sign-in", body: signInBody("Reader", testPassword)})
+	rec := f.do(call{method: http.MethodPost, path: "/mobile/sign-in", body: signInBody("Reader", testPassword)})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	var resp SignInResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
@@ -216,7 +216,7 @@ func TestSignIn_CreatesAnAppDevice(t *testing.T) {
 	assert.Equal(t, "1.0.0 (1)", *device.AppVersion)
 
 	// The credential signs in, and reports the app's version as it changes.
-	rec = f.do(call{path: "/app/changes?cursor=0", credential: resp.Credential, version: "1.1.0 (2)"})
+	rec = f.do(call{path: "/mobile/changes?cursor=0", credential: resp.Credential, version: "1.1.0 (2)"})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	device, err = f.h.devices.Retrieve(f.ctx, userID, resp.DeviceID)
 	require.NoError(t, err)
@@ -228,7 +228,7 @@ func TestSignIn_WrongPasswordIsRefused(t *testing.T) {
 	f := newFixture(t)
 	f.addUser()
 
-	rec := f.do(call{method: http.MethodPost, path: "/app/sign-in", body: signInBody("reader", "wrong")})
+	rec := f.do(call{method: http.MethodPost, path: "/mobile/sign-in", body: signInBody("reader", "wrong")})
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	count, err := f.db.NewSelect().Model((*devices.Device)(nil)).Count(f.ctx)
 	require.NoError(t, err)
@@ -241,7 +241,7 @@ func TestSignIn_ForcedPasswordResetIsRefused(t *testing.T) {
 	f.addUser()
 	f.exec(`UPDATE users SET must_change_password = TRUE`)
 
-	rec := f.do(call{method: http.MethodPost, path: "/app/sign-in", body: signInBody("reader", testPassword)})
+	rec := f.do(call{method: http.MethodPost, path: "/mobile/sign-in", body: signInBody("reader", testPassword)})
 	assert.Equal(t, http.StatusForbidden, rec.Code, rec.Body.String())
 }
 
@@ -252,12 +252,12 @@ func TestCredential_RevokedOrDeactivatedIsRefused(t *testing.T) {
 
 	revoked := f.signIn()
 	require.NoError(t, f.h.devices.Revoke(f.ctx, deviceIDFor(t, f, revoked)))
-	rec := f.do(call{path: "/app/changes?cursor=0", credential: revoked})
+	rec := f.do(call{path: "/mobile/changes?cursor=0", credential: revoked})
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	deactivated := f.signIn()
 	f.exec(`UPDATE users SET is_active = FALSE WHERE id = ?`, userID)
-	rec = f.do(call{path: "/app/changes?cursor=0", credential: deactivated})
+	rec = f.do(call{path: "/mobile/changes?cursor=0", credential: deactivated})
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
@@ -268,7 +268,7 @@ func TestCredential_SurvivesAPasswordChange(t *testing.T) {
 	credential := f.signIn()
 
 	f.exec(`UPDATE users SET password_hash = 'changed'`)
-	rec := f.do(call{path: "/app/changes?cursor=0", credential: credential})
+	rec := f.do(call{path: "/mobile/changes?cursor=0", credential: credential})
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
@@ -279,9 +279,9 @@ func TestSignOut_EndsTheCredential(t *testing.T) {
 	credential := f.signIn()
 
 	// An app too old for the server can still sign out.
-	rec := f.do(call{method: http.MethodDelete, path: "/app/device", credential: credential, protocol: "none"})
+	rec := f.do(call{method: http.MethodDelete, path: "/mobile/device", credential: credential, protocol: "none"})
 	require.Equal(t, http.StatusNoContent, rec.Code, rec.Body.String())
-	rec = f.do(call{path: "/app/changes?cursor=0", credential: credential})
+	rec = f.do(call{path: "/mobile/changes?cursor=0", credential: credential})
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
@@ -300,7 +300,7 @@ func TestProtocol_OutsideTheRangeIs426(t *testing.T) {
 		t.Parallel()
 		f := newFixtureWith(t, newContract(2, 3))
 		f.addUser()
-		rec := f.do(call{method: http.MethodPost, path: "/app/sign-in", body: signInBody("reader", testPassword), protocol: "1"})
+		rec := f.do(call{method: http.MethodPost, path: "/mobile/sign-in", body: signInBody("reader", testPassword), protocol: "1"})
 		require.Equal(t, http.StatusUpgradeRequired, rec.Code)
 		assert.Equal(t, "app_update_required", errorCode(t, rec))
 		assert.Equal(t, "2", rec.Header().Get(HeaderProtocolMin))
@@ -313,7 +313,7 @@ func TestProtocol_OutsideTheRangeIs426(t *testing.T) {
 		f := newFixture(t)
 		f.addUser()
 		credential := f.signIn()
-		rec := f.do(call{path: "/app/changes?cursor=0", credential: credential, protocol: "2"})
+		rec := f.do(call{path: "/mobile/changes?cursor=0", credential: credential, protocol: "2"})
 		require.Equal(t, http.StatusUpgradeRequired, rec.Code)
 		assert.Equal(t, "server_update_required", errorCode(t, rec))
 		assert.Equal(t, "v0.10.0", rec.Header().Get(HeaderServerVersion))
@@ -323,7 +323,7 @@ func TestProtocol_OutsideTheRangeIs426(t *testing.T) {
 		t.Parallel()
 		f := newFixtureWith(t, newContract(2, 2))
 		f.addUser()
-		rec := f.do(call{method: http.MethodPost, path: "/app/sign-in", body: signInBody("reader", "wrong"), protocol: "1"})
+		rec := f.do(call{method: http.MethodPost, path: "/mobile/sign-in", body: signInBody("reader", "wrong"), protocol: "1"})
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
 		assert.Empty(t, rec.Header().Get(HeaderServerVersion))
 	})
@@ -331,7 +331,7 @@ func TestProtocol_OutsideTheRangeIs426(t *testing.T) {
 	t.Run("server info answers any protocol", func(t *testing.T) {
 		t.Parallel()
 		f := newFixtureWith(t, newContract(2, 2))
-		rec := f.do(call{path: "/app/server", protocol: "1"})
+		rec := f.do(call{path: "/mobile/server", protocol: "1"})
 		require.Equal(t, http.StatusOK, rec.Code)
 		var info ServerInfo
 		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
@@ -374,10 +374,10 @@ func TestCapabilities_DependOnTheRequestsProtocol(t *testing.T) {
 	} {
 		// Every response carries the list: a success, a refusal, and an
 		// /api route this test doesn't even register.
-		rec := f.do(call{path: "/app/changes?cursor=0", credential: credential, protocol: tc.protocol})
+		rec := f.do(call{path: "/mobile/changes?cursor=0", credential: credential, protocol: tc.protocol})
 		assert.Equal(t, tc.want, rec.Header().Get(HeaderCapabilities), "changes, protocol %s", tc.protocol)
 		assert.Contains(t, rec.Header(), HeaderCapabilities)
-		rec = f.do(call{path: "/app/changes?cursor=0", credential: "wrong", protocol: tc.protocol})
+		rec = f.do(call{path: "/mobile/changes?cursor=0", credential: "wrong", protocol: tc.protocol})
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
 		assert.Equal(t, tc.want, rec.Header().Get(HeaderCapabilities), "refusal, protocol %s", tc.protocol)
 		rec = f.do(call{path: "/api/books", protocol: tc.protocol})
@@ -646,15 +646,15 @@ func TestCover_ServesAccessibleBooksOnly(t *testing.T) {
 	f.addUser(1)
 	credential := f.signIn()
 
-	rec := f.do(call{path: "/app/books/1/cover?v=1-1", credential: credential})
+	rec := f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, "private, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
 
-	rec = f.do(call{path: "/app/books/2/cover?v=1-1", credential: credential})
+	rec = f.do(call{path: "/mobile/books/2/cover?v=1-1", credential: credential})
 	assert.Equal(t, http.StatusNotFound, rec.Code)
-	rec = f.do(call{path: "/app/books/9/cover", credential: credential})
+	rec = f.do(call{path: "/mobile/books/9/cover", credential: credential})
 	assert.Equal(t, http.StatusNotFound, rec.Code)
-	rec = f.do(call{path: "/app/books/1/cover?v=1-1"})
+	rec = f.do(call{path: "/mobile/books/1/cover?v=1-1"})
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 

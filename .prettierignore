@@ -31,3 +31,5 @@ mobile/ios/*.xcodeproj/
 mobile/android/**/build/
 mobile/android/.gradle/
 mobile/android/.kotlin/
+# Written by Icon Composer, which rewrites it in its own format on every save.
+mobile/ios/Shisho/Resources/AppIcon.icon/

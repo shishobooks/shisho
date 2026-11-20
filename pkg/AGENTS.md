@@ -10,7 +10,7 @@ Go backend: Echo, Bun ORM on SQLite, Air for hot reload. Each domain package has
 - Read `docs/agents/backend/covers-and-file-serving.md` before writing covers, adding a route that serves file bytes, or a device download.
 - Read `docs/agents/backend/data-sources-and-merges.md` before writing metadata from a new source, editing identifiers or series numbers, or adding a resource delete, merge, or rename.
 - Read `docs/agents/backend/search-fts.md` before adding a write that changes indexed names, titles, or links, an entity delete, or an FTS column.
-- Read `docs/agents/backend/change-feed.md` before adding a catalog table or column, a write path that rewrites rows or calls `UpdateFile`, or a change to the Shisho app's routes under `/app`.
+- Read `docs/agents/backend/change-feed.md` before adding a catalog table or column, a write path that rewrites rows or calls `UpdateFile`, or a change to the Shisho app's routes under `/mobile`.
 
 golangci `forbidigo` and `pkg/migrations/schema_invariants_test.go` enforce several backend rules; their messages name the fix.
 

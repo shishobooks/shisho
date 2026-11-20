@@ -28,14 +28,15 @@ const (
 // server is a Shisho server of the run's own, on a free port, with its
 // database and caches in the run's folder.
 type server struct {
-	URL string
-	cmd *exec.Cmd
-	log *os.File
+	URL  string
+	port string
+	cmd  *exec.Cmd
+	log  *os.File
 }
 
 // startServer builds the server from this checkout and starts it on dir's
-// files. The server's output goes to dir/server.log.
-func startServer(ctx context.Context, root, dir string) (*server, error) {
+// files, listening on host. The server's output goes to dir/server.log.
+func startServer(ctx context.Context, root, dir, host string) (*server, error) {
 	binary := filepath.Join(dir, "shisho")
 	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "./cmd/api")
 	build.Dir = root
@@ -59,7 +60,7 @@ func startServer(ctx context.Context, root, dir string) (*server, error) {
 		"PLUGIN_DIR="+filepath.Join(dir, "plugins"),
 		"PLUGIN_DATA_DIR="+filepath.Join(dir, "plugin-data"),
 		"JWT_SECRET=appharness-secret-not-for-production",
-		"SERVER_HOST=127.0.0.1",
+		"SERVER_HOST="+host,
 		"SERVER_PORT="+strconv.Itoa(port),
 		"LIBRARY_MONITOR_ENABLED=false",
 		"UPDATE_CHECK_ENABLED=false",
@@ -71,7 +72,7 @@ func startServer(ctx context.Context, root, dir string) (*server, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, errors.Wrap(err, "start the server")
 	}
-	s := &server{URL: fmt.Sprintf("http://127.0.0.1:%d", port), cmd: cmd, log: log}
+	s := &server{URL: fmt.Sprintf("http://127.0.0.1:%d", port), port: strconv.Itoa(port), cmd: cmd, log: log}
 	if err := s.waitHealthy(ctx); err != nil {
 		s.Stop()
 		return nil, err

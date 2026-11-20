@@ -1,30 +1,36 @@
 import Foundation
+import GRDB
 import ShishoAPI
 
 /// A Book as the Library grid shows it.
-struct BookSummary: Identifiable, Hashable {
+struct BookSummary: Identifiable, Hashable, Sendable {
     let id: Int
     let libraryID: Int
     let title: String
     let authors: String
     let coverVersion: String
     let coverAspectRatio: String
+    /// The Book's first Series membership, when it has one.
+    let seriesName: String?
+    let seriesNumber: Double?
+    /// The File Types of its main Files, in their order, each once.
+    let fileTypes: [String]
 }
 
 /// A Book as its detail screen shows it.
-struct BookDetail: Hashable {
-    struct Author: Hashable {
+struct BookDetail: Hashable, Sendable {
+    struct Author: Hashable, Sendable {
         let name: String
         let role: String?
     }
 
-    struct Series: Hashable {
+    struct Series: Hashable, Sendable {
         let name: String
         let number: Double?
         let numberEnd: Double?
     }
 
-    struct File: Hashable, Identifiable {
+    struct File: Hashable, Identifiable, Sendable {
         let id: Int
         let fileType: String
         let fileRole: String
@@ -38,13 +44,13 @@ struct BookDetail: Hashable {
     let files: [File]
 }
 
-struct LibrarySummary: Identifiable, Hashable {
+struct LibrarySummary: Identifiable, Hashable, Sendable {
     let id: Int
     let name: String
 }
 
 /// Where the sync is in the change feed (ADR 0023).
-struct SyncState: Equatable {
+struct SyncState: Equatable, Sendable {
     var cursor: Int
     /// Increases each time the catalog is downloaded again from the start.
     var generation: Int
@@ -56,93 +62,100 @@ struct SyncState: Equatable {
 
 /// One account's copy of the catalog: every screen reads from it, and the
 /// network only updates it (ADR 0021, ADR 0023).
-final class CatalogStore: @unchecked Sendable {
+///
+/// Schema changes are GRDB migrations, registered in order in `migrator`
+/// and never edited once released: a change is a new migration. The catalog
+/// can always be downloaded again, but later tables (the journal of changes
+/// made offline) can't, so every change migrates rather than wipes.
+final class CatalogStore: Sendable {
     /// The kinds and fields of the feed this version understands. When an
     /// app update understands more, raise it, and the catalog downloads
     /// again from the start in the background.
     static let feedVersion = 1
 
-    let database: Database
+    let pool: DatabasePool
 
     init(path: String) throws {
-        database = try Database(path: path)
-        try migrate()
+        var configuration = Configuration()
+        configuration.foreignKeysEnabled = true
+        pool = try DatabasePool(path: path, configuration: configuration)
+        try CatalogStore.migrator.migrate(pool)
     }
 
-    private func migrate() throws {
-        if database.userVersion < 1 {
-            try database.executeScript("""
-            CREATE TABLE IF NOT EXISTS sync_state (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                cursor INTEGER NOT NULL DEFAULT 0,
-                generation INTEGER NOT NULL DEFAULT 0,
-                starting_over INTEGER NOT NULL DEFAULT 0,
-                feed_version INTEGER NOT NULL DEFAULT 0,
-                last_synced_at REAL
-            );
-            INSERT OR IGNORE INTO sync_state (id) VALUES (1);
-            CREATE TABLE IF NOT EXISTS libraries (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                cover_aspect_ratio TEXT NOT NULL,
-                generation INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS books (
-                id INTEGER PRIMARY KEY,
-                library_id INTEGER NOT NULL,
-                title TEXT NOT NULL,
-                subtitle TEXT,
-                sort_title TEXT NOT NULL,
-                authors TEXT NOT NULL,
-                cover_version TEXT NOT NULL,
-                generation INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS ix_books_library_id ON books (library_id);
-            CREATE TABLE IF NOT EXISTS book_authors (
-                book_id INTEGER NOT NULL REFERENCES books (id) ON DELETE CASCADE,
-                position INTEGER NOT NULL,
-                person_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                sort_name TEXT NOT NULL,
-                role TEXT,
-                PRIMARY KEY (book_id, position)
-            );
-            CREATE TABLE IF NOT EXISTS book_series (
-                book_id INTEGER NOT NULL REFERENCES books (id) ON DELETE CASCADE,
-                position INTEGER NOT NULL,
-                series_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                sort_name TEXT NOT NULL,
-                number REAL,
-                number_end REAL,
-                unit TEXT,
-                PRIMARY KEY (book_id, position)
-            );
-            CREATE TABLE IF NOT EXISTS book_files (
-                id INTEGER PRIMARY KEY,
-                book_id INTEGER NOT NULL REFERENCES books (id) ON DELETE CASCADE,
-                position INTEGER NOT NULL,
-                file_type TEXT NOT NULL,
-                file_role TEXT NOT NULL,
-                size_bytes INTEGER NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS ix_book_files_book_id ON book_files (book_id);
-            """)
-            database.userVersion = 1
+    static var migrator: DatabaseMigrator {
+        var migrator = DatabaseMigrator()
+        migrator.registerMigration("v1: catalog") { db in
+            try db.create(table: "sync_state") { t in
+                t.primaryKey("id", .integer).check { $0 == 1 }
+                t.column("cursor", .integer).notNull().defaults(to: 0)
+                t.column("generation", .integer).notNull().defaults(to: 0)
+                t.column("starting_over", .boolean).notNull().defaults(to: false)
+                t.column("feed_version", .integer).notNull().defaults(to: 0)
+                t.column("last_synced_at", .datetime)
+            }
+            try db.execute(sql: "INSERT INTO sync_state (id) VALUES (1)")
+            try db.create(table: "libraries") { t in
+                t.primaryKey("id", .integer)
+                t.column("name", .text).notNull()
+                t.column("cover_aspect_ratio", .text).notNull()
+                t.column("generation", .integer).notNull()
+            }
+            try db.create(table: "books") { t in
+                t.primaryKey("id", .integer)
+                t.column("library_id", .integer).notNull().indexed()
+                t.column("title", .text).notNull()
+                t.column("subtitle", .text)
+                t.column("sort_title", .text).notNull()
+                t.column("authors", .text).notNull()
+                t.column("cover_version", .text).notNull()
+                t.column("generation", .integer).notNull()
+            }
+            try db.create(table: "book_authors") { t in
+                t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
+                t.column("position", .integer).notNull()
+                t.column("person_id", .integer).notNull()
+                t.column("name", .text).notNull()
+                t.column("sort_name", .text).notNull()
+                t.column("role", .text)
+                t.primaryKey(["book_id", "position"])
+            }
+            try db.create(table: "book_series") { t in
+                t.column("book_id", .integer).notNull().references("books", onDelete: .cascade)
+                t.column("position", .integer).notNull()
+                t.column("series_id", .integer).notNull()
+                t.column("name", .text).notNull()
+                t.column("sort_name", .text).notNull()
+                t.column("number", .double)
+                t.column("number_end", .double)
+                t.column("unit", .text)
+                t.primaryKey(["book_id", "position"])
+            }
+            try db.create(table: "book_files") { t in
+                t.primaryKey("id", .integer)
+                t.column("book_id", .integer).notNull().references("books", onDelete: .cascade).indexed()
+                t.column("position", .integer).notNull()
+                t.column("file_type", .text).notNull()
+                t.column("file_role", .text).notNull()
+                t.column("size_bytes", .integer).notNull()
+            }
         }
+        return migrator
     }
 
     // MARK: - Sync state
 
     func syncState() throws -> SyncState {
-        try database.query("SELECT cursor, generation, starting_over, last_synced_at FROM sync_state WHERE id = 1") {
-            SyncState(
-                cursor: $0.int(0),
-                generation: $0.int(1),
-                startingOver: $0.int(2) != 0,
-                lastSyncedAt: $0.optionalDouble(3).map(Date.init(timeIntervalSince1970:))
-            )
-        }.first ?? SyncState(cursor: 0, generation: 0, startingOver: false)
+        try pool.read(CatalogStore.syncState)
+    }
+
+    static func syncState(_ db: Database) throws -> SyncState {
+        let row = try Row.fetchOne(db, sql: "SELECT cursor, generation, starting_over, last_synced_at FROM sync_state WHERE id = 1")
+        return SyncState(
+            cursor: row?["cursor"] ?? 0,
+            generation: row?["generation"] ?? 0,
+            startingOver: row?["starting_over"] ?? false,
+            lastSyncedAt: row?["last_synced_at"]
+        )
     }
 
     /// Starts downloading the catalog again from the start when the server
@@ -150,16 +163,16 @@ final class CatalogStore: @unchecked Sendable {
     /// feed than the copy was made with. The current copy stays on screen
     /// until the download finishes.
     func startOverIfNeeded(serverSaidSo: Bool = false) throws {
-        try database.transaction {
-            let feedVersion = try database.query("SELECT feed_version FROM sync_state WHERE id = 1") { $0.int(0) }.first ?? 0
-            let state = try syncState()
+        try pool.write { db in
+            let feedVersion = try Int.fetchOne(db, sql: "SELECT feed_version FROM sync_state WHERE id = 1") ?? 0
+            let state = try CatalogStore.syncState(db)
             guard serverSaidSo || feedVersion < CatalogStore.feedVersion else { return }
-            // A copy made from the start that never finished is still the
-            // one being made.
+            // A copy made from the start that never got its first page is
+            // still the one being made.
             if state.startingOver && state.cursor == 0 { return }
-            try database.execute(
-                "UPDATE sync_state SET cursor = 0, generation = generation + 1, starting_over = 1, feed_version = ? WHERE id = 1",
-                [.int(CatalogStore.feedVersion)]
+            try db.execute(
+                sql: "UPDATE sync_state SET cursor = 0, generation = generation + 1, starting_over = 1, feed_version = ? WHERE id = 1",
+                arguments: [CatalogStore.feedVersion]
             )
         }
     }
@@ -169,133 +182,175 @@ final class CatalogStore: @unchecked Sendable {
     /// 0023). The last page of a download from the start drops whatever it
     /// didn't send.
     func apply(_ page: Shishoapp.FeedResponse) throws {
-        try database.transaction {
-            let generation = try syncState().generation
+        try pool.write { db in
+            let generation = try CatalogStore.syncState(db).generation
             for entry in page.entries {
                 switch entry.kind {
                 case .book:
                     if entry.deleted {
-                        try database.execute("DELETE FROM books WHERE id = ?", [.int(entry.id)])
+                        try db.execute(sql: "DELETE FROM books WHERE id = ?", arguments: [entry.id])
                     } else if let book = entry.book {
-                        try upsert(book, generation: generation)
+                        try CatalogStore.upsert(book, generation: generation, in: db)
                     }
                 case .library:
                     if entry.deleted {
-                        try database.execute("DELETE FROM books WHERE library_id = ?", [.int(entry.id)])
-                        try database.execute("DELETE FROM libraries WHERE id = ?", [.int(entry.id)])
+                        try db.execute(sql: "DELETE FROM books WHERE library_id = ?", arguments: [entry.id])
+                        try db.execute(sql: "DELETE FROM libraries WHERE id = ?", arguments: [entry.id])
                     } else if let library = entry.library {
-                        try database.execute(
-                            """
+                        try db.execute(
+                            sql: """
                             INSERT INTO libraries (id, name, cover_aspect_ratio, generation) VALUES (?, ?, ?, ?)
                             ON CONFLICT (id) DO UPDATE SET name = excluded.name,
                                 cover_aspect_ratio = excluded.cover_aspect_ratio, generation = excluded.generation
                             """,
-                            [.int(library.id), .text(library.name), .text(library.coverAspectRatio.rawValue), .int(generation)]
+                            arguments: [library.id, library.name, library.coverAspectRatio.rawValue, generation]
                         )
                     }
                 case .unknown:
                     continue
                 }
             }
-            try database.execute("UPDATE sync_state SET cursor = ?, last_synced_at = ? WHERE id = 1",
-                                 [.int(page.cursor), .double(Date().timeIntervalSince1970)])
-            if !page.hasMore, try syncState().startingOver {
-                try database.execute("DELETE FROM books WHERE generation < ?", [.int(generation)])
-                try database.execute("DELETE FROM libraries WHERE generation < ?", [.int(generation)])
-                try database.execute("UPDATE sync_state SET starting_over = 0 WHERE id = 1")
+            try db.execute(sql: "UPDATE sync_state SET cursor = ?, last_synced_at = ? WHERE id = 1",
+                           arguments: [page.cursor, Date()])
+            if !page.hasMore, try CatalogStore.syncState(db).startingOver {
+                try db.execute(sql: "DELETE FROM books WHERE generation < ?", arguments: [generation])
+                try db.execute(sql: "DELETE FROM libraries WHERE generation < ?", arguments: [generation])
+                try db.execute(sql: "UPDATE sync_state SET starting_over = 0 WHERE id = 1")
             }
         }
     }
 
-    private func upsert(_ book: Shishoapp.FeedBook, generation: Int) throws {
-        let authors = book.authors.map(\.name).joined(separator: ", ")
-        try database.execute(
-            """
+    private static func upsert(_ book: Shishoapp.FeedBook, generation: Int, in db: Database) throws {
+        try db.execute(
+            sql: """
             INSERT INTO books (id, library_id, title, subtitle, sort_title, authors, cover_version, generation)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET library_id = excluded.library_id, title = excluded.title,
                 subtitle = excluded.subtitle, sort_title = excluded.sort_title, authors = excluded.authors,
                 cover_version = excluded.cover_version, generation = excluded.generation
             """,
-            [.int(book.id), .int(book.libraryId), .text(book.title), SQLValue(book.subtitle), .text(book.sortTitle),
-             .text(authors), .text(book.coverVersion), .int(generation)]
+            arguments: [book.id, book.libraryId, book.title, book.subtitle, book.sortTitle,
+                        book.authors.map(\.name).joined(separator: ", "), book.coverVersion, generation]
         )
         for table in ["book_authors", "book_series", "book_files"] {
-            try database.execute("DELETE FROM \(table) WHERE book_id = ?", [.int(book.id)])
+            try db.execute(sql: "DELETE FROM \(table) WHERE book_id = ?", arguments: [book.id])
         }
         for (position, author) in book.authors.enumerated() {
-            try database.execute(
-                "INSERT INTO book_authors (book_id, position, person_id, name, sort_name, role) VALUES (?, ?, ?, ?, ?, ?)",
-                [.int(book.id), .int(position), .int(author.personId), .text(author.name), .text(author.sortName),
-                 SQLValue(author.role?.rawValue)]
+            try db.execute(
+                sql: "INSERT INTO book_authors (book_id, position, person_id, name, sort_name, role) VALUES (?, ?, ?, ?, ?, ?)",
+                arguments: [book.id, position, author.personId, author.name, author.sortName, author.role?.rawValue]
             )
         }
         for (position, series) in book.series.enumerated() {
-            try database.execute(
-                "INSERT INTO book_series (book_id, position, series_id, name, sort_name, number, number_end, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                [.int(book.id), .int(position), .int(series.seriesId), .text(series.name), .text(series.sortName),
-                 SQLValue(series.number), SQLValue(series.numberEnd), SQLValue(series.unit?.rawValue)]
+            try db.execute(
+                sql: "INSERT INTO book_series (book_id, position, series_id, name, sort_name, number, number_end, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                arguments: [book.id, position, series.seriesId, series.name, series.sortName, series.number, series.numberEnd, series.unit?.rawValue]
             )
         }
         // A File moved between Books can arrive in its new Book before its
         // old Book's entry, which still lists it, so it moves here.
         for (position, file) in book.files.enumerated() {
-            try database.execute(
-                """
+            try db.execute(
+                sql: """
                 INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, position = excluded.position,
                     file_type = excluded.file_type, file_role = excluded.file_role, size_bytes = excluded.size_bytes
                 """,
-                [.int(file.id), .int(book.id), .int(position), .text(file.fileType.rawValue), .text(file.fileRole.rawValue),
-                 .int(file.sizeBytes)]
+                arguments: [file.id, book.id, position, file.fileType.rawValue, file.fileRole.rawValue, file.sizeBytes]
             )
         }
     }
 
     // MARK: - Reading
+    //
+    // Each read is a static function of a Database, so a screen can observe
+    // it (ValueObservation) and update whenever a sync changes what it read.
 
-    func libraries() throws -> [LibrarySummary] {
-        try database.query("SELECT id, name FROM libraries ORDER BY name COLLATE NOCASE") {
-            LibrarySummary(id: $0.int(0), name: $0.string(1))
+    static func libraries(_ db: Database) throws -> [LibrarySummary] {
+        try Row.fetchAll(db, sql: "SELECT id, name FROM libraries ORDER BY name COLLATE NOCASE").map {
+            LibrarySummary(id: $0["id"], name: $0["name"])
         }
     }
 
     /// The Books of libraryID, or of every Library, by sort title.
-    func books(libraryID: Int?) throws -> [BookSummary] {
+    static func books(_ db: Database, libraryID: Int?) throws -> [BookSummary] {
         var sql = """
-        SELECT b.id, b.library_id, b.title, b.authors, b.cover_version, COALESCE(l.cover_aspect_ratio, 'book')
-        FROM books b LEFT JOIN libraries l ON l.id = b.library_id
+        SELECT b.id, b.library_id, b.title, b.authors, b.cover_version,
+            COALESCE(l.cover_aspect_ratio, 'book') AS aspect, s.name AS series_name, s.number AS series_number
+        FROM books b
+        LEFT JOIN libraries l ON l.id = b.library_id
+        LEFT JOIN book_series s ON s.book_id = b.id AND s.position = 0
         """
-        var params: [SQLValue] = []
+        var arguments: StatementArguments = []
         if let libraryID {
             sql += " WHERE b.library_id = ?"
-            params.append(.int(libraryID))
+            arguments = [libraryID]
         }
         sql += " ORDER BY b.sort_title COLLATE NOCASE, b.id"
-        return try database.query(sql, params, CatalogStore.summary)
+        let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
+        let fileTypes = try mainFileTypes(db)
+        return rows.map { summary($0, fileTypes: fileTypes[$0["id"]] ?? []) }
+    }
+
+    static func book(_ db: Database, id: Int) throws -> BookDetail? {
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT b.id, b.library_id, b.title, b.authors, b.cover_version, b.subtitle,
+                COALESCE(l.cover_aspect_ratio, 'book') AS aspect, s.name AS series_name, s.number AS series_number
+            FROM books b
+            LEFT JOIN libraries l ON l.id = b.library_id
+            LEFT JOIN book_series s ON s.book_id = b.id AND s.position = 0
+            WHERE b.id = ?
+            """, arguments: [id])
+        else { return nil }
+        let authors = try Row.fetchAll(db, sql: "SELECT name, role FROM book_authors WHERE book_id = ? ORDER BY position", arguments: [id]).map {
+            BookDetail.Author(name: $0["name"], role: $0["role"])
+        }
+        let series = try Row.fetchAll(db, sql: "SELECT name, number, number_end FROM book_series WHERE book_id = ? ORDER BY position", arguments: [id]).map {
+            BookDetail.Series(name: $0["name"], number: $0["number"], numberEnd: $0["number_end"])
+        }
+        let files = try Row.fetchAll(db, sql: "SELECT id, file_type, file_role, size_bytes FROM book_files WHERE book_id = ? ORDER BY position", arguments: [id]).map {
+            BookDetail.File(id: $0["id"], fileType: $0["file_type"], fileRole: $0["file_role"], sizeBytes: $0["size_bytes"])
+        }
+        let fileTypes = orderedUnique(files.filter { $0.fileRole != "supplement" }.map(\.fileType))
+        return BookDetail(summary: summary(row, fileTypes: fileTypes), subtitle: row["subtitle"], authors: authors, series: series, files: files)
+    }
+
+    /// Each Book's main File Types, in order, each once.
+    private static func mainFileTypes(_ db: Database) throws -> [Int: [String]] {
+        var byBook: [Int: [String]] = [:]
+        let rows = try Row.fetchAll(db, sql: "SELECT book_id, file_type FROM book_files WHERE file_role != 'supplement' ORDER BY book_id, position")
+        for row in rows {
+            let bookID: Int = row["book_id"]
+            let fileType: String = row["file_type"]
+            if !(byBook[bookID] ?? []).contains(fileType) {
+                byBook[bookID, default: []].append(fileType)
+            }
+        }
+        return byBook
+    }
+
+    private static func orderedUnique(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0).inserted }
+    }
+
+    private static func summary(_ row: Row, fileTypes: [String]) -> BookSummary {
+        BookSummary(id: row["id"], libraryID: row["library_id"], title: row["title"], authors: row["authors"],
+                    coverVersion: row["cover_version"], coverAspectRatio: row["aspect"],
+                    seriesName: row["series_name"], seriesNumber: row["series_number"], fileTypes: fileTypes)
+    }
+
+    // Conveniences for code that reads once rather than observing.
+
+    func libraries() throws -> [LibrarySummary] {
+        try pool.read(CatalogStore.libraries)
+    }
+
+    func books(libraryID: Int?) throws -> [BookSummary] {
+        try pool.read { try CatalogStore.books($0, libraryID: libraryID) }
     }
 
     func book(id: Int) throws -> BookDetail? {
-        guard let row = try database.query(
-            """
-            SELECT b.id, b.library_id, b.title, b.authors, b.cover_version, COALESCE(l.cover_aspect_ratio, 'book'), b.subtitle
-            FROM books b LEFT JOIN libraries l ON l.id = b.library_id WHERE b.id = ?
-            """, [.int(id)], { (CatalogStore.summary($0), $0.optionalString(6)) }
-        ).first else { return nil }
-        let authors = try database.query("SELECT name, role FROM book_authors WHERE book_id = ? ORDER BY position", [.int(id)]) {
-            BookDetail.Author(name: $0.string(0), role: $0.optionalString(1))
-        }
-        let series = try database.query("SELECT name, number, number_end FROM book_series WHERE book_id = ? ORDER BY position", [.int(id)]) {
-            BookDetail.Series(name: $0.string(0), number: $0.optionalDouble(1), numberEnd: $0.optionalDouble(2))
-        }
-        let files = try database.query("SELECT id, file_type, file_role, size_bytes FROM book_files WHERE book_id = ? ORDER BY position", [.int(id)]) {
-            BookDetail.File(id: $0.int(0), fileType: $0.string(1), fileRole: $0.string(2), sizeBytes: $0.int(3))
-        }
-        return BookDetail(summary: row.0, subtitle: row.1, authors: authors, series: series, files: files)
-    }
-
-    private static func summary(_ row: Row) -> BookSummary {
-        BookSummary(id: row.int(0), libraryID: row.int(1), title: row.string(2), authors: row.string(3),
-                    coverVersion: row.string(4), coverAspectRatio: row.string(5))
+        try pool.read { try CatalogStore.book($0, id: id) }
     }
 }

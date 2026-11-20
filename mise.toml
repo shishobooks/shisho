@@ -288,6 +288,24 @@ depends = ["ios:generate"]
 dir = "mobile/ios"
 run = "xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet build"
 
+[tasks."ios:strings"]
+description = "Update the iOS app's String Catalog from the strings in its code, which command-line builds leave alone"
+depends = ["ios:build"]
+dir = "mobile/ios"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+objects=build/DerivedData/Build/Intermediates.noindex/Shisho.build/Debug-iphonesimulator/Shisho.build/Objects-normal/arm64
+data=()
+for f in "$objects"/*.stringsdata; do
+  # Skip what a deleted source file left behind, and the build's generated files.
+  if find Shisho -name "$(basename "$f" .stringsdata).swift" | grep -q .; then
+    data+=("$f")
+  fi
+done
+xcrun xcstringstool sync Shisho/Resources/Localizable.xcstrings --stringsdata "${data[@]}"
+'''
+
 [tasks."ios:run"]
 description = "Build the iOS app and run it on a simulator, or on a connected iPhone or iPad with --device"
 usage = '''
@@ -330,6 +348,10 @@ description = "Run the Maestro flows against the iOS app on a disposable simulat
 depends = ["ios:build"]
 tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
 run = "go run ./tools/appharness ios"
+
+[tasks."mobile:server"]
+description = "Run a throwaway Shisho server seeded with test books, to develop the app against (needs ffmpeg)"
+run = "go run ./tools/appharness serve"
 
 [tasks."android:test"]
 description = "Run the Android API types' decode tests"

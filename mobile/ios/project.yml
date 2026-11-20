@@ -21,6 +21,12 @@ settings:
 packages:
   ShishoAPI:
     path: ShishoAPI
+  # The app's SQLite layer: migrations, observation, and a pool of readers
+  # beside one writer. Pinned exactly; the resolved file lives in the
+  # generated project, which isn't committed.
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    exactVersion: 7.11.1
 targets:
   Shisho:
     type: application
@@ -29,6 +35,7 @@ targets:
       - path: Shisho
     dependencies:
       - package: ShishoAPI
+      - package: GRDB
     info:
       path: Shisho/Info.plist
       properties:
@@ -41,6 +48,7 @@ targets:
           UIColorName: LaunchBackground
         UIAppFonts:
           - Geist.ttf
+          - ShishoWordmark-Bold.ttf
         # Plain HTTP only to the local network; everything else is HTTPS.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

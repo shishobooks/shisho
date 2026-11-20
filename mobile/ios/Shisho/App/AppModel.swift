@@ -42,8 +42,6 @@ final class AppModel {
 
     private(set) var session: AccountSession?
     private(set) var syncStatus: SyncStatus = .idle
-    /// Changes whenever the catalog does, so screens read it again.
-    private(set) var catalogRevision = 0
     /// Set when the server ended this installation's sign-in, for the
     /// sign-in screen to explain.
     private(set) var signedOutAccount: Account?
@@ -161,7 +159,6 @@ final class AppModel {
         } catch {
             syncStatus = .failed(error.localizedDescription)
         }
-        catalogRevision += 1
     }
 
     private func recordCapabilities(_ listed: [String], accountID: String) {

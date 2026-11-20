@@ -9,7 +9,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// RegisterRoutes registers the Shisho app's Device surface under /app, at
+// RegisterRoutes registers the Shisho app's Device surface under /mobile, at
 // the root beside the other Device families. It's registered in Demo Mode
 // too, where the middleware refuses signing in like every other write, so
 // the app hears why. Each Device's first connection is announced on
@@ -31,7 +31,7 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	signedIn := mw.BearerAuth(devices.ConnectionShishoApp)
 	// Middleware is per route, because a group's own middleware would add
 	// catch-all routes for the group's paths.
-	g := e.Group("/app")
+	g := e.Group("/mobile")
 	g.GET("/server", h.server)
 	g.POST("/sign-in", h.signIn)
 	g.DELETE("/device", h.signOut, signedIn)

@@ -273,8 +273,8 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /api/invites/:token", "POST /api/invites/:token/accept",
 				// The Shisho app's Device surface stays registered, so
 				// signing in hears Demo Mode's refusal.
-				"GET /app/server", "POST /app/sign-in", "DELETE /app/device",
-				"GET /app/changes", "GET /app/books/:id/cover",
+				"GET /mobile/server", "POST /mobile/sign-in", "DELETE /mobile/device",
+				"GET /mobile/changes", "GET /mobile/books/:id/cover",
 			} {
 				assert.True(t, routes[route], route)
 			}
@@ -360,7 +360,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 			// The Shisho app recognizes Demo Mode's own code on sign-in, sent
 			// before the handler reads the body, and every app and /api
 			// response carries the capability header.
-			req := httptest.NewRequest(http.MethodPost, "/app/sign-in", strings.NewReader(`{"username":"a","password":"b","installation_id":"i","device_name":"iPhone","app_version":"1"}`))
+			req := httptest.NewRequest(http.MethodPost, "/mobile/sign-in", strings.NewReader(`{"username":"a","password":"b","installation_id":"i","device_name":"iPhone","app_version":"1"}`))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			req.Header.Set(shishoapp.HeaderAppProtocol, "1")
 			rec := httptest.NewRecorder()
@@ -372,14 +372,14 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				assert.Equal(t, http.StatusUnauthorized, rec.Code, rec.Body.String())
 			}
 			assert.Contains(t, rec.Header(), shishoapp.HeaderCapabilities)
-			for _, path := range []string{"/app/server", "/api/auth/status", "/api/books", "/app/nope"} {
+			for _, path := range []string{"/mobile/server", "/api/auth/status", "/api/books", "/mobile/nope"} {
 				rec := httptest.NewRecorder()
 				e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
 				assert.Contains(t, rec.Header(), shishoapp.HeaderCapabilities, path)
 			}
 			rec = httptest.NewRecorder()
-			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/nope", nil))
-			assert.Equal(t, http.StatusNotFound, rec.Code, "an unknown /app path is a JSON 404, not the web app")
+			e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/mobile/nope", nil))
+			assert.Equal(t, http.StatusNotFound, rec.Code, "an unknown /mobile path is a JSON 404, not the web app")
 		})
 	}
 }

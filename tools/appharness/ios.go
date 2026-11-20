@@ -70,7 +70,7 @@ func runIOS(ctx context.Context, args []string) error {
 	if err := writeFixtures(ctx, library); err != nil {
 		return errors.Wrap(err, "make fixtures")
 	}
-	srv, err := startServer(ctx, root, dir)
+	srv, err := startServer(ctx, root, dir, "127.0.0.1")
 	if err != nil {
 		return err
 	}

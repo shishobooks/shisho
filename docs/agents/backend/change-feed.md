@@ -17,4 +17,4 @@ A transaction that reads before it writes can't take SQLite's write lock once an
 
 ## The Device surface is a contract
 
-Routes under `/app` serve app releases that can't be forced to update (ADR 0020). Within a protocol, responses only grow and request fields stay strict; removing or retyping a field in `pkg/shishoapp/types.go`, or a feed document, needs a new protocol. A feature the app turns on per server gets a capability in `capabilities` in `pkg/shishoapp/contract.go`.
+Routes under `/mobile` serve app releases that can't be forced to update (ADR 0020). Within a protocol, responses only grow and request fields stay strict; removing or retyping a field in `pkg/shishoapp/types.go`, or a feed document, needs a new protocol. A feature the app turns on per server gets a capability in `capabilities` in `pkg/shishoapp/contract.go`.

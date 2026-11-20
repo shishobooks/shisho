@@ -23,7 +23,7 @@ const (
 	HeaderAppVersion  = "X-Shisho-App-Version"
 
 	// HeaderCapabilities lists, comma-separated, the capabilities the
-	// server offers to the protocol a request names. Every /app and /api
+	// server offers to the protocol a request names. Every /mobile and /api
 	// response carries it, errors included, so a server rolled back to an
 	// older release is noticed mid-session. The KOReader plugin's routes
 	// use the same header for their own list.
@@ -116,14 +116,14 @@ func (k *Contract) info(protocol int, demoMode bool, renderKey string) ServerInf
 	}
 }
 
-// CapabilitiesHeader sets HeaderCapabilities on every /app and /api
+// CapabilitiesHeader sets HeaderCapabilities on every /mobile and /api
 // response, before any route runs, so refusals and errors carry it too. A
 // request without an accepted protocol, such as the web app's, gets an
 // empty list. Register it with Use before the Demo Mode middleware.
 func (k *Contract) CapabilitiesHeader(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		path := c.Request().URL.Path
-		if path == "/api" || path == "/app" || strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/app/") {
+		if path == "/api" || path == "/mobile" || strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/mobile/") {
 			c.Response().Header().Set(HeaderCapabilities, strings.Join(k.Capabilities(requestProtocol(c)), ","))
 		}
 		return next(c)

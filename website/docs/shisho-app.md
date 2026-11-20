@@ -36,7 +36,7 @@ The app calls these paths on your server. A reverse proxy has to pass them, as [
 
 | Path | Used for |
 |------|----------|
-| `/app/*` | Signing in, syncing the library, and covers |
+| `/mobile/*` | Signing in, syncing the library, and covers |
 
 ## Local Network and Certificates
 
@@ -70,8 +70,8 @@ A server with a certificate from your own certificate authority works once the a
 
 **Symptom:** Signing in fails away from home, where an authentication proxy guards the server, while the web app works after the proxy's login.
 
-**Likely cause:** The proxy answers `/app/*` with its own login page.
+**Likely cause:** The proxy answers `/mobile/*` with its own login page.
 
-**Verify:** While signed out of the proxy, open `https://your-server/app/server` in a browser. Shisho answers with a short JSON document; a login page means the proxy caught it.
+**Verify:** While signed out of the proxy, open `https://your-server/mobile/server` in a browser. Shisho answers with a short JSON document; a login page means the proxy caught it.
 
-**Fix:** Exempt `/app/*` from the proxy's login, as in [Paths the App Uses](#paths-the-app-uses).
+**Fix:** Exempt `/mobile/*` from the proxy's login, as in [Paths the App Uses](#paths-the-app-uses).

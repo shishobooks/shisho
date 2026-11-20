@@ -13,7 +13,11 @@ import { useCan } from "@/hooks/useCan";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { isDemoModeError, toastRequestError } from "@/libraries/api";
 import type { AdminDeviceResponse } from "@/types/generated/devices";
-import { CONNECTION_LABELS, DEVICE_TYPE_LABELS } from "@/utils/devices";
+import {
+  CONNECTION_LABELS,
+  DEVICE_TYPE_LABELS,
+  isShishoApp,
+} from "@/utils/devices";
 import { formatDateTime } from "@/utils/format";
 
 const AdminDevices = () => {
@@ -78,8 +82,10 @@ const AdminDevices = () => {
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground md:text-sm">
                   {device.owner.username}
-                  {device.connections.length > 0 &&
-                    ` · ${device.connections.map((c) => CONNECTION_LABELS[c]).join(", ")}`}
+                  {isShishoApp(device)
+                    ? device.app_version && ` · App ${device.app_version}`
+                    : device.connections.length > 0 &&
+                      ` · ${device.connections.map((c) => CONNECTION_LABELS[c]).join(", ")}`}
                   {device.last_accessed_at &&
                     ` · Last used ${formatDateTime(device.last_accessed_at)}`}
                 </p>

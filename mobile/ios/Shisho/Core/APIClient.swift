@@ -54,7 +54,7 @@ final class APIClient: @unchecked Sendable {
     // MARK: - Requests
 
     func serverInfo() async throws -> Shishoapp.ServerInfo {
-        try await json("app/server")
+        try await json("mobile/server")
     }
 
     func signIn(username: String, password: String, deviceName: String) async throws -> Shishoapp.SignInResponse {
@@ -63,7 +63,7 @@ final class APIClient: @unchecked Sendable {
             deviceName: deviceName, appVersion: Installation.appVersion
         )
         do {
-            return try await json("app/sign-in", method: "POST", body: try JSONEncoder().encode(payload))
+            return try await json("mobile/sign-in", method: "POST", body: try JSONEncoder().encode(payload))
         } catch APIError.server(let status, _) where status == 404 || status == 405 {
             throw APIError.serverPredatesApp
         } catch APIError.signedOut {
@@ -74,18 +74,18 @@ final class APIClient: @unchecked Sendable {
     /// Signs the Device out on the server, so its credential stops working.
     /// It's best effort: a sign-out offline still forgets the credential.
     func signOut() async {
-        _ = try? await data("app/device", method: "DELETE")
+        _ = try? await data("mobile/device", method: "DELETE")
     }
 
     func changes(cursor: Int, limit: Int = 500) async throws -> Shishoapp.FeedResponse {
-        try await json("app/changes", query: [URLQueryItem(name: "cursor", value: String(cursor)),
+        try await json("mobile/changes", query: [URLQueryItem(name: "cursor", value: String(cursor)),
                                               URLQueryItem(name: "limit", value: String(limit))])
     }
 
     /// A Book's cover at size pixels, keyed by its cover version so the
     /// server sends it as immutable.
     func cover(bookID: Int, version: String, size: Int, renderKey: String) async throws -> Data {
-        try await data("app/books/\(bookID)/cover", query: [
+        try await data("mobile/books/\(bookID)/cover", query: [
             URLQueryItem(name: "v", value: version),
             URLQueryItem(name: "size", value: String(size)),
             URLQueryItem(name: "r", value: renderKey),

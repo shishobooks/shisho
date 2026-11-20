@@ -3,12 +3,14 @@
 // Shisho server seeded with small fixtures made for the run.
 //
 //	go run ./tools/appharness ios [-app Shisho.app] [-flows dir] [-keep]
+//	go run ./tools/appharness serve
 //	go run ./tools/appharness fixtures DIR
 //	go run ./tools/appharness simulator -- COMMAND...
 //
 // `ios` builds and seeds a throwaway server, clones a base iOS simulator,
 // installs the app, runs every flow, and removes the clone and the server's
-// files afterwards. `simulator` runs a command against a disposable
+// files afterwards. `serve` runs the same seeded server until interrupted,
+// to develop the app against without touching real data. `simulator` runs a command against a disposable
 // simulator clone, its UDID in SIMULATOR_UDID, so several worktrees can run
 // tests at once. Use the mise tasks (`mise ios:harness`, `mise ios:test`),
 // which build what these need first.
@@ -34,6 +36,8 @@ func main() {
 	switch os.Args[1] {
 	case "ios":
 		err = runIOS(ctx, os.Args[2:])
+	case "serve":
+		err = runServe(ctx)
 	case "fixtures":
 		if len(os.Args) != 3 {
 			usage()
@@ -52,7 +56,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | fixtures DIR | simulator -- COMMAND...")
+	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | serve | fixtures DIR | simulator -- COMMAND...")
 	flag.PrintDefaults()
 	os.Exit(2)
 }

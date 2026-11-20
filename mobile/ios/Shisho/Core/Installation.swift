@@ -35,10 +35,10 @@ enum Installation {
         return "\(version) (\(build))"
     }
 
-    /// The hardware's name for the Device list, such as "iPhone". iOS gives
-    /// apps only the model unless they hold an entitlement for the name the
-    /// user chose, so people rename the Device on the web if they want.
+    /// The hardware's name for the Device list, such as "iPhone 17 Pro".
+    /// iOS gives apps the name the user chose only with an entitlement, so
+    /// this is the model; people can rename the Device on the web.
     @MainActor static var deviceName: String {
-        UIDevice.current.name
+        DeviceModels.current ?? UIDevice.current.model
     }
 }

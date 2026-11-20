@@ -27,11 +27,11 @@ func TestCover_FaultsAreServerErrors(t *testing.T) {
 
 	require.NoError(t, os.Chmod(cover, 0o000))
 	t.Cleanup(func() { _ = os.Chmod(cover, 0o600) })
-	rec := f.do(call{path: "/app/books/1/cover?v=1-1", credential: credential})
+	rec := f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential})
 	assertServerFault(t, rec)
 
 	f.exec(`DROP TABLE files`)
-	rec = f.do(call{path: "/app/books/1/cover?v=1-1", credential: credential})
+	rec = f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential})
 	assertServerFault(t, rec)
 }
 
