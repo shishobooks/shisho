@@ -58,6 +58,11 @@ run = "go run ./cmd/dev start"
 description = "Start API with hot reload via Air on a free port"
 run = "go run ./cmd/dev start air"
 
+[tasks."start:qa"]
+description = "Start a throwaway server with the web app and seeded test books, for QA in a browser or the Shisho app (needs ffmpeg)"
+depends = ["build"]
+run = "go run ./tools/appharness serve"
+
 [tasks."start:web"]
 description = "Start Vite dev server against this worktree's API (waits for it)"
 run = "go run ./cmd/dev start web"
@@ -322,7 +327,12 @@ run = '''
 set -e
 derived=build/DerivedData
 if [ -n "${usage_device:-}" ]; then
-  xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination "id=$usage_device" \
+  # xcodebuild finds a device by UDID or by name, but needs to be told which.
+  case "$usage_device" in
+    *[!0-9A-Fa-f-]*) destination="platform=iOS,name=$usage_device" ;;
+    *) destination="id=$usage_device" ;;
+  esac
+  xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination "$destination" \
     -derivedDataPath "$derived" -allowProvisioningUpdates -quiet build
   app="$derived/Build/Products/Debug-iphoneos/Shisho.app"
   xcrun devicectl device install app --device "$usage_device" "$app"
@@ -352,10 +362,6 @@ description = "Run the Maestro flows against the iOS app on a disposable simulat
 depends = ["ios:build"]
 tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
 run = "go run ./tools/appharness ios"
-
-[tasks."mobile:server"]
-description = "Run a throwaway Shisho server seeded with test books, to develop the app against (needs ffmpeg)"
-run = "go run ./tools/appharness serve"
 
 [tasks."android:test"]
 description = "Run the Android API types' decode tests"

@@ -35,8 +35,9 @@ type server struct {
 }
 
 // startServer builds the server from this checkout and starts it on dir's
-// files, listening on host. The server's output goes to dir/server.log.
-func startServer(ctx context.Context, root, dir, host string) (*server, error) {
+// files, listening on host and port, or a free port when port is 0. env adds
+// to the server's environment. The server's output goes to dir/server.log.
+func startServer(ctx context.Context, root, dir, host string, port int, env ...string) (*server, error) {
 	binary := filepath.Join(dir, "shisho")
 	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "./cmd/api")
 	build.Dir = root
@@ -44,9 +45,11 @@ func startServer(ctx context.Context, root, dir, host string) (*server, error) {
 	if err := build.Run(); err != nil {
 		return nil, errors.Wrap(err, "build the server")
 	}
-	port, err := freePort(ctx)
-	if err != nil {
-		return nil, err
+	if port == 0 {
+		var err error
+		if port, err = freePort(ctx); err != nil {
+			return nil, err
+		}
 	}
 	log, err := os.Create(filepath.Join(dir, "server.log"))
 	if err != nil {
@@ -66,6 +69,7 @@ func startServer(ctx context.Context, root, dir, host string) (*server, error) {
 		"UPDATE_CHECK_ENABLED=false",
 		"SYNC_INTERVAL_MINUTES=0",
 	)
+	cmd.Env = append(cmd.Env, env...)
 	cmd.Stdout, cmd.Stderr = log, log
 	// Its own process group, so stopping the run stops it and nothing else.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

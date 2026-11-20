@@ -65,6 +65,7 @@ All tasks are in `mise.toml` (`mise tasks` lists them). The ones with non-obviou
 
 - `mise setup` installs tools and dependencies and generates types. Run it after creating a worktree.
 - `mise start` runs the API with hot reload plus Vite. Several worktrees can run it at once, so each server may land on a different port than usual: read the URL it prints.
+- `mise start:qa` runs a throwaway server with the web app and seeded test books, deleted when it stops, on a port each worktree keeps. QA against it rather than the dev database, which someone else may be using.
 - `mise build` is the only way to refresh the frontend embedded in the binary; `pnpm build` alone does not. Never overwrite the tracked `pkg/frontend/dist/placeholder.html` with build output: it lets plain `go build` and `go test ./...` work without a frontend build.
 - `mise check:quiet` runs every check except Firefox e2e and the KOReader harness (CI runs them) and serializes across worktrees via `flock` (`brew install flock` on macOS). Use it instead of `mise check`.
 - `app/types/generated/` is gitignored output of `mise tygo`; change the Go structs, never the generated files.

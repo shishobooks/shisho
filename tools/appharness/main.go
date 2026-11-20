@@ -10,9 +10,9 @@
 // `ios` builds and seeds a throwaway server, clones a base iOS simulator,
 // installs the app, runs every flow, and removes the clone and the server's
 // files afterwards. `serve` runs the same seeded server until interrupted,
-// to develop the app against without touching real data. `simulator` runs a command against a disposable
-// simulator clone, its UDID in SIMULATOR_UDID, so several worktrees can run
-// tests at once. Use the mise tasks (`mise ios:harness`, `mise ios:test`),
+// for QA without touching real data (`mise start:qa`). `simulator` runs a
+// command against a disposable simulator clone, its UDID in SIMULATOR_UDID,
+// so several worktrees can run tests at once. Use the mise tasks (`mise ios:harness`, `mise ios:test`),
 // which build what these need first.
 package main
 

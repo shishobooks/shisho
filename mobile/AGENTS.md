@@ -21,7 +21,7 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 - **Command-line builds use `ios/build/`**, never Xcode's DerivedData, so a terminal build and Xcode, or two worktrees, never build or resolve packages in the same place. Pass `-derivedDataPath build/DerivedData` to any `xcodebuild` you run yourself.
 - **Simulator builds sign ad hoc with the team** (`CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=-`), as the tasks do. An unsigned build (`CODE_SIGNING_ALLOWED=NO`) can't write the Keychain, so it signs in and then forgets the sign-in on relaunch.
 - **Signing**: `ios/Config/Shisho.xcconfig` sets the maintainer's team and the bundle id. Someone else copies `Signing.local.xcconfig.example` to the gitignored `Signing.local.xcconfig`.
-- **Develop against `mise mobile:server`**, a throwaway server seeded with the harness's fixtures, never the dev database. It listens on the LAN too, so a phone can reach it.
+- **QA against `mise start:qa`**, a throwaway server seeded with the harness's fixtures, never the dev database. It listens on the LAN too, so a phone can reach it.
 - **Simulators are cloned per run** by `tools/appharness`, from a base it makes once. Never boot or change the base, and don't run tests on a simulator you share with another worktree; use `mise ios:test`.
 
 ## Checks
