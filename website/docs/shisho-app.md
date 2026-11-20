@@ -1,5 +1,9 @@
 # Shisho App
 
+:::note[In Development]
+The Shisho app is under development and isn't available to install yet. This page describes what the server supports for it, and grows as the app does.
+:::
+
 The Shisho app is Shisho's own app for iPhone and iPad. It keeps a copy of every library you can access on the device, so browsing works without a connection, and it syncs with your server whenever it can reach it.
 
 ## Server Requirements
