@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-19
+
+### Breaking Changes
+- **Scan, play, and download single-file M4A audiobooks as M4B (#891)**
+  - Shisho now parses `.m4a` audiobooks itself, as M4B, and the set of
+    extensions it parses itself can now grow in any release without counting
+    as a breaking change. A plugin file parser that declares `m4a` is no
+    longer used for those files; Shisho's own parser reads them, and each
+    scan's job log names the plugin it skipped. A metadata enricher that
+    lists `m4a` in `fileTypes` no longer matches them either: list `m4b`
+    instead.
+  - On the first scan after upgrading, every `.m4a` file Shisho already
+    tracks becomes an audiobook File of its Book, keeping its ID, and its
+    title, narrators, chapters, and cover are read from the file. Values a
+    plugin parser or a sidecar already set keep taking priority. If a bonus
+    track, such as an interview or a sample, should stay a supplement,
+    demote it in **Edit File**, which clears its file metadata. With
+    **Organize file structure during scans** on, the scan renames it like
+    any audiobook, and demoting it does not restore the old name. A `.m4a`
+    that is not a valid audio file shows a scan error until you demote or
+    delete it. An audiobook split into several `.m4a` parts gets one
+    audiobook File per part, as split `.m4b` audiobooks already do.
+  - Input converters still run on `.m4a` files. If a plugin converted
+    `.m4a` into `.m4b`, remove it, because both files now become audiobook
+    Files of the Book. Delete the `.m4b` copies it made, or demote them in
+    **Edit File**.
+
+### Features
+- Recommend metadata plugins on Discover, and finish the onboarding spec (#948)
+- Warn when shared links are copied at localhost, and match the destructive badge (#946)
+- Connect a device: a guided flow that waits for the device (#945)
+- Search inside the web ebook reader, with back and forward (#944)
+- Invite Links and Add User cleanup (#943)
+- Setup: a guided first-run flow from the admin account to the first scan (#942)
+- Web reader display settings, chapter marks, and book-styled footnotes (#940)
+- Scan progress on the library page, and a library-wide Scan for new metadata (#939)
+- Add Getting Started: a per-user list of first steps (#937)
+- Reading Direction on Page-based Files (#936)
+- Bookmarks and per-Book speed in the web audiobook player (#935)
+- KOReader plugin and server agree on capabilities (#933)
+- Explain every empty page and add a no-library-access state (#932)
+- Show admins when a newer Shisho release is out (#895)
+- KOReader onboarding: keep dismissed books' history, bulk reading status, clearer pairing (#894)
+- Scan, play, and download single-file M4A audiobooks as M4B (#891)
+- Warn before playback that ALAC audiobooks play only in Safari (#890)
+
+### Bug Fixes
+- Match usernames in any letter case, not only English letters (#947)
+- Show heatmap day stats on tap, and long totals in days (#941)
+- Recover browser tabs left open across an upgrade (#934)
+- Stop KOReader Devices from listing audiobooks they can't open (#893)
+- Show the plugin a job log line came from (#892)
+
+### Documentation
+- Add ADRs and glossary terms for the Shisho app (#931)
+- Add Invite Link and Getting Started to the glossary (#903)
+- Add ADRs for M4A support and growing built-in extensions (#888)
+
+### Testing
+- Keep the KOReader harness from running daily sync's timer early (#889)
+
+### CI/CD
+- Pin the demo authoring image to 0.8.0 (#884)
+
 ## [0.8.0] - 2026-11-14
 
 ### Breaking Changes
