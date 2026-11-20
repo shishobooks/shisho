@@ -64,11 +64,17 @@ struct Wordmark: View {
     var body: some View {
         HStack(alignment: .center, spacing: size * 0.22) {
             if showsMark {
-                Image("LogoMark")
-                    .resizable()
-                    .renderingMode(.template)
-                    .foregroundStyle(Theme.primary)
-                    .frame(width: size * 1.05, height: size * 1.05)
+                // The shelf in the primary color, with the web logo's spine
+                // highlights, title bands, and shading over it.
+                ZStack {
+                    Image("LogoMark")
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundStyle(Theme.primary)
+                    Image("LogoMarkDetails")
+                        .resizable()
+                }
+                .frame(width: size * 1.05, height: size * 1.05)
             }
             // 司書 sits raised beside the name, as the web app's superscript does.
             Text(verbatim: "SHISHO")

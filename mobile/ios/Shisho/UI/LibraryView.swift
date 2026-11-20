@@ -6,35 +6,18 @@ struct LibraryView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Namespace private var zoom
 
     @AppStorage("libraryID") private var storedLibraryID = 0
     @State private var books: [BookSummary]?
     @State private var libraries: [LibrarySummary]?
     /// How far the content has scrolled up, which shrinks the logo.
     @State private var scrolledBy: CGFloat = 0
-    @State private var width: CGFloat = 0
     @State private var showingAccount = false
-
-    private static let margin: CGFloat = 16
-    private static let columnSpacing: CGFloat = 10
 
     private var libraryID: Int? {
         storedLibraryID == 0 ? nil : storedLibraryID
     }
 
-    /// Three columns on a phone, two at accessibility text sizes, and as
-    /// many as fit at about 150 points on an iPad.
-    private var columns: Int {
-        if dynamicTypeSize.isAccessibilitySize { return sizeClass == .regular ? 3 : 2 }
-        guard sizeClass == .regular else { return 3 }
-        return max(4, Int((width - 2 * Self.margin + Self.columnSpacing) / (150 + Self.columnSpacing)))
-    }
-
-    private var cellWidth: CGFloat {
-        let n = CGFloat(columns)
-        return max(0, ((width - 2 * Self.margin - Self.columnSpacing * (n - 1)) / n).rounded(.down))
-    }
 
     private var libraryName: String {
         (libraries ?? []).first { $0.id == libraryID }?.name ?? String(localized: "All Libraries")
@@ -42,34 +25,33 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    Color.clear.frame(height: 0)
-                        .readsScrollOffset(in: "library")
-                    if let libraries, libraries.count > 1 {
-                        LibraryPicker(libraries: libraries, selection: $storedLibraryID, name: libraryName)
-                            .padding(.horizontal, Self.margin)
-                            .padding(.top, 8)
-                    }
-                    SyncBanner()
-                        .padding(.horizontal, Self.margin)
-                        .padding(.top, 14)
-                    if let books {
-                        sectionHeader(count: books.count)
-                        if books.isEmpty {
-                            emptyState
-                        } else {
-                            grid(books)
+            // The width comes from outside the scroll view, so a grid laid
+            // out for a wider screen can't hold it wide after a rotation.
+            GeometryReader { geometry in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ScrollTopMarker(space: "library")
+                        if let libraries, libraries.count > 1 {
+                            LibraryPicker(libraries: libraries, selection: $storedLibraryID, name: libraryName)
+                                .padding(.horizontal, GridLayout.margin)
+                                .padding(.top, 8)
+                        }
+                        SyncBanner()
+                            .padding(.horizontal, GridLayout.margin)
+                            .padding(.top, 14)
+                        if let books {
+                            sectionHeader(count: books.count)
+                            if books.isEmpty {
+                                emptyState
+                            } else {
+                                grid(books, width: geometry.size.width)
+                            }
                         }
                     }
+                    .padding(.bottom, 32)
                 }
-                .padding(.bottom, 32)
+                .onScrolledDistanceChange(space: "library") { scrolledBy = $0 }
             }
-            .coordinateSpace(name: "library")
-            .onPreferenceChange(ScrollOffsetKey.self) { offset in
-                scrolledBy = max(0, -offset)
-            }
-            .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
             .navigationBarTitleDisplayMode(.inline)
@@ -81,7 +63,6 @@ struct LibraryView: View {
             }
             .navigationDestination(for: BookSummary.self) { book in
                 BookDetailView(bookID: book.id, initial: book)
-                    .zoomDestination(id: book.id, in: zoom)
             }
             .sheet(isPresented: $showingAccount) {
                 AccountSheet()
@@ -112,22 +93,25 @@ struct LibraryView: View {
                 .foregroundStyle(Theme.mutedForeground)
                 .contentTransition(.numericText())
         }
-        .padding(.horizontal, Self.margin)
+        .padding(.horizontal, GridLayout.margin)
         .padding(.top, 20)
         .padding(.bottom, 14)
     }
 
-    private func grid(_ books: [BookSummary]) -> some View {
-        let column = GridItem(.fixed(cellWidth), spacing: Self.columnSpacing, alignment: .top)
-        return LazyVGrid(columns: Array(repeating: column, count: columns), spacing: 22) {
+    private func grid(_ books: [BookSummary], width: CGFloat) -> some View {
+        let layout = GridLayout(width: width, regular: sizeClass == .regular,
+                                accessibility: dynamicTypeSize.isAccessibilitySize)
+        let cellWidth = layout.cellWidth
+        let column = GridItem(.fixed(cellWidth), spacing: GridLayout.spacing, alignment: .top)
+        return LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(books) { book in
                 NavigationLink(value: book) {
-                    BookCell(book: book, width: cellWidth, zoom: zoom)
+                    BookCell(book: book, width: cellWidth)
                 }
                 .buttonStyle(PressableStyle())
             }
         }
-        .padding(.horizontal, Self.margin)
+        .padding(.horizontal, GridLayout.margin)
         .accessibilityIdentifier("library.grid")
     }
 
@@ -157,6 +141,27 @@ struct LibraryView: View {
         .padding(.horizontal, 32)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("library.empty")
+    }
+}
+
+/// The grid's columns for a width: as many as fit at about 110 points each
+/// on a phone, or 140 on an iPad, and half again at accessibility text
+/// sizes; never fewer than three, or two at those sizes. A phone shows three
+/// upright and about six on its side.
+struct GridLayout {
+    static let margin: CGFloat = 16
+    static let spacing: CGFloat = 10
+
+    let columns: Int
+    let cellWidth: CGFloat
+
+    init(width: CGFloat, regular: Bool, accessibility: Bool) {
+        let target: CGFloat = (regular ? 140 : 110) * (accessibility ? 1.5 : 1)
+        let available = width - 2 * Self.margin
+        let fits = Int((available + Self.spacing) / (target + Self.spacing))
+        columns = max(accessibility ? 2 : 3, fits)
+        let n = CGFloat(columns)
+        cellWidth = max(0, ((available - Self.spacing * (n - 1)) / n).rounded(.down))
     }
 }
 
@@ -248,12 +253,10 @@ private struct AccountButton: View {
 struct BookCell: View {
     let book: BookSummary
     let width: CGFloat
-    let zoom: Namespace.ID
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             CoverView(book: book, width: width)
-                .zoomSource(id: book.id, in: zoom)
                 .padding(.bottom, 4)
             Text(book.title)
                 .font(.geist(.subheadline, weight: .semibold))

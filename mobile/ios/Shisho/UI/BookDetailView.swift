@@ -22,6 +22,7 @@ struct BookDetailView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
+                ScrollTopMarker(space: "book")
                 if case .some(.none) = book {
                     ContentUnavailableView("This Book isn't in your Libraries anymore", systemImage: "book.closed")
                         .padding(.top, 80)
@@ -38,10 +39,9 @@ struct BookDetailView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable { await model.syncNow() }
-        .background(PullDownKeepsPage())
-        .coordinateSpace(name: "book")
-        .onPreferenceChange(ScrollOffsetKey.self) { offset in
-            let collapsed = offset < -200
+        .onScrolledDistanceChange(space: "book") { distance in
+            // The title shows in the bar once the cover has scrolled away.
+            let collapsed = distance > 210
             if collapsed != scrolled {
                 withAnimation(.easeOut(duration: 0.2)) { scrolled = collapsed }
             }
@@ -86,7 +86,6 @@ struct BookDetailView: View {
                 tint = averageColor(of: image)
             }
             .padding(.top, 8)
-            .readsScrollOffset(in: "book")
 
             if let detail = book ?? nil, let series = detail.series.first {
                 HStack(spacing: 8) {

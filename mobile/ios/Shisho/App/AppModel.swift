@@ -157,7 +157,18 @@ final class AppModel {
             return
         }
         isSyncing = true
-        defer { isSyncing = false }
+        let task = Task { await sync(session) }
+        syncTask = task
+        await task.value
+        syncTask = nil
+        isSyncing = false
+    }
+
+    /// The sync in flight, which losing the network cancels, so it says
+    /// Offline at once instead of waiting for its request to time out.
+    private var syncTask: Task<Void, Never>?
+
+    private func sync(_ session: AccountSession) async {
         do {
             try await session.sync.run()
             syncStatus = .idle
@@ -196,6 +207,7 @@ final class AppModel {
         if available {
             Task { await syncNow() }
         } else if session != nil {
+            syncTask?.cancel()
             syncStatus = .offline
         }
     }
