@@ -21,7 +21,7 @@ A download delivered through a [conversion](./supported-formats.md#conversions),
 OPDS uses HTTP Basic Authentication with your Shisho username and one of two passwords:
 
 - **Your account password**, the one used for the web interface. The catalog follows your default Delivery Rules and shows every library you can access.
-- **A Device credential**, from an **OPDS app** Device. The catalog follows that Device's Delivery Rules and [scope](./users-and-permissions.md#which-books). See [Sign In as a Device](#sign-in-as-a-device).
+- **A Device password**, from an **OPDS app** Device. The catalog follows that Device's Delivery Rules and [which books it reaches](./users-and-permissions.md#which-books). See [Sign In as a Device](#sign-in-as-a-device).
 
 Use HTTPS whenever the catalog is reachable outside a trusted local network.
 
@@ -31,7 +31,7 @@ The root catalog lists only libraries the authenticated user can access that hav
 
 ### Sign In as a Device
 
-Give each reading app its own Device so it gets its own Delivery Rules and scope, for example comics only in Panels and every EPUB in Thorium. For KOReader, add a [KOReader Device](./koreader.md) instead, which also syncs its reading position.
+Give each reading app its own Device so it gets its own Delivery Rules and books, for example comics only in Panels and every EPUB in Thorium. For KOReader, add a [KOReader Device](./koreader.md) instead, which also syncs its reading position.
 
 1. Open the user menu, select **Devices**, and click **Connect Device**. Choose **A reading app on a phone or tablet**, keep or change the name, and click **Continue**.
 2. Copy the **OPDS URL**, **Username**, and **Password** from the setup steps. They are also under **Setup > OPDS** on the Device's page.
@@ -39,9 +39,9 @@ Give each reading app its own Device so it gets its own Delivery Rules and scope
 
 Click **Next** in Shisho to wait for the app. The screen switches to **Connected!** on the app's first request. If it never does, **Not working?** opens [Troubleshooting](#troubleshooting).
 
-A new OPDS app Device follows your default Delivery Rules until you change its rules on its page; see [Devices](./users-and-permissions.md#delivery-rules-of-a-device). The credential is accepted only with its owner's username, in any letter case, and only exactly as shown. A wrong credential, or another user's, gets the same `401 Unauthorized` as a wrong password. Only an OPDS app or KOReader Device's credential signs in to OPDS; a Kobo, Kindle, or Browser Device's does not.
+A new OPDS app Device follows your default Delivery Rules until you change its rules on its page; see [Devices](./users-and-permissions.md#delivery-rules-of-a-device). The Device password is accepted only with its owner's username, in any letter case, and only exactly as shown. A wrong Device password, or another user's, gets the same `401 Unauthorized` as a wrong account password. Only an OPDS app or KOReader Device's password signs in to OPDS; a Kobo, Kindle, or Browser Device's does not.
 
-A Device scoped to one library shows only that library in the root catalog, with no **Lists** entry, and its **Currently Reading** and **To Read** hold only that library's books. A Device scoped to a list shows only that list, plus **Currently Reading** and **To Read** holding only the books on that list. A library, list, book, cover, or download outside the scope returns `404 Not Found`, as one that does not exist would.
+A Device set to one library shows only that library in the root catalog, with no **Lists** entry, and its **Currently Reading** and **To Read** hold only that library's books. A Device set to a list shows only that list, plus **Currently Reading** and **To Read** holding only the books on that list. A library, list, book, cover, or download the Device doesn't reach returns `404 Not Found`, as one that does not exist would.
 
 ## Catalog Structure
 
@@ -78,7 +78,7 @@ Shisho includes tested compatibility behavior for KOReader. Other OPDS 1.2 clien
 
 Add a **KOReader** Device and follow the [KOReader](./koreader.md) page, which covers the catalog and syncing your reading position.
 
-KOReader can't play audiobooks, so a [KOReader Device](./users-and-permissions.md#device-types) never receives them. Signed in with your account password or an OPDS app Device's credential instead, KOReader gets the M4B files the rules deliver and lists those books with nothing to download.
+KOReader can't play audiobooks, so a [KOReader Device](./users-and-permissions.md#device-types) never receives them. Signed in with your account password or an OPDS app Device's password instead, KOReader gets the M4B files the rules deliver and lists those books with nothing to download.
 
 ## Troubleshooting
 
@@ -96,8 +96,8 @@ KOReader can't play audiobooks, so a [KOReader Device](./users-and-permissions.m
 
 **Symptom:** A library or expected book is absent from the catalog.
 
-**Likely cause:** The account lacks library access, the [Delivery Rules](./supported-formats.md#delivery-rules) the catalog follows have no rule for the book's main file types, a Device's scope leaves the book out, the file is a supplement, or the book is an audiobook and the reading app signs in as a [KOReader Device](#koreader). A file can also be absent while its book is listed: only the files on a book's first matching rule are offered.
+**Likely cause:** The account lacks library access, the [Delivery Rules](./supported-formats.md#delivery-rules) the catalog follows have no rule for the book's main file types, a Device's **Which books** setting leaves the book out, the file is a supplement, or the book is an audiobook and the reading app signs in as a [KOReader Device](#koreader). A file can also be absent while its book is listed: only the files of the first rule that fits the book are offered.
 
 **Verify:** Check the user's library access. Signed in with the account password, compare the book's main-file types with the rules under **Preferences > Delivery Rules**; signed in as a Device, check **Delivery Rules** and **Which books** under **Advanced** on the Device's page.
 
-**Fix:** Grant the intended [library access](./users-and-permissions.md), add or reorder a rule for the required file type, or change the Device's scope. The web app's **Download as** menu offers every file type regardless of the rules. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).
+**Fix:** Grant the intended [library access](./users-and-permissions.md), add or reorder a rule for the required file type, or change which books the Device reaches. The web app's **Download as** menu offers every file type regardless of the rules. Supplements do not appear as acquisitions. See [Libraries, Scanning, and File Organization](./libraries.md) and [Supplement Files](./supplement-files.md).

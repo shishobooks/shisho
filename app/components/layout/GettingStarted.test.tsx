@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -219,6 +222,20 @@ describe("GettingStarted", () => {
     const button = await pill();
     expect(button).toHaveAttribute("data-pulse");
     expect(screen.queryByRole("dialog")).toBeNull();
+    // It grows once, or with reduced motion, a ring glows in place instead.
+    // Vitest loads CSS as an empty string, so the stylesheet is read from
+    // disk to check the glow exists.
+    expect(button.className).toContain(
+      "motion-safe:animate-[getting-started-pulse_",
+    );
+    expect(button.className).toContain(
+      "motion-reduce:animate-[getting-started-glow_",
+    );
+    const css = readFileSync(
+      path.resolve(import.meta.dirname, "../../index.css"),
+      "utf8",
+    );
+    expect(css).toContain("@keyframes getting-started-glow");
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1500);

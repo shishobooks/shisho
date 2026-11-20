@@ -240,3 +240,15 @@
     transform: scale(1);
   }
 }
+
+/* The same cue with reduced motion: a ring lights up around the pill and
+   fades, with nothing growing or moving. */
+@keyframes getting-started-glow {
+  0%,
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 70%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 0%, transparent);
+  }
+}

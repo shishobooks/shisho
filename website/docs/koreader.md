@@ -59,7 +59,7 @@ Signing in adds the server's catalog to KOReader's OPDS catalogs as **Shisho** w
 
 The Device's page shows when the Device last synced through the plugin, or, before its first sync, when it last connected, with the version of the plugin it reported. Its install steps fold away once the plugin has connected.
 
-Regenerating the Device's credential stops the plugin's sign-in working too. The server shows **Needs login** in the plugin's menu: choose **Sign in again** under it, and the OPDS catalog entry is updated with the new password.
+Regenerating the Device's password stops the plugin's sign-in working too. The server shows **Needs login** in the plugin's menu: choose **Sign in again** under it, and the OPDS catalog entry is updated with the new password.
 
 ## Update the Plugin
 
@@ -193,13 +193,13 @@ Shisho estimated the reading time progress sync reported. Wherever the plugin's 
 
 ### Needs Login
 
-Regenerating the Device's credential, or deleting the Device, marks the server **Needs login** in the plugin's menu. Everything you read stays queued on the e-reader until you choose **Sign in again**, and then arrives with nothing lost.
+Regenerating the Device's password, or deleting the Device, marks the server **Needs login** in the plugin's menu. Everything you read stays queued on the e-reader until you choose **Sign in again**, and then arrives with nothing lost.
 
 ## Books Shisho Doesn't Recognize
 
 The plugin can bring in a copy Shisho doesn't [recognize](#which-books-sync), such as one downloaded before v0.7.0 or edited elsewhere. When no server you're signed in to recognizes a book you read, the plugin sends each of them its reading history anyway: its reading sessions, status, Rating, and place, with what KOReader knows of it, such as its title, authors, identifiers, and language. Each server holds that history, counting it toward nothing yet, and lists the book under **Unrecognized Books** on the KOReader Device's page, at the top of the page while any are waiting to be linked. The **Devices** page shows how many are waiting on each Device.
 
-For each book, the page suggests books from your libraries: ones with a matching identifier, such as an ISBN, first, and then ones whose title and author match. Each book shows its best match, to link in one click, and **Dismiss**; **More**, beside its title, shows the other suggestions and a search. The books you've linked fold away under **Linked**, and the ones you've dismissed under **Dismissed**. Suggestions and search cover only the libraries you can access and the Device's [scope](./users-and-permissions.md#which-books), and never audiobooks. Only you see your Devices' unrecognized books, and a link is yours alone: another user with an identical copy links their own.
+For each book, the page suggests books from your libraries: ones with a matching identifier, such as an ISBN, first, and then ones whose title and author match. Each book shows its best match, to link in one click, and **Dismiss**; **More**, beside its title, shows the other suggestions and a search. The books you've linked fold away under **Linked**, and the ones you've dismissed under **Dismissed**. Suggestions and search cover only the libraries you can access and the books the Device [reaches](./users-and-permissions.md#which-books), and never audiobooks. Only you see your Devices' unrecognized books, and a link is yours alone: another user with an identical copy links their own.
 
 - **Link** links the copy to the file you choose, from a suggestion or a search. Everything held for it is added at once, without waiting for the e-reader to sync: its reading sessions, its status, its Rating, and its place. [History](#send-your-existing-reading-history) you sent for it follows history's rules, so it fills in only what Shisho has none of. From then on, the copy syncs like any other book.
 - **Unlink**, on a book under **Linked**, undoes a link made to the wrong book, after you confirm. The copy stops syncing with that book on all your Devices and is listed to link again, and its reading sessions from then on are held until you do. What the link already added stays, so delete any wrong [reading sessions](./reading-stats.md#calendar) or Read-throughs, and change the book's status, Rating, or place, by hand.
@@ -209,7 +209,7 @@ For each book, the page suggests books from your libraries: ones with a matching
 
 A linked copy keeps the reading sessions, status, and Rating of any other book, but its place syncs as a percentage only: its file isn't the one in your library, so an exact spot in it may not line up. The Shisho reader, a Kobo, and KOReader with the plugin open the book at that percentage, and KOReader goes to the same percentage of the copy. KOReader's built-in progress sync gets no place for it. Under **Linked**, the Device's page suggests downloading the book again from Shisho to sync your exact place.
 
-If the file a copy is linked to is later deleted, or falls outside your libraries or the Device's scope, the copy is listed to link again, and its reading sessions from then on are held for it.
+If the file a copy is linked to is later deleted, or falls outside your libraries or the books the Device reaches, the copy is listed to link again, and its reading sessions from then on are held for it.
 
 With [several servers](#several-servers):
 
@@ -244,7 +244,7 @@ KOReader doesn't tell Shisho when you read, so Shisho dates each position when t
 
 You can leave automatic sync off to save battery. KOReader then pushes only when you choose **Push progress from this device now** in the **Progress sync** menu, and it sends only the open book's position. Every book you read in the meantime keeps its place in KOReader and syncs the next time you open it and push. You give up accurate dates for the battery you save, so a Read-through can start or end on the day you pushed rather than the day you read. To correct those dates, use **Edit dates** in [Reading History](./reading-tracking.md#reading-history).
 
-Regenerating the Device's credential stops the old one working for sync as well as OPDS. Log in again in KOReader with the new one.
+Regenerating the Device's password stops the old one working for sync as well as OPDS. Log in again in KOReader with the new one.
 
 ## Which Books Sync
 
@@ -253,7 +253,7 @@ This applies to the plugin and to progress sync alike. KOReader identifies a boo
 - **Downloaded from Shisho**, over OPDS or from the web interface, individually or in a bulk download. A copy keeps syncing after you edit the book's metadata, without downloading it again.
 - **Copied over by hand**, as long as it is an unmodified copy of the file in your library.
 
-A book in a library you can't access, or outside the Device's [scope](./users-and-permissions.md#which-books), syncs as if Shisho didn't have it.
+A book in a library you can't access, or one the Device doesn't [reach](./users-and-permissions.md#which-books), syncs as if Shisho didn't have it.
 
 A copy that differs from those by even one byte does not sync, such as one edited elsewhere, unless you [link it](#books-shisho-doesnt-recognize) with the plugin. KOReader also remembers a book's hash, so a file replaced in place on the device keeps reporting the hash of the copy it replaced. Delete the book and its metadata from KOReader, then download it again.
 
@@ -273,7 +273,7 @@ With the plugin, marking a book finished in KOReader marks it **Read**; see [Sta
 
 ### Login Fails
 
-KOReader shows the message from Shisho. Check that the username is your Shisho username and the password is the credential of a KOReader Device, not your account password or the credential of another type of Device. If you regenerated the credential, log in with the new one. A deactivated user, or a role without Books Read, cannot log in.
+KOReader shows the message from Shisho. Check that the username is your Shisho username and the password is the **Device password** of a KOReader Device, not your account password or the password of another type of Device. If you regenerated the Device password, log in with the new one. A deactivated user, or a role without Books Read, cannot log in.
 
 ### The Plugin Says the Pairing Code Is Wrong or Has Expired
 

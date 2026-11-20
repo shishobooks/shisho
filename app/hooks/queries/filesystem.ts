@@ -36,11 +36,13 @@ export const useFilesystemBrowse = (
   });
 };
 
-// Counts the ebooks, audiobooks, and comics in folders a new library will
-// scan, and names any folder the server can't open and read. The server
-// stops after a few seconds on a large library and says so. With
-// foldersOnly it only checks the folders, which answers at once. Nothing
-// changes on the server, so each answer is cached per set of paths.
+// Counts the ebooks, audiobooks, and comics in folders, as Setup does for a
+// new library's and the plugin page does for the libraries', and names any
+// folder the server can't open and read. The server stops after a few
+// seconds on a large library and says so. With foldersOnly it only checks
+// the folders, which answers at once. Each answer is cached per set of
+// paths; installed plugins change which files count, so plugin changes
+// invalidate it (invalidateFileTypeDetection).
 const detectFileTypesOptions = (paths: string[], foldersOnly = false) => ({
   queryKey: [QueryKey.FilesystemDetect, paths, { foldersOnly }],
   queryFn: ({ signal }: { signal: AbortSignal }) => {
@@ -56,6 +58,16 @@ const detectFileTypesOptions = (paths: string[], foldersOnly = false) => ({
     );
   },
 });
+
+/** The most paths one detection takes, as DetectFileTypesPayload allows. */
+export const DETECT_MAX_PATHS = 100;
+
+/**
+ * Drops cached detection answers, for a plugin change that adds or removes
+ * file types the scanner imports.
+ */
+export const invalidateFileTypeDetection = (queryClient: QueryClient) =>
+  queryClient.invalidateQueries({ queryKey: [QueryKey.FilesystemDetect] });
 
 /** Detects the file types in the paths; an empty set asks nothing. */
 export const useDetectFileTypes = (paths: string[]) => {

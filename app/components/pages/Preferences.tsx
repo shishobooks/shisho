@@ -338,10 +338,10 @@ const PreferencesPage = () => {
             <h2 className="text-lg font-semibold mb-1">Delivery Rules</h2>
             <p className="text-sm text-muted-foreground mb-4">
               Choose which File Type each book&apos;s main download button and
-              OPDS deliver. For each book, the first rule matching one of its
-              files wins, separately for ebooks and audiobooks. OPDS leaves out
-              File Types with no rule; the download menu always offers every
-              File Type.
+              OPDS deliver. When a book has several files, the first rule that
+              fits one of them decides, separately for ebooks and audiobooks.
+              OPDS leaves out File Types with no rule; the download menu always
+              offers every File Type.
             </p>
             <DeliveryRulesEditor
               onHasChangesChange={setDeliveryRulesHaveChanges}

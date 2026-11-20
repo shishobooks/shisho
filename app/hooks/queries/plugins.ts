@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 
 import { QueryKey as BooksQueryKey } from "@/hooks/queries/books";
+import { invalidateFileTypeDetection } from "@/hooks/queries/filesystem";
 import { QueryKey as GenresQueryKey } from "@/hooks/queries/genres";
 import { QueryKey as PeopleQueryKey } from "@/hooks/queries/people";
 import { QueryKey as PublishersQueryKey } from "@/hooks/queries/publishers";
@@ -249,6 +250,16 @@ export const useInstallPlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginIdentifierTypes],
       });
+      // Loading the plugin appends it to each of its hooks' orders, which
+      // the plugin page reads to tell whether a metadata enricher is
+      // installed.
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.PluginOrder],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.LibraryPluginOrder],
+      });
+      invalidateFileTypeDetection(queryClient);
       invalidateGettingStarted(queryClient);
     },
   });
@@ -281,6 +292,7 @@ export const useUninstallPlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.LibraryPluginOrder],
       });
+      invalidateFileTypeDetection(queryClient);
       invalidateGettingStarted(queryClient);
     },
   });
@@ -330,6 +342,7 @@ export const useUpdatePlugin = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.LibraryPluginOrder],
       });
+      invalidateFileTypeDetection(queryClient);
     },
   });
 };
@@ -348,6 +361,8 @@ export const useUpdatePluginVersion = () => {
       queryClient.invalidateQueries({
         queryKey: [QueryKey.PluginsInstalled],
       });
+      // A new version can read different file types.
+      invalidateFileTypeDetection(queryClient);
     },
   });
 };

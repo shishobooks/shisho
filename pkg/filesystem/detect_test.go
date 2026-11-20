@@ -93,6 +93,99 @@ func TestDetect_CountsRecognizedFilesByCategory(t *testing.T) {
 	assert.Equal(t, DetectFileTypesResponse{Ebooks: 5, Audiobooks: 2, Comics: 1}, resp)
 }
 
+// fakePlugins stands in for the plugin manager: the extensions file parsers
+// read, each with the MIME types its parser declares, and the extensions
+// input converters read, each with the type it converts to.
+type fakePlugins struct {
+	parsers    map[string][]string
+	converters map[string]string
+}
+
+func (f fakePlugins) FileParserMIMETypes() map[string][]string { return f.parsers }
+func (f fakePlugins) ConverterTargetTypes() map[string]string  { return f.converters }
+
+func TestDetect_CountsFileTypesPluginsParse(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, rel := range []string{
+		"Books/Emma.epub",
+		"Books/Emma.fb2",
+		"Audio/Dune.MP3",
+		"Comics/Saga.cbr",
+		// No plugin parses these.
+		"notes.txt",
+		"Audio/cover.jpg",
+	} {
+		touch(t, root, rel)
+	}
+	h := newDetectHandler()
+	h.plugins = fakePlugins{parsers: map[string][]string{
+		"fb2": {"application/x-fictionbook+xml"},
+		"mp3": {"audio/mpeg"},
+		"cbr": {"application/vnd.comicbook-rar"},
+	}}
+
+	status, resp, body := detect(t, h, pathsBody(t, root))
+
+	require.Equal(t, http.StatusOK, status, body)
+	assert.Equal(t, DetectFileTypesResponse{Ebooks: 2, Audiobooks: 1, Comics: 1}, resp)
+}
+
+func TestDetect_CountsFileTypesPluginsConvert(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, rel := range []string{
+		"Books/Emma.docx",
+		"Comics/Saga.cb7",
+		"Audio/Dune.aax",
+	} {
+		touch(t, root, rel)
+	}
+	h := newDetectHandler()
+	h.plugins = fakePlugins{converters: map[string]string{
+		"docx": "epub",
+		"cb7":  "cbz",
+		"aax":  "m4b",
+	}}
+
+	status, resp, body := detect(t, h, pathsBody(t, root))
+
+	require.Equal(t, http.StatusOK, status, body)
+	assert.Equal(t, DetectFileTypesResponse{Ebooks: 1, Audiobooks: 1, Comics: 1}, resp)
+}
+
+func TestDetect_CountsComicArchivesAsComicsWhateverTheirMIMEType(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	touch(t, root, "Saga.cbr")
+	touch(t, root, "Saga 2.cbt")
+	h := newDetectHandler()
+	h.plugins = fakePlugins{parsers: map[string][]string{
+		"cbr": {"application/x-rar-compressed"},
+		"cbt": {"application/x-tar"},
+	}}
+
+	status, resp, body := detect(t, h, pathsBody(t, root))
+
+	require.Equal(t, http.StatusOK, status, body)
+	assert.Equal(t, DetectFileTypesResponse{Comics: 2}, resp)
+}
+
+func TestDetect_MatchesPluginTypesAsTheScannerDoes(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	touch(t, root, "Emma.fb2")
+	h := newDetectHandler()
+	// The scanner compares a file's lowercased extension with the type as
+	// the manifest spells it, so it never imports these files.
+	h.plugins = fakePlugins{parsers: map[string][]string{"FB2": nil}}
+
+	status, resp, body := detect(t, h, pathsBody(t, root))
+
+	require.Equal(t, http.StatusOK, status, body)
+	assert.Equal(t, DetectFileTypesResponse{}, resp)
+}
+
 func TestDetect_SumsEveryPathAndCountsAnOverlapOnce(t *testing.T) {
 	t.Parallel()
 	books := t.TempDir()
@@ -311,7 +404,7 @@ func TestDetect_CanceledRequestStops(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	_, err := NewService().DetectFileTypes(ctx, []string{root}, defaultDetectLimits)
+	_, err := NewService().DetectFileTypes(ctx, []string{root}, defaultDetectLimits, nil)
 
 	require.ErrorIs(t, err, context.Canceled)
 }

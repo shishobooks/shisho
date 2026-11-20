@@ -345,6 +345,53 @@ func TestManager_RegisteredFileExtensions_SkipsReserved(t *testing.T) {
 	assert.NotContains(t, exts, "pdf")
 }
 
+func TestManager_FileParserMIMETypes(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	service := NewService(db)
+	pluginDir := t.TempDir()
+
+	destDir := filepath.Join(pluginDir, "test", "audio-parser")
+	require.NoError(t, os.MkdirAll(destDir, 0755))
+	manifest := `{
+  "manifestVersion": 1,
+  "id": "audio-parser",
+  "name": "Audio Parser",
+  "version": "1.0.0",
+  "capabilities": {
+    "fileParser": {
+      "description": "Parses MP3 audiobooks",
+      "types": ["mp3", "m4b"],
+      "mimeTypes": ["audio/mpeg"]
+    }
+  }
+}`
+	mainJS := `var plugin = (function() {
+  return {
+    fileParser: {
+      parse: function(context) { return { title: "Test" }; }
+    }
+  };
+})();`
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "manifest.json"), []byte(manifest), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(destDir, "main.js"), []byte(mainJS), 0644))
+
+	mgr := NewManager(service, pluginDir, "")
+	ctx := context.Background()
+	require.NoError(t, service.InstallPlugin(ctx, &models.Plugin{
+		Scope:       "test",
+		ID:          "audio-parser",
+		Name:        "Audio Parser",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}))
+	require.NoError(t, mgr.LoadPlugin(ctx, "test", "audio-parser"))
+
+	// Shisho parses M4B itself, so only the plugin's own type is listed.
+	assert.Equal(t, map[string][]string{"mp3": {"audio/mpeg"}}, mgr.FileParserMIMETypes())
+}
+
 func TestManager_RegisteredConverterExtensions(t *testing.T) {
 	t.Parallel()
 	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "multi-hook", "multi-hook"})
@@ -367,6 +414,24 @@ func TestManager_RegisteredConverterExtensions(t *testing.T) {
 
 	exts := mgr.RegisteredConverterExtensions()
 	assert.Contains(t, exts, "docx")
+}
+
+func TestManager_ConverterTargetTypes(t *testing.T) {
+	t.Parallel()
+	mgr, svc := setupTestManager(t, struct{ scope, id, testdata string }{"test", "multi-hook", "multi-hook"})
+	ctx := context.Background()
+	require.NoError(t, svc.InstallPlugin(ctx, &models.Plugin{
+		Scope:       "test",
+		ID:          "multi-hook",
+		Name:        "Multi Hook Plugin",
+		Version:     "1.0.0",
+		Status:      models.PluginStatusActive,
+		InstalledAt: time.Now(),
+	}))
+	require.NoError(t, mgr.LoadPlugin(ctx, "test", "multi-hook"))
+
+	// The multi-hook plugin converts DOCX to EPUB.
+	assert.Equal(t, map[string]string{"docx": "epub"}, mgr.ConverterTargetTypes())
 }
 
 func TestManager_GetParserForType(t *testing.T) {

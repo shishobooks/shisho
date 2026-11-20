@@ -99,7 +99,7 @@ describe("BookDevicesPanel", () => {
       "Not delivered · No rule for EPUB or PDF",
     );
     expect((await row("Tablet")).getByText(/Not delivered/)).toHaveTextContent(
-      "Not delivered · Outside its scope",
+      "Not delivered · Not among the books it can reach",
     );
     expect(
       screen.getByRole("link", { name: "Manage Devices" }),

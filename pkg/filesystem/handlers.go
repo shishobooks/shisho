@@ -12,6 +12,9 @@ import (
 type handler struct {
 	filesystemService *Service
 	detectBudget      detectLimits
+	// plugins says which file types plugins add; nil when the server runs
+	// without plugins.
+	plugins pluginManager
 }
 
 func (h *handler) browse(c echo.Context) error {
@@ -54,7 +57,7 @@ func (h *handler) detect(c echo.Context) error {
 
 	limits := h.detectBudget
 	limits.foldersOnly = payload.FoldersOnly
-	resp, err := h.filesystemService.DetectFileTypes(c.Request().Context(), payload.Paths, limits)
+	resp, err := h.filesystemService.DetectFileTypes(c.Request().Context(), payload.Paths, limits, pluginCategories(h.plugins))
 	if err != nil {
 		return errors.WithStack(err)
 	}
