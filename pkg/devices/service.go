@@ -146,6 +146,12 @@ func (s *Service) GetByCredential(ctx context.Context, credential string) (*Devi
 	return device, nil
 }
 
+// ownerID selects the id of the user signing in as username, matched as
+// password sign-in matches it.
+func (s *Service) ownerID(username string) *bun.SelectQuery {
+	return auth.MatchUsername(s.db.NewSelect().Model((*models.User)(nil)).Column("u.id"), username)
+}
+
 // GetByOwnerCredential returns the Device of the user named username (in
 // any case, as password sign-in matches it) whose credential is exactly
 // credential, or nil. It compares against each of that user's Devices in
@@ -157,7 +163,7 @@ func (s *Service) GetByOwnerCredential(ctx context.Context, username, credential
 	}
 	devices := []*Device{}
 	err := s.selectDevices(&devices).
-		Where("d.user_id IN (SELECT id FROM users WHERE username = ? COLLATE NOCASE)", username).
+		Where("d.user_id = (?)", s.ownerID(username)).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
@@ -182,7 +188,7 @@ func (s *Service) GetByOwnerCredentialMD5(ctx context.Context, username, key, co
 	}
 	devices := []*Device{}
 	err := s.selectDevices(&devices).
-		Where("d.user_id IN (SELECT id FROM users WHERE username = ? COLLATE NOCASE)", username).
+		Where("d.user_id = (?)", s.ownerID(username)).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)

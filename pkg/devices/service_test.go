@@ -2,11 +2,14 @@ package devices
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/hex"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -291,4 +294,32 @@ func TestService_RecordPluginConnection_ReportsOnlyTheFirst(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, recorded.PluginVersion)
 	assert.Equal(t, "1.0.1", *recorded.PluginVersion)
+}
+
+// A Device signs in with its owner's username in any case, for every
+// letter, as password sign-in does.
+func TestService_GetByOwnerCredential_IgnoresCaseOfEveryLetter(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	service := NewService(db)
+	ctx := context.Background()
+	owner := &models.User{Username: "Émile", PasswordHash: "hash", RoleID: 1, IsActive: true}
+	_, err := db.NewInsert().Model(owner).Exec(ctx)
+	require.NoError(t, err)
+	device, err := service.Create(ctx, owner.ID, "KOReader", DeviceTypeKOReader)
+	require.NoError(t, err)
+	sum := md5.Sum([]byte(device.Credential)) //nolint:gosec // KOReader's protocol sends the password's MD5.
+	key := hex.EncodeToString(sum[:])
+
+	for _, typed := range []string{"Émile", "émile", "ÉMILE"} {
+		found, err := service.GetByOwnerCredential(ctx, typed, device.Credential)
+		require.NoError(t, err)
+		require.NotNil(t, found, typed)
+		assert.Equal(t, device.ID, found.ID)
+
+		found, err = service.GetByOwnerCredentialMD5(ctx, typed, key, ConnectionKOReaderSync)
+		require.NoError(t, err)
+		require.NotNil(t, found, typed)
+		assert.Equal(t, device.ID, found.ID)
+	}
 }

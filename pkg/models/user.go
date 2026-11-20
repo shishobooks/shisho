@@ -1,9 +1,12 @@
 package models
 
 import (
+	"context"
 	"time"
 
 	"github.com/uptrace/bun"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 )
 
 type User struct {
@@ -19,6 +22,12 @@ type User struct {
 	IsActive           bool      `json:"is_active"`
 	MustChangePassword bool      `json:"must_change_password"`
 
+	// UsernameKey is UsernameKey(Username), unique among users, so two
+	// usernames that differ only in case can't both exist. It is NULL only
+	// for users who already shared a key with another user when keys were
+	// added; auth.MatchUsername explains how they sign in.
+	UsernameKey string `bun:",nullzero" json:"-"`
+
 	// Getting Started state. pkg/gettingstarted owns it; creating a user sets
 	// its starting values. It stays out of user payloads: an admin never sees
 	// a user's progress.
@@ -33,6 +42,27 @@ type User struct {
 	// Relations
 	Role          *Role                `bun:"rel:belongs-to,join:role_id=id" json:"role,omitempty" tstype:"Role"`
 	LibraryAccess []*UserLibraryAccess `bun:"rel:has-many,join:id=user_id" json:"library_access,omitempty" tstype:"UserLibraryAccess[]"`
+}
+
+// UsernameKey returns the form of username that usernames are compared in:
+// with every letter's case folded (not just English letters, as SQLite's
+// NOCASE does) and in composed form, so "Émile", "ÉMILE", and "émile", or
+// "Straße" and "STRASSE", give the same key. It follows Unicode's canonical
+// caseless match: decompose, fold, compose.
+func UsernameKey(username string) string {
+	return norm.NFC.String(cases.Fold().String(norm.NFD.String(username)))
+}
+
+var _ bun.BeforeAppendModelHook = (*User)(nil)
+
+// BeforeAppendModel keys every inserted user by its username, so no insert
+// path can leave the key out. An update that changes the username lists
+// username_key among its columns as well.
+func (u *User) BeforeAppendModel(_ context.Context, query bun.Query) error {
+	if _, ok := query.(*bun.InsertQuery); ok && u.Username != "" {
+		u.UsernameKey = UsernameKey(u.Username)
+	}
+	return nil
 }
 
 // HasPermission checks if the user has a specific permission.

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -197,4 +198,38 @@ func TestServiceUpdate_LibraryAccessOnly_BumpsUpdatedAt(t *testing.T) {
 	require.NoError(t, err)
 	assert.WithinDuration(t, time.Now(), updated.UpdatedAt, time.Minute)
 	assert.WithinDuration(t, old, updated.CreatedAt, time.Second)
+}
+
+// A failed lookup of the usernames taken is a server fault (500), not a
+// username for the user to change.
+func TestService_TakenUsernameLookupFaultIsServerError(t *testing.T) {
+	t.Parallel()
+
+	db := testdb.New(t)
+	svc := NewService(db)
+	ctx := context.Background()
+	user, err := svc.Create(ctx, CreateUserOptions{
+		Username:         "reader",
+		Password:         "password123",
+		RoleID:           getRoleIDByName(ctx, t, db, models.RoleViewer),
+		AllLibraryAccess: true,
+	})
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `ALTER TABLE users RENAME COLUMN username_key TO username_key_gone`)
+	require.NoError(t, err)
+
+	var codeErr *errcodes.Error
+	user.Username = "someone"
+	err = svc.Update(ctx, user, UpdateOptions{Columns: []string{"username"}})
+	require.Error(t, err)
+	assert.NotErrorAs(t, err, &codeErr, "want a server fault, got %v", err)
+
+	_, err = svc.Create(ctx, CreateUserOptions{
+		Username:         "another",
+		Password:         "password123",
+		RoleID:           getRoleIDByName(ctx, t, db, models.RoleViewer),
+		AllLibraryAccess: true,
+	})
+	require.Error(t, err)
+	assert.NotErrorAs(t, err, &codeErr, "want a server fault, got %v", err)
 }

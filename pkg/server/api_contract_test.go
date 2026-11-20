@@ -71,6 +71,7 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	child := &models.Publisher{LibraryID: f.lib.ID, Name: "Child Imprint", ParentID: &parent.ID}
 	f.insert(child)
 	f.insert(&models.Plugin{Scope: "contract", ID: "installed", Name: "Installed", Version: "1.0.0", Status: models.PluginStatusActive, InstalledAt: time.Now()})
+	insertPermissionTestUser(f.ctx, t, f.db, "Émile", models.RoleViewer, nil)
 	// Files on disk for the download and page rejections: a main file of a
 	// type with no generator, a PDF that needs a password, and a CBZ with no
 	// stored page count.
@@ -781,6 +782,12 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			name:   "Add User with a username another user has",
 			method: http.MethodPost, path: "/api/users",
 			body:   `{"username":"ADMIN","password":"password123","role_id":1}`,
+			status: http.StatusUnprocessableEntity, code: "username_taken", message: "That username is already taken.",
+		},
+		{
+			name:   "renaming a user to another user's username in another case",
+			method: http.MethodPost, path: fmt.Sprintf("/api/users/%d", f.admin.ID),
+			body:   `{"username":"ÉMILE"}`,
 			status: http.StatusUnprocessableEntity, code: "username_taken", message: "That username is already taken.",
 		},
 		{
