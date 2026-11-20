@@ -25,6 +25,17 @@ final class RedirectPolicyTests: XCTestCase {
         XCTAssertFalse(allows("http://nas.local:3689/a", "http://nas.local:3690/a"))
     }
 
+    /// URLSession drops Authorization on a redirect, even one to the same
+    /// server, which would sign the device out right after signing in.
+    func testAFollowedRedirectKeepsTheCredential() throws {
+        var current = URLRequest(url: URL(string: "http://books.example.com/mobile/changes")!)
+        current.setValue("Bearer secret", forHTTPHeaderField: "Authorization")
+        let next = URLRequest(url: URL(string: "https://books.example.com/mobile/changes")!)
+        let followed = try XCTUnwrap(RedirectPolicy.follow(next, from: current))
+        XCTAssertEqual(followed.value(forHTTPHeaderField: "Authorization"), "Bearer secret")
+        XCTAssertNil(RedirectPolicy.follow(URLRequest(url: URL(string: "https://evil.example.net/")!), from: current))
+    }
+
     func testRefusesDowngradingToHTTP() {
         XCTAssertFalse(allows("https://books.example.com/a", "http://books.example.com/a"))
     }

@@ -136,13 +136,15 @@ final class AppModel {
     /// the catalog stays for signing in again.
     func signOut() async {
         guard let session else { return }
+        // Everything here first: the server's answer can take a while, and a
+        // sign-in meanwhile must not be undone when it comes.
         syncs.stop()
-        await session.client.signOut()
         Keychain.removeCredential(for: session.account.id)
         accounts.leaveCurrent()
         self.session = nil
         signedOutAccount = nil
         syncStatus = .idle
+        await session.client.signOut()
     }
 
     /// The server ended the sign-in. Its data stays, waiting for the same

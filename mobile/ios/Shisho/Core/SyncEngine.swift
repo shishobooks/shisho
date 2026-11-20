@@ -29,10 +29,14 @@ final class SyncEngine: Sendable {
                 guard restarts <= 2 else {
                     throw APIError.server(status: 0, message: String(localized: "The server kept asking to download the library again. Try syncing later."))
                 }
-                try store.startOverIfNeeded(serverSaidSo: true)
+                try store.startOverIfNeeded(serverSaidSo: true, at: state.cursor)
                 continue
             }
-            try store.apply(page)
+            // Another sync moved the copy on while this one waited, so this
+            // one's answer is stale.
+            guard try store.apply(page, after: state.cursor) else {
+                return
+            }
             if !page.hasMore {
                 return
             }

@@ -48,6 +48,9 @@ final class CoverCache: Sendable {
         guard let data = try? await client.cover(bookID: bookID, version: version, size: size, renderKey: renderKey),
               let image = UIImage(data: data)
         else { return otherSize(bookID: bookID, version: version) }
+        // A view that moved on to a newer version cancelled this download;
+        // its answer must not prune the newer version from disk.
+        guard !Task.isCancelled else { return image }
         removeOlderVersions(bookID: bookID, keeping: version)
         try? FileManager.default.createDirectory(at: bookFolder(bookID), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)

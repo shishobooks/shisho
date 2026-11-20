@@ -102,7 +102,8 @@ final class APIClient: Sendable {
     // from something else would end a download from the start and drop
     // every Book it hadn't reached.
 
-    /// A feed page, which always has its cursor and entries. A server from
+    /// A feed page, which always has its cursor, entries, and paging flags.
+    /// A server from
     /// before the app answers with the web app's page, which isn't JSON.
     static func feedPage(_ data: Data) throws -> Shishoapp.FeedResponse {
         struct Shape: Decodable {
@@ -112,6 +113,14 @@ final class APIClient: Sendable {
 
             let cursor: Int64
             let entries: [Anything]
+            let hasMore: Bool
+            let startOver: Bool
+
+            enum CodingKeys: String, CodingKey {
+                case cursor, entries
+                case hasMore = "has_more"
+                case startOver = "start_over"
+            }
         }
         guard (try? JSONDecoder().decode(Shape.self, from: data)) != nil,
               let page = try? makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: data)
@@ -201,16 +210,21 @@ final class APIClient: Sendable {
         let code = parsed?.error?.code ?? ""
         let message = parsed?.error?.message ?? HTTPURLResponse.localizedString(forStatusCode: status)
         let serverVersion = response.value(forHTTPHeaderField: "X-Shisho-Server-Version").flatMap { $0.isEmpty ? nil : $0 }
-        // Shisho answers every refusal with its error body. A 401 or 403
-        // without one came from something in front of it, and must not sign
-        // the device out.
-        if code.isEmpty, status == 401 || status == 403 {
+        // Shisho answers every refusal with its error body, and every 401
+        // with the code unauthorized. A 401 or 403 that isn't Shisho's came
+        // from something in front of it, and must not sign the device out.
+        if (status == 401 && code != "unauthorized") || (status == 403 && code.isEmpty) {
             return .blockedByProxy
         }
-        // A redirect RedirectPolicy refused to follow.
+        // A redirect RedirectPolicy refused to follow, to another server. Its
+        // address is the part before the app's paths, as the address field
+        // takes it.
         if (300..<400).contains(status) {
-            let location = response.value(forHTTPHeaderField: "Location") ?? ""
-            return .server(status: status, message: String(localized: "The server sends the app to another address (\(location)), which it doesn't follow with your sign-in. Use that address instead."))
+            var server = response.value(forHTTPHeaderField: "Location") ?? ""
+            if let paths = server.range(of: "/mobile/") {
+                server = String(server[..<paths.lowerBound])
+            }
+            return .server(status: status, message: String(localized: "The server sends the app to another server (\(server)), which it doesn't follow with your sign-in. Sign in with that address instead."))
         }
         switch (status, code) {
         case (403, "demo_mode"):

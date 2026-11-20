@@ -179,11 +179,15 @@ final class CatalogStore: Sendable {
     /// says the cursor is too old, or this version understands more of the
     /// feed than the copy was made with. The current copy stays on screen
     /// until the download finishes.
-    func startOverIfNeeded(serverSaidSo: Bool = false) throws {
+    ///
+    /// When the server said so, at is the cursor it said it about: if the
+    /// copy has moved on since, another sync already handled it.
+    func startOverIfNeeded(serverSaidSo: Bool = false, at cursor: Int? = nil) throws {
         try pool.write { db in
             let feedVersion = try Int.fetchOne(db, sql: "SELECT feed_version FROM sync_state WHERE id = 1") ?? 0
             let state = try CatalogStore.syncState(db)
             guard serverSaidSo || feedVersion < CatalogStore.feedVersion else { return }
+            if let cursor, cursor != state.cursor { return }
             // A copy made from the start that never got its first page is
             // still the one being made.
             if state.startingOver && state.cursor == 0 { return }
@@ -198,9 +202,19 @@ final class CatalogStore: Sendable {
     /// cursor past it. Kinds this version doesn't know are skipped (ADR
     /// 0023). The last page of a download from the start drops whatever it
     /// didn't send.
-    func apply(_ page: Shishoapp.FeedResponse) throws {
+    ///
+    /// after is the cursor the page was asked for. A page that doesn't
+    /// continue the copy, from a sync that was stopped and answered late, is
+    /// dropped and apply returns false. Tests that apply pages in order may
+    /// leave it out.
+    @discardableResult
+    func apply(_ page: Shishoapp.FeedResponse, after cursor: Int? = nil) throws -> Bool {
         try pool.write { db in
-            let generation = try CatalogStore.syncState(db).generation
+            let state = try CatalogStore.syncState(db)
+            if let cursor, cursor != state.cursor {
+                return false
+            }
+            let generation = state.generation
             for entry in page.entries {
                 switch entry.kind {
                 case .book:
@@ -235,6 +249,7 @@ final class CatalogStore: Sendable {
                 try db.execute(sql: "DELETE FROM libraries WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "UPDATE sync_state SET starting_over = 0 WHERE id = 1")
             }
+            return true
         }
     }
 

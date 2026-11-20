@@ -64,6 +64,17 @@ final class CatalogStoreTests: XCTestCase {
         XCTAssertEqual(try store.syncState().expiredThrough, 7)
     }
 
+    /// A page applies only on top of the cursor it was asked for. A sync that
+    /// was stopped and whose answer came late can't rewind a newer one.
+    func testAPageFromAnOlderCursorIsDropped() throws {
+        try store.startOverIfNeeded()
+        XCTAssertTrue(try store.apply(page(#"{"entries":[\#(library)],"cursor":2}"#), after: 0))
+        XCTAssertTrue(try store.apply(page(#"{"entries":[\#(book(1, "Dune"))],"cursor":4}"#), after: 2))
+        XCTAssertFalse(try store.apply(page(#"{"entries":[\#(book(2, "Emma"))],"cursor":3}"#), after: 2))
+        XCTAssertEqual(try store.syncState().cursor, 4)
+        XCTAssertEqual(try store.books(libraryID: nil).map(\.id), [1])
+    }
+
     func testIgnoresKindsItDoesntKnow() throws {
         try store.startOverIfNeeded()
         try store.apply(page(#"{"entries":[{"kind":"bookmark","id":9,"bookmark":{"seconds":3}},\#(book(1, "Dune"))],"cursor":2}"#))

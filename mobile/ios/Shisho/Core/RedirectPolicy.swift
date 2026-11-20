@@ -23,11 +23,24 @@ final class RedirectPolicy: NSObject, URLSessionTaskDelegate, Sendable {
         url.port ?? (url.scheme?.lowercased() == "https" ? 443 : 80)
     }
 
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest) async -> URLRequest? {
-        guard let from = task.currentRequest?.url, let to = request.url, Self.allows(from: from, to: to) else {
+    /// The redirect's request to follow, or nil to stop at the redirect.
+    /// URLSession drops Authorization on any redirect, so one that stays on
+    /// the server carries it on: without it the server would answer the
+    /// request as signed out.
+    static func follow(_ next: URLRequest, from current: URLRequest) -> URLRequest? {
+        guard let from = current.url, let to = next.url, allows(from: from, to: to) else {
             return nil
         }
-        return request
+        var next = next
+        if let credential = current.value(forHTTPHeaderField: "Authorization") {
+            next.setValue(credential, forHTTPHeaderField: "Authorization")
+        }
+        return next
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest) async -> URLRequest? {
+        guard let current = task.currentRequest else { return nil }
+        return Self.follow(request, from: current)
     }
 }

@@ -33,13 +33,16 @@ final class SyncRunner {
                 again = false
                 await work(isCurrent)
             } while again && isCurrent() && !Task.isCancelled
+            // Cleared here, with no suspension after the last check of again,
+            // so a request that arrives now starts a new run rather than
+            // joining one that's ending.
+            if isCurrent() {
+                self.task = nil
+                isRunning = false
+            }
         }
         self.task = task
         await task.value
-        if isCurrent() {
-            self.task = nil
-            isRunning = false
-        }
     }
 
     /// Cancels the run in flight and drops its result.

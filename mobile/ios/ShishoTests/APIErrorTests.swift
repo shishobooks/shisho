@@ -26,6 +26,7 @@ final class APIErrorTests: XCTestCase {
         XCTAssertEqual(APIClient.error(status: 401, response: response(401), body: page), .blockedByProxy)
         XCTAssertEqual(APIClient.error(status: 403, response: response(403), body: page), .blockedByProxy)
         XCTAssertEqual(APIClient.error(status: 401, response: response(401), body: Data(#"{"message":"Unauthorized"}"#.utf8)), .blockedByProxy)
+        XCTAssertEqual(error(401, "session_expired"), .blockedByProxy)
         XCTAssertEqual(error(403, "forbidden"), .noAccess)
     }
 
@@ -37,10 +38,25 @@ final class APIErrorTests: XCTestCase {
         XCTAssertThrowsError(try APIClient.feedPage(unrelated)) { XCTAssertEqual($0 as? APIError, .serverPredatesApp) }
         XCTAssertThrowsError(try APIClient.signInResponse(unrelated)) { XCTAssertEqual($0 as? APIError, .serverPredatesApp) }
 
-        let page = try APIClient.feedPage(Data(#"{"entries":[],"cursor":0,"has_more":false}"#.utf8))
+        // A page that doesn't say whether more follow could end a download
+        // from the start early.
+        XCTAssertThrowsError(try APIClient.feedPage(Data(#"{"entries":[],"cursor":42}"#.utf8)))
+        let page = try APIClient.feedPage(Data(#"{"entries":[],"cursor":0,"has_more":false,"start_over":false,"expired_through":0}"#.utf8))
         XCTAssertEqual(page.cursor, 0)
         let signIn = try APIClient.signInResponse(Data(#"{"credential":"abc","device_id":"dev-3","user":{"id":1,"username":"u"},"server":{}}"#.utf8))
         XCTAssertEqual(signIn.credential, "abc")
+    }
+
+    /// A refused redirect names the server it points at, in the form the
+    /// app's address field takes.
+    func testARefusedRedirectNamesTheServer() {
+        let response = HTTPURLResponse(url: URL(string: "https://example.com")!, statusCode: 307, httpVersion: nil,
+                                       headerFields: ["Location": "https://other.example.net/shisho/mobile/sign-in"])!
+        guard case .server(_, let message) = APIClient.error(status: 307, response: response, body: Data()) else {
+            return XCTFail("a refused redirect is a server message")
+        }
+        XCTAssertTrue(message.contains("https://other.example.net/shisho"), message)
+        XCTAssertFalse(message.contains("mobile/sign-in"), message)
     }
 
     func testMessagesNameBothVersions() {

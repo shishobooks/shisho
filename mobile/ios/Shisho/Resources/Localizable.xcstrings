@@ -133,7 +133,7 @@
     "The server kept asking to download the library again. Try syncing later." : {
 
     },
-    "The server sends the app to another address (%@), which it doesn't follow with your sign-in. Use that address instead." : {
+    "The server sends the app to another server (%@), which it doesn't follow with your sign-in. Sign in with that address instead." : {
 
     },
     "This Book isn't in your Libraries anymore" : {
