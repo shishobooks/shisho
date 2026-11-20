@@ -4,7 +4,7 @@ import ShishoAPI
 /// Brings an account's copy of the catalog up to date from the change feed
 /// (ADR 0023): every page after the stored cursor, each applied in one
 /// transaction.
-final class SyncEngine: @unchecked Sendable {
+final class SyncEngine: Sendable {
     private let client: APIClient
     private let store: CatalogStore
 

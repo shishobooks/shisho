@@ -87,13 +87,17 @@ outputs = [
 
 [tasks.lint]
 description = "Run Go linting"
-depends = ["lint:emdash", "lint:docrefs", "lint:versions", "lint:apptypes"]
+depends = ["lint:emdash", "lint:docrefs", "lint:versions", "lint:apptypes", "lint:swiftconcurrency"]
 # check:quiet sets SHISHO_GO_PACKAGE_DIRS; see the comment there.
 run = "golangci-lint run ${SHISHO_GO_PACKAGE_DIRS:-./...}"
 
 [tasks."lint:emdash"]
 description = "Reject em-dashes on lines added since the merge base with master"
 run = "./scripts/check-emdash.sh"
+
+[tasks."lint:swiftconcurrency"]
+description = "Keep the Shisho app's Swift in Swift 6 mode, with every concurrency escape hatch explained"
+run = "./scripts/check-swift-concurrency.sh"
 
 [tasks."lint:docrefs"]
 description = "Reject paths, identifiers, and section names in agent instruction files that do not exist"
@@ -146,8 +150,8 @@ description = "Run JS unit tests"
 run = "pnpm test:unit"
 
 [tasks."test:scripts"]
-description = "Run the script tests (changelog generation, em-dash check, doc reference check, tool version check)"
-run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
+description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, doc reference check, tool version check)"
+run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
 
 [tasks."test:e2e"]
 description = "Run E2E tests"

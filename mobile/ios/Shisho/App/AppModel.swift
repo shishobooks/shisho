@@ -12,9 +12,9 @@ final class AccountSession {
     let sync: SyncEngine
     let covers: CoverCache
 
-    init(account: Account, credential: String) throws {
+    init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void) throws {
         self.account = account
-        client = APIClient(baseURL: account.serverURL, credential: credential)
+        client = APIClient(baseURL: account.serverURL, credential: credential, onCapabilities: onCapabilities)
         try FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true)
         store = try CatalogStore(path: account.folder.appendingPathComponent("catalog.sqlite").path)
         sync = SyncEngine(client: client, store: store)
@@ -51,7 +51,7 @@ final class AppModel {
             if current.signedOut {
                 signedOutAccount = current
             } else if let credential = Keychain.credential(for: current.id) {
-                session = try? AccountSession(account: current, credential: credential)
+                session = try? openSession(account: current, credential: credential)
             }
         }
     }
@@ -96,7 +96,7 @@ final class AppModel {
         }
         accounts.save(account)
         do {
-            session = try AccountSession(account: account, credential: response.credential)
+            session = try openSession(account: account, credential: response.credential)
         } catch {
             throw SignInError(message: String(localized: "The app couldn't open its storage on this device. \(error.localizedDescription)"))
         }
@@ -136,11 +136,6 @@ final class AppModel {
     func syncNow() async {
         guard let session, syncStatus != .syncing else { return }
         syncStatus = .syncing
-        let client = session.client
-        let accountID = session.account.id
-        client.onCapabilities = { [weak self] listed in
-            Task { @MainActor in self?.recordCapabilities(listed, accountID: accountID) }
-        }
         do {
             try await session.sync.run()
             syncStatus = .idle
@@ -158,6 +153,14 @@ final class AppModel {
             }
         } catch {
             syncStatus = .failed(error.localizedDescription)
+        }
+    }
+
+    /// The account's session, whose responses keep its capabilities current.
+    private func openSession(account: Account, credential: String) throws -> AccountSession {
+        let accountID = account.id
+        return try AccountSession(account: account, credential: credential) { [weak self] listed in
+            Task { @MainActor in self?.recordCapabilities(listed, accountID: accountID) }
         }
     }
 

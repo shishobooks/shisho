@@ -30,18 +30,19 @@ enum APIError: Error, Equatable {
 /// skip the URL cache, so every response the app reads capabilities from
 /// came from the server (ADR 0020). The system's trust store, including
 /// root certificates the user installed and trusted, checks HTTPS.
-final class APIClient: @unchecked Sendable {
+final class APIClient: Sendable {
     let baseURL: URL
     private let credential: String?
     private let session: URLSession
     private let decoder = makeShishoDecoder()
+    /// Called with each capability list a server response carries. It's
+    /// fixed at creation, since requests on any thread read it.
+    private let onCapabilities: (@Sendable ([String]) -> Void)?
 
-    /// Called with each capability list a server response carries.
-    var onCapabilities: (@Sendable ([String]) -> Void)?
-
-    init(baseURL: URL, credential: String?) {
+    init(baseURL: URL, credential: String?, onCapabilities: (@Sendable ([String]) -> Void)? = nil) {
         self.baseURL = baseURL
         self.credential = credential
+        self.onCapabilities = onCapabilities
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
