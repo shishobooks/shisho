@@ -47,12 +47,31 @@ final class CoverCache: Sendable {
         }
         guard let data = try? await client.cover(bookID: bookID, version: version, size: size, renderKey: renderKey),
               let image = UIImage(data: data)
-        else { return nil }
+        else { return otherSize(bookID: bookID, version: version) }
         removeOlderVersions(bookID: bookID, keeping: version)
         try? FileManager.default.createDirectory(at: bookFolder(bookID), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
         memory[name] = image
         return image
+    }
+
+    /// The largest size kept of this version of the cover, for when the size
+    /// asked for can't be fetched: a Book seen in the grid offline still has
+    /// its cover on its own page.
+    private func otherSize(bookID: Int, version: String) -> UIImage? {
+        let prefix = "\(bookID)-\(version)-"
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: bookFolder(bookID).path)) ?? []
+        let largest = names
+            .filter { $0.hasPrefix(prefix) && $0.hasSuffix("-r\(renderKey).jpg") }
+            .max { size(of: $0, after: prefix) < size(of: $1, after: prefix) }
+        guard let largest, let data = try? Data(contentsOf: bookFolder(bookID).appendingPathComponent(largest)) else {
+            return nil
+        }
+        return UIImage(data: data)
+    }
+
+    private func size(of name: String, after prefix: String) -> Int {
+        Int(name.dropFirst(prefix.count).prefix { $0.isNumber }) ?? 0
     }
 
     private func bookFolder(_ bookID: Int) -> URL {

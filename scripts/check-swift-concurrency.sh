@@ -44,7 +44,9 @@ if [[ -f "$package" ]]; then
     done < <(grep -nE '\.v[45]([^0-9]|$)|swiftLanguageMode|swiftLanguageVersions' "$package" || true)
 fi
 
-escape='@unchecked[[:space:]]+Sendable|nonisolated[(]unsafe[)]|@preconcurrency|assumeIsolated'
+# Swift lets an escape hatch break across lines, so @unchecked counts on its
+# own, and so does a nonisolated( that ends its line.
+escape='@unchecked|nonisolated[[:space:]]*[(][[:space:]]*(unsafe|$)|@preconcurrency|assumeIsolated'
 while IFS= read -r -d '' file; do
     [[ -f "$file" ]] || continue
     while IFS= read -r match; do

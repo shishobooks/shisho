@@ -64,6 +64,8 @@ type FeedQuery struct {
 	Cursor int64 `query:"cursor" json:"cursor" validate:"min=0"`
 	// Limit is the most entries one page holds.
 	Limit int `query:"limit" json:"limit,omitempty" validate:"omitempty,min=1,max=1000"`
+	// ExpiredThrough is the last page's ExpiredThrough, or 0 from the start.
+	ExpiredThrough int64 `query:"expired_through" json:"expired_through,omitempty" validate:"min=0"`
 }
 
 // The kinds of record the feed sends. An app ignores a kind it doesn't
@@ -88,6 +90,11 @@ type FeedResponse struct {
 	// expired, so the app syncs again from 0 and drops what that doesn't
 	// send.
 	StartOver bool `json:"start_over"`
+	// ExpiredThrough says how far deletions had expired when the page was
+	// read. The app sends it back with the next cursor: a cursor below it is
+	// stale only if deletions expired after the app last saw it, so a
+	// download from the start can page past expired deletions it never had.
+	ExpiredThrough int64 `json:"expired_through"`
 }
 
 // FeedEntry is one record that changed. Exactly one of the record fields

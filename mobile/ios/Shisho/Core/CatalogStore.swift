@@ -58,6 +58,9 @@ struct SyncState: Equatable, Sendable {
     /// are kept on screen until it finishes, then dropped.
     var startingOver: Bool
     var lastSyncedAt: Date?
+    /// How far the server's deletions had expired at the last page, which
+    /// the next request sends back with the cursor.
+    var expiredThrough: Int = 0
 }
 
 /// One account's copy of the catalog: every screen reads from it, and the
@@ -97,6 +100,7 @@ final class CatalogStore: Sendable {
                 t.column("starting_over", .boolean).notNull().defaults(to: false)
                 t.column("feed_version", .integer).notNull().defaults(to: 0)
                 t.column("last_synced_at", .datetime)
+                t.column("expired_through", .integer).notNull().defaults(to: 0)
             }
             try db.execute(sql: "INSERT INTO sync_state (id) VALUES (1)")
             try db.create(table: "libraries") { t in
@@ -161,12 +165,13 @@ final class CatalogStore: Sendable {
     }
 
     static func syncState(_ db: Database) throws -> SyncState {
-        let row = try Row.fetchOne(db, sql: "SELECT cursor, generation, starting_over, last_synced_at FROM sync_state WHERE id = 1")
+        let row = try Row.fetchOne(db, sql: "SELECT cursor, generation, starting_over, last_synced_at, expired_through FROM sync_state WHERE id = 1")
         return SyncState(
             cursor: row?["cursor"] ?? 0,
             generation: row?["generation"] ?? 0,
             startingOver: row?["starting_over"] ?? false,
-            lastSyncedAt: row?["last_synced_at"]
+            lastSyncedAt: row?["last_synced_at"],
+            expiredThrough: row?["expired_through"] ?? 0
         )
     }
 
@@ -223,8 +228,8 @@ final class CatalogStore: Sendable {
                     continue
                 }
             }
-            try db.execute(sql: "UPDATE sync_state SET cursor = ?, last_synced_at = ? WHERE id = 1",
-                           arguments: [page.cursor, Date()])
+            try db.execute(sql: "UPDATE sync_state SET cursor = ?, expired_through = ?, last_synced_at = ? WHERE id = 1",
+                           arguments: [page.cursor, page.expiredThrough, Date()])
             if !page.hasMore, try CatalogStore.syncState(db).startingOver {
                 try db.execute(sql: "DELETE FROM books WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM libraries WHERE generation < ?", arguments: [generation])

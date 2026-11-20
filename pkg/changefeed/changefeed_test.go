@@ -19,12 +19,14 @@ func exec(t *testing.T, db *bun.DB, query string, args ...any) {
 	require.NoError(t, err)
 }
 
+// page reads a page for an installation that hasn't seen any deletions
+// expire.
 func page(t *testing.T, s *Service, user *models.User, cursor int64) *Page {
 	t.Helper()
 	var p *Page
 	require.NoError(t, s.Read(context.Background(), func(ctx context.Context, tx bun.Tx) error {
 		var err error
-		p, err = s.Page(ctx, tx, user, cursor, 10)
+		p, err = s.Page(ctx, tx, user, cursor, 0, 10)
 		return err
 	}))
 	return p

@@ -68,6 +68,9 @@ type Page struct {
 	// since expired, so the installation may have missed a deletion and has
 	// to sync again from the start.
 	StartOver bool
+	// ExpiredThrough is how far deletions had expired when the page was
+	// read, which the installation sends back with its next cursor.
+	ExpiredThrough int64
 }
 
 type Service struct {
@@ -90,15 +93,20 @@ func (s *Service) Read(ctx context.Context, fn func(ctx context.Context, tx bun.
 // and user sees those of the Libraries they can access. A deletion entry of
 // a Library that no longer exists is seen by everyone: it carries nothing
 // but ids, and the access that would have shown it went with the Library.
-func (s *Service) Page(ctx context.Context, tx bun.IDB, user *models.User, cursor int64, limit int) (*Page, error) {
+//
+// seenExpired is the ExpiredThrough of the installation's last page.
+func (s *Service) Page(ctx context.Context, tx bun.IDB, user *models.User, cursor, seenExpired int64, limit int) (*Page, error) {
 	var expired int64
 	err := tx.NewSelect().Model((*expiry)(nil)).Column("expired_through").Where("id = 1").Scan(ctx, &expired)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.WithStack(err)
 	}
-	// A cursor of 0 has seen nothing, so it can't have missed anything.
-	if cursor > 0 && cursor < expired {
-		return &Page{Entries: []*Entry{}, Cursor: cursor, StartOver: true}, nil
+	// A cursor below an expired deletion may have missed it, unless those
+	// deletions had already expired when the installation last synced: then
+	// it was downloading from the start and never had what they deleted. A
+	// cursor of 0 has seen nothing, so it can't have missed anything.
+	if cursor > 0 && cursor < expired && seenExpired < expired {
+		return &Page{Entries: []*Entry{}, Cursor: cursor, StartOver: true, ExpiredThrough: expired}, nil
 	}
 	// A cursor past every seq this log has handed out came from another
 	// database, such as the one before a restore from backup, so the
@@ -110,7 +118,7 @@ func (s *Service) Page(ctx context.Context, tx bun.IDB, user *models.User, curso
 		return nil, errors.WithStack(err)
 	}
 	if cursor > handedOut.Int64 {
-		return &Page{Entries: []*Entry{}, Cursor: cursor, StartOver: true}, nil
+		return &Page{Entries: []*Entry{}, Cursor: cursor, StartOver: true, ExpiredThrough: expired}, nil
 	}
 
 	entries := []*Entry{}
@@ -130,7 +138,7 @@ func (s *Service) Page(ctx context.Context, tx bun.IDB, user *models.User, curso
 		return nil, errors.WithStack(err)
 	}
 
-	page := &Page{Entries: entries, Cursor: cursor}
+	page := &Page{Entries: entries, Cursor: cursor, ExpiredThrough: expired}
 	if len(entries) > limit {
 		page.Entries = entries[:limit]
 		page.HasMore = true

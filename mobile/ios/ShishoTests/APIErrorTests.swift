@@ -29,6 +29,20 @@ final class APIErrorTests: XCTestCase {
         XCTAssertEqual(error(403, "forbidden"), .noAccess)
     }
 
+    /// The API types decode leniently, so any JSON decodes. A feed page or a
+    /// sign-in without the fields only Shisho sends came from something
+    /// else, and must not change what's on the device.
+    func testResponsesNeedShishosFields() throws {
+        let unrelated = Data(#"{"status":"ok"}"#.utf8)
+        XCTAssertThrowsError(try APIClient.feedPage(unrelated)) { XCTAssertEqual($0 as? APIError, .serverPredatesApp) }
+        XCTAssertThrowsError(try APIClient.signInResponse(unrelated)) { XCTAssertEqual($0 as? APIError, .serverPredatesApp) }
+
+        let page = try APIClient.feedPage(Data(#"{"entries":[],"cursor":0,"has_more":false}"#.utf8))
+        XCTAssertEqual(page.cursor, 0)
+        let signIn = try APIClient.signInResponse(Data(#"{"credential":"abc","device_id":"dev-3","user":{"id":1,"username":"u"},"server":{}}"#.utf8))
+        XCTAssertEqual(signIn.credential, "abc")
+    }
+
     func testMessagesNameBothVersions() {
         let tooOld = Messages.signIn(.serverTooOld(serverVersion: "v0.10.0"))
         XCTAssertTrue(tooOld.contains("v0.10.0"), tooOld)

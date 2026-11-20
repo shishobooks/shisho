@@ -635,7 +635,11 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 	// Update stored mod time and size so future rescans can skip unchanged
 	// files. The write bumps updated_at, which keys cover and page URLs and
 	// moves the Book in the change log, so it's skipped when neither changed.
-	if fileStat != nil && fileStatChanged(fileStat, file) {
+	// A refresh or reset of a page-based file writes it anyway: it dropped the
+	// cached pages above, and bytes can change under the same size and mtime,
+	// so browsers must refetch the pages too.
+	pagesReread := (opts.ForceRefresh || opts.Reset) && models.IsPageBasedFileType(file.FileType)
+	if fileStat != nil && (pagesReread || fileStatChanged(fileStat, file)) {
 		modTime := fileStat.ModTime()
 		file.FileModifiedAt = &modTime
 		file.FilesizeBytes = fileStat.Size()

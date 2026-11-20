@@ -41,7 +41,6 @@ final class APIClient: Sendable {
     let baseURL: URL
     private let credential: String?
     private let session: URLSession
-    private let decoder = makeShishoDecoder()
     /// Called with each capability list a server response carries. It's
     /// fixed at creation, since requests on any thread read it.
     private let onCapabilities: (@Sendable ([String]) -> Void)?
@@ -56,7 +55,12 @@ final class APIClient: Sendable {
         configuration.httpCookieStorage = nil
         configuration.timeoutIntervalForRequest = 30
         configuration.waitsForConnectivity = false
-        session = URLSession(configuration: configuration)
+        session = URLSession(configuration: configuration, delegate: RedirectPolicy(), delegateQueue: nil)
+    }
+
+    deinit {
+        // The session holds its delegate until it's invalidated.
+        session.finishTasksAndInvalidate()
     }
 
     // MARK: - Requests
@@ -67,7 +71,7 @@ final class APIClient: Sendable {
             deviceName: deviceName, appVersion: Installation.appVersion
         )
         do {
-            return try await json("mobile/sign-in", method: "POST", body: try JSONEncoder().encode(payload))
+            return try APIClient.signInResponse(await data("mobile/sign-in", method: "POST", body: try JSONEncoder().encode(payload)))
         } catch APIError.server(let status, _) where status == 404 || status == 405 {
             throw APIError.serverPredatesApp
         } catch APIError.signedOut {
@@ -81,9 +85,46 @@ final class APIClient: Sendable {
         _ = try? await data("mobile/device", method: "DELETE")
     }
 
-    func changes(cursor: Int, limit: Int = 500) async throws -> Shishoapp.FeedResponse {
-        try await json("mobile/changes", query: [URLQueryItem(name: "cursor", value: String(cursor)),
-                                              URLQueryItem(name: "limit", value: String(limit))])
+    /// The changes after cursor. expiredThrough is the last page's, so the
+    /// server can tell a cursor that missed expired deletions from one that
+    /// was downloading from the start when they expired.
+    func changes(cursor: Int, expiredThrough: Int, limit: Int = 500) async throws -> Shishoapp.FeedResponse {
+        try APIClient.feedPage(await data("mobile/changes", query: [
+            URLQueryItem(name: "cursor", value: String(cursor)),
+            URLQueryItem(name: "expired_through", value: String(expiredThrough)),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ]))
+    }
+
+    // The API types decode leniently (ADR 0020), so any JSON decodes as
+    // one, with every field at its zero value. A response that changes what's
+    // on the device must have the fields only Shisho sends: an empty page
+    // from something else would end a download from the start and drop
+    // every Book it hadn't reached.
+
+    /// A feed page, which always has its cursor and entries. A server from
+    /// before the app answers with the web app's page, which isn't JSON.
+    static func feedPage(_ data: Data) throws -> Shishoapp.FeedResponse {
+        struct Shape: Decodable {
+            struct Anything: Decodable {
+                init(from decoder: Decoder) throws {}
+            }
+
+            let cursor: Int64
+            let entries: [Anything]
+        }
+        guard (try? JSONDecoder().decode(Shape.self, from: data)) != nil,
+              let page = try? makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: data)
+        else { throw APIError.serverPredatesApp }
+        return page
+    }
+
+    /// A sign-in, which always names its credential, Device, and user.
+    static func signInResponse(_ data: Data) throws -> Shishoapp.SignInResponse {
+        guard let response = try? makeShishoDecoder().decode(Shishoapp.SignInResponse.self, from: data),
+              !response.credential.isEmpty, !response.deviceId.isEmpty, response.user.id > 0
+        else { throw APIError.serverPredatesApp }
+        return response
     }
 
     /// A Book's cover at size pixels, keyed by its cover version so the
@@ -97,17 +138,6 @@ final class APIClient: Sendable {
     }
 
     // MARK: - Plumbing
-
-    private func json<T: Decodable>(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil) async throws -> T {
-        let data = try await data(path, method: method, query: query, body: body)
-        do {
-            return try decoder.decode(T.self, from: data)
-        } catch {
-            // A server from before the app answers its paths with the web
-            // app's page.
-            throw APIError.serverPredatesApp
-        }
-    }
 
     private func data(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil,
                       readsCapabilities: Bool = true) async throws -> Data {
@@ -176,6 +206,11 @@ final class APIClient: Sendable {
         // the device out.
         if code.isEmpty, status == 401 || status == 403 {
             return .blockedByProxy
+        }
+        // A redirect RedirectPolicy refused to follow.
+        if (300..<400).contains(status) {
+            let location = response.value(forHTTPHeaderField: "Location") ?? ""
+            return .server(status: status, message: String(localized: "The server sends the app to another address (\(location)), which it doesn't follow with your sign-in. Use that address instead."))
         }
         switch (status, code) {
         case (403, "demo_mode"):

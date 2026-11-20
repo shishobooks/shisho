@@ -55,6 +55,15 @@ final class CatalogStoreTests: XCTestCase {
         XCTAssertEqual(try store.syncState().cursor, 5)
     }
 
+    /// How far the server's deletions had expired is kept with the cursor,
+    /// in the same transaction, for the next request to send back.
+    func testKeepsTheExpiryWithTheCursor() throws {
+        try store.startOverIfNeeded()
+        try store.apply(page(#"{"entries":[\#(library)],"cursor":2,"expired_through":7}"#))
+        XCTAssertEqual(try store.syncState().cursor, 2)
+        XCTAssertEqual(try store.syncState().expiredThrough, 7)
+    }
+
     func testIgnoresKindsItDoesntKnow() throws {
         try store.startOverIfNeeded()
         try store.apply(page(#"{"entries":[{"kind":"bookmark","id":9,"bookmark":{"seconds":3}},\#(book(1, "Dune"))],"cursor":2}"#))

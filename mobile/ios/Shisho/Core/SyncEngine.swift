@@ -20,8 +20,8 @@ final class SyncEngine: Sendable {
         try store.startOverIfNeeded()
         var restarts = 0
         while true {
-            let cursor = try store.syncState().cursor
-            let page = try await client.changes(cursor: cursor)
+            let state = try store.syncState()
+            let page = try await client.changes(cursor: state.cursor, expiredThrough: state.expiredThrough)
             if page.startOver {
                 restarts += 1
                 // A server that keeps answering "start over" can't be synced

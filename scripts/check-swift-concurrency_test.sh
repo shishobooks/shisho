@@ -81,6 +81,14 @@ expect_pass "reason in the comment block above"
 printf '// concurrency-exception: reason\nlet x = 1\nfinal class Box: @unchecked Sendable {}\n' > mobile/ios/Shisho/Box.swift
 expect_fail "code between the reason and the escape hatch" "Box.swift:3:"
 
+# Swift lets an escape hatch break across lines.
+printf 'final class Box: @unchecked\n    Sendable {}\n' > mobile/ios/Shisho/Box.swift
+expect_fail "@unchecked on its own line" "Box.swift:1:"
+printf 'nonisolated(\n    unsafe) var shared = 0\n' > mobile/ios/Shisho/Box.swift
+expect_fail "nonisolated( broken before unsafe" "Box.swift:1:"
+printf 'nonisolated(nonsending) func f() async {}\n' > mobile/ios/Shisho/Box.swift
+expect_pass "nonisolated(nonsending) is not an escape hatch"
+
 # A comment that only mentions an escape hatch isn't one.
 printf '// Never use @preconcurrency here.\nimport Foundation\n' > mobile/ios/Shisho/Box.swift
 expect_pass "escape hatch named in a comment"

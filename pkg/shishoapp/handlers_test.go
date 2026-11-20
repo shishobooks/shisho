@@ -169,7 +169,14 @@ func errorCode(t *testing.T, rec *httptest.ResponseRecorder) string {
 // changes reads one page of the feed after cursor.
 func (f *fixture) changes(credential string, cursor int64, limit int) FeedResponse {
 	f.t.Helper()
-	path := fmt.Sprintf("/mobile/changes?cursor=%d", cursor)
+	return f.changesSeen(credential, cursor, 0, limit)
+}
+
+// changesSeen asks for the changes after cursor from an installation that
+// last saw deletions expired through expiredThrough.
+func (f *fixture) changesSeen(credential string, cursor, expiredThrough int64, limit int) FeedResponse {
+	f.t.Helper()
+	path := fmt.Sprintf("/mobile/changes?cursor=%d&expired_through=%d", cursor, expiredThrough)
 	if limit > 0 {
 		path += fmt.Sprintf("&limit=%d", limit)
 	}
@@ -667,6 +674,39 @@ func TestFeed_ExpiredCursorStartsOver(t *testing.T) {
 	fresh := f.changes(credential, 0, 0)
 	assert.False(t, fresh.StartOver)
 	assert.Equal(t, []string{"library:1", "book:2"}, summary(fresh))
+}
+
+// A download from the start finishes even when its cursors fall below
+// deletions that had already expired when it began: it never had those
+// records, so it missed nothing. The cursor it ends on syncs on later.
+func TestFeed_DownloadAcrossExpiredDeletionsFinishes(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Fiction")
+	for id := 1; id <= 4; id++ {
+		f.addBook(id, 1, fmt.Sprintf("Book %d", id))
+	}
+	f.addBook(5, 1, "Gone")
+	f.exec(`DELETE FROM books WHERE id = 5`)
+	f.exec(`UPDATE change_log_entries SET changed_at = '2000-01-01 00:00:00' WHERE deleted`)
+	f.addUser()
+	credential := f.signIn()
+
+	var got []string
+	resp := f.changesSeen(credential, 0, 0, 2)
+	for {
+		require.False(t, resp.StartOver, "after %v", got)
+		got = append(got, summary(resp)...)
+		if !resp.HasMore {
+			break
+		}
+		resp = f.changesSeen(credential, resp.Cursor, resp.ExpiredThrough, 2)
+	}
+	assert.Equal(t, []string{"library:1", "book:1", "book:2", "book:3", "book:4"}, got)
+
+	next := f.changesSeen(credential, resp.Cursor, resp.ExpiredThrough, 0)
+	assert.False(t, next.StartOver)
+	assert.Empty(t, next.Entries)
 }
 
 // A cursor past anything this server's log handed out came from another

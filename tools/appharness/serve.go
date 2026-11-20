@@ -7,14 +7,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/internal/devtool"
 )
 
-// qaPort is where a QA server looks for a port first. It takes the first
-// free one from here, as `mise start` does, so a phone usually keeps the same
-// address between runs.
+// qaPort is where a worktree's first QA server looks for a port. It takes
+// the first free one from there, and the worktree remembers which it got and
+// asks for that one first next time, so a phone keeps the same address
+// whichever worktree starts first.
 const qaPort = 3789
 
 // runServe starts the harness's seeded server and keeps it running until
@@ -25,11 +28,21 @@ func runServe(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "resolve the worktree")
 	}
-	lease, err := (&devtool.FilePortAllocator{LockRoot: env.PortLockRoot()}).Acquire(qaPort)
+	remembered := filepath.Join(env.CurrentRoot, "tmp", "qa-port")
+	preferred := qaPort
+	if saved, err := os.ReadFile(remembered); err == nil {
+		if port, err := strconv.Atoi(strings.TrimSpace(string(saved))); err == nil && port > 0 {
+			preferred = port
+		}
+	}
+	lease, err := (&devtool.FilePortAllocator{LockRoot: env.PortLockRoot()}).Acquire(preferred)
 	if err != nil {
 		return errors.Wrap(err, "reserve a port")
 	}
 	defer func() { _ = lease.Close() }()
+	if err := os.MkdirAll(filepath.Dir(remembered), 0o755); err == nil {
+		_ = os.WriteFile(remembered, []byte(strconv.Itoa(lease.Port())), 0o600)
+	}
 
 	dir, err := os.MkdirTemp("", "shisho-qa-server-")
 	if err != nil {

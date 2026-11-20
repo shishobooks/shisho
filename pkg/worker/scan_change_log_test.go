@@ -1,6 +1,9 @@
 package worker
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/shishobooks/shisho/internal/testgen"
@@ -63,12 +66,60 @@ func TestResync_UnchangedBookRecordsNothing(t *testing.T) {
 	require.Len(t, chaptersBefore, 3)
 
 	before := tc.changeLog()
-	for _, force := range []bool{false, true} {
-		for _, book := range books {
-			_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{BookID: book.ID, ForceRefresh: force}, nil)
-			require.NoError(t, err)
-		}
-		assert.Equal(t, before, tc.changeLog(), "force refresh %v", force)
+	for _, book := range books {
+		_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{BookID: book.ID}, nil)
+		require.NoError(t, err)
 	}
+	assert.Equal(t, before, tc.changeLog())
+
+	// A forced refresh records nothing either, except for a page-based File:
+	// its page URLs are keyed by updated_at, which a refresh moves so
+	// browsers drop pages it re-read (see TestForceRefresh_MovesThePageKey).
+	var comicBookID int
+	for _, book := range books {
+		if book.Title == "Comic" {
+			comicBookID = book.ID
+		}
+		_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{BookID: book.ID, ForceRefresh: true}, nil)
+		require.NoError(t, err)
+	}
+	require.NotZero(t, comicBookID)
+	after := tc.changeLog()
+	assert.Len(t, after, len(before))
+	moved := []string{}
+	for _, entry := range after {
+		if !slices.Contains(before, entry) {
+			moved = append(moved, entry[:strings.LastIndex(entry, ":")])
+		}
+	}
+	assert.Equal(t, []string{fmt.Sprintf("book:%d", comicBookID)}, moved)
 	assert.Equal(t, chaptersBefore, chapterIDs())
+}
+
+// A file's bytes can change while its size and modified time don't (a copy
+// that keeps them). A forced refresh re-reads it and drops the cached pages,
+// so it must also move updated_at, the key on the immutable page URLs, or
+// browsers keep showing the old pages.
+func TestForceRefresh_MovesThePageKey(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	libraryPath := t.TempDir()
+	tc.createLibrary([]string{libraryPath})
+	cbzDir := testgen.CreateSubDir(t, libraryPath, "Comic")
+	testgen.GenerateCBZ(t, cbzDir, "comic.cbz", testgen.CBZOptions{Title: "Comic", HasComicInfo: true, PageCount: 2})
+	require.NoError(t, tc.runScan())
+
+	files := tc.listFiles()
+	require.Len(t, files, 1)
+	before := files[0].UpdatedAt
+	books := tc.listBooks()
+	require.Len(t, books, 1)
+
+	_, err := tc.worker.scanInternal(tc.ctx, ScanOptions{BookID: books[0].ID}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, before, tc.listFiles()[0].UpdatedAt, "an unforced Resync of an unchanged file")
+
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{BookID: books[0].ID, ForceRefresh: true}, nil)
+	require.NoError(t, err)
+	assert.True(t, tc.listFiles()[0].UpdatedAt.After(before), "a forced refresh")
 }

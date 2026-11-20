@@ -163,7 +163,7 @@ func (h *handler) changes(c echo.Context) error {
 
 	var resp FeedResponse
 	err = h.feed.Read(ctx, func(ctx context.Context, tx bun.Tx) error {
-		page, err := h.feed.Page(ctx, tx, user, query.Cursor, limit)
+		page, err := h.feed.Page(ctx, tx, user, query.Cursor, query.ExpiredThrough, limit)
 		if err != nil {
 			return err
 		}
@@ -171,7 +171,10 @@ func (h *handler) changes(c echo.Context) error {
 		if err != nil {
 			return err
 		}
-		resp = FeedResponse{Entries: entries, Cursor: page.Cursor, HasMore: page.HasMore, StartOver: page.StartOver}
+		resp = FeedResponse{
+			Entries: entries, Cursor: page.Cursor, HasMore: page.HasMore,
+			StartOver: page.StartOver, ExpiredThrough: page.ExpiredThrough,
+		}
 		return nil
 	})
 	if err != nil {
