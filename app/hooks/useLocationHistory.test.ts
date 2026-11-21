@@ -81,4 +81,32 @@ describe("useLocationHistory", () => {
     await flush();
     expect(goTo).toHaveBeenCalledWith("turned-to");
   });
+
+  // foliate replaces the renderer when a Book opens, and the old one can be
+  // left mid-turn for good, such as on a section that never loads.
+  it("starts a Book opened again on moves of its own, not ones still waiting on the last", async () => {
+    const { view, relocate, startTurn, landTurn } = makeView();
+    const { result } = renderHook(() => useLocationHistory(view));
+    relocate("start");
+
+    startTurn();
+    const stale = vi.fn(() => relocate("old-book"));
+    act(() => void result.current.jump(stale).catch(() => {}));
+    await flush();
+
+    act(() => result.current.reset());
+    Object.assign(view, { renderer: { settled: () => Promise.resolve() } });
+    relocate("new-start");
+    const fresh = vi.fn(() => relocate("new-jumped-to"));
+    await act(() => result.current.jump(fresh));
+
+    expect(fresh).toHaveBeenCalled();
+    expect(stale).not.toHaveBeenCalled();
+    expect(result.current.canGoBack).toBe(true);
+
+    // Nor does it run once the old turn lands after all.
+    landTurn("new-jumped-to");
+    await flush();
+    expect(stale).not.toHaveBeenCalled();
+  });
 });

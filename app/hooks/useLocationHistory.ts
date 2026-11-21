@@ -35,6 +35,8 @@ export function useLocationHistory(view: HTMLElement | null) {
   const historyRef = useRef(new LocationHistory());
   const hereRef = useRef<Here | null>(null);
   const turnRef = useRef<Promise<unknown>>(Promise.resolve());
+  // Which Book's moves are queued: reset() starts a new queue.
+  const bookRef = useRef(0);
   const [state, setState] = useState({ canGoBack: false, canGoForward: false });
 
   const sync = useCallback(() => {
@@ -45,12 +47,14 @@ export function useLocationHistory(view: HTMLElement | null) {
     });
   }, []);
 
-  // Runs `task` once the moves before it and any page turn have landed.
+  // Runs `task` once the moves before it and any page turn have landed,
+  // unless another Book opened meanwhile.
   const takeTurn = useCallback(
-    <T>(task: () => Promise<T>) => {
+    (task: () => Promise<void>) => {
+      const book = bookRef.current;
       const turn = turnRef.current
         .then(() => (view as HistoryBook | null)?.renderer?.settled?.())
-        .then(task);
+        .then(() => (bookRef.current === book ? task() : undefined));
       turnRef.current = turn.catch(() => {});
       return turn;
     },
@@ -61,6 +65,10 @@ export function useLocationHistory(view: HTMLElement | null) {
   const reset = useCallback(() => {
     historyRef.current = new LocationHistory();
     hereRef.current = null;
+    // A new queue: the last Book's renderer, replaced mid-turn, may never
+    // let go of the old one.
+    bookRef.current += 1;
+    turnRef.current = Promise.resolve();
     sync();
   }, [sync]);
 
