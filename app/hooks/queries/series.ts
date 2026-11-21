@@ -108,11 +108,11 @@ export const useUpdateSeries = () => {
         payload,
       );
     },
-    onSuccess: (_data, variables) => {
-      // Saving resolves once the entity is fetched again, since its edit
-      // dialog fills from it when opened, and one reopened before then would
-      // show, and save again, what was there before.
-      const refetched = queryClient.invalidateQueries({
+    onSuccess: (data, variables) => {
+      // Its edit dialog fills from the series when reopened, so it holds what
+      // was saved at once rather than after the refetch below.
+      queryClient.setQueryData([QueryKey.RetrieveSeries, data.id], data);
+      queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrieveSeries, variables.seriesId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListSeries] });
@@ -123,7 +123,6 @@ export const useUpdateSeries = () => {
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],
       });
-      return refetched;
     },
   });
 };

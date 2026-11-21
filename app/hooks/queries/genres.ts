@@ -84,11 +84,12 @@ export const useUpdateGenre = () => {
     }) => {
       return API.request<GenreResponse>("PATCH", `/genres/${genreId}`, payload);
     },
-    onSuccess: (_data, variables) => {
-      // Saving resolves once the entity is fetched again, since its edit
-      // dialog fills from it when opened, and one reopened before then would
-      // show, and save again, what was there before.
-      const refetched = queryClient.invalidateQueries({
+    onSuccess: (data, variables) => {
+      // Its edit dialog fills from the genre when reopened, so it holds what
+      // was saved at once rather than after the refetch below. A rename can
+      // merge into another, which the response is, so it's keyed by its id.
+      queryClient.setQueryData([QueryKey.RetrieveGenre, data.id], data);
+      queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrieveGenre, variables.genreId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
@@ -97,7 +98,6 @@ export const useUpdateGenre = () => {
       // Reading Stats counts finished books by these names and filters by them.
       invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
-      return refetched;
     },
   });
 };

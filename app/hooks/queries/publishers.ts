@@ -32,11 +32,10 @@ export enum QueryKey {
 // Reparenting a publisher changes descendant-inclusive data on both sides of
 // the move and for every cached ancestor, so it invalidates both families
 // whole rather than the moved publisher's entries.
-const invalidatePublisherHierarchyQueries = (queryClient: QueryClient) =>
-  Promise.all([
-    queryClient.invalidateQueries({ queryKey: [QueryKey.RetrievePublisher] }),
-    queryClient.invalidateQueries({ queryKey: [QueryKey.PublisherFiles] }),
-  ]);
+const invalidatePublisherHierarchyQueries = (queryClient: QueryClient) => {
+  queryClient.invalidateQueries({ queryKey: [QueryKey.RetrievePublisher] });
+  queryClient.invalidateQueries({ queryKey: [QueryKey.PublisherFiles] });
+};
 
 export const usePublishersList = (
   query: ListPublishersQuery = {},
@@ -124,22 +123,25 @@ export const useUpdatePublisher = () => {
         payload,
       );
     },
-    onSuccess: (_data, variables) => {
-      // Saving resolves once the publisher is fetched again, since its edit
-      // dialog fills from it when opened, and one reopened before then would
-      // show, and save again, what was there before.
-      const refetched =
+    onSuccess: (data, variables) => {
+      // Its edit dialog fills from the publisher when reopened, so it holds what
+      // was saved at once rather than after the refetch below. A rename can
+      // merge into another, which the response is, so it's keyed by its id.
+      queryClient.setQueryData([QueryKey.RetrievePublisher, data.id], data);
+      if (
         variables.payload.parent_id !== undefined ||
         variables.payload.parent_name !== undefined
-          ? invalidatePublisherHierarchyQueries(queryClient)
-          : queryClient.invalidateQueries({
-              queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
-            });
+      ) {
+        invalidatePublisherHierarchyQueries(queryClient);
+      } else {
+        queryClient.invalidateQueries({
+          queryKey: [QueryKey.RetrievePublisher, variables.publisherId],
+        });
+      }
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPublishers] });
       // Invalidate book queries since they display publisher info on files
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.ListBooks] });
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
-      return refetched;
     },
   });
 };
