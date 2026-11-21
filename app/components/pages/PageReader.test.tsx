@@ -1061,9 +1061,17 @@ describe("PageReader position", () => {
   // nothing, so a jump to the end wouldn't finish the book.
   it("turns no page until a page shows", () => {
     flow.readingLoading = true;
+    chapters.data = [
+      { id: 1, title: "Opening", start_page: 0 },
+      { id: 2, title: "Middle", start_page: 4 },
+    ];
     renderReader(10);
 
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    expect(
+      screen.getByRole("combobox", { name: "Jump to chapter" }),
+    ).toBeDisabled();
+    expect(screen.queryByTestId("chapter-mark")).toBeNull();
     const progress = screen.getByRole("slider", { name: "Reading progress" });
     expect(progress).toHaveAttribute("aria-disabled", "true");
     act(() => progress.focus());

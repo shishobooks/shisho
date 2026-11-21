@@ -712,6 +712,8 @@ export default function PageReader({
           {/* Chapter dropdown */}
           {flatChapters.length > 0 && (
             <ReaderChapterSelect
+              // Nothing turns until a page shows (goToPage).
+              disabled={!flow}
               entries={flatChapters.map((ch) => ({
                 value: String(ch.id),
                 label: ch.title,
@@ -1046,7 +1048,8 @@ export default function PageReader({
               )}
               style={{ width: `${progressPercent}%` }}
             />
-            <ProgressMarks marks={progressMarks} rtl={rtl} />
+            {/* The marks jump, so they wait for a page as the rest do. */}
+            <ProgressMarks marks={flow ? progressMarks : []} rtl={rtl} />
           </div>
           {currentChapter && (
             <div className="text-xs text-muted-foreground mt-1">
