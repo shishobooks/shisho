@@ -99,7 +99,7 @@ func TestPositionRoutes_ListenedSecondsCountTowardStarting(t *testing.T) {
 	api := newReadingAPI(t, f.db, f.user)
 	path := fmt.Sprintf("/files/%d/position", audio.ID)
 
-	rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 30})
+	rec := api.do(http.MethodPost, path, map[string]any{"seconds": 75, "percentage": 0.02, "listened_seconds": 3})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.False(t, decode[UpdatePositionResponse](t, rec.Body.Bytes()).Started)
 

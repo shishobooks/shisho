@@ -125,8 +125,8 @@ type UpdatePositionPayload struct {
 	// finishes the Read-through underway.
 	AtEnd bool `json:"at_end,omitempty"`
 	// ListenedSeconds is how long the player has played in this sitting,
-	// including any session sent with the update. A minute of it starts or
-	// resumes a Read-through.
+	// including any session sent with the update. Five seconds of it start
+	// or resume a Read-through.
 	ListenedSeconds *float64 `json:"listened_seconds,omitempty" validate:"omitempty,min=0"`
 	// ListeningSince is when this sitting began: a Read-through it starts
 	// begins that day and takes what it already recorded. Out of range, more

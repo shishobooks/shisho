@@ -19,9 +19,9 @@ const RevertWindow = 15 * time.Minute
 
 const (
 	// AudioStartSeconds is how much of one sitting of listening counts as real
-	// progress: a minute of it, not a few seconds of checking what it sounds
-	// like or a seek to somewhere later.
-	AudioStartSeconds = 60.0
+	// progress: enough that pressing play by accident, or a seek to somewhere
+	// later, doesn't start a read.
+	AudioStartSeconds = 5.0
 	// AudioEndSeconds is how close to an audiobook's end counts as reaching
 	// it, so end credits don't stop it being marked read.
 	AudioEndSeconds = 60.0
@@ -96,7 +96,7 @@ type PositionUpdate struct {
 	ListenedSeconds float64
 	// ListeningSince is when this sitting of listening or reading began, for
 	// a source that knows. A sitting that starts a Read-through belongs to it
-	// from here, first minute included, and dates its begin day.
+	// from here, its first seconds included, and dates its begin day.
 	ListeningSince *time.Time
 	// Opened is a reader opened at this place by a link, such as a page
 	// thumbnail or a shared URL, which saves it as the place but isn't
@@ -403,8 +403,9 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 }
 
 // isRealProgress reports whether u's position is past where merely opening
-// the File leaves a reader: past the first page or screen, or a minute of
-// listening in one sitting. A Read-through already going needs no such minute.
+// the File leaves a reader: past the first page or screen, or
+// AudioStartSeconds of listening in one sitting. A Read-through already going
+// needs no such seconds.
 func isRealProgress(u PositionUpdate, underway *models.ReadThrough) bool {
 	switch {
 	case u.Locator.Seconds != nil:
@@ -420,7 +421,7 @@ func isRealProgress(u PositionUpdate, underway *models.ReadThrough) bool {
 }
 
 // claimSitting puts what u's sitting already recorded, before it knew it would
-// start a Read-through, on rtID, so its first minute counts toward the read.
+// start a Read-through, on rtID, so its first seconds count toward the read.
 func claimSitting(ctx context.Context, tx bun.Tx, u PositionUpdate, rtID int, since time.Time) error {
 	if u.ListeningSince == nil {
 		return nil

@@ -249,8 +249,8 @@ func TestJournal_PlacesLateListeningByItsTime(t *testing.T) {
 }
 
 // Listening starts and finishes a Read-through by the server's rules, as in
-// the web player: a minute of it starts one, and reaching the end finishes
-// it.
+// the web player: five seconds of it start one, and reaching the end
+// finishes it.
 func TestJournal_ListeningStartsAndFinishesTheReadThrough(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -261,7 +261,7 @@ func TestJournal_ListeningStartsAndFinishesTheReadThrough(t *testing.T) {
 	credential := f.signIn()
 
 	brief := position(5, 20, 0.03)
-	brief["listened_seconds"] = 20
+	brief["listened_seconds"] = 3
 	f.journal(credential, now, event("brief", JournalEventReadingPosition, now.Add(-10*time.Minute), brief))
 	assert.Zero(t, f.count(`SELECT COUNT(*) FROM read_throughs`))
 
