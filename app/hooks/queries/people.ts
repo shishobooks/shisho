@@ -111,7 +111,10 @@ export const useUpdatePerson = () => {
       );
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
+      // Saving resolves once the entity is fetched again, since its edit
+      // dialog fills from it when opened, and one reopened before then would
+      // show, and save again, what was there before.
+      const refetched = queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrievePerson, variables.personId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListPeople] });
@@ -124,6 +127,7 @@ export const useUpdatePerson = () => {
       queryClient.invalidateQueries({
         queryKey: [SearchQueryKey.GlobalSearch],
       });
+      return refetched;
     },
   });
 };

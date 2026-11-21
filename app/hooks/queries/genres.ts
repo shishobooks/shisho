@@ -85,7 +85,10 @@ export const useUpdateGenre = () => {
       return API.request<GenreResponse>("PATCH", `/genres/${genreId}`, payload);
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
+      // Saving resolves once the entity is fetched again, since its edit
+      // dialog fills from it when opened, and one reopened before then would
+      // show, and save again, what was there before.
+      const refetched = queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrieveGenre, variables.genreId],
       });
       queryClient.invalidateQueries({ queryKey: [QueryKey.ListGenres] });
@@ -94,6 +97,7 @@ export const useUpdateGenre = () => {
       // Reading Stats counts finished books by these names and filters by them.
       invalidateReadingRecords(queryClient);
       queryClient.invalidateQueries({ queryKey: [BooksQueryKey.RetrieveBook] });
+      return refetched;
     },
   });
 };
