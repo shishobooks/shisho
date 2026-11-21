@@ -1,0 +1,8 @@
+# Taps the player control ${CONTROL_ID}. The position ticks while playing, so
+# the tap doesn't wait for the screen to settle. Not a flow of its own.
+appId: ${APP_ID}
+---
+- tapOn:
+    id: ${CONTROL_ID}
+    waitToSettleTimeoutMs: 500
+    retryTapIfNoChange: false

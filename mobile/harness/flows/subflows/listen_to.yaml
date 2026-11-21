@@ -1,0 +1,18 @@
+# Opens the Book titled ${TITLE} from the Library and starts listening.
+# Not a flow of its own.
+appId: ${APP_ID}
+---
+- extendedWaitUntil:
+    visible: ${TITLE}
+    timeout: 30000
+- tapOn: ${TITLE}
+- scrollUntilVisible:
+    element:
+      id: book.listen
+    direction: DOWN
+- tapOn:
+    id: book.listen
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+    timeout: 15000

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -132,12 +134,42 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	var once sync.Once
+	var mu sync.Mutex
+	var offlineAt, onlineAt time.Time
 	mux := http.NewServeMux()
 	// The app can't reach a stopped server, as it can't in airplane mode.
 	mux.HandleFunc("POST /offline", func(w http.ResponseWriter, _ *http.Request) {
-		once.Do(srv.Stop)
+		srv.Stop()
+		mu.Lock()
+		offlineAt = time.Now()
+		mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
+	})
+	// The server comes back on the same address and data. A flow that needs
+	// the server calls it first, in case an earlier flow left it offline.
+	mux.HandleFunc("POST /online", func(w http.ResponseWriter, r *http.Request) {
+		if err := srv.Start(r.Context()); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		mu.Lock()
+		onlineAt = time.Now()
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// What the server holds of the harness user's listening to the Book
+	// titled ?title=, read from its database, which works offline too.
+	mux.HandleFunc("GET /reading", func(w http.ResponseWriter, r *http.Request) {
+		state, err := readReading(r.Context(), filepath.Join(srv.dir, "data.sqlite"), r.URL.Query().Get("title"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		mu.Lock()
+		state.OfflineAt, state.OnlineAt = unixOrZero(offlineAt), unixOrZero(onlineAt)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(state)
 	})
 	go func() { _ = http.Serve(listener, mux) }()
 	return &control{URL: "http://" + strings.TrimPrefix(listener.Addr().String(), "http://"), listener: listener}, nil

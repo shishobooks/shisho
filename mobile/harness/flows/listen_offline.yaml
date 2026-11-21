@@ -1,0 +1,83 @@
+# Listen while the server is offline, then reconnect: the session reaches
+# the server placed at the time it happened, not when it synced (#912).
+appId: ${APP_ID}
+name: Listen offline and sync later
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Harbor Lights
+# Another flow may have listened already: start from the beginning.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.prevChapter
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.prevChapter
+# A few seconds online, so the player buffers the whole (small) File.
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: ".*0:0[4-9]"
+    timeout: 30000
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+
+# Listening offline.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: ".*0:(1[8-9]|2[0-9])"
+    timeout: 40000
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.paused = maestro.copiedText}
+
+# The app is closed, which ends the session, and opened once the server is
+# back: what it kept offline syncs.
+- stopApp
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 3000
+    optional: true
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: miniplayer.open
+    timeout: 20000
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 6000
+    optional: true
+- runScript:
+    file: scripts/assert_offline_session.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights

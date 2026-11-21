@@ -76,7 +76,7 @@ final class CatalogStore: Sendable {
     /// The kinds and fields of the feed this version understands. When an
     /// app update understands more, raise it, and the catalog downloads
     /// again from the start in the background.
-    static let feedVersion = 1
+    static let feedVersion = 2
 
     let pool: DatabasePool
 
@@ -153,6 +153,81 @@ final class CatalogStore: Sendable {
                 t.column("release_date", .double)
                 t.column("page_count", .integer)
                 t.column("duration_seconds", .double)
+            }
+        }
+        // The journal (ADR 0024) and what the feed gained with it: chapters,
+        // and the user's own Reading Positions and Read-throughs. The journal
+        // can't be downloaded again, so this and every later change migrates.
+        migrator.registerMigration("v2: listening") { db in
+            try db.create(table: "book_file_chapters") { t in
+                t.column("file_id", .integer).notNull().references("book_files", onDelete: .cascade)
+                t.column("position", .integer).notNull()
+                t.column("chapter_id", .integer).notNull()
+                t.column("parent_id", .integer)
+                t.column("title", .text).notNull()
+                t.column("start_ms", .integer)
+                t.column("start_page", .integer)
+                t.column("href", .text)
+                t.primaryKey(["file_id", "position"])
+            }
+            // The server's place in each File, from the feed.
+            try db.create(table: "reading_positions") { t in
+                t.primaryKey("file_id", .integer)
+                t.column("cfi", .text)
+                t.column("page", .integer)
+                t.column("seconds", .double)
+                t.column("percentage", .double).notNull()
+                t.column("occurred_at", .double).notNull()
+                t.column("source", .text).notNull()
+                t.column("device_id", .text)
+                t.column("generation", .integer).notNull()
+            }
+            try db.create(table: "read_throughs") { t in
+                t.primaryKey("id", .integer)
+                t.column("book_id", .integer).indexed()
+                t.column("begin_day", .text)
+                t.column("end_day", .text)
+                t.column("outcome", .text).notNull()
+                t.column("paused", .boolean).notNull()
+                t.column("generation", .integer).notNull()
+            }
+            // This installation's own place in each File it played.
+            try db.create(table: "local_positions") { t in
+                t.primaryKey("file_id", .integer)
+                t.column("seconds", .double).notNull()
+                t.column("percentage", .double).notNull()
+                t.column("updated_at", .double).notNull()
+                // When the server's place was from when this device first
+                // moved since its last sync.
+                t.column("base_occurred_at", .double)
+            }
+            // Changes made on the device, oldest first, until the server
+            // takes them in. held_for is the capability list a server that
+            // didn't understand one listed then: it waits until that changes.
+            try db.create(table: "journal") { t in
+                t.autoIncrementedPrimaryKey("seq")
+                t.column("event_id", .text).notNull().unique()
+                t.column("type", .text).notNull()
+                t.column("at", .double).notNull()
+                t.column("payload", .blob).notNull()
+                t.column("file_id", .integer)
+                // Position events of one sitting replace each other until
+                // sent; the end of a File never is replaced.
+                t.column("coalesce_key", .text).indexed()
+                t.column("held_for", .text)
+                t.column("held_reason", .text)
+            }
+            // The sitting being timed, at most one.
+            try db.create(table: "open_sitting") { t in
+                t.primaryKey("id", .integer).check { $0 == 1 }
+                t.column("sitting", .blob).notNull()
+            }
+            // Changes the server refused, for the user to read.
+            try db.create(table: "journal_notes") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("at", .double).notNull()
+                t.column("event_type", .text).notNull()
+                t.column("reason", .text).notNull()
             }
         }
         return migrator
@@ -238,6 +313,27 @@ final class CatalogStore: Sendable {
                             arguments: [library.id, library.name, library.coverAspectRatio.rawValue, library.sortSpec, generation]
                         )
                     }
+                case .readingPosition:
+                    if entry.deleted {
+                        try db.execute(sql: "DELETE FROM reading_positions WHERE file_id = ?", arguments: [entry.id])
+                    } else if let position = entry.readingPosition {
+                        try CatalogStore.upsert(position, generation: generation, in: db)
+                    }
+                case .readThrough:
+                    if entry.deleted {
+                        try db.execute(sql: "DELETE FROM read_throughs WHERE id = ?", arguments: [entry.id])
+                    } else if let readThrough = entry.readThrough {
+                        try db.execute(
+                            sql: """
+                            INSERT INTO read_throughs (id, book_id, begin_day, end_day, outcome, paused, generation) VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, begin_day = excluded.begin_day,
+                                end_day = excluded.end_day, outcome = excluded.outcome, paused = excluded.paused,
+                                generation = excluded.generation
+                            """,
+                            arguments: [readThrough.id, readThrough.bookId, readThrough.beginDay, readThrough.endDay,
+                                        readThrough.outcome.rawValue, readThrough.paused, generation]
+                        )
+                    }
                 case .unknown:
                     continue
                 }
@@ -247,6 +343,8 @@ final class CatalogStore: Sendable {
             if !page.hasMore, try CatalogStore.syncState(db).startingOver {
                 try db.execute(sql: "DELETE FROM books WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM libraries WHERE generation < ?", arguments: [generation])
+                try db.execute(sql: "DELETE FROM reading_positions WHERE generation < ?", arguments: [generation])
+                try db.execute(sql: "DELETE FROM read_throughs WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "UPDATE sync_state SET starting_over = 0 WHERE id = 1")
             }
             return true
@@ -297,7 +395,33 @@ final class CatalogStore: Sendable {
                 arguments: [file.id, book.id, position, file.fileType.rawValue, file.fileRole.rawValue, file.sizeBytes,
                             file.displayName, file.releaseDate.map(CatalogStore.timestamp), file.pageCount, file.audiobookDurationSeconds]
             )
+            try db.execute(sql: "DELETE FROM book_file_chapters WHERE file_id = ?", arguments: [file.id])
+            for (index, chapter) in file.chapters.enumerated() {
+                try db.execute(
+                    sql: """
+                    INSERT INTO book_file_chapters (file_id, position, chapter_id, parent_id, title, start_ms, start_page, href)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    arguments: [file.id, index, chapter.id, chapter.parentId, chapter.title, chapter.startTimestampMs,
+                                chapter.startPage, chapter.href]
+                )
+            }
         }
+    }
+
+    private static func upsert(_ position: Shishoapp.FeedReadingPosition, generation: Int, in db: Database) throws {
+        guard let occurredAt = CatalogStore.timestamp(position.occurredAt) else { return }
+        try db.execute(
+            sql: """
+            INSERT INTO reading_positions (file_id, cfi, page, seconds, percentage, occurred_at, source, device_id, generation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (file_id) DO UPDATE SET cfi = excluded.cfi, page = excluded.page, seconds = excluded.seconds,
+                percentage = excluded.percentage, occurred_at = excluded.occurred_at, source = excluded.source,
+                device_id = excluded.device_id, generation = excluded.generation
+            """,
+            arguments: [position.fileId, position.cfi, position.page, position.seconds, position.percentage, occurredAt,
+                        position.source.rawValue, position.deviceId, generation]
+        )
     }
 
     /// Seconds since 1970 of an RFC 3339 time from the server, which writes

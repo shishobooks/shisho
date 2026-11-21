@@ -11,6 +11,7 @@ struct BookDetailView: View {
     let initial: BookSummary
 
     @State private var book: BookDetail??
+    @State private var listen: ListenProgress??
     @State private var tint: Color?
     @State private var scrolled = false
 
@@ -27,6 +28,11 @@ struct BookDetailView: View {
                         .padding(.top, 80)
                 } else {
                     hero
+                    if let progress = listen ?? nil {
+                        ListenCard(progress: progress, bookID: bookID)
+                            .padding(.top, 22)
+                            .frame(maxWidth: 520)
+                    }
                     if let detail = book ?? nil {
                         details(detail)
                     }
@@ -61,6 +67,9 @@ struct BookDetailView: View {
         .observing(model.session?.store, id: bookID, into: $book) { [bookID] db in
             try CatalogStore.book(db, id: bookID)
         }
+        .observing(model.session?.store, id: bookID, into: $listen) { [bookID, deviceID = model.session?.account.deviceID ?? ""] db in
+            try CatalogStore.listenProgress(db, bookID: bookID, ownDeviceID: deviceID)
+        }
     }
 
     /// The cover's color, washed from the top and fading into the page.
@@ -85,7 +94,7 @@ struct BookDetailView: View {
                 let average = await CoverTint.average(of: image)
                 // A cover replaced meanwhile has its own tint coming.
                 guard !Task.isCancelled else { return }
-                tint = average.map { Color(red: $0.red, green: $0.green, blue: $0.blue) }
+                tint = average?.color
             }
             .padding(.top, 8)
 

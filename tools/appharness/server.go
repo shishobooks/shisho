@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,12 +27,18 @@ const (
 )
 
 // server is a Shisho server of the run's own, on a free port, with its
-// database and caches in the run's folder.
+// database and caches in the run's folder. A flow can stop it and start it
+// again on the same port and data, as a server coming back online.
 type server struct {
-	URL  string
-	port string
-	cmd  *exec.Cmd
-	log  *os.File
+	URL    string
+	port   string
+	binary string
+	dir    string
+	env    []string
+
+	mu  sync.Mutex
+	cmd *exec.Cmd
+	log *os.File
 }
 
 // startServer builds the server from this checkout and starts it on dir's
@@ -51,37 +58,57 @@ func startServer(ctx context.Context, root, dir, host string, port int, env ...s
 			return nil, err
 		}
 	}
-	log, err := os.Create(filepath.Join(dir, "server.log"))
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	cmd := exec.Command(binary) //nolint:noctx // Stop ends it, with its process group.
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"DATABASE_FILE_PATH="+filepath.Join(dir, "data.sqlite"),
-		"CACHE_DIR="+filepath.Join(dir, "cache"),
-		"PLUGIN_DIR="+filepath.Join(dir, "plugins"),
-		"PLUGIN_DATA_DIR="+filepath.Join(dir, "plugin-data"),
+	s := &server{URL: fmt.Sprintf("http://127.0.0.1:%d", port), port: strconv.Itoa(port), binary: binary, dir: dir}
+	s.env = append([]string{
+		"DATABASE_FILE_PATH=" + filepath.Join(dir, "data.sqlite"),
+		"CACHE_DIR=" + filepath.Join(dir, "cache"),
+		"PLUGIN_DIR=" + filepath.Join(dir, "plugins"),
+		"PLUGIN_DATA_DIR=" + filepath.Join(dir, "plugin-data"),
 		"JWT_SECRET=appharness-secret-not-for-production",
-		"SERVER_HOST="+host,
-		"SERVER_PORT="+strconv.Itoa(port),
+		"SERVER_HOST=" + host,
+		"SERVER_PORT=" + strconv.Itoa(port),
 		"LIBRARY_MONITOR_ENABLED=false",
 		"UPDATE_CHECK_ENABLED=false",
 		"SYNC_INTERVAL_MINUTES=0",
-	)
-	cmd.Env = append(cmd.Env, env...)
+	}, env...)
+	if err := s.Start(ctx); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// Start runs the server, if it isn't running, and waits until it answers.
+// Its output goes to the end of dir/server.log.
+func (s *server) Start(ctx context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.running() {
+		return nil
+	}
+	log, err := os.OpenFile(filepath.Join(s.dir, "server.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	cmd := exec.Command(s.binary) //nolint:noctx,gosec // The server this run built; Stop ends it, with its process group.
+	cmd.Dir = s.dir
+	cmd.Env = append(os.Environ(), s.env...)
 	cmd.Stdout, cmd.Stderr = log, log
 	// Its own process group, so stopping the run stops it and nothing else.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
-		return nil, errors.Wrap(err, "start the server")
+		_ = log.Close()
+		return errors.Wrap(err, "start the server")
 	}
-	s := &server{URL: fmt.Sprintf("http://127.0.0.1:%d", port), port: strconv.Itoa(port), cmd: cmd, log: log}
+	s.cmd, s.log = cmd, log
 	if err := s.waitHealthy(ctx); err != nil {
-		s.Stop()
-		return nil, err
+		s.stopLocked()
+		return err
 	}
-	return s, nil
+	return nil
+}
+
+func (s *server) running() bool {
+	return s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil
 }
 
 func freePort(ctx context.Context) (int, error) {
@@ -115,7 +142,13 @@ func (s *server) waitHealthy(ctx context.Context) error {
 
 // Stop ends the server, if it's still running.
 func (s *server) Stop() {
-	if s.cmd.Process != nil && s.cmd.ProcessState == nil {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopLocked()
+}
+
+func (s *server) stopLocked() {
+	if s.running() {
 		_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGTERM)
 		done := make(chan struct{})
 		go func() { _ = s.cmd.Wait(); close(done) }()
@@ -126,7 +159,9 @@ func (s *server) Stop() {
 			<-done
 		}
 	}
-	_ = s.log.Close()
+	if s.log != nil {
+		_ = s.log.Close()
+	}
 }
 
 // seed makes the first admin, a Library on the fixtures, and waits for the

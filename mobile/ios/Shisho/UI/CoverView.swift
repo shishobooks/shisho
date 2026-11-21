@@ -23,6 +23,11 @@ struct CoverView: View {
     /// Library's setting, and in its fallback modes by which kinds of File
     /// the Book has.
     private var aspectRatio: CGFloat {
+        CoverView.aspectRatio(of: book)
+    }
+
+    /// The width over the height of book's cover.
+    static func aspectRatio(of book: BookSummary) -> CGFloat {
         let hasAudiobook = book.fileTypes.contains("m4b")
         let hasEbook = book.fileTypes.contains { $0 != "m4b" && FileTypes.isKnown($0) }
         let square = switch book.coverAspectRatio {
@@ -106,5 +111,12 @@ private struct DrawnCover: View {
             }
             .padding(width * 0.09)
         }
+    }
+}
+
+extension CoverTint.RGB {
+    /// The tint as a color to wash a screen with.
+    var color: Color {
+        Color(red: red, green: green, blue: blue)
     }
 }

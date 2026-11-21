@@ -136,6 +136,54 @@ final class APIClient: Sendable {
         return response
     }
 
+    /// Sends a batch of the journal (ADR 0024), answered with one result per
+    /// event. A response without them, from something other than Shisho,
+    /// is an error, so the app keeps every event.
+    func journal(_ rows: [JournalRow], clock: Date = Date()) async throws -> Shishoapp.JournalResponse {
+        var events: [[String: Any]] = []
+        for row in rows {
+            events.append([
+                "id": row.eventID, "type": row.type, "at": JournalTime.string(row.at),
+                "payload": try JSONSerialization.jsonObject(with: row.payload),
+            ])
+        }
+        let body = try JSONSerialization.data(withJSONObject: ["clock": JournalTime.string(clock), "events": events])
+        return try APIClient.journalResponse(await data("mobile/journal", method: "POST", body: body), sent: rows.count)
+    }
+
+    static func journalResponse(_ data: Data, sent: Int) throws -> Shishoapp.JournalResponse {
+        struct Shape: Decodable {
+            struct Result: Decodable {
+                let id: String
+                let result: String
+            }
+
+            let results: [Result]
+        }
+        guard let shape = try? JSONDecoder().decode(Shape.self, from: data), shape.results.count == sent,
+              let response = try? makeShishoDecoder().decode(Shishoapp.JournalResponse.self, from: data)
+        else { throw APIError.serverPredatesApp }
+        return response
+    }
+
+    /// Where an audiobook File streams from, with Range support.
+    func streamURL(fileID: Int) -> URL {
+        baseURL.appendingPathComponent("mobile/files/\(fileID)/stream")
+    }
+
+    /// The headers every request of this account sends, for a player that
+    /// makes its own requests.
+    var headers: [String: String] {
+        var headers = [
+            "X-Shisho-App-Protocol": String(Installation.appProtocol),
+            "X-Shisho-App-Version": Installation.appVersion,
+        ]
+        if let credential {
+            headers["Authorization"] = "Bearer \(credential)"
+        }
+        return headers
+    }
+
     /// A Book's cover at size pixels, keyed by its cover version so the
     /// server sends it as immutable.
     func cover(bookID: Int, version: String, size: Int, renderKey: String) async throws -> Data {

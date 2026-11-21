@@ -4,6 +4,7 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        @Bindable var model = model
         ZStack {
             if model.session != nil {
                 LibraryView()
@@ -15,6 +16,9 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: model.session != nil)
         .background(Theme.background)
+        .sheet(isPresented: $model.showingPlayer) {
+            NowPlayingView()
+        }
     }
 }
 
