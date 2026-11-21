@@ -18,12 +18,12 @@ require (
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
-	github.com/klippa-app/go-pdfium v1.21.4
+	github.com/klippa-app/go-pdfium v1.21.5
 	github.com/knadh/koanf/parsers/yaml v1.1.1
 	github.com/knadh/koanf/providers/env v1.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.4.1
-	github.com/labstack/echo/v4 v4.16.3
+	github.com/labstack/echo/v4 v4.16.5
 	github.com/pdfcpu/pdfcpu v0.16.4
 	github.com/pkg/errors v0.9.1
 	github.com/quasilyte/go-ruleguard/dsl v0.3.23
@@ -34,13 +34,13 @@ require (
 	github.com/uptrace/bun/dialect/sqlitedialect v1.3.0
 	github.com/uptrace/bun/driver/sqliteshim v1.3.0
 	github.com/urfave/cli/v2 v2.27.7
-	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/image v0.48.0
-	golang.org/x/net v0.62.0
+	golang.org/x/net v0.63.0
 	golang.org/x/sync v0.25.0
 	golang.org/x/text v0.44.0
 	golang.org/x/time v0.16.0
-	golang.org/x/tools v0.52.0
+	golang.org/x/tools v0.53.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.62.0
 )
@@ -85,7 +85,7 @@ require (
 	github.com/xdg-go/stringprep v1.0.4 // indirect
 	github.com/xrash/smetrics v0.0.0-20250705151800-55b8f293f342 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/mod v0.42.0 // indirect
+	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
