@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/shishoapp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -161,7 +162,8 @@ func TestForwardedHeadersTrustDirectPeer(t *testing.T) {
 }
 
 // The access log names the version the web app sends in X-Version as the
-// client's, since it is the bundle's version rather than the server's.
+// client's, since it is the bundle's version rather than the server's, and
+// the Shisho app's version, marked as the app's.
 func TestRequestLoggingClientVersion(t *testing.T) {
 	// This test changes the process-wide logger output.
 	var output bytes.Buffer
@@ -172,17 +174,26 @@ func TestRequestLoggingClientVersion(t *testing.T) {
 	e.Use(requestLoggerMiddleware)
 	e.GET("/api/books", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
 
-	for header, want := range map[string]string{"0.0.9": "0.0.9", "": "unknown"} {
+	for name, tc := range map[string]struct {
+		set  func(*http.Request)
+		want string
+	}{
+		"web app":    {func(r *http.Request) { r.Header.Set("X-Version", "0.0.9") }, "0.0.9"},
+		"nothing":    {func(*http.Request) {}, "unknown"},
+		"Shisho app": {func(r *http.Request) { r.Header.Set(shishoapp.HeaderAppVersion, "1.2.0 (7)") }, "app/1.2.0 (7)"},
+		// The system player streams with cookies, not headers.
+		"Shisho app stream": {func(r *http.Request) {
+			r.AddCookie(&http.Cookie{Name: shishoapp.CookieAppVersion, Value: "1.2.0 (7)"})
+		}, "app/1.2.0 (7)"},
+	} {
 		output.Reset()
 		req := httptest.NewRequest(http.MethodGet, "/api/books", nil)
-		if header != "" {
-			req.Header.Set("X-Version", header)
-		}
+		tc.set(req)
 		e.ServeHTTP(httptest.NewRecorder(), req)
 
 		var line map[string]any
 		require.NoError(t, json.Unmarshal(output.Bytes(), &line), output.String())
-		assert.Equal(t, want, line["client_version"])
+		assert.Equal(t, tc.want, line["client_version"], name)
 		assert.NotContains(t, line, "version")
 	}
 }

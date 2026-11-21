@@ -27,6 +27,9 @@
         }
       }
     },
+    "%@ · Finished" : {
+
+    },
     "%@, %@" : {
       "localizations" : {
         "en" : {
@@ -87,15 +90,8 @@
     "CREATORS" : {
 
     },
-    "Chapter %lld · %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Chapter %1$lld · %2$@"
-          }
-        }
-      }
+    "Chapter %lld" : {
+
     },
     "Chapter remaining %@" : {
 
@@ -160,10 +156,19 @@
     "Listen again" : {
 
     },
+    "Listen to %@" : {
+
+    },
     "Listening" : {
 
     },
     "Loading" : {
+
+    },
+    "NARRATORS" : {
+
+    },
+    "Narrated by %@" : {
 
     },
     "Never" : {

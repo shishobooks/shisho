@@ -40,8 +40,9 @@ var feedTables = map[string][]string{
 	"series":      {"UPDATE"},
 	// A user's saved sort for a Library is part of the Library's document.
 	"user_library_settings": {"INSERT", "UPDATE", "DELETE"},
-	// A File's chapters are part of its Book's document.
-	"chapters": {"INSERT", "UPDATE", "DELETE"},
+	// A File's chapters and narrators are part of its Book's document.
+	"chapters":  {"INSERT", "UPDATE", "DELETE"},
+	"narrators": {"INSERT", "UPDATE", "DELETE"},
 	// The user's own records.
 	"reading_positions": {"INSERT", "UPDATE", "DELETE"},
 	"read_throughs":     {"INSERT", "UPDATE", "DELETE"},
@@ -129,6 +130,7 @@ var columnsNotCompared = map[string]string{
 	"user_library_settings.updated_at": reasonBookkeep,
 
 	"chapters.id":         reasonPrimaryKey,
+	"narrators.id":        reasonPrimaryKey,
 	"chapters.created_at": reasonBookkeep,
 	"chapters.updated_at": reasonBookkeep,
 
@@ -201,7 +203,6 @@ var tablesNotInFeed = map[string]string{
 	"share_links":                   "Share Links, managed only on the web",
 	"user_delivery_rules":           "Delivery Rules, which the Shisho app doesn't follow",
 	"user_settings":                 "web display settings",
-	"narrators":                     reasonCatalogNext,
 	"file_identifiers":              reasonCatalogNext,
 	"genres":                        reasonCatalogNext,
 	"genre_aliases":                 reasonCatalogNext,

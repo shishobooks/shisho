@@ -8,10 +8,12 @@ struct NowPlayingView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tint: Color?
-    /// Where the scrubber is while it's dragged, in seconds.
+    /// Where the scrubber is while it's dragged, in seconds into the File.
     @State private var scrubbing: Double?
+    /// The chapter the scrubber spans for the whole of a drag, so playing
+    /// into the next chapter meanwhile doesn't move the target.
+    @State private var dragBounds: (start: Double, end: Double)?
 
     var body: some View {
         Group {
@@ -57,7 +59,7 @@ struct NowPlayingView: View {
                             .padding(.top, 12)
                             .accessibilityIdentifier("player.error")
                     }
-                    artwork(player, file, size: artworkWidth(geometry.size, book: file.book))
+                    artwork(player, file, size: artworkWidth(geometry.size))
                     titles(file)
                     chapterRow(player)
                     scrubber(player, file)
@@ -77,9 +79,10 @@ struct NowPlayingView: View {
 
     /// The artwork's width: as large as fits beside the controls, by its
     /// height for a portrait cover.
-    private func artworkWidth(_ space: CGSize, book: BookSummary) -> CGFloat {
+    private func artworkWidth(_ space: CGSize) -> CGFloat {
         let height = space.height * (dynamicTypeSize.isAccessibilitySize ? 0.28 : 0.38)
-        return max(120, min(336, space.width - 44, height * CoverView.aspectRatio(of: book)))
+        // An audiobook's cover is square.
+        return max(120, min(336, space.width - 44, height))
     }
 
     private func header(_ file: ListeningFile) -> some View {
@@ -109,15 +112,13 @@ struct NowPlayingView: View {
     }
 
     private func artwork(_ player: AudioPlayer, _ file: ListeningFile, size: CGFloat) -> some View {
-        CoverView(book: file.book, width: size, shadow: .large) { image in
+        CoverView(book: file.book, file: CoverFile(id: file.fileID, fileType: "m4b", coverVersion: file.coverVersion),
+                  width: size, shadow: .large) { image in
             let average = await CoverTint.average(of: image)
             // A cover replaced meanwhile has its own tint coming.
             guard !Task.isCancelled else { return }
             tint = average?.color
         }
-        // The artwork settles back while paused.
-        .scaleEffect(player.isPlaying || reduceMotion ? 1 : 0.86)
-        .animation(.spring(response: 0.55, dampingFraction: 0.7), value: player.isPlaying)
         .padding(.top, 18)
     }
 
@@ -130,8 +131,8 @@ struct NowPlayingView: View {
                 .foregroundStyle(Theme.foreground)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("player.title")
-            if !file.book.authors.isEmpty {
-                Text(file.book.authors)
+            if let byline = byline(file) {
+                Text(byline)
                     .font(.geist(.callout))
                     .foregroundStyle(Theme.foreground.opacity(0.7))
                     .lineLimit(1)
@@ -139,6 +140,16 @@ struct NowPlayingView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 24)
+    }
+
+    /// "Author · Narrated by Narrator", whichever there are.
+    private func byline(_ file: ListeningFile) -> String? {
+        var parts: [String] = []
+        if !file.book.authors.isEmpty { parts.append(file.book.authors) }
+        if !file.narrators.isEmpty {
+            parts.append(String(localized: "Narrated by \(file.narrators.joined(separator: ", "))"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private func chapterRow(_ player: AudioPlayer) -> some View {
@@ -161,22 +172,24 @@ struct NowPlayingView: View {
     }
 
     private func scrubber(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
-        let bounds = player.chapterBounds
+        let bounds = dragBounds ?? player.chapterBounds
         let length = max(1, bounds.end - bounds.start)
         let shown = scrubbing ?? player.position
         let elapsed = min(length, max(0, shown - bounds.start))
         let left = max(0, file.duration - shown) / player.rate
         return VStack(spacing: 6) {
-            Slider(
-                value: Binding(get: { elapsed }, set: { scrubbing = bounds.start + $0 }),
-                in: 0...length
-            ) { editing in
-                if !editing, let target = scrubbing {
-                    player.seek(to: target)
+            Scrubber(value: elapsed, length: length) { dragged in
+                if let dragged {
+                    if dragBounds == nil { dragBounds = bounds }
+                    scrubbing = bounds.start + dragged
+                } else {
                     scrubbing = nil
+                    dragBounds = nil
                 }
+            } onCommit: { place in
+                // The end of a chapter is just before the next one starts.
+                player.seek(to: bounds.start + min(place, max(0, length - 0.5)))
             }
-            .tint(Theme.primary)
             .accessibilityLabel("Position in chapter")
             .accessibilityValue(String(localized: "\(TimeLabels.clock(elapsed)) of \(TimeLabels.clock(length))"))
             .accessibilityIdentifier("player.scrubber")

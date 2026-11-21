@@ -55,6 +55,9 @@ final class AudioPlayer {
     @ObservationIgnored private var statusObservation: NSKeyValueObservation?
     @ObservationIgnored private var ready = false
     @ObservationIgnored private var pendingSeek: Double?
+    /// Where a seek under way is going: the position until it lands, so the
+    /// bar doesn't flick back to where it was.
+    @ObservationIgnored private var seekingTo: Double?
     @ObservationIgnored private var sitting: ListeningSitting?
     @ObservationIgnored private var lastSave = Date.distantPast
     /// When the server's place was from that the player last knew of, at
@@ -338,6 +341,7 @@ final class AudioPlayer {
 
     private func currentPosition() -> Double {
         if let pendingSeek { return pendingSeek }
+        if let seekingTo { return seekingTo }
         guard ready, let seconds = player?.currentTime().seconds, seconds.isFinite else { return position }
         return seconds
     }
@@ -541,12 +545,15 @@ final class AudioPlayer {
         let target = max(0, min(seconds, max(0, file.duration - 0.5)))
         position = target
         if ready, let player {
+            seekingTo = target
             let generation = itemGeneration
             AudioPlayer.seek(player, to: target) { [weak self] in
                 Task { @MainActor in
-                    guard self?.itemGeneration == generation else { return }
-                    self?.refreshPosition()
-                    self?.updateNowPlaying()
+                    guard let self, self.itemGeneration == generation else { return }
+                    // A later seek supersedes this one, and clears its own.
+                    if self.seekingTo == target { self.seekingTo = nil }
+                    self.refreshPosition()
+                    self.updateNowPlaying()
                 }
             }
         } else {
@@ -600,6 +607,7 @@ final class AudioPlayer {
 
     private func teardownItem() {
         itemGeneration += 1
+        seekingTo = nil
         if let endObserver {
             NotificationCenter.default.removeObserver(endObserver)
             self.endObserver = nil

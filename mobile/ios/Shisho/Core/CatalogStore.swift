@@ -35,11 +35,21 @@ struct BookDetail: Hashable, Sendable {
         /// The File's label among its Book's Files: its name, or its
         /// filename. Empty from a server that doesn't send one.
         let displayName: String
+        /// Keys the File's own cover; empty when it has none.
+        var coverVersion = ""
+        /// The File's narrators, in order.
+        var narrators: [String] = []
+        var durationSeconds: Double?
     }
 
     let summary: BookSummary
     let subtitle: String?
     let authors: [Author]
+    /// The narrators of the Book's main Files, each once, in order.
+    var narrators: [String] {
+        var seen = Set<String>()
+        return files.filter { $0.fileRole != "supplement" }.flatMap(\.narrators).filter { seen.insert($0).inserted }
+    }
     let series: [Series]
     let files: [File]
 }
@@ -159,6 +169,12 @@ final class CatalogStore: Sendable {
         // and the user's own Reading Positions and Read-throughs. The journal
         // can't be downloaded again, so this and every later change migrates.
         migrator.registerMigration("v2: listening") { db in
+            // Each File's own cover and narrators, which can differ from
+            // its Book's other Files.
+            try db.alter(table: "book_files") { t in
+                t.add(column: "cover_version", .text).notNull().defaults(to: "")
+                t.add(column: "narrators", .text).notNull().defaults(to: "[]")
+            }
             try db.create(table: "book_file_chapters") { t in
                 t.column("file_id", .integer).notNull().references("book_files", onDelete: .cascade)
                 t.column("position", .integer).notNull()
@@ -408,16 +424,19 @@ final class CatalogStore: Sendable {
         for (position, file) in book.files.enumerated() {
             try db.execute(
                 sql: """
-                INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes, display_name, release_date, page_count, duration_seconds)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes, display_name, release_date, page_count,
+                    duration_seconds, cover_version, narrators)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, position = excluded.position,
                     file_type = excluded.file_type, file_role = excluded.file_role, size_bytes = excluded.size_bytes,
                     display_name = excluded.display_name,
                     release_date = excluded.release_date, page_count = excluded.page_count,
-                    duration_seconds = excluded.duration_seconds
+                    duration_seconds = excluded.duration_seconds, cover_version = excluded.cover_version,
+                    narrators = excluded.narrators
                 """,
                 arguments: [file.id, book.id, position, file.fileType.rawValue, file.fileRole.rawValue, file.sizeBytes,
-                            file.displayName, file.releaseDate.map(CatalogStore.timestamp), file.pageCount, file.audiobookDurationSeconds]
+                            file.displayName, file.releaseDate.map(CatalogStore.timestamp), file.pageCount, file.audiobookDurationSeconds,
+                            file.coverVersion, CatalogStore.namesJSON(file.narrators.map(\.name))]
             )
             try db.execute(sql: "DELETE FROM book_file_chapters WHERE file_id = ?", arguments: [file.id])
             for (index, chapter) in file.chapters.enumerated() {
@@ -446,6 +465,16 @@ final class CatalogStore: Sendable {
             arguments: [position.fileId, position.cfi, position.page, position.seconds, position.percentage, occurredAt,
                         position.source.rawValue, position.deviceId, generation]
         )
+    }
+
+    /// Names stored as a JSON array, as a File's narrators are.
+    static func namesJSON(_ names: [String]) -> String {
+        (try? String(data: JSONEncoder().encode(names), encoding: .utf8)) ?? "[]"
+    }
+
+    static func names(_ json: String?) -> [String] {
+        guard let data = json?.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
     /// Seconds since 1970 of an RFC 3339 time from the server, which writes
@@ -508,8 +537,13 @@ final class CatalogStore: Sendable {
         let series = try Row.fetchAll(db, sql: "SELECT name, number, number_end FROM book_series WHERE book_id = ? ORDER BY position", arguments: [id]).map {
             BookDetail.Series(name: $0["name"], number: $0["number"], numberEnd: $0["number_end"])
         }
-        let files = try Row.fetchAll(db, sql: "SELECT id, file_type, file_role, size_bytes, display_name FROM book_files WHERE book_id = ? ORDER BY position", arguments: [id]).map {
-            BookDetail.File(id: $0["id"], fileType: $0["file_type"], fileRole: $0["file_role"], sizeBytes: $0["size_bytes"], displayName: $0["display_name"])
+        let files = try Row.fetchAll(db, sql: """
+            SELECT id, file_type, file_role, size_bytes, display_name, cover_version, narrators, duration_seconds
+            FROM book_files WHERE book_id = ? ORDER BY position
+            """, arguments: [id]).map {
+            BookDetail.File(id: $0["id"], fileType: $0["file_type"], fileRole: $0["file_role"], sizeBytes: $0["size_bytes"],
+                            displayName: $0["display_name"], coverVersion: $0["cover_version"],
+                            narrators: CatalogStore.names($0["narrators"]), durationSeconds: $0["duration_seconds"])
         }
         let fileTypes = orderedUnique(files.filter { $0.fileRole != "supplement" }.map(\.fileType))
         return BookDetail(summary: summary(row, fileTypes: fileTypes), subtitle: row["subtitle"], authors: authors, series: series, files: files)

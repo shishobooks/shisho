@@ -34,11 +34,19 @@ struct ListenCard: View {
 
     private var detail: String {
         if finished && !playing {
-            return String(localized: "Finished")
+            return progress.audiobookCount > 1 && !progress.fileName.isEmpty
+                ? String(localized: "\(progress.fileName) · Finished") : String(localized: "Finished")
         }
-        let left = String(localized: "\(TimeLabels.left(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))")
-        guard let index = AudioChapters.index(at: seconds, in: progress.chapters) else { return left }
-        return String(localized: "Chapter \(index + 1) · \(left)")
+        var parts: [String] = []
+        // With more than one audiobook, it says which this plays.
+        if progress.audiobookCount > 1, !progress.fileName.isEmpty {
+            parts.append(progress.fileName)
+        }
+        if let index = AudioChapters.index(at: seconds, in: progress.chapters) {
+            parts.append(String(localized: "Chapter \(index + 1)"))
+        }
+        parts.append(String(localized: "\(TimeLabels.left(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))"))
+        return parts.joined(separator: " · ")
     }
 
     private var icon: some View {

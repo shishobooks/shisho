@@ -117,3 +117,28 @@ func TestFiles_StreamTakesTheCredentialFromACookie(t *testing.T) {
 	assert.Equal(t, http.StatusUnauthorized, withCookies("/mobile/files/5/download", credentialCookie, protocolCookie).Code)
 	assert.Equal(t, http.StatusUnauthorized, withCookies("/mobile/changes", credentialCookie, protocolCookie).Code)
 }
+
+// A File's own cover, keyed by its version so it caches as immutable, and
+// only from the user's Libraries.
+func TestFiles_CoverIsTheFilesOwn(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.m4b.cover.png"), tinyPNG(t), 0o600))
+	f.addLibrary(1, "Mine")
+	f.addLibrary(2, "Theirs")
+	f.addBook(1, 1, "Dune")
+	f.addBook(2, 2, "Emma")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, cover_image_filename) VALUES
+		(5, 1, 1, ?, 'm4b', 1, 'a.m4b.cover.png'), (6, 1, 1, ?, 'epub', 1, NULL), (7, 2, 2, ?, 'm4b', 1, 'a.m4b.cover.png')`,
+		filepath.Join(dir, "a.m4b"), filepath.Join(dir, "b.epub"), filepath.Join(dir, "a.m4b"))
+	f.addUser(1)
+	credential := f.signIn()
+
+	rec := f.do(call{path: "/mobile/files/5/cover?v=5-1", credential: credential})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, "private, max-age=31536000, immutable", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/6/cover?v=1", credential: credential}).Code)
+	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/7/cover?v=1", credential: credential}).Code)
+	assert.Equal(t, http.StatusUnauthorized, f.do(call{path: "/mobile/files/5/cover?v=1"}).Code)
+}

@@ -89,3 +89,78 @@ struct PlaceOfferBanner: View {
         .accessibilityIdentifier("player.offer")
     }
 }
+
+/// The player's position bar: drag anywhere on it to go to a place. It goes
+/// exactly where the finger lifts, with no momentum, as Apple's own players'
+/// scrubbers do; the system slider's thumb keeps moving after a fast drag.
+/// value and length are seconds within what the bar spans.
+struct Scrubber: View {
+    let value: Double
+    let length: Double
+    /// Called with the place under the finger while dragging, and nil once
+    /// it lifts.
+    var onDrag: (Double?) -> Void = { _ in }
+    /// Called once with where the finger lifted.
+    let onCommit: (Double) -> Void
+    /// What VoiceOver's swipe up and down moves by.
+    var step: Double = 15
+
+    @State private var dragging: Double?
+
+    private static let thumb: CGFloat = 20
+
+    var body: some View {
+        GeometryReader { geometry in
+            let track = max(1, geometry.size.width - Scrubber.thumb)
+            let shown = dragging ?? value
+            let fraction = length > 0 ? min(1, max(0, shown / length)) : 0
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Theme.foreground.opacity(0.14))
+                    .frame(height: dragging == nil ? 6 : 10)
+                Capsule()
+                    .fill(Theme.primary)
+                    .frame(width: Scrubber.thumb / 2 + track * fraction, height: dragging == nil ? 6 : 10)
+                Circle()
+                    .fill(Color.white)
+                    .overlay(Circle().strokeBorder(Theme.primary, lineWidth: 2))
+                    .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                    .frame(width: Scrubber.thumb, height: Scrubber.thumb)
+                    .scaleEffect(dragging == nil ? 1 : 1.2)
+                    .offset(x: track * fraction)
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { drag in
+                        let place = seconds(at: drag.location.x, track: track)
+                        dragging = place
+                        onDrag(place)
+                    }
+                    .onEnded { drag in
+                        let place = seconds(at: drag.location.x, track: track)
+                        dragging = nil
+                        onDrag(nil)
+                        onCommit(place)
+                    }
+            )
+            .animation(.snappy(duration: 0.2), value: dragging == nil)
+        }
+        .frame(height: 32)
+        .accessibilityElement()
+        .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onCommit(min(length, value + step))
+            case .decrement: onCommit(max(0, value - step))
+            @unknown default: break
+            }
+        }
+    }
+
+    private func seconds(at x: CGFloat, track: CGFloat) -> Double {
+        let fraction = min(1, max(0, (x - Scrubber.thumb / 2) / track))
+        return Double(fraction) * length
+    }
+}

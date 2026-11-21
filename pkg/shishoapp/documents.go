@@ -2,6 +2,7 @@ package shishoapp
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/changefeed"
@@ -146,6 +147,10 @@ func loadBooks(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedBook, e
 		Relation("Files", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.Order("f.id ASC")
 		}).
+		Relation("Files.Narrators", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Order("n.sort_order ASC")
+		}).
+		Relation("Files.Narrators.Person").
 		Relation("Files.Chapters", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.Order("ch.sort_order ASC", "ch.id ASC")
 		}).
@@ -199,7 +204,18 @@ func bookDocument(book *models.Book) *FeedBook {
 		})
 	}
 	for _, file := range book.Files {
+		narrators := []FeedNarrator{}
+		for _, narrator := range file.Narrators {
+			if narrator.Person == nil {
+				continue
+			}
+			narrators = append(narrators, FeedNarrator{
+				PersonID: narrator.PersonID, Name: narrator.Person.Name, SortName: narrator.Person.SortName,
+			})
+		}
 		doc.Files = append(doc.Files, FeedFile{
+			CoverVersion:             fileCoverVersion(file),
+			Narrators:                narrators,
 			Chapters:                 chapterDocuments(file.Chapters),
 			ID:                       file.ID,
 			FileType:                 file.FileType,
@@ -294,4 +310,13 @@ func loadReadThroughs(ctx context.Context, tx bun.IDB, userID int, ids []int) (m
 		}
 	}
 	return out, nil
+}
+
+// fileCoverVersion keys file's own cover as covers.CacheKey keys a Book's,
+// or is empty when the File has no cover.
+func fileCoverVersion(file *models.File) string {
+	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
+		return ""
+	}
+	return fmt.Sprintf("%d-%d", file.ID, file.UpdatedAt.Unix())
 }

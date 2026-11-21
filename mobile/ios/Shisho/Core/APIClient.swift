@@ -169,18 +169,30 @@ final class APIClient: Sendable {
         return response
     }
 
+    /// A File's own cover at size pixels, keyed by its cover version.
+    func fileCover(fileID: Int, version: String, size: Int, renderKey: String) async throws -> Data {
+        try await data("mobile/files/\(fileID)/cover", query: [
+            URLQueryItem(name: "v", value: version),
+            URLQueryItem(name: "size", value: String(size)),
+            URLQueryItem(name: "r", value: renderKey),
+        ], readsCapabilities: false)
+    }
+
     /// Where an audiobook File streams from, with Range support.
     func streamURL(fileID: Int) -> URL {
         baseURL.appendingPathComponent("mobile/files/\(fileID)/stream")
     }
 
-    /// The credential and protocol as cookies, for the system player, which
-    /// makes its own requests and takes cookies but no headers. The server
-    /// reads them on the stream route only.
+    /// The credential, protocol, and version as cookies, for the system
+    /// player, which makes its own requests and takes cookies but no
+    /// headers. The server takes the credential and protocol from cookies
+    /// on the stream route only.
     var streamCookies: [HTTPCookie] {
         let values = [
             ("shisho_app_credential", credential),
             ("shisho_app_protocol", String(Installation.appProtocol)),
+            // For the server's access log, as the header names it elsewhere.
+            ("shisho_app_version", Installation.appVersion),
         ]
         return values.compactMap { name, value in
             guard let value else { return nil }

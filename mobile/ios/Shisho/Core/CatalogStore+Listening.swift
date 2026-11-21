@@ -7,6 +7,12 @@ import ShishoAPI
 struct ListeningFile: Equatable, Sendable {
     let fileID: Int
     let book: BookSummary
+    /// Keys the File's own cover, which can differ from its Book's; empty
+    /// when it has none.
+    var coverVersion = ""
+    /// The File's label among its Book's Files.
+    var displayName = ""
+    var narrators: [String] = []
     /// The real length, which speed doesn't change.
     let duration: Double
     /// Shisho's chapters, top level only, in order (ADR 0022).
@@ -21,6 +27,10 @@ struct ListenProgress: Equatable, Sendable {
     let chapters: [AudioChapter]
     /// A Read-through of the Book is underway.
     let underway: Bool
+    /// The File's label, which says which one plays when the Book has more
+    /// than one audiobook.
+    var fileName = ""
+    var audiobookCount = 1
 
     var fraction: Double { duration > 0 ? min(1, max(0, seconds / duration)) : 0 }
 }
@@ -45,20 +55,28 @@ struct JournalRow: Equatable, Sendable {
 extension CatalogStore {
     // MARK: - Reading
 
-    /// The main audiobook File of bookID, if it has one.
+    /// The audiobook File of bookID the Listen button plays: the one
+    /// listened to most recently on any device, or else the first, or nil
+    /// when the Book has none.
     static func audiobookFileID(_ db: Database, bookID: Int) throws -> Int? {
         try Int.fetchOne(db, sql: """
-            SELECT id FROM book_files
-            WHERE book_id = ? AND file_type = 'm4b' AND file_role != 'supplement'
-            ORDER BY position LIMIT 1
+            SELECT f.id FROM book_files f
+            LEFT JOIN local_positions l ON l.file_id = f.id
+            LEFT JOIN reading_positions p ON p.file_id = f.id
+            WHERE f.book_id = ? AND f.file_type = 'm4b' AND f.file_role != 'supplement'
+            ORDER BY MAX(COALESCE(l.updated_at, 0), COALESCE(p.occurred_at, 0)) DESC, f.position
+            LIMIT 1
             """, arguments: [bookID])
     }
 
     static func listeningFile(_ db: Database, fileID: Int) throws -> ListeningFile? {
-        guard let row = try Row.fetchOne(db, sql: "SELECT book_id, duration_seconds FROM book_files WHERE id = ?", arguments: [fileID]),
+        guard let row = try Row.fetchOne(db, sql: """
+                SELECT book_id, duration_seconds, cover_version, display_name, narrators FROM book_files WHERE id = ?
+                """, arguments: [fileID]),
               let book = try CatalogStore.book(db, id: row["book_id"])
         else { return nil }
-        return ListeningFile(fileID: fileID, book: book.summary, duration: row["duration_seconds"] ?? 0,
+        return ListeningFile(fileID: fileID, book: book.summary, coverVersion: row["cover_version"], displayName: row["display_name"],
+                             narrators: names(row["narrators"]), duration: row["duration_seconds"] ?? 0,
                              chapters: try chapters(db, fileID: fileID))
     }
 
@@ -150,7 +168,11 @@ extension CatalogStore {
                                      ownDeviceID: ownDeviceID)
         let underway = try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM read_throughs WHERE book_id = ? AND outcome = 'underway')",
                                          arguments: [bookID]) ?? false
-        return ListenProgress(fileID: fileID, seconds: choice.start, duration: file.duration, chapters: file.chapters, underway: underway)
+        let audiobooks = try Int.fetchOne(db, sql: """
+            SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type = 'm4b' AND file_role != 'supplement'
+            """, arguments: [bookID]) ?? 1
+        return ListenProgress(fileID: fileID, seconds: choice.start, duration: file.duration, chapters: file.chapters, underway: underway,
+                              fileName: file.displayName, audiobookCount: audiobooks)
     }
 
     /// Titles for the Books and Files a diagnostics log names by id, keyed as

@@ -470,7 +470,9 @@ func TestFeed_BookDocument(t *testing.T) {
 		Files: []FeedFile{{
 			ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345, DisplayName: "dune.epub",
 			ReleaseDate: &released, PageCount: &pages, AudiobookDurationSeconds: &duration,
-			Chapters: []FeedChapter{},
+			CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),
+			Narrators:    []FeedNarrator{},
+			Chapters:     []FeedChapter{},
 		}},
 		// covers.CacheKey: the File's id and its updated_at.
 		CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),

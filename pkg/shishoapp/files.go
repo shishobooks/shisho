@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -85,6 +86,36 @@ func streamCookies(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		return next(c)
 	}
+}
+
+// fileCover serves a File's own cover, resized when the app asks for a
+// size. A URL keyed with the File's cover version is cached as immutable.
+func (h *handler) fileCover(c echo.Context) error {
+	ctx := c.Request().Context()
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	id, err := httputil.ParamID(c, "id", "Cover")
+	if err != nil {
+		return err
+	}
+	file := new(models.File)
+	err = h.db.NewSelect().Model(file).Where("f.id = ?", id).Scan(ctx)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errcodes.NotFound("Cover")
+	}
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	if !user.HasLibraryAccess(file.LibraryID) || file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
+		return errcodes.NotFound("Cover")
+	}
+	cacheControl := covers.CacheControlNoCache
+	if c.QueryParam("v") != "" {
+		cacheControl = covers.CacheControlImmutable
+	}
+	return covers.ServeFileCover(c, file, cacheControl, "Cover", h.opts.Thumbnails)
 }
 
 // download serves an Original File as it sits in the library (ADR 0022),

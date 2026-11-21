@@ -14,8 +14,10 @@ struct ShishoApp: App {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
+                model.didBecomeActive()
                 Task { await model.syncNow() }
             case .background:
+                model.didEnterBackground()
                 model.scheduleBackgroundRefresh()
             default:
                 break

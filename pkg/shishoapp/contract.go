@@ -36,6 +36,9 @@ const (
 	// stream route reads them.
 	CookieCredential = "shisho_app_credential" //nolint:gosec // A cookie name, not a credential.
 	CookieProtocol   = "shisho_app_protocol"
+	// CookieAppVersion carries the app's version to a stream, for the access
+	// log.
+	CookieAppVersion = "shisho_app_version"
 
 	// The headers a refused app that signed in reads what to tell the user
 	// from, since the refusal has Shisho's usual error body.

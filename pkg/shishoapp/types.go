@@ -185,10 +185,23 @@ type FeedFile struct {
 	ReleaseDate              *time.Time `json:"release_date"`
 	PageCount                *int       `json:"page_count"`
 	AudiobookDurationSeconds *float64   `json:"audiobook_duration_seconds"`
+	// CoverVersion keys the File's own cover (GET
+	// /mobile/files/:id/cover?v=), which can differ from its Book's, so it
+	// can be cached as immutable. It's empty for a File with no cover.
+	CoverVersion string `json:"cover_version"`
+	// Narrators are the File's, in order.
+	Narrators []FeedNarrator `json:"narrators"`
 	// Chapters are Shisho's chapter list, which the app navigates by
 	// instead of the file's own (ADR 0022), in order, each after its
 	// parent.
 	Chapters []FeedChapter `json:"chapters"`
+}
+
+// FeedNarrator is one of a File's narrators.
+type FeedNarrator struct {
+	PersonID int    `json:"person_id"`
+	Name     string `json:"name"`
+	SortName string `json:"sort_name"`
 }
 
 // FeedChapter is one of a File's chapters. Where it starts takes the form
@@ -273,8 +286,8 @@ type JournalPositionPayload struct {
 	// AtEnd is playback or the reader reaching the end of the File, which
 	// finishes the Read-through underway, as in the web readers.
 	AtEnd bool `json:"at_end,omitempty"`
-	// ListenedSeconds is how long this sitting has played. A minute of it
-	// starts or resumes a Read-through, as in the web player.
+	// ListenedSeconds is how long this sitting has played. Five seconds of
+	// it start or resume a Read-through, as in the web player.
 	ListenedSeconds *float64 `json:"listened_seconds,omitempty" validate:"omitempty,min=0"`
 	// ListeningSince is when this sitting began, on the device's clock: a
 	// Read-through it starts begins that day.

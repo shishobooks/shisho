@@ -13,6 +13,7 @@ final class StreamCookiesTests: XCTestCase {
         let local = cookies("http://192.168.1.20:3789")
         XCTAssertEqual(local["shisho_app_credential"]?.value, "secret-credential")
         XCTAssertEqual(local["shisho_app_protocol"]?.value, String(Installation.appProtocol))
+        XCTAssertEqual(local["shisho_app_version"]?.value, Installation.appVersion)
         XCTAssertEqual(local["shisho_app_credential"]?.domain, "192.168.1.20")
         XCTAssertEqual(local["shisho_app_credential"]?.isSecure, false)
 

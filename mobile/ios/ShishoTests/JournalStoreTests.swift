@@ -212,6 +212,35 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(try journal().count, 1)
     }
 
+    /// Each File keeps its own cover and narrators, and with two
+    /// audiobooks the Listen button plays the one listened to last.
+    func testABookWithTwoAudiobooks() throws {
+        try store.apply(page("""
+        {"entries":[{"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Harbor Lights","sort_title":"Harbor Lights",
+          "created_at":"2026-01-01T00:00:00Z","cover_version":"9-1","files":[
+          {"id":9,"file_type":"epub","file_role":"main","size_bytes":10,"cover_version":"9-1"},
+          {"id":5,"file_type":"m4b","file_role":"main","size_bytes":10,"display_name":"Unabridged","audiobook_duration_seconds":600,
+           "cover_version":"5-2","narrators":[{"person_id":1,"name":"Ann Reader"},{"person_id":2,"name":"Ned Narrator"}]},
+          {"id":6,"file_type":"m4b","file_role":"main","size_bytes":10,"display_name":"Abridged","audiobook_duration_seconds":300,
+           "cover_version":"","narrators":[{"person_id":2,"name":"Ned Narrator"}]}]}}],"cursor":4}
+        """))
+        let detail = try XCTUnwrap(store.book(id: 1))
+        XCTAssertEqual(detail.files.map(\.coverVersion), ["9-1", "5-2", ""])
+        XCTAssertEqual(detail.files[1].narrators, ["Ann Reader", "Ned Narrator"])
+        XCTAssertEqual(detail.narrators, ["Ann Reader", "Ned Narrator"])
+        let unabridged = try XCTUnwrap(store.pool.read { try CatalogStore.listeningFile($0, fileID: 5) })
+        XCTAssertEqual(unabridged.coverVersion, "5-2")
+        XCTAssertEqual(unabridged.narrators, ["Ann Reader", "Ned Narrator"])
+
+        var progress = try XCTUnwrap(store.pool.read { try CatalogStore.listenProgress($0, bookID: 1, ownDeviceID: "me") })
+        XCTAssertEqual(progress.fileID, 5, "the first audiobook, before any listening")
+        XCTAssertEqual(progress.audiobookCount, 2)
+        try store.recordPosition(fileID: 6, seconds: 30, percentage: 0.1, at: now, atEnd: false, sitting: nil)
+        progress = try XCTUnwrap(store.pool.read { try CatalogStore.listenProgress($0, bookID: 1, ownDeviceID: "me") })
+        XCTAssertEqual(progress.fileID, 6)
+        XCTAssertEqual(progress.fileName, "Abridged")
+    }
+
     func testTheOpenSittingIsKept() throws {
         let (sitting, _) = ListeningRules.play(nil, fileID: 5, at: now, percentage: 0)
         try store.saveSitting(sitting)

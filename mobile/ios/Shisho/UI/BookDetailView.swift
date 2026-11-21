@@ -197,6 +197,10 @@ struct BookDetailView: View {
             let text = credited.map { "\($0.name) (\(roleLabel($0.role ?? "")))" }.joined(separator: ", ")
             rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(Text(text).font(.geist(.subheadline)))))
         }
+        if !book.narrators.isEmpty {
+            rows.append(InfoRow(label: String(localized: "NARRATORS"),
+                                value: AnyView(Text(book.narrators.joined(separator: ", ")).font(.geist(.subheadline)))))
+        }
         if !book.summary.fileTypes.isEmpty {
             rows.append(InfoRow(label: String(localized: "FORMATS"), value: AnyView(
                 HStack(spacing: 6) { ForEach(book.summary.fileTypes, id: \.self) { FileTypeChip(fileType: $0) } }
@@ -222,41 +226,82 @@ struct BookDetailView: View {
 
 /// One of a Book's Files, as the web app's file card shows it.
 private struct FileCard: View {
+    @Environment(AppModel.self) private var model
     let file: BookDetail.File
     let book: BookSummary
 
+    private var isAudiobook: Bool { file.fileType == "m4b" }
+    private var playing: Bool { model.player?.file?.fileID == file.id && model.player?.isPlaying == true }
+
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            CoverView(book: book, width: 46)
-            VStack(alignment: .leading, spacing: 6) {
-                // Each File by its own label, as the web app's file list does;
-                // the Book's title would name every File the same.
-                Text(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)
-                    .font(.geist(.subheadline, weight: .semibold))
-                    .lineLimit(2)
-                if FileTypes.isKnown(file.fileType) {
-                    HStack(spacing: 8) {
-                        FileTypeChip(fileType: file.fileType, outlined: true)
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(file.sizeBytes), countStyle: .file))
-                            .font(.geist(.footnote))
-                            .foregroundStyle(Theme.mutedForeground)
-                            .monospacedDigit()
-                        if file.fileRole == "supplement" {
-                            Text("Supplement")
+            HStack(alignment: .center, spacing: 14) {
+                CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion), width: 46)
+                VStack(alignment: .leading, spacing: 6) {
+                    // Each File by its own label, as the web app's file list does;
+                    // the Book's title would name every File the same.
+                    Text(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)
+                        .font(.geist(.subheadline, weight: .semibold))
+                        .lineLimit(2)
+                    if FileTypes.isKnown(file.fileType) {
+                        HStack(spacing: 8) {
+                            FileTypeChip(fileType: file.fileType, outlined: true)
+                            Text(details)
                                 .font(.geist(.footnote))
                                 .foregroundStyle(Theme.mutedForeground)
+                                .monospacedDigit()
+                        }
+                        if !file.narrators.isEmpty {
+                            Text("Narrated by \(file.narrators.joined(separator: ", "))")
+                                .font(.geist(.footnote))
+                                .foregroundStyle(Theme.mutedForeground)
+                                .lineLimit(2)
+                        }
+                    } else {
+                        Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
+                            .font(.geist(.footnote))
+                            .foregroundStyle(Theme.mutedForeground)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+            if isAudiobook {
+                // Every audiobook File plays from here; the Listen button
+                // above plays the one listened to last.
+                Button { model.listen(fileID: file.id) } label: {
+                    Group {
+                        if playing {
+                            PlayingIndicator(playing: true, height: 14)
+                        } else {
+                            Image(systemName: "headphones")
+                                .font(.system(size: 16, weight: .semibold))
                         }
                     }
-                } else {
-                    Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
-                        .font(.geist(.footnote))
-                        .foregroundStyle(Theme.mutedForeground)
+                    .foregroundStyle(Theme.primary)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
+                .buttonStyle(PlayerControlStyle())
+                .accessibilityLabel("Listen to \(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)")
+                .accessibilityIdentifier("file.listen")
             }
-            Spacer(minLength: 0)
         }
         .padding(14)
         .cardStyle()
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Its length for an audiobook, its size, and whether it's a supplement.
+    private var details: String {
+        var parts: [String] = []
+        if isAudiobook, let seconds = file.durationSeconds, seconds > 0 {
+            parts.append(TimeLabels.left(seconds))
+        }
+        parts.append(ByteCountFormatter.string(fromByteCount: Int64(file.sizeBytes), countStyle: .file))
+        if file.fileRole == "supplement" {
+            parts.append(String(localized: "Supplement"))
+        }
+        return parts.joined(separator: " · ")
     }
 }

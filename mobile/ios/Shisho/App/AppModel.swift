@@ -110,6 +110,23 @@ final class AppModel {
         }
     }
 
+    /// Audio was playing when the app went to the background.
+    @ObservationIgnored private var playingInBackground = false
+
+    func didEnterBackground() {
+        playingInBackground = player?.isPlaying == true
+    }
+
+    /// Coming back while the audio played on, as by tapping it on the lock
+    /// screen or in Control Center, opens Now Playing, where its controls
+    /// are. iOS doesn't say which of those brought the app back.
+    func didBecomeActive() {
+        if playingInBackground, player?.isPlaying == true, player?.file != nil {
+            showingPlayer = true
+        }
+        playingInBackground = false
+    }
+
     /// Opens an audiobook File in the player and shows Now Playing.
     func listen(fileID: Int) {
         player?.open(fileID: fileID, autoplay: true)

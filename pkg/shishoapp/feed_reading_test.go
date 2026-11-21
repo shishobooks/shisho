@@ -2,6 +2,7 @@ package shishoapp
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -140,4 +141,46 @@ func decodeJSON(rec interface{ Result() *http.Response }, into any) error {
 	resp := rec.Result()
 	defer resp.Body.Close()
 	return json.NewDecoder(resp.Body).Decode(into)
+}
+
+// Each File carries its own cover's version and its narrators, since a
+// Book's Files can have different covers and readers.
+func TestFeed_FileCarriesItsCoverAndNarrators(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Audio")
+	f.addBook(1, 1, "Dune")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, cover_image_filename, updated_at) VALUES
+		(5, 1, 1, '/dune.epub', 'epub', 1, 'dune.epub.cover.jpg', '2026-01-02 03:04:05'),
+		(6, 1, 1, '/dune.m4b', 'm4b', 1, 'dune.m4b.cover.jpg', '2026-02-03 04:05:06'),
+		(7, 1, 1, '/dune2.m4b', 'm4b', 1, NULL, '2026-02-03 04:05:06')`)
+	f.exec(`INSERT INTO persons (id, library_id, name, sort_name, sort_name_source) VALUES (1, 1, 'Scott Brick', 'Brick, Scott', 'file'), (2, 1, 'Ann Reader', 'Reader, Ann', 'file')`)
+	f.exec(`INSERT INTO narrators (id, file_id, person_id, sort_order) VALUES (1, 6, 2, 2), (2, 6, 1, 1)`)
+	f.addUser()
+	credential := f.signIn()
+
+	resp := f.changes(credential, 0, 0)
+	book := resp.Entries[len(resp.Entries)-1].Book
+	require.NotNil(t, book)
+	require.Len(t, book.Files, 3)
+	assert.Equal(t, fmt.Sprintf("5-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()), book.Files[0].CoverVersion)
+	assert.Equal(t, fmt.Sprintf("6-%d", time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC).Unix()), book.Files[1].CoverVersion)
+	assert.Empty(t, book.Files[2].CoverVersion)
+	assert.Equal(t, []FeedNarrator{
+		{PersonID: 1, Name: "Scott Brick", SortName: "Brick, Scott"},
+		{PersonID: 2, Name: "Ann Reader", SortName: "Reader, Ann"},
+	}, book.Files[1].Narrators)
+	assert.Empty(t, book.Files[0].Narrators)
+
+	for _, write := range []string{
+		`INSERT INTO narrators (id, file_id, person_id, sort_order) VALUES (3, 7, 1, 1)`,
+		`UPDATE narrators SET sort_order = 3 WHERE id = 1`,
+		`UPDATE persons SET name = 'Scott Brick Jr.' WHERE id = 1`,
+		`DELETE FROM narrators WHERE id = 3`,
+	} {
+		cursor := resp.Cursor
+		f.exec(write)
+		resp = f.changes(credential, cursor, 0)
+		assert.Equal(t, []string{"book:1"}, summary(resp), write)
+	}
 }

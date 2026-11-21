@@ -5,7 +5,6 @@ import SwiftUI
 /// opens Now Playing.
 struct MiniPlayer: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tint: Color?
 
     var body: some View {
@@ -74,7 +73,8 @@ struct MiniPlayer: View {
 
     private func summary(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
         HStack(spacing: 10) {
-            CoverView(book: file.book, width: 42) { image in
+            CoverView(book: file.book, file: CoverFile(id: file.fileID, fileType: "m4b", coverVersion: file.coverVersion),
+                      width: 42) { image in
                 let average = await CoverTint.average(of: image)
                 // A cover replaced meanwhile has its own tint coming.
                 guard !Task.isCancelled else { return }
@@ -82,8 +82,6 @@ struct MiniPlayer: View {
             }
             .frame(width: 42, height: 42)
             .clipped()
-            .scaleEffect(player.isPlaying || reduceMotion ? 1 : 0.84)
-            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: player.isPlaying)
             VStack(alignment: .leading, spacing: 2) {
                 Text(file.book.title)
                     .font(.geist(.subheadline, weight: .semibold))

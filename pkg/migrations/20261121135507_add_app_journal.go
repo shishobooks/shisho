@@ -11,8 +11,8 @@ import (
 
 func init() {
 	// The Shisho app's journal (ADR 0024) and what the change feed (ADR 0023)
-	// gains with it: chapters on each File, and the user's own Reading
-	// Positions and Read-throughs.
+	// gains with it: chapters and narrators on each File, and the user's own
+	// Reading Positions and Read-throughs.
 	//
 	// app_journal_events records each event the server took in, by user,
 	// installation, and the event's own id, so a resent event is applied once
@@ -94,6 +94,15 @@ func init() {
 			moveBooks(fileBook("OLD")+" UNION "+fileBook("NEW"))),
 		trigger("chapters_delete", "DELETE", "chapters", "", moveBooks(fileBook("OLD"))),
 
+		// Narrators are part of their File, and a Person's name is part of
+		// each File that names them as a narrator.
+		trigger("narrators_insert", "INSERT", "narrators", "", moveBooks(fileBook("NEW"))),
+		trigger("narrators_update", "UPDATE", "narrators", differs("file_id", "person_id", "sort_order"),
+			moveBooks(fileBook("OLD")+" UNION "+fileBook("NEW"))),
+		trigger("narrators_delete", "DELETE", "narrators", "", moveBooks(fileBook("OLD"))),
+		trigger("persons_update_narrators", "UPDATE", "persons", differs("name", "sort_name"),
+			moveBooks("SELECT f.book_id FROM narrators n JOIN files f ON f.id = n.file_id WHERE n.person_id = NEW.id")),
+
 		trigger("reading_positions_insert", "INSERT", "reading_positions", "",
 			recordOwn("reading_position", "NEW.file_id", "NEW.user_id", false)),
 		trigger("reading_positions_update", "UPDATE", "reading_positions",
@@ -135,6 +144,10 @@ func init() {
 	down := func(ctx context.Context, db *bun.DB) error {
 		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 			for _, statement := range []string{
+				`DROP TRIGGER IF EXISTS change_log_narrators_insert`,
+				`DROP TRIGGER IF EXISTS change_log_narrators_update`,
+				`DROP TRIGGER IF EXISTS change_log_narrators_delete`,
+				`DROP TRIGGER IF EXISTS change_log_persons_update_narrators`,
 				`DROP TRIGGER IF EXISTS change_log_chapters_insert`,
 				`DROP TRIGGER IF EXISTS change_log_chapters_update`,
 				`DROP TRIGGER IF EXISTS change_log_chapters_delete`,
