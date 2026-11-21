@@ -102,6 +102,9 @@ struct NowPlayingView: View {
             Spacer()
             Color.clear.frame(width: 40, height: 40)
         }
+        // A control keeps its size; VoiceOver and the large content viewer
+        // read it at any text size.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.top, 14)
     }
 
@@ -177,16 +180,27 @@ struct NowPlayingView: View {
             .accessibilityLabel("Position in chapter")
             .accessibilityValue(String(localized: "\(TimeLabels.clock(elapsed)) of \(TimeLabels.clock(length))"))
             .accessibilityIdentifier("player.scrubber")
-            HStack {
-                Text(TimeLabels.clock(elapsed))
-                    .accessibilityLabel("Elapsed \(TimeLabels.clock(elapsed))")
-                    .accessibilityIdentifier("player.position")
-                Spacer()
-                Text("\(TimeLabels.left(left)) left at \(PlaybackSpeed.label(player.rate))")
-                    .accessibilityIdentifier("player.left")
-                Spacer()
-                Text("-\(TimeLabels.clock(length - elapsed))")
-                    .accessibilityLabel("Chapter remaining \(TimeLabels.clock(length - elapsed))")
+            // At accessibility text sizes the time left goes under the
+            // times, so none of them wraps.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let timeLeft = Text("\(TimeLabels.left(left)) left at \(PlaybackSpeed.label(player.rate))")
+                .accessibilityIdentifier("player.left")
+            VStack(spacing: 4) {
+                HStack {
+                    Text(TimeLabels.clock(elapsed))
+                        .accessibilityLabel("Elapsed \(TimeLabels.clock(elapsed))")
+                        .accessibilityIdentifier("player.position")
+                    Spacer()
+                    if !stacked {
+                        timeLeft
+                        Spacer()
+                    }
+                    Text("-\(TimeLabels.clock(length - elapsed))")
+                        .accessibilityLabel("Chapter remaining \(TimeLabels.clock(length - elapsed))")
+                }
+                if stacked {
+                    timeLeft
+                }
             }
             .font(.geist(.caption, weight: .medium))
             .monospacedDigit()
@@ -227,6 +241,7 @@ struct NowPlayingView: View {
         }
         .buttonStyle(PlayerControlStyle())
         .foregroundStyle(Theme.foreground)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .padding(.top, 20)
     }
 
@@ -272,6 +287,7 @@ struct NowPlayingView: View {
             .background(Theme.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
             .animation(.snappy, value: player.rate)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             Text("Speed")
                 .font(.geist(.caption))
                 .foregroundStyle(Theme.foreground.opacity(0.66))

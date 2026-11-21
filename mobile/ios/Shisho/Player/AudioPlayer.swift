@@ -62,6 +62,7 @@ final class AudioPlayer {
     @ObservationIgnored private var knownServerAt: Date?
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var placeWatch: Task<Void, Never>?
+    @ObservationIgnored private var fileWatch: Task<Void, Never>?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var resumeAfterInterruption = false
     @ObservationIgnored private var nowPlayingChapter: Int?
@@ -445,19 +446,55 @@ final class AudioPlayer {
         requestSync()
     }
 
-    /// Offers a place another device synced while this File is open, but
-    /// never jumps to it.
+    /// Follows the open File in the catalog: an edit, such as renamed
+    /// chapters, shows at once, and a File removed from the user's
+    /// Libraries closes the player. It also offers a place another device
+    /// synced while the File is open, but never jumps to it.
     private func watchServerPlace(fileID: Int) {
         placeWatch?.cancel()
         let pool = session.store.pool
-        placeWatch = Task { [weak self] in
-            let observation = ValueObservation.tracking { db in try CatalogStore.serverPlace(db, fileID: fileID) }.removeDuplicates()
+        fileWatch?.cancel()
+        fileWatch = Task { [weak self] in
+            let files = ValueObservation.tracking { db in try CatalogStore.listeningFile(db, fileID: fileID) }.removeDuplicates()
             do {
-                for try await place in observation.values(in: pool) {
+                for try await file in files.values(in: pool) {
+                    self?.catalogChanged(file, fileID: fileID)
+                }
+            } catch {}
+        }
+        placeWatch = Task { [weak self] in
+            let places = ValueObservation.tracking { db in try CatalogStore.serverPlace(db, fileID: fileID) }.removeDuplicates()
+            do {
+                for try await place in places.values(in: pool) {
                     self?.serverPlaceChanged(place)
                 }
             } catch {}
         }
+    }
+
+    private func catalogChanged(_ updated: ListeningFile?, fileID: Int) {
+        guard file?.fileID == fileID else { return }
+        guard let updated else {
+            close()
+            return
+        }
+        if updated != file {
+            file = updated
+            updateNowPlaying()
+        }
+    }
+
+    /// Closes the File, keeping what was listened, as when it's no longer
+    /// in the user's Libraries.
+    private func close() {
+        if isPlaying { pause() }
+        stopSitting(at: Date())
+        teardownItem()
+        file = nil
+        offer = nil
+        UserDefaults.standard.removeObject(forKey: lastFileKey)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
     }
 
     private func serverPlaceChanged(_ place: ServerPlace?) {
@@ -567,6 +604,7 @@ final class AudioPlayer {
         statusObservation?.invalidate()
         statusObservation = nil
         placeWatch?.cancel()
+        fileWatch?.cancel()
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil

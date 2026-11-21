@@ -65,6 +65,9 @@ struct MiniPlayer: View {
         .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
         .padding(.horizontal, 8)
         .padding(.bottom, 6)
+        // It docks over every screen, so it grows only so far with the text
+        // size; Now Playing shows everything in it at full size.
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("miniplayer")
     }

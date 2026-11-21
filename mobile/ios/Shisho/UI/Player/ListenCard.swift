@@ -5,6 +5,7 @@ import SwiftUI
 /// for this Book, and a progress line. It opens Now Playing.
 struct ListenCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let progress: ListenProgress
     let bookID: Int
 
@@ -20,45 +21,73 @@ struct ListenCard: View {
         progress.duration > 0 ? min(1, max(0, seconds / progress.duration)) : 0
     }
 
+    /// At the end, where playing again starts over.
+    private var finished: Bool {
+        progress.duration > 0 && seconds >= progress.duration - 1
+    }
+
     private var title: LocalizedStringKey {
         if playing { return "Listening" }
+        if finished { return "Listen again" }
         return seconds > 1 ? "Resume listening" : "Listen"
     }
 
     private var detail: String {
+        if finished && !playing {
+            return String(localized: "Finished")
+        }
         let left = String(localized: "\(TimeLabels.left(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))")
         guard let index = AudioChapters.index(at: seconds, in: progress.chapters) else { return left }
         return String(localized: "Chapter \(index + 1) · \(left)")
     }
 
+    private var icon: some View {
+        Group {
+            if playing {
+                PlayingIndicator(playing: true, height: 14)
+            } else {
+                Image(systemName: finished ? "arrow.counterclockwise" : "headphones")
+                    .font(.system(size: 20, weight: .semibold))
+            }
+        }
+        .frame(width: 24)
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(.geist(.callout, weight: .bold))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     var body: some View {
         Button { model.listen(fileID: progress.fileID) } label: {
-            HStack(spacing: 12) {
-                Group {
-                    if playing {
-                        PlayingIndicator(playing: true, height: 14)
-                    } else {
-                        Image(systemName: "headphones")
-                            .font(.system(size: 20, weight: .semibold))
-                    }
+            // At accessibility text sizes the parts stack, so no word breaks.
+            let stacked = dynamicTypeSize.isAccessibilitySize
+            let layout = stacked
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+                : AnyLayout(HStackLayout(spacing: 12))
+            layout {
+                HStack(spacing: 12) {
+                    icon
+                    if stacked { titleText }
                 }
-                .frame(width: 24)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.geist(.callout, weight: .bold))
+                    if !stacked { titleText }
                     Text(detail)
                         .font(.geist(.caption))
                         .opacity(0.8)
-                        .lineLimit(1)
+                        .lineLimit(stacked ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: stacked)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if seconds > 1 {
+                if seconds > 1 && !finished {
                     Text(fraction, format: .percent.precision(.fractionLength(0)))
                         .font(.geist(.title3, weight: .heavy))
                         .tracking(-0.4)
                         .monospacedDigit()
                 }
             }
+            .padding(.vertical, stacked ? 12 : 0)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 60)
             .foregroundStyle(Theme.primaryForeground)

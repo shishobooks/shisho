@@ -98,8 +98,10 @@ actor Diagnostics {
 
         """
         for (index, account) in accounts.enumerated() {
-            let capabilities = account.capabilities.isEmpty ? "none" : account.capabilities.joined(separator: ", ")
-            text += "Account \(index + 1): server \(account.serverVersion), capabilities: \(capabilities), changes waiting to sync: \(account.pendingEvents)\n"
+            // A protocol's baseline features aren't listed, so a server with
+            // nothing beyond it lists none.
+            let capabilities = account.capabilities.isEmpty ? "none beyond the protocol's" : account.capabilities.joined(separator: ", ")
+            text += "Account \(index + 1): server \(account.serverVersion), protocol \(Installation.appProtocol), capabilities: \(capabilities), changes waiting to sync: \(account.pendingEvents)\n"
         }
         text += "\nLog\n\n" + contents()
         if let titles, !titles.isEmpty {
