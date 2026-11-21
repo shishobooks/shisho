@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,9 +203,11 @@ func TestSeriesList_IncludesCoverCacheKey(t *testing.T) {
 	assert.Equal(t, expected, resp.Items[0].CoverCacheKey)
 }
 
-func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
-	t.Parallel()
-
+// seriesWithCover seeds a series whose one book has a file with a cover,
+// returning the series, the cover cache key the series should report, and a
+// handler.
+func seriesWithCover(t *testing.T) (*models.Series, string, *handler) {
+	t.Helper()
 	db := testdb.New(t)
 	ctx := context.Background()
 
@@ -258,12 +261,22 @@ func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 	_, err = db.NewInsert().Model(file).Exec(ctx)
 	require.NoError(t, err)
 
+	reloaded := &models.File{}
+	require.NoError(t, db.NewSelect().Model(reloaded).Where("f.id = ?", file.ID).Scan(ctx))
+
 	h := &handler{
 		seriesService:  NewService(db),
 		bookService:    books.NewService(db, appsettings.NewService(db)),
 		libraryService: libraries.NewService(db),
 		aliasService:   aliases.NewService(db),
 	}
+
+	return series1, fmt.Sprintf("%d-%d", file.ID, reloaded.UpdatedAt.Unix()), h
+}
+
+func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
+	t.Parallel()
+	series1, expected, h := seriesWithCover(t)
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -281,11 +294,31 @@ func TestSeriesRetrieve_IncludesCoverCacheKey(t *testing.T) {
 		CoverCacheKey string `json:"cover_cache_key"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, expected, resp.CoverCacheKey)
+}
 
-	reloaded := &models.File{}
-	require.NoError(t, db.NewSelect().Model(reloaded).Where("f.id = ?", file.ID).Scan(ctx))
+// The web app keeps an update's response as the series, so it carries the
+// cover's key as retrieving it does.
+func TestSeriesUpdate_IncludesCoverCacheKey(t *testing.T) {
+	t.Parallel()
+	series1, expected, h := seriesWithCover(t)
 
-	expected := fmt.Sprintf("%d-%d", file.ID, reloaded.UpdatedAt.Unix())
+	e := newTestEchoSeries(t)
+	req := httptest.NewRequest(http.MethodPatch, "/", strings.NewReader(`{"aliases":["Saga"]}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	setAllAccessUser(c)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.Itoa(series1.ID))
+
+	require.NoError(t, h.update(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp struct {
+		CoverCacheKey string `json:"cover_cache_key"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, expected, resp.CoverCacheKey)
 }
 
