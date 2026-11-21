@@ -4,6 +4,7 @@
 //
 //	go run ./tools/appharness ios [-app Shisho.app] [-flows dir] [-keep]
 //	go run ./tools/appharness serve
+//	go run ./tools/appharness base
 //	go run ./tools/appharness fixtures DIR
 //	go run ./tools/appharness simulator -- COMMAND...
 //
@@ -38,6 +39,10 @@ func main() {
 		err = runIOS(ctx, os.Args[2:])
 	case "serve":
 		err = runServe(ctx)
+	case "base":
+		// Makes the base simulator ahead of a run, so its first boot can
+		// happen while the app builds (`mise ios:simulator`).
+		_, err = baseSimulator(ctx)
 	case "fixtures":
 		if len(os.Args) != 3 {
 			usage()
@@ -56,7 +61,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | serve | fixtures DIR | simulator -- COMMAND...")
+	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | serve | base | fixtures DIR | simulator -- COMMAND...")
 	flag.PrintDefaults()
 	os.Exit(2)
 }

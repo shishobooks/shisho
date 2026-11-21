@@ -29,6 +29,6 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 `mise mobile:check` runs them all; `mise check:quiet` leaves them out. While iterating:
 
 - Generated types → `mise lint:apptypes`, then `mise ios:test` (decode tests on the host, app tests on a simulator) and `mise android:test`.
-- App code → `mise ios:test` and `mise ios:build`.
+- App code → `mise ios:test`, which builds the app first.
 - Anything a flow covers → `mise ios:harness`, which needs ffmpeg. `-- -keep` keeps the server log and Maestro's screenshots. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
 - The too-old paths → start the server with `SHISHO_DEV_APP_PROTOCOLS` set to the range it should accept: a range above the app's protocol makes the app too old, and one below it makes the server too old for it.

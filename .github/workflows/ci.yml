@@ -511,9 +511,11 @@ jobs:
       # The harness makes its M4B fixture with ffmpeg.
       - name: Install ffmpeg
         run: brew install ffmpeg
-      - run: mise ios:test
-      - name: Run the Maestro flows
-        run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
+      # The unit tests and the Maestro flows run side by side on clones of
+      # one base simulator, after one build. The base's first boot happens
+      # while the app builds.
+      - name: Run the unit tests and the Maestro flows
+        run: mise run ios:test ::: ios:harness -out "$RUNNER_TEMP/harness"
       - name: Keep the harness output
         if: failure()
         uses: actions/upload-artifact@v7

@@ -105,6 +105,11 @@ func runIOS(ctx context.Context, args []string) error {
 		"-e", "CONTROL="+control.URL,
 		flows)
 	maestro.Stdout, maestro.Stderr = os.Stdout, os.Stderr
+	// Maestro installs its driver on the simulator first, which a busy CI
+	// machine takes longer to do than Maestro's default allows.
+	if os.Getenv("MAESTRO_DRIVER_STARTUP_TIMEOUT") == "" {
+		maestro.Env = append(os.Environ(), "MAESTRO_DRIVER_STARTUP_TIMEOUT=300000")
+	}
 	if err := maestro.Run(); err != nil {
 		if !*keep {
 			fmt.Fprintln(os.Stderr, "appharness: a flow failed; run with -keep to keep the server log and Maestro's screenshots")

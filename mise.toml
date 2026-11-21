@@ -291,11 +291,17 @@ description = "Generate the iOS app's Xcode project and open it in Xcode"
 depends = ["ios:generate"]
 run = "open mobile/ios/Shisho.xcodeproj"
 
+# The simulator build is for this Mac's own architecture only, and includes
+# the tests, so the unit tests and the Maestro flows share one build.
 [tasks."ios:build"]
-description = "Build the iOS app for the simulator, into mobile/ios/build (never Xcode's DerivedData)"
+description = "Build the iOS app and its tests for the simulator, into mobile/ios/build (never Xcode's DerivedData)"
 depends = ["ios:generate"]
 dir = "mobile/ios"
-run = "xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet build"
+run = "xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- ARCHS=\"$(uname -m)\" -quiet build-for-testing"
+
+[tasks."ios:simulator"]
+description = "Make the harness's base simulator, booted once, if it doesn't exist yet: the tests and flows clone it"
+run = "go run ./tools/appharness base"
 
 [tasks."ios:strings"]
 description = "Update the iOS app's String Catalog from the strings in its code, which command-line builds leave alone"
@@ -304,7 +310,7 @@ dir = "mobile/ios"
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-objects=build/DerivedData/Build/Intermediates.noindex/Shisho.build/Debug-iphonesimulator/Shisho.build/Objects-normal/arm64
+objects=build/DerivedData/Build/Intermediates.noindex/Shisho.build/Debug-iphonesimulator/Shisho.build/Objects-normal/$(uname -m)
 data=()
 for f in "$objects"/*.stringsdata; do
   # Skip what a deleted source file left behind, and the build's generated files.
@@ -349,17 +355,22 @@ else
 fi
 '''
 
+[tasks."ios:test:api"]
+description = "Run the API types' decode tests on this Mac"
+depends = ["tygo"]
+dir = "mobile/ios/ShishoAPI"
+run = "swift test --scratch-path ../build/ShishoAPI"
+
+# Its dependencies run in parallel, so the base simulator's first boot
+# happens while the app builds.
 [tasks."ios:test"]
 description = "Run the iOS unit tests: the API types' decode tests, and the app's tests on a disposable simulator"
-depends = ["ios:generate"]
-run = [
-  "cd mobile/ios/ShishoAPI && swift test --scratch-path ../build/ShishoAPI",
-  "go run ./tools/appharness simulator -- sh -c 'cd mobile/ios && xcodebuild -project Shisho.xcodeproj -scheme Shisho -destination \"id=$SIMULATOR_UDID\" -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet test'",
-]
+depends = ["ios:test:api", "ios:build", "ios:simulator"]
+run = "go run ./tools/appharness simulator -- sh -c 'cd mobile/ios && xcodebuild -project Shisho.xcodeproj -scheme Shisho -destination \"id=$SIMULATOR_UDID\" -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet test-without-building'"
 
 [tasks."ios:harness"]
 description = "Run the Maestro flows against the iOS app on a disposable simulator and a seeded server (needs ffmpeg)"
-depends = ["ios:build"]
+depends = ["ios:build", "ios:simulator"]
 tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
 run = "go run ./tools/appharness ios"
 
@@ -380,7 +391,6 @@ run = [
   "mise lint:apptypes",
   "mise ios:test",
   "mise android:test",
-  "mise ios:build",
 ]
 
 # === Other ===
