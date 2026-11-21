@@ -12,6 +12,7 @@ import type {
   Reporter,
   Suite,
   TestCase,
+  TestResult,
 } from "@playwright/test/reporter";
 
 export interface FlakyTest {
@@ -28,8 +29,21 @@ export interface FlakyTest {
 // eslint-disable-next-line no-control-regex
 const ansi = /\u001b\[[0-9;]*m/g;
 
+const failure = (result: TestResult) =>
+  result.status === "failed" || result.status === "timedOut";
+
+// Whether an attempt failed and a later one passed. Playwright also calls a
+// failure then a skip flaky, and a test.fail() that passed, then failed.
+const passedOnRetry = (test: TestCase) => {
+  const failed = test.results.findIndex(failure);
+  return (
+    failed >= 0 &&
+    test.results.slice(failed + 1).some((result) => result.status === "passed")
+  );
+};
+
 const firstFailure = (test: TestCase) => {
-  const failed = test.results.find((result) => result.status !== "passed");
+  const failed = test.results.find(failure);
   return (
     failed?.error?.message?.replace(ansi, "").split("\n")[0] ??
     failed?.status ??
@@ -38,22 +52,15 @@ const firstFailure = (test: TestCase) => {
 };
 
 export function flakyTests(tests: TestCase[], rootDir: string): FlakyTest[] {
-  return (
-    tests
-      // Playwright also calls a failure then a skip flaky.
-      .filter(
-        (test) =>
-          test.outcome() === "flaky" &&
-          test.results.some((result) => result.status === "passed"),
-      )
-      .map((test) => ({
-        project: test.parent.project()?.name ?? "",
-        title: test.titlePath().slice(3).join(" › "),
-        file: path.relative(rootDir, test.location.file),
-        line: test.location.line,
-        error: firstFailure(test),
-      }))
-  );
+  return tests
+    .filter((test) => test.outcome() === "flaky" && passedOnRetry(test))
+    .map((test) => ({
+      project: test.parent.project()?.name ?? "",
+      title: test.titlePath().slice(3).join(" › "),
+      file: path.relative(rootDir, test.location.file),
+      line: test.location.line,
+      error: firstFailure(test),
+    }));
 }
 
 // Workflow commands reserve these in messages, and also , and : in

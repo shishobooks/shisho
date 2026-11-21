@@ -65,6 +65,17 @@ describe("flakyTests", () => {
     ).toEqual([]);
   });
 
+  // Playwright calls a test.fail() that passes, then fails on its retry,
+  // flaky too.
+  it("leaves out a test that passed, then failed", () => {
+    expect(
+      flakyTests(
+        [testCase("flaky", [result("passed"), result("failed", "Error: x")])],
+        "/repo",
+      ),
+    ).toEqual([]);
+  });
+
   it("says a failed attempt timed out when it has no error message", () => {
     const [flaky] = flakyTests(
       [testCase("flaky", [result("timedOut"), result("passed")])],
