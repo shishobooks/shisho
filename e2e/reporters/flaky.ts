@@ -38,15 +38,22 @@ const firstFailure = (test: TestCase) => {
 };
 
 export function flakyTests(tests: TestCase[], rootDir: string): FlakyTest[] {
-  return tests
-    .filter((test) => test.outcome() === "flaky")
-    .map((test) => ({
-      project: test.parent.project()?.name ?? "",
-      title: test.titlePath().slice(3).join(" › "),
-      file: path.relative(rootDir, test.location.file),
-      line: test.location.line,
-      error: firstFailure(test),
-    }));
+  return (
+    tests
+      // Playwright also calls a failure then a skip flaky.
+      .filter(
+        (test) =>
+          test.outcome() === "flaky" &&
+          test.results.some((result) => result.status === "passed"),
+      )
+      .map((test) => ({
+        project: test.parent.project()?.name ?? "",
+        title: test.titlePath().slice(3).join(" › "),
+        file: path.relative(rootDir, test.location.file),
+        line: test.location.line,
+        error: firstFailure(test),
+      }))
+  );
 }
 
 // Workflow commands reserve these in messages, and also , and : in
@@ -97,6 +104,12 @@ export default class FlakyReporter implements Reporter {
     if (flaky.length === 0) return;
     for (const test of flaky) console.log(annotation(test));
     const summaryFile = process.env.GITHUB_STEP_SUMMARY;
-    if (summaryFile) fs.appendFileSync(summaryFile, summary(flaky));
+    if (!summaryFile) return;
+    try {
+      fs.appendFileSync(summaryFile, summary(flaky));
+    } catch (err) {
+      // The annotations above still show them; the run's result stands.
+      console.log(`Couldn't write the flaky test summary: ${err}`);
+    }
   }
 }

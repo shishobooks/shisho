@@ -1,7 +1,12 @@
-import type { TestCase, TestResult } from "@playwright/test/reporter";
-import { describe, expect, it } from "vitest";
+import type {
+  FullConfig,
+  Suite,
+  TestCase,
+  TestResult,
+} from "@playwright/test/reporter";
+import { describe, expect, it, vi } from "vitest";
 
-import { annotation, flakyTests, summary } from "./flaky";
+import FlakyReporter, { annotation, flakyTests, summary } from "./flaky";
 
 const result = (status: TestResult["status"], message?: string) =>
   ({ status, error: message ? { message } : undefined }) as TestResult;
@@ -49,6 +54,15 @@ describe("flakyTests", () => {
         error: "Error: expect(received).toBe(expected)",
       },
     ]);
+  });
+
+  it("leaves out a test whose retry was skipped rather than passed", () => {
+    expect(
+      flakyTests(
+        [testCase("flaky", [result("failed", "Error: x"), result("skipped")])],
+        "/repo",
+      ),
+    ).toEqual([]);
   });
 
   it("says a failed attempt timed out when it has no error message", () => {
@@ -100,5 +114,34 @@ describe("summary", () => {
         "",
       ].join("\n"),
     );
+  });
+});
+
+describe("FlakyReporter", () => {
+  // A summary that can't be written mustn't fail a run whose tests passed.
+  it("still reports when the job summary can't be written", () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const before = process.env.GITHUB_STEP_SUMMARY;
+    process.env.GITHUB_STEP_SUMMARY = "/nonexistent/dir/summary.md";
+    try {
+      const reporter = new FlakyReporter();
+      const flaky = testCase("flaky", [
+        result("failed", "Error: x"),
+        result("passed"),
+      ]);
+      reporter.onBegin(
+        {} as FullConfig,
+        {
+          allTests: () => [flaky],
+        } as unknown as Suite,
+      );
+
+      expect(() => reporter.onEnd()).not.toThrow();
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/^::warning /));
+    } finally {
+      if (before === undefined) delete process.env.GITHUB_STEP_SUMMARY;
+      else process.env.GITHUB_STEP_SUMMARY = before;
+      log.mockRestore();
+    }
   });
 });
