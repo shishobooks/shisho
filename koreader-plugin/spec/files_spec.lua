@@ -91,4 +91,41 @@ return {
             assert(flushed, "flush was not called")
         end)
     end,
+
+    -- A full disk takes the buffered write, then fails it when flushed, which
+    -- must not replace a good file with an empty one.
+    ["keeps the old file when the disk is full"] = function()
+        local path = scratch_dir() .. "/state.lua"
+        assert(Files.write(path, { kept = true }, "state"))
+        -- The temporary file lands on a device that is always full.
+        assert(os.execute("ln -s /dev/full '" .. path .. ".tmp'") == 0)
+
+        assert_eq(Files.write(path, { kept = false }, "state"), nil)
+        assert_eq(lfs.attributes(path, "mode"), "file")
+        assert_eq(dofile(path), { kept = true })
+        assert_eq(lfs.symlinkattributes(path .. ".tmp", "mode"), nil, "no temporary file is left")
+    end,
+
+    -- KOReader keeps a custom title or cover beside the sidecar, and moves it
+    -- when it saves the sidecar elsewhere. One left behind would shadow a
+    -- newer one KOReader writes in the new place.
+    ["moves a custom metadata file with the sidecar, as KOReader does"] = function()
+        local book = scratch_dir() .. "/book.epub"
+        write(book, "book")
+        local beside
+        withLocation("doc", function()
+            local doc_settings = DocSettings:open(book)
+            doc_settings:saveSetting("summary", { status = "complete" })
+            doc_settings:flush()
+            beside = DocSettings:findSidecarFile(book)
+            write(beside:gsub("[^/]+$", "custom_metadata.lua"), "return { custom_props = { title = \"Mine\" } }")
+        end)
+        withLocation("dir", function()
+            local doc_settings = DocSettings:open(book)
+            doc_settings:saveSetting("summary", { status = "reading" })
+            local dir = Files.writeSidecar(doc_settings)
+            assert_eq(DocSettings:findCustomMetadataFile(book), dir .. "/custom_metadata.lua")
+            assert_eq(lfs.attributes(beside:gsub("[^/]+$", "custom_metadata.lua"), "mode"), nil, "the copy beside the book is gone")
+        end)
+    end,
 }

@@ -18,15 +18,17 @@ function Files.write(path, data, comment)
     if not file then
         return nil, err
     end
-    local written, write_err = file:write("-- ", comment, "\nreturn ", dump(data, nil, true), "\n")
-    if written then
-        ffiutil.fsyncOpenedFile(file)
-    end
+    local ok, err = file:write("-- ", comment, "\nreturn ", dump(data, nil, true), "\n")
+    -- A full disk takes a write into the buffer and fails it here.
+    if ok then ok, err = file:flush() end
+    -- Best effort, as KOReader's own writes: some storage can't sync, and
+    -- what flush handed the system is there to read either way.
+    if ok then ffiutil.fsyncOpenedFile(file) end
     local closed, close_err = file:close()
-    if not written or not closed then
+    if not ok or not closed then
         -- A short write, as on a full disk, must never replace a good file.
         os.remove(tmp)
-        return nil, write_err or close_err
+        return nil, err or close_err
     end
     local ok, rename_err = os.rename(tmp, path)
     if not ok then
@@ -64,6 +66,7 @@ function Files.writeSidecar(doc_settings)
             util.makePath(dir)
             local sidecar = dir .. "/" .. doc_settings.sidecar_filename
             if Files.write(sidecar, doc_settings.data, sidecar) then
+                Files.moveCustomFiles(doc_settings, dir)
                 -- Copies in other locations would shadow this one.
                 doc_settings:purge(sidecar)
                 return dir
@@ -71,6 +74,23 @@ function Files.writeSidecar(doc_settings)
         end
     end
     return doc_settings:flush()
+end
+
+-- moveCustomFiles moves a book's custom cover and custom metadata into dir,
+-- where its sidecar now is, as DocSettings:flush does. One left behind would
+-- shadow a newer one KOReader writes in dir. Each old copy goes only once
+-- its replacement is written.
+function Files.moveCustomFiles(doc_settings, dir)
+    for __, get in ipairs({ "getCustomCoverFile", "getCustomMetadataFile" }) do
+        local file = doc_settings[get] and doc_settings[get](doc_settings)
+        if file then
+            local filepath, filename = util.splitFilePathName(file)
+            if filepath ~= dir .. "/" and ffiutil.copyFile(file, dir .. "/" .. filename) == nil then
+                os.remove(file)
+                doc_settings[get](doc_settings, true) -- KOReader's cache of where it is
+            end
+        end
+    end
 end
 
 -- Writer writes data to path only when it changed since the last write, for
