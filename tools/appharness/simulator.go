@@ -24,7 +24,7 @@ import (
 // The number changes when how the harness makes a base does; it deletes a
 // base of an older number and makes a new one. CI caches the base by this
 // name (.github/actions/setup-ios), so keep it on one line as it is.
-const baseSimulatorName = "Shisho Harness Base 2"
+const baseSimulatorName = "Shisho Harness Base 3"
 
 // oldBaseSimulatorPrefix names every base the harness has made.
 const oldBaseSimulatorPrefix = "Shisho Harness Base"
@@ -132,6 +132,12 @@ func setUp(ctx context.Context, udid string) error {
 		return err
 	}
 	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+		return err
+	}
+	// Password AutoFill off, so iOS doesn't offer to save the password after
+	// a flow signs in: the offer covers the app, at a moment that varies with
+	// how busy the machine is.
+	if _, err := simctl(ctx, "spawn", udid, "defaults", "write", "com.apple.WebUI", "AutoFillPasswords", "-bool", "NO"); err != nil {
 		return err
 	}
 	_, err := simctl(ctx, "shutdown", udid)

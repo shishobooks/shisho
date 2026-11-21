@@ -21,10 +21,12 @@ runs:
       id: keys
       shell: bash
       run: |
-        # The runner image fixes Xcode and the simulator runtimes, so a new
-        # image builds and boots afresh.
-        image="$ImageOS-$ImageVersion"
-        echo "image=$image" >> "$GITHUB_OUTPUT"
+        # By the Xcode build and the iOS runtimes it can boot, not the image
+        # version: GitHub serves several image versions at once while it
+        # rolls one out, most with the same Xcode and runtimes.
+        xcode=$(xcodebuild -version | sed -nE 's/^Build version (.*)$/\1/p')
+        runtimes=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.platform == "iOS" and .isAvailable) | .buildversion] | sort | join("-")')
+        echo "xcode=$xcode" >> "$GITHUB_OUTPUT"
         # The base's name carries a number that changes when how the
         # harness makes a base does, so other edits keep the cache.
         base=$(sed -nE 's/^const baseSimulatorName = "(.*)"$/\1/p' tools/appharness/simulator.go)
@@ -32,7 +34,7 @@ runs:
           echo "::error::Couldn't read baseSimulatorName from tools/appharness/simulator.go"
           exit 1
         fi
-        echo "simulator=ios-base-simulator-$image-${base// /-}" >> "$GITHUB_OUTPUT"
+        echo "simulator=ios-base-simulator-$xcode-$runtimes-${base// /-}" >> "$GITHUB_OUTPUT"
         echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
         echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
         echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
@@ -56,7 +58,7 @@ runs:
           !mobile/ios/build/DerivedData/TestResults
           !mobile/ios/build/DerivedData/Index.noindex
           mobile/ios/build/ShishoAPI
-        key: xcode-ios-${{ steps.keys.outputs.image }}-${{ hashFiles('mobile/ios/project.yml', 'mobile/ios/ShishoAPI/Package.swift') }}
+        key: xcode-ios-${{ steps.keys.outputs.xcode }}-${{ hashFiles('mobile/ios/project.yml', 'mobile/ios/ShishoAPI/Package.swift') }}
     - name: Restore the base simulator
       id: simulator
       uses: actions/cache/restore@v6
