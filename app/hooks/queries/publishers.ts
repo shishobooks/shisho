@@ -123,8 +123,18 @@ export const useUpdatePublisher = () => {
         payload,
       );
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (data, variables) => {
+      // Its edit dialog fills from the publisher when reopened, so it holds what
+      // was saved at once rather than after the refetch below. A rename can
+      // merge into another, which the response is, so it's keyed by its id.
+      // A fetch of it begun before the save would land over this one.
+      await queryClient.cancelQueries({
+        queryKey: [QueryKey.RetrievePublisher, data.id],
+      });
+      queryClient.setQueryData([QueryKey.RetrievePublisher, data.id], data);
+      // A merge moves the source's children to the publisher it merged into.
       if (
+        data.id !== variables.publisherId ||
         variables.payload.parent_id !== undefined ||
         variables.payload.parent_name !== undefined
       ) {

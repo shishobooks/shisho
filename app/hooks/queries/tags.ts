@@ -106,7 +106,15 @@ export const useUpdateTag = () => {
     }) => {
       return API.request<TagResponse>("PATCH", `/tags/${tagId}`, payload);
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (data, variables) => {
+      // Its edit dialog fills from the tag when reopened, so it holds what
+      // was saved at once rather than after the refetch below. A rename can
+      // merge into another, which the response is, so it's keyed by its id.
+      // A fetch of it begun before the save would land over this one.
+      await queryClient.cancelQueries({
+        queryKey: [QueryKey.RetrieveTag, data.id],
+      });
+      queryClient.setQueryData([QueryKey.RetrieveTag, data.id], data);
       queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrieveTag, variables.tagId],
       });

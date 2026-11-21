@@ -482,6 +482,8 @@ export class Paginator extends HTMLElement {
     #anchor = 0 // anchor view to a fraction (0-1), Range, or Element
     #justAnchored = false
     #locked = false // while true, prevent any further navigation
+    // Shisho patch: the page turn holding #locked, for settled() below.
+    #turning = Promise.resolve()
     #styles
     #styleMap = new WeakMap()
     #mediaQuery = matchMedia('(prefers-color-scheme: dark)')
@@ -1120,14 +1122,28 @@ export class Paginator extends HTMLElement {
     async #turnPage(dir, distance) {
         if (this.#locked) return
         this.#locked = true
-        const prev = dir === -1
-        const shouldGo = await (prev ? this.#scrollPrev(distance) : this.#scrollNext(distance))
-        if (shouldGo) await this.#goTo({
-            index: this.#adjacentIndex(dir),
-            anchor: prev ? () => 1 : () => 0,
-        })
-        if (shouldGo || !this.hasAttribute('animated')) await wait(100)
-        this.#locked = false
+        // Shisho patch: settled() waits on this turn.
+        let landed
+        this.#turning = new Promise(resolve => landed = resolve)
+        try {
+            const prev = dir === -1
+            const shouldGo = await (prev ? this.#scrollPrev(distance) : this.#scrollNext(distance))
+            if (shouldGo) await this.#goTo({
+                index: this.#adjacentIndex(dir),
+                anchor: prev ? () => 1 : () => 0,
+            })
+            if (shouldGo || !this.hasAttribute('animated')) await wait(100)
+        } finally {
+            this.#locked = false
+            landed()
+        }
+    }
+    // Shisho patch: resolves once no page turn is in progress. goTo() does
+    // nothing while one is, for as long as the next section takes to load
+    // plus 100ms, so a caller that must not lose its move awaits this first.
+    // Where the reader is (the last 'relocate') is also only final then.
+    async settled() {
+        while (this.#locked) await this.#turning
     }
     prev(distance) {
         return this.#turnPage(-1, distance)

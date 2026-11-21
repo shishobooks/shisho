@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { LocationHistory } from "@/libraries/locationHistory";
 
-// The parts of foliate's <foliate-view> the history uses.
+// The parts of foliate's <foliate-view> the history uses. Only the
+// paginator has settled(); the fixed-layout renderer never ignores a move.
 type HistoryBook = HTMLElement & {
   goTo?: (target: string) => unknown;
+  renderer?: { settled?: () => Promise<void> };
 };
 
 // Where the reader is, as foliate last reported it: the CFI of what the
@@ -25,12 +27,16 @@ const warn = (err: unknown) =>
  * the same way.
  *
  * foliate doesn't queue moves, and one can land before an earlier one still
- * loading a section, so jumps and moves back and forward take turns.
+ * loading a section, so jumps and moves back and forward take turns. Each
+ * also waits for a page turn in progress to land: foliate ignores a move
+ * until then, and where the reader is isn't known until then either.
  */
 export function useLocationHistory(view: HTMLElement | null) {
   const historyRef = useRef(new LocationHistory());
   const hereRef = useRef<Here | null>(null);
   const turnRef = useRef<Promise<unknown>>(Promise.resolve());
+  // Which Book's moves are queued: reset() starts a new queue.
+  const bookRef = useRef(0);
   const [state, setState] = useState({ canGoBack: false, canGoForward: false });
 
   const sync = useCallback(() => {
@@ -41,17 +47,28 @@ export function useLocationHistory(view: HTMLElement | null) {
     });
   }, []);
 
-  // Runs `task` once the moves before it have landed.
-  const takeTurn = useCallback(<T>(task: () => Promise<T>) => {
-    const turn = turnRef.current.then(task);
-    turnRef.current = turn.catch(() => {});
-    return turn;
-  }, []);
+  // Runs `task` once the moves before it and any page turn have landed,
+  // unless another Book opened meanwhile.
+  const takeTurn = useCallback(
+    (task: () => Promise<void>) => {
+      const book = bookRef.current;
+      const turn = turnRef.current
+        .then(() => (view as HistoryBook | null)?.renderer?.settled?.())
+        .then(() => (bookRef.current === book ? task() : undefined));
+      turnRef.current = turn.catch(() => {});
+      return turn;
+    },
+    [view],
+  );
 
   /** Starts over, for a Book just opened. */
   const reset = useCallback(() => {
     historyRef.current = new LocationHistory();
     hereRef.current = null;
+    // A new queue: the last Book's renderer, replaced mid-turn, may never
+    // let go of the old one.
+    bookRef.current += 1;
+    turnRef.current = Promise.resolve();
     sync();
   }, [sync]);
 
@@ -109,8 +126,8 @@ export function useLocationHistory(view: HTMLElement | null) {
           // Position.
           await (view as HistoryBook).goTo?.(target);
         } finally {
-          // foliate ignores a move for a moment after a page turn: the
-          // history stays as it was, to try again.
+          // A move that went nowhere, such as to a section that failed to
+          // load, leaves the history as it was, to try again.
           if (hereRef.current === here && historyRef.current === history) {
             history.restore(before);
             sync();

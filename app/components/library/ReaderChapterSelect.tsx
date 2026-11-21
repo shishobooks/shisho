@@ -22,6 +22,8 @@ interface ReaderChapterSelectProps {
   // The current entry, or empty when the reader isn't in one.
   value: string;
   onValueChange: (value: string) => void;
+  // While the reader can't move yet.
+  disabled?: boolean;
 }
 
 // The chapter menu in a reader's header. After a pick with the mouse, focus
@@ -31,6 +33,7 @@ const ReaderChapterSelect = ({
   entries,
   value,
   onValueChange,
+  disabled,
 }: ReaderChapterSelectProps) => {
   const current = entries.find((entry) => entry.value === value);
   const usedPointerRef = useRef(false);
@@ -42,7 +45,7 @@ const ReaderChapterSelect = ({
   };
 
   return (
-    <Select onValueChange={onValueChange} value={value}>
+    <Select disabled={disabled} onValueChange={onValueChange} value={value}>
       <SelectTrigger
         aria-label="Jump to chapter"
         className="w-auto max-w-[50vw] gap-2 [&>span]:truncate"

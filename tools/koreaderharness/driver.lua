@@ -654,13 +654,16 @@ end
 -- plugin-sync seeds statistics, with Wi-Fi off, then turns Wi-Fi on, which
 -- syncs by itself. With sync_now, it taps Sync now first instead.
 commands["plugin-sync"] = function()
+    -- Before the file browser starts, as KOReader saved them in an earlier
+    -- session: its cover extraction then reads sidecars from a process of
+    -- its own, and deletes one it catches half written.
+    seedSummaries()
     withPlugin(function(plugin)
         if args.statistics_off then
             G_reader_settings:saveSetting("statistics", { is_enabled = false })
         end
         resetStatistics()
         seedStatistics()
-        seedSummaries()
         if args.sync_now then
             -- Sync now, as the menu runs it: only once Wi-Fi is on.
             local problems

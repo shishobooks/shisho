@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -24,7 +25,7 @@ import (
 // The number changes when how the harness makes a base does; it deletes a
 // base of an older number and makes a new one. CI caches the base by this
 // name (.github/actions/setup-ios), so keep it on one line as it is.
-const baseSimulatorName = "Shisho Harness Base 3"
+const baseSimulatorName = "Shisho Harness Base 4"
 
 // oldBaseSimulatorPrefix names every base the harness has made.
 const oldBaseSimulatorPrefix = "Shisho Harness Base"
@@ -125,8 +126,8 @@ func baseSimulator(ctx context.Context) (string, error) {
 	return "", errors.New("no iOS simulator runtime with an iPhone is installed; install one in Xcode's Components settings")
 }
 
-// setUp boots a new simulator until iOS finishes its first-boot setup, then
-// shuts it down.
+// setUp boots a new simulator until iOS finishes its first-boot setup, shuts
+// it down, and disallows password AutoFill.
 func setUp(ctx context.Context, udid string) error {
 	if _, err := simctl(ctx, "boot", udid); err != nil {
 		return err
@@ -134,14 +135,36 @@ func setUp(ctx context.Context, udid string) error {
 	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
 		return err
 	}
-	// Password AutoFill off, so iOS doesn't offer to save the password after
-	// a flow signs in: the offer covers the app, at a moment that varies with
-	// how busy the machine is.
-	if _, err := simctl(ctx, "spawn", udid, "defaults", "write", "com.apple.WebUI", "AutoFillPasswords", "-bool", "NO"); err != nil {
+	home, err := simctl(ctx, "getenv", udid, "HOME")
+	if err != nil {
 		return err
 	}
-	_, err := simctl(ctx, "shutdown", udid)
-	return err
+	if _, err := simctl(ctx, "shutdown", udid); err != nil {
+		return err
+	}
+	return disallowPasswordAutoFill(ctx, home)
+}
+
+// disallowPasswordAutoFill sets the restriction a device management profile
+// would, in the settings the first boot wrote, so that iOS never offers to
+// save the password after a flow signs in. Turning password AutoFill off in
+// Settings only hides the offer: iOS still starts SafariViewService for it,
+// and once the app lets that go, iOS throttles it in the background while
+// XCTest still reports it in front, so Maestro's driver waits on it each time
+// it reads the screen, for up to half a minute on a busy CI runner.
+func disallowPasswordAutoFill(ctx context.Context, home string) error {
+	for _, settings := range []string{
+		"Containers/Shared/SystemGroup/systemgroup.com.apple.configurationprofiles/Library/ConfigurationProfiles/UserSettings.plist",
+		"Library/UserConfigurationProfiles/EffectiveUserSettings.plist",
+		"Library/UserConfigurationProfiles/PublicInfo/PublicEffectiveUserSettings.plist",
+	} {
+		path := filepath.Join(home, settings)
+		//nolint:gosec // The harness's own plutil arguments.
+		if out, err := exec.CommandContext(ctx, "plutil", "-replace", "restrictedBool.allowPasswordAutoFill.value", "-bool", "NO", path).CombinedOutput(); err != nil {
+			return errors.Wrapf(err, "disallow password AutoFill in %s: %s", path, out)
+		}
+	}
+	return nil
 }
 
 // versionLess compares dotted versions numerically.

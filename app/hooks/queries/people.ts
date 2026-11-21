@@ -110,7 +110,14 @@ export const useUpdatePerson = () => {
         payload,
       );
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (data, variables) => {
+      // Its edit dialog fills from the person when reopened, so it holds what
+      // was saved at once rather than after the refetch below.
+      // A fetch of it begun before the save would land over this one.
+      await queryClient.cancelQueries({
+        queryKey: [QueryKey.RetrievePerson, data.id],
+      });
+      queryClient.setQueryData([QueryKey.RetrievePerson, data.id], data);
       queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrievePerson, variables.personId],
       });

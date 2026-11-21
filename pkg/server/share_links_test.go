@@ -62,6 +62,9 @@ func newShareLinksFixture(t *testing.T) *shareLinksFixture {
 	cfg := newPermissionTestConfig(t)
 	cacheDir := t.TempDir()
 	dlCache := downloadcache.NewCache(cacheDir, 1<<30)
+	// A download's generation publishes and cleans up after its response, so
+	// it must end before the cache directory is removed.
+	t.Cleanup(dlCache.Wait)
 	srv, err := New(cfg, db, worker.New(&config.Config{WorkerProcesses: 1}, db, nil, nil, nil, nil, nil, nil), nil, nil, nil, dlCache, nil, nil, nil)
 	require.NoError(t, err)
 

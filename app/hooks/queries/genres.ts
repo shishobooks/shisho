@@ -84,7 +84,15 @@ export const useUpdateGenre = () => {
     }) => {
       return API.request<GenreResponse>("PATCH", `/genres/${genreId}`, payload);
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: async (data, variables) => {
+      // Its edit dialog fills from the genre when reopened, so it holds what
+      // was saved at once rather than after the refetch below. A rename can
+      // merge into another, which the response is, so it's keyed by its id.
+      // A fetch of it begun before the save would land over this one.
+      await queryClient.cancelQueries({
+        queryKey: [QueryKey.RetrieveGenre, data.id],
+      });
+      queryClient.setQueryData([QueryKey.RetrieveGenre, data.id], data);
       queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrieveGenre, variables.genreId],
       });

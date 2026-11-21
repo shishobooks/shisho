@@ -17,6 +17,7 @@ local Daily = require("shisho/daily")
 local Device = require("device")
 local DocSettings = require("docsettings")
 local Event = require("ui/event")
+local Files = require("shisho/files")
 local HashIndex = require("shisho/hashindex")
 local History = require("shisho/history")
 local InfoMessage = require("ui/widget/infomessage")
@@ -918,7 +919,8 @@ end
 
 -- writeSummary writes what a server sent into a book's sidecar, as
 -- KOReader's file manager does when it marks a book: a book never opened
--- gets a sidecar.
+-- gets a sidecar. It's written whole (Files.writeSidecar), since the file
+-- browser's cover extraction may be reading it from another process.
 function Shisho:writeSummary(book, write)
     local open = self.ui and self.ui.document and self.ui.document.file == book.path
     -- A book deleted since the index last saw it gets no sidecar.
@@ -926,7 +928,7 @@ function Shisho:writeSummary(book, write)
     local doc_settings = open and self.ui.doc_settings or DocSettings:open(book.path)
     local summary = Summaries.written(doc_settings:readSetting("summary"), write, os.date("%Y-%m-%d"))
     doc_settings:saveSetting("summary", summary)
-    doc_settings:flush()
+    Files.writeSidecar(doc_settings)
     if self.sidecars then self.sidecars[book.path] = nil end
     book.current = Summaries.read(summary)
     self.summaries_written = true

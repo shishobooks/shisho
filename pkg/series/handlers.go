@@ -41,6 +41,21 @@ func (h *handler) writeSidecars(ctx context.Context, seriesID int) {
 // buildSeriesResponse adds the book count and the flat alias list to a series.
 // retrieve, list, and update all use it, so a failed lookup fails the request
 // instead of rendering a zero count or no aliases.
+// setCoverCacheKey sets the key of the cover a series shows, its first
+// book's.
+func (h *handler) setCoverCacheKey(ctx context.Context, series *models.Series) error {
+	seriesFiles, err := h.bookService.GetFirstBooksFilesForSeries(ctx, []int{series.ID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	aspectRatio := ""
+	if series.Library != nil {
+		aspectRatio = series.Library.CoverAspectRatio
+	}
+	series.CoverCacheKey = covers.CacheKey(seriesFiles[series.ID], aspectRatio)
+	return nil
+}
+
 func (h *handler) buildSeriesResponse(ctx context.Context, series *models.Series) (SeriesResponse, error) {
 	bookCount, err := h.seriesService.GetSeriesBookCount(ctx, series.ID)
 	if err != nil {
@@ -72,15 +87,9 @@ func (h *handler) retrieve(c echo.Context) error {
 		return err
 	}
 
-	seriesFiles, err := h.bookService.GetFirstBooksFilesForSeries(ctx, []int{id})
-	if err != nil {
-		return errors.WithStack(err)
+	if err := h.setCoverCacheKey(ctx, series); err != nil {
+		return err
 	}
-	aspectRatio := ""
-	if series.Library != nil {
-		aspectRatio = series.Library.CoverAspectRatio
-	}
-	series.CoverCacheKey = covers.CacheKey(seriesFiles[id], aspectRatio)
 
 	response, err := h.buildSeriesResponse(ctx, series)
 	if err != nil {
@@ -259,6 +268,10 @@ func (h *handler) update(c echo.Context) error {
 	})
 	if err != nil {
 		return errors.WithStack(err)
+	}
+	// The web app keeps this response as the series, as it does retrieve's.
+	if err := h.setCoverCacheKey(ctx, series); err != nil {
+		return err
 	}
 
 	response, err := h.buildSeriesResponse(ctx, series)

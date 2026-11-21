@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { API } from "@/libraries/api";
+
 import { QueryKey as BooksQueryKey } from "./books";
 import {
   QueryKey,
@@ -17,7 +19,10 @@ vi.mock("@/libraries/api", async () => {
   return {
     ...actual,
     API: {
-      request: vi.fn().mockResolvedValue(undefined),
+      // The publisher the request names, for the mutations that return one.
+      request: vi.fn((_method: string, path: string) =>
+        Promise.resolve({ id: Number(path.split("/")[2]) }),
+      ),
     },
   };
 });
@@ -316,6 +321,77 @@ describe("useUpdatePublisher", () => {
         client.getQueryState([QueryKey.RetrievePublisher, 2])?.isInvalidated,
       ).toBe(true);
     });
+  });
+
+  // A fetch of the publisher a rename merged into, begun before the save,
+  // holds what it was before the merge.
+  it("isn't overwritten by a fetch that began before the save", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    let land!: (publisher: unknown) => void;
+    const stale = client
+      .fetchQuery({
+        queryKey: [QueryKey.RetrievePublisher, 3],
+        queryFn: () => new Promise((resolve) => (land = resolve)),
+      })
+      .catch(() => {});
+    vi.mocked(API.request).mockResolvedValueOnce({
+      id: 3,
+      name: "Tor",
+      aliases: ["Tor Books"],
+    });
+    const { result } = renderHook(() => useUpdatePublisher(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        publisherId: 7,
+        payload: { name: "Tor" },
+      });
+    });
+    land({ id: 3, name: "Tor", aliases: [] });
+    await stale;
+
+    expect(
+      client.getQueryData<{ aliases: string[] }>([
+        QueryKey.RetrievePublisher,
+        3,
+      ])?.aliases,
+    ).toEqual(["Tor Books"]);
+  });
+
+  // Renaming a publisher to another's name merges it into that one, and the
+  // response is the publisher it merged into. Its edit dialog fills from the
+  // cache when reopened, so the cache holds the response at once.
+  it("holds the publisher the save returns, under its own id", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    vi.mocked(API.request).mockResolvedValueOnce({
+      id: 3,
+      name: "Tor",
+      aliases: ["Tor Books"],
+    });
+
+    const { result } = renderHook(() => useUpdatePublisher(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        publisherId: 7,
+        payload: { name: "Tor" },
+      });
+    });
+
+    expect(
+      client.getQueryData<{ aliases: string[] }>([
+        QueryKey.RetrievePublisher,
+        3,
+      ])?.aliases,
+    ).toEqual(["Tor Books"]);
   });
 });
 

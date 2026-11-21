@@ -136,6 +136,17 @@ test.describe("Deleting a book", () => {
       .locator(`a[href$="/files/${testData.fileOnlyFileId}"]`)
       .first()
       .click();
+    // The book page stays up for a moment after the URL changes, and its
+    // file row has the same download button and File actions menu. Acting on
+    // them deletes from the book page, or opens a menu the file page then
+    // replaces.
+    await expect(
+      page.getByRole("heading", {
+        level: 1,
+        name: "File Page Book.epub",
+        exact: true,
+      }),
+    ).toBeVisible();
     // The menu gains "Move to another book" once the library loads, which
     // moves "Delete file" under a click made before then.
     await expect(

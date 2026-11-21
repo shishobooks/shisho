@@ -8,7 +8,9 @@ struct CoverView: View {
     let book: BookSummary
     let width: CGFloat
     var shadow: CoverShadow = .small
-    var onImage: ((UIImage) -> Void)?
+    /// Called with the cover once it shows. It runs in the view's task, so
+    /// it's cancelled when the cover changes or the view goes away.
+    var onImage: ((UIImage) async -> Void)?
 
     @State private var image: UIImage?
     @State private var loaded = false
@@ -60,12 +62,14 @@ struct CoverView: View {
                 image = cached
             } else {
                 let fetched = await covers.image(bookID: book.id, version: book.coverVersion, size: size)
+                // A cover replaced meanwhile is its replacement's to show.
+                guard !Task.isCancelled else { return }
                 withAnimation(.easeOut(duration: 0.25)) {
                     image = fetched
                     loaded = true
                 }
             }
-            if let image { onImage?(image) }
+            if let image { await onImage?(image) }
         }
     }
 }
