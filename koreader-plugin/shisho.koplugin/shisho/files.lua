@@ -1,11 +1,13 @@
 --[[--
-Writes the plugin's own files in KOReader's settings directory as Lua files
-LuaSettings reads, atomically: through a temporary file beside each, renamed
-over the old one, so a crash or a dead battery leaves the old file or the
-new one, never half of either. No UI.
+Writes the plugin's own files in KOReader's settings directory, and the
+books' sidecars it writes to, as Lua files LuaSettings reads, atomically:
+through a temporary file beside each, renamed over the old one, so a crash,
+a dead battery, or another process reading it leaves the old file or the new
+one, never half of either. No UI.
 ]]
 local dump = require("dump")
 local ffiutil = require("ffi/util")
+local util = require("util")
 
 local Files = {}
 
@@ -33,6 +35,37 @@ function Files.write(path, data, comment)
     end
     ffiutil.fsyncDirectory(path)
     return true
+end
+
+--[[--
+writeSidecar saves doc_settings, a book's DocSettings, where
+DocSettings:flush would, but through Files.write. flush truncates the
+sidecar and then writes it, and DocSettings:open deletes a sidecar it finds
+empty or cut short. The file browser's cover extraction runs in a process
+of its own that opens each new book's sidecar, so one opening it mid-write
+would delete it, and everything in it. Returns the sidecar's directory, or
+nil when no location took it.
+]]
+function Files.writeSidecar(doc_settings)
+    local location = G_reader_settings:readSetting("document_metadata_folder", "doc")
+    local dirs
+    if location == "doc" then
+        -- Beside the book, or KOReader's own folder when the book's is read-only.
+        dirs = { doc_settings.doc_sidecar_dir, doc_settings.dir_sidecar_dir }
+    elseif location == "dir" then
+        dirs = { doc_settings.dir_sidecar_dir }
+    else
+        dirs = { doc_settings.hash_sidecar_dir or doc_settings:getSidecarDir(doc_settings.data.doc_path, "hash") }
+    end
+    for __, dir in ipairs(dirs) do
+        util.makePath(dir)
+        local sidecar = dir .. "/" .. doc_settings.sidecar_filename
+        if Files.write(sidecar, doc_settings.data, sidecar) then
+            -- Copies in other locations would shadow this one.
+            doc_settings:purge(sidecar)
+            return dir
+        end
+    end
 end
 
 -- Writer writes data to path only when it changed since the last write, for
