@@ -1,0 +1,208 @@
+# Temporary: runs every suite many times on CI runners to surface flaky
+# tests. Delete before merging.
+name: Flake Hunt
+
+on:
+  push:
+    branches: [t3/investigate-flaky-tests]
+  workflow_dispatch:
+
+concurrency:
+  group: flake-hunt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (rep ${{ matrix.rep }}, GOMAXPROCS ${{ matrix.procs }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3]
+        # 2 starves the runner, as a slow or busy CI machine would.
+        procs: [4, 2]
+    env:
+      TZ: America/Chicago
+      CI: "true"
+      GOMAXPROCS: ${{ matrix.procs }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-race-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
+      - name: Run tests twice, shuffled
+        run: |
+          set -o pipefail
+          go test -race -count=2 -shuffle=on -timeout 50m ./... 2>&1 | tee go.log
+      - name: Summarize failures
+        if: always()
+        run: |
+          {
+            echo '### Go failures'
+            echo '```'
+            grep -aE -e '--- FAIL' -e '^panic:' -e 'WARNING: DATA RACE' -e '-test.shuffle' -e '^FAIL' go.log | sort | uniq -c | sort -rn | head -80 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: go-log-${{ matrix.rep }}-${{ matrix.procs }}
+          path: go.log
+          retention-days: 7
+
+  koreader:
+    name: KOReader (rep ${{ matrix.rep }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3, 4]
+    env:
+      TZ: America/Chicago
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: go
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
+      - uses: actions/cache/restore@v6
+        with:
+          path: tmp/koreader/release
+          key: koreader-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/koreaderharness/harness.go') }}
+      - name: Run the harness five times
+        run: |
+          set -o pipefail
+          go test -tags koreaderharness -count=5 -v -timeout 40m ./tools/koreaderharness 2>&1 | tee koreader.log
+      - name: Summarize failures
+        if: always()
+        run: |
+          {
+            echo '### KOReader failures'
+            echo '```'
+            grep -aE -e '--- FAIL' -e '^panic:' -e 'Error Trace' -e 'Messages:' koreader.log | sort | uniq -c | sort -rn | head -60 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: koreader-log-${{ matrix.rep }}
+          path: koreader.log
+          retention-days: 7
+
+  e2e:
+    name: E2E (${{ matrix.browser }} ${{ matrix.shard }}/2, rep ${{ matrix.rep }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+        shard: [1, 2]
+        rep: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-js
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browser: ${{ matrix.browser }}
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-build-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
+      - run: go mod download
+      - run: mise tygo
+      - name: Run E2E with no retries
+        env:
+          BROWSER: ${{ matrix.browser }}
+          SHARD: ${{ matrix.shard }}/2
+        run: |
+          set -o pipefail
+          pnpm "e2e:$BROWSER" --shard="$SHARD" --retries=0 --trace=retain-on-failure --reporter=list 2>&1 | grep -v '\[WebServer\]' | tee e2e.log
+      - name: Summarize failures
+        if: always()
+        run: |
+          {
+            echo '### E2E failures'
+            echo '```'
+            grep -aE '^\s+[0-9]+\) \[' e2e.log | sort -u || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: e2e-${{ matrix.browser }}-${{ matrix.shard }}-${{ matrix.rep }}
+          path: |
+            e2e.log
+            test-results/
+          retention-days: 7
+
+  js:
+    name: JS Unit (rep ${{ matrix.rep }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-js
+      - run: mise tygo
+      - run: pnpm test:unit
+
+  docs:
+    name: Docs E2E (rep ${{ matrix.rep }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rep: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-js
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browser: chromium
+      - run: pnpm e2e:docs --retries=0
