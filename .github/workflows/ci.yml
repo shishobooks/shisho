@@ -499,23 +499,53 @@ jobs:
       - uses: jdx/mise-action@v5
       - run: mise android:test
 
+  # The unit tests and the Maestro flows each get a runner: one macOS
+  # runner is too small for two simulators, and the flows' driver times out
+  # beside anything else. Each job's base simulator boots while its app
+  # builds.
   app-ios:
     name: iOS
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
+      - run: mise ios:test
+
+  app-ios-flows:
+    name: iOS flows
+    needs: app-changes
+    if: needs.app-changes.outputs.changed == 'true'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - name: Locate Go caches
+        id: go-env
+        run: |
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      # The harness builds the server. Only master saves Go caches, so PR
+      # runs never evict the shared ones.
+      - name: Restore Go caches
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
+            go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
       # The harness makes its M4B fixture with ffmpeg.
       - name: Install ffmpeg
         run: brew install ffmpeg
-      # The unit tests and the Maestro flows run side by side on clones of
-      # one base simulator, after one build. The base's first boot happens
-      # while the app builds.
-      - name: Run the unit tests and the Maestro flows
-        run: 'mise run ios:test ::: ios:harness -out "$RUNNER_TEMP/harness"'
+      - name: Run the Maestro flows
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
       - name: Keep the harness output
         if: failure()
         uses: actions/upload-artifact@v7
@@ -523,6 +553,16 @@ jobs:
           name: harness-output
           path: ${{ runner.temp }}/harness
           if-no-files-found: ignore
+      - name: Save Go caches
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        # A re-run on the same SHA finds the key taken.
+        continue-on-error: true
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ${{ steps.go-env.outputs.gocache }}
+            ${{ steps.go-env.outputs.gomodcache }}
+          key: go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
 
   # The one check branch protection requires, so the shard count and job
   # names can change without editing protection. A job added above that
@@ -542,6 +582,7 @@ jobs:
       - app-changes
       - app-android
       - app-ios
+      - app-ios-flows
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -555,5 +596,5 @@ jobs:
           jq -e --arg app "$APP_CHANGED" '
             to_entries | all(
               .value.result == "success"
-              or (.value.result == "skipped" and $app == "false" and (.key == "app-android" or .key == "app-ios"))
+              or (.value.result == "skipped" and $app == "false" and (.key | startswith("app-")) and .key != "app-changes")
             )' <<< "$NEEDS"

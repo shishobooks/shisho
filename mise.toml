@@ -292,7 +292,8 @@ depends = ["ios:generate"]
 run = "open mobile/ios/Shisho.xcodeproj"
 
 # The simulator build is for this Mac's own architecture only, and includes
-# the tests, so the unit tests and the Maestro flows share one build.
+# the tests, so the unit tests and the Maestro flows share one build when
+# both run.
 [tasks."ios:build"]
 description = "Build the iOS app and its tests for the simulator, into mobile/ios/build (never Xcode's DerivedData)"
 depends = ["ios:generate"]
