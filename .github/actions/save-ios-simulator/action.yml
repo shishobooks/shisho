@@ -1,0 +1,38 @@
+name: Save the base simulator
+description: >-
+  Save the harness's base simulator for later runs, when setup-ios didn't
+  restore it. The base is shut down and never booted after it's made, so
+  the copy is clean.
+
+inputs:
+  key:
+    description: setup-ios's simulator-key output.
+    required: true
+  hit:
+    description: setup-ios's simulator-hit output.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Copy the base simulator
+      id: copy
+      if: inputs.hit != 'true'
+      shell: bash
+      run: |
+        udid=$(xcrun simctl list devices -j | jq -r '.devices[][] | select(.name | startswith("Shisho Harness Base")) | .udid' | head -n 1)
+        if [ -z "$udid" ]; then
+          echo "No base simulator to save."
+          exit 0
+        fi
+        mkdir -p "$RUNNER_TEMP/ios-base-simulator"
+        cp -R "$HOME/Library/Developer/CoreSimulator/Devices/$udid" "$RUNNER_TEMP/ios-base-simulator/"
+        echo "copied=true" >> "$GITHUB_OUTPUT"
+    - name: Save the base simulator
+      if: steps.copy.outputs.copied == 'true'
+      # The other iOS job may have saved it first.
+      continue-on-error: true
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ runner.temp }}/ios-base-simulator
+        key: ${{ inputs.key }}

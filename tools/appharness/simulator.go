@@ -20,11 +20,13 @@ import (
 // rather than in every clone: a clone then boots in seconds instead of half a
 // minute here, and minutes on CI. Runs never boot it again, so a clone always
 // starts from the same device and runs in other worktrees never share one.
-const baseSimulatorName = "Shisho Harness Base (Set Up)"
+//
+// The number changes when how the harness makes a base does; it deletes a
+// base of an older number and makes a new one. CI caches the base.
+const baseSimulatorName = "Shisho Harness Base 2"
 
-// oldBaseSimulatorName is the base from before bases were booted once, which
-// the harness deletes and replaces.
-const oldBaseSimulatorName = "Shisho Harness Base"
+// oldBaseSimulatorPrefix names every base the harness has made.
+const oldBaseSimulatorPrefix = "Shisho Harness Base"
 
 // iPhoneType matches a plain current iPhone, such as "iPhone 17".
 var iPhoneType = regexp.MustCompile(`^iPhone \d+$`)
@@ -74,7 +76,7 @@ func baseSimulator(ctx context.Context) (string, error) {
 	}
 	for _, devices := range listing.Devices {
 		for _, d := range devices {
-			if d.Name == oldBaseSimulatorName {
+			if strings.HasPrefix(d.Name, oldBaseSimulatorPrefix) && d.Name != baseSimulatorName {
 				_, _ = simctl(ctx, "delete", d.UDID)
 			}
 		}

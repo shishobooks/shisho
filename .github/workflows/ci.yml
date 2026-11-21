@@ -501,8 +501,8 @@ jobs:
 
   # The unit tests and the Maestro flows each get a runner: one macOS
   # runner is too small for two simulators, and the flows' driver times out
-  # beside anything else. Each job's base simulator boots while its app
-  # builds.
+  # beside anything else. setup-ios restores what they'd otherwise rebuild,
+  # the base simulator included.
   app-ios:
     name: iOS
     needs: app-changes
@@ -512,7 +512,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
+      - id: setup
+        uses: ./.github/actions/setup-ios
       - run: mise ios:test
+      - uses: ./.github/actions/save-ios-simulator
+        with:
+          key: ${{ steps.setup.outputs.simulator-key }}
+          hit: ${{ steps.setup.outputs.simulator-hit }}
 
   app-ios-flows:
     name: iOS flows
@@ -523,46 +529,27 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
-      - name: Locate Go caches
-        id: go-env
-        run: |
-          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
-          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
-          echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
-      # The harness builds the server. Only master saves Go caches, so PR
-      # runs never evict the shared ones.
-      - name: Restore Go caches
-        uses: actions/cache/restore@v6
-        with:
-          path: |
-            ${{ steps.go-env.outputs.gocache }}
-            ${{ steps.go-env.outputs.gomodcache }}
-          key: go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-
-            go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-
+      - id: setup
+        uses: ./.github/actions/setup-ios
       # The harness makes its M4B fixture with ffmpeg.
       - name: Install ffmpeg
         run: brew install ffmpeg
       - name: Run the Maestro flows
         run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
+      - uses: ./.github/actions/save-ios-simulator
+        with:
+          key: ${{ steps.setup.outputs.simulator-key }}
+          hit: ${{ steps.setup.outputs.simulator-hit }}
+      # The server log and Maestro's own log and screenshots, which also show
+      # where a slow run spent its time.
       - name: Keep the harness output
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: harness-output
           path: ${{ runner.temp }}/harness
           if-no-files-found: ignore
-      - name: Save Go caches
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        # A re-run on the same SHA finds the key taken.
-        continue-on-error: true
-        uses: actions/cache/save@v6
-        with:
-          path: |
-            ${{ steps.go-env.outputs.gocache }}
-            ${{ steps.go-env.outputs.gomodcache }}
-          key: go-app-flows-${{ runner.os }}-${{ steps.go-env.outputs.goversion }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+          retention-days: 7
 
   # The one check branch protection requires, so the shard count and job
   # names can change without editing protection. A job added above that

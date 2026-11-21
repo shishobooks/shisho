@@ -293,12 +293,12 @@ run = "open mobile/ios/Shisho.xcodeproj"
 
 # The simulator build is for this Mac's own architecture only, and includes
 # the tests, so the unit tests and the Maestro flows share one build when
-# both run.
+# both run. It skips the index store, which only Xcode's own builds read.
 [tasks."ios:build"]
 description = "Build the iOS app and its tests for the simulator, into mobile/ios/build (never Xcode's DerivedData)"
 depends = ["ios:generate"]
 dir = "mobile/ios"
-run = "xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- ARCHS=\"$(uname -m)\" -quiet build-for-testing"
+run = "xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- ARCHS=\"$(uname -m)\" COMPILER_INDEX_STORE_ENABLE=NO -quiet build-for-testing"
 
 [tasks."ios:simulator"]
 description = "Make the harness's base simulator, booted once, if it doesn't exist yet: the tests and flows clone it"
