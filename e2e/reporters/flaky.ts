@@ -21,12 +21,21 @@ export interface FlakyTest {
   // Relative to the repository root, as GitHub annotations need.
   file: string;
   line: number;
-  // The first line of each failed attempt's error.
-  errors: string[];
+  // The first line of the first failed attempt's error.
+  error: string;
 }
 
 // eslint-disable-next-line no-control-regex
 const ansi = /\u001b\[[0-9;]*m/g;
+
+const firstFailure = (test: TestCase) => {
+  const failed = test.results.find((result) => result.status !== "passed");
+  return (
+    failed?.error?.message?.replace(ansi, "").split("\n")[0] ??
+    failed?.status ??
+    ""
+  );
+};
 
 export function flakyTests(tests: TestCase[], rootDir: string): FlakyTest[] {
   return tests
@@ -36,13 +45,7 @@ export function flakyTests(tests: TestCase[], rootDir: string): FlakyTest[] {
       title: test.titlePath().slice(3).join(" › "),
       file: path.relative(rootDir, test.location.file),
       line: test.location.line,
-      errors: test.results
-        .filter((result) => result.status !== "passed")
-        .map(
-          (result) =>
-            result.error?.message?.replace(ansi, "").split("\n")[0] ??
-            result.status,
-        ),
+      error: firstFailure(test),
     }));
 }
 
@@ -59,7 +62,7 @@ export function annotation(test: FlakyTest): string {
     `line=${test.line}`,
     `title=${escapeProperty(`Flaky test (${test.project})`)}`,
   ].join(",");
-  const message = `${test.title} failed, then passed on retry: ${test.errors[0] ?? ""}`;
+  const message = `${test.title} failed, then passed on retry: ${test.error}`;
   return `::warning ${properties}::${escapeData(message)}`;
 }
 
@@ -75,7 +78,7 @@ export function summary(tests: FlakyTest[]): string {
     "| --- | --- | --- |",
     ...tests.map(
       (test) =>
-        `| \`${test.file}:${test.line}\` ${cell(test.title)} | ${cell(test.project)} | ${cell(test.errors[0] ?? "")} |`,
+        `| \`${test.file}:${test.line}\` ${cell(test.title)} | ${cell(test.project)} | ${cell(test.error)} |`,
     ),
     "",
   ].join("\n");
@@ -95,9 +98,5 @@ export default class FlakyReporter implements Reporter {
     for (const test of flaky) console.log(annotation(test));
     const summaryFile = process.env.GITHUB_STEP_SUMMARY;
     if (summaryFile) fs.appendFileSync(summaryFile, summary(flaky));
-  }
-
-  printsToStdio() {
-    return false;
   }
 }

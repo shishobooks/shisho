@@ -46,7 +46,7 @@ describe("flakyTests", () => {
         title: "resuming › a comic reopens on the page turned to",
         file: "e2e/page-reader.spec.ts",
         line: 680,
-        errors: ["Error: expect(received).toBe(expected)"],
+        error: "Error: expect(received).toBe(expected)",
       },
     ]);
   });
@@ -56,7 +56,7 @@ describe("flakyTests", () => {
       [testCase("flaky", [result("timedOut"), result("passed")])],
       "/repo",
     );
-    expect(flaky.errors).toEqual(["timedOut"]);
+    expect(flaky.error).toBe("timedOut");
   });
 });
 
@@ -68,7 +68,7 @@ describe("annotation", () => {
         title: "a, b: 100%",
         file: "e2e/x.spec.ts",
         line: 3,
-        errors: ["Error: one\ntwo"],
+        error: "Error: one\ntwo",
       }),
     ).toBe(
       "::warning file=e2e/x.spec.ts,line=3,title=Flaky test (chromium)::a, b: 100%25 failed, then passed on retry: Error: one%0Atwo",
@@ -85,7 +85,7 @@ describe("summary", () => {
           title: "Alias workflows › adds | removes",
           file: "e2e/alias.spec.ts",
           line: 68,
-          errors: ["Error: timeout"],
+          error: "Error: timeout",
         },
       ]),
     ).toBe(

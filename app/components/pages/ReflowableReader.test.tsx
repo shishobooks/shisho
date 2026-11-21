@@ -2664,7 +2664,7 @@ describe("ReflowableReader location history", () => {
     const view = await openBook();
     const u = user();
     await toTheEnd(u);
-    // foliate ignores a move just after a page turn.
+    // A move that goes nowhere, such as to a section that fails to load.
     view.goTo.mockImplementation(() => Promise.resolve());
     await u.click(back());
     expect(view.goTo).toHaveBeenLastCalledWith("start");
