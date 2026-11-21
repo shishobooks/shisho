@@ -80,4 +80,15 @@ return {
             assert_eq(DocSettings:open(book):readSetting("summary"), { status = "reading" })
         end)
     end,
+
+    -- writeSidecar reads DocSettings fields that aren't KOReader's API. A
+    -- KOReader without them still gets the sidecar saved, by its own write.
+    ["falls back to KOReader's own write without the fields it reads"] = function()
+        withLocation("doc", function()
+            local flushed = false
+            local doc_settings = { data = {}, flush = function() flushed = true end }
+            Files.writeSidecar(doc_settings)
+            assert(flushed, "flush was not called")
+        end)
+    end,
 }
