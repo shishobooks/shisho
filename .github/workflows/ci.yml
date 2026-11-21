@@ -554,6 +554,8 @@ jobs:
           path: ${{ runner.temp }}/harness
           if-no-files-found: ignore
           retention-days: 7
+          # Maestro writes its log and screenshots under .maestro.
+          include-hidden-files: true
 
   # The one check branch protection requires, so the shard count and job
   # names can change without editing protection. A job added above that
