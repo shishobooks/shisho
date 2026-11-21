@@ -109,7 +109,10 @@ struct ListenCard: View {
                         .monospacedDigit()
                 }
             }
-            .padding(.vertical, stacked ? 12 : 0)
+            // Room above and below however many lines it has, and above the
+            // progress line when there is one.
+            .padding(.top, 12)
+            .padding(.bottom, seconds > 1 ? 15 : 12)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 60)
             .foregroundStyle(Theme.primaryForeground)

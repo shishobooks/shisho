@@ -49,35 +49,48 @@ struct NowPlayingView: View {
 
     private func content(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
         GeometryReader { geometry in
-            ScrollView {
-                VStack(spacing: 0) {
-                    header(file)
-                    if let offer = player.offer {
-                        PlaceOfferBanner(offer: offer, accept: player.acceptOffer, dismiss: player.dismissOffer)
-                            .padding(.top, 12)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-                    if let error = player.error {
-                        NoticeCard(text: error, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive)
-                            .padding(.top, 12)
-                            .accessibilityIdentifier("player.error")
-                    }
-                    artwork(player, file, size: artworkWidth(geometry.size))
-                    titles(file)
-                    chapterRow(player)
-                    scrubber(player, file)
-                    transport(player)
-                    tools(player)
+            // When it all fits, the page fills the sheet, so the controls
+            // can center in the room left and speed sits at the bottom. A
+            // scroll view would size it to its content instead, so it
+            // scrolls only when it doesn't fit, as at large text sizes.
+            ViewThatFits(in: .vertical) {
+                page(player, file, space: geometry.size)
+                ScrollView {
+                    page(player, file, space: geometry.size)
                 }
-                .padding(.horizontal, 22)
-                .padding(.bottom, 24)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: geometry.size.height, alignment: .top)
-                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: player.offer)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .scrollBounceBehavior(.basedOnSize)
         }
+    }
+
+    private func page(_ player: AudioPlayer, _ file: ListeningFile, space: CGSize) -> some View {
+        VStack(spacing: 0) {
+            header(file)
+            if let offer = player.offer {
+                PlaceOfferBanner(offer: offer, accept: player.acceptOffer, dismiss: player.dismissOffer)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            if let error = player.error {
+                NoticeCard(text: error, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive)
+                    .padding(.top, 12)
+                    .accessibilityIdentifier("player.error")
+            }
+            artwork(player, file, size: artworkWidth(space))
+            titles(file)
+            chapterRow(player)
+            scrubber(player, file)
+            Spacer(minLength: 20)
+            transport(player)
+            Spacer(minLength: 20)
+            tools(player)
+        }
+        .padding(.horizontal, 22)
+        // The home indicator's safe area is room enough under speed.
+        .padding(.bottom, 8)
+        .frame(maxWidth: 560)
+        .frame(maxWidth: .infinity)
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: player.offer)
     }
 
     /// The artwork's width: as large as fits beside the controls, by its
@@ -280,7 +293,6 @@ struct NowPlayingView: View {
         .buttonStyle(PlayerControlStyle())
         .foregroundStyle(Theme.foreground)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .padding(.top, 20)
     }
 
     private func control(_ symbol: String, label: LocalizedStringKey, id: String, size: CGFloat, action: @escaping () -> Void) -> some View {
