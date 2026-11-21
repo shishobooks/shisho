@@ -515,7 +515,7 @@ jobs:
       # one base simulator, after one build. The base's first boot happens
       # while the app builds.
       - name: Run the unit tests and the Maestro flows
-        run: mise run ios:test ::: ios:harness -out "$RUNNER_TEMP/harness"
+        run: 'mise run ios:test ::: ios:harness -out "$RUNNER_TEMP/harness"'
       - name: Keep the harness output
         if: failure()
         uses: actions/upload-artifact@v7
