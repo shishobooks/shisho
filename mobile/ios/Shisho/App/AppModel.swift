@@ -29,7 +29,7 @@ final class AccountSession {
         }
         try FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true)
         store = try CatalogStore(path: account.folder.appendingPathComponent("catalog.sqlite").path)
-        sync = SyncEngine(client: client, store: store) { capabilities.withLock { $0 } }
+        sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
     }
 }
@@ -247,15 +247,26 @@ final class AppModel {
         }
         // A sync asked for as playback pauses, with the phone locked, gets
         // the time to finish.
-        let background = UIApplication.shared.beginBackgroundTask(withName: "Sync")
-        defer {
-            if background != .invalid {
-                UIApplication.shared.endBackgroundTask(background)
-            }
+        let background = UIApplication.shared.beginBackgroundTask(withName: "Sync") { [weak self] in
+            // Out of time: the sync stops, keeping what it hadn't sent.
+            self?.endBackgroundSync(stopping: true)
         }
+        backgroundSync = background
         await syncs.run { [weak self] isCurrent in
             await self?.sync(session, isCurrent: isCurrent)
         }
+        if backgroundSync == background {
+            endBackgroundSync(stopping: false)
+        }
+    }
+
+    @ObservationIgnored private var backgroundSync: UIBackgroundTaskIdentifier = .invalid
+
+    private func endBackgroundSync(stopping: Bool) {
+        guard backgroundSync != .invalid else { return }
+        if stopping { syncs.stop() }
+        UIApplication.shared.endBackgroundTask(backgroundSync)
+        backgroundSync = .invalid
     }
 
     // MARK: - Background refresh

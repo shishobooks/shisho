@@ -57,13 +57,19 @@ final class AudioPlayer {
     @ObservationIgnored private var pendingSeek: Double?
     @ObservationIgnored private var sitting: ListeningSitting?
     @ObservationIgnored private var lastSave = Date.distantPast
-    @ObservationIgnored private var openedAt = Date()
+    /// When the server's place was from that the player last knew of, at
+    /// opening or applying it: a later one from another device is offered.
+    @ObservationIgnored private var knownServerAt: Date?
     @ObservationIgnored private var ticker: Task<Void, Never>?
     @ObservationIgnored private var placeWatch: Task<Void, Never>?
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
     @ObservationIgnored private var resumeAfterInterruption = false
     @ObservationIgnored private var nowPlayingChapter: Int?
     @ObservationIgnored private var dismissedOffer: ServerPlace?
+    /// Which item AVFoundation's callbacks are about: a callback queued
+    /// before another File opened is dropped.
+    @ObservationIgnored private var itemGeneration = 0
+    @ObservationIgnored private var endObserver: NSObjectProtocol?
 
     init(session: AccountSession, requestSync: @escaping @MainActor () -> Void) {
         self.session = session
@@ -80,11 +86,11 @@ final class AudioPlayer {
     func restore() {
         do {
             if let left = try session.store.openSitting() {
-                if let finished = ListeningRules.finish(left) {
-                    try session.store.recordSession(finished)
+                let finished = ListeningRules.finish(left)
+                try session.store.saveSitting(nil, recording: finished)
+                if let finished {
                     Task { await Diagnostics.shared.log(.player, "file \(left.fileID): sitting from an earlier launch recorded, \(finished.duration) s") }
                 }
-                try session.store.saveSitting(nil)
             }
         } catch {
             log("couldn't recover the last sitting: \(Diagnostics.describe(error))")
@@ -117,16 +123,16 @@ final class AudioPlayer {
             UserDefaults.standard.removeObject(forKey: lastFileKey)
             return
         }
-        let choice = (try? store.pool.read { db in
-            PlaceRules.open(local: try CatalogStore.localPlace(db, fileID: fileID),
-                            server: try CatalogStore.serverPlace(db, fileID: fileID), ownDeviceID: ownDevice)
-        }) ?? PlaceRules.Choice(start: 0, offer: nil)
+        let places = try? store.pool.read { db in
+            (local: try CatalogStore.localPlace(db, fileID: fileID), server: try CatalogStore.serverPlace(db, fileID: fileID))
+        }
+        let choice = PlaceRules.open(local: places?.local, server: places?.server, ownDeviceID: ownDevice)
 
         file = loaded
         error = nil
         offer = choice.offer
         dismissedOffer = nil
-        openedAt = Date()
+        knownServerAt = places?.server?.occurredAt
         artwork = nil
         rate = storedRate(bookID: loaded.book.id)
         position = min(choice.start, max(0, loaded.duration))
@@ -135,6 +141,8 @@ final class AudioPlayer {
         nowPlayingChapter = nil
         UserDefaults.standard.set(fileID, forKey: lastFileKey)
 
+        // AVPlayer makes its own range requests, so they carry the
+        // account's headers here rather than going through APIClient.
         let asset = AVURLAsset(url: session.client.streamURL(fileID: fileID),
                                options: ["AVURLAssetHTTPHeaderFieldsKey": session.client.headers])
         let item = AVPlayerItem(asset: asset)
@@ -144,10 +152,15 @@ final class AudioPlayer {
         let player = AVPlayer(playerItem: item)
         player.automaticallyWaitsToMinimizeStalling = true
         self.player = player
+        itemGeneration += 1
+        let generation = itemGeneration
         statusObservation = AudioPlayer.observeStatus(of: item) { [weak self] status, failure in
-            Task { @MainActor in self?.itemStatusChanged(status, failure: failure) }
+            Task { @MainActor in
+                guard self?.itemGeneration == generation else { return }
+                self?.itemStatusChanged(status, failure: failure)
+            }
         }
-        observeEnd(of: item)
+        observeEnd(of: item, generation: generation)
         watchServerPlace(fileID: fileID)
         loadArtwork(loaded.book)
         startTicker()
@@ -163,9 +176,10 @@ final class AudioPlayer {
             let target = pendingSeek ?? 0
             pendingSeek = nil
             isBuffering = isPlaying
+            let generation = itemGeneration
             AudioPlayer.seek(player, to: target) { [weak self] in
                 Task { @MainActor in
-                    guard let self else { return }
+                    guard let self, self.itemGeneration == generation else { return }
                     if self.isPlaying { self.player?.playImmediately(atRate: Float(self.rate)) }
                     self.refreshPosition()
                     self.updateNowPlaying()
@@ -215,10 +229,7 @@ final class AudioPlayer {
         let now = Date()
         let (next, ended) = ListeningRules.play(sitting, fileID: file.fileID, at: now, percentage: percentage)
         sitting = next
-        if let ended {
-            record(ended)
-        }
-        persistSitting()
+        persistSitting(recording: ended)
         updateNowPlaying()
     }
 
@@ -276,12 +287,19 @@ final class AudioPlayer {
     func acceptOffer() {
         guard let offer else { return }
         self.offer = nil
+        resolveOffer()
         seek(to: offer.seconds)
     }
 
     func dismissOffer() {
         dismissedOffer = offer
         offer = nil
+        resolveOffer()
+    }
+
+    private func resolveOffer() {
+        guard let file else { return }
+        try? session.store.resolveOffer(fileID: file.fileID)
     }
 
     /// Stops playing and forgets the File, recording what was listened.
@@ -343,8 +361,19 @@ final class AudioPlayer {
                 isBuffering = buffering
                 updateNowPlaying()
             }
-            if player.timeControlStatus == .playing, let current = sitting {
-                sitting = ListeningRules.tick(current, at: now, percentage: percentage)
+            // Only time playing counts: a stall waiting for the stream
+            // pauses the sitting's clock.
+            if let current = sitting {
+                if buffering, current.isPlaying {
+                    sitting = ListeningRules.pause(current, at: now, percentage: percentage)
+                    persistSitting()
+                } else if !buffering, !current.isPlaying {
+                    let (next, ended) = ListeningRules.play(current, fileID: current.fileID, at: now, percentage: percentage)
+                    sitting = next
+                    persistSitting(recording: ended)
+                } else if !buffering {
+                    sitting = ListeningRules.tick(current, at: now, percentage: percentage)
+                }
             }
             if now.timeIntervalSince(lastSave) >= ListeningRules.saveInterval {
                 savePosition()
@@ -372,11 +401,16 @@ final class AudioPlayer {
         }
     }
 
-    private func persistSitting() {
+    /// Keeps the sitting, and queues the session of one that ended, which
+    /// asks for a sync.
+    private func persistSitting(recording ended: FinishedSession? = nil) {
         do {
-            try session.store.saveSitting(sitting)
+            try session.store.saveSitting(sitting, recording: ended)
         } catch {
             log("couldn't keep the sitting: \(Diagnostics.describe(error))")
+        }
+        if ended != nil {
+            requestSync()
         }
     }
 
@@ -384,19 +418,7 @@ final class AudioPlayer {
     private func stopSitting(at: Date) {
         guard let current = sitting else { return }
         sitting = nil
-        if let finished = ListeningRules.finish(current, at: at) {
-            record(finished)
-        }
-        persistSitting()
-    }
-
-    private func record(_ finished: FinishedSession) {
-        do {
-            try session.store.recordSession(finished)
-        } catch {
-            log("file \(finished.fileID): couldn't keep a session: \(Diagnostics.describe(error))")
-        }
-        requestSync()
+        persistSitting(recording: ListeningRules.finish(current, at: at))
     }
 
     /// Playback reached the end of the File, which finishes the Read-through
@@ -437,7 +459,7 @@ final class AudioPlayer {
             applyNewestPlace()
             return
         }
-        if let offered = PlaceRules.offerDuringListening(server: place, at: currentPosition(), since: sitting?.startedAt ?? openedAt,
+        if let offered = PlaceRules.offerDuringListening(server: place, at: currentPosition(), known: knownServerAt,
                                                          ownDeviceID: session.account.deviceID) {
             offer = offered
         }
@@ -450,10 +472,11 @@ final class AudioPlayer {
         guard let file else { return }
         let fileID = file.fileID
         let ownDevice = session.account.deviceID
-        guard let choice = try? session.store.pool.read({ db in
-            PlaceRules.open(local: try CatalogStore.localPlace(db, fileID: fileID),
-                            server: try CatalogStore.serverPlace(db, fileID: fileID), ownDeviceID: ownDevice)
+        guard let places = try? session.store.pool.read({ db in
+            (local: try CatalogStore.localPlace(db, fileID: fileID), server: try CatalogStore.serverPlace(db, fileID: fileID))
         }) else { return }
+        let choice = PlaceRules.open(local: places.local, server: places.server, ownDeviceID: ownDevice)
+        knownServerAt = places.server?.occurredAt
         if let other = choice.offer, other != dismissedOffer {
             offer = other
         } else if abs(choice.start - currentPosition()) > 1 {
@@ -467,8 +490,10 @@ final class AudioPlayer {
         let target = max(0, min(seconds, max(0, file.duration - 0.5)))
         position = target
         if ready, let player {
+            let generation = itemGeneration
             AudioPlayer.seek(player, to: target) { [weak self] in
                 Task { @MainActor in
+                    guard self?.itemGeneration == generation else { return }
                     self?.refreshPosition()
                     self?.updateNowPlaying()
                 }
@@ -523,6 +548,11 @@ final class AudioPlayer {
     }
 
     private func teardownItem() {
+        itemGeneration += 1
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
         statusObservation?.invalidate()
         statusObservation = nil
         placeWatch?.cancel()
@@ -534,11 +564,13 @@ final class AudioPlayer {
         isBuffering = false
     }
 
-    private func observeEnd(of item: AVPlayerItem) {
-        let observer = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.reachedEnd() }
+    private func observeEnd(of item: AVPlayerItem, generation: Int) {
+        endObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.didPlayToEndTimeNotification, object: item, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard self?.itemGeneration == generation else { return }
+                self?.reachedEnd()
+            }
         }
-        observers.append(observer)
     }
 
     /// Interruptions, such as a call, pause without counting, and resume

@@ -109,6 +109,12 @@ type PositionUpdate struct {
 	// Session is a Reading Session the source finished, recorded with the
 	// update.
 	Session *SessionInput
+
+	// Claim, when set, runs first in the update's transaction, so what the
+	// caller records about the update, such as a journal event being taken
+	// in, commits or rolls back with it. An error from it rolls back the
+	// update and is returned.
+	Claim func(ctx context.Context, tx bun.Tx) error
 }
 
 // SessionInput is a finished Reading Session handed in with an update.
@@ -125,6 +131,9 @@ type SessionInput struct {
 	// Duration is the seconds the source counted, when it counted less than
 	// the span; more is taken as the span.
 	Duration *int
+	// Claim, when set, runs first in RecordSession's transaction, as
+	// PositionUpdate.Claim does in UpdatePosition's.
+	Claim func(ctx context.Context, tx bun.Tx) error
 }
 
 // UpdatePosition is the position update service. In one transaction it:
@@ -154,6 +163,11 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		u.Session = &session
 	}
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if u.Claim != nil {
+			if err := u.Claim(ctx, tx); err != nil {
+				return err
+			}
+		}
 		now := svc.now()
 		occurredAt := now
 		if u.OccurredAt != nil && u.OccurredAt.Before(now) {
@@ -248,6 +262,12 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			if err != nil {
 				return err
 			}
+		}
+		// A finish from before the read underway began, sent late from a
+		// device that was offline through a reread starting, belongs to the
+		// earlier read, so it ends nothing.
+		if finishing && !starting && underway != nil && underway.BeginDay != nil && day < *underway.BeginDay {
+			finishing = false
 		}
 		// A read that a sitting of listening started began when the sitting did.
 		beginDay := day
@@ -447,6 +467,11 @@ func readThroughID(rt *models.ReadThrough) *int {
 func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, source string, session SessionInput) (int, error) {
 	var bookID int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if session.Claim != nil {
+			if err := session.Claim(ctx, tx); err != nil {
+				return err
+			}
+		}
 		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrFileNotFound

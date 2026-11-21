@@ -51,8 +51,11 @@ struct PlaceOfferBanner: View {
     let accept: () -> Void
     let dismiss: () -> Void
 
-    private var whereText: String {
-        offer.source == "web_reader" ? String(localized: "on the web") : String(localized: "on another device")
+    private var message: String {
+        let time = TimeLabels.clock(offer.seconds)
+        return offer.source == "web_reader"
+            ? String(localized: "You listened up to \(time) on the web.")
+            : String(localized: "You listened up to \(time) on another device.")
     }
 
     var body: some View {
@@ -61,7 +64,7 @@ struct PlaceOfferBanner: View {
                 .font(.geist(.body, weight: .semibold))
                 .foregroundStyle(Theme.primary)
                 .accessibilityHidden(true)
-            Text("You listened to \(TimeLabels.clock(offer.seconds)) \(whereText).")
+            Text(message)
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.foreground)
                 .fixedSize(horizontal: false, vertical: true)

@@ -64,8 +64,8 @@ final class JournalStoreTests: XCTestCase {
         try store.recordPosition(fileID: 5, seconds: 5, percentage: 0.01, at: now.addingTimeInterval(5), atEnd: false, sitting: sitting)
         try store.recordPosition(fileID: 5, seconds: 10, percentage: 0.02, at: now.addingTimeInterval(10), atEnd: false, sitting: sitting)
         try store.recordPosition(fileID: 5, seconds: 600, percentage: 1, at: now.addingTimeInterval(20), atEnd: true, sitting: sitting)
-        try store.recordSession(FinishedSession(fileID: 5, startedAt: now, endedAt: now.addingTimeInterval(20),
-                                                startPercentage: 0, endPercentage: 1, duration: 20))
+        try store.saveSitting(nil, recording: FinishedSession(fileID: 5, startedAt: now, endedAt: now.addingTimeInterval(20),
+                                                              startPercentage: 0, endPercentage: 1, duration: 20))
 
         let rows = try journal()
         XCTAssertEqual(rows.map { $0["type"] as String }, ["reading_position", "reading_position", "reading_session"])
@@ -127,6 +127,47 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(choice.offer?.seconds, 400)
     }
 
+    /// Another device's place that arrives while this one has moves to send
+    /// is kept as an offer, since sending them may replace it on the server,
+    /// until the user picks.
+    func testAnotherDevicesPlaceIsKeptAsAnOfferUntilResolved() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+          "occurred_at":"2026-05-02T10:00:00Z","source":"web_reader"}}],"cursor":4}
+        """), ownDeviceID: "me")
+        // This device's move reached the server, and replaced the web's.
+        try store.applyJournalResults(try store.pendingJournal(capabilities: "", limit: 10).map {
+            Shishoapp.JournalResult(id: $0.eventID, result: .accepted)
+        }, sent: try store.pendingJournal(capabilities: "", limit: 10), capabilities: "")
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":30,"percentage":0.05,
+          "occurred_at":"2027-01-15T08:00:00Z","source":"shisho_app","device_id":"me"}}],"cursor":6}
+        """), ownDeviceID: "me")
+
+        let choice = try store.pool.read { db in
+            PlaceRules.open(local: try CatalogStore.localPlace(db, fileID: 5), server: try CatalogStore.serverPlace(db, fileID: 5), ownDeviceID: "me")
+        }
+        XCTAssertEqual(choice.start, 30)
+        XCTAssertEqual(choice.offer?.seconds, 400)
+        try store.resolveOffer(fileID: 5)
+        XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+    }
+
+    /// The server resetting the place, as reading again on the web does,
+    /// resets this device's synced place too, but not moves still to send.
+    func testAResetPlaceIsForgottenUnlessMovesWait() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        let reset = try page(#"{"entries":[{"kind":"reading_position","id":5,"deleted":true}],"cursor":4}"#)
+        try store.apply(reset)
+        XCTAssertNotNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) })
+
+        let sent = try store.pendingJournal(capabilities: "", limit: 10)
+        try store.applyJournalResults(sent.map { Shishoapp.JournalResult(id: $0.eventID, result: .accepted) }, sent: sent, capabilities: "")
+        try store.apply(try page(#"{"entries":[{"kind":"reading_position","id":5,"deleted":true}],"cursor":6}"#))
+        XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) })
+    }
+
     func testTheOpenSittingIsKept() throws {
         let (sitting, _) = ListeningRules.play(nil, fileID: 5, at: now, percentage: 0)
         try store.saveSitting(sitting)
@@ -141,7 +182,7 @@ final class DiagnosticsTests: XCTestCase {
         let text = """
         sync failed: unreachable("Could not connect to https://books.example.com/mobile/changes")
         GET http://192.168.1.20:3789/mobile/files/5/stream Authorization: Bearer abc.def-123
-        server books.example.com said no; fe80::1:2:3:4 too
+        server books.example.com said no; fe80::1:2:3:4 too, and fd12:3456::1 at 1:02:05
         file 12: couldn't play
         """
         let redacted = Diagnostics.redact(text, servers: [URL(string: "https://books.example.com")!])
@@ -149,6 +190,8 @@ final class DiagnosticsTests: XCTestCase {
         XCTAssertFalse(redacted.contains("192.168"))
         XCTAssertFalse(redacted.contains("abc.def"))
         XCTAssertFalse(redacted.contains("fe80"))
+        XCTAssertFalse(redacted.contains("fd12"))
+        XCTAssertTrue(redacted.contains("at 1:02:05"))
         XCTAssertTrue(redacted.contains("file 12: couldn't play"))
         XCTAssertTrue(redacted.contains("<server>"))
     }

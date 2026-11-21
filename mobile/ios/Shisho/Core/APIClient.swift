@@ -140,14 +140,17 @@ final class APIClient: Sendable {
     /// event. A response without them, from something other than Shisho,
     /// is an error, so the app keeps every event.
     func journal(_ rows: [JournalRow], clock: Date = Date()) async throws -> Shishoapp.JournalResponse {
-        var events: [[String: Any]] = []
-        for row in rows {
-            events.append([
-                "id": row.eventID, "type": row.type, "at": JournalTime.string(row.at),
-                "payload": try JSONSerialization.jsonObject(with: row.payload),
-            ])
+        let decoder = JSONDecoder()
+        let events = try rows.map { row in
+            Shishoapp.JournalEvent(
+                id: row.eventID, type: Shishoapp.JournalEventType(rawValue: row.type), at: JournalTime.string(row.at),
+                payload: try decoder.decode(JSONValue.self, from: row.payload)
+            )
         }
-        let body = try JSONSerialization.data(withJSONObject: ["clock": JournalTime.string(clock), "events": events])
+        let payload = Shishoapp.JournalPayload(clock: JournalTime.string(clock), events: try events.map {
+            try decoder.decode(JSONValue.self, from: JSONEncoder().encode($0))
+        })
+        let body = try JSONEncoder().encode(payload)
         return try APIClient.journalResponse(await data("mobile/journal", method: "POST", body: body), sent: rows.count)
     }
 

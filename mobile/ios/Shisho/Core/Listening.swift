@@ -121,6 +121,10 @@ struct LocalPlace: Equatable, Sendable {
     /// When the server's place was from, as this installation knew it when
     /// it first moved since its last sync, or nil when the server had none.
     let base: Date?
+    /// Another device's place that arrived while this one had moves of its
+    /// own to send, kept until the user picks one: once both sent theirs,
+    /// the server holds only the newer.
+    var offer: ServerPlace?
 }
 
 /// Where a File opens, across devices (#912): the newest synced place when
@@ -136,22 +140,31 @@ enum PlaceRules {
         let offer: ServerPlace?
     }
 
+    /// Places are compared by what this device knew of the server's place
+    /// when it began moving (`LocalPlace.base`), never by the phone's clock
+    /// against the server's.
     static func open(local: LocalPlace?, server: ServerPlace?, ownDeviceID: String) -> Choice {
-        guard let server else { return Choice(start: local?.seconds ?? 0, offer: nil) }
+        guard let server else { return Choice(start: local?.seconds ?? 0, offer: local?.offer) }
         guard let local else { return Choice(start: server.seconds, offer: nil) }
-        if !local.pending {
-            // The feed may not have brought back this device's last move yet.
-            return Choice(start: server.occurredAt > local.updatedAt ? server.seconds : local.seconds, offer: nil)
+        if let offer = local.offer {
+            return Choice(start: local.seconds, offer: abs(offer.seconds - local.seconds) > sameWithin ? offer : nil)
         }
+        // Another device moved since this one began moving. A place this
+        // device already knew is older than its own moves, as when the feed
+        // hasn't brought back its last move yet.
         let movedElsewhere = server.deviceID != ownDeviceID && server.occurredAt > (local.base ?? .distantPast)
+        if !local.pending {
+            return Choice(start: movedElsewhere ? server.seconds : local.seconds, offer: nil)
+        }
         let differs = abs(server.seconds - local.seconds) > sameWithin
         return Choice(start: local.seconds, offer: movedElsewhere && differs ? server : nil)
     }
 
-    /// A place that arrived while listening is only ever offered: when
-    /// another device moved after this sitting began, somewhere else.
-    static func offerDuringListening(server: ServerPlace?, at seconds: Double, since: Date, ownDeviceID: String) -> ServerPlace? {
-        guard let server, server.deviceID != ownDeviceID, server.occurredAt > since,
+    /// A place that arrives while listening is only ever offered: when
+    /// another device moved after the place the player knew when it opened
+    /// the File, somewhere else.
+    static func offerDuringListening(server: ServerPlace?, at seconds: Double, known: Date?, ownDeviceID: String) -> ServerPlace? {
+        guard let server, server.deviceID != ownDeviceID, server.occurredAt > (known ?? .distantPast),
               abs(server.seconds - seconds) > sameWithin
         else { return nil }
         return server

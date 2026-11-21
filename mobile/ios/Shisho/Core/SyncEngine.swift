@@ -1,10 +1,10 @@
 import Foundation
 import ShishoAPI
 
-/// Syncs an account both ways: sends the journal of changes made on the
-/// device (ADR 0024), then brings the copy of the catalog up to date from
-/// the change feed (ADR 0023), every page after the stored cursor, each
-/// applied in one transaction.
+/// Syncs an account both ways: brings the copy of the catalog up to date
+/// from the change feed (ADR 0023), every page after the stored cursor,
+/// each applied in one transaction, and sends the journal of changes made
+/// on the device (ADR 0024).
 final class SyncEngine: Sendable {
     /// The most events one batch carries.
     static let batchSize = 200
@@ -14,20 +14,29 @@ final class SyncEngine: Sendable {
     /// The capabilities the server listed last, which decide when events it
     /// didn't understand are sent again.
     private let capabilities: @Sendable () -> [String]
+    /// This installation's Device, which tells its own places from others'.
+    private let deviceID: String
 
-    init(client: APIClient, store: CatalogStore, capabilities: @escaping @Sendable () -> [String] = { [] }) {
+    init(client: APIClient, store: CatalogStore, deviceID: String = "", capabilities: @escaping @Sendable () -> [String] = { [] }) {
         self.client = client
         self.store = store
+        self.deviceID = deviceID
         self.capabilities = capabilities
     }
 
-    /// Sends the journal, then syncs until the feed has nothing more, so the
-    /// feed brings back what the journal changed. A "start over" answer
-    /// starts a fresh download from the start, keeping the current copy on
-    /// screen until it's done.
+    /// Syncs until the feed has nothing more, sends the journal, then syncs
+    /// again for what the journal changed. The feed comes first so another
+    /// device's place is seen, and kept as an offer, before this device's
+    /// moves replace it on the server. A "start over" answer starts a fresh
+    /// download from the start, keeping the current copy on screen until
+    /// it's done.
     func run() async throws {
-        try await sendJournal()
         try await pullFeed()
+        let pending = try await store.pool.read(CatalogStore.pendingCount)
+        try await sendJournal()
+        if pending > 0 {
+            try await pullFeed()
+        }
     }
 
     /// Sends the journal in batches until nothing sendable is left. Any
@@ -71,7 +80,7 @@ final class SyncEngine: Sendable {
             }
             // Another sync moved the copy on while this one waited, so this
             // one's answer is stale.
-            guard try store.apply(page, after: state.cursor) else {
+            guard try store.apply(page, after: state.cursor, ownDeviceID: deviceID) else {
                 return
             }
             if !page.hasMore {

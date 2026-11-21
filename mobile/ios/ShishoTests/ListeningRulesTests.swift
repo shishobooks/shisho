@@ -88,10 +88,19 @@ final class PlaceRulesTests: XCTestCase {
     }
 
     /// A feed that hasn't brought back the device's own last move yet
-    /// doesn't send it back.
+    /// doesn't send it back to the place it knew before moving.
     func testAnOlderServerPlaceDoesntRewind() {
-        let choice = PlaceRules.open(local: local(300, at: -10, pending: false), server: server(100, at: -600), ownDeviceID: "me")
+        let choice = PlaceRules.open(local: local(300, at: -10, pending: false, base: -600), server: server(100, at: -600), ownDeviceID: "me")
         XCTAssertEqual(choice.start, 300)
+        let own = PlaceRules.open(local: local(300, at: -10, pending: false), server: server(290, at: -5, device: "me"), ownDeviceID: "me")
+        XCTAssertEqual(own.start, 300)
+    }
+
+    /// The phone's clock never decides: a phone running an hour fast still
+    /// takes a newer place from the web.
+    func testAFastPhoneClockStillTakesTheNewerPlace() {
+        let choice = PlaceRules.open(local: local(100, at: 3600, pending: false, base: -7200), server: server(900, at: -60), ownDeviceID: "me")
+        XCTAssertEqual(choice.start, 900)
     }
 
     /// Both moved: the device stays and offers the other place.
@@ -115,10 +124,19 @@ final class PlaceRulesTests: XCTestCase {
     }
 
     func testAPlaceArrivingWhileListeningIsOnlyOffered() {
-        let since = now.addingTimeInterval(-120)
-        XCTAssertNotNil(PlaceRules.offerDuringListening(server: server(900, at: -10), at: 200, since: since, ownDeviceID: "me"))
-        XCTAssertNil(PlaceRules.offerDuringListening(server: server(900, at: -300), at: 200, since: since, ownDeviceID: "me"))
-        XCTAssertNil(PlaceRules.offerDuringListening(server: server(900, at: -10, device: "me"), at: 200, since: since, ownDeviceID: "me"))
+        let known = now.addingTimeInterval(-3600)
+        XCTAssertNotNil(PlaceRules.offerDuringListening(server: server(900, at: -10), at: 200, known: known, ownDeviceID: "me"))
+        XCTAssertNil(PlaceRules.offerDuringListening(server: server(900, at: -3600), at: 200, known: known, ownDeviceID: "me"))
+        XCTAssertNil(PlaceRules.offerDuringListening(server: server(900, at: -10, device: "me"), at: 200, known: known, ownDeviceID: "me"))
+    }
+
+    /// A place moved on the web before listening began, which the feed
+    /// brings only after, is still offered: it's newer than the place the
+    /// player knew.
+    func testAPlaceFromBeforeTheSittingThatArrivesLateIsOffered() {
+        let webMove = server(900, at: -120)
+        XCTAssertEqual(PlaceRules.offerDuringListening(server: webMove, at: 30, known: now.addingTimeInterval(-86400), ownDeviceID: "me"), webMove)
+        XCTAssertNotNil(PlaceRules.offerDuringListening(server: webMove, at: 30, known: nil, ownDeviceID: "me"))
     }
 }
 

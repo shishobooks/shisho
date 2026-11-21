@@ -135,6 +135,8 @@ actor Diagnostics {
             ("[A-Za-z][A-Za-z0-9+.-]*://[^\\s\"'<>)]+", "<address>"),
             ("\\b\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?\\b", "<address>"),
             ("(?i)\\b[0-9a-f]{1,4}(:[0-9a-f]{0,4}){4,7}\\b", "<address>"),
+            // Compressed IPv6, such as fe80::1; a clock time never has "::".
+            ("(?i)(?<![\\w:])(?:[0-9a-f]{1,4}:){1,6}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?(?![\\w:])", "<address>"),
         ]
         for (pattern, replacement) in patterns {
             text = text.replacingOccurrences(of: pattern, with: replacement, options: .regularExpression)

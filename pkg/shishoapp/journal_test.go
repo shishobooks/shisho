@@ -293,3 +293,25 @@ func (f *fixture) signInAs(installation string) string {
 	require.NoError(f.t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	return resp.Credential
 }
+
+// An event the server failed to apply was never taken in: the batch fails,
+// the app keeps it, and sending it again applies it once.
+func TestJournal_AFaultWhileApplyingLeavesTheEventToResend(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.audiobook()
+	userID := f.addUser()
+	now := time.Now()
+	f.accountSince(userID, now.Add(-time.Hour))
+	credential := f.signIn()
+	listened := event("s1", JournalEventReadingSession, now, session(now.Add(-20*time.Minute), now.Add(-10*time.Minute)))
+
+	f.exec(`CREATE TRIGGER fail_sessions BEFORE INSERT ON reading_sessions BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+	rec := f.journalRaw(credential, now, listened)
+	assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	assert.Zero(t, f.count(`SELECT COUNT(*) FROM app_journal_events`))
+
+	f.exec(`DROP TRIGGER fail_sessions`)
+	assert.Equal(t, []string{"s1:accepted"}, results(f.journal(credential, now, listened)))
+	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_sessions`))
+}

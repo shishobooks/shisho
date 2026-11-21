@@ -89,16 +89,49 @@ extension CatalogStore {
     }
 
     static func localPlace(_ db: Database, fileID: Int) throws -> LocalPlace? {
-        guard let row = try Row.fetchOne(db, sql: "SELECT seconds, updated_at, base_occurred_at FROM local_positions WHERE file_id = ?",
-                                         arguments: [fileID])
+        guard let row = try Row.fetchOne(db, sql: """
+            SELECT seconds, updated_at, base_occurred_at, offer_seconds, offer_occurred_at, offer_source, offer_device_id
+            FROM local_positions WHERE file_id = ?
+            """, arguments: [fileID])
         else { return nil }
+        var offer: ServerPlace?
+        if let seconds: Double = row["offer_seconds"], let at: Double = row["offer_occurred_at"] {
+            offer = ServerPlace(seconds: seconds, occurredAt: Date(timeIntervalSince1970: at),
+                                deviceID: row["offer_device_id"], source: row["offer_source"] ?? "")
+        }
         return LocalPlace(seconds: row["seconds"], updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
                           pending: try hasPendingMoves(db, fileID: fileID),
-                          base: (row["base_occurred_at"] as Double?).map(Date.init(timeIntervalSince1970:)))
+                          base: (row["base_occurred_at"] as Double?).map(Date.init(timeIntervalSince1970:)), offer: offer)
+    }
+
+    /// Keeps another device's place as an offer when it arrives while this
+    /// device has moves of its own to send, since sending them may replace
+    /// it on the server. A newer one replaces the offer.
+    static func keepOffer(_ position: Shishoapp.FeedReadingPosition, ownDeviceID: String, in db: Database) throws {
+        guard !ownDeviceID.isEmpty, position.deviceId != ownDeviceID,
+              let occurredAt = timestamp(position.occurredAt),
+              try hasPendingMoves(db, fileID: position.fileId),
+              let place = try serverPlace(db, fileID: position.fileId)
+        else { return }
+        try db.execute(sql: """
+            UPDATE local_positions SET offer_seconds = ?, offer_occurred_at = ?, offer_source = ?, offer_device_id = ?
+            WHERE file_id = ? AND ? > COALESCE(base_occurred_at, 0) AND ? > COALESCE(offer_occurred_at, 0)
+            """, arguments: [place.seconds, occurredAt, position.source.rawValue, position.deviceId, position.fileId,
+                             occurredAt, occurredAt])
+    }
+
+    /// The user went to the offered place, or chose to stay.
+    func resolveOffer(fileID: Int) throws {
+        try pool.write { db in
+            try db.execute(sql: """
+                UPDATE local_positions SET offer_seconds = NULL, offer_occurred_at = NULL, offer_source = NULL, offer_device_id = NULL
+                WHERE file_id = ?
+                """, arguments: [fileID])
+        }
     }
 
     private static func hasPendingMoves(_ db: Database, fileID: Int) throws -> Bool {
-        try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM journal WHERE type = ? AND file_id = ?)",
+        try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM journal WHERE type = ? AND file_id = ? AND held_for IS NULL)",
                           arguments: [Shishoapp.JournalEventType.readingPosition.rawValue, fileID]) ?? false
     }
 
@@ -177,17 +210,28 @@ extension CatalogStore {
         }
     }
 
-    /// Queues a finished Reading Session, and forgets the sitting it came
-    /// from when that's the one kept.
-    func recordSession(_ session: FinishedSession) throws {
-        let payload = Shishoapp.JournalSessionPayload(
-            fileId: session.fileID, startedAt: JournalTime.string(session.startedAt), endedAt: JournalTime.string(session.endedAt),
-            startPercentage: min(1, max(0, session.startPercentage)), endPercentage: min(1, max(0, session.endPercentage)),
-            duration: session.duration
-        )
-        let data = try JSONEncoder().encode(payload)
+    /// Keeps the sitting being timed, or forgets it with nil, and queues the
+    /// Reading Session a sitting that ended made, in one transaction: a kill
+    /// in between can't send a sitting twice or lose it.
+    func saveSitting(_ sitting: ListeningSitting?, recording session: FinishedSession? = nil) throws {
+        let kept = try sitting.map { try JSONEncoder().encode($0) }
+        let ended = try session.map { session in
+            try JSONEncoder().encode(Shishoapp.JournalSessionPayload(
+                fileId: session.fileID, startedAt: JournalTime.string(session.startedAt), endedAt: JournalTime.string(session.endedAt),
+                startPercentage: min(1, max(0, session.startPercentage)), endPercentage: min(1, max(0, session.endPercentage)),
+                duration: session.duration
+            ))
+        }
         try pool.write { db in
-            try CatalogStore.append(db, type: .readingSession, at: session.endedAt, payload: data, fileID: session.fileID, coalesceKey: nil)
+            if let session, let ended {
+                try CatalogStore.append(db, type: .readingSession, at: session.endedAt, payload: ended, fileID: session.fileID, coalesceKey: nil)
+            }
+            if let kept {
+                try db.execute(sql: "INSERT INTO open_sitting (id, sitting) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET sitting = excluded.sitting",
+                               arguments: [kept])
+            } else {
+                try db.execute(sql: "DELETE FROM open_sitting")
+            }
         }
     }
 
@@ -206,17 +250,6 @@ extension CatalogStore {
         }
     }
 
-    func saveSitting(_ sitting: ListeningSitting?) throws {
-        let data = try sitting.map { try JSONEncoder().encode($0) }
-        try pool.write { db in
-            if let data {
-                try db.execute(sql: "INSERT INTO open_sitting (id, sitting) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET sitting = excluded.sitting",
-                               arguments: [data])
-            } else {
-                try db.execute(sql: "DELETE FROM open_sitting")
-            }
-        }
-    }
 
     // MARK: - The journal
 

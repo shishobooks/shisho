@@ -335,15 +335,11 @@
     "Wrong username or password." : {
 
     },
-    "You listened to %@ %@." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "You listened to %1$@ %2$@."
-          }
-        }
-      }
+    "You listened up to %@ on another device." : {
+
+    },
+    "You listened up to %@ on the web." : {
+
     },
     "Your account can't read Books on this server. Ask the server's owner for access." : {
 
@@ -373,12 +369,6 @@
 
     },
     "https://shisho.example.com" : {
-
-    },
-    "on another device" : {
-
-    },
-    "on the web" : {
 
     }
   },

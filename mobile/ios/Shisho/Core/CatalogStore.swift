@@ -200,6 +200,12 @@ final class CatalogStore: Sendable {
                 // When the server's place was from when this device first
                 // moved since its last sync.
                 t.column("base_occurred_at", .double)
+                // Another device's place that arrived while this one had
+                // moves of its own to send, offered until the user picks.
+                t.column("offer_seconds", .double)
+                t.column("offer_occurred_at", .double)
+                t.column("offer_source", .text)
+                t.column("offer_device_id", .text)
             }
             // Changes made on the device, oldest first, until the server
             // takes them in. held_for is the capability list a server that
@@ -282,8 +288,11 @@ final class CatalogStore: Sendable {
     /// continue the copy, from a sync that was stopped and answered late, is
     /// dropped and apply returns false. Tests that apply pages in order may
     /// leave it out.
+    ///
+    /// ownDeviceID is this installation's Device, so another device's place
+    /// arriving while this one has moves to send is kept as an offer.
     @discardableResult
-    func apply(_ page: Shishoapp.FeedResponse, after cursor: Int? = nil) throws -> Bool {
+    func apply(_ page: Shishoapp.FeedResponse, after cursor: Int? = nil, ownDeviceID: String = "") throws -> Bool {
         try pool.write { db in
             let state = try CatalogStore.syncState(db)
             if let cursor, cursor != state.cursor {
@@ -316,8 +325,16 @@ final class CatalogStore: Sendable {
                 case .readingPosition:
                     if entry.deleted {
                         try db.execute(sql: "DELETE FROM reading_positions WHERE file_id = ?", arguments: [entry.id])
+                        // The server's place was reset, as by reading again
+                        // on the web: this device's synced place goes too,
+                        // unless it has moves still to send.
+                        try db.execute(sql: """
+                            DELETE FROM local_positions WHERE file_id = ? AND NOT EXISTS (
+                                SELECT 1 FROM journal WHERE type = 'reading_position' AND file_id = ? AND held_for IS NULL)
+                            """, arguments: [entry.id, entry.id])
                     } else if let position = entry.readingPosition {
                         try CatalogStore.upsert(position, generation: generation, in: db)
+                        try CatalogStore.keepOffer(position, ownDeviceID: ownDeviceID, in: db)
                     }
                 case .readThrough:
                     if entry.deleted {

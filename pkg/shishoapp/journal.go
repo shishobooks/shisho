@@ -118,6 +118,9 @@ func (h *handler) journal(c echo.Context) error {
 		installation = *device.InstallationID
 	}
 	clock := newDeviceClock(payload.Clock, time.Now(), user.CreatedAt)
+	// A batch the app gave up on, such as when the network went, still
+	// finishes the event it started rather than leave the app unsure of it.
+	ctx = context.WithoutCancel(ctx)
 
 	resp := JournalResponse{Results: make([]JournalResult, 0, len(payload.Events)), ClockOffsetSeconds: clock.offset.Seconds()}
 	counts := map[string]int{}
@@ -169,86 +172,114 @@ func (h *handler) takeEvent(ctx context.Context, c echo.Context, user *models.Us
 		result.Result, result.Reason = JournalRefused, fmt.Sprintf("The event's id is longer than %d characters.", maxEventID)
 		return result, nil
 	}
-	refuse := func(reason string) (JournalResult, error) {
+	refuse := func(reason string) JournalResult {
 		result.Result, result.Reason = JournalRefused, reason
-		return result, nil
+		return result
 	}
-	notUnderstood := func(reason string) (JournalResult, error) {
+	notUnderstood := func(reason string) JournalResult {
 		result.Result, result.Reason = JournalNotUnderstood, reason
-		return result, nil
+		return result
+	}
+
+	unreadable := func(err error) JournalResult {
+		logger.FromContext(ctx).Warn("shisho app journal event not readable", logger.Data{
+			"device_id": device.ID, "event_id": result.ID, "error": err.Error(),
+		})
+		return refuse("The event isn't readable.")
 	}
 
 	var ev JournalEvent
 	if field, err := decodeStrict(raw, &ev); err != nil {
 		if field != "" {
-			return notUnderstood(fmt.Sprintf("This server doesn't know the event field %q.", field))
+			return notUnderstood(fmt.Sprintf("This server doesn't know the event field %q.", field)), nil
 		}
-		return refuse("The event isn't readable: " + err.Error())
+		return unreadable(err), nil
 	}
-	var apply func() (eventOutcome, error)
+	var apply func(claim claimFunc) (eventOutcome, error)
 	switch ev.Type {
 	case JournalEventReadingPosition:
 		var p JournalPositionPayload
 		if field, err := decodeStrict(ev.Payload, &p); err != nil {
 			if field != "" {
-				return notUnderstood(fmt.Sprintf("This server doesn't know the %s field %q.", ev.Type, field))
+				return notUnderstood(fmt.Sprintf("This server doesn't know the %s field %q.", ev.Type, field)), nil
 			}
-			return refuse("The event isn't readable: " + err.Error())
+			return unreadable(err), nil
 		}
 		if err := validate(c, &p); err != nil {
-			return refuse(err.Error())
+			return refuse(err.Error()), nil
 		}
-		apply = func() (eventOutcome, error) { return h.applyPosition(ctx, user, device, clock, ev.At, p) }
+		apply = func(claim claimFunc) (eventOutcome, error) {
+			return h.applyPosition(ctx, user, device, clock, ev.At, p, claim)
+		}
 	case JournalEventReadingSession:
 		var p JournalSessionPayload
 		if field, err := decodeStrict(ev.Payload, &p); err != nil {
 			if field != "" {
-				return notUnderstood(fmt.Sprintf("This server doesn't know the %s field %q.", ev.Type, field))
+				return notUnderstood(fmt.Sprintf("This server doesn't know the %s field %q.", ev.Type, field)), nil
 			}
-			return refuse("The event isn't readable: " + err.Error())
+			return unreadable(err), nil
 		}
 		if err := validate(c, &p); err != nil {
-			return refuse(err.Error())
+			return refuse(err.Error()), nil
 		}
-		apply = func() (eventOutcome, error) { return h.applySession(ctx, user, device, clock, p) }
+		apply = func(claim claimFunc) (eventOutcome, error) { return h.applySession(ctx, user, device, clock, p, claim) }
 	default:
-		return notUnderstood(fmt.Sprintf("This server doesn't know the event type %q.", ev.Type))
+		return notUnderstood(fmt.Sprintf("This server doesn't know the event type %q.", ev.Type)), nil
 	}
 	if ev.At.IsZero() {
-		return refuse("The event has no time.")
+		return refuse("The event has no time."), nil
 	}
 
-	// Claimed before it's applied, so a batch sent twice at once applies it
-	// once. A refusal or a fault gives the claim back.
-	claim, err := h.db.NewInsert().
-		Model(&journalEvent{UserID: user.ID, InstallationID: installation, EventID: ev.ID, EventType: ev.Type, CreatedAt: time.Now()}).
-		On("CONFLICT DO NOTHING").
-		Exec(ctx)
+	// An event taken in before is a duplicate, even if what it names is
+	// gone since.
+	seen, err := h.db.NewSelect().Model((*journalEvent)(nil)).
+		Where("user_id = ? AND installation_id = ? AND event_id = ?", user.ID, installation, ev.ID).
+		Exists(ctx)
 	if err != nil {
 		return result, errors.WithStack(err)
 	}
-	if n, err := claim.RowsAffected(); err != nil {
-		return result, errors.WithStack(err)
-	} else if n == 0 {
+	if seen {
 		result.Result = JournalDuplicate
 		return result, nil
 	}
-	outcome, err := apply()
-	if err != nil || outcome.refused != "" {
-		_, dropErr := h.db.NewDelete().Model((*journalEvent)(nil)).
-			Where("user_id = ? AND installation_id = ? AND event_id = ?", user.ID, installation, ev.ID).
+	// Claimed in the same transaction that applies it, so it's recorded
+	// exactly when it's applied: a refusal or a fault leaves it unclaimed,
+	// and a batch sent twice at once applies it once.
+	claim := func(ctx context.Context, tx bun.Tx) error {
+		res, err := tx.NewInsert().
+			Model(&journalEvent{UserID: user.ID, InstallationID: installation, EventID: ev.ID, EventType: ev.Type, CreatedAt: time.Now()}).
+			On("CONFLICT DO NOTHING").
 			Exec(ctx)
 		if err != nil {
-			return result, err
+			return errors.WithStack(err)
 		}
-		if dropErr != nil {
-			return result, errors.WithStack(dropErr)
+		if n, err := res.RowsAffected(); err != nil {
+			return errors.WithStack(err)
+		} else if n == 0 {
+			return errDuplicate
 		}
-		return refuse(outcome.refused)
+		return nil
+	}
+	outcome, err := apply(claim)
+	switch {
+	case errors.Is(err, errDuplicate):
+		result.Result = JournalDuplicate
+		return result, nil
+	case err != nil:
+		return result, err
+	case outcome.refused != "":
+		return refuse(outcome.refused), nil
 	}
 	result.Result = JournalAccepted
 	return result, nil
 }
+
+// claimFunc records an event as taken in, inside the transaction that
+// applies it.
+type claimFunc = func(ctx context.Context, tx bun.Tx) error
+
+// errDuplicate is a claim on an event already taken in.
+var errDuplicate = errors.New("journal event already taken in")
 
 // validate checks v against its validate tags as the binder would.
 func validate(c echo.Context, v any) error {
@@ -272,8 +303,7 @@ const (
 
 // readableFile reports whether user can reach fileID.
 func (h *handler) readableFile(ctx context.Context, user *models.User, fileID int) (bool, error) {
-	var libraryID int
-	err := h.db.NewSelect().Model((*models.File)(nil)).Column("f.library_id").Where("f.id = ?", fileID).Scan(ctx, &libraryID)
+	libraryID, err := h.reading.FileLibraryID(ctx, fileID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -287,7 +317,7 @@ func (h *handler) readableFile(ctx context.Context, user *models.User, fileID in
 // service at the time it happened, which starts, resumes, and finishes
 // Read-throughs by the same rules as the web player.
 func (h *handler) applyPosition(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock,
-	at time.Time, p JournalPositionPayload) (eventOutcome, error) {
+	at time.Time, p JournalPositionPayload, claim claimFunc) (eventOutcome, error) {
 	forms := 0
 	for _, given := range []bool{p.CFI != nil, p.Page != nil, p.Seconds != nil} {
 		if given {
@@ -314,6 +344,7 @@ func (h *handler) applyPosition(ctx context.Context, user *models.User, device *
 		Percentage: p.Percentage,
 		AtEnd:      p.AtEnd,
 		OccurredAt: &occurred,
+		Claim:      claim,
 	}
 	if p.ListenedSeconds != nil {
 		update.ListenedSeconds = *p.ListenedSeconds
@@ -335,12 +366,12 @@ func (h *handler) applyPosition(ctx context.Context, user *models.User, device *
 // applySession records a finished Reading Session at the time it happened,
 // on the Read-through underway then (ADR 0016).
 func (h *handler) applySession(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock,
-	p JournalSessionPayload) (eventOutcome, error) {
+	p JournalSessionPayload, claim claimFunc) (eventOutcome, error) {
 	if p.EndedAt.Before(p.StartedAt) {
-		return eventOutcome{refused: "A reading session can't end before it starts."}, nil
+		return eventOutcome{refused: "A Reading Session can't end before it starts."}, nil
 	}
 	if p.EndedAt.Sub(p.StartedAt) > maxSessionLength {
-		return eventOutcome{refused: "A reading session lasts at most a day."}, nil
+		return eventOutcome{refused: "A Reading Session lasts at most a day."}, nil
 	}
 	if ok, err := h.readableFile(ctx, user, p.FileID); err != nil || !ok {
 		return eventOutcome{refused: refusedFile}, err
@@ -359,6 +390,7 @@ func (h *handler) applySession(ctx context.Context, user *models.User, device *d
 		Measured:        true,
 		DeviceID:        &deviceID,
 		Duration:        p.Duration,
+		Claim:           claim,
 	})
 	if errors.Is(err, reading.ErrFileNotFound) {
 		return eventOutcome{refused: refusedFile}, nil
