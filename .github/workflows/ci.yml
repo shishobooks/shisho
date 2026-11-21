@@ -531,8 +531,12 @@ jobs:
       - uses: jdx/mise-action@v5
       - id: setup
         uses: ./.github/actions/setup-ios
-      # The harness makes its M4B fixture with ffmpeg.
+      # The harness makes its M4B fixture with ffmpeg. Homebrew skips
+      # updating itself first, which the runner image's Homebrew doesn't need.
       - name: Install ffmpeg
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install ffmpeg
       - name: Run the Maestro flows
         run: mise ios:harness -- -out "$RUNNER_TEMP/harness"

@@ -183,8 +183,12 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 }
 
 // Remove shuts the clone down and deletes it, even after the run was
-// interrupted.
+// interrupted. On a GitHub Actions runner, which is thrown away after the
+// job, it leaves the clone, saving the best part of a minute.
 func (c *simulatorClone) Remove() {
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	_, _ = simctl(ctx, "shutdown", c.UDID)
