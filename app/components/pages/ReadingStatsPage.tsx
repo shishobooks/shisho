@@ -600,7 +600,9 @@ const ReadingStatsPage = () => {
           </TabsList>
           <TabsContent value="overview">
             {renderBody()}
-            {stats?.places.some((place) => place.source !== "web_reader") && (
+            {stats?.places.some(
+              (place) => place.source === "kobo" || place.source === "koreader",
+            ) && (
               <p className="mt-6 text-xs text-muted-foreground">
                 Kobo, and KOReader without the KOReader plugin, don't time your
                 reading the way Shisho's web reader and player do, so time from

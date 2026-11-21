@@ -26,6 +26,23 @@ describe("sessionSourceLabel", () => {
       }),
     ).toBe("KOReader (estimated)");
   });
+
+  it("names the Shisho app's reader and player apart", () => {
+    expect(
+      sessionSourceLabel({
+        source: "shisho_app",
+        kind: "reading",
+        measured: true,
+      }),
+    ).toBe("Shisho app reader");
+    expect(
+      sessionSourceLabel({
+        source: "shisho_app",
+        kind: "listening",
+        measured: true,
+      }),
+    ).toBe("Shisho app player");
+  });
 });
 
 describe("placeRows", () => {
@@ -83,6 +100,37 @@ describe("placeRows", () => {
         listening_seconds: 0,
       },
       { label: "KOReader", reading_seconds: 60, listening_seconds: 0 },
+    ]);
+  });
+
+  it("names a Shisho app Device by name, and a removed one by its reader and player", () => {
+    expect(
+      placeRows([
+        {
+          source: "shisho_app",
+          device_name: "iPhone 17 Pro",
+          reading_seconds: 60,
+          listening_seconds: 600,
+        },
+        {
+          source: "shisho_app",
+          device_name: null,
+          reading_seconds: 120,
+          listening_seconds: 300,
+        },
+      ]),
+    ).toEqual([
+      { label: "iPhone 17 Pro", reading_seconds: 60, listening_seconds: 600 },
+      {
+        label: "Shisho app player",
+        reading_seconds: 0,
+        listening_seconds: 300,
+      },
+      {
+        label: "Shisho app reader",
+        reading_seconds: 120,
+        listening_seconds: 0,
+      },
     ]);
   });
 });

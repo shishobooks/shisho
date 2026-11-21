@@ -626,8 +626,11 @@ final class AudioPlayer {
             (center.togglePlayPauseCommand, { player, _ in player.togglePlay() }),
             (center.skipBackwardCommand, { player, _ in player.skip(by: -AudioPlayer.skipInterval) }),
             (center.skipForwardCommand, { player, _ in player.skip(by: AudioPlayer.skipInterval) }),
-            (center.nextTrackCommand, { player, _ in player.nextChapter() }),
-            (center.previousTrackCommand, { player, _ in player.previousChapter() }),
+            // Headphones' double and triple click, and a car's track
+            // buttons, skip as the lock screen does rather than change
+            // chapter; chapters change in the app.
+            (center.nextTrackCommand, { player, _ in player.skip(by: AudioPlayer.skipInterval) }),
+            (center.previousTrackCommand, { player, _ in player.skip(by: -AudioPlayer.skipInterval) }),
             (center.changePlaybackPositionCommand, { player, time in
                 if let time { player.seek(to: player.chapterBounds.start + time) }
             }),
