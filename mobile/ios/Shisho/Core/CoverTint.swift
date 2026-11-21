@@ -10,9 +10,11 @@ enum CoverTint {
     }
 
     /// The cover's average color, or nil when it has no pixels. It runs off
-    /// the main actor and on the CPU: Core Image would compile Metal shaders
-    /// the first time, which takes seconds on a machine without a GPU, and
-    /// on the main actor that froze the page.
+    /// the main actor (`@concurrent`, whatever the caller's isolation) and on
+    /// the CPU: Core Image would compile Metal shaders the first time, which
+    /// takes seconds on a machine without a GPU, and on the main actor that
+    /// froze the page.
+    @concurrent
     static func average(of image: UIImage) async -> RGB? {
         guard let cgImage = image.cgImage else { return nil }
         return average(of: cgImage)

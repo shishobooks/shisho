@@ -82,9 +82,10 @@ struct BookDetailView: View {
     private var hero: some View {
         VStack(spacing: 0) {
             CoverView(book: summary, width: sizeClass == .regular ? 260 : 200, shadow: .large) { image in
-                Task {
-                    tint = await CoverTint.average(of: image).map { Color(red: $0.red, green: $0.green, blue: $0.blue) }
-                }
+                let average = await CoverTint.average(of: image)
+                // A cover replaced meanwhile has its own tint coming.
+                guard !Task.isCancelled else { return }
+                tint = average.map { Color(red: $0.red, green: $0.green, blue: $0.blue) }
             }
             .padding(.top, 8)
 
