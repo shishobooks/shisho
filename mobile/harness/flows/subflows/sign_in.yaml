@@ -13,5 +13,6 @@ appId: ${APP_ID}
 - pressKey: Enter
 - inputText: ${PASSWORD}
 - pressKey: Enter
-# The harness's simulators have password AutoFill off (tools/appharness), so
-# iOS doesn't offer to save the password over the app.
+# The harness's simulators disallow password AutoFill (tools/appharness), so
+# iOS never offers to save the password, which would cover the app and stall
+# Maestro.
