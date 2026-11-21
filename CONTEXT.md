@@ -172,8 +172,12 @@ _Avoid_: onboarding (as a term), checklist (alone), tour
 ### Reading
 
 **Reading Status**:
-Where one user stands with a **Book**: To Read, Currently Reading, Paused, Read, Did Not Finish, or none. It belongs to the Book, not a **File**, and is private to the user. Currently Reading, Paused, Read, and Did Not Finish describe the user's latest **Read-through**.
+Where one user stands with a **Book**: To Read, Currently Reading, Paused, Read, Did Not Finish, **Reference**, or none. It belongs to the Book, not a **File**, and is private to the user. Currently Reading, Paused, Read, and Did Not Finish describe the user's latest **Read-through**; Reference describes how the user uses the Book now, whatever its Read-throughs say.
 _Avoid_: shelf, reading state
+
+**Reference**:
+A **Reading Status** a user chooses for a **Book** they dip into rather than read through, such as a cookbook, a textbook, or an anthology. A Reference Book never has a **Read-through** underway: time spent in it counts as **Reading Sessions** and its **Reading Positions** are kept, but it adds nothing finished or abandoned. The user sets and clears it by choosing a status; nothing inferred from reading or reported by Kobo or KOReader changes it. Its earlier Read-throughs stay as history.
+_Avoid_: dip-in, lookup book, reference as a Book's metadata (it's each user's choice, not a property of the Book)
 
 **Read-through**:
 One pass a user makes through a **Book**, with the day it began if known and, once it ends, the day it ended and whether it was finished or abandoned. Rereading starts a new one; earlier ones stay as history. A Read-through still underway may be paused. It outlives its Book: when the Book is deleted, the Read-through keeps the title and authors it had and still counts in **Reading Stats**, until the user deletes it.
@@ -204,7 +208,7 @@ A moment in one audiobook **File** that one user marked to come back to, with an
 _Avoid_: clip, marker, highlight (a highlight marks text, not a moment)
 
 **Reading Session**:
-One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. Its time is how long the user actually spent, which can be less than the span when they paused within it or when the reader caps the time counted on one page. It belongs to the **Read-through** underway at the time, if there is one; time spent in a Book with none underway, such as looking something up in a finished one, still counts toward reading time.
+One stretch of time a user spent reading or listening to a **File**, from when it started to when it ended, and how far through the File it began and finished. Its time is how long the user actually spent, which can be less than the span when they paused within it or when the reader caps the time counted on one page. It belongs to at most one **Read-through**, normally the one underway at the time; time spent in a Book with none underway, such as looking something up in a finished one or a **Reference** one, still counts toward reading time.
 _Avoid_: reading time, sitting, activity
 
 ### Stats
@@ -242,9 +246,9 @@ _Avoid_: sample library, fixtures (those are test data)
 - A user has one set of default **Delivery Rules**, which follow Shisho's built-in rules until edited; a **Device** follows them, follows its Device type's preset, or has its own, except a **Shisho app** Device, which has none
 - An admin creates many **Invite Links**; an **Invite Link** adds at most one user
 - A **Book** has many **Share Links**; a **Share Link** belongs to exactly one **Book** and is created by one user
-- A user has at most one **Reading Status** and one **Rating** per **Book**, many **Read-throughs** per Book (at most one underway), and one **To Read** queue
+- A user has at most one **Reading Status** and one **Rating** per **Book**, many **Read-throughs** per Book (at most one underway, and none underway while the Book is **Reference**), and one **To Read** queue
 - A user has at most one **Reading Position** per **File**, and many **Bookmarks** per audiobook File
-- A **Read-through** has many **Reading Sessions**, each on one **File**
+- A **Read-through** has many **Reading Sessions**, each on one **File**; a **Reading Session** belongs to at most one Read-through
 - A **Resource** (series, person, genre, tag, publisher) has many **Aliases**
 - An **Alias** belongs to exactly one resource and is unique within its resource type and library
 
