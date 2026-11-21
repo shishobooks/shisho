@@ -13,10 +13,15 @@ appId: ${APP_ID}
 - pressKey: Enter
 - inputText: ${PASSWORD}
 - pressKey: Enter
-# The system may offer to save the password.
+# The system may offer to save the password once the sign-in screen goes,
+# which can take seconds on a busy CI runner, so wait for that first.
+- extendedWaitUntil:
+    notVisible:
+      id: signin.submit
+    timeout: 30000
 - extendedWaitUntil:
     visible: Not Now
-    timeout: 4000
+    timeout: 5000
     optional: true
 - tapOn:
     text: Not Now
