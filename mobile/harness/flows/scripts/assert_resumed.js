@@ -19,7 +19,9 @@ function serverReading() {
     CONTROL + "/reading?title=" + encodeURIComponent(TITLE),
   );
   if (response.status !== 200) {
-    throw new Error("the harness could not read the server: " + response.status);
+    throw new Error(
+      "the harness could not read the server: " + response.status,
+    );
   }
   return json(response.body);
 }
@@ -28,12 +30,20 @@ const after = seconds(output.afterRelaunch);
 console.log("before kill " + before + " s, after relaunch " + after + " s");
 if (after < before - 8 || after > before + 2) {
   throw new Error(
-    "resumed at " + output.afterRelaunch + ", but the place before the kill was " +
+    "resumed at " +
+      output.afterRelaunch +
+      ", but the place before the kill was " +
       output.beforeKill,
   );
 }
 const reading = serverReading();
 console.log("server place " + reading.seconds + " s from " + reading.source);
 if (Math.abs(reading.seconds - after) > 2) {
-  throw new Error("the server's place is " + reading.seconds + " s, the app's " + after + " s");
+  throw new Error(
+    "the server's place is " +
+      reading.seconds +
+      " s, the app's " +
+      after +
+      " s",
+  );
 }

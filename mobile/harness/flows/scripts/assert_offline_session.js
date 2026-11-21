@@ -19,29 +19,42 @@ function serverReading() {
     CONTROL + "/reading?title=" + encodeURIComponent(TITLE),
   );
   if (response.status !== 200) {
-    throw new Error("the harness could not read the server: " + response.status);
+    throw new Error(
+      "the harness could not read the server: " + response.status,
+    );
   }
   return json(response.body);
 }
 const reading = serverReading();
 console.log(JSON.stringify(reading));
 const sessions = reading.sessions.filter((s) => s.source === "shisho_app");
-if (sessions.length === 0) throw new Error("the server has no session from the app");
+if (sessions.length === 0)
+  throw new Error("the server has no session from the app");
 const session = sessions[sessions.length - 1];
 if (session.ended_at > reading.online_at) {
   throw new Error(
-    "the session ended at " + session.ended_at + ", after the server came back at " +
-      reading.online_at + ": it was placed when it synced",
+    "the session ended at " +
+      session.ended_at +
+      ", after the server came back at " +
+      reading.online_at +
+      ": it was placed when it synced",
   );
 }
 if (session.ended_at < reading.offline_at) {
   throw new Error("the session ended before the server went offline");
 }
 if (session.duration < 12) {
-  throw new Error("the session counts " + session.duration + " s, not the time offline");
+  throw new Error(
+    "the session counts " + session.duration + " s, not the time offline",
+  );
 }
 if (Math.abs(reading.seconds - seconds(output.paused)) > 6) {
-  throw new Error("the server's place is " + reading.seconds + " s, the app paused at " + output.paused);
+  throw new Error(
+    "the server's place is " +
+      reading.seconds +
+      " s, the app paused at " +
+      output.paused,
+  );
 }
 if (reading.occurred_at > reading.online_at) {
   throw new Error("the place was placed when it synced");
