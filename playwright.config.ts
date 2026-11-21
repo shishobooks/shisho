@@ -231,8 +231,14 @@ const projects = e2eConfig.browsers.map(createProject);
 
 export default defineConfig({
   testDir: "./e2e",
+  // Not the default, which also takes *.test.ts: e2e/reporters has vitest
+  // tests.
+  testMatch: "**/*.spec.ts",
   timeout: 30000,
   retries: process.env.CI ? 1 : 0,
+  // A test that passes only on its retry passes the job, so CI also reports
+  // it (e2e/reporters/flaky.ts). dot is Playwright's own default in CI.
+  reporter: process.env.CI ? [["dot"], ["./e2e/reporters/flaky.ts"]] : "list",
   // A suite that runs this long in CI has hung. Stopping it here, under the
   // workflow's 20-minute step timeout, reports which tests were still
   // running, where the step timeout would kill it without a word.

@@ -31,7 +31,11 @@ export default defineConfig({
     // Forks, not threads: threads share this process's locale, which was
     // fixed before the pin above ran.
     pool: "forks",
-    include: ["app/**/*.test.{ts,tsx}", "website/*.test.ts"],
+    include: [
+      "app/**/*.test.{ts,tsx}",
+      "website/*.test.ts",
+      "e2e/reporters/*.test.ts",
+    ],
     // `mise check:quiet` runs this suite alongside the Go tests, both linters,
     // and the browser e2e pipelines, which pegs the CPU. Heavy jsdom tests take
     // 2-3s on an idle machine, so vitest's 5s default let a different one time
