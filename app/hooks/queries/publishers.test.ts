@@ -19,8 +19,10 @@ vi.mock("@/libraries/api", async () => {
   return {
     ...actual,
     API: {
-      // A publisher, for the mutations that return one. No test caches id 0.
-      request: vi.fn().mockResolvedValue({ id: 0 }),
+      // The publisher the request names, for the mutations that return one.
+      request: vi.fn((_method: string, path: string) =>
+        Promise.resolve({ id: Number(path.split("/")[2]) }),
+      ),
     },
   };
 });
@@ -319,6 +321,45 @@ describe("useUpdatePublisher", () => {
         client.getQueryState([QueryKey.RetrievePublisher, 2])?.isInvalidated,
       ).toBe(true);
     });
+  });
+
+  // A fetch of the publisher a rename merged into, begun before the save,
+  // holds what it was before the merge.
+  it("isn't overwritten by a fetch that began before the save", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    let land!: (publisher: unknown) => void;
+    const stale = client
+      .fetchQuery({
+        queryKey: [QueryKey.RetrievePublisher, 3],
+        queryFn: () => new Promise((resolve) => (land = resolve)),
+      })
+      .catch(() => {});
+    vi.mocked(API.request).mockResolvedValueOnce({
+      id: 3,
+      name: "Tor",
+      aliases: ["Tor Books"],
+    });
+    const { result } = renderHook(() => useUpdatePublisher(), {
+      wrapper: makeWrapper(client),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        publisherId: 7,
+        payload: { name: "Tor" },
+      });
+    });
+    land({ id: 3, name: "Tor", aliases: [] });
+    await stale;
+
+    expect(
+      client.getQueryData<{ aliases: string[] }>([
+        QueryKey.RetrievePublisher,
+        3,
+      ])?.aliases,
+    ).toEqual(["Tor Books"]);
   });
 
   // Renaming a publisher to another's name merges it into that one, and the

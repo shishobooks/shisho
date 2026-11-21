@@ -108,9 +108,13 @@ export const useUpdateSeries = () => {
         payload,
       );
     },
-    onSuccess: (data, variables) => {
+    onSuccess: async (data, variables) => {
       // Its edit dialog fills from the series when reopened, so it holds what
       // was saved at once rather than after the refetch below.
+      // A fetch of it begun before the save would land over this one.
+      await queryClient.cancelQueries({
+        queryKey: [QueryKey.RetrieveSeries, data.id],
+      });
       queryClient.setQueryData([QueryKey.RetrieveSeries, data.id], data);
       queryClient.invalidateQueries({
         queryKey: [QueryKey.RetrieveSeries, variables.seriesId],
