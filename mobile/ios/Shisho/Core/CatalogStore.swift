@@ -362,6 +362,13 @@ final class CatalogStore: Sendable {
                 try db.execute(sql: "DELETE FROM libraries WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM reading_positions WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM read_throughs WHERE generation < ?", arguments: [generation])
+                // A place the server reset while its deletion expired goes
+                // too, unless this device has moves still to send.
+                try db.execute(sql: """
+                    DELETE FROM local_positions
+                    WHERE file_id NOT IN (SELECT file_id FROM reading_positions)
+                        AND file_id NOT IN (SELECT file_id FROM journal WHERE type = 'reading_position' AND held_for IS NULL AND file_id IS NOT NULL)
+                    """)
                 try db.execute(sql: "UPDATE sync_state SET starting_over = 0 WHERE id = 1")
             }
             return true

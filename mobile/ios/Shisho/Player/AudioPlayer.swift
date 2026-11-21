@@ -242,7 +242,8 @@ final class AudioPlayer {
         refreshPosition()
         updateNowPlaying()
         guard wasPlaying else { return }
-        if let current = sitting {
+        // A sitting a stall already paused keeps when the stall began.
+        if let current = sitting, current.isPlaying {
             sitting = ListeningRules.pause(current, at: Date(), percentage: percentage)
         }
         savePosition()
@@ -367,6 +368,9 @@ final class AudioPlayer {
                 if buffering, current.isPlaying {
                     sitting = ListeningRules.pause(current, at: now, percentage: percentage)
                     persistSitting()
+                } else if buffering, ListeningRules.isOver(current, at: now) {
+                    // Stalled as long as a pause that ends a sitting.
+                    stopSitting(at: now)
                 } else if !buffering, !current.isPlaying {
                     let (next, ended) = ListeningRules.play(current, fileID: current.fileID, at: now, percentage: percentage)
                     sitting = next
@@ -374,6 +378,10 @@ final class AudioPlayer {
                 } else if !buffering {
                     sitting = ListeningRules.tick(current, at: now, percentage: percentage)
                 }
+            } else if !buffering, let file {
+                // Playing again after a stall ended the last sitting.
+                sitting = ListeningRules.play(nil, fileID: file.fileID, at: now, percentage: percentage).0
+                persistSitting()
             }
             if now.timeIntervalSince(lastSave) >= ListeningRules.saveInterval {
                 savePosition()
@@ -453,12 +461,15 @@ final class AudioPlayer {
     }
 
     private func serverPlaceChanged(_ place: ServerPlace?) {
-        guard let place, place != dismissedOffer, place != offer else { return }
-        // Loaded but not being listened to, the File is as good as unopened.
+        // Loaded but not being listened to, the File is as good as unopened,
+        // including when the server's place was reset.
         guard sitting != nil || isPlaying else {
-            applyNewestPlace()
+            if place == nil || place != dismissedOffer && place != offer {
+                applyNewestPlace()
+            }
             return
         }
+        guard let place, place != dismissedOffer, place != offer else { return }
         if let offered = PlaceRules.offerDuringListening(server: place, at: currentPosition(), known: knownServerAt,
                                                          ownDeviceID: session.account.deviceID) {
             offer = offered

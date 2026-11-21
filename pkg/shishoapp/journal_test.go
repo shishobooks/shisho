@@ -307,11 +307,15 @@ func TestJournal_AFaultWhileApplyingLeavesTheEventToResend(t *testing.T) {
 	listened := event("s1", JournalEventReadingSession, now, session(now.Add(-20*time.Minute), now.Add(-10*time.Minute)))
 
 	f.exec(`CREATE TRIGGER fail_sessions BEFORE INSERT ON reading_sessions BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+	// A claim given back by a delete after the fact would stay here: only
+	// claiming in the transaction that applies the event leaves none.
+	f.exec(`CREATE TRIGGER keep_claims BEFORE DELETE ON app_journal_events BEGIN SELECT RAISE(ABORT, 'locked'); END`)
 	rec := f.journalRaw(credential, now, listened)
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.Zero(t, f.count(`SELECT COUNT(*) FROM app_journal_events`))
 
 	f.exec(`DROP TRIGGER fail_sessions`)
+	f.exec(`DROP TRIGGER keep_claims`)
 	assert.Equal(t, []string{"s1:accepted"}, results(f.journal(credential, now, listened)))
 	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_sessions`))
 }

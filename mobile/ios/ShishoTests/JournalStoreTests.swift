@@ -154,6 +154,25 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
     }
 
+    /// Staying put dismisses the offer for good: the next open doesn't jump
+    /// to the place the user just declined, even though it's still the
+    /// server's newest.
+    func testStayingPutIsRemembered() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+          "occurred_at":"2030-05-02T10:00:00Z","source":"web_reader"}}],"cursor":4}
+        """), ownDeviceID: "me")
+        let sent = try store.pendingJournal(capabilities: "", limit: 10)
+        try store.applyJournalResults(sent.map { Shishoapp.JournalResult(id: $0.eventID, result: .accepted) }, sent: sent, capabilities: "")
+        try store.resolveOffer(fileID: 5)
+
+        let choice = try store.pool.read { db in
+            PlaceRules.open(local: try CatalogStore.localPlace(db, fileID: 5), server: try CatalogStore.serverPlace(db, fileID: 5), ownDeviceID: "me")
+        }
+        XCTAssertEqual(choice, PlaceRules.Choice(start: 30, offer: nil))
+    }
+
     /// The server resetting the place, as reading again on the web does,
     /// resets this device's synced place too, but not moves still to send.
     func testAResetPlaceIsForgottenUnlessMovesWait() throws {

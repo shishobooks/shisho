@@ -247,26 +247,26 @@ final class AppModel {
         }
         // A sync asked for as playback pauses, with the phone locked, gets
         // the time to finish.
-        let background = UIApplication.shared.beginBackgroundTask(withName: "Sync") { [weak self] in
+        // Each call has its own, since calls that overlap wait on one run.
+        let key = UUID()
+        backgroundSyncs[key] = UIApplication.shared.beginBackgroundTask(withName: "Sync") { [weak self] in
             // Out of time: the sync stops, keeping what it hadn't sent.
-            self?.endBackgroundSync(stopping: true)
+            self?.endBackgroundSync(key, stopping: true)
         }
-        backgroundSync = background
         await syncs.run { [weak self] isCurrent in
             await self?.sync(session, isCurrent: isCurrent)
         }
-        if backgroundSync == background {
-            endBackgroundSync(stopping: false)
-        }
+        endBackgroundSync(key, stopping: false)
     }
 
-    @ObservationIgnored private var backgroundSync: UIBackgroundTaskIdentifier = .invalid
+    @ObservationIgnored private var backgroundSyncs: [UUID: UIBackgroundTaskIdentifier] = [:]
 
-    private func endBackgroundSync(stopping: Bool) {
-        guard backgroundSync != .invalid else { return }
+    private func endBackgroundSync(_ key: UUID, stopping: Bool) {
+        guard let task = backgroundSyncs.removeValue(forKey: key) else { return }
         if stopping { syncs.stop() }
-        UIApplication.shared.endBackgroundTask(backgroundSync)
-        backgroundSync = .invalid
+        if task != .invalid {
+            UIApplication.shared.endBackgroundTask(task)
+        }
     }
 
     // MARK: - Background refresh

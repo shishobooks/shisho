@@ -118,13 +118,17 @@ func (h *handler) journal(c echo.Context) error {
 		installation = *device.InstallationID
 	}
 	clock := newDeviceClock(payload.Clock, time.Now(), user.CreatedAt)
-	// A batch the app gave up on, such as when the network went, still
-	// finishes the event it started rather than leave the app unsure of it.
+	// An event started is finished even if the app gives up on the batch,
+	// such as when the network goes; the rest of the batch isn't started.
+	requestCtx := ctx
 	ctx = context.WithoutCancel(ctx)
 
 	resp := JournalResponse{Results: make([]JournalResult, 0, len(payload.Events)), ClockOffsetSeconds: clock.offset.Seconds()}
 	counts := map[string]int{}
 	for _, raw := range payload.Events {
+		if err := requestCtx.Err(); err != nil {
+			return errors.WithStack(err)
+		}
 		result, err := h.takeEvent(ctx, c, user, device, installation, clock, raw)
 		if err != nil {
 			return err

@@ -106,13 +106,15 @@ extension CatalogStore {
 
     /// Keeps another device's place as an offer when it arrives while this
     /// device has moves of its own to send, since sending them may replace
-    /// it on the server. A newer one replaces the offer.
+    /// it on the server. A newer one replaces an offer kept already.
     static func keepOffer(_ position: Shishoapp.FeedReadingPosition, ownDeviceID: String, in db: Database) throws {
         guard !ownDeviceID.isEmpty, position.deviceId != ownDeviceID,
               let occurredAt = timestamp(position.occurredAt),
-              try hasPendingMoves(db, fileID: position.fileId),
               let place = try serverPlace(db, fileID: position.fileId)
         else { return }
+        let offered = try Bool.fetchOne(db, sql: "SELECT offer_seconds IS NOT NULL FROM local_positions WHERE file_id = ?",
+                                        arguments: [position.fileId]) ?? false
+        guard try offered || hasPendingMoves(db, fileID: position.fileId) else { return }
         try db.execute(sql: """
             UPDATE local_positions SET offer_seconds = ?, offer_occurred_at = ?, offer_source = ?, offer_device_id = ?
             WHERE file_id = ? AND ? > COALESCE(base_occurred_at, 0) AND ? > COALESCE(offer_occurred_at, 0)
@@ -120,13 +122,17 @@ extension CatalogStore {
                              occurredAt, occurredAt])
     }
 
-    /// The user went to the offered place, or chose to stay.
+    /// The user went to the offered place, or chose to stay. Either way the
+    /// server's place now is one they've seen, so it isn't offered or gone
+    /// to again until another device moves.
     func resolveOffer(fileID: Int) throws {
         try pool.write { db in
             try db.execute(sql: """
-                UPDATE local_positions SET offer_seconds = NULL, offer_occurred_at = NULL, offer_source = NULL, offer_device_id = NULL
+                UPDATE local_positions SET offer_seconds = NULL, offer_occurred_at = NULL, offer_source = NULL, offer_device_id = NULL,
+                    base_occurred_at = MAX(COALESCE(base_occurred_at, 0),
+                        COALESCE((SELECT occurred_at FROM reading_positions WHERE file_id = ?), 0))
                 WHERE file_id = ?
-                """, arguments: [fileID])
+                """, arguments: [fileID, fileID])
         }
     }
 

@@ -31,9 +31,18 @@ final class SyncEngine: Sendable {
     /// download from the start, keeping the current copy on screen until
     /// it's done.
     func run() async throws {
-        try await pullFeed()
+        // A feed that fails doesn't keep the journal from being sent.
+        var feedError: Error?
+        do {
+            try await pullFeed()
+        } catch {
+            feedError = error
+        }
         let pending = try await store.pool.read(CatalogStore.pendingCount)
         try await sendJournal()
+        if let feedError {
+            throw feedError
+        }
         if pending > 0 {
             try await pullFeed()
         }
