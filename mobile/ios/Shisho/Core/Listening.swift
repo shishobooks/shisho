@@ -244,12 +244,13 @@ enum TimeLabels {
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
-    /// "3 h 51 m" or "12 min", for time left.
+    /// "3h 51m" or "12m", as the web app writes a length.
     static func left(_ seconds: Double) -> String {
         let minutes = Int((max(0, seconds) / 60).rounded())
         if minutes >= 60 {
-            return String(localized: "\(minutes / 60) h \(minutes % 60) m")
+            return String(localized: "\(minutes / 60)h \(minutes % 60)m")
         }
-        return String(localized: "\(max(minutes, seconds > 0 ? 1 : 0)) min")
+        // Some time, but under a minute, would otherwise read as none.
+        return String(localized: "\(max(minutes, seconds > 0 ? 1 : 0))m")
     }
 }

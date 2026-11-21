@@ -4,8 +4,15 @@
     "%@ #%@" : {
 
     },
-    "%@ #%@–%@" : {
-
+    "%@ #%@-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ #%2$@-%3$@"
+          }
+        }
+      }
     },
     "%@ left at %@" : {
       "localizations" : {
@@ -13,6 +20,26 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ left at %2$@"
+          }
+        }
+      }
+    },
+    "%@ left in the book at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ left in the book at %2$@"
+          }
+        }
+      }
+    },
+    "%@ left in the chapter at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ left in the chapter at %2$@"
           }
         }
       }
@@ -26,9 +53,6 @@
           }
         }
       }
-    },
-    "%@ · Finished" : {
-
     },
     "%@, %@" : {
       "localizations" : {
@@ -50,17 +74,17 @@
         }
       }
     },
-    "%lld h %lld m" : {
+    "%lldh %lldm" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$lld h %2$lld m"
+            "value" : "%1$lldh %2$lldm"
           }
         }
       }
     },
-    "%lld min" : {
+    "%lldm" : {
 
     },
     "-%@" : {
@@ -79,6 +103,9 @@
 
     },
     "Back 30 Seconds" : {
+
+    },
+    "Book remaining %@" : {
 
     },
     "Books in the Libraries you can access appear here." : {
@@ -138,6 +165,9 @@
     "Go There" : {
 
     },
+    "Go to %@" : {
+
+    },
     "Include titles" : {
 
     },
@@ -165,7 +195,10 @@
     "Loading" : {
 
     },
-    "NARRATORS" : {
+    "Makes the bar span the chapter" : {
+
+    },
+    "Makes the bar span the whole book" : {
 
     },
     "Narrated by %@" : {
@@ -195,6 +228,16 @@
     "Number %@" : {
 
     },
+    "Numbers %@ to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Numbers %1$@ to %2$@"
+          }
+        }
+      }
+    },
     "Offline. Showing what's on this device." : {
 
     },
@@ -214,6 +257,9 @@
 
     },
     "Play" : {
+
+    },
+    "Position in book" : {
 
     },
     "Position in chapter" : {

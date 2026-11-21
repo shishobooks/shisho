@@ -105,3 +105,23 @@ struct MiniPlayer: View {
         file.duration > 0 ? CGFloat(min(1, max(0, player.position / file.duration))) : 0
     }
 }
+
+extension View {
+    /// Room at the end of a scroll view for the mini player while it shows,
+    /// so the last of the content can scroll clear of it.
+    func miniPlayerClearance() -> some View {
+        modifier(MiniPlayerClearance())
+    }
+}
+
+private struct MiniPlayerClearance: ViewModifier {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    func body(content: Content) -> some View {
+        let showing = model.player?.file != nil
+        // The bar's height at the largest size it grows to, and its margin.
+        let room: CGFloat = dynamicTypeSize >= .xxLarge ? 96 : 80
+        content.contentMargins(.bottom, showing ? room : 0, for: .scrollContent)
+    }
+}

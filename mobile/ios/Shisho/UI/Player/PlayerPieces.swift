@@ -90,64 +90,79 @@ struct PlaceOfferBanner: View {
     }
 }
 
-/// The player's position bar: drag anywhere on it to go to a place. It goes
-/// exactly where the finger lifts, with no momentum, as Apple's own players'
-/// scrubbers do; the system slider's thumb keeps moving after a fast drag.
-/// value and length are seconds within what the bar spans.
+/// The player's position bar. Only its handle moves it: drag the handle to
+/// a place, as Apple's own players do; a tap on the bar does nothing. It goes
+/// exactly where the finger lifts, with no momentum, which the system
+/// slider's thumb has. value and length are seconds within what the bar
+/// spans.
 struct Scrubber: View {
     let value: Double
     let length: Double
-    /// Called with the place under the finger while dragging, and nil once
-    /// it lifts.
+    /// Called with the place under the handle while it's dragged, and nil
+    /// once it's let go.
     var onDrag: (Double?) -> Void = { _ in }
-    /// Called once with where the finger lifted.
+    /// Called once with where the handle was let go.
     let onCommit: (Double) -> Void
     /// What VoiceOver's swipe up and down moves by.
     var step: Double = 15
 
+    /// Where a drag began, and where the handle is now, in seconds.
+    @State private var dragStart: Double?
     @State private var dragging: Double?
 
     private static let thumb: CGFloat = 20
+    private static let track: CGFloat = 8
+    /// The handle's touch target, the size Apple's guidelines ask for.
+    private static let target: CGFloat = 44
 
     var body: some View {
         GeometryReader { geometry in
-            let track = max(1, geometry.size.width - Scrubber.thumb)
+            let width = geometry.size.width
+            let travel = max(1, width - Scrubber.thumb)
             let shown = dragging ?? value
             let fraction = length > 0 ? min(1, max(0, shown / length)) : 0
+            let x = travel * fraction
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(Theme.foreground.opacity(0.14))
-                    .frame(height: dragging == nil ? 6 : 10)
+                    .frame(height: Scrubber.track)
                 Capsule()
                     .fill(Theme.primary)
-                    .frame(width: Scrubber.thumb / 2 + track * fraction, height: dragging == nil ? 6 : 10)
+                    .frame(width: min(width, x + Scrubber.thumb / 2), height: Scrubber.track)
                 Circle()
                     .fill(Color.white)
                     .overlay(Circle().strokeBorder(Theme.primary, lineWidth: 2))
                     .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
                     .frame(width: Scrubber.thumb, height: Scrubber.thumb)
-                    .scaleEffect(dragging == nil ? 1 : 1.2)
-                    .offset(x: track * fraction)
+                    // Only the handle grows; nothing it moves along is
+                    // animated, so it can't overshoot.
+                    .scaleEffect(dragging == nil ? 1 : 1.25)
+                    .animation(.snappy(duration: 0.15), value: dragging == nil)
+                    .frame(width: Scrubber.target, height: Scrubber.target)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 1, coordinateSpace: .named("scrubber"))
+                            .onChanged { drag in
+                                let start = dragStart ?? value
+                                dragStart = start
+                                let place = min(length, max(0, start + Double(drag.translation.width / travel) * length))
+                                dragging = place
+                                onDrag(place)
+                            }
+                            .onEnded { _ in
+                                let place = dragging ?? value
+                                dragStart = nil
+                                dragging = nil
+                                onDrag(nil)
+                                onCommit(place)
+                            }
+                    )
+                    .offset(x: x - (Scrubber.target - Scrubber.thumb) / 2)
             }
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { drag in
-                        let place = seconds(at: drag.location.x, track: track)
-                        dragging = place
-                        onDrag(place)
-                    }
-                    .onEnded { drag in
-                        let place = seconds(at: drag.location.x, track: track)
-                        dragging = nil
-                        onDrag(nil)
-                        onCommit(place)
-                    }
-            )
-            .animation(.snappy(duration: 0.2), value: dragging == nil)
+            .frame(width: width, height: geometry.size.height)
+            .coordinateSpace(name: "scrubber")
         }
-        .frame(height: 32)
+        .frame(height: Scrubber.thumb + 4)
         .accessibilityElement()
         .accessibilityAddTraits(.updatesFrequently)
         .accessibilityAdjustableAction { direction in
@@ -157,10 +172,5 @@ struct Scrubber: View {
             @unknown default: break
             }
         }
-    }
-
-    private func seconds(at x: CGFloat, track: CGFloat) -> Double {
-        let fraction = min(1, max(0, (x - Scrubber.thumb / 2) / track))
-        return Double(fraction) * length
     }
 }

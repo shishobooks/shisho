@@ -227,7 +227,6 @@ final class JournalStoreTests: XCTestCase {
         let detail = try XCTUnwrap(store.book(id: 1))
         XCTAssertEqual(detail.files.map(\.coverVersion), ["9-1", "5-2", ""])
         XCTAssertEqual(detail.files[1].narrators, ["Ann Reader", "Ned Narrator"])
-        XCTAssertEqual(detail.narrators, ["Ann Reader", "Ned Narrator"])
         let unabridged = try XCTUnwrap(store.pool.read { try CatalogStore.listeningFile($0, fileID: 5) })
         XCTAssertEqual(unabridged.coverVersion, "5-2")
         XCTAssertEqual(unabridged.narrators, ["Ann Reader", "Ned Narrator"])

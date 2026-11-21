@@ -113,20 +113,28 @@ struct FileTypeChip: View {
     }
 }
 
-/// A Series Number in the primary color's square, as the web app badges it.
+/// A Series Number in the primary color's square, as the web app badges it:
+/// "3", or a range such as "1-6".
 struct SeriesNumberBadge: View {
     let number: Double
+    var end: Double?
     @ScaledMetric(relativeTo: .caption) private var height: CGFloat = 18
 
+    private var label: String {
+        guard let end else { return SeriesNumbers.format(number) }
+        return "\(SeriesNumbers.format(number))-\(SeriesNumbers.format(end))"
+    }
+
     var body: some View {
-        Text(SeriesNumbers.format(number))
+        Text(label)
             .font(.geist(.caption, weight: .heavy))
             .monospacedDigit()
             .padding(.horizontal, 5)
             .frame(minWidth: height, minHeight: height)
             .background(Theme.primary, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
             .foregroundStyle(Theme.primaryForeground)
-            .accessibilityLabel("Number \(SeriesNumbers.format(number))")
+            .accessibilityLabel(end.map { "Numbers \(SeriesNumbers.format(number)) to \(SeriesNumbers.format($0))" }
+                ?? "Number \(SeriesNumbers.format(number))")
     }
 }
 

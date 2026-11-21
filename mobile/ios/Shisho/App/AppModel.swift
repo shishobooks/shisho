@@ -63,6 +63,8 @@ final class AppModel {
     private(set) var player: AudioPlayer?
     /// Now Playing is open.
     var showingPlayer = false
+    /// The Library's navigation: the Book pages pushed on it.
+    var libraryPath: [BookSummary] = []
     private let syncs = SyncRunner()
     var isSyncing: Bool { syncs.isRunning }
     /// False while the device has no network at all, as in airplane mode
@@ -101,6 +103,7 @@ final class AppModel {
         player?.stop()
         player = nil
         showingPlayer = false
+        libraryPath = []
         if let session {
             let player = AudioPlayer(session: session) { [weak self] in
                 Task { await self?.syncNow() }
@@ -125,6 +128,14 @@ final class AppModel {
             showingPlayer = true
         }
         playingInBackground = false
+    }
+
+    /// Closes Now Playing onto book's page, pushing it unless it's showing.
+    func showBook(_ book: BookSummary) {
+        showingPlayer = false
+        if libraryPath.last?.id != book.id {
+            libraryPath.append(book)
+        }
     }
 
     /// Opens an audiobook File in the player and shows Now Playing.

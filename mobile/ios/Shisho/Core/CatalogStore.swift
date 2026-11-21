@@ -45,11 +45,6 @@ struct BookDetail: Hashable, Sendable {
     let summary: BookSummary
     let subtitle: String?
     let authors: [Author]
-    /// The narrators of the Book's main Files, each once, in order.
-    var narrators: [String] {
-        var seen = Set<String>()
-        return files.filter { $0.fileRole != "supplement" }.flatMap(\.narrators).filter { seen.insert($0).inserted }
-    }
     let series: [Series]
     let files: [File]
 }

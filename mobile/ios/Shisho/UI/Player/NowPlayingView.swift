@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Now Playing, presented as a sheet over the screen it came from. Variant
 /// E's most expressive screen: the cover's color washes it, the artwork is
-/// large and settles back when paused, and the controls are big. The full
+/// large, and the controls are big. The full
 /// player (chapters list, sleep timer, Bookmarks) builds on it in #916.
 struct NowPlayingView: View {
     @Environment(AppModel.self) private var model
@@ -14,6 +14,9 @@ struct NowPlayingView: View {
     /// The chapter the scrubber spans for the whole of a drag, so playing
     /// into the next chapter meanwhile doesn't move the target.
     @State private var dragBounds: (start: Double, end: Double)?
+    /// The bar spans the whole book instead of the chapter; tapping the time
+    /// left switches it.
+    @AppStorage("player.scrubsWholeBook") private var wholeBook = false
 
     var body: some View {
         Group {
@@ -97,11 +100,24 @@ struct NowPlayingView: View {
             .accessibilityLabel("Close Player")
             .accessibilityIdentifier("player.close")
             Spacer()
-            Text(file.book.title)
+            // Goes to the Book's page, under the player.
+            Button { model.showBook(file.book) } label: {
+                HStack(spacing: 4) {
+                    Text(file.book.title)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.right")
+                        .font(.geist(.caption2, weight: .bold))
+                        .opacity(0.6)
+                }
                 .font(.geist(.footnote, weight: .semibold))
                 .foregroundStyle(Theme.foreground.opacity(0.75))
-                .lineLimit(1)
-                .accessibilityHidden(true)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 40)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Go to \(file.book.title)")
+            .accessibilityIdentifier("player.book")
             Spacer()
             Color.clear.frame(width: 40, height: 40)
         }
@@ -172,11 +188,11 @@ struct NowPlayingView: View {
     }
 
     private func scrubber(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
-        let bounds = dragBounds ?? player.chapterBounds
+        let bounds = dragBounds ?? (wholeBook ? (start: 0, end: file.duration) : player.chapterBounds)
         let length = max(1, bounds.end - bounds.start)
         let shown = scrubbing ?? player.position
         let elapsed = min(length, max(0, shown - bounds.start))
-        let left = max(0, file.duration - shown) / player.rate
+        let left = max(0, bounds.end - shown) / player.rate
         return VStack(spacing: 6) {
             Scrubber(value: elapsed, length: length) { dragged in
                 if let dragged {
@@ -190,14 +206,21 @@ struct NowPlayingView: View {
                 // The end of a chapter is just before the next one starts.
                 player.seek(to: bounds.start + min(place, max(0, length - 0.5)))
             }
-            .accessibilityLabel("Position in chapter")
+            .accessibilityLabel(wholeBook ? "Position in book" : "Position in chapter")
             .accessibilityValue(String(localized: "\(TimeLabels.clock(elapsed)) of \(TimeLabels.clock(length))"))
             .accessibilityIdentifier("player.scrubber")
             // At accessibility text sizes the time left goes under the
             // times, so none of them wraps.
             let stacked = dynamicTypeSize.isAccessibilitySize
-            let timeLeft = Text("\(TimeLabels.left(left)) left at \(PlaybackSpeed.label(player.rate))")
-                .accessibilityIdentifier("player.left")
+            let timeLeft = Button { wholeBook.toggle() } label: {
+                Text(wholeBook
+                    ? "\(TimeLabels.left(left)) left in the book at \(PlaybackSpeed.label(player.rate))"
+                    : "\(TimeLabels.left(left)) left in the chapter at \(PlaybackSpeed.label(player.rate))")
+                    .contentTransition(.numericText())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(wholeBook ? "Makes the bar span the chapter" : "Makes the bar span the whole book")
+            .accessibilityIdentifier("player.left")
             VStack(spacing: 4) {
                 HStack {
                     Text(TimeLabels.clock(elapsed))
@@ -209,7 +232,9 @@ struct NowPlayingView: View {
                         Spacer()
                     }
                     Text("-\(TimeLabels.clock(length - elapsed))")
-                        .accessibilityLabel("Chapter remaining \(TimeLabels.clock(length - elapsed))")
+                        .accessibilityLabel(wholeBook
+                            ? "Book remaining \(TimeLabels.clock(length - elapsed))"
+                            : "Chapter remaining \(TimeLabels.clock(length - elapsed))")
                 }
                 if stacked {
                     timeLeft
@@ -239,7 +264,7 @@ struct NowPlayingView: View {
                     .foregroundStyle(Theme.primaryForeground)
                     .frame(width: 76, height: 76)
                     .background(Theme.primary, in: Circle())
-                    .shadow(color: Theme.primary.opacity(0.45), radius: 14, y: 10)
+                    .shadow(color: Theme.primary.opacity(0.45), radius: 16)
             }
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
             .accessibilityIdentifier("player.playPause")

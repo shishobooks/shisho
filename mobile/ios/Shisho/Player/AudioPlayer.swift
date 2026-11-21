@@ -108,16 +108,17 @@ final class AudioPlayer {
     // MARK: - Loading
 
     /// Opens an audiobook File at its place (`PlaceRules.open`), playing when
-    /// autoplay. Opening the File already loaded only plays it.
+    /// autoplay. Opening the File already loaded only plays it. Nothing is
+    /// streamed until it plays.
     func open(fileID: Int, autoplay: Bool) {
-        if file?.fileID == fileID, player != nil {
+        if file?.fileID == fileID {
             if sitting == nil, !isPlaying {
                 applyNewestPlace()
             }
             if autoplay { play() }
             return
         }
-        if player != nil {
+        if file != nil {
             pause()
             teardownItem()
         }
@@ -138,25 +139,41 @@ final class AudioPlayer {
         dismissedOffer = nil
         knownServerAt = places?.server?.occurredAt
         artwork = nil
-        rate = storedRate(bookID: loaded.book.id)
+        rate = storedRate(fileID: fileID)
         position = min(choice.start, max(0, loaded.duration))
         pendingSeek = position
         ready = false
         nowPlayingChapter = nil
         UserDefaults.standard.set(fileID, forKey: lastFileKey)
 
+        watchServerPlace(fileID: fileID)
+        loadArtwork(loaded)
+        startTicker()
+        updateNowPlaying()
+        if autoplay { play() }
+    }
+
+    /// How far ahead the stream buffers while playing, so listening goes on
+    /// through a lost connection. Paused, it stops fetching.
+    private static let playingBuffer: TimeInterval = 10 * 60
+    private static let pausedBuffer: TimeInterval = 1
+
+    /// Starts streaming the open File, the first time it plays.
+    private func prepareItem() {
+        guard let file, player == nil else { return }
         // AVPlayer makes its own range requests rather than going through
         // APIClient, and takes cookies but no headers, so the credential goes
         // as a cookie the stream route reads.
-        let asset = AVURLAsset(url: session.client.streamURL(fileID: fileID),
+        let asset = AVURLAsset(url: session.client.streamURL(fileID: file.fileID),
                                options: [AVURLAssetHTTPCookiesKey: session.client.streamCookies])
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .timeDomain
-        // Buffer far ahead, so listening goes on through a lost connection.
-        item.preferredForwardBufferDuration = 15 * 60
+        item.preferredForwardBufferDuration = AudioPlayer.playingBuffer
         let player = AVPlayer(playerItem: item)
         player.automaticallyWaitsToMinimizeStalling = true
         self.player = player
+        ready = false
+        pendingSeek = pendingSeek ?? position
         itemGeneration += 1
         let generation = itemGeneration
         statusObservation = AudioPlayer.observeStatus(of: item) { [weak self] status, failure in
@@ -166,11 +183,6 @@ final class AudioPlayer {
             }
         }
         observeEnd(of: item, generation: generation)
-        watchServerPlace(fileID: fileID)
-        loadArtwork(loaded.book)
-        startTicker()
-        updateNowPlaying()
-        if autoplay { play() }
     }
 
     private func itemStatusChanged(_ status: AVPlayerItem.Status, failure: String?) {
@@ -209,15 +221,17 @@ final class AudioPlayer {
     }
 
     func play() {
-        guard let file, player != nil else { return }
+        guard let file else { return }
         if error != nil {
             // A failed stream is tried again from where it was.
-            let fileID = file.fileID
+            error = nil
+            pendingSeek = position
             teardownItem()
-            self.file = nil
-            open(fileID: fileID, autoplay: true)
-            return
         }
+        if player == nil {
+            prepareItem()
+        }
+        player?.currentItem?.preferredForwardBufferDuration = AudioPlayer.playingBuffer
         // Playing again at the end starts over.
         if file.duration > 0, currentPosition() >= file.duration - 0.5 {
             move(to: 0)
@@ -239,8 +253,9 @@ final class AudioPlayer {
     }
 
     func pause() {
-        guard player != nil else { return }
+        guard file != nil else { return }
         player?.pause()
+        player?.currentItem?.preferredForwardBufferDuration = AudioPlayer.pausedBuffer
         let wasPlaying = isPlaying
         isPlaying = false
         isBuffering = false
@@ -283,7 +298,7 @@ final class AudioPlayer {
         let clamped = PlaybackSpeed.clamp(value)
         rate = clamped
         if let file {
-            UserDefaults.standard.set(clamped, forKey: rateKey(bookID: file.book.id))
+            UserDefaults.standard.set(clamped, forKey: AudioPlayer.rateKey(accountID: session.account.id, fileID: file.fileID))
         }
         if isPlaying, ready {
             player?.rate = Float(clamped)
@@ -486,7 +501,9 @@ final class AudioPlayer {
             return
         }
         if updated != file {
+            let coverChanged = updated.coverVersion != file?.coverVersion || updated.book.coverVersion != file?.book.coverVersion
             file = updated
+            if coverChanged { loadArtwork(updated) }
             updateNowPlaying()
         }
     }
@@ -564,22 +581,20 @@ final class AudioPlayer {
 
     // MARK: - Speed
 
-    private static func rateKey(accountID: String, bookID: Int) -> String {
-        "player.speed.\(accountID).\(bookID)"
+    // Speed is the File's, since it suits the narrator: a Book's two
+    // audiobooks are often read by different people.
+    private static func rateKey(accountID: String, fileID: Int) -> String {
+        "player.speed.\(accountID).file.\(fileID)"
     }
 
-    private func rateKey(bookID: Int) -> String {
-        AudioPlayer.rateKey(accountID: session.account.id, bookID: bookID)
-    }
-
-    /// The Book's own speed on this installation; a new Book starts at 1x.
-    static func storedRate(accountID: String, bookID: Int) -> Double {
-        let stored = UserDefaults.standard.double(forKey: rateKey(accountID: accountID, bookID: bookID))
+    /// The File's own speed on this installation; a new File starts at 1x.
+    static func storedRate(accountID: String, fileID: Int) -> Double {
+        let stored = UserDefaults.standard.double(forKey: rateKey(accountID: accountID, fileID: fileID))
         return stored == 0 ? 1 : PlaybackSpeed.clamp(stored)
     }
 
-    private func storedRate(bookID: Int) -> Double {
-        AudioPlayer.storedRate(accountID: session.account.id, bookID: bookID)
+    private func storedRate(fileID: Int) -> Double {
+        AudioPlayer.storedRate(accountID: session.account.id, fileID: fileID)
     }
 
     // MARK: - System
@@ -741,11 +756,14 @@ final class AudioPlayer {
         MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
     }
 
-    private func loadArtwork(_ book: BookSummary) {
+    /// The lock screen's artwork: the File's own cover, or its Book's.
+    private func loadArtwork(_ loaded: ListeningFile) {
         let covers = session.covers
+        let (owner, version): (CoverCache.Owner, String) = loaded.coverVersion.isEmpty
+            ? (.book(loaded.book.id), loaded.book.coverVersion) : (.file(loaded.fileID), loaded.coverVersion)
         Task { [weak self] in
-            let image = await covers.image(bookID: book.id, version: book.coverVersion, size: 512)
-            guard let self, self.file?.book.id == book.id else { return }
+            let image = await covers.image(owner, version: version, size: 512)
+            guard let self, self.file?.fileID == loaded.fileID else { return }
             self.artwork = image
             self.updateNowPlaying()
         }

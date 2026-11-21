@@ -163,5 +163,9 @@ final class AudioChaptersTests: XCTestCase {
         XCTAssertEqual(PlaybackSpeed.label(1.4), "1.4x")
         XCTAssertEqual(TimeLabels.clock(3725), "1:02:05")
         XCTAssertEqual(TimeLabels.clock(65), "1:05")
+        // Lengths as the web app writes them.
+        XCTAssertEqual(TimeLabels.left(24 * 3600 + 32 * 60), "24h 32m")
+        XCTAssertEqual(TimeLabels.left(12 * 60), "12m")
+        XCTAssertEqual(TimeLabels.left(20), "1m")
     }
 }

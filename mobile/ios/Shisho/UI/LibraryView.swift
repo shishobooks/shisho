@@ -25,7 +25,8 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        @Bindable var model = model
+        NavigationStack(path: $model.libraryPath) {
             // The width comes from outside the scroll view, so a grid laid
             // out for a wider screen can't hold it wide after a rotation.
             GeometryReader { geometry in
@@ -57,6 +58,7 @@ struct LibraryView: View {
                     .padding(.bottom, 32)
                 }
                 .onScrolledDistanceChange(space: "library") { scrolledBy = $0 }
+                .miniPlayerClearance()
             }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
@@ -75,7 +77,8 @@ struct LibraryView: View {
             }
         }
         // Outside the stack, so the mini player stays on every pushed screen.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // Each screen's scroll view leaves room for it (miniPlayerClearance).
+        .overlay(alignment: .bottom) {
             MiniPlayer()
                 .frame(maxWidth: 680)
                 .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)

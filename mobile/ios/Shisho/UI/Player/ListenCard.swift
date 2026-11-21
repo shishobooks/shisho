@@ -14,7 +14,7 @@ struct ListenCard: View {
     private var seconds: Double { isThisFile ? model.player?.position ?? progress.seconds : progress.seconds }
     private var rate: Double {
         guard let account = model.session?.account else { return 1 }
-        return isThisFile ? model.player?.rate ?? 1 : AudioPlayer.storedRate(accountID: account.id, bookID: bookID)
+        return isThisFile ? model.player?.rate ?? 1 : AudioPlayer.storedRate(accountID: account.id, fileID: progress.fileID)
     }
 
     private var fraction: Double {
@@ -32,16 +32,24 @@ struct ListenCard: View {
         return seconds > 1 ? "Resume listening" : "Listen"
     }
 
+    /// Which audiobook this plays, when the Book has more than one: its
+    /// name, and its narrators, since editions often share a name. Each has
+    /// a line of its own so neither is cut off.
+    private var whichFile: [String] {
+        guard progress.audiobookCount > 1 else { return [] }
+        var lines: [String] = []
+        if !progress.fileName.isEmpty { lines.append(progress.fileName) }
+        if !progress.narrators.isEmpty {
+            lines.append(String(localized: "Narrated by \(progress.narrators.joined(separator: ", "))"))
+        }
+        return lines
+    }
+
     private var detail: String {
         if finished && !playing {
-            return progress.audiobookCount > 1 && !progress.fileName.isEmpty
-                ? String(localized: "\(progress.fileName) · Finished") : String(localized: "Finished")
+            return String(localized: "Finished")
         }
         var parts: [String] = []
-        // With more than one audiobook, it says which this plays.
-        if progress.audiobookCount > 1, !progress.fileName.isEmpty {
-            parts.append(progress.fileName)
-        }
         if let index = AudioChapters.index(at: seconds, in: progress.chapters) {
             parts.append(String(localized: "Chapter \(index + 1)"))
         }
@@ -81,6 +89,12 @@ struct ListenCard: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     if !stacked { titleText }
+                    ForEach(whichFile, id: \.self) { line in
+                        Text(line)
+                            .font(.geist(.caption, weight: .medium))
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(detail)
                         .font(.geist(.caption))
                         .opacity(0.8)
@@ -115,7 +129,8 @@ struct ListenCard: View {
         .buttonStyle(PressableStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(title))
-        .accessibilityValue(seconds > 1 ? "\(fraction.formatted(.percent.precision(.fractionLength(0)))), \(detail)" : detail)
+        .accessibilityValue((whichFile + [seconds > 1 ? "\(fraction.formatted(.percent.precision(.fractionLength(0)))), \(detail)" : detail])
+            .joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("book.listen")
     }

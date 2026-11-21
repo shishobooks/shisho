@@ -44,6 +44,7 @@ struct BookDetailView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable { await model.syncNow() }
+        .miniPlayerClearance()
         .onScrolledDistanceChange(space: "book") { distance in
             // The title shows in the bar once the cover has scrolled away.
             let collapsed = distance > 210
@@ -101,7 +102,7 @@ struct BookDetailView: View {
             if let detail = book ?? nil, let series = detail.series.first {
                 HStack(spacing: 8) {
                     if let number = series.number {
-                        SeriesNumberBadge(number: number)
+                        SeriesNumberBadge(number: number, end: series.numberEnd)
                     }
                     Text(series.name)
                         .font(.geist(.callout, weight: .semibold))
@@ -197,10 +198,6 @@ struct BookDetailView: View {
             let text = credited.map { "\($0.name) (\(roleLabel($0.role ?? "")))" }.joined(separator: ", ")
             rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(Text(text).font(.geist(.subheadline)))))
         }
-        if !book.narrators.isEmpty {
-            rows.append(InfoRow(label: String(localized: "NARRATORS"),
-                                value: AnyView(Text(book.narrators.joined(separator: ", ")).font(.geist(.subheadline)))))
-        }
         if !book.summary.fileTypes.isEmpty {
             rows.append(InfoRow(label: String(localized: "FORMATS"), value: AnyView(
                 HStack(spacing: 6) { ForEach(book.summary.fileTypes, id: \.self) { FileTypeChip(fileType: $0) } }
@@ -214,7 +211,7 @@ struct BookDetailView: View {
     private func seriesLine(_ series: BookDetail.Series) -> String {
         guard let number = series.number else { return series.name }
         if let end = series.numberEnd {
-            return String(localized: "\(series.name) #\(SeriesNumbers.format(number))–\(SeriesNumbers.format(end))")
+            return String(localized: "\(series.name) #\(SeriesNumbers.format(number))-\(SeriesNumbers.format(end))")
         }
         return String(localized: "\(series.name) #\(SeriesNumbers.format(number))")
     }

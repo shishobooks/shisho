@@ -30,6 +30,7 @@ struct ListenProgress: Equatable, Sendable {
     /// The File's label, which says which one plays when the Book has more
     /// than one audiobook.
     var fileName = ""
+    var narrators: [String] = []
     var audiobookCount = 1
 
     var fraction: Double { duration > 0 ? min(1, max(0, seconds / duration)) : 0 }
@@ -172,7 +173,7 @@ extension CatalogStore {
             SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type = 'm4b' AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
         return ListenProgress(fileID: fileID, seconds: choice.start, duration: file.duration, chapters: file.chapters, underway: underway,
-                              fileName: file.displayName, audiobookCount: audiobooks)
+                              fileName: file.displayName, narrators: file.narrators, audiobookCount: audiobooks)
     }
 
     /// Titles for the Books and Files a diagnostics log names by id, keyed as
