@@ -20,6 +20,10 @@ import (
 const (
 	KindBook    = "book"
 	KindLibrary = "library"
+	// The user's own records, whose entries carry the user instead of a
+	// Library. A Reading Position's record id is its File's.
+	KindReadingPosition = "reading_position"
+	KindReadThrough     = "read_through"
 )
 
 const (
@@ -89,10 +93,12 @@ func (s *Service) Read(ctx context.Context, fn func(ctx context.Context, tx bun.
 }
 
 // Page returns up to limit entries after cursor that user may see, in seq
-// order. Call it inside Read. An entry belongs to the Library it recorded,
-// and user sees those of the Libraries they can access. A deletion entry of
-// a Library that no longer exists is seen by everyone: it carries nothing
-// but ids, and the access that would have shown it went with the Library.
+// order. Call it inside Read. A catalog entry belongs to the Library it
+// recorded, and user sees those of the Libraries they can access. A deletion
+// entry of a Library that no longer exists is seen by everyone: it carries
+// nothing but ids, and the access that would have shown it went with the
+// Library. An entry of a user's own record is seen by that user alone,
+// whatever their role.
 //
 // seenExpired is the ExpiredThrough of the installation's last page.
 func (s *Service) Page(ctx context.Context, tx bun.IDB, user *models.User, cursor, seenExpired int64, limit int) (*Page, error) {
@@ -122,18 +128,26 @@ func (s *Service) Page(ctx context.Context, tx bun.IDB, user *models.User, curso
 	}
 
 	entries := []*Entry{}
+	ids := user.GetAccessibleLibraryIDs()
 	q := tx.NewSelect().Model(&entries).
 		Where("cle.seq > ?", cursor).
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			q = q.WhereGroup(" OR ", func(q *bun.SelectQuery) *bun.SelectQuery {
+				q = q.Where("cle.user_id IS NULL")
+				if ids == nil {
+					return q
+				}
+				return q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+					if len(ids) > 0 {
+						q = q.Where("cle.library_id IN (?)", bun.List(ids))
+					}
+					return q.WhereOr("cle.deleted AND cle.library_id NOT IN (SELECT id FROM libraries)")
+				})
+			})
+			return q.WhereOr("cle.user_id = ?", user.ID)
+		}).
 		OrderExpr("cle.seq ASC").
 		Limit(int64(limit) + 1)
-	if ids := user.GetAccessibleLibraryIDs(); ids != nil {
-		q = q.WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
-			if len(ids) > 0 {
-				q = q.Where("cle.library_id IN (?)", bun.List(ids))
-			}
-			return q.WhereOr("cle.deleted AND cle.library_id NOT IN (SELECT id FROM libraries)")
-		})
-	}
 	if err := q.Scan(ctx); err != nil {
 		return nil, errors.WithStack(err)
 	}

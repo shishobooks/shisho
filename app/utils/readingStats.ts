@@ -59,6 +59,7 @@ const SOURCE_LABELS: Record<ReadingSource, string> = {
   web_reader: "Shisho web reader",
   kobo: "Kobo",
   koreader: "KOReader",
+  shisho_app: "Shisho app",
 };
 const WEB_PLAYER = "Shisho web player";
 

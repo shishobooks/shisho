@@ -1,5 +1,6 @@
 // Package shishoapp is the Shisho app's Device surface (ADR 0020): signing
-// in, server info, the catalog change feed (ADR 0023), and covers. It's
+// in, server info, the catalog change feed (ADR 0023), the journal (ADR
+// 0024), Original File downloads and streams (ADR 0022), and covers. It's
 // versioned apart from the web app's /api, because a phone app can't be
 // forced to update and a self-hosted server upgrades whenever its owner
 // gets to it.
@@ -49,7 +50,9 @@ const (
 // before it, never offers it. A protocol bump starts a new entry, since an
 // app on the new protocol assumes everything listed before it. Never remove
 // one while its protocol is accepted. Protocol 1's baseline is signing in,
-// the feed, and covers, so it lists nothing yet.
+// the feed, covers, Original File downloads and streams, and the journal's
+// position and session events, so it lists nothing yet. A journal event
+// type added later is a capability (ADR 0024).
 var capabilities = map[int][]string{
 	1: {},
 }

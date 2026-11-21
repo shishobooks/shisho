@@ -15,6 +15,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
 
@@ -39,6 +40,7 @@ type handler struct {
 	auth     *auth.Service
 	devices  *devices.Service
 	feed     *changefeed.Service
+	reading  *reading.Service
 	contract *Contract
 	opts     Options
 }

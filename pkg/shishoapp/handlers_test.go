@@ -22,6 +22,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,6 +64,7 @@ func newFixtureWith(t *testing.T, contract *Contract) *fixture {
 		auth:     auth.NewService(db, "secret", time.Hour),
 		devices:  deviceService,
 		feed:     changefeed.NewService(db),
+		reading:  reading.NewService(db),
 		contract: contract,
 		opts:     Options{Contract: contract, ServerVersion: "v0.10.0"},
 	}
@@ -468,6 +470,7 @@ func TestFeed_BookDocument(t *testing.T) {
 		Files: []FeedFile{{
 			ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345, DisplayName: "dune.epub",
 			ReleaseDate: &released, PageCount: &pages, AudiobookDurationSeconds: &duration,
+			Chapters: []FeedChapter{},
 		}},
 		// covers.CacheKey: the File's id and its updated_at.
 		CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),
@@ -765,6 +768,8 @@ func TestFeedKinds_MatchTheChangeLog(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, changefeed.KindBook, FeedKindBook)
 	assert.Equal(t, changefeed.KindLibrary, FeedKindLibrary)
+	assert.Equal(t, changefeed.KindReadingPosition, FeedKindReadingPosition)
+	assert.Equal(t, changefeed.KindReadThrough, FeedKindReadThrough)
 }
 
 func tinyPNG(t *testing.T) []byte {
