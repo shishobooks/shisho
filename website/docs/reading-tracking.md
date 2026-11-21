@@ -39,7 +39,7 @@ To fix the status of many books together, such as books a device's reading histo
 
 - **Mark as read** does what it does on one book for each selected book. Books already **Read** are skipped, so they don't gain a second finished read.
 - **Mark as not started** does what it does on one book for each selected book you're reading or have paused, after you confirm how many reads it deletes. Other books are skipped.
-- **Mark as Reference** does what it does on one book for each selected book. When any of them are being read or paused, you confirm first, told how many reads leave your history. Books already **Reference** are skipped.
+- **Mark as Reference** does what it does on one book for each selected book. When any of them are being read or paused, you confirm first, told how many reads it deletes. Books already **Reference** are skipped.
 - **Remove from Reference** does what it does on one book for each selected **Reference** book. Other books are skipped.
 
 A message says how many books changed and how many were skipped.
@@ -51,7 +51,7 @@ Some books you dip into rather than read through: a cookbook opened for one reci
 **Mark as Reference** in the status menu:
 
 - takes the book off To Read;
-- turns a read you're on, paused or not, into plain reading sessions. The read leaves your [reading history](#reading-history), but the reading time recorded during it still counts toward your [Reading Stats](./reading-stats.md), and every file keeps its place. Because the history loses an entry, Shisho asks you to confirm first. With no read underway, it applies right away.
+- turns a read you're on, paused or not, into plain reading sessions. The read is deleted from your [reading history](#reading-history) and can't be restored, but the reading time recorded during it still counts toward your [Reading Stats](./reading-stats.md), and every file keeps its place. Because this deletes a read, Shisho asks you to confirm first. With no read underway, it applies right away.
 
 While a book is **Reference**:
 

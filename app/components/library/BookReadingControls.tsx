@@ -1,9 +1,10 @@
-import { BookOpen, ChevronDown, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import LastRead from "@/components/library/LastRead";
+import ReadingStatusIcon from "@/components/library/ReadingStatusIcon";
 import StarRating from "@/components/library/StarRating";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -172,7 +173,12 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
               size="sm"
               variant="outline"
             >
-              <BookOpen aria-hidden className="h-4 w-4" />
+              {/* The status's own icon, as on its cover bookmark. */}
+              <ReadingStatusIcon
+                aria-hidden
+                className="h-4 w-4"
+                status={status}
+              />
               {statusLabel}
               <ChevronDown aria-hidden className="h-3.5 w-3.5 opacity-60" />
             </Button>
@@ -270,7 +276,7 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       />
       <ConfirmDialog
         confirmLabel="Mark as Reference"
-        description="This read leaves your reading history, but the reading time recorded during it still counts, and every file keeps its place. While the book is Reference, opening it never starts or finishes a read."
+        description="The read you're on is deleted from your reading history, and this can't be undone. The reading time recorded during it still counts toward your Reading Stats, and every file keeps its place. While the book is Reference, opening it never starts or finishes a read."
         isPending={referenceMutation.isPending}
         onConfirm={() => handleReference(true)}
         onOpenChange={setConfirmingReference}

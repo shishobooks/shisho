@@ -246,7 +246,7 @@ test.describe("Reading", () => {
       .click();
     await page.getByRole("menuitem", { name: "Mark as Reference" }).click();
     const dialog = page.getByRole("dialog", { name: "Mark as Reference?" });
-    await expect(dialog).toContainText("leaves your reading history");
+    await expect(dialog).toContainText("deleted from your reading history");
     await dialog.getByRole("button", { name: "Mark as Reference" }).click();
     await expect(
       page.getByRole("button", { name: "Reading status: Reference" }),

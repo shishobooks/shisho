@@ -1,24 +1,15 @@
-import {
-  BookOpen,
-  Check,
-  Clock,
-  Library,
-  Pause,
-  X,
-  type LucideIcon,
-} from "lucide-react";
-
+import ReadingStatusIcon from "@/components/library/ReadingStatusIcon";
 import { cn } from "@/libraries/utils";
 import type { ReadingStatus } from "@/types";
 import { formatProgress, readingStatusLabel } from "@/utils/readingStatus";
 
-const LOOKS: Record<ReadingStatus, { icon: LucideIcon; color: string }> = {
-  currently_reading: { icon: BookOpen, color: "bg-violet-600" },
-  paused: { icon: Pause, color: "bg-amber-500" },
-  to_read: { icon: Clock, color: "bg-sky-500" },
-  read: { icon: Check, color: "bg-emerald-600" },
-  did_not_finish: { icon: X, color: "bg-rose-600" },
-  reference: { icon: Library, color: "bg-teal-600" },
+const COLORS: Record<ReadingStatus, string> = {
+  currently_reading: "bg-violet-600",
+  paused: "bg-amber-500",
+  to_read: "bg-sky-500",
+  read: "bg-emerald-600",
+  did_not_finish: "bg-rose-600",
+  reference: "bg-teal-600",
 };
 
 interface ReadingStatusBookmarkProps {
@@ -37,7 +28,7 @@ const ReadingStatusBookmark = ({
   progress,
   className,
 }: ReadingStatusBookmarkProps) => {
-  const { icon: Icon, color } = LOOKS[status];
+  const color = COLORS[status];
   const percent =
     status === "currently_reading" && progress != null
       ? formatProgress(progress)
@@ -65,9 +56,10 @@ const ReadingStatusBookmark = ({
             {percent}
           </span>
         ) : (
-          <Icon
+          <ReadingStatusIcon
             aria-hidden
             className="h-3.5 w-3.5 text-white"
+            status={status}
             strokeWidth={3}
           />
         )}

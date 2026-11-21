@@ -528,7 +528,7 @@ describe("SelectionToolbar reading status actions", () => {
     info.mockRestore();
   });
 
-  it("confirms marking Reference, naming how many reads leave the history", async () => {
+  it("confirms marking Reference, naming how many reads it deletes", async () => {
     const user = createUser();
     const success = vi.spyOn(toast, "success");
     mockBulkReadingMutateAsync.mockResolvedValueOnce({
@@ -544,7 +544,7 @@ describe("SelectionToolbar reading status actions", () => {
     const dialog = screen.getByRole("dialog");
     // Books One and Two are being read; Book Three is already read.
     expect(dialog).toHaveTextContent(
-      "The reads underway on 2 books leave your reading history, but the reading time recorded during them still counts",
+      "The reads underway on 2 books are deleted from your reading history, and this can't be undone. The reading time recorded during them still counts",
     );
     await user.click(
       within(dialog).getByRole("button", { name: "Mark as Reference" }),
@@ -589,7 +589,7 @@ describe("SelectionToolbar reading status actions", () => {
 
     expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "The read underway on each selected book leaves your reading history",
+      "The read underway on each selected book is deleted from your reading history",
     );
   });
 

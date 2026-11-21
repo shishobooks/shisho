@@ -99,6 +99,26 @@ describe("BookReadingControls", () => {
     expect(screen.queryByText(/Last read/)).not.toBeInTheDocument();
   });
 
+  it.each<[ReadingStatus | null, string, string]>([
+    [null, "Track reading", "lucide-book-open"],
+    ["to_read", "To Read", "lucide-clock"],
+    ["currently_reading", "Currently Reading", "lucide-book-open"],
+    ["paused", "Paused", "lucide-pause"],
+    ["read", "Read", "lucide-check"],
+    ["did_not_finish", "Did Not Finish", "lucide-x"],
+    ["reference", "Reference", "lucide-library"],
+  ])(
+    "shows the %s bookmark's icon on the status button",
+    async (status, label, iconClass) => {
+      renderControls(reading({ status }));
+
+      const button = await screen.findByRole("button", {
+        name: `Reading status: ${label}`,
+      });
+      expect(button.querySelector(`svg.${iconClass}`)).not.toBeNull();
+    },
+  );
+
   it.each<[ReadingStatus | null, string, string[]]>([
     [
       null,
@@ -255,7 +275,7 @@ describe("BookReadingControls", () => {
     ["currently_reading", "Currently Reading"],
     ["paused", "Paused"],
   ])(
-    "confirms marking a %s book Reference, since its read leaves the history",
+    "confirms marking a %s book Reference, since its read is deleted",
     async (status, label) => {
       const underway = readThrough({
         id: 12,
@@ -279,8 +299,12 @@ describe("BookReadingControls", () => {
       const dialog = await screen.findByRole("dialog", {
         name: "Mark as Reference?",
       });
-      expect(dialog).toHaveTextContent("leaves your reading history");
-      expect(dialog).toHaveTextContent("still counts");
+      expect(dialog).toHaveTextContent(
+        "The read you're on is deleted from your reading history, and this can't be undone.",
+      );
+      expect(dialog).toHaveTextContent(
+        "still counts toward your Reading Stats",
+      );
       request.mockResolvedValue(reading({ status: "reference" }));
       await user().click(
         within(dialog).getByRole("button", { name: "Mark as Reference" }),
