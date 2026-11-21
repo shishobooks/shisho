@@ -11,14 +11,16 @@ local util = require("util")
 
 local Files = {}
 
--- write writes data to path, with comment as its first line.
-function Files.write(path, data, comment)
+-- replace writes content to path through a temporary file beside it,
+-- renamed over the old one.
+local function replace(path, content)
     local tmp = path .. ".tmp"
     local file, err = io.open(tmp, "wb")
     if not file then
         return nil, err
     end
-    local ok, err = file:write("-- ", comment, "\nreturn ", dump(data, nil, true), "\n")
+    local ok
+    ok, err = file:write(content)
     -- A full disk takes a write into the buffer and fails it here.
     if ok then ok, err = file:flush() end
     -- Best effort, as KOReader's own writes: some storage can't sync, and
@@ -30,13 +32,32 @@ function Files.write(path, data, comment)
         os.remove(tmp)
         return nil, err or close_err
     end
-    local ok, rename_err = os.rename(tmp, path)
-    if not ok then
+    local renamed, rename_err = os.rename(tmp, path)
+    if not renamed then
         os.remove(tmp)
         return nil, rename_err
     end
     ffiutil.fsyncDirectory(path)
     return true
+end
+
+-- write writes data to path, with comment as its first line.
+function Files.write(path, data, comment)
+    return replace(path, table.concat({ "-- ", comment, "\nreturn ", dump(data, nil, true), "\n" }))
+end
+
+-- copy copies the file at from to to, whole or not at all.
+function Files.copy(from, to)
+    local source, err = io.open(from, "rb")
+    if not source then
+        return nil, err
+    end
+    local content = source:read("*a")
+    source:close()
+    if not content then
+        return nil, "can't read " .. from
+    end
+    return replace(to, content)
 end
 
 --[[--
@@ -46,9 +67,9 @@ sidecar and then writes it, and DocSettings:open deletes a sidecar it finds
 empty or cut short. The file browser's cover extraction runs in a process
 of its own that opens each new book's sidecar, so one opening it mid-write
 would delete it, and everything in it. It reads DocSettings fields that
-aren't KOReader's API, so without them, or when no location takes the file,
-it saves with flush after all. Returns the sidecar's directory, or what
-flush returns.
+aren't KOReader's API, and without them saves with flush after all.
+Returns the sidecar's directory, or nil and an error when no location took
+it, leaving the sidecar as it was.
 ]]
 function Files.writeSidecar(doc_settings)
     local location = G_reader_settings:readSetting("document_metadata_folder", "doc")
@@ -61,19 +82,24 @@ function Files.writeSidecar(doc_settings)
     elseif doc_settings.getSidecarDir then
         dirs = { doc_settings.hash_sidecar_dir or doc_settings:getSidecarDir(doc_settings.data.doc_path, "hash") }
     end
-    if doc_settings.sidecar_filename and doc_settings.purge then
-        for __, dir in ipairs(dirs) do
-            util.makePath(dir)
-            local sidecar = dir .. "/" .. doc_settings.sidecar_filename
-            if Files.write(sidecar, doc_settings.data, sidecar) then
-                Files.moveCustomFiles(doc_settings, dir)
-                -- Copies in other locations would shadow this one.
-                doc_settings:purge(sidecar)
-                return dir
-            end
+    if not (dirs[1] and doc_settings.sidecar_filename and doc_settings.purge) then
+        return doc_settings:flush()
+    end
+    local err
+    for __, dir in ipairs(dirs) do
+        util.makePath(dir)
+        local sidecar = dir .. "/" .. doc_settings.sidecar_filename
+        local ok
+        ok, err = Files.write(sidecar, doc_settings.data, sidecar)
+        if ok then
+            Files.moveCustomFiles(doc_settings, dir)
+            -- Copies in other locations would shadow this one.
+            doc_settings:purge(sidecar)
+            return dir
         end
     end
-    return doc_settings:flush()
+    -- Not flush, which would empty the sidecar where the write just failed.
+    return nil, err
 end
 
 -- moveCustomFiles moves a book's custom cover and custom metadata into dir,
@@ -85,7 +111,7 @@ function Files.moveCustomFiles(doc_settings, dir)
         local file = doc_settings[get] and doc_settings[get](doc_settings)
         if file then
             local filepath, filename = util.splitFilePathName(file)
-            if filepath ~= dir .. "/" and ffiutil.copyFile(file, dir .. "/" .. filename) == nil then
+            if filepath ~= dir .. "/" and Files.copy(file, dir .. "/" .. filename) then
                 os.remove(file)
                 doc_settings[get](doc_settings, true) -- KOReader's cache of where it is
             end

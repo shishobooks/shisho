@@ -85,10 +85,35 @@ return {
     -- KOReader without them still gets the sidecar saved, by its own write.
     ["falls back to KOReader's own write without the fields it reads"] = function()
         withLocation("doc", function()
-            local flushed = false
-            local doc_settings = { data = {}, flush = function() flushed = true end }
+            local book = scratch_dir() .. "/book.epub"
+            write(book, "book")
+            local real = DocSettings:open(book)
+            real:saveSetting("summary", { status = "complete" })
+            -- Only what KOReader's API offers.
+            local doc_settings = setmetatable({}, { __index = function(_, key)
+                if key == "data" then return real.data end
+                if key == "flush" then return function() return real:flush() end end
+            end })
             Files.writeSidecar(doc_settings)
-            assert(flushed, "flush was not called")
+            assert_eq(DocSettings:open(book):readSetting("summary"), { status = "complete" })
+        end)
+    end,
+
+    -- Unlike KOReader's own write, which would empty it.
+    ["keeps a sidecar it can't write on a full disk"] = function()
+        withLocation("dir", function()
+            local book = scratch_dir() .. "/book.epub"
+            write(book, "book")
+            local doc_settings = DocSettings:open(book)
+            doc_settings:saveSetting("summary", { status = "complete" })
+            doc_settings:flush()
+            local sidecar = DocSettings:findSidecarFile(book)
+            assert(os.execute("ln -s /dev/full '" .. sidecar .. ".tmp'") == 0)
+
+            doc_settings:saveSetting("summary", { status = "reading" })
+            assert_eq(Files.writeSidecar(doc_settings), nil)
+            os.remove(sidecar .. ".tmp")
+            assert_eq(DocSettings:open(book):readSetting("summary"), { status = "complete" })
         end)
     end,
 
@@ -126,6 +151,31 @@ return {
             local dir = Files.writeSidecar(doc_settings)
             assert_eq(DocSettings:findCustomMetadataFile(book), dir .. "/custom_metadata.lua")
             assert_eq(lfs.attributes(beside:gsub("[^/]+$", "custom_metadata.lua"), "mode"), nil, "the copy beside the book is gone")
+        end)
+    end,
+
+    -- A copy that fails partway mustn't cost the only good one.
+    ["keeps a custom metadata file it can't copy"] = function()
+        local book = scratch_dir() .. "/book.epub"
+        write(book, "book")
+        local custom
+        withLocation("doc", function()
+            local doc_settings = DocSettings:open(book)
+            doc_settings:saveSetting("summary", { status = "complete" })
+            doc_settings:flush()
+            custom = DocSettings:findSidecarFile(book):gsub("[^/]+$", "custom_metadata.lua")
+            write(custom, "return { custom_props = { title = \"Mine\" } }")
+        end)
+        withLocation("dir", function()
+            local doc_settings = DocSettings:open(book)
+            local target = doc_settings.dir_sidecar_dir
+            require("util").makePath(target)
+            assert(os.execute("ln -s /dev/full '" .. target .. "/custom_metadata.lua.tmp'") == 0)
+            doc_settings:saveSetting("summary", { status = "reading" })
+            Files.writeSidecar(doc_settings)
+            os.remove(target .. "/custom_metadata.lua.tmp")
+            assert_eq(dofile(custom), { custom_props = { title = "Mine" } })
+            assert_eq(DocSettings:findCustomMetadataFile(book), custom)
         end)
     end,
 }
