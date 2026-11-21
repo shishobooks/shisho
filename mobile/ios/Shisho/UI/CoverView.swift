@@ -62,6 +62,8 @@ struct CoverView: View {
                 image = cached
             } else {
                 let fetched = await covers.image(bookID: book.id, version: book.coverVersion, size: size)
+                // A cover replaced meanwhile is its replacement's to show.
+                guard !Task.isCancelled else { return }
                 withAnimation(.easeOut(duration: 0.25)) {
                     image = fetched
                     loaded = true
