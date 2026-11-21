@@ -50,7 +50,7 @@ const sidebars: SidebarsConfig = {
       type: "category",
       label: "Integrations",
       collapsed: true,
-      items: ["opds", "koreader", "kobo-sync", "ereader-browser"],
+      items: ["shisho-app", "opds", "koreader", "kobo-sync", "ereader-browser"],
     },
     "troubleshooting",
     {

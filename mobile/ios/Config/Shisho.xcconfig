@@ -1,0 +1,15 @@
+// Settings every configuration of the Shisho app shares.
+//
+// Run in Xcode signs automatically with the maintainer's team and the
+// store's bundle id, so there's no team to pick. To sign with your own
+// team, copy Signing.local.xcconfig.example to Signing.local.xcconfig
+// (gitignored) and set both there.
+DEVELOPMENT_TEAM = 5GBPBX69VA
+SHISHO_BUNDLE_ID = com.shishobooks.shisho
+CODE_SIGN_STYLE = Automatic
+
+// The app's version, which its Device in Shisho shows.
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+#include? "Signing.local.xcconfig"

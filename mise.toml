@@ -58,6 +58,11 @@ run = "go run ./cmd/dev start"
 description = "Start API with hot reload via Air on a free port"
 run = "go run ./cmd/dev start air"
 
+[tasks."start:qa"]
+description = "Start a throwaway server with the web app and seeded test books, for QA in a browser or the Shisho app (needs ffmpeg)"
+depends = ["build"]
+run = "go run ./tools/appharness serve"
+
 [tasks."start:web"]
 description = "Start Vite dev server against this worktree's API (waits for it)"
 run = "go run ./cmd/dev start web"
@@ -73,22 +78,31 @@ run = "go run ./cmd/dev docs"
 # === Type Generation ===
 
 [tasks.tygo]
-description = "Generate TypeScript types from Go structs"
-run = "tygo generate"
-sources = ["tygo.yaml", "pkg/**/types.go", "pkg/**/config.go", "pkg/**/model.go", "pkg/models/*.go", "pkg/mediafile/mediafile.go"]
-outputs = ["app/types/generated/**/*.ts"]
+description = "Generate the API types from Go structs: TypeScript for the web app, Swift and Kotlin for the Shisho app"
+# tools/apptypes reads the packages tygo.yaml names (ADR 0021).
+run = ["tygo generate", "go run ./tools/apptypes"]
+sources = ["tygo.yaml", "pkg/**/types.go", "pkg/**/config.go", "pkg/**/model.go", "pkg/models/*.go", "pkg/mediafile/mediafile.go", "tools/apptypes/*.go"]
+outputs = [
+  "app/types/generated/**/*.ts",
+  "mobile/ios/ShishoAPI/Sources/ShishoAPI/Generated/*.swift",
+  "mobile/android/api/src/main/kotlin/generated/*.kt",
+]
 
 # === Linting ===
 
 [tasks.lint]
 description = "Run Go linting"
-depends = ["lint:emdash", "lint:docrefs", "lint:versions"]
+depends = ["lint:emdash", "lint:docrefs", "lint:versions", "lint:apptypes", "lint:swiftconcurrency"]
 # check:quiet sets SHISHO_GO_PACKAGE_DIRS; see the comment there.
 run = "golangci-lint run ${SHISHO_GO_PACKAGE_DIRS:-./...}"
 
 [tasks."lint:emdash"]
 description = "Reject em-dashes on lines added since the merge base with master"
 run = "./scripts/check-emdash.sh"
+
+[tasks."lint:swiftconcurrency"]
+description = "Keep the Shisho app's Swift in Swift 6 mode, with every concurrency escape hatch explained"
+run = "./scripts/check-swift-concurrency.sh"
 
 [tasks."lint:docrefs"]
 description = "Reject paths, identifiers, and section names in agent instruction files that do not exist"
@@ -141,8 +155,8 @@ description = "Run JS unit tests"
 run = "pnpm test:unit"
 
 [tasks."test:scripts"]
-description = "Run the script tests (changelog generation, em-dash check, doc reference check, tool version check)"
-run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
+description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, doc reference check, tool version check)"
+run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
 
 [tasks."test:e2e"]
 description = "Run E2E tests"
@@ -254,6 +268,131 @@ run = 'go run ./cmd/migrations create "$usage_name"'
 description = "Roll back the last migration group"
 env = { CONFIG_FILE = "./shisho.dev.yaml" }
 run = "go run ./cmd/migrations rollback"
+
+# === Shisho app ===
+# The mobile tools are pinned on the tasks that use them, so `mise install`
+# for the server and web app never downloads them. mobile/AGENTS.md covers
+# these tasks. `mise check:quiet` stays server and web only; mobile:check
+# runs the mobile checks.
+#
+# Simulator builds sign ad hoc (CODE_SIGN_IDENTITY=-) with the team, which
+# needs no certificate, so they also build on CI. An unsigned build can't
+# write the Keychain, so it would forget every sign-in.
+
+[tasks."ios:generate"]
+description = "Generate the iOS app's Xcode project from project.yml, and the API types it uses"
+depends = ["tygo"]
+tools = { "aqua:yonaskolb/XcodeGen" = "2.47.0" }
+dir = "mobile/ios"
+run = "xcodegen --spec project.yml --quiet"
+
+[tasks."ios:open"]
+description = "Generate the iOS app's Xcode project and open it in Xcode"
+depends = ["ios:generate"]
+run = "open mobile/ios/Shisho.xcodeproj"
+
+# The simulator build is for this Mac's own architecture only, and includes
+# the tests, so the unit tests and the Maestro flows share one build when
+# both run. It skips the index store, which only Xcode's own builds read.
+[tasks."ios:build"]
+description = "Build the iOS app and its tests for the simulator, into mobile/ios/build (never Xcode's DerivedData)"
+depends = ["ios:generate"]
+dir = "mobile/ios"
+run = "xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- ARCHS=\"$(uname -m)\" COMPILER_INDEX_STORE_ENABLE=NO -quiet build-for-testing"
+
+[tasks."ios:simulator"]
+description = "Make the harness's base simulator, booted once, if it doesn't exist yet: the tests and flows clone it"
+run = "go run ./tools/appharness base"
+
+[tasks."ios:strings"]
+description = "Update the iOS app's String Catalog from the strings in its code, which command-line builds leave alone"
+depends = ["ios:build"]
+dir = "mobile/ios"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+objects=build/DerivedData/Build/Intermediates.noindex/Shisho.build/Debug-iphonesimulator/Shisho.build/Objects-normal/$(uname -m)
+data=()
+for f in "$objects"/*.stringsdata; do
+  # Skip what a deleted source file left behind, and the build's generated files.
+  if find Shisho -name "$(basename "$f" .stringsdata).swift" | grep -q .; then
+    data+=("$f")
+  fi
+done
+xcrun xcstringstool sync Shisho/Resources/Localizable.xcstrings --stringsdata "${data[@]}"
+'''
+
+[tasks."ios:run"]
+description = "Build the iOS app and run it on a simulator, or on a connected iPhone or iPad with --device"
+usage = '''
+flag "--device <device>" help="A connected device's name or UDID, from xcrun devicectl list devices. Omit it to use a simulator."
+flag "--simulator <simulator>" help="The simulator to boot, by name" default="iPhone 17"
+'''
+depends = ["ios:generate"]
+dir = "mobile/ios"
+run = '''
+set -e
+derived=build/DerivedData
+if [ -n "${usage_device:-}" ]; then
+  # xcodebuild finds a device by UDID or by name, but needs to be told which.
+  case "$usage_device" in
+    *[!0-9A-Fa-f-]*) destination="platform=iOS,name=$usage_device" ;;
+    *) destination="id=$usage_device" ;;
+  esac
+  xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination "$destination" \
+    -derivedDataPath "$derived" -allowProvisioningUpdates -quiet build
+  app="$derived/Build/Products/Debug-iphoneos/Shisho.app"
+  xcrun devicectl device install app --device "$usage_device" "$app"
+  # The bundle id Signing.local.xcconfig may have changed.
+  xcrun devicectl device process launch --device "$usage_device" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+else
+  xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath "$derived" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet build
+  xcrun simctl boot "$usage_simulator" 2>/dev/null || true
+  open -a Simulator
+  app="$derived/Build/Products/Debug-iphonesimulator/Shisho.app"
+  xcrun simctl install "$usage_simulator" "$app"
+  xcrun simctl launch "$usage_simulator" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
+fi
+'''
+
+[tasks."ios:test:api"]
+description = "Run the API types' decode tests on this Mac"
+depends = ["tygo"]
+dir = "mobile/ios/ShishoAPI"
+run = "swift test --scratch-path ../build/ShishoAPI"
+
+# Its dependencies run in parallel, so the base simulator's first boot
+# happens while the app builds.
+[tasks."ios:test"]
+description = "Run the iOS unit tests: the API types' decode tests, and the app's tests on a disposable simulator"
+depends = ["ios:test:api", "ios:build", "ios:simulator"]
+run = "go run ./tools/appharness simulator -- sh -c 'cd mobile/ios && xcodebuild -project Shisho.xcodeproj -scheme Shisho -destination \"id=$SIMULATOR_UDID\" -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet test-without-building'"
+
+[tasks."ios:harness"]
+description = "Run the Maestro flows against the iOS app on a disposable simulator and a seeded server (needs ffmpeg)"
+depends = ["ios:build", "ios:simulator"]
+tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
+run = "go run ./tools/appharness ios"
+
+[tasks."android:test"]
+description = "Run the Android API types' decode tests"
+depends = ["tygo"]
+tools = { java = "temurin-21.0.13+9.0.LTS", gradle = "9.8.2" }
+dir = "mobile/android"
+run = "gradle :api:test --console=plain --quiet"
+
+[tasks."lint:apptypes"]
+description = "Fail when generated Swift or Kotlin API types are out of date with the Go structs (a folder never generated passes)"
+run = "go run ./tools/apptypes -check"
+
+[tasks."mobile:check"]
+description = "Run the Shisho app's checks: generated types, iOS and Android tests, and the iOS build"
+run = [
+  "mise lint:apptypes",
+  "mise ios:test",
+  "mise android:test",
+]
 
 # === Other ===
 

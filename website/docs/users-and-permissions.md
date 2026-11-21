@@ -196,7 +196,7 @@ A user with Users Write can open an account under **Administration > Users** and
 
 ## Devices
 
-A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra, KOReader on that same Kobo, or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md), [KOReader](./koreader.md), the [eReader Browser](./ereader-browser.md), and the [OPDS Catalog](./opds.md#sign-in-as-a-device) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
+A Device is one reading app on one piece of hardware, such as Kobo's own reader on a Kobo Libra, KOReader on that same Kobo, or the web browser on a Kindle. [Kobo Sync](./kobo-sync.md), [KOReader](./koreader.md), the [eReader Browser](./ereader-browser.md), the [OPDS Catalog](./opds.md#sign-in-as-a-device), and the [Shisho app](./shisho-app.md) sign in as a Device. Any signed-in user can manage their own Devices from the user menu under **Devices**, with no role permission.
 
 **Connect Device** on that page adds one in three steps. It asks what you read on, shows the setup steps for that one way of connecting, and then waits, switching to **Connected!** the first time the device reaches Shisho. A Device's page leads with its **Status**, which says whether it has connected and when it was last used, and its **Setup** steps. Its password, which books it reaches, and its Delivery Rules are under **Advanced**.
 
@@ -213,6 +213,8 @@ Set a device up from Shisho opened at the address your devices use, not `localho
 | **KOReader** | The [KOReader plugin](./koreader.md#install-the-koreader-plugin), OPDS, and KOReader's progress sync | Any file type except M4B, since KOReader can't play audiobooks | Your default Delivery Rules |
 | **OPDS app** | OPDS, for other reading apps such as Thorium, Panels, etc. | Any file type | Your default Delivery Rules |
 | **Browser** | eReader browser, for any other e-reader's web browser | Any file type | Your default Delivery Rules |
+
+A **Shisho app** Device isn't added here: the [Shisho app](./shisho-app.md#sign-in) adds one when it signs in. It reaches every library you can access, receives each file as it is with no Delivery Rules, and has no password to show or regenerate, so its page shows only its status, the app's version, **Rename**, and **Delete**.
 
 The type alone decides how a Device connects, and the Device's page shows setup steps for each way it connects under **Setup**. A Device used in a way its type does not connect, such as a Browser Device's password in a Kobo sync URL, gets a forbidden response; an OPDS client given the password of a Device without OPDS, or KOReader's progress sync given one from a Device that isn't a KOReader Device, gets `401 Unauthorized`.
 

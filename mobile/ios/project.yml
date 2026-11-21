@@ -1,0 +1,93 @@
+# The Shisho app for iPhone and iPad. XcodeGen makes Shisho.xcodeproj from
+# this file (`mise ios:generate`); the project itself isn't committed.
+name: Shisho
+options:
+  bundleIdPrefix: com.shishobooks
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+configFiles:
+  Debug: Config/Shisho.xcconfig
+  Release: Config/Shisho.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+    SWIFT_EMIT_LOC_STRINGS: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+packages:
+  ShishoAPI:
+    path: ShishoAPI
+  # The app's SQLite layer: migrations, observation, and a pool of readers
+  # beside one writer. Pinned exactly; the resolved file lives in the
+  # generated project, which isn't committed.
+  GRDB:
+    url: https://github.com/groue/GRDB.swift
+    exactVersion: 7.11.1
+targets:
+  Shisho:
+    type: application
+    platform: iOS
+    sources:
+      - path: Shisho
+    dependencies:
+      - package: ShishoAPI
+      - package: GRDB
+    info:
+      path: Shisho/Info.plist
+      properties:
+        CFBundleDisplayName: Shisho
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIAppFonts:
+          - Geist.ttf
+          - ShishoWordmark-Bold.ttf
+        # Plain HTTP only to the local network; everything else is HTTPS.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Shisho connects to your Shisho server when it's on your local network.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SHISHO_BUNDLE_ID)
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  ShishoTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ShishoTests
+    dependencies:
+      - target: Shisho
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(SHISHO_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Shisho:
+    build:
+      targets:
+        Shisho: all
+    test:
+      targets:
+        - ShishoTests
+    run:
+      config: Debug

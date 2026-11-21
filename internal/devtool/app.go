@@ -6,7 +6,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
+	"strconv"
 
 	"github.com/pkg/errors"
 )
@@ -42,6 +44,10 @@ type App struct {
 	Resolve   func(context.Context) (Environment, error)
 	Ports     PortAllocator
 	Processes ProcessManager
+	// LANAddress is this machine's address on the local network, or "" for
+	// none, so start can print the URL a phone signs in to the Shisho app
+	// with. Nil looks it up.
+	LANAddress func() string
 }
 
 // NewApp returns an App that runs real processes from the current worktree.
@@ -112,6 +118,19 @@ func (a *App) start(ctx context.Context, env Environment, ports PortAllocator, a
 		webPort = lease.Port()
 		a.printf("Web: http://localhost:%d\n", webPort)
 	}
+	// Both servers listen on every interface, so a phone on the same
+	// network reaches the web port, which proxies the API, or the API.
+	lanPort := webPort
+	if lanPort == 0 {
+		lanPort = apiPort
+	}
+	lanAddress := a.LANAddress
+	if lanAddress == nil {
+		lanAddress = LANAddress
+	}
+	if address := lanAddress(); address != "" {
+		a.printf("LAN: http://%s (sign in to the Shisho app with this)\n", net.JoinHostPort(address, strconv.Itoa(lanPort)))
+	}
 	return a.Processes.Start(ctx, env, mode, apiPort, webPort)
 }
 
@@ -127,4 +146,29 @@ func (a *App) docs(ctx context.Context, env Environment, ports PortAllocator) er
 
 func (a *App) printf(format string, values ...any) {
 	_, _ = fmt.Fprintf(a.Stdout, format, values...)
+}
+
+// LANAddress returns this machine's private IPv4 address on the local
+// network, or "" when it has none.
+func LANAddress() string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+	for _, iface := range interfaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addresses, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, address := range addresses {
+			ipNet, ok := address.(*net.IPNet)
+			if ok && ipNet.IP.To4() != nil && ipNet.IP.IsPrivate() {
+				return ipNet.IP.String()
+			}
+		}
+	}
+	return ""
 }

@@ -14,7 +14,7 @@ import (
 // The generated CBZ contains:
 // - ComicInfo.xml (if HasComicInfo is true)
 // - Page images (001.png, 002.png, etc.)
-func GenerateCBZ(t *testing.T, dir, filename string, opts CBZOptions) string {
+func GenerateCBZ(t TB, dir, filename string, opts CBZOptions) string {
 	t.Helper()
 
 	path := filepath.Join(dir, filename)

@@ -1,0 +1,6 @@
+# The packages the generator's tests read, as tygo.yaml names them.
+packages:
+  - path: "github.com/shishobooks/shisho/tools/apptypes/testdata/fixture"
+    include_files:
+      - types.go
+  - path: "github.com/shishobooks/shisho/tools/apptypes/testdata/other"

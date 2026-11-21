@@ -226,7 +226,22 @@ export default tseslint.config(
       "packages/plugin-sdk/testing/index.js",
       "packages/plugin-sdk/testing/index.d.ts",
       "tmp",
+      // The Shisho app's build output.
+      "mobile/ios/build/**",
+      "mobile/android/**/build/**",
     ],
+  },
+  {
+    // Maestro runs the flows' scripts with its own globals.
+    files: ["mobile/harness/**/*.js"],
+    languageOptions: {
+      globals: {
+        http: "readonly",
+        maestro: "readonly",
+        output: "readonly",
+        CONTROL: "readonly",
+      },
+    },
   },
   {
     files: ["app/**/*.{ts,tsx}", "website/src/**/*.{ts,tsx}"],

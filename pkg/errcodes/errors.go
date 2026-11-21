@@ -262,6 +262,28 @@ func PluginUpdateRequired() error {
 	}
 }
 
+// AppUpdateRequired returns the 426 for a Shisho app that speaks a protocol
+// older than the server accepts. The app asks the user to update it, and
+// keeps working offline with its changes waiting until it's updated.
+func AppUpdateRequired() error {
+	return &Error{
+		http.StatusUpgradeRequired,
+		"This server needs a newer version of the Shisho app. Update the app to keep syncing.",
+		"app_update_required",
+	}
+}
+
+// ServerUpdateRequired returns the 426 for a Shisho app that speaks a
+// protocol newer than the server accepts. Only the server's owner can fix
+// it, by updating Shisho.
+func ServerUpdateRequired() error {
+	return &Error{
+		http.StatusUpgradeRequired,
+		"This version of the Shisho app needs a newer Shisho server. Ask the server's owner to update Shisho.",
+		"server_update_required",
+	}
+}
+
 // UsernameTaken returns the 422 for a new username another user
 // already has, compared without case. Its own code lets a form flag the
 // username field instead of showing a toast.

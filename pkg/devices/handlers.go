@@ -25,9 +25,14 @@ func newHandler(service *Service, listService *lists.Service) *handler {
 // buildDeviceResponse returns device as its owner sees it, with rules, the
 // Delivery Rules it follows, and unlinked, its books waiting to be linked.
 func buildDeviceResponse(device *Device, rules []delivery.Rule, unlinked int) DeviceResponse {
+	credential := device.Credential
+	if device.DeviceType == DeviceTypeShishoApp {
+		// Only the app holds its credential; the web never needs it.
+		credential = ""
+	}
 	resp := DeviceResponse{
 		Device:              *device,
-		Credential:          device.Credential,
+		Credential:          credential,
 		Connections:         device.ConnectionNames(),
 		DeliveryRules:       rules,
 		DeliveryRuleOptions: RuleOptions(device.DeviceType),
@@ -71,6 +76,9 @@ func buildAdminDeviceResponse(device *Device) AdminDeviceResponse {
 func deviceNotFound(err error) error {
 	if errors.Is(err, ErrNotFound) {
 		return errcodes.NotFound("Device")
+	}
+	if errors.Is(err, ErrManagedByApp) {
+		return errcodes.InvalidState("A Shisho app Device's type, credential, scope, and Delivery Rules come from the app. Sign out in the app, or revoke the Device, instead.")
 	}
 	return errors.WithStack(err)
 }

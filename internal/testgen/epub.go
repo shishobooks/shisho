@@ -12,13 +12,12 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"testing"
 )
 
 // GenerateEPUB creates a valid EPUB file at the specified path with the given options.
 // The generated EPUB contains mimetype, container.xml, content.opf with metadata,
 // chapter1.xhtml, and optionally a cover image.
-func GenerateEPUB(t *testing.T, dir, filename string, opts EPUBOptions) string {
+func GenerateEPUB(t TB, dir, filename string, opts EPUBOptions) string {
 	t.Helper()
 
 	path := filepath.Join(dir, filename)
@@ -225,7 +224,7 @@ func writeZipFile(zw *zip.Writer, name string, data []byte) error {
 	return err
 }
 
-func generateImage(t *testing.T, mimeType string) []byte {
+func generateImage(t TB, mimeType string) []byte {
 	t.Helper()
 
 	// Create a simple 100x100 solid color image

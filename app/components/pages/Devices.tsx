@@ -11,17 +11,10 @@ import { Button } from "@/components/ui/button";
 import { useDevices } from "@/hooks/queries/devices";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import type { DeviceResponse } from "@/types/generated/devices";
-import {
-  CONNECTION_LABELS,
-  DEVICE_TYPE_LABELS,
-  scopeLabel,
-} from "@/utils/devices";
+import { DEVICE_TYPE_LABELS, deviceSummary } from "@/utils/devices";
 import { formatCount, formatDateTime } from "@/utils/format";
 
 const DeviceRow = ({ device }: { device: DeviceResponse }) => {
-  const connections = device.connections
-    .map((connection) => CONNECTION_LABELS[connection])
-    .join(" · ");
   return (
     <Link
       className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50 md:px-6 md:py-4"
@@ -43,7 +36,7 @@ const DeviceRow = ({ device }: { device: DeviceResponse }) => {
           )}
         </div>
         <p className="mt-1 text-xs text-muted-foreground md:text-sm">
-          {scopeLabel(device)} · {connections}
+          {deviceSummary(device)}
           {device.last_accessed_at &&
             ` · Last used ${formatDateTime(device.last_accessed_at)}`}
         </p>

@@ -1,0 +1,5 @@
+// Copy to Signing.local.xcconfig (gitignored) to sign with your own Apple
+// Developer team. A free Personal Team works on your own devices; it needs
+// a bundle id no one else has registered.
+DEVELOPMENT_TEAM = YOURTEAMID
+SHISHO_BUNDLE_ID = com.example.shisho

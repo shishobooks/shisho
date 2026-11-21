@@ -1,0 +1,83 @@
+name: Set up the Shisho app's iOS checks
+description: >-
+  Restore what the iOS jobs would otherwise rebuild on every run: Go's
+  caches, Xcode's build of the app and its packages, and the harness's base
+  simulator, already booted once. Each cache is saved by the run that misses
+  it, from any branch; pull requests then find master's. Run
+  save-ios-simulator at the end of the job to save the simulator.
+
+outputs:
+  simulator-key:
+    description: The base simulator's cache key, for save-ios-simulator.
+    value: ${{ steps.keys.outputs.simulator }}
+  simulator-hit:
+    description: Whether the base simulator came from the cache.
+    value: ${{ steps.simulator.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Name the caches
+      id: keys
+      shell: bash
+      run: |
+        # By the Xcode build and the iOS runtimes it can boot, not the image
+        # version: GitHub serves several image versions at once while it
+        # rolls one out, most with the same Xcode and runtimes.
+        xcode=$(xcodebuild -version | sed -nE 's/^Build version (.*)$/\1/p')
+        runtimes=$(xcrun simctl list runtimes -j | jq -r '[.runtimes[] | select(.platform == "iOS" and .isAvailable) | .buildversion] | sort | join("-")')
+        echo "xcode=$xcode" >> "$GITHUB_OUTPUT"
+        # The base's name carries a number that changes when how the
+        # harness makes a base does, so other edits keep the cache.
+        base=$(sed -nE 's/^const baseSimulatorName = "(.*)"$/\1/p' tools/appharness/simulator.go)
+        if [ -z "$base" ]; then
+          echo "::error::Couldn't read baseSimulatorName from tools/appharness/simulator.go"
+          exit 1
+        fi
+        echo "simulator=ios-base-simulator-$xcode-$runtimes-${base// /-}" >> "$GITHUB_OUTPUT"
+        echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+        echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+    # tygo, the type generators, the harness, and the server it builds. Go
+    # recompiles only what changed since the cache was saved.
+    - name: Cache Go builds
+      uses: actions/cache@v6
+      with:
+        path: |
+          ${{ steps.keys.outputs.gocache }}
+          ${{ steps.keys.outputs.gomodcache }}
+        key: go-ios-${{ runner.os }}-${{ steps.keys.outputs.goversion }}-${{ hashFiles('go.sum') }}
+    # Mostly the packages (GRDB), which a checkout doesn't touch; the app's
+    # own sources rebuild as they change.
+    - name: Cache Xcode's build
+      uses: actions/cache@v6
+      with:
+        path: |
+          mobile/ios/build/DerivedData
+          !mobile/ios/build/DerivedData/Logs
+          !mobile/ios/build/DerivedData/TestResults
+          !mobile/ios/build/DerivedData/Index.noindex
+          mobile/ios/build/ShishoAPI
+        key: xcode-ios-${{ steps.keys.outputs.xcode }}-${{ hashFiles('mobile/ios/project.yml', 'mobile/ios/ShishoAPI/Package.swift') }}
+    - name: Restore the base simulator
+      id: simulator
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ runner.temp }}/ios-base-simulator
+        key: ${{ steps.keys.outputs.simulator }}
+    # CoreSimulator reads its devices when it starts, so it restarts to find
+    # the restored one. Without it the harness makes a new base, slowly.
+    - name: Register the base simulator
+      if: steps.simulator.outputs.cache-hit == 'true'
+      shell: bash
+      run: |
+        devices="$HOME/Library/Developer/CoreSimulator/Devices"
+        mkdir -p "$devices"
+        mv "$RUNNER_TEMP"/ios-base-simulator/* "$devices"/
+        xcrun simctl shutdown all >/dev/null 2>&1 || true
+        killall -9 com.apple.CoreSimulator.CoreSimulatorService 2>/dev/null || true
+        if xcrun simctl list devices | grep "Shisho Harness Base"; then
+          echo "Restored the base simulator."
+        else
+          echo "::warning::CoreSimulator didn't pick up the restored base simulator; the harness makes a new one."
+        fi

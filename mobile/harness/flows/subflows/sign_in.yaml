@@ -1,0 +1,17 @@
+# Signs in with the harness account. Not a flow of its own.
+#
+# Only the first field is tapped. Return moves to the next field and the
+# last one submits, as the sign-in screen's focus order does, because a tap
+# while the keyboard is still sliding in can land on the wrong field.
+appId: ${APP_ID}
+---
+- tapOn:
+    id: signin.server
+- inputText: ${SERVER}
+- pressKey: Enter
+- inputText: ${USERNAME}
+- pressKey: Enter
+- inputText: ${PASSWORD}
+- pressKey: Enter
+# The harness's simulators have password AutoFill off (tools/appharness), so
+# iOS doesn't offer to save the password over the app.

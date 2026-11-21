@@ -134,8 +134,9 @@ The reverse proxy must pass all of these public route families without rewriting
 - `/koreader/*` for KOReader's progress sync and the [KOReader plugin](./koreader.md)
 - `/ereader/*` for the eReader browser
 - `/e/*` for short eReader setup URLs
+- `/mobile/*` for the [Shisho app](./shisho-app.md)
 
-Do not strip `/api` before forwarding it. Also pass `/health` if your external monitor uses it. Pass Shisho's `X-Shisho-*` response headers through unchanged; the KOReader plugin uses them to tell which features a server supports and when the plugin needs an update. Avoid response buffering for streaming API responses. The browser interface and API must share an origin; Shisho does not send CORS permission headers for cross-origin browser access.
+Do not strip `/api` before forwarding it. Also pass `/health` if your external monitor uses it. Pass Shisho's `X-Shisho-*` response headers through unchanged; the KOReader plugin and the Shisho app use them to tell which features a server supports and when they need an update. Avoid response buffering for streaming API responses. The browser interface and API must share an origin; Shisho does not send CORS permission headers for cross-origin browser access.
 
 Review authentication for [OPDS](./opds.md), Kobo, and eReader links before publishing them. Treat device URLs and [Device passwords](./users-and-permissions.md#device-password) as secrets.
 
@@ -157,7 +158,7 @@ Kobo devices leave the port out of `Host`, so this matters most for Kobo sync:
 
 Shisho uses gzip for eligible responses of at least 1 KiB when the client accepts it. Event streams, covers, page images, and file downloads bypass gzip. Keep proxy buffering disabled for event streams so live updates arrive promptly.
 
-Hashed frontend files under `/assets/` carry `Cache-Control: public, max-age=31536000, immutable`. The frontend's `index.html` uses `Cache-Control: no-cache` so browsers revalidate it. Do not override these with a blanket proxy cache rule. Unknown paths under `/api`, `/opds`, `/kobo`, `/ereader`, and `/e` return JSON errors rather than the frontend page, and missing files under `/assets/` return 404; other unknown paths open the frontend.
+Hashed frontend files under `/assets/` carry `Cache-Control: public, max-age=31536000, immutable`. The frontend's `index.html` uses `Cache-Control: no-cache` so browsers revalidate it. Do not override these with a blanket proxy cache rule. Unknown paths under `/api`, `/mobile`, `/opds`, `/kobo`, `/ereader`, and `/e` return JSON errors rather than the frontend page, and missing files under `/assets/` return 404; other unknown paths open the frontend.
 
 Responses include `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: strict-origin-when-cross-origin`. Shisho does not emit a `Server` header or the deprecated `X-XSS-Protection` header. Responses also carry `X-Shisho-Build`, which open tabs compare with their own version to notice an update; a proxy that strips it leaves stale tabs without the update banner. A reverse proxy may add its own headers, so check the public response when auditing the deployment.
 

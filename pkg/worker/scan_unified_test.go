@@ -4345,7 +4345,7 @@ func TestScanFileCore_Chapters_HigherPriority(t *testing.T) {
 
 	// Create existing chapters
 	oldHref := "old.xhtml"
-	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+	_, err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
 		{Title: "Old Chapter", Href: &oldHref},
 	})
 	require.NoError(t, err)
@@ -4418,7 +4418,7 @@ func TestScanFileCore_Chapters_LowerPriority_Skipped(t *testing.T) {
 
 	// Create existing chapters (from manual edit)
 	manualHref := "manual.xhtml"
-	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+	_, err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
 		{Title: "Manual Chapter", Href: &manualHref},
 	})
 	require.NoError(t, err)
@@ -4489,7 +4489,7 @@ func TestScanFileCore_Chapters_ForceRefresh(t *testing.T) {
 
 	// Create existing chapters (from manual edit)
 	manualHref := "manual.xhtml"
-	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+	_, err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
 		{Title: "Manual Chapter", Href: &manualHref},
 	})
 	require.NoError(t, err)
@@ -4630,7 +4630,7 @@ func TestScanFileCore_Chapters_EmptyChapters_Skipped(t *testing.T) {
 
 	// Create existing chapters
 	existingHref := "existing.xhtml"
-	err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
+	_, err = tc.chapterService.ReplaceChapters(tc.ctx, file.ID, []mediafile.ParsedChapter{
 		{Title: "Existing Chapter", Href: &existingHref},
 	})
 	require.NoError(t, err)

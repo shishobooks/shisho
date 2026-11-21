@@ -60,6 +60,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/serverstats"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sharelinks"
+	"github.com/shishobooks/shisho/pkg/shishoapp"
 	"github.com/shishobooks/shisho/pkg/tags"
 	"github.com/shishobooks/shisho/pkg/testutils"
 	"github.com/shishobooks/shisho/pkg/updatecheck"
@@ -87,6 +88,13 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	e.Use(securityHeadersMiddleware)
 	e.Use(buildHeaderMiddleware(frontend.EmbeddedBuildID()))
 	e.Use(compressionMiddleware())
+	// Every /mobile and /api response lists the Shisho app capabilities for the
+	// protocol it names, Demo Mode refusals included (ADR 0020).
+	appContract, err := shishoapp.NewContract(cfg.DevAppProtocols)
+	if err != nil {
+		return nil, err
+	}
+	e.Use(appContract.CapabilitiesHeader)
 	if cfg.DemoMode {
 		e.Use(demoModeMiddleware)
 		// The Public Demo's database is prepared once and baked into the
@@ -206,6 +214,16 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	koreaderplugin.RegisterRoutes(e, db, pluginBundle, svcs.books, broker)
 	delivery.RegisterRoutes(api, db, authMiddleware)
 
+	// The Shisho app's Device surface. It's registered in Demo Mode too,
+	// where the middleware refuses signing in like every other write, so
+	// the app can say it doesn't connect to the demo.
+	shishoapp.RegisterRoutes(e, db, authService, broker, shishoapp.Options{
+		Contract:      appContract,
+		ServerVersion: version.Version,
+		DemoMode:      cfg.DemoMode,
+		Thumbnails:    svcs.coverCache,
+	})
+
 	// Register protected API routes
 	// These routes require authentication and appropriate permissions
 	registerProtectedRoutes(api, db, cfg, authMiddleware, w, pm, broker, svcs)
@@ -281,7 +299,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	spa := echo.WrapHandler(frontend.Handler())
 	e.RouteNotFound("/*", func(c echo.Context) error {
 		path := c.Request().URL.Path
-		for _, prefix := range []string{"/api", "/opds", "/kobo", "/koreader", "/ereader", "/e"} {
+		for _, prefix := range []string{"/api", "/mobile", "/opds", "/kobo", "/koreader", "/ereader", "/e"} {
 			if path == prefix || strings.HasPrefix(path, prefix+"/") {
 				return notFoundHandler(c)
 			}

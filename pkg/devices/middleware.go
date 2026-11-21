@@ -165,6 +165,48 @@ func (m *Middleware) BasicAuth(connection string) echo.MiddlewareFunc {
 	}
 }
 
+// BearerAuth signs a request in with the credential in its Authorization
+// header ("Bearer <credential>"), as the Shisho app sends it. A missing or
+// unknown credential is a 401, which the app reads as signed out; a Device
+// whose type doesn't use connection is a 403; and the owner is checked with
+// AuthenticateOwner, so a deactivated owner is a 401 too. Like DeviceAuth,
+// it records the request and stores the Device and its owner.
+func (m *Middleware) BearerAuth(connection string) echo.MiddlewareFunc {
+	deniedMessage, ok := connectionDeniedMessages[connection]
+	if !ok {
+		deniedMessage = "This Device cannot connect this way."
+	}
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			ctx := c.Request().Context()
+			scheme, credential, ok := strings.Cut(c.Request().Header.Get(echo.HeaderAuthorization), " ")
+			if !ok || !strings.EqualFold(scheme, "Bearer") || credential == "" {
+				return errcodes.Unauthorized("Sign in to continue.")
+			}
+			device, err := m.service.GetByCredential(ctx, credential)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+			if device == nil {
+				return errcodes.Unauthorized("This Device was signed out. Sign in again.")
+			}
+			if !device.HasConnection(connection) {
+				return errcodes.Forbidden(deniedMessage)
+			}
+			user, err := m.service.AuthenticateOwner(ctx, device)
+			if err != nil {
+				return errors.WithStack(err)
+			}
+
+			m.connections.RecordAccess(device)
+
+			SetDevice(c, device)
+			auth.SetUser(c, user)
+			return next(c)
+		}
+	}
+}
+
 // legacyCredentialPrefix starts the API keys that Devices migrated from API
 // keys keep as their credentials until they're regenerated.
 const legacyCredentialPrefix = "ak_"
@@ -186,7 +228,7 @@ func isCredentialShaped(s string) bool {
 	return true
 }
 
-// SetDevice stores device for RequireDevice. Only DeviceAuth, OPDSAuth, BasicAuth,
+// SetDevice stores device for RequireDevice. Only DeviceAuth, OPDSAuth, BasicAuth, BearerAuth,
 // KOReader's sync auth, middleware that updates the Device, and tests standing
 // in for them call it.
 func SetDevice(c echo.Context, device *Device) {

@@ -73,6 +73,7 @@ import {
   ConnectionKOReaderPlugin,
   ConnectionKOReaderSync,
   ConnectionOPDS,
+  ConnectionShishoApp,
   ScopeAll,
   ScopeLibrary,
   ScopeList,
@@ -85,6 +86,7 @@ import {
   connectChoiceFor,
   CONNECTION_LABELS,
   DEVICE_TYPE_LABELS,
+  isShishoApp,
 } from "@/utils/devices";
 import { formatDateTime } from "@/utils/format";
 
@@ -285,6 +287,14 @@ const ScopeSection = ({ device }: { device: DeviceResponse }) => {
   );
 };
 
+// A Shisho app Device is made by signing in from the app, so there's
+// nothing to set up here.
+const ShishoAppSetup = () => (
+  <p className="text-sm text-muted-foreground">
+    Sign in from the Shisho app with your username and password.
+  </p>
+);
+
 const CONNECTION_SETUP: Record<
   Connection,
   (props: { device: DeviceResponse }) => React.ReactNode
@@ -294,6 +304,7 @@ const CONNECTION_SETUP: Record<
   [ConnectionOPDS]: OPDSSetup,
   [ConnectionKOReaderSync]: KOReaderSyncSetup,
   [ConnectionKOReaderPlugin]: KOReaderPluginSetup,
+  [ConnectionShishoApp]: ShishoAppSetup,
 };
 
 const ConnectionSetups = ({
@@ -322,6 +333,32 @@ const ConnectionSetups = ({
 // was last used, with where to look if it never has.
 const StatusSection = ({ device }: { device: DeviceResponse }) => {
   const lastUsed = device.last_accessed_at ?? device.plugin_last_connected_at;
+  if (isShishoApp(device)) {
+    return (
+      <DeviceSection id="status-heading" title="Status">
+        <p
+          className="flex items-center gap-2 text-sm"
+          data-testid="device-status"
+        >
+          <CircleCheck
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 text-primary"
+          />
+          {lastUsed
+            ? `Connected. Last used ${formatDateTime(lastUsed)}.`
+            : "Signed in from the Shisho app."}
+        </p>
+        {device.app_version && (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="app-version"
+          >
+            Shisho app {device.app_version}
+          </p>
+        )}
+      </DeviceSection>
+    );
+  }
   return (
     <DeviceSection id="status-heading" title="Status">
       {lastUsed ? (
@@ -605,6 +642,10 @@ const DeviceDetail = () => {
     );
   } else {
     const hasPlugin = device.connections.includes(ConnectionKOReaderPlugin);
+    // The Shisho app owns its Device's type and credential, and it reaches
+    // every Library with no Delivery Rules (ADR 0022), so there's nothing to
+    // set up or change but its name.
+    const isApp = isShishoApp(device);
     body = (
       <>
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between md:mb-8">
@@ -631,20 +672,22 @@ const DeviceDetail = () => {
               <Pencil className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">Rename</span>
             </Button>
-            <Button
-              aria-label="Change Type"
-              onClick={() => {
-                // Change Type waits on unsaved Delivery Rules edits, so they
-                // show where it says to save or discard them.
-                if (rulesHaveChanges) setAdvancedOpen(true);
-                setChangeTypeOpen(true);
-              }}
-              size="sm"
-              variant="outline"
-            >
-              <Tablet className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Change Type</span>
-            </Button>
+            {!isApp && (
+              <Button
+                aria-label="Change Type"
+                onClick={() => {
+                  // Change Type waits on unsaved Delivery Rules edits, so they
+                  // show where it says to save or discard them.
+                  if (rulesHaveChanges) setAdvancedOpen(true);
+                  setChangeTypeOpen(true);
+                }}
+                size="sm"
+                variant="outline"
+              >
+                <Tablet className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Change Type</span>
+              </Button>
+            )}
             <Button
               aria-label="Delete"
               onClick={() => setDeleteOpen(true)}
@@ -662,43 +705,45 @@ const DeviceDetail = () => {
             <KOReaderUnrecognizedBooks device={device} />
           )}
           <StatusSection device={device} />
-          <SetupSection device={device} />
+          {!isApp && <SetupSection device={device} />}
           {hasPlugin && !unrecognizedAtTop && (
             <KOReaderUnrecognizedBooks device={device} />
           )}
-          <section className="pt-2">
-            {/* Kept mounted, so closing it never drops unsaved Delivery
+          {!isApp && (
+            <section className="pt-2">
+              {/* Kept mounted, so closing it never drops unsaved Delivery
                 Rules edits. */}
-            <Disclosure
-              badge={
-                rulesHaveChanges &&
-                !advancedOpen && (
-                  <Badge variant="secondary">Unsaved changes</Badge>
-                )
-              }
-              description="This Device's password, which books it reaches, and which files it gets."
-              heading="h2"
-              keepMounted
-              onOpenChange={setAdvancedOpen}
-              open={advancedOpen}
-              title="Advanced"
-            >
-              <div className="space-y-6">
-                <CredentialSection device={device} />
-                <ScopeSection device={device} />
-                <DeviceSection
-                  description="Which kinds of files this Device gets, and in what format. When a book has several files, the first rule that fits one of them decides what's sent."
-                  id="delivery-rules-heading"
-                  title="Delivery Rules"
-                >
-                  <DeviceRulesSection
-                    device={device}
-                    onHasChangesChange={setRulesHaveChanges}
-                  />
-                </DeviceSection>
-              </div>
-            </Disclosure>
-          </section>
+              <Disclosure
+                badge={
+                  rulesHaveChanges &&
+                  !advancedOpen && (
+                    <Badge variant="secondary">Unsaved changes</Badge>
+                  )
+                }
+                description="This Device's password, which books it reaches, and which files it gets."
+                heading="h2"
+                keepMounted
+                onOpenChange={setAdvancedOpen}
+                open={advancedOpen}
+                title="Advanced"
+              >
+                <div className="space-y-6">
+                  <CredentialSection device={device} />
+                  <ScopeSection device={device} />
+                  <DeviceSection
+                    description="Which kinds of files this Device gets, and in what format. When a book has several files, the first rule that fits one of them decides what's sent."
+                    id="delivery-rules-heading"
+                    title="Delivery Rules"
+                  >
+                    <DeviceRulesSection
+                      device={device}
+                      onHasChangesChange={setRulesHaveChanges}
+                    />
+                  </DeviceSection>
+                </div>
+              </Disclosure>
+            </section>
+          )}
         </div>
 
         <RenameDeviceDialog
@@ -714,7 +759,11 @@ const DeviceDetail = () => {
         />
         <ConfirmDialog
           confirmLabel="Delete"
-          description={`"${device.name}" will no longer be able to reach your library. To use it again, add it as a new Device and set it up again.`}
+          description={
+            isApp
+              ? `This signs this installation of the Shisho app out of your account. Its copy of your library stays on "${device.name}" until you sign in there again.`
+              : `"${device.name}" will no longer be able to reach your library. To use it again, add it as a new Device and set it up again.`
+          }
           isPending={deleteDevice.isPending}
           onConfirm={handleDelete}
           onOpenChange={setDeleteOpen}

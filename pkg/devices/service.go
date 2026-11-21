@@ -22,6 +22,11 @@ import (
 // caller's.
 var ErrNotFound = errors.New("device not found")
 
+// ErrManagedByApp is returned for a change to what a Shisho app Device's
+// installation owns: its type, its credential, which only the app holds,
+// and the scope and Delivery Rules it doesn't have (ADR 0022).
+var ErrManagedByApp = errors.New("the Shisho app manages this")
+
 type Service struct {
 	db *bun.DB
 }
@@ -30,10 +35,15 @@ func NewService(db *bun.DB) *Service {
 	return &Service{db: db}
 }
 
-// newCredential returns a credential no Device holds yet.
-func (s *Service) newCredential(ctx context.Context, tx bun.IDB) (string, error) {
+// newCredential returns a credential no Device holds yet, the length a
+// Device of deviceType uses.
+func (s *Service) newCredential(ctx context.Context, tx bun.IDB, deviceType string) (string, error) {
+	length := credentialLength
+	if deviceType == DeviceTypeShishoApp {
+		length = appCredentialLength
+	}
 	for range 10 {
-		credential, err := generateCredential()
+		credential, err := generateCredentialOfLength(length)
 		if err != nil {
 			return "", err
 		}
@@ -64,8 +74,16 @@ func (s *Service) Create(ctx context.Context, userID int, name, deviceType strin
 		UpdatedAt:         now,
 	}
 
-	err := s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		credential, err := s.newCredential(ctx, tx)
+	if err := s.insert(ctx, device); err != nil {
+		return nil, err
+	}
+	return device, nil
+}
+
+// insert gives device a new credential and saves it.
+func (s *Service) insert(ctx context.Context, device *Device) error {
+	return s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+		credential, err := s.newCredential(ctx, tx, device.DeviceType)
 		if err != nil {
 			return err
 		}
@@ -73,10 +91,58 @@ func (s *Service) Create(ctx context.Context, userID int, name, deviceType strin
 		_, err = tx.NewInsert().Model(device).Exec(ctx)
 		return errors.WithStack(err)
 	})
-	if err != nil {
+}
+
+// AppDeviceOptions describes the Shisho app installation signing in.
+type AppDeviceOptions struct {
+	// Name is the hardware's name, which the owner can change later.
+	Name string
+	// InstallationID is the installation's own id, kept across signing out
+	// and back in.
+	InstallationID string
+	AppVersion     string
+}
+
+// CreateAppDevice adds a Shisho app Device for userID, made when an
+// installation signs in. Each sign-in makes a new Device, even from an
+// installation that signed in before, since that one's credential is gone
+// with its sign-out or revoke.
+func (s *Service) CreateAppDevice(ctx context.Context, userID int, opts AppDeviceOptions) (*Device, error) {
+	now := time.Now()
+	device := &Device{
+		ID:                uuid.New().String(),
+		UserID:            userID,
+		Name:              opts.Name,
+		DeviceType:        DeviceTypeShishoApp,
+		ScopeType:         ScopeAll,
+		DeliveryRulesMode: startingRulesMode(DeviceTypeShishoApp),
+		InstallationID:    &opts.InstallationID,
+		AppVersion:        &opts.AppVersion,
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	if err := s.insert(ctx, device); err != nil {
 		return nil, err
 	}
 	return device, nil
+}
+
+// RecordAppVersion stores the app version a Shisho app Device reports, when
+// it differs from the one stored. An empty version changes nothing.
+func (s *Service) RecordAppVersion(ctx context.Context, device *Device, version string) error {
+	if version == "" || (device.AppVersion != nil && *device.AppVersion == version) {
+		return nil
+	}
+	_, err := s.db.NewUpdate().
+		Model((*Device)(nil)).
+		Set("app_version = ?", version).
+		Where("id = ?", device.ID).
+		Exec(ctx)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	device.AppVersion = &version
+	return nil
 }
 
 func (s *Service) selectDevices(model any) *bun.SelectQuery {
@@ -230,6 +296,12 @@ func (s *Service) Update(ctx context.Context, userID int, id string, opts Update
 	if err != nil {
 		return nil, err
 	}
+	if device.DeviceType == DeviceTypeShishoApp && (opts.DeviceType != nil || opts.Scope != nil || opts.Rules != nil) {
+		return nil, ErrManagedByApp
+	}
+	if opts.DeviceType != nil && *opts.DeviceType == DeviceTypeShishoApp {
+		return nil, ErrManagedByApp
+	}
 	resultingType := device.DeviceType
 	if opts.DeviceType != nil {
 		resultingType = *opts.DeviceType
@@ -287,8 +359,11 @@ func (s *Service) RegenerateCredential(ctx context.Context, userID int, id strin
 	if err != nil {
 		return nil, err
 	}
+	if device.DeviceType == DeviceTypeShishoApp {
+		return nil, ErrManagedByApp
+	}
 	err = s.db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
-		credential, err := s.newCredential(ctx, tx)
+		credential, err := s.newCredential(ctx, tx, device.DeviceType)
 		if err != nil {
 			return err
 		}

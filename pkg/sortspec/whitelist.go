@@ -7,6 +7,9 @@ package sortspec
 //   - Add an SQL case to OrderClauses in sql.go.
 //   - Update the TS whitelist in app/libraries/sortSpec.ts (it mirrors this file).
 //   - Document semantics in website/docs/browsing-search-bulk-actions.md (the user-facing reference).
+//   - Mirror it in the Shisho app's mobile/ios/Shisho/Core/LibrarySort.swift, which sorts the
+//     device's copy of a Library the same way. A field the app's copy has no data for is
+//     skipped there until the feed carries it.
 const (
 	FieldTitle        = "title"
 	FieldAuthor       = "author"

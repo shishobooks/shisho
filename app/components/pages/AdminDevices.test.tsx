@@ -72,6 +72,24 @@ describe("AdminDevices", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a Shisho app Device's app version", async () => {
+    setAuth({ permissions: ["users:read"] });
+    vi.spyOn(API, "request").mockResolvedValue([
+      {
+        ...readersKobo,
+        id: "app-1",
+        name: "iPhone 17 Pro",
+        device_type: "shisho_app",
+        connections: ["shisho_app"],
+        app_version: "1.2.0 (34)",
+      },
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("iPhone 17 Pro")).toBeInTheDocument();
+    expect(screen.getByText(/reader · App 1\.2\.0 \(34\)/)).toBeInTheDocument();
+  });
+
   it("hides revoke from a role that cannot write users", async () => {
     setAuth({ permissions: ["users:read"] });
     vi.spyOn(API, "request").mockResolvedValue([readersKobo]);

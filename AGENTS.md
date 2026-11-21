@@ -27,6 +27,7 @@ Guidance for coding agents (Claude Code, Codex, Pi, etc.) working in this reposi
 | `tools/gotestsplit/AGENTS.md` | Timing-aware Go test sharding |
 | `tools/koreaderharness/AGENTS.md` | Headless KOReader for QA of KOReader sync |
 | `koreader-plugin/AGENTS.md` | The KOReader plugin: Lua modules, Lua unit tests, protocol |
+| `mobile/AGENTS.md` | The Shisho app: the iOS project, generated Swift and Kotlin API types, Maestro harness |
 
 Repo-wide topic docs:
 
@@ -64,6 +65,7 @@ All tasks are in `mise.toml` (`mise tasks` lists them). The ones with non-obviou
 
 - `mise setup` installs tools and dependencies and generates types. Run it after creating a worktree.
 - `mise start` runs the API with hot reload plus Vite. Several worktrees can run it at once, so each server may land on a different port than usual: read the URL it prints.
+- `mise start:qa` runs a throwaway server with the web app and seeded test books, deleted when it stops, on the same port each run when that port is free. QA against it rather than the dev database, which someone else may be using.
 - `mise build` is the only way to refresh the frontend embedded in the binary; `pnpm build` alone does not. Never overwrite the tracked `pkg/frontend/dist/placeholder.html` with build output: it lets plain `go build` and `go test ./...` work without a frontend build.
 - `mise check:quiet` runs every check except Firefox e2e and the KOReader harness (CI runs them) and serializes across worktrees via `flock` (`brew install flock` on macOS). Use it instead of `mise check`.
 - `app/types/generated/` is gitignored output of `mise tygo`; change the Go structs, never the generated files.
@@ -75,6 +77,7 @@ While iterating, run only the checks for what you touched. Separate mise tasks w
 - Scripts under `scripts/` → `mise test:scripts`
 - Migrations → also `mise db:rollback && mise db:migrate`. `db:rollback` rolls back the last migration group, so the round trip only checks your migration when it is alone in its group. Run `mise db:migrate` before adding the migration so it lands in a group of its own. If `mise start` applied every migration as one group, the rollback runs every down, including the initial schema's, which drops every table.
 - KOReader sync (`pkg/koreader`, document hashes) → also `mise test:koreader`, which needs Docker
+- The Shisho app, its Device surface (`pkg/shishoapp`), or API types → also `mise mobile:check` on macOS, which `mise check:quiet` leaves out
 - App E2E flows you touched → `mise e2e:chromium`; documentation theme flows → `mise e2e:docs`
 
 Run `mise check:quiet` once when the work is done, before pushing or opening a PR.

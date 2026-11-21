@@ -62,50 +62,45 @@ type RelationshipUpdates struct {
 }
 
 // UpdateBookRelationships updates all book relationships using the books service methods.
-// It first deletes existing relationships (if flagged) then bulk inserts new ones.
+// A relationship flagged for deletion is replaced in place, so rows whose
+// values the scan read again keep their ids and are left unwritten, and a
+// Resync that reads the same values records nothing in the change log (ADR
+// 0023). Unflagged relationships are only inserted.
 // This method should be called with appropriate locking when used in parallel processing.
 func (w *Worker) UpdateBookRelationships(ctx context.Context, bookID int, updates RelationshipUpdates) error {
-	// Delete existing relationships if flagged
 	if updates.DeleteAuthors {
-		if err := w.bookService.DeleteAuthors(ctx, bookID); err != nil {
-			return errors.Wrap(err, "failed to delete authors")
+		if err := w.bookService.ReplaceAuthors(ctx, bookID, updates.Authors); err != nil {
+			return errors.Wrap(err, "failed to replace authors")
 		}
-	}
-	if updates.DeleteNarrators && updates.FileID != 0 {
-		if _, err := w.bookService.DeleteNarratorsForFile(ctx, updates.FileID); err != nil {
-			return errors.Wrap(err, "failed to delete narrators")
-		}
-	}
-	if updates.DeleteGenres {
-		if err := w.bookService.DeleteBookGenres(ctx, bookID); err != nil {
-			return errors.Wrap(err, "failed to delete genres")
-		}
-	}
-	if updates.DeleteTags {
-		if err := w.bookService.DeleteBookTags(ctx, bookID); err != nil {
-			return errors.Wrap(err, "failed to delete tags")
-		}
-	}
-	if updates.DeleteSeries {
-		if err := w.bookService.DeleteBookSeries(ctx, bookID); err != nil {
-			return errors.Wrap(err, "failed to delete series")
-		}
-	}
-
-	// Bulk insert new relationships using service methods
-	if err := w.bookService.BulkCreateAuthors(ctx, updates.Authors); err != nil {
+	} else if err := w.bookService.BulkCreateAuthors(ctx, updates.Authors); err != nil {
 		return errors.Wrap(err, "failed to insert authors")
 	}
-	if err := w.bookService.BulkCreateNarrators(ctx, updates.Narrators); err != nil {
+	if updates.DeleteNarrators && updates.FileID != 0 {
+		if err := w.bookService.ReplaceNarrators(ctx, updates.FileID, updates.Narrators); err != nil {
+			return errors.Wrap(err, "failed to replace narrators")
+		}
+	} else if err := w.bookService.BulkCreateNarrators(ctx, updates.Narrators); err != nil {
 		return errors.Wrap(err, "failed to insert narrators")
 	}
-	if err := w.bookService.BulkCreateBookGenres(ctx, updates.BookGenres); err != nil {
+	if updates.DeleteGenres {
+		if err := w.bookService.ReplaceBookGenres(ctx, bookID, updates.BookGenres); err != nil {
+			return errors.Wrap(err, "failed to replace genres")
+		}
+	} else if err := w.bookService.BulkCreateBookGenres(ctx, updates.BookGenres); err != nil {
 		return errors.Wrap(err, "failed to insert genres")
 	}
-	if err := w.bookService.BulkCreateBookTags(ctx, updates.BookTags); err != nil {
+	if updates.DeleteTags {
+		if err := w.bookService.ReplaceBookTags(ctx, bookID, updates.BookTags); err != nil {
+			return errors.Wrap(err, "failed to replace tags")
+		}
+	} else if err := w.bookService.BulkCreateBookTags(ctx, updates.BookTags); err != nil {
 		return errors.Wrap(err, "failed to insert tags")
 	}
-	if err := w.bookService.BulkCreateBookSeries(ctx, updates.BookSeries); err != nil {
+	if updates.DeleteSeries {
+		if err := w.bookService.ReplaceBookSeries(ctx, bookID, updates.BookSeries); err != nil {
+			return errors.Wrap(err, "failed to replace series")
+		}
+	} else if err := w.bookService.BulkCreateBookSeries(ctx, updates.BookSeries); err != nil {
 		return errors.Wrap(err, "failed to insert series")
 	}
 
@@ -637,8 +632,14 @@ func (w *Worker) scanFileByID(ctx context.Context, opts ScanOptions, cache *Scan
 		return nil, err
 	}
 
-	// Update stored mod time and size so future rescans can skip unchanged files
-	if fileStat != nil {
+	// Update stored mod time and size so future rescans can skip unchanged
+	// files. The write bumps updated_at, which keys cover and page URLs and
+	// moves the Book in the change log, so it's skipped when neither changed.
+	// A refresh or reset of a page-based file writes it anyway: it dropped the
+	// cached pages above, and bytes can change under the same size and mtime,
+	// so browsers must refetch the pages too.
+	pagesReread := (opts.ForceRefresh || opts.Reset) && models.IsPageBasedFileType(file.FileType)
+	if fileStat != nil && (pagesReread || fileStatChanged(fileStat, file)) {
 		modTime := fileStat.ModTime()
 		file.FileModifiedAt = &modTime
 		file.FilesizeBytes = fileStat.Size()
@@ -2305,14 +2306,19 @@ func (w *Worker) scanFileCore(
 			logInfo("updating chapters", logger.Data{"chapter_count": len(parsedChapters)})
 
 			// Replace all chapters with new ones from metadata
-			if err := w.chapterService.ReplaceChapters(ctx, file.ID, parsedChapters); err != nil {
+			replaced, err := w.chapterService.ReplaceChapters(ctx, file.ID, parsedChapters)
+			if err != nil {
 				return nil, errors.Wrap(err, "failed to replace chapters")
 			}
 
-			// Update chapter source on file
-			file.ChapterSource = &chapterSource
-			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}); err != nil {
-				return nil, errors.Wrap(err, "failed to update chapter source")
+			// Update chapter source on file. Unchanged chapters under the
+			// same source leave the file as it is, so a Resync that reads
+			// the same chapters changes nothing (ADR 0023).
+			if replaced || file.ChapterSource == nil || *file.ChapterSource != chapterSource {
+				file.ChapterSource = &chapterSource
+				if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}); err != nil {
+					return nil, errors.Wrap(err, "failed to update chapter source")
+				}
 			}
 		}
 	}
@@ -2326,14 +2332,19 @@ func (w *Worker) scanFileCore(
 			logInfo("updating chapters from sidecar", logger.Data{"chapter_count": len(sidecarChapters)})
 
 			// Replace all chapters with new ones from sidecar
-			if err := w.chapterService.ReplaceChapters(ctx, file.ID, sidecarChapters); err != nil {
+			replaced, err := w.chapterService.ReplaceChapters(ctx, file.ID, sidecarChapters)
+			if err != nil {
 				return nil, errors.Wrap(err, "failed to replace chapters from sidecar")
 			}
 
-			// Update chapter source on file
-			file.ChapterSource = &sidecarSource
-			if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}); err != nil {
-				return nil, errors.Wrap(err, "failed to update chapter source")
+			// Update chapter source on file. Chapters the sidecar holds
+			// unchanged are Shisho's own copy of the stored ones (ADR 0027),
+			// so they keep the source they were stored under.
+			if replaced {
+				file.ChapterSource = &sidecarSource
+				if err := w.bookService.UpdateFile(ctx, file, books.UpdateFileOptions{Columns: []string{"chapter_source"}}); err != nil {
+					return nil, errors.Wrap(err, "failed to update chapter source")
+				}
 			}
 		}
 	}

@@ -133,6 +133,11 @@ func TestShiftDates_MovesEveryDateSoTheLatestReadingIsYesterday(t *testing.T) {
 	after := readDates(t, db)
 	require.Len(t, after, len(before), "an empty date stays empty")
 	for c, was := range before {
+		// The change log records the shift itself: moving a Book's dates
+		// re-records the Book, at the time of the shift.
+		if c.table == "change_log_entries" {
+			continue
+		}
 		got := after[c]
 		name := c.table + "." + c.column
 		// Excluded columns, zero times, and rows written after the reading
