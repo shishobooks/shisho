@@ -487,10 +487,12 @@ export default function PageReader({
     [totalPages],
   );
 
-  // Navigate to page
+  // Navigate to page. Nothing turns until a page shows: the opening is
+  // reported then, and a move made before it would be taken for where the
+  // reader opened, saving nothing.
   const goToPage = useCallback(
     (page: number) => {
-      if (page < 0) return;
+      if (page < 0 || flow === undefined) return;
       if (page >= totalPages) {
         // Navigate back to book detail
         navigate(`/libraries/${libraryId}/books/${bookId}`);
@@ -501,7 +503,7 @@ export default function PageReader({
         pageRefs.current[page]?.scrollIntoView({ block: "start" });
       }
     },
-    [totalPages, navigate, libraryId, bookId, scrolled],
+    [totalPages, navigate, libraryId, bookId, flow, scrolled],
   );
 
   // Built once per change, not on every page turn, since each mark is a
@@ -675,7 +677,7 @@ export default function PageReader({
   const pageButton = ({ side, turn }: (typeof sideTurns)[number]) => (
     <Button
       aria-label={turn === "next" ? "Next page" : "Previous page"}
-      disabled={turn === "prev" && currentPage === 0}
+      disabled={!flow || (turn === "prev" && currentPage === 0)}
       onClick={() => turnPage(turn)}
       size="icon"
       variant="ghost"
@@ -1025,6 +1027,7 @@ export default function PageReader({
             so the bar adds only Home and End for keyboard seeking. */}
         <div className="px-4 pt-3">
           <div
+            aria-disabled={!flow || undefined}
             aria-label="Reading progress"
             aria-valuemax={totalPages}
             aria-valuemin={1}

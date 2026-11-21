@@ -35,14 +35,16 @@ const readerUrl = (bookId: number, fileId: number, page?: number) =>
   `/libraries/${libraryId}/books/${bookId}/files/${fileId}/read` +
   (page === undefined ? "" : `?page=${page}`);
 
-// Where the top of a page sits relative to the top of the reader's view.
+// Where the top of a page sits relative to the top of the reader's view, or
+// null while the page isn't there, such as before the flow is known. It's
+// read inside expect.poll, which fails at once on a throw instead of polling.
 const pageTop = (page: Page, pageNumber: number) =>
   page.evaluate((alt) => {
-    const main = document.querySelector("main")!;
-    const img = main.querySelector(`img[alt="${alt}"]`)!;
+    const main = document.querySelector("main");
+    const box = main?.querySelector(`img[alt="${alt}"]`)?.parentElement;
+    if (!main || !box) return null;
     return Math.round(
-      img.parentElement!.getBoundingClientRect().top -
-        main.getBoundingClientRect().top,
+      box.getBoundingClientRect().top - main.getBoundingClientRect().top,
     );
   }, `Page ${pageNumber}`);
 
@@ -724,6 +726,11 @@ test.describe("Page reader flows", () => {
         waitUntil: "domcontentloaded",
       });
       await expect(page.getByText("Page 2 of 6")).toBeVisible();
+      // The counter shows the saved page before the flow is known, and
+      // nothing turns until the page does.
+      await expect(
+        page.getByRole("img", { name: "Page 2", exact: true }),
+      ).toBeVisible();
 
       await page.getByRole("slider", { name: "Reading progress" }).focus();
       await page.keyboard.press("End");
