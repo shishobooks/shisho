@@ -1,4 +1,3 @@
-import CoreImage
 import SwiftUI
 
 /// A Book from the device's copy of the catalog: its cover, with the cover's
@@ -83,7 +82,9 @@ struct BookDetailView: View {
     private var hero: some View {
         VStack(spacing: 0) {
             CoverView(book: summary, width: sizeClass == .regular ? 260 : 200, shadow: .large) { image in
-                tint = averageColor(of: image)
+                Task {
+                    tint = await CoverTint.average(of: image).map { Color(red: $0.red, green: $0.green, blue: $0.blue) }
+                }
             }
             .padding(.top, 8)
 
@@ -206,15 +207,6 @@ struct BookDetailView: View {
 
     private func roleLabel(_ role: String) -> String {
         role.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-
-    private func averageColor(of image: UIImage) -> Color? {
-        guard let input = CIImage(image: image) else { return nil }
-        let filter = CIFilter(name: "CIAreaAverage", parameters: [kCIInputImageKey: input, kCIInputExtentKey: CIVector(cgRect: input.extent)])
-        guard let output = filter?.outputImage else { return nil }
-        var pixel = [UInt8](repeating: 0, count: 4)
-        CIContext().render(output, toBitmap: &pixel, rowBytes: 4, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBA8, colorSpace: nil)
-        return Color(red: Double(pixel[0]) / 255, green: Double(pixel[1]) / 255, blue: Double(pixel[2]) / 255)
     }
 }
 
