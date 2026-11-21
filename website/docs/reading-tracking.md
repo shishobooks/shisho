@@ -90,7 +90,7 @@ Reading time from KOReader with the plugin and listening time from the Shisho ap
 - **KOReader with the plugin** sends the time its statistics recorded on each page. A break of more than ten minutes starts a new session, and a session's time counts only the time spent on its pages, so it can be shorter than the span from its start to its end. KOReader's statistics also leave out a page you turned past in under 5 seconds and count at most 2 minutes on any one page, by default; both are **Read page duration limits** under **Reading statistics > Settings** in KOReader.
 - **KOReader without the plugin**, using progress sync, doesn't report how long you read. A session runs from when KOReader pulls your position on opening a book to its last push before you close it.
 - **A Kobo** counts the minutes it spends on each book. Each time it reports more, the extra minutes become one session that ends when the Kobo reported them, so reading over a few days with Wi-Fi off becomes one session.
-- **The Shisho app** times listening on the phone. A session counts only the time playing. A pause or phone call of up to 5 minutes doesn't end it; a longer one does, at the moment it began.
+- **The Shisho app** times listening on the phone. A session counts only the time playing. Each pause sends the session so far, so it shows here moments later, or when the phone next connects. Playing again within 5 minutes of a pause or phone call continues the same session; a longer break starts a new one.
 
 A session that reaches Shisho late belongs to the Read-through you were on when it started, or to none if you weren't reading the book then, and counts toward your reading time either way.
 

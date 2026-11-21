@@ -30,6 +30,13 @@ const (
 	// use the same header for their own list.
 	HeaderCapabilities = "X-Shisho-Capabilities"
 
+	// CookieCredential and CookieProtocol carry the Device credential and
+	// the app's protocol to an audiobook stream, since the system player
+	// makes its own requests and takes cookies but no headers. Only the
+	// stream route reads them.
+	CookieCredential = "shisho_app_credential" //nolint:gosec // A cookie name, not a credential.
+	CookieProtocol   = "shisho_app_protocol"
+
 	// The headers a refused app that signed in reads what to tell the user
 	// from, since the refusal has Shisho's usual error body.
 	HeaderProtocolMin   = "X-Shisho-App-Protocol-Min"

@@ -66,6 +66,27 @@ func withDownloadName(q *bun.SelectQuery) *bun.SelectQuery {
 		Relation("Narrators.Person")
 }
 
+// streamCookies takes the credential and protocol a stream request carries
+// as cookies (CookieCredential, CookieProtocol), when it carries no
+// headers: the system player makes its own requests and sends only the
+// cookies the app hands it. Headers, when present, win.
+func streamCookies(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		header := c.Request().Header
+		if header.Get(echo.HeaderAuthorization) == "" {
+			if cookie, err := c.Cookie(CookieCredential); err == nil && cookie.Value != "" {
+				header.Set(echo.HeaderAuthorization, "Bearer "+cookie.Value)
+			}
+		}
+		if header.Get(HeaderAppProtocol) == "" {
+			if cookie, err := c.Cookie(CookieProtocol); err == nil {
+				header.Set(HeaderAppProtocol, cookie.Value)
+			}
+		}
+		return next(c)
+	}
+}
+
 // download serves an Original File as it sits in the library (ADR 0022),
 // with Range support, so an interrupted download resumes.
 func (h *handler) download(c echo.Context) error {

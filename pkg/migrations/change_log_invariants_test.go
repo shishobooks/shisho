@@ -165,6 +165,7 @@ var tablesNotInFeed = map[string]string{
 	"change_log_entries":            "the change log itself",
 	"change_log_expiries":           "the change log's own bookkeeping",
 	"app_journal_events":            "which Shisho app journal events were taken in, for ignoring repeats",
+	"app_journal_sessions":          "which Reading Session each Shisho app sitting's snapshots update",
 	"jobs":                          reasonServer,
 	"job_logs":                      reasonServer,
 	"library_paths":                 reasonServer,

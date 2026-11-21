@@ -1,5 +1,6 @@
-# Listen while the server is offline, then reconnect: the session reaches
-# the server placed at the time it happened, not when it synced (#912).
+# Pause, and the session so far reaches the server. Then listen while the
+# server is offline and reconnect: the session reaches the server placed at
+# the time it happened, not when it synced (#912).
 appId: ${APP_ID}
 name: Listen offline and sync later
 ---
@@ -33,6 +34,16 @@ name: Listen offline and sync later
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
+# The pause sends the session so far.
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 4000
+    optional: true
+- runScript:
+    file: scripts/assert_paused_session.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
 - runScript:
     file: scripts/go_offline.js
     env:

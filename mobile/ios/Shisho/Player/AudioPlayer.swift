@@ -142,10 +142,11 @@ final class AudioPlayer {
         nowPlayingChapter = nil
         UserDefaults.standard.set(fileID, forKey: lastFileKey)
 
-        // AVPlayer makes its own range requests, so they carry the
-        // account's headers here rather than going through APIClient.
+        // AVPlayer makes its own range requests rather than going through
+        // APIClient, and takes cookies but no headers, so the credential goes
+        // as a cookie the stream route reads.
         let asset = AVURLAsset(url: session.client.streamURL(fileID: fileID),
-                               options: ["AVURLAssetHTTPHeaderFieldsKey": session.client.headers])
+                               options: [AVURLAssetHTTPCookiesKey: session.client.streamCookies])
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .timeDomain
         // Buffer far ahead, so listening goes on through a lost connection.
@@ -248,7 +249,9 @@ final class AudioPlayer {
             sitting = ListeningRules.pause(current, at: Date(), percentage: percentage)
         }
         savePosition()
-        persistSitting()
+        // The session so far goes out on every pause, so it shows on the web
+        // at once; resuming within five minutes extends the same session.
+        persistSitting(recording: sitting.flatMap { ListeningRules.finish($0) })
         requestSync()
     }
 

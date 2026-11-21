@@ -319,3 +319,57 @@ func TestJournal_AFaultWhileApplyingLeavesTheEventToResend(t *testing.T) {
 	assert.Equal(t, []string{"s1:accepted"}, results(f.journal(credential, now, listened)))
 	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_sessions`))
 }
+
+// sessionSoFar is a snapshot of sitting id's Reading Session, as the app
+// sends one each time playback pauses.
+func sessionSoFar(id string, start, end time.Time, played int) map[string]any {
+	s := session(start, end)
+	s["session_id"] = id
+	s["duration"] = played
+	return s
+}
+
+// The app sends the session so far on every pause, under the sitting's id:
+// the server keeps one session for it, extended by each later snapshot,
+// and a session the user deleted stays deleted.
+func TestJournal_SnapshotsOfOneSittingUpdateOneSession(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.audiobook()
+	userID := f.addUser()
+	now := time.Now().UTC()
+	f.accountSince(userID, now.Add(-time.Hour))
+	credential := f.signIn()
+	start := now.Add(-30 * time.Minute)
+	sessionRow := func() (ended time.Time, duration int) {
+		require.NoError(t, f.db.QueryRowContext(f.ctx, `SELECT ended_at, duration FROM reading_sessions`).Scan(&ended, &duration))
+		return ended, duration
+	}
+
+	f.journal(credential, now, event("p1", JournalEventReadingSession, start.Add(time.Minute), sessionSoFar("sit-1", start, start.Add(time.Minute), 60)))
+	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_sessions`))
+
+	// Resumed within five minutes and paused again: the same session, longer.
+	resp := f.journal(credential, now, event("p2", JournalEventReadingSession, start.Add(5*time.Minute), sessionSoFar("sit-1", start, start.Add(5*time.Minute), 200)))
+	assert.Equal(t, []string{"p2:accepted"}, results(resp))
+	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_sessions`))
+	ended, duration := sessionRow()
+	assert.WithinDuration(t, start.Add(5*time.Minute), ended, time.Second)
+	assert.Equal(t, 200, duration)
+
+	// An older snapshot arriving late changes nothing.
+	f.journal(credential, now, event("p0", JournalEventReadingSession, start.Add(2*time.Minute), sessionSoFar("sit-1", start, start.Add(2*time.Minute), 120)))
+	_, duration = sessionRow()
+	assert.Equal(t, 200, duration)
+
+	// Another sitting is another session.
+	f.journal(credential, now, event("q1", JournalEventReadingSession, start.Add(20*time.Minute), sessionSoFar("sit-2", start.Add(15*time.Minute), start.Add(20*time.Minute), 300)))
+	assert.Equal(t, 2, f.count(`SELECT COUNT(*) FROM reading_sessions`))
+
+	// Deleted on the web, a session stays deleted however much more of it
+	// arrives.
+	f.exec(`DELETE FROM reading_sessions`)
+	resp = f.journal(credential, now, event("p3", JournalEventReadingSession, start.Add(9*time.Minute), sessionSoFar("sit-1", start, start.Add(9*time.Minute), 400)))
+	assert.Equal(t, []string{"p3:accepted"}, results(resp))
+	assert.Zero(t, f.count(`SELECT COUNT(*) FROM reading_sessions`))
+}

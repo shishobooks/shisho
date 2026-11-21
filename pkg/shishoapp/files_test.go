@@ -81,3 +81,39 @@ func TestFiles_DownloadAndStreamWithRanges(t *testing.T) {
 	// Without the credential, nothing.
 	assert.Equal(t, http.StatusUnauthorized, f.rangeCall(http.MethodGet, "/mobile/files/5/stream", "", "").Code)
 }
+
+// AVPlayer can't set headers, so a stream also takes the credential and
+// protocol from cookies the app hands it. Nothing else does.
+func TestFiles_StreamTakesTheCredentialFromACookie(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	audio := filepath.Join(t.TempDir(), "dune.m4b")
+	require.NoError(t, os.WriteFile(audio, []byte("0123456789"), 0o600))
+	f.addLibrary(1, "Mine")
+	f.addBook(1, 1, "Dune")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (5, 1, 1, ?, 'm4b', 10)`, audio)
+	f.addUser()
+	credential := f.signIn()
+
+	withCookies := func(path string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Range", "bytes=2-")
+		for _, cookie := range cookies {
+			req.AddCookie(cookie)
+		}
+		rec := httptest.NewRecorder()
+		f.e.ServeHTTP(rec, req)
+		return rec
+	}
+	credentialCookie := &http.Cookie{Name: CookieCredential, Value: credential}
+	protocolCookie := &http.Cookie{Name: CookieProtocol, Value: strconv.Itoa(Protocol)}
+
+	rec := withCookies("/mobile/files/5/stream", credentialCookie, protocolCookie)
+	require.Equal(t, http.StatusPartialContent, rec.Code, rec.Body.String())
+	assert.Equal(t, "23456789", rec.Body.String())
+
+	assert.Equal(t, http.StatusUnauthorized, withCookies("/mobile/files/5/stream").Code)
+	assert.Equal(t, http.StatusUpgradeRequired, withCookies("/mobile/files/5/stream", credentialCookie).Code)
+	assert.Equal(t, http.StatusUnauthorized, withCookies("/mobile/files/5/download", credentialCookie, protocolCookie).Code)
+	assert.Equal(t, http.StatusUnauthorized, withCookies("/mobile/changes", credentialCookie, protocolCookie).Code)
+}

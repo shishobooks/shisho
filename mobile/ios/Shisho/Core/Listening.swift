@@ -6,6 +6,9 @@ import Foundation
 /// It's kept in the account's database as it goes, so a sitting the app
 /// was killed during still becomes a Reading Session on the next launch.
 struct ListeningSitting: Codable, Equatable, Sendable {
+    /// Names the sitting's Reading Session: every snapshot of it sent on a
+    /// pause carries this, and the server keeps one session for it.
+    var id: String = UUID().uuidString.lowercased()
     var fileID: Int
     var startedAt: Date
     var startPercentage: Double
@@ -27,8 +30,11 @@ struct ListeningSitting: Codable, Equatable, Sendable {
     }
 }
 
-/// A Reading Session ready for the journal.
+/// A Reading Session ready for the journal: a sitting's session so far, or
+/// all of it once the sitting ends.
 struct FinishedSession: Equatable, Sendable {
+    /// The sitting's id, which every snapshot of its session carries.
+    var sittingID: String = ""
     let fileID: Int
     let startedAt: Date
     let endedAt: Date
@@ -89,15 +95,16 @@ enum ListeningRules {
         !sitting.isPlaying && at.timeIntervalSince(sitting.lastActiveAt) > splitAfter
     }
 
-    /// The Reading Session the sitting makes, ending where it was last known
-    /// to be going, or nil when nothing was played. at is now, for a sitting
+    /// The Reading Session the sitting makes so far, ending where it was
+    /// last known to be going, or nil when nothing was played. Sent on every
+    /// pause, and again when the sitting ends. at is now, for a sitting
     /// still playing; a sitting found after a relaunch ends at its last save.
     static func finish(_ sitting: ListeningSitting, at: Date? = nil) -> FinishedSession? {
         let end = sitting.isPlaying ? max(sitting.lastActiveAt, at ?? sitting.lastActiveAt) : sitting.lastActiveAt
         let played = sitting.played(at: end)
         guard played >= 1, end > sitting.startedAt else { return nil }
         return FinishedSession(
-            fileID: sitting.fileID, startedAt: sitting.startedAt, endedAt: end,
+            sittingID: sitting.id, fileID: sitting.fileID, startedAt: sitting.startedAt, endedAt: end,
             startPercentage: sitting.startPercentage, endPercentage: sitting.lastPercentage,
             duration: Int(played.rounded())
         )

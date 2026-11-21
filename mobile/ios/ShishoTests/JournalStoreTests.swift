@@ -64,7 +64,7 @@ final class JournalStoreTests: XCTestCase {
         try store.recordPosition(fileID: 5, seconds: 5, percentage: 0.01, at: now.addingTimeInterval(5), atEnd: false, sitting: sitting)
         try store.recordPosition(fileID: 5, seconds: 10, percentage: 0.02, at: now.addingTimeInterval(10), atEnd: false, sitting: sitting)
         try store.recordPosition(fileID: 5, seconds: 600, percentage: 1, at: now.addingTimeInterval(20), atEnd: true, sitting: sitting)
-        try store.saveSitting(nil, recording: FinishedSession(fileID: 5, startedAt: now, endedAt: now.addingTimeInterval(20),
+        try store.saveSitting(nil, recording: FinishedSession(sittingID: "sit-1", fileID: 5, startedAt: now, endedAt: now.addingTimeInterval(20),
                                                               startPercentage: 0, endPercentage: 1, duration: 20))
 
         let rows = try journal()
@@ -75,6 +75,7 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertNotNil(first["listening_since"])
         XCTAssertEqual(try payload(rows[1])["at_end"] as? Bool, true)
         XCTAssertEqual(try payload(rows[2])["duration"] as? Int, 20)
+        XCTAssertEqual(try payload(rows[2])["session_id"] as? String, "sit-1")
 
         let local = try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) })
         XCTAssertEqual(local.seconds, 600)
@@ -185,6 +186,30 @@ final class JournalStoreTests: XCTestCase {
         try store.applyJournalResults(sent.map { Shishoapp.JournalResult(id: $0.eventID, result: .accepted) }, sent: sent, capabilities: "")
         try store.apply(try page(#"{"entries":[{"kind":"reading_position","id":5,"deleted":true}],"cursor":6}"#))
         XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) })
+    }
+
+    /// Each pause queues the sitting's session so far; one not yet sent is
+    /// replaced by the next, and the sitting stays open beside it.
+    func testSnapshotsOfASittingReplaceEachOtherUntilSent() throws {
+        var (sitting, _) = ListeningRules.play(nil, fileID: 5, at: now, percentage: 0)
+        sitting = ListeningRules.pause(sitting, at: now.addingTimeInterval(60), percentage: 0.1)
+        try store.saveSitting(sitting, recording: ListeningRules.finish(sitting))
+        (sitting, _) = ListeningRules.play(sitting, fileID: 5, at: now.addingTimeInterval(90), percentage: 0.1)
+        sitting = ListeningRules.pause(sitting, at: now.addingTimeInterval(150), percentage: 0.2)
+        try store.saveSitting(sitting, recording: ListeningRules.finish(sitting))
+
+        let rows = try journal()
+        XCTAssertEqual(rows.count, 1)
+        let snapshot = try payload(rows[0])
+        XCTAssertEqual(snapshot["session_id"] as? String, sitting.id)
+        XCTAssertEqual(snapshot["duration"] as? Int, 120)
+        XCTAssertEqual(try store.openSitting(), sitting)
+
+        // Once sent, the next snapshot is queued anew.
+        let sent = try store.pendingJournal(capabilities: "", limit: 10)
+        try store.applyJournalResults(sent.map { Shishoapp.JournalResult(id: $0.eventID, result: .accepted) }, sent: sent, capabilities: "")
+        try store.saveSitting(nil, recording: ListeningRules.finish(sitting))
+        XCTAssertEqual(try journal().count, 1)
     }
 
     func testTheOpenSittingIsKept() throws {

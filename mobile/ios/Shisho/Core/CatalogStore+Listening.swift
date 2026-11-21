@@ -216,21 +216,27 @@ extension CatalogStore {
         }
     }
 
-    /// Keeps the sitting being timed, or forgets it with nil, and queues the
-    /// Reading Session a sitting that ended made, in one transaction: a kill
-    /// in between can't send a sitting twice or lose it.
+    /// Keeps the sitting being timed, or forgets it with nil, and queues a
+    /// snapshot of a sitting's Reading Session, in one transaction: a kill in
+    /// between can't lose the session or record it apart from its sitting.
     func saveSitting(_ sitting: ListeningSitting?, recording session: FinishedSession? = nil) throws {
         let kept = try sitting.map { try JSONEncoder().encode($0) }
         let ended = try session.map { session in
             try JSONEncoder().encode(Shishoapp.JournalSessionPayload(
-                fileId: session.fileID, startedAt: JournalTime.string(session.startedAt), endedAt: JournalTime.string(session.endedAt),
+                sessionId: session.sittingID, fileId: session.fileID, startedAt: JournalTime.string(session.startedAt), endedAt: JournalTime.string(session.endedAt),
                 startPercentage: min(1, max(0, session.startPercentage)), endPercentage: min(1, max(0, session.endPercentage)),
                 duration: session.duration
             ))
         }
         try pool.write { db in
             if let session, let ended {
-                try CatalogStore.append(db, type: .readingSession, at: session.endedAt, payload: ended, fileID: session.fileID, coalesceKey: nil)
+                // A later snapshot of a sitting's session replaces one not
+                // yet sent; the server keeps the latest anyway.
+                let key = session.sittingID.isEmpty ? nil : "session:\(session.sittingID)"
+                if let key {
+                    try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
+                }
+                try CatalogStore.append(db, type: .readingSession, at: session.endedAt, payload: ended, fileID: session.fileID, coalesceKey: key)
             }
             if let kept {
                 try db.execute(sql: "INSERT INTO open_sitting (id, sitting) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET sitting = excluded.sitting",

@@ -134,6 +134,9 @@ type SessionInput struct {
 	// Claim, when set, runs first in RecordSession's transaction, as
 	// PositionUpdate.Claim does in UpdatePosition's.
 	Claim func(ctx context.Context, tx bun.Tx) error
+	// Recorded, when set, runs in RecordSession's transaction with the new
+	// session's id, for a caller that links it to its own records.
+	Recorded func(ctx context.Context, tx bun.Tx, sessionID int) error
 }
 
 // UpdatePosition is the position update service. In one transaction it:
@@ -483,9 +486,55 @@ func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, sourc
 		if err != nil {
 			return err
 		}
-		return recordSession(ctx, tx, userID, fileID, source, &session, underway, svc.now())
+		id, err := insertSession(ctx, tx, userID, fileID, source, session, underway, svc.now())
+		if err != nil {
+			return err
+		}
+		if session.Recorded != nil {
+			return session.Recorded(ctx, tx, id)
+		}
+		return nil
 	})
 	return bookID, err
+}
+
+// ExtendSession moves the end of userID's Reading Session sessionID to a
+// later snapshot of it, as a source that sends a session so far on every
+// pause does, keeping the Read-through it was placed on. A snapshot no later
+// than the session's end changes nothing. claim, when set, runs first in
+// the transaction. It reports whether the session changed.
+func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, snapshot SessionInput,
+	claim func(ctx context.Context, tx bun.Tx) error) (bool, error) {
+	changed := false
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if claim != nil {
+			if err := claim(ctx, tx); err != nil {
+				return err
+			}
+		}
+		stored := &models.ReadingSession{}
+		err := tx.NewSelect().Model(stored).Where("rs.id = ? AND rs.user_id = ?", sessionID, userID).Scan(ctx)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if !snapshot.EndedAt.After(stored.EndedAt) {
+			return nil
+		}
+		duration := int(snapshot.EndedAt.Sub(stored.StartedAt).Round(time.Second) / time.Second)
+		if snapshot.Duration != nil && *snapshot.Duration < duration {
+			duration = *snapshot.Duration
+		}
+		stored.EndedAt = snapshot.EndedAt
+		stored.EndPercentage = snapshot.EndPercentage
+		stored.Duration = duration
+		_, err = tx.NewUpdate().Model(stored).Column("ended_at", "end_percentage", "duration").WherePK().Exec(ctx)
+		changed = err == nil
+		return errors.WithStack(err)
+	})
+	return changed, err
 }
 
 // recordSession records session, if there is one, on rt, the Read-through

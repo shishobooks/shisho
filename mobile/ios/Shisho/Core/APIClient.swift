@@ -174,17 +174,24 @@ final class APIClient: Sendable {
         baseURL.appendingPathComponent("mobile/files/\(fileID)/stream")
     }
 
-    /// The headers every request of this account sends, for a player that
-    /// makes its own requests.
-    var headers: [String: String] {
-        var headers = [
-            "X-Shisho-App-Protocol": String(Installation.appProtocol),
-            "X-Shisho-App-Version": Installation.appVersion,
+    /// The credential and protocol as cookies, for the system player, which
+    /// makes its own requests and takes cookies but no headers. The server
+    /// reads them on the stream route only.
+    var streamCookies: [HTTPCookie] {
+        let values = [
+            ("shisho_app_credential", credential),
+            ("shisho_app_protocol", String(Installation.appProtocol)),
         ]
-        if let credential {
-            headers["Authorization"] = "Bearer \(credential)"
+        return values.compactMap { name, value in
+            guard let value else { return nil }
+            var properties: [HTTPCookiePropertyKey: Any] = [
+                .name: name, .value: value, .path: "/", .originURL: baseURL,
+            ]
+            if baseURL.scheme == "https" {
+                properties[.secure] = "TRUE"
+            }
+            return HTTPCookie(properties: properties)
         }
-        return headers
     }
 
     /// A Book's cover at size pixels, keyed by its cover version so the

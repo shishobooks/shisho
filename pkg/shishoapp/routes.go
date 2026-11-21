@@ -44,6 +44,6 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	// and a stream seeks.
 	g.GET("/files/:id/download", h.download, signedIn, h.requireProtocol)
 	g.HEAD("/files/:id/download", h.download, signedIn, h.requireProtocol)
-	g.GET("/files/:id/stream", h.stream, signedIn, h.requireProtocol)
-	g.HEAD("/files/:id/stream", h.stream, signedIn, h.requireProtocol)
+	g.GET("/files/:id/stream", h.stream, streamCookies, signedIn, h.requireProtocol)
+	g.HEAD("/files/:id/stream", h.stream, streamCookies, signedIn, h.requireProtocol)
 }

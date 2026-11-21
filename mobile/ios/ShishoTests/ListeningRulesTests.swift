@@ -19,6 +19,7 @@ final class ListeningRulesTests: XCTestCase {
         sitting = ListeningRules.pause(sitting, at: at(400), percentage: 0.3)
 
         let session = try XCTUnwrap(ListeningRules.finish(sitting))
+        XCTAssertEqual(session.sittingID, sitting.id)
         XCTAssertEqual(session.startedAt, at(0))
         XCTAssertEqual(session.endedAt, at(400))
         XCTAssertEqual(session.duration, 160)
@@ -39,6 +40,7 @@ final class ListeningRulesTests: XCTestCase {
         XCTAssertEqual(first.endedAt, at(90))
         XCTAssertEqual(first.duration, 90)
         XCTAssertEqual(next.startedAt, at(1000))
+        XCTAssertNotEqual(next.id, sitting.id)
         XCTAssertEqual(next.played(at: at(1010)), 10)
     }
 

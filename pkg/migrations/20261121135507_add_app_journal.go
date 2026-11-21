@@ -67,6 +67,20 @@ func init() {
 			PRIMARY KEY (user_id, installation_id, event_id)
 		)`,
 
+		// The Reading Session each sitting's snapshots update: the app sends
+		// the session so far on every pause, under the sitting's id. A
+		// session the user deleted keeps its row, with no session, so later
+		// snapshots don't bring it back.
+		`CREATE TABLE app_journal_sessions (
+			user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+			installation_id TEXT NOT NULL,
+			session_id TEXT NOT NULL,
+			reading_session_id INTEGER REFERENCES reading_sessions (id) ON DELETE SET NULL,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (user_id, installation_id, session_id)
+		)`,
+		`CREATE INDEX ix_app_journal_sessions_reading_session_id ON app_journal_sessions (reading_session_id)`,
+
 		`DROP INDEX ux_change_log_entries_kind_record_id`,
 		`CREATE UNIQUE INDEX ux_change_log_entries_kind_record_id_user_id ON change_log_entries (kind, record_id, IFNULL(user_id, 0))`,
 		`CREATE INDEX ix_change_log_entries_user_id ON change_log_entries (user_id) WHERE user_id IS NOT NULL`,
@@ -134,6 +148,7 @@ func init() {
 				`DROP INDEX IF EXISTS ix_change_log_entries_user_id`,
 				`DROP INDEX IF EXISTS ux_change_log_entries_kind_record_id_user_id`,
 				`CREATE UNIQUE INDEX ux_change_log_entries_kind_record_id ON change_log_entries (kind, record_id)`,
+				`DROP TABLE IF EXISTS app_journal_sessions`,
 				`DROP TABLE IF EXISTS app_journal_events`,
 			} {
 				if _, err := tx.ExecContext(ctx, statement); err != nil {

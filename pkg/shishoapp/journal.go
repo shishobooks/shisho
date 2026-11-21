@@ -226,7 +226,9 @@ func (h *handler) takeEvent(ctx context.Context, c echo.Context, user *models.Us
 		if err := validate(c, &p); err != nil {
 			return refuse(err.Error()), nil
 		}
-		apply = func(claim claimFunc) (eventOutcome, error) { return h.applySession(ctx, user, device, clock, p, claim) }
+		apply = func(claim claimFunc) (eventOutcome, error) {
+			return h.applySession(ctx, user, device, installation, clock, p, claim)
+		}
 	default:
 		return notUnderstood(fmt.Sprintf("This server doesn't know the event type %q.", ev.Type)), nil
 	}
@@ -367,10 +369,26 @@ func (h *handler) applyPosition(ctx context.Context, user *models.User, device *
 	return eventOutcome{}, err
 }
 
-// applySession records a finished Reading Session at the time it happened,
+// journalSession links one sitting's snapshots to the Reading Session they
+// update; ReadingSessionID is nil once the user deleted it.
+type journalSession struct {
+	bun.BaseModel `bun:"table:app_journal_sessions,alias:ajs"`
+
+	UserID           int       `bun:"user_id,pk"`
+	InstallationID   string    `bun:"installation_id,pk"`
+	SessionID        string    `bun:"session_id,pk"`
+	ReadingSessionID *int      `bun:"reading_session_id"`
+	CreatedAt        time.Time `bun:"created_at,notnull"`
+}
+
+// applySession records a Reading Session at the time it happened,
 // on the Read-through underway then (ADR 0016).
-func (h *handler) applySession(ctx context.Context, user *models.User, device *devices.Device, clock deviceClock,
-	p JournalSessionPayload, claim claimFunc) (eventOutcome, error) {
+//
+// A snapshot of a sitting, named by SessionID, updates the session the
+// sitting's first snapshot made, and a session the user deleted stays
+// deleted: the latest instant wins, and a delete wins (ADR 0024).
+func (h *handler) applySession(ctx context.Context, user *models.User, device *devices.Device, installation string,
+	clock deviceClock, p JournalSessionPayload, claim claimFunc) (eventOutcome, error) {
 	if p.EndedAt.Before(p.StartedAt) {
 		return eventOutcome{refused: "A Reading Session can't end before it starts."}, nil
 	}
@@ -386,7 +404,7 @@ func (h *handler) applySession(ctx context.Context, user *models.User, device *d
 	}
 	ended, _ := clock.instant(p.EndedAt)
 	deviceID := device.ID
-	_, err := h.reading.RecordSession(ctx, user.ID, p.FileID, models.ReadingSourceShishoApp, reading.SessionInput{
+	input := reading.SessionInput{
 		StartedAt:       started,
 		EndedAt:         ended,
 		StartPercentage: p.StartPercentage,
@@ -395,7 +413,31 @@ func (h *handler) applySession(ctx context.Context, user *models.User, device *d
 		DeviceID:        &deviceID,
 		Duration:        p.Duration,
 		Claim:           claim,
-	})
+	}
+	if p.SessionID != "" {
+		link := &journalSession{}
+		err := h.db.NewSelect().Model(link).
+			Where("user_id = ? AND installation_id = ? AND session_id = ?", user.ID, installation, p.SessionID).
+			Scan(ctx)
+		switch {
+		case err == nil && link.ReadingSessionID == nil:
+			// Deleted: the snapshot is taken in and changes nothing.
+			return eventOutcome{}, errors.WithStack(h.db.RunInTx(ctx, nil, claim))
+		case err == nil:
+			_, err = h.reading.ExtendSession(ctx, user.ID, *link.ReadingSessionID, input, claim)
+			return eventOutcome{}, err
+		case !errors.Is(err, sql.ErrNoRows):
+			return eventOutcome{}, errors.WithStack(err)
+		}
+		input.Recorded = func(ctx context.Context, tx bun.Tx, sessionID int) error {
+			_, err := tx.NewInsert().Model(&journalSession{
+				UserID: user.ID, InstallationID: installation, SessionID: p.SessionID,
+				ReadingSessionID: &sessionID, CreatedAt: time.Now(),
+			}).Exec(ctx)
+			return errors.WithStack(err)
+		}
+	}
+	_, err := h.reading.RecordSession(ctx, user.ID, p.FileID, models.ReadingSourceShishoApp, input)
 	if errors.Is(err, reading.ErrFileNotFound) {
 		return eventOutcome{refused: refusedFile}, nil
 	}
