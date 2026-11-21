@@ -450,6 +450,78 @@ jobs:
           key: koreader-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/koreaderharness/harness.go') }}
       - run: mise test:koreader
 
+  # Whether a pull request touches what the Shisho app's jobs test: the
+  # apps, the harness, the Device surface and the server code under it, or
+  # the API types the apps are generated from (what `mise tygo` reads, per
+  # its sources in mise.toml). Pushes to master and release runs always run
+  # them.
+  app-changes:
+    name: Shisho app changes
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.paths.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: paths
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=false
+          while IFS= read -r path; do
+            case "$path" in
+              mobile/* | tools/apptypes/* | tools/appharness/* | internal/testgen/* | tygo.yaml | \
+              pkg/*/types.go | pkg/*/config.go | pkg/*/model.go | pkg/models/* | pkg/mediafile/mediafile.go | \
+              pkg/shishoapp/* | pkg/changefeed/* | pkg/devices/* | pkg/migrations/* | \
+              pkg/server/* | pkg/auth/* | pkg/worker/* | pkg/books/* | pkg/sortspec/* | \
+              mise.toml | .github/workflows/ci.yml)
+                changed=true
+                ;;
+            esac
+          done < <(git diff --name-only "origin/$BASE_REF...HEAD")
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+
+  # The Shisho app's checks: the generated API types' decode tests on both
+  # platforms, the iOS unit tests and build, and the Maestro flows against a
+  # seeded server.
+  app-android:
+    name: Android API types
+    needs: app-changes
+    if: needs.app-changes.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: mise android:test
+
+  app-ios:
+    name: iOS
+    needs: app-changes
+    if: needs.app-changes.outputs.changed == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      # The harness makes its M4B fixture with ffmpeg.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+      - run: mise ios:test
+      - name: Run the Maestro flows
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
+      - name: Keep the harness output
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-output
+          path: ${{ runner.temp }}/harness
+          if-no-files-found: ignore
+
   # The one check branch protection requires, so the shard count and job
   # names can change without editing protection. A job added above that
   # should block merges goes in needs.
@@ -465,9 +537,21 @@ jobs:
       - test-js
       - e2e
       - koreader-harness
+      - app-changes
+      - app-android
+      - app-ios
     if: always()
     runs-on: ubuntu-latest
     steps:
+      # Every job must succeed, except that the Shisho app's are skipped
+      # when a pull request doesn't touch what they test.
       - name: Fail unless every needed job succeeded
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
-        run: exit 1
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          APP_CHANGED: ${{ needs.app-changes.outputs.changed }}
+        run: |
+          jq -e --arg app "$APP_CHANGED" '
+            to_entries | all(
+              .value.result == "success"
+              or (.value.result == "skipped" and $app == "false" and (.key == "app-android" or .key == "app-ios"))
+            )' <<< "$NEEDS"

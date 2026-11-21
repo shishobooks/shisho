@@ -16,9 +16,15 @@ import (
 )
 
 // baseSimulatorName is the simulator every run clones. The harness makes it
-// once and never boots it, so a clone always starts from a clean device and
-// runs in other worktrees never share one.
-const baseSimulatorName = "Shisho Harness Base"
+// once and boots it once, so iOS's first-boot setup is done in the base
+// rather than in every clone: a clone then boots in seconds instead of half a
+// minute here, and minutes on CI. Runs never boot it again, so a clone always
+// starts from the same device and runs in other worktrees never share one.
+const baseSimulatorName = "Shisho Harness Base (Set Up)"
+
+// oldBaseSimulatorName is the base from before bases were booted once, which
+// the harness deletes and replaces.
+const oldBaseSimulatorName = "Shisho Harness Base"
 
 // iPhoneType matches a plain current iPhone, such as "iPhone 17".
 var iPhoneType = regexp.MustCompile(`^iPhone \d+$`)
@@ -68,6 +74,13 @@ func baseSimulator(ctx context.Context) (string, error) {
 	}
 	for _, devices := range listing.Devices {
 		for _, d := range devices {
+			if d.Name == oldBaseSimulatorName {
+				_, _ = simctl(ctx, "delete", d.UDID)
+			}
+		}
+	}
+	for _, devices := range listing.Devices {
+		for _, d := range devices {
 			if d.Name == baseSimulatorName {
 				return d.UDID, nil
 			}
@@ -93,12 +106,33 @@ func baseSimulator(ctx context.Context) (string, error) {
 		}
 		for _, dt := range rt.SupportedDeviceTypes {
 			if iPhoneType.MatchString(dt.Name) {
-				fmt.Fprintf(os.Stderr, "appharness: making the base simulator, an %s on iOS %s\n", dt.Name, rt.Version)
-				return simctl(ctx, "create", baseSimulatorName, dt.Identifier, rt.Identifier)
+				fmt.Fprintf(os.Stderr, "appharness: making the base simulator, an %s on iOS %s, and booting it once\n", dt.Name, rt.Version)
+				udid, err := simctl(ctx, "create", baseSimulatorName, dt.Identifier, rt.Identifier)
+				if err != nil {
+					return "", err
+				}
+				if err := setUp(ctx, udid); err != nil {
+					_, _ = simctl(ctx, "delete", udid)
+					return "", err
+				}
+				return udid, nil
 			}
 		}
 	}
 	return "", errors.New("no iOS simulator runtime with an iPhone is installed; install one in Xcode's Components settings")
+}
+
+// setUp boots a new simulator until iOS finishes its first-boot setup, then
+// shuts it down.
+func setUp(ctx context.Context, udid string) error {
+	if _, err := simctl(ctx, "boot", udid); err != nil {
+		return err
+	}
+	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+		return err
+	}
+	_, err := simctl(ctx, "shutdown", udid)
+	return err
 }
 
 // versionLess compares dotted versions numerically.
