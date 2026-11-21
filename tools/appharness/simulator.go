@@ -22,7 +22,8 @@ import (
 // starts from the same device and runs in other worktrees never share one.
 //
 // The number changes when how the harness makes a base does; it deletes a
-// base of an older number and makes a new one. CI caches the base.
+// base of an older number and makes a new one. CI caches the base by this
+// name (.github/actions/setup-ios), so keep it on one line as it is.
 const baseSimulatorName = "Shisho Harness Base 2"
 
 // oldBaseSimulatorPrefix names every base the harness has made.

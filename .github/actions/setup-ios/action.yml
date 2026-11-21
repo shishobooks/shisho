@@ -25,7 +25,14 @@ runs:
         # image builds and boots afresh.
         image="$ImageOS-$ImageVersion"
         echo "image=$image" >> "$GITHUB_OUTPUT"
-        echo "simulator=ios-base-simulator-$image-${{ hashFiles('tools/appharness/simulator.go') }}" >> "$GITHUB_OUTPUT"
+        # The base's name carries a number that changes when how the
+        # harness makes a base does, so other edits keep the cache.
+        base=$(sed -nE 's/^const baseSimulatorName = "(.*)"$/\1/p' tools/appharness/simulator.go)
+        if [ -z "$base" ]; then
+          echo "::error::Couldn't read baseSimulatorName from tools/appharness/simulator.go"
+          exit 1
+        fi
+        echo "simulator=ios-base-simulator-$image-${base// /-}" >> "$GITHUB_OUTPUT"
         echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
         echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
         echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
