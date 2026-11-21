@@ -20,8 +20,14 @@ import (
 // that ended with no end day ended at some unknown time, so it covers no day
 // after its begin day for certain and takes nothing. The latest wins a day
 // two of them share, as when a reread began the day the read before it
-// ended.
+// ended. A Reference Book's sessions belong to none.
 func readThroughAt(ctx context.Context, db bun.IDB, userID, bookID int, instant time.Time) (*models.ReadThrough, error) {
+	// A Reference Book's Reading Sessions are lookups, which belong to no
+	// Read-through (ADR 0028), even one that ended that day.
+	reference, err := isReference(ctx, db, userID, bookID)
+	if err != nil || reference {
+		return nil, err
+	}
 	day, err := userDay(ctx, db, userID, instant)
 	if err != nil {
 		return nil, err

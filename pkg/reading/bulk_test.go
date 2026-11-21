@@ -199,3 +199,24 @@ func TestBulk_DatabaseFailureIs500(t *testing.T) {
 		})
 	}
 }
+
+// The Reference routes' 404 and 422 are only for a missing Book or one in
+// the wrong state: a failed lookup of either is a 500.
+func TestReferenceRoutes_DatabaseFailureIs500(t *testing.T) {
+	t.Parallel()
+	for _, table := range []string{"books", "user_books"} {
+		t.Run(table, func(t *testing.T) {
+			t.Parallel()
+			db := testdb.New(t)
+			api := newReadingAPI(t, db, createUser(t, db, "reader", 2))
+			book := createBook(t, db, "Dune")
+			_, err := db.Exec("DROP TABLE " + table)
+			require.NoError(t, err)
+
+			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, "/books/bulk/reference", BulkReferencePayload{BookIDs: []int{book.ID}}).Code)
+			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, "/books/bulk/remove-reference", BulkReferencePayload{BookIDs: []int{book.ID}}).Code)
+			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, fmt.Sprintf("/books/%d/reference", book.ID), nil).Code)
+			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodDelete, fmt.Sprintf("/books/%d/reference", book.ID), nil).Code)
+		})
+	}
+}

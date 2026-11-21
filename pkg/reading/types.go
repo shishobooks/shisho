@@ -82,6 +82,12 @@ type BulkNotStartedPayload struct {
 	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
 }
 
+// BulkReferencePayload marks each of the named Books Reference, or removes
+// the mark, as doing so for one does.
+type BulkReferencePayload struct {
+	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+}
+
 // BulkReadingResponse says how many of the named Books a bulk reading
 // change changed and how many it skipped because they were already in the
 // state it sets. A Book named twice counts once.

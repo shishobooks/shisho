@@ -19,7 +19,7 @@ type ListBooksQuery struct {
 	ToRead         bool     `query:"to_read" json:"to_read,omitempty"`                                                                                              // Only the caller's To Read, in queue order, whatever the sort
 	// Only Books whose caller's Reading Status is any of these; "none"
 	// matches Books with no status.
-	ReadingStatuses []string `query:"reading_status" json:"reading_status,omitempty" validate:"omitempty,max=6,dive,oneof=currently_reading paused to_read read did_not_finish none" tstype:"ReadingStatusFilter[]"`
+	ReadingStatuses []string `query:"reading_status" json:"reading_status,omitempty" validate:"omitempty,max=7,dive,oneof=currently_reading paused to_read read did_not_finish reference none" tstype:"ReadingStatusFilter[]"`
 	// Only Books the caller rated in this range of stars, both ends included.
 	RatingMin *float64 `query:"rating_min" json:"rating_min,omitempty" validate:"omitempty,min=0.25,max=5" tstype:"number"`
 	RatingMax *float64 `query:"rating_max" json:"rating_max,omitempty" validate:"omitempty,min=0.25,max=5" tstype:"number"`

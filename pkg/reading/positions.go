@@ -132,10 +132,11 @@ type SessionInput struct {
 //  1. ignores an update older than the stored position, recording only its
 //     session
 //  2. undoes the File's automatic finish when this is the next update back
-//     before the end, within RevertWindow, from the reader that finished it
+//     before the end, within RevertWindow, from the reader that finished it,
+//     unless the Book is Reference
 //  3. starts a Read-through when none is underway, the update is real
 //     progress, and the Book is unread or on To Read, taking it off To Read
-//     and resetting its other positions
+//     and resetting its other positions. A Reference Book never starts one.
 //  4. resumes a paused Read-through on real progress made since the pause
 //  5. finishes the Read-through underway on reaching the end, or on a
 //     reported finish, dated in the user's time zone
@@ -202,8 +203,20 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		reportedFinish := reading && u.ReportedStatus == ReportedFinished
 		reported := reading && u.ReportedStatus != ReportedNothing
 
+		// Only the user's own choices change a Reference Book's status (ADR
+		// 0028), so nothing here reopens a Read-through in it. Marking it
+		// Reference clears its automatic finishes, but a merge can bring in
+		// another Book's. Nothing is underway in it to finish, and
+		// startsOnProgress never starts one.
 		if underway == nil && !atEnd && moved && reading && !reportedFinish {
-			reverted, err := revertAutoFinish(ctx, tx, u, occurredAt, now)
+			reference, err := isReference(ctx, tx, u.UserID, bookID)
+			if err != nil {
+				return err
+			}
+			var reverted *models.ReadThrough
+			if !reference {
+				reverted, err = revertAutoFinish(ctx, tx, u, occurredAt, now)
+			}
 			if err != nil {
 				return err
 			}
@@ -476,13 +489,19 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 	if err != nil {
 		return 0, err
 	}
+	// A Reference Book's sessions are lookups, which belong to no
+	// Read-through (ADR 0028), even one an update during them was part of.
+	reference, err := isReference(ctx, tx, userID, file.BookID)
+	if err != nil {
+		return 0, err
+	}
 	var sessionReadThrough *int
 	if rt != nil && coversDay(rt, day) {
 		sessionReadThrough = &rt.ID
 	}
 	// An update sent during the session, such as the one it came with, says
 	// which read it was part of, even when that read began after midnight.
-	if sessionReadThrough == nil {
+	if sessionReadThrough == nil && !reference {
 		var ranDuring int
 		err := tx.NewSelect().
 			Model((*models.ReadingPositionUpdate)(nil)).
@@ -574,7 +593,9 @@ func revertAutoFinish(ctx context.Context, tx bun.Tx, u PositionUpdate, occurred
 // reopenAutoFinished makes the finished Read-through rtID underway again
 // and clears its update's automatic finish, so it's undone only once. A Book
 // added to To Read since leaves it, as a Book underway can't be on To Read.
-// It returns nil when rtID is no longer finished.
+// It returns nil when rtID is no longer finished, or its Book is Reference,
+// which never has a Read-through underway (ADR 0028), whichever Book the
+// File that finished it is in now.
 func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time) (*models.ReadThrough, error) {
 	rt := &models.ReadThrough{}
 	err := tx.NewSelect().Model(rt).Where("rt.id = ? AND rt.outcome = ?", rtID, models.ReadThroughOutcomeFinished).Scan(ctx)
@@ -583,6 +604,12 @@ func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time)
 	}
 	if err != nil {
 		return nil, errors.WithStack(err)
+	}
+	if rt.BookID != nil {
+		reference, err := isReference(ctx, tx, rt.UserID, *rt.BookID)
+		if err != nil || reference {
+			return nil, err
+		}
 	}
 	rt.Outcome = models.ReadThroughOutcomeUnderway
 	rt.EndDay = nil
@@ -605,13 +632,29 @@ func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time)
 }
 
 // UndoAutoFinish undoes the automatic finish of rt, for Undo on the finish
-// toast, refusing with ErrNotAutoFinished a finish no position update made,
-// and with ErrAlreadyUnderway when another Read-through is underway.
+// toast, refusing with ErrUndoOnReference once the Book is marked
+// Reference, the later choice, with ErrNotAutoFinished a finish no position
+// update made, and with ErrAlreadyUnderway when another Read-through is
+// underway.
 func (svc *Service) UndoAutoFinish(ctx context.Context, rt *models.ReadThrough) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// rt may have changed since it was loaded, such as by a merge moving
+		// it to another Book.
+		if err := tx.NewSelect().Model(rt).WherePK().Scan(ctx); errors.Is(err, sql.ErrNoRows) {
+			return ErrNotAutoFinished
+		} else if err != nil {
+			return errors.WithStack(err)
+		}
 		// A detached Read-through's finish has no Book to read again.
 		if rt.Outcome != models.ReadThroughOutcomeFinished || rt.BookID == nil {
 			return ErrNotAutoFinished
+		}
+		reference, err := isReference(ctx, tx, rt.UserID, *rt.BookID)
+		if err != nil {
+			return err
+		}
+		if reference {
+			return ErrUndoOnReference
 		}
 		exists, err := tx.NewSelect().
 			Model((*models.ReadingPositionUpdate)(nil)).
@@ -796,13 +839,15 @@ func userLocation(ctx context.Context, db bun.IDB, userID int) (*time.Location, 
 // startsOnProgress reports whether reading userID's bookID, with nothing
 // underway, starts a Read-through: for a Book never read, or one on To Read,
 // which plans a reread. Opening a Book already read or abandoned is looking
-// something up until the user chooses Read again.
+// something up until the user chooses Read again, and so is every visit to a
+// Reference Book (ADR 0028).
 func startsOnProgress(ctx context.Context, db bun.IDB, userID, bookID int) (bool, error) {
 	var starts bool
 	err := db.NewSelect().
-		ColumnExpr(`NOT EXISTS (SELECT 1 FROM read_throughs WHERE user_id = ? AND book_id = ?)
-			OR EXISTS (SELECT 1 FROM user_books WHERE user_id = ? AND book_id = ? AND to_read_position IS NOT NULL)`,
-			userID, bookID, userID, bookID).
+		ColumnExpr(`NOT EXISTS (SELECT 1 FROM user_books WHERE user_id = ? AND book_id = ? AND reference)
+			AND (NOT EXISTS (SELECT 1 FROM read_throughs WHERE user_id = ? AND book_id = ?)
+				OR EXISTS (SELECT 1 FROM user_books WHERE user_id = ? AND book_id = ? AND to_read_position IS NOT NULL))`,
+			userID, bookID, userID, bookID, userID, bookID).
 		Scan(ctx, &starts)
 	return starts, errors.WithStack(err)
 }

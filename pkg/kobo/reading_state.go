@@ -167,6 +167,9 @@ func (r *readingStates) build(ctx context.Context, in *stateInputs) *ReadingStat
 
 // koboStatus is the Kobo status closest to a Reading Status. A Kobo has no
 // paused or abandoned book, so both stay Reading, which keeps the bookmark.
+// Nor has it a Reference one, which goes as ReadyToRead with its bookmark
+// (ADR 0028): the Kobo may still show it as reading, and its reports don't
+// change it.
 func koboStatus(status *string) string {
 	if status == nil {
 		return koboStatusReadyToRead

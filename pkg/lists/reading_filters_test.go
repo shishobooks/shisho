@@ -98,11 +98,17 @@ func TestListBooks_FiltersByReadingStatus(t *testing.T) {
 	untouchedA := f.add(t, f.libA, "Untouched A")
 	readB := f.add(t, f.libB, "Read B")
 	queuedB := f.add(t, f.libB, "Queued B")
+	referenceB := f.add(t, f.libB, "Reference B")
 	finish(t, f.db, f.owner.ID, readA.ID, "2026-01-01")
 	finish(t, f.db, f.owner.ID, readB.ID, "2026-01-01")
 	require.NoError(t, reading.NewService(f.db).AddToRead(t.Context(), f.owner.ID, queuedB.ID))
+	require.NoError(t, reading.NewService(f.db).MarkReference(t.Context(), f.owner.ID, referenceB.ID))
 
-	ids, total := listBookIDs(t, f.h, f.owner, f.list.ID, "reading_status=read")
+	ids, total := listBookIDs(t, f.h, f.owner, f.list.ID, "reading_status=reference")
+	assert.Equal(t, []int{referenceB.ID}, ids)
+	assert.Equal(t, 1, total)
+
+	ids, total = listBookIDs(t, f.h, f.owner, f.list.ID, "reading_status=read")
 	assert.Equal(t, []int{readA.ID, readB.ID}, ids)
 	assert.Equal(t, 2, total)
 
@@ -192,11 +198,13 @@ func TestListBooks_SortsByReadingStatus(t *testing.T) {
 	read := f.add(t, f.libA, "Read")
 	untouched := f.add(t, f.libB, "Untouched")
 	current := f.add(t, f.libB, "Current")
+	reference := f.add(t, f.libA, "Reference")
 	finish(t, f.db, f.owner.ID, read.ID, "2026-01-01")
 	require.NoError(t, reading.NewService(f.db).Start(t.Context(), f.owner.ID, current.ID, "2026-01-01"))
+	require.NoError(t, reading.NewService(f.db).MarkReference(t.Context(), f.owner.ID, reference.ID))
 
 	ids, _ := listBookIDs(t, f.h, f.owner, f.list.ID, "sort=reading_status_asc")
-	assert.Equal(t, []int{current.ID, read.ID, untouched.ID}, ids)
+	assert.Equal(t, []int{current.ID, read.ID, reference.ID, untouched.ID}, ids)
 	ids, _ = listBookIDs(t, f.h, f.owner, f.list.ID, "sort=reading_status_desc")
-	assert.Equal(t, []int{untouched.ID, read.ID, current.ID}, ids)
+	assert.Equal(t, []int{untouched.ID, reference.ID, read.ID, current.ID}, ids)
 }

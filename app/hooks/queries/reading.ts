@@ -455,10 +455,39 @@ export const useDeleteReadThrough = () => {
   });
 };
 
+interface SetReferenceVariables {
+  bookId: number;
+  reference: boolean;
+}
+
+// Marks a Book Reference, or removes the mark. Marking it turns a
+// Read-through underway into plain Reading Sessions, which Reading History
+// and Stats show, so onReadingChanged refetches them.
+export const useSetReference = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    BookReadingResponse,
+    ShishoAPIError,
+    SetReferenceVariables
+  >({
+    mutationFn: ({ bookId, reference }) => {
+      return API.request(
+        reference ? "POST" : "DELETE",
+        `/reading/books/${bookId}/reference`,
+        null,
+        null,
+      );
+    },
+    onSuccess: (data) => onReadingChanged(queryClient, data),
+  });
+};
+
 // A reading change made to many Books at once from the selection toolbar,
-// named by its route (pkg/reading/routes.go): marking each read, or marking
-// each not started, which deletes its Read-through underway.
-export type BulkReadingAction = "finish" | "not-started";
+// named by its route (pkg/reading/routes.go): marking each read, marking
+// each not started, which deletes its Read-through underway, or marking each
+// Reference or removing the mark.
+export type BulkReadingAction =
+  "finish" | "not-started" | "reference" | "remove-reference";
 
 interface BulkReadingChangeVariables {
   action: BulkReadingAction;
@@ -477,10 +506,10 @@ export const useBulkReadingChange = () => {
     BulkReadingChangeVariables
   >({
     mutationFn: ({ action, bookIds }) => {
-      if (action === "not-started") {
+      if (action !== "finish") {
         return API.request(
           "POST",
-          "/reading/books/bulk/not-started",
+          `/reading/books/bulk/${action}`,
           { book_ids: bookIds },
           null,
         );

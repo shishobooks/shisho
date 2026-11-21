@@ -6,17 +6,18 @@ Each user can record their reading of a book, rate it, and look back at its hist
 
 A book's **Reading Status** shows on its page, next to its actions, and as a bookmark hanging from the top of its cover, on its page and on its card wherever books are listed. Each status has its own bookmark color and icon, and hovering over the bookmark names it. It is one of:
 
-| Status                | Meaning                                                    |
-| --------------------- | ---------------------------------------------------------- |
-| **Currently Reading** | You started the book and haven't finished or abandoned it. |
-| **Paused**            | You started the book and set it aside for now.             |
-| **To Read**           | The book is on your [To Read](#to-read) queue.             |
-| **Read**              | The last time you read the book, you finished it.          |
-| **Did Not Finish**    | The last time you read the book, you abandoned it.         |
+| Status                | Meaning                                                                                                          |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| **Currently Reading** | You started the book and haven't finished or abandoned it.                                                       |
+| **Paused**            | You started the book and set it aside for now.                                                                   |
+| **To Read**           | The book is on your [To Read](#to-read) queue.                                                                   |
+| **Read**              | The last time you read the book, you finished it.                                                                |
+| **Did Not Finish**    | The last time you read the book, you abandoned it.                                                               |
+| **Reference**         | You dip into the book rather than read it through, such as a cookbook or a textbook. See [Reference Books](#reference-books). |
 
 A book you have never tracked has no status and no bookmark.
 
-The status follows your history. A book you are reading or have paused shows that, whatever happened before. Otherwise a book on To Read shows **To Read**, even if you have read it before. Otherwise it shows how your latest read ended, where latest means the latest end date. A read with no end date counts as older than any dated one, so editing or deleting a Read-through can change the status.
+The status follows your history. A book you are reading or have paused shows that, whatever happened before. Otherwise a book on To Read shows **To Read**, even if you have read it before. Otherwise a book you marked **Reference** shows that, even if you finished or abandoned it before. Otherwise it shows how your latest read ended, where latest means the latest end date. A read with no end date counts as older than any dated one, so editing or deleting a Read-through can change the status.
 
 ## Changing the Status
 
@@ -28,6 +29,7 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 - **Mark as read** finishes the read you're on, dated [the day you last read it](#last-read). With nothing underway, it records a finished read that ended today with no start date, for a book you read before you used Shisho.
 - **Mark as Did Not Finish** ends the read you're on as abandoned, dated the same way.
 - **Mark as not started** takes back the read you're on, as if you had never started it: it's deleted from the history, every main file of the book opens at the start again, and a book that left To Read when you started it goes back to its place there.
+- **Mark as Reference** and **Remove from Reference** set and clear [Reference](#reference-books).
 
 "Today" is the date in [your time zone](#your-time-zone) when you choose the action. To correct a date afterwards, use **Edit dates** in [Reading History](#reading-history).
 
@@ -37,8 +39,29 @@ To fix the status of many books together, such as books a device's reading histo
 
 - **Mark as read** does what it does on one book for each selected book. Books already **Read** are skipped, so they don't gain a second finished read.
 - **Mark as not started** does what it does on one book for each selected book you're reading or have paused, after you confirm how many reads it deletes. Other books are skipped.
+- **Mark as Reference** does what it does on one book for each selected book. When any of them are being read or paused, you confirm first, told how many reads leave your history. Books already **Reference** are skipped.
+- **Remove from Reference** does what it does on one book for each selected **Reference** book. Other books are skipped.
 
 A message says how many books changed and how many were skipped.
+
+## Reference Books
+
+Some books you dip into rather than read through: a cookbook opened for one recipe, a textbook for one chapter, an anthology for one story. Mark such a book **Reference** so a visit doesn't leave it **Currently Reading** for days and then force you to call it **Read** or **Did Not Finish**. Reference is your own choice for the book, like your rating: other users see their own status.
+
+**Mark as Reference** in the status menu:
+
+- takes the book off To Read;
+- turns a read you're on, paused or not, into plain reading sessions. The read leaves your [reading history](#reading-history), but the reading time recorded during it still counts toward your [Reading Stats](./reading-stats.md), and every file keeps its place. Because the history loses an entry, Shisho asks you to confirm first. With no read underway, it applies right away.
+
+While a book is **Reference**:
+
+- Reading it in Shisho or on a device moves your place and adds reading time, but never starts, finishes, or resumes a read. Reaching the last page doesn't mark it read, and **Undo** on an earlier automatic finish is refused.
+- It never shows on the [Currently Reading page](#currently-reading-page).
+- Its earlier finished and abandoned reads stay in the history and keep counting in Reading Stats, so a textbook you finished in 2024 still counts in 2024.
+- Only your own choices in Shisho change its status. [KOReader](./koreader.md#statuses-and-ratings) and a [Kobo](./kobo-sync.md#reading-progress) can't, though their reading time and place still come through.
+- You can still rate it.
+
+To stop treating a book as Reference, choose another status. **Mark as read**, **Add to To Read**, and **Start reading** (**Read again** on a book you read before) each clear it, and starting sends the book's files back to the start, as it always does. **Remove from Reference** clears it and records nothing: the book shows **Read** or **Did Not Finish** again if you read it before, or no status if you never did, and a book you never read starts a read the next time you turn past its first page.
 
 ## Reading on Devices
 
@@ -141,7 +164,7 @@ Your statuses and ratings are ways to browse, in a library's gallery and on any 
 
 - **Filter** has a **Reading status** picker, where you can choose one or more statuses, and **No status** for books you have never tracked. A book matching any chosen status shows. Below it, the **Rating** slider sets a range in quarter stars: drag the left end up to set the lowest rating, and the right end down to set the highest. An end left at its edge, marked **Any**, sets no limit on that side. Unrated books match only while both ends are at **Any**.
 - **Sort** offers **Reading status**, **Rating**, **Date finished**, and **Last read**.
-  - **Reading status** orders books Currently Reading, Paused, To Read, Read, Did Not Finish, then books with no status, so the books you're reading come first. Reverse it to put them last. Add another level, such as **Date added**, to order books with the same status.
+  - **Reading status** orders books Currently Reading, Paused, To Read, Read, Did Not Finish, Reference, then books with no status, so the books you're reading come first. Reverse it to put them last. Add another level, such as **Date added**, to order books with the same status.
   - **Rating**, **Date finished**, and **Last read** start highest and latest first. Date finished is the end date of your latest finished read; a book you abandoned, or finished with no end date, has none. [Last read](#last-read) only applies to books you're reading or have paused. Books with no rating or date come last in either direction.
   - A list's sort menu offers **Currently Reading First**, **Currently Reading Last**, **Rating (high to low)**, **Rating (low to high)**, **Recently Finished**, and **Earliest Finished**.
 
@@ -192,6 +215,7 @@ When [merging books](./managing-books-and-files.md#merging-books) removes a book
 
 - The merged book keeps its own rating and its place on To Read. When it has none, it takes those of a removed book, the one added to Shisho first if several have one.
 - If both books were being read, the two reads become one, starting on the earlier start date.
+- Whether the merged book is [Reference](#reference-books) follows whichever book you chose a status for more recently. Merging never deletes a read to keep Reference, so a merged book you're reading or have on To Read stops being Reference.
 
 Moving only some of a book's files moves no reading data. A user who loses access to a library keeps their reading data, and sees it again if their access returns.
 

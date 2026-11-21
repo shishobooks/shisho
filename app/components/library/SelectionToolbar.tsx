@@ -2,11 +2,13 @@ import {
   BookCheck,
   BookDashed,
   BookOpen,
+  BookX,
   CheckCircle,
   ChevronUp,
   Circle,
   Download,
   GitMerge,
+  Library,
   List,
   Loader2,
   MoreHorizontal,
@@ -83,6 +85,7 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const [morePopoverOpen, setMorePopoverOpen] = useState(false);
   const [readingPopoverOpen, setReadingPopoverOpen] = useState(false);
   const [confirmingNotStarted, setConfirmingNotStarted] = useState(false);
+  const [confirmingReference, setConfirmingReference] = useState(false);
   const [actionsPopoverOpen, setActionsPopoverOpen] = useState(false);
   const [addingToListId, setAddingToListId] = useState<number | null>(null);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
@@ -238,29 +241,48 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     }
   };
 
+  // What each bulk reading change says it did, and what it says on failure.
+  const bulkReadingMessages: Record<
+    BulkReadingAction,
+    { done: (books: string) => string; failed: string }
+  > = {
+    finish: {
+      done: (books) => `Marked ${books} as read`,
+      failed: "Failed to mark books as read",
+    },
+    "not-started": {
+      done: (books) => `Marked ${books} as not started`,
+      failed: "Failed to mark books as not started",
+    },
+    reference: {
+      done: (books) => `Marked ${books} as Reference`,
+      failed: "Failed to mark books as Reference",
+    },
+    "remove-reference": {
+      done: (books) => `Removed ${books} from Reference`,
+      failed: "Failed to remove books from Reference",
+    },
+  };
+
   const handleBulkReading = async (action: BulkReadingAction) => {
+    const messages = bulkReadingMessages[action];
     try {
       const result = await bulkReadingMutation.mutateAsync({
         action,
         bookIds: selectedBookIds,
       });
-      const label = action === "finish" ? "read" : "not started";
       const skipped =
         result.skipped > 0
           ? `, ${result.skipped.toLocaleString()} skipped`
           : "";
       toast.success(
-        `Marked ${formatCount(result.changed, "book")} as ${label}${skipped}`,
+        `${messages.done(formatCount(result.changed, "book"))}${skipped}`,
       );
       setConfirmingNotStarted(false);
+      setConfirmingReference(false);
       exitSelectionMode();
     } catch (error) {
-      toastRequestError(
-        error,
-        action === "finish"
-          ? "Failed to mark books as read"
-          : "Failed to mark books as not started",
-      );
+      toastRequestError(error, messages.failed);
     }
   };
 
@@ -292,14 +314,26 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
         book.reading_status === "paused"),
   ).length;
   // Known only when every selected book loaded: a selection can be larger
-  // than one page of books.
+  // than one page of books, and a selection that just changed may still
+  // show the previous one's books.
   const underwayKnown =
-    (allSelectedBooksQuery.data?.items.length ?? 0) >= selectedBookIds.length;
+    !allSelectedBooksQuery.isPlaceholderData &&
+    selectedBookIds.every((id) => allBooks.some((book) => book.id === id));
   const readsUnderway =
     !underwayKnown || underwayCount === 1
       ? `The read underway on ${underwayKnown ? "1 book" : "each selected book"} is deleted`
       : `The reads underway on ${formatCount(underwayCount, "book")} are deleted`;
-  const notStartedDescription = `${readsUnderway}, along with the reading time and places recorded during it, and the books' main files open at the start again. A book that left To Read when it was started goes back to its place there. Books that aren't being read are skipped.`;
+  // "it" for one read, or when each book has its own, "them" for several.
+  const duringReads =
+    !underwayKnown || underwayCount === 1 ? "during it" : "during them";
+  const notStartedDescription = `${readsUnderway}, along with the reading time and places recorded ${duringReads}, and the books' main files open at the start again. A book that left To Read when it was started goes back to its place there. Books that aren't being read are skipped.`;
+  // Marking Reference takes each read underway out of the history but keeps
+  // its time, so its confirmation counts them the same way.
+  const readsLeavingHistory =
+    !underwayKnown || underwayCount === 1
+      ? `The read underway on ${underwayKnown ? "1 book" : "each selected book"} leaves your reading history`
+      : `The reads underway on ${formatCount(underwayCount, "book")} leave your reading history`;
+  const referenceDescription = `${readsLeavingHistory}, but the reading time recorded ${duringReads} still counts, and every file keeps its place. The books leave To Read, and opening them never starts or finishes a read while they're Reference.`;
 
   // The reading actions, for the phone menu and the desktop popover. onPick
   // closes whichever holds them.
@@ -335,6 +369,37 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
       >
         <BookDashed className="h-4 w-4 shrink-0 text-muted-foreground" />
         <span className="truncate">Mark as not started</span>
+      </Button>
+      <Button
+        className="w-full justify-start gap-2 font-normal"
+        disabled={bulkReadingMutation.isPending}
+        onClick={() => {
+          onPick();
+          // With nothing being read, nothing leaves the history to confirm.
+          if (underwayKnown && underwayCount === 0) {
+            handleBulkReading("reference");
+            return;
+          }
+          setConfirmingReference(true);
+        }}
+        size="sm"
+        variant="ghost"
+      >
+        <Library className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="truncate">Mark as Reference</span>
+      </Button>
+      <Button
+        className="w-full justify-start gap-2 font-normal"
+        disabled={bulkReadingMutation.isPending}
+        onClick={() => {
+          onPick();
+          handleBulkReading("remove-reference");
+        }}
+        size="sm"
+        variant="ghost"
+      >
+        <BookX className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="truncate">Remove from Reference</span>
       </Button>
     </>
   );
@@ -714,6 +779,18 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
           onOpenChange={setConfirmingNotStarted}
           open={confirmingNotStarted}
           title={`Mark ${bookLabel} as not started?`}
+        />
+      )}
+
+      {canTrackReading && (
+        <ConfirmDialog
+          confirmLabel="Mark as Reference"
+          description={referenceDescription}
+          isPending={bulkReadingMutation.isPending}
+          onConfirm={() => handleBulkReading("reference")}
+          onOpenChange={setConfirmingReference}
+          open={confirmingReference}
+          title={`Mark ${bookLabel} as Reference?`}
         />
       )}
 

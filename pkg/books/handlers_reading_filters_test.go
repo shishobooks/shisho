@@ -64,8 +64,10 @@ func TestListHandler_FiltersByReadingStatus(t *testing.T) {
 	dnf := seedBook(t, db, lib, "DNF", "DNF", now.Add(-4*time.Hour))
 	untouched := seedBook(t, db, lib, "Untouched", "Untouched", now.Add(-5*time.Hour))
 	ratedOnly := seedBook(t, db, lib, "Rated only", "Rated only", now.Add(-6*time.Hour))
+	reference := seedBook(t, db, lib, "Reference", "Reference", now.Add(-7*time.Hour))
 
 	seedReading(t, db, reader.ID, current.ID, nil, [2]string{"start", "2026-01-01"})
+	require.NoError(t, reading.NewService(db).MarkReference(context.Background(), reader.ID, reference.ID))
 	seedReading(t, db, reader.ID, paused.ID, nil, [2]string{"start", "2026-01-01"}, [2]string{"pause", ""})
 	require.NoError(t, reading.NewService(db).AddToRead(context.Background(), reader.ID, queued.ID))
 	seedReading(t, db, reader.ID, read.ID, nil, [2]string{"finish", "2026-02-01"})
@@ -84,6 +86,7 @@ func TestListHandler_FiltersByReadingStatus(t *testing.T) {
 		{"reading_status=to_read", []int{queued.ID}},
 		{"reading_status=read", []int{read.ID}},
 		{"reading_status=did_not_finish", []int{dnf.ID}},
+		{"reading_status=reference", []int{reference.ID}},
 		{"reading_status=none", []int{untouched.ID, ratedOnly.ID}},
 		{"reading_status=read&reading_status=did_not_finish", []int{read.ID, dnf.ID}},
 		{"reading_status=none&reading_status=currently_reading", []int{current.ID, untouched.ID, ratedOnly.ID}},
@@ -328,6 +331,7 @@ func TestListHandler_SortsByReadingStatus(t *testing.T) {
 
 	now := time.Now()
 	untouched := seedBook(t, db, lib, "Untouched", "Untouched", now)
+	reference := seedBook(t, db, lib, "Reference", "Reference", now.Add(-30*time.Minute))
 	dnf := seedBook(t, db, lib, "DNF", "DNF", now.Add(-1*time.Hour))
 	read := seedBook(t, db, lib, "Read", "Read", now.Add(-2*time.Hour))
 	queued := seedBook(t, db, lib, "Queued", "Queued", now.Add(-3*time.Hour))
@@ -341,14 +345,15 @@ func TestListHandler_SortsByReadingStatus(t *testing.T) {
 	require.NoError(t, reading.NewService(db).AddToRead(context.Background(), reader.ID, queued.ID))
 	seedReading(t, db, reader.ID, read.ID, nil, [2]string{"finish", "2026-02-01"})
 	seedReading(t, db, reader.ID, dnf.ID, nil, [2]string{"start", "2026-01-01"}, [2]string{"abandon", "2026-02-01"})
+	require.NoError(t, reading.NewService(db).MarkReference(context.Background(), reader.ID, reference.ID))
 	// Another user's reading doesn't sort the reader's listing.
 	seedReading(t, db, other.ID, untouched.ID, nil, [2]string{"start", "2026-01-01"})
 
 	ids, _ := listBookIDs(t, db, reader, "library_id="+itoa(lib.ID)+"&sort=reading_status:asc,title:asc")
-	assert.Equal(t, []int{readingA.ID, readingB.ID, paused.ID, queued.ID, read.ID, dnf.ID, untouched.ID}, ids)
+	assert.Equal(t, []int{readingA.ID, readingB.ID, paused.ID, queued.ID, read.ID, dnf.ID, reference.ID, untouched.ID}, ids)
 
 	ids, _ = listBookIDs(t, db, reader, "library_id="+itoa(lib.ID)+"&sort=reading_status:desc,title:asc")
-	assert.Equal(t, []int{untouched.ID, dnf.ID, read.ID, queued.ID, paused.ID, readingA.ID, readingB.ID}, ids)
+	assert.Equal(t, []int{untouched.ID, reference.ID, dnf.ID, read.ID, queued.ID, paused.ID, readingA.ID, readingB.ID}, ids)
 }
 
 func reloadUser(t *testing.T, db *bun.DB, id int) *models.User {

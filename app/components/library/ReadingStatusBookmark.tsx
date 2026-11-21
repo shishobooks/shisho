@@ -2,6 +2,7 @@ import {
   BookOpen,
   Check,
   Clock,
+  Library,
   Pause,
   X,
   type LucideIcon,
@@ -17,6 +18,7 @@ const LOOKS: Record<ReadingStatus, { icon: LucideIcon; color: string }> = {
   to_read: { icon: Clock, color: "bg-sky-500" },
   read: { icon: Check, color: "bg-emerald-600" },
   did_not_finish: { icon: X, color: "bg-rose-600" },
+  reference: { icon: Library, color: "bg-teal-600" },
 };
 
 interface ReadingStatusBookmarkProps {

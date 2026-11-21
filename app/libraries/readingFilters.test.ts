@@ -4,6 +4,7 @@ import {
   hasReadingFilters,
   parseReadingFilters,
   ratingRangeLabel,
+  READING_STATUS_FILTER_OPTIONS,
   readingFilterQuery,
   setRatingRangeParams,
   toggleReadingStatusParam,
@@ -23,6 +24,12 @@ describe("parseReadingFilters", () => {
       ratingMax: 4.5,
     });
     expect(hasReadingFilters(filters)).toBe(true);
+  });
+
+  it("reads Reference", () => {
+    expect(
+      parseReadingFilters(new URLSearchParams("reading_status=reference")),
+    ).toEqual({ statuses: ["reference"] });
   });
 
   it("drops values the server would refuse", () => {
@@ -98,5 +105,19 @@ describe("setRatingRangeParams", () => {
     const params = new URLSearchParams("reading_status=read&rating_max=2");
     setRatingRangeParams(params, 4, undefined);
     expect(params.toString()).toBe("reading_status=read&rating_min=4");
+  });
+});
+
+describe("READING_STATUS_FILTER_OPTIONS", () => {
+  it("offers Reference after Did Not Finish, before no status", () => {
+    expect(READING_STATUS_FILTER_OPTIONS.map((o) => o.label)).toEqual([
+      "Currently Reading",
+      "Paused",
+      "To Read",
+      "Read",
+      "Did Not Finish",
+      "Reference",
+      "No status",
+    ]);
   });
 });

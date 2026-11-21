@@ -1,6 +1,7 @@
 package reading
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -167,6 +168,9 @@ var refusedTransitions = []refusal{
 	{ErrNotPaused, "This book isn't paused."},
 	{ErrNotAutoFinished, "This finish can't be undone."},
 	{ErrReadThroughEnded, "This Read-through has already ended."},
+	{ErrAlreadyReference, "This book is already Reference."},
+	{ErrNotReference, "This book isn't Reference."},
+	{ErrUndoOnReference, "This finish can't be undone because the book is Reference now."},
 }
 
 // rejectedDays are the date edits rendered as 422 validation_error.
@@ -329,6 +333,58 @@ func (h *handler) bulkNotStarted(c echo.Context) error {
 		return err
 	}
 	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+// bulkReferenceChange runs a bulk change of the Reference mark.
+func (h *handler) bulkReferenceChange(c echo.Context, run func(ctx context.Context, userID int, bookIDs []int) (BulkReadingResponse, error)) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	params := BulkReferencePayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := h.requireBooks(c, user, params.BookIDs); err != nil {
+		return err
+	}
+	resp, err := run(c.Request().Context(), user.ID, params.BookIDs)
+	if err != nil {
+		return err
+	}
+	return errors.WithStack(c.JSON(http.StatusOK, resp))
+}
+
+func (h *handler) bulkReference(c echo.Context) error {
+	return h.bulkReferenceChange(c, h.readingService.BulkReference)
+}
+
+func (h *handler) bulkRemoveReference(c echo.Context) error {
+	return h.bulkReferenceChange(c, h.readingService.BulkRemoveReference)
+}
+
+// referenceChange marks the :id Book Reference or removes the mark.
+func (h *handler) referenceChange(c echo.Context, run func(ctx context.Context, userID, bookID int) error) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	bookID, err := h.requireBook(c)
+	if err != nil {
+		return err
+	}
+	if err := run(c.Request().Context(), user.ID, bookID); err != nil {
+		return transitionError(err)
+	}
+	return h.respond(c, user, bookID)
+}
+
+func (h *handler) markReference(c echo.Context) error {
+	return h.referenceChange(c, h.readingService.MarkReference)
+}
+
+func (h *handler) removeReference(c echo.Context) error {
+	return h.referenceChange(c, h.readingService.RemoveReference)
 }
 
 func (h *handler) setPaused(c echo.Context, paused bool) error {

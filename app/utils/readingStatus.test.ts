@@ -112,6 +112,7 @@ describe("readingTransitions", () => {
     ]);
     expect(readingTransitions("read")).toEqual(["start", "finish"]);
     expect(readingTransitions("did_not_finish")).toEqual(["start", "finish"]);
+    expect(readingTransitions("reference")).toEqual(["start", "finish"]);
   });
 });
 
@@ -122,6 +123,7 @@ describe("readingStatusLabel", () => {
     expect(readingStatusLabel("to_read")).toBe("To Read");
     expect(readingStatusLabel("read")).toBe("Read");
     expect(readingStatusLabel("did_not_finish")).toBe("Did Not Finish");
+    expect(readingStatusLabel("reference")).toBe("Reference");
   });
 });
 

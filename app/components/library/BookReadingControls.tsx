@@ -20,6 +20,7 @@ import {
   useReadingTransition,
   useSetOnToRead,
   useSetRating,
+  useSetReference,
 } from "@/hooks/queries/reading";
 import { useAuth } from "@/hooks/useAuth";
 import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
@@ -34,10 +35,13 @@ import {
 const transitionLabel = (
   transition: ReadingTransition,
   status: ReadingStatus | null | undefined,
+  readBefore: boolean,
 ): string => {
   switch (transition) {
     case "start":
-      return status === "read" || status === "did_not_finish"
+      return status === "read" ||
+        status === "did_not_finish" ||
+        (status === "reference" && readBefore)
         ? "Read again"
         : "Start reading";
     case "pause":
@@ -65,8 +69,9 @@ interface BookReadingControlsProps {
 
 // The signed-in user's Reading Status and Rating for a Book. The status
 // menu offers only the transitions valid from the current status, plus
-// adding to or removing from To Read while the Book isn't being read. In
-// Demo Mode both render disabled with the demo's explanation.
+// adding to or removing from To Read while the Book isn't being read, and
+// marking it Reference or removing the mark. In Demo Mode both render
+// disabled with the demo's explanation.
 const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const { demoMode } = useAuth();
   const readingQuery = useBookReading(bookId);
@@ -74,7 +79,9 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const ratingMutation = useSetRating();
   const toReadMutation = useSetOnToRead();
   const deleteMutation = useDeleteReadThrough();
+  const referenceMutation = useSetReference();
   const [confirmingNotStarted, setConfirmingNotStarted] = useState(false);
+  const [confirmingReference, setConfirmingReference] = useState(false);
 
   // A failed load leaves the controls out; the history section reports it.
   const reading = readingQuery.data;
@@ -118,6 +125,33 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       toastRequestError(error, "Failed to mark as not started");
     }
   };
+
+  const handleReference = async (reference: boolean) => {
+    try {
+      await referenceMutation.mutateAsync({ bookId, reference });
+      setConfirmingReference(false);
+    } catch (error) {
+      toastRequestError(
+        error,
+        reference
+          ? "Failed to mark as Reference"
+          : "Failed to remove from Reference",
+      );
+    }
+  };
+
+  // Marking Reference takes the read underway out of the history, so it
+  // asks first; with nothing underway it just applies.
+  const handleMarkReference = () => {
+    if (underway) {
+      setConfirmingReference(true);
+      return;
+    }
+    handleReference(true);
+  };
+  const readBefore = (reading.read_throughs ?? []).some(
+    (rt) => rt.outcome !== "underway",
+  );
 
   const handleRating = async (stars: number | null) => {
     try {
@@ -166,18 +200,23 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
                 key={transition}
                 onSelect={() => handleTransition(transition)}
               >
-                {transitionLabel(transition, status)}
+                {transitionLabel(transition, status, readBefore)}
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator />
+            {status === "reference" ? (
+              <DropdownMenuItem onSelect={() => handleReference(false)}>
+                Remove from Reference
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={handleMarkReference}>
+                Mark as Reference
+              </DropdownMenuItem>
+            )}
             {underway && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => setConfirmingNotStarted(true)}
-                >
-                  Mark as not started
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem onSelect={() => setConfirmingNotStarted(true)}>
+                Mark as not started
+              </DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -228,6 +267,15 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
         onOpenChange={setConfirmingNotStarted}
         open={confirmingNotStarted}
         title="Mark as not started?"
+      />
+      <ConfirmDialog
+        confirmLabel="Mark as Reference"
+        description="This read leaves your reading history, but the reading time recorded during it still counts, and every file keeps its place. While the book is Reference, opening it never starts or finishes a read."
+        isPending={referenceMutation.isPending}
+        onConfirm={() => handleReference(true)}
+        onOpenChange={setConfirmingReference}
+        open={confirmingReference}
+        title="Mark as Reference?"
       />
     </div>
   );

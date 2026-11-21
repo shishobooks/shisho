@@ -103,12 +103,17 @@ describe("BookReadingControls", () => {
     [
       null,
       "Track reading",
-      ["Add to To Read", "Start reading", "Mark as read"],
+      ["Add to To Read", "Start reading", "Mark as read", "Mark as Reference"],
     ],
     [
       "to_read",
       "To Read",
-      ["Remove from To Read", "Start reading", "Mark as read"],
+      [
+        "Remove from To Read",
+        "Start reading",
+        "Mark as read",
+        "Mark as Reference",
+      ],
     ],
     [
       "currently_reading",
@@ -117,6 +122,7 @@ describe("BookReadingControls", () => {
         "Pause",
         "Mark as read",
         "Mark as Did Not Finish",
+        "Mark as Reference",
         "Mark as not started",
       ],
     ],
@@ -127,14 +133,29 @@ describe("BookReadingControls", () => {
         "Resume",
         "Mark as read",
         "Mark as Did Not Finish",
+        "Mark as Reference",
         "Mark as not started",
       ],
     ],
-    ["read", "Read", ["Add to To Read", "Read again", "Mark as read"]],
+    [
+      "read",
+      "Read",
+      ["Add to To Read", "Read again", "Mark as read", "Mark as Reference"],
+    ],
     [
       "did_not_finish",
       "Did Not Finish",
-      ["Add to To Read", "Read again", "Mark as read"],
+      ["Add to To Read", "Read again", "Mark as read", "Mark as Reference"],
+    ],
+    [
+      "reference",
+      "Reference",
+      [
+        "Add to To Read",
+        "Start reading",
+        "Mark as read",
+        "Remove from Reference",
+      ],
     ],
   ])(
     "offers only the valid transitions from %s",
@@ -193,6 +214,108 @@ describe("BookReadingControls", () => {
     );
     expect(
       await screen.findByRole("button", { name: "Reading status: To Read" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Read again on a Reference book read before", async () => {
+    renderControls(
+      reading({ status: "reference", read_throughs: [readThrough({})] }),
+    );
+    await openStatusMenu("Reference");
+
+    expect(menuItems()).toEqual([
+      "Add to To Read",
+      "Read again",
+      "Mark as read",
+      "Remove from Reference",
+    ]);
+  });
+
+  it("marks a book Reference without confirming when nothing is underway", async () => {
+    const request = renderControls(reading({ status: "read" }));
+    await openStatusMenu("Read");
+    request.mockResolvedValue(reading({ status: "reference" }));
+    await user().click(
+      screen.getByRole("menuitem", { name: "Mark as Reference" }),
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(request).toHaveBeenCalledWith(
+      "POST",
+      "/reading/books/7/reference",
+      null,
+      null,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Reading status: Reference" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each<["currently_reading" | "paused", string]>([
+    ["currently_reading", "Currently Reading"],
+    ["paused", "Paused"],
+  ])(
+    "confirms marking a %s book Reference, since its read leaves the history",
+    async (status, label) => {
+      const underway = readThrough({
+        id: 12,
+        outcome: "underway",
+        paused: status === "paused",
+      });
+      const request = renderControls(
+        reading({ status, read_throughs: [underway] }),
+      );
+      await openStatusMenu(label);
+      await user().click(
+        screen.getByRole("menuitem", { name: "Mark as Reference" }),
+      );
+      expect(request).not.toHaveBeenCalledWith(
+        "POST",
+        "/reading/books/7/reference",
+        null,
+        null,
+      );
+
+      const dialog = await screen.findByRole("dialog", {
+        name: "Mark as Reference?",
+      });
+      expect(dialog).toHaveTextContent("leaves your reading history");
+      expect(dialog).toHaveTextContent("still counts");
+      request.mockResolvedValue(reading({ status: "reference" }));
+      await user().click(
+        within(dialog).getByRole("button", { name: "Mark as Reference" }),
+      );
+
+      expect(request).toHaveBeenCalledWith(
+        "POST",
+        "/reading/books/7/reference",
+        null,
+        null,
+      );
+      expect(
+        await screen.findByRole("button", {
+          name: "Reading status: Reference",
+        }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("removes a book from Reference", async () => {
+    const request = renderControls(reading({ status: "reference" }));
+    await openStatusMenu("Reference");
+    request.mockResolvedValue(reading({ status: "read" }));
+    await user().click(
+      screen.getByRole("menuitem", { name: "Remove from Reference" }),
+    );
+
+    expect(request).toHaveBeenCalledWith(
+      "DELETE",
+      "/reading/books/7/reference",
+      null,
+      null,
+    );
+    expect(
+      await screen.findByRole("button", { name: "Reading status: Read" }),
     ).toBeInTheDocument();
   });
 
