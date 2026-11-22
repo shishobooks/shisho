@@ -2,10 +2,7 @@
 # Not a flow of its own.
 appId: ${APP_ID}
 ---
-- extendedWaitUntil:
-    visible: ${TITLE}
-    timeout: 30000
-- tapOn: ${TITLE}
+- runFlow: open_book.yaml
 - scrollUntilVisible:
     element:
       id: book.listen

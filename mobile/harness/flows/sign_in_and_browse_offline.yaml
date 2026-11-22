@@ -20,7 +20,10 @@ name: Sign in and browse Books offline
 - assertVisible: Quiet Lighthouse
 
 # Book detail
-- tapOn: The Harness Novel
+- runFlow:
+    file: subflows/open_book.yaml
+    env:
+      TITLE: The Harness Novel
 - assertVisible:
     id: book.detail.title
     text: The Harness Novel
@@ -47,7 +50,10 @@ name: Sign in and browse Books offline
     visible:
       id: sync.banner
     timeout: 30000
-- tapOn: The Harness Novel
+- runFlow:
+    file: subflows/open_book.yaml
+    env:
+      TITLE: The Harness Novel
 - assertVisible:
     id: book.detail.authors
     text: .*Ada Writer.*

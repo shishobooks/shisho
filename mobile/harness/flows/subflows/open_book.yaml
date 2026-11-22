@@ -1,0 +1,13 @@
+# Opens the Book titled ${TITLE} from the Library grid. Not a flow of its
+# own. It scrolls the Book to the middle of the screen first: at the bottom
+# a title can sit under the tab bar, which then takes the tap.
+appId: ${APP_ID}
+---
+- extendedWaitUntil:
+    visible: ${TITLE}
+    timeout: 30000
+- scrollUntilVisible:
+    element: ${TITLE}
+    direction: DOWN
+    centerElement: true
+- tapOn: ${TITLE}
