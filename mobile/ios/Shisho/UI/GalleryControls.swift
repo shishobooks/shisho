@@ -96,14 +96,14 @@ struct FilterChip: View {
         Button(action: remove) {
             HStack(spacing: 6) {
                 Image(systemName: kind.symbol)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.geist(size: 10, relativeTo: .footnote, weight: .semibold))
                     .foregroundStyle(kind.color)
                 Text(label)
                     .font(.geist(.footnote, weight: .medium))
                     .foregroundStyle(Theme.foreground)
                     .lineLimit(1)
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.geist(size: 9, relativeTo: .footnote, weight: .bold))
                     .foregroundStyle(Theme.mutedForeground)
             }
             .padding(.horizontal, 9)
@@ -189,9 +189,9 @@ struct SortedByChips: View {
                             Text(LibrarySort.label(level.field))
                                 .font(.geist(.footnote, weight: .medium))
                             Image(systemName: level.descending ? "arrow.down" : "arrow.up")
-                                .font(.system(size: 10, weight: .semibold))
+                                .font(.geist(size: 10, relativeTo: .footnote, weight: .semibold))
                             Image(systemName: "xmark")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.geist(size: 9, relativeTo: .footnote, weight: .bold))
                                 .foregroundStyle(Theme.mutedForeground)
                         }
                         .foregroundStyle(Theme.foreground)
@@ -259,7 +259,7 @@ private struct FilterSection<Content: View>: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: kind.symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.geist(size: 11, relativeTo: .footnote, weight: .semibold))
                     .foregroundStyle(kind.color)
                     .frame(width: 22, height: 22)
                     .background(kind.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -295,8 +295,9 @@ private struct TriggerLabel: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
             Image(systemName: pushes ? "chevron.right" : "chevron.up.chevron.down")
-                .font(.system(size: 11, weight: .medium))
+                .font(.geist(size: 11, relativeTo: .footnote, weight: .medium))
                 .foregroundStyle(Theme.mutedForeground)
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: 42)
@@ -404,6 +405,7 @@ private struct FilterSheet: View {
             }
             .menuActionDismissBehavior(.disabled)
             .accessibilityLabel("Reading status")
+            .accessibilityValue(chosen.isEmpty ? String(localized: "Any status") : chosen.map(FilterChoices.statusLabel).joined(separator: ", "))
             .accessibilityIdentifier("filters.status")
         }
     }
@@ -427,6 +429,7 @@ private struct FilterSheet: View {
             }
             .menuActionDismissBehavior(.disabled)
             .accessibilityLabel("File type")
+            .accessibilityValue(chosen.isEmpty ? String(localized: "Any file type") : chosen.map(FileTypes.label).joined(separator: ", "))
             .accessibilityIdentifier("filters.fileType")
         }
     }
@@ -467,6 +470,7 @@ private struct FilterSheet: View {
                 TriggerLabel(text: model.filter.language.map(FilterChoices.languageName) ?? String(localized: "All Languages"))
             }
             .accessibilityLabel("Language")
+            .accessibilityValue(model.filter.language.map(FilterChoices.languageName) ?? String(localized: "All Languages"))
             .accessibilityIdentifier("filters.language")
         }
     }
@@ -495,7 +499,7 @@ private struct NamePicker: View {
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: on ? "checkmark.square.fill" : "square")
-                        .font(.system(size: 17))
+                        .font(.geist(size: 17, relativeTo: .body))
                         .foregroundStyle(on ? Theme.primary : Theme.mutedForeground)
                     Text(option.name)
                         .font(.geist(.body))
@@ -511,9 +515,8 @@ private struct NamePicker: View {
             .buttonStyle(.plain)
             .listRowBackground(Theme.background)
             .listRowSeparatorTint(Theme.border)
-            .accessibilityElement(children: .ignore)
             .accessibilityLabel(String(localized: "\(option.name), \(Counts.books(option.count))"))
-            .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAddTraits(on ? [.isSelected] : [])
             .accessibilityIdentifier("filters.option")
         }
         .listStyle(.plain)
@@ -632,7 +635,10 @@ private struct RatingRangeSlider: View {
             .overlay(Circle().strokeBorder(Theme.ratingStrong, lineWidth: 1.5))
             .frame(width: Self.thumb, height: Self.thumb)
             .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-            .offset(x: x - Self.thumb / 2)
+            // The 44-point target Apple asks for, around the smaller thumb.
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+            .offset(x: x - 22)
             .accessibilityElement()
             .accessibilityLabel(low ? String(localized: "Lowest rating") : String(localized: "Highest rating"))
             .accessibilityValue(value == edge ? String(localized: "Any") : String(localized: "\(Ratings.text(value)) stars"))
@@ -703,7 +709,7 @@ private struct SortSheet: View {
                                 } label: {
                                     HStack(spacing: 5) {
                                         Image(systemName: "plus")
-                                            .font(.system(size: 11, weight: .semibold))
+                                            .font(.geist(size: 11, relativeTo: .footnote, weight: .semibold))
                                         Text(LibrarySort.label(field))
                                     }
                                     .fixedSize()
@@ -764,9 +770,9 @@ private struct SortSheet: View {
                 apply(next)
             } label: {
                 Image(systemName: level.descending ? "arrow.down" : "arrow.up")
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.geist(size: 15, relativeTo: .footnote, weight: .medium))
                     .foregroundStyle(Theme.foreground)
-                    .frame(width: 42, height: 42)
+                    .frame(minWidth: 42, minHeight: 42)
                     .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.input))
                     .contentShape(Rectangle())
@@ -783,14 +789,34 @@ private struct SortSheet: View {
                 apply(next)
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.geist(size: 13, relativeTo: .footnote, weight: .semibold))
                     .foregroundStyle(Theme.mutedForeground)
-                    .frame(width: 36, height: 42)
+                    .frame(minWidth: 36, minHeight: 42)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(String(localized: "Remove \(label) sort level"))
             .accessibilityIdentifier("sort.remove")
+        }
+        // Names the row, so the list's handle reads "Reorder Date added",
+        // and moves it without dragging, for VoiceOver.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(label)
+        .accessibilityActions {
+            if index > 0 {
+                Button(String(localized: "Move up")) {
+                    var next = levels
+                    next.swapAt(index, index - 1)
+                    apply(next)
+                }
+            }
+            if index < levels.count - 1 {
+                Button(String(localized: "Move down")) {
+                    var next = levels
+                    next.swapAt(index, index + 1)
+                    apply(next)
+                }
+            }
         }
     }
 }

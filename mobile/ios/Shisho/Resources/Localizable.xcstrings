@@ -151,6 +151,9 @@
     "%lldm" : {
 
     },
+    "+%lld more" : {
+
+    },
     "-%@" : {
 
     },
@@ -376,9 +379,6 @@
     "From " : {
 
     },
-    "GENRES" : {
-
-    },
     "Genres" : {
 
     },
@@ -404,6 +404,9 @@
 
     },
     "Letterer" : {
+
+    },
+    "Level %lld" : {
 
     },
     "Library" : {
@@ -453,6 +456,12 @@
 
     },
     "Modified" : {
+
+    },
+    "Move down" : {
+
+    },
+    "Move up" : {
 
     },
     "Narrated by " : {
@@ -550,9 +559,6 @@
     "Organize your books into custom collections" : {
 
     },
-    "PUBLISHED" : {
-
-    },
     "Page %lld" : {
 
     },
@@ -598,6 +604,9 @@
     "Previous field" : {
 
     },
+    "Published" : {
+
+    },
     "Publisher" : {
 
     },
@@ -638,9 +647,6 @@
 
     },
     "Right to left" : {
-
-    },
-    "SERIES" : {
 
     },
     "Search" : {
@@ -762,9 +768,6 @@
 
     },
     "Sync Now" : {
-
-    },
-    "TAGS" : {
 
     },
     "Tags" : {

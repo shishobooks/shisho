@@ -22,10 +22,12 @@ struct RelatedPanel: View {
         }
     }
 
-    /// 24 points of heading and four and a half rows, as on the web, so the
-    /// cut-off row says the window scrolls. It sits in a card, so the
-    /// pinned headings have a surface to cover the rows with.
-    private static let windowHeight: CGFloat = 24 + 4.5 * 56
+    /// A heading and four and a half rows tall, as on the web, so the cut-off
+    /// row says the window scrolls. Both grow with the text size. It sits in
+    /// a card, so the pinned headings have a surface to cover the rows with.
+    @ScaledMetric(relativeTo: .subheadline) private var rowHeight: CGFloat = 56
+    @ScaledMetric(relativeTo: .caption) private var headingHeight: CGFloat = 24
+    private var windowHeight: CGFloat { headingHeight + 4.5 * rowHeight }
 
     private var tabs: [Tab] {
         var tabs: [Tab] = []
@@ -60,6 +62,9 @@ struct RelatedPanel: View {
 
     /// The web's tab list: the tabs over a hairline, the open one underlined.
     private func tabStrip(_ active: Tab) -> some View {
+        // Scrolls sideways when large text makes the tabs wider than the
+        // screen, rather than wrapping their names.
+        ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 4) {
             ForEach(tabs, id: \.self) { tab in
                 let selected = tab == active
@@ -69,6 +74,8 @@ struct RelatedPanel: View {
                     HStack(spacing: 6) {
                         Text(tab.title)
                             .font(.geist(.footnote, weight: .medium))
+                            .lineLimit(1)
+                            .fixedSize()
                             .foregroundStyle(selected ? Theme.foreground : Theme.mutedForeground)
                         if tab == .lists {
                             Text(verbatim: "\(related.lists.count)")
@@ -94,8 +101,9 @@ struct RelatedPanel: View {
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
                 .accessibilityIdentifier("book.related.\(tab.rawValue)")
             }
-            Spacer(minLength: 0)
         }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.border).frame(height: 1)
         }
@@ -105,7 +113,8 @@ struct RelatedPanel: View {
         let groups = groups(tab)
         let current = groups.first { $0.lines.contains { $0.book.id == bookID } }.map { "\($0.id)-\(bookID)" }
         // As tall as its Books when they're few, so a short tab has no gap.
-        let content = groups.reduce(CGFloat(0)) { $0 + 24 + CGFloat($1.lines.count) * 56 } + CGFloat(max(0, groups.count - 1)) * 10
+        let content = groups.reduce(CGFloat(0)) { $0 + headingHeight + CGFloat($1.lines.count) * rowHeight }
+            + CGFloat(max(0, groups.count - 1)) * 10
         return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
@@ -122,7 +131,7 @@ struct RelatedPanel: View {
                     }
                 }
             }
-            .frame(height: min(content, Self.windowHeight))
+            .frame(height: min(content, windowHeight))
             .padding(6)
             .cardStyle()
             // Opened on this Book, centered, as the web's window opens.
@@ -156,7 +165,7 @@ struct RelatedPanel: View {
         .font(.geist(.caption, weight: .medium))
         .lineLimit(1)
         .padding(.horizontal, 6)
-        .frame(height: 24)
+        .frame(minHeight: headingHeight)
         .background(Theme.card)
         .accessibilityAddTraits(.isHeader)
     }
@@ -176,6 +185,7 @@ struct RelatedPanel: View {
 private struct RelatedLine: View {
     let line: BookRelated.Line
     let current: Bool
+    @ScaledMetric(relativeTo: .subheadline) private var rowHeight: CGFloat = 56
 
     private var meta: String? {
         let parts = [line.meta, current ? String(localized: "This book") : nil].compactMap { $0 }
@@ -212,7 +222,7 @@ private struct RelatedLine: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 6)
-        .frame(height: 56)
+        .frame(minHeight: rowHeight)
         .contentShape(Rectangle())
     }
 }

@@ -333,7 +333,9 @@ struct LabelRows: View {
                 : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
             ForEach(rows) { row in
                 layout {
+                    // Capitals only on screen; VoiceOver reads the word.
                     Text(row.label.uppercased())
+                        .accessibilityLabel(row.label)
                         .font(.geist(.caption, weight: .semibold))
                         .tracking(0.8)
                         .foregroundStyle(Theme.mutedForeground)
@@ -384,11 +386,9 @@ private struct ChapterRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
             .accessibilityLabel(chapter.title)
             .accessibilityValue(Self.timestamp(start))
             .accessibilityHint("Plays from this chapter")
-            .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("file.chapter")
         } else {
             HStack(alignment: .center, spacing: 10) {
@@ -405,6 +405,8 @@ private struct ChapterRow: View {
             .padding(.vertical, 12)
             .frame(minHeight: 46)
             .accessibilityElement(children: .combine)
+            // How deep it sits, which the indent shows on screen.
+            .accessibilityValue(chapter.depth > 0 ? String(localized: "Level \(chapter.depth + 1)") : "")
             .accessibilityIdentifier("file.chapter")
         }
     }

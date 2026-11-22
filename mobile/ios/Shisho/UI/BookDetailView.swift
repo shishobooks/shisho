@@ -126,9 +126,12 @@ struct BookDetailView: View {
                             .font(.geist(.callout, weight: .semibold))
                             .foregroundStyle(Theme.foreground)
                     }
+                    // A 44-point target, as Apple asks.
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(.top, 22)
+                .padding(.top, 11)
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("book.detail.series")
             }
@@ -198,7 +201,9 @@ struct BookDetailView: View {
                         : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
                     ForEach(rows, id: \.label) { row in
                         layout {
-                            Text(row.label)
+                            // Capitals only on screen; VoiceOver reads the word.
+                            Text(row.label.uppercased())
+                                .accessibilityLabel(row.label)
                                 .font(.geist(.caption, weight: .semibold))
                                 .tracking(0.8)
                                 .foregroundStyle(Theme.mutedForeground)
@@ -255,7 +260,7 @@ struct BookDetailView: View {
     private func infoRows(_ book: BookDetail) -> [InfoRow] {
         var rows: [InfoRow] = []
         if !book.series.isEmpty {
-            rows.append(InfoRow(label: String(localized: "SERIES"), value: AnyView(
+            rows.append(InfoRow(label: String(localized: "Series"), value: AnyView(
                 Text(Byline.links(book.series.map { (Route.resource(.series, id: $0.seriesID, name: $0.name), seriesLine($0)) }))
                     .font(.geist(.subheadline))
                     .tint(Theme.foreground)
@@ -263,17 +268,17 @@ struct BookDetailView: View {
             )))
         }
         if !book.genres.isEmpty {
-            rows.append(InfoRow(label: String(localized: "GENRES"), value: AnyView(LinkChips(items: book.genres.map {
+            rows.append(InfoRow(label: String(localized: "Genres"), value: AnyView(LinkChips(items: book.genres.map {
                 (Route.resource(.genre, id: $0.id, name: $0.name), $0.name)
             }, identifier: "book.detail.genre"))))
         }
         if !book.tags.isEmpty {
-            rows.append(InfoRow(label: String(localized: "TAGS"), value: AnyView(LinkChips(items: book.tags.map {
+            rows.append(InfoRow(label: String(localized: "Tags"), value: AnyView(LinkChips(items: book.tags.map {
                 (Route.resource(.tag, id: $0.id, name: $0.name), $0.name)
             }, identifier: "book.detail.tag"))))
         }
         if let published = book.published {
-            rows.append(InfoRow(label: String(localized: "PUBLISHED"), value: AnyView(
+            rows.append(InfoRow(label: String(localized: "Published"), value: AnyView(
                 Text(published, format: .dateTime.year()).font(.geist(.subheadline))
             )))
         }
@@ -296,6 +301,7 @@ struct BookDetailView: View {
 /// rest of what's known about it.
 private struct FileCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.horizontalSizeClass) private var sizeClass
     let file: BookDetail.File
     let book: BookSummary
@@ -354,8 +360,13 @@ private struct FileCard: View {
                         .font(.geist(.subheadline, weight: .semibold))
                         .lineLimit(2)
                     if FileTypes.isKnown(file.fileType) {
-                        // The chip stays centered on facts that wrap.
-                        HStack(alignment: .center, spacing: 8) {
+                        // The chip stays centered on facts that wrap, and sits
+                        // above them at accessibility text sizes, so they
+                        // keep the row's width.
+                        let factsLayout = dynamicTypeSize.isAccessibilitySize
+                            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                            : AnyLayout(HStackLayout(alignment: .center, spacing: 8))
+                        factsLayout {
                             FileTypeChip(fileType: file.fileType, outlined: true)
                             Text(facts)
                                 .font(.geist(.footnote))
@@ -510,15 +521,38 @@ struct RatingStars: View {
 struct LinkChips: View {
     let items: [(Route, String)]
     let identifier: String
+    @State private var expanded = false
+
+    /// As many as show before the rest collapse, as on the web: sources
+    /// like MangaUpdates attach dozens of tags, which would push the rest of
+    /// the page far down. A row a couple past it shows whole, so the button
+    /// never hides just one or two.
+    private static let collapsed = 12
+    private static let slack = 2
+
+    private var collapsible: Bool { items.count > Self.collapsed + Self.slack }
 
     var body: some View {
+        let shown = collapsible && !expanded ? Array(items.prefix(Self.collapsed)) : items
         FlowLayout(spacing: 6) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            ForEach(Array(shown.enumerated()), id: \.offset) { _, item in
                 NavigationLink(value: item.0) {
                     CountBadge(text: item.1)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(identifier)
+            }
+            if collapsible {
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    Text(expanded ? String(localized: "Show less") : String(localized: "+\(items.count - Self.collapsed) more"))
+                        .font(.geist(.footnote, weight: .medium))
+                        .foregroundStyle(Theme.primary)
+                        .padding(.vertical, 4)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("\(identifier).more")
             }
         }
     }

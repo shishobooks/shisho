@@ -7,12 +7,18 @@ struct MainTabs: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        // Both tabs stay alive, each with its navigation, and the
-        // prototype's tab bar sits under them rather than the system's
-        // floating one.
-        ZStack {
-            tab(.library) { LibraryView() }
-            tab(.lists) { ListsView() }
+        // A TabView with its own bar hidden keeps both tabs alive, each with
+        // its navigation, and hides the one not showing from VoiceOver, which
+        // accessibilityHidden can't do inside a NavigationStack. The
+        // prototype's tab bar sits over it instead of the system's floating
+        // one; every screen hides the system's (routeDestinations).
+        TabView(selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
+            LibraryView()
+                .withMiniPlayer()
+                .tag(AppTab.library)
+            ListsView()
+                .withMiniPlayer()
+                .tag(AppTab.lists)
         }
         // Over the screens, which leave room for it at the end of their
         // scrolling (miniPlayerClearance), as the prototype's bar is.
@@ -25,14 +31,6 @@ struct MainTabs: View {
         }
     }
 
-    private func tab(_ tab: AppTab, @ViewBuilder content: () -> some View) -> some View {
-        let showing = model.tab == tab
-        return content()
-            .withMiniPlayer()
-            .opacity(showing ? 1 : 0)
-            .allowsHitTesting(showing)
-            .accessibilityHidden(!showing)
-    }
 }
 
 /// The tab bar of the prototype's native structure (variant E): across the
@@ -60,6 +58,10 @@ struct AppTabBar: View {
         .overlay(alignment: .top) {
             Rectangle().fill(Theme.border).frame(height: 1)
         }
+        // A fixed size, as the system's tab bar keeps, so it always fits the
+        // room screens leave for it; at accessibility sizes a long press
+        // shows each tab large instead.
+        .dynamicTypeSize(.large)
     }
 
     private func item(_ tab: AppTab, _ title: String, systemImage: String, identifier: String) -> some View {
@@ -84,6 +86,9 @@ struct AppTabBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(TabPressStyle())
+        .accessibilityShowsLargeContentViewer {
+            Label(title, systemImage: systemImage)
+        }
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityIdentifier(identifier)
@@ -127,23 +132,36 @@ extension View {
     }
 
     /// The pages any tab can push: a Book, a browsing list, a Series,
-    /// Person, Genre, or Tag, a List, and search.
+    /// Person, Genre, or Tag, a List, and search. Each, and the tab's first
+    /// screen this is on, hides the system tab bar, since the prototype's
+    /// takes its place (MainTabs).
     func routeDestinations() -> some View {
-        navigationDestination(for: Route.self) { route in
-            switch route {
-            case .book(let book):
-                BookDetailView(bookID: book.id, initial: book)
-            case .browse(let kind):
-                ResourceListView(kind: kind)
-            case .resource(let kind, let id, let name):
-                ResourceView(kind: kind, id: id, initialName: name)
-            case .list(let id, let name):
-                ListDetailView(listID: id, initialName: name)
-            case .file(let bookID, let fileID):
-                FileView(bookID: bookID, fileID: fileID)
-            case .search:
-                SearchView()
+        toolbar(.hidden, for: .tabBar)
+            .navigationDestination(for: Route.self) { route in
+                RouteDestination(route: route)
+                    .toolbar(.hidden, for: .tabBar)
             }
+    }
+}
+
+/// The screen a Route opens.
+private struct RouteDestination: View {
+    let route: Route
+
+    var body: some View {
+        switch route {
+        case .book(let book):
+            BookDetailView(bookID: book.id, initial: book)
+        case .browse(let kind):
+            ResourceListView(kind: kind)
+        case .resource(let kind, let id, let name):
+            ResourceView(kind: kind, id: id, initialName: name)
+        case .list(let id, let name):
+            ListDetailView(listID: id, initialName: name)
+        case .file(let bookID, let fileID):
+            FileView(bookID: bookID, fileID: fileID)
+        case .search:
+            SearchView()
         }
     }
 }
