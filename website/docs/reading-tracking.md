@@ -17,18 +17,18 @@ A book's **Reading Status** shows on its page, next to its actions, and as a boo
 
 A book you have never tracked has no status and no bookmark.
 
-The status follows your history. A book you are reading or have paused shows that, whatever happened before. Otherwise a book on To Read shows **To Read**, even if you have read it before. Otherwise a book you marked **Reference** shows that, even if you finished or abandoned it before. Otherwise it shows how your latest read ended, where latest means the latest end date. A read with no end date counts as older than any dated one, so editing or deleting a Read-through can change the status.
+The status follows your history. A book you are reading or have paused shows that, whatever happened before. Otherwise a book on To Read shows **To Read**, even if you have read it before. Otherwise a book you marked **Reference** shows that, even if you finished or abandoned it before. Otherwise it shows how your latest Read-through ended, where latest means the latest end date. A Read-through with no end date counts as older than any dated one, so editing or deleting a Read-through can change the status.
 
 ## Changing the Status
 
 On a book's page, open the status button (**Track reading** on a book you haven't tracked) and choose an action. The menu offers only the actions that make sense from the current status:
 
 - **Add to To Read** or **Remove from To Read** puts the book at the end of your [To Read](#to-read) queue or takes it off. It isn't offered while you're reading the book or have paused it.
-- **Start reading** begins a new read dated today. It's called **Read again** once you have read the book before, and the earlier reads stay in the history.
+- **Start reading** begins a new Read-through dated today. It's called **Read again** once you have read the book before, and the earlier Read-throughs stay in the history.
 - **Pause** sets aside the book you're reading. **Resume** picks it back up with its original start date.
-- **Mark as read** finishes the read you're on, dated [the day you last read it](#last-read). With nothing underway, it records a finished read that ended today with no start date, for a book you read before you used Shisho.
-- **Mark as Did Not Finish** ends the read you're on as abandoned, dated the same way.
-- **Mark as not started** takes back the read you're on, as if you had never started it: it's deleted from the history, every main file of the book opens at the start again, and a book that left To Read when you started it goes back to its place there.
+- **Mark as read** finishes your current Read-through, dated [the day you last read it](#last-read). With nothing underway, it records a finished Read-through that ended today with no start date, for a book you read before you used Shisho.
+- **Mark as Did Not Finish** ends your current Read-through as abandoned, dated the same way.
+- **Mark as not started** takes back your current Read-through, as if you had never started it: it's deleted from the history, every main file of the book opens at the start again, and a book that left To Read when you started it goes back to its place there.
 - **Mark as Reference** and **Remove from Reference** set and clear [Reference](#reference-books).
 
 "Today" is the date in [your time zone](#your-time-zone) when you choose the action. To correct a date afterwards, use **Edit dates** in [Reading History](#reading-history).
@@ -37,8 +37,8 @@ On a book's page, open the status button (**Track reading** on a book you haven'
 
 To fix the status of many books together, such as books a device's reading history marked **Currently Reading** that you finished long ago, select them in a library gallery or on the [Currently Reading page](#currently-reading-page) and open **Reading** on the selection toolbar (in **Actions** on a phone):
 
-- **Mark as read** does what it does on one book for each selected book. Books already **Read** are skipped, so they don't gain a second finished read.
-- **Mark as not started** does what it does on one book for each selected book you're reading or have paused, after you confirm how many reads it deletes. Other books are skipped.
+- **Mark as read** does what it does on one book for each selected book. Books already **Read** are skipped, so they don't gain a second finished Read-through.
+- **Mark as not started** does what it does on one book for each selected book you're reading or have paused, after you confirm how many Read-throughs it deletes. Other books are skipped.
 - **Mark as Reference** does what it does on one book for each selected book. When any of them are being read or paused, you confirm first, told how many Read-throughs it deletes. Books already **Reference** are skipped.
 - **Remove from Reference** does what it does on one book for each selected **Reference** book. Other books are skipped.
 
@@ -108,7 +108,7 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 
 ### Starting and Finishing Automatically
 
-- **Starting**: turning past the first page of a book you have never read, or listening to a minute of its audiobook in one sitting, starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing, and neither does seeking around an audiobook, short of its last 60 seconds, or listening to less than a minute of it. Sittings don't add up, but pausing for under 5 minutes doesn't end one. The minute that starts a read counts toward it, and the read is dated from when you started listening.
+- **Starting**: turning past the first page of a book you have never read, or listening to a minute of its audiobook in one sitting, starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing, and neither does seeking around an audiobook, short of its last 60 seconds, or listening to less than a minute of it. Sittings don't add up, but pausing for under 5 minutes doesn't end one. The minute that starts a Read-through counts toward it, and the Read-through is dated from when you started listening.
 - **Rereading**: a book you have read or abandoned starts again only when you choose **Read again**, or when you've added it back to To Read to plan a reread. Otherwise you can open it to look something up, and only your place in it is saved.
 - **Resuming**: turning a page of a paused book, or listening to a minute of it in one sitting, makes it **Currently Reading** again.
 - **Finishing**: reaching the last page finishes the Read-through, dated today. An audiobook finishes when playback ends or you're within its last 60 seconds, so end credits don't stop it being marked read. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
@@ -120,13 +120,13 @@ The Shisho reader times each page you read. A page counts once you've been on it
 
 ### Supplements
 
-A supplement keeps your place like any other file, and shows how far through it you are, but reading it never changes the book's status: it doesn't start, resume, or finish a read. Starting a read doesn't send a supplement back to the start either. Supplements don't count toward [last read](#last-read).
+A supplement keeps your place like any other file, and shows how far through it you are, but reading it never changes the book's status: it doesn't start, resume, or finish a Read-through. Starting a Read-through doesn't send a supplement back to the start either. Supplements don't count toward [last read](#last-read).
 
 ### Last Read
 
-The page of a book you're reading or have paused shows when you last read it, such as **Last read 4 hours ago** or **Last read 5 days ago**, and so does its card on the [Currently Reading page](#currently-reading-page). Hovering over it shows the exact date and time. Last read is the latest time you read any of the book's main files during the read you're on. Opening a place from a link, such as a page thumbnail or a shared `?page=` link, doesn't count as reading. A book you have read or abandoned shows no last read, even if you open it again to look something up.
+The page of a book you're reading or have paused shows when you last read it, such as **Last read 4 hours ago** or **Last read 5 days ago**, and so does its card on the [Currently Reading page](#currently-reading-page). Hovering over it shows the exact date and time. Last read is the latest time you read any of the book's main files during your current Read-through. Opening a place from a link, such as a page thumbnail or a shared `?page=` link, doesn't count as reading. A book you have read or abandoned shows no last read, even if you open it again to look something up.
 
-**Mark as read** and **Mark as Did Not Finish** date the read's end by the day you last read the book, not today, so a book you put down before the epilogue and close out a week later shows when you really stopped. With no reading sessions to go on, such as a book you marked **Start reading** and read elsewhere, they use today.
+**Mark as read** and **Mark as Did Not Finish** date the Read-through's end by the day you last read the book, not today, so a book you put down before the epilogue and close out a week later shows when you really stopped. With no reading sessions to go on, such as a book you marked **Start reading** and read elsewhere, they use today.
 
 ### Currently Reading Page
 
@@ -152,7 +152,7 @@ Starts and finishes are dated by the day in your time zone, under **Preferences 
 
 A queued book's page shows its place beside the status button, such as **#3 on To Read**, counting only books you can access. Choose it to open To Read. The **Lists** tab of the page's Related panel also shows To Read first, up to its first 100 books.
 
-Starting a book, or marking it read, takes it off To Read. To plan a reread, add a book you have finished: it shows **To Read** again and opens at the start, and its earlier reads stay in the history.
+Starting a book, or marking it read, takes it off To Read. To plan a reread, add a book you have finished: it shows **To Read** again and opens at the start, and its earlier Read-throughs stay in the history.
 
 To queue a whole [list](./lists.md), use [Copy to To Read](./lists.md#copying-to-to-read) on its page.
 
@@ -165,7 +165,7 @@ Your statuses and ratings are ways to browse, in a library's gallery and on any 
 - **Filter** has a **Reading status** picker, where you can choose one or more statuses, and **No status** for books you have never tracked. A book matching any chosen status shows. Below it, the **Rating** slider sets a range in quarter stars: drag the left end up to set the lowest rating, and the right end down to set the highest. An end left at its edge, marked **Any**, sets no limit on that side. Unrated books match only while both ends are at **Any**.
 - **Sort** offers **Reading status**, **Rating**, **Date finished**, and **Last read**.
   - **Reading status** orders books Currently Reading, Paused, To Read, Read, Did Not Finish, Reference, then books with no status, so the books you're reading come first. Reverse it to put them last. Add another level, such as **Date added**, to order books with the same status.
-  - **Rating**, **Date finished**, and **Last read** start highest and latest first. Date finished is the end date of your latest finished read; a book you abandoned, or finished with no end date, has none. [Last read](#last-read) only applies to books you're reading or have paused. Books with no rating or date come last in either direction.
+  - **Rating**, **Date finished**, and **Last read** start highest and latest first. Date finished is the end date of your latest finished Read-through; a book you abandoned, or finished with no end date, has none. [Last read](#last-read) only applies to books you're reading or have paused. Books with no rating or date come last in either direction.
   - A list's sort menu offers **Currently Reading First**, **Currently Reading Last**, **Rating (high to low)**, **Rating (low to high)**, **Recently Finished**, and **Earliest Finished**.
 
 Filters apply before the gallery or list pages, so the count and every page hold only matching books. An ordered list can't be dragged into a new order while it's filtered.
@@ -185,19 +185,19 @@ The status and summary update after each change.
 
 ### Reading History Page
 
-**Reading History**, in the user menu, lists every Read-through you have, across every library, newest first: the ones you're on, then by end date. Each row shows the book's cover, title, and authors, how the read ended, and its dates. Filter by **Finished**, **Did Not Finish**, or **Underway**, and with **Removed from library** to see only reads of books that were deleted.
+**Reading History**, in the user menu, lists every Read-through you have, across every library, newest first: the ones you're on, then by end date. Each row shows the book's cover, title, and authors, how the Read-through ended, and its dates. Filter by **Finished**, **Did Not Finish**, or **Underway**, and with **Removed from library** to see only Read-throughs of books that were deleted.
 
 Each row's menu offers:
 
 - **Edit dates** and **Delete**, as on the book's page.
 - **Start a reread** for a book you can still open and aren't reading now.
-- **Mark as finished** and **Mark as Did Not Finish** for a read you're on, dated the way the status menu dates them.
+- **Mark as finished** and **Mark as Did Not Finish** for a Read-through you're still on, dated the way the status menu dates them.
 
-A read with recorded time shows how many sessions it has, such as **8 sessions**. Select it to list each one, with its date, times, length, how far through the book it took you, and where you read it, naming the Device it came from. A book's page lists them the same way under **Reading history**. Deleting a session can't be undone: its time stops counting toward your [Reading Stats](./reading-stats.md). To delete one, select the trash can beside it and confirm.
+A Read-through with recorded time shows how many sessions it has, such as **8 sessions**. Select it to list each one, with its date, times, length, how far through the book it took you, and where you read it, naming the Device it came from. A book's page lists them the same way under **Reading history**. Deleting a session can't be undone: its time stops counting toward your [Reading Stats](./reading-stats.md). To delete one, select the trash can beside it and confirm.
 
-A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its reads still count, and you can still edit or delete them.
+A book in a library you no longer have access to shows its title with no link or cover, marked **No access to this library**. Its Read-throughs still count, and you can still edit or delete them.
 
-[Reading Stats](./reading-stats.md) sums up these reads, and the time you spent on them, by year.
+[Reading Stats](./reading-stats.md) sums up these Read-throughs, and the time you spent on them, by year.
 
 ## Ratings
 
@@ -214,9 +214,9 @@ With the KOReader plugin, ratings sync with KOReader's stars, which are whole st
 When [merging books](./managing-books-and-files.md#merging-books) removes a book, every user's reading history moves to the book it merged into:
 
 - The merged book keeps its own rating and its place on To Read. When it has none, it takes those of a removed book, the one added to Shisho first if several have one.
-- If both books were being read, the two reads become one, starting on the earlier start date.
+- If both books were being read, the two Read-throughs become one, starting on the earlier start date.
 - Whether the merged book is [Reference](#reference-books) follows whichever book you chose a status for more recently. Merging never deletes a Read-through to keep Reference, so a merged book you're reading or have on To Read stops being Reference.
 
 Moving only some of a book's files moves no reading data. A user who loses access to a library keeps their reading data, and sees it again if their access returns.
 
-Deleting a book, or the library it's in, keeps every user's Read-throughs of it, with the book's title and authors as they were. They stay on [Reading History](#reading-history-page) marked **Removed from library**, with no link, and keep counting until the user deletes them. A read that was underway stays underway until the user marks it finished or Did Not Finish, or deletes it. Ratings and places on To Read are deleted with the book. Adding the same book again starts it with no history.
+Deleting a book, or the library it's in, keeps every user's Read-throughs of it, with the book's title and authors as they were. They stay on [Reading History](#reading-history-page) marked **Removed from library**, with no link, and keep counting until the user deletes them. A Read-through that was underway stays underway until the user marks it finished or Did Not Finish, or deletes it. Ratings and places on To Read are deleted with the book. Adding the same book again starts it with no history.

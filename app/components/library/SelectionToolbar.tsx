@@ -321,8 +321,8 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
     selectedBookIds.every((id) => allBooks.some((book) => book.id === id));
   const readsUnderway =
     !underwayKnown || underwayCount === 1
-      ? `The read underway on ${underwayKnown ? "1 book" : "each selected book"} is deleted`
-      : `The reads underway on ${formatCount(underwayCount, "book")} are deleted`;
+      ? `The Read-through underway on ${underwayKnown ? "1 book" : "each selected book"} is deleted`
+      : `The Read-throughs underway on ${formatCount(underwayCount, "book")} are deleted`;
   // "it" for one read, or when each book has its own, "them" for several.
   const duringReads =
     !underwayKnown || underwayCount === 1 ? "during it" : "during them";

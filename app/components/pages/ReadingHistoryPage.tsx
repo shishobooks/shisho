@@ -348,7 +348,8 @@ const ReadingHistoryPage = () => {
           <h1 className="mb-2 text-2xl font-semibold">Reading History</h1>
           <p className="mb-2 text-sm text-muted-foreground md:text-base">
             Every time you've read a book, including books since removed from
-            the library. Fix dates here, or delete a read that shouldn't count.
+            the library. Fix dates here, or delete a Read-through that shouldn't
+            count.
           </p>
           {historyQuery.data && (
             <Badge variant="secondary">

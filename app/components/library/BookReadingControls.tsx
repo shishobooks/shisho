@@ -141,8 +141,8 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
     }
   };
 
-  // Marking Reference takes the read underway out of the history, so it
-  // asks first; with nothing underway it just applies.
+  // Marking Reference deletes the Read-through underway, so it asks first;
+  // with nothing underway it just applies.
   const handleMarkReference = () => {
     if (underway) {
       setConfirmingReference(true);
@@ -267,7 +267,7 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       )}
       <ConfirmDialog
         confirmLabel="Mark as not started"
-        description="This read is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
+        description="Your current Read-through is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
         isPending={deleteMutation.isPending}
         onConfirm={handleNotStarted}
         onOpenChange={setConfirmingNotStarted}

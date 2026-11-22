@@ -173,7 +173,7 @@ A book that already has a Read-through or a Rating in Shisho keeps what it has: 
 
 History can't know everything:
 
-- **Rereads:** KOReader keeps only a book's current status, not its earlier reads, so history makes at most one Read-through per book. A book you read twice gets one Read-through, from your first session, and reading outside its dates still counts toward your reading time.
+- **Rereads:** KOReader keeps only a book's current status, not the times you read it before, so history makes at most one Read-through per book. A book you read twice gets one Read-through, from your first session, and reading outside its dates still counts toward your reading time.
 - **Books with no status:** reading in a book KOReader shows no status for counts toward your reading time but starts no Read-through.
 - **Books Shisho doesn't recognize:** their reading time, statuses, and stars wait on the Device's page, and arrive when you [link the book](#books-shisho-doesnt-recognize), by the same rules as the rest of history.
 

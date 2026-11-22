@@ -492,7 +492,7 @@ describe("SelectionToolbar reading status actions", () => {
     const dialog = screen.getByRole("dialog");
     // Books One and Two are being read; Book Three is already read.
     expect(dialog).toHaveTextContent(
-      "The reads underway on 2 books are deleted",
+      "The Read-throughs underway on 2 books are deleted",
     );
     await user.click(
       within(dialog).getByRole("button", { name: "Mark as not started" }),
@@ -640,7 +640,7 @@ describe("SelectionToolbar reading status actions", () => {
     );
 
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "The read underway on each selected book is deleted",
+      "The Read-through underway on each selected book is deleted",
     );
   });
 
