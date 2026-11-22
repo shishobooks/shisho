@@ -2,8 +2,11 @@ import SwiftUI
 
 /// A File's own page, as the web's: its cover, name, the Book it's from, its
 /// narrators and facts, Listen, what edition it is, its chapters, and where
-/// it sits on disk. The Book's other Files are a step back, on the Book page. It's all in the device's copy,
-/// so it works offline.
+/// it sits on disk. It's all in the device's copy, so it works offline.
+///
+/// Left out from the web's page: the Book's other Files, a step back on the
+/// Book page; a comic's or PDF's page grid, which waits for the reader's page
+/// images (#921); and links out from identifiers, whose pages plugins define.
 struct FileView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -36,7 +39,7 @@ struct FileView: View {
         }
         .environment(\.openURL, OpenURLAction { url in
             if let id = LinkedText.bookID(url), let detail = book ?? nil, detail.summary.id == id {
-                model.push(.book(detail.summary))
+                model.returnToBook(detail.summary)
                 return .handled
             }
             guard let route = LinkedText.route(url) else { return .systemAction }
@@ -171,8 +174,13 @@ struct FileView: View {
     private func fromLine(_ book: BookDetail, supplement: Bool) -> AttributedString {
         var line = LinkedText.muted(supplement ? String(localized: "Supplement to ") : String(localized: "From "))
         line += LinkedText.bookLink(book.summary.title, id: book.summary.id)
-        if !supplement, !book.authors.isEmpty {
-            line += LinkedText.muted(" ") + Byline.text(book.authors)
+        // Each author once by name, without roles, as the web's File page
+        // names them.
+        var seen = Set<Int>()
+        let authors = book.authors.filter { seen.insert($0.personID).inserted }
+        if !supplement, !authors.isEmpty {
+            line += LinkedText.muted(String(localized: " by "))
+                + Byline.links(authors.map { (Route.resource(.person, id: $0.personID, name: $0.name), $0.name) })
         }
         return line
     }
@@ -345,6 +353,7 @@ struct LabelRows: View {
                             Link(row.value, destination: url)
                                 .underline()
                                 .foregroundStyle(Theme.foreground)
+                                .accessibilityIdentifier("file.url")
                         } else {
                             Text(row.value)
                                 .foregroundStyle(row.muted ? Theme.mutedForeground : Theme.foreground)
@@ -376,7 +385,7 @@ private struct ChapterRow: View {
                     Image(systemName: "play")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.mutedForeground)
-                    Text(verbatim: Self.timestamp(start))
+                    Text(verbatim: TimeLabels.clock(start))
                         .font(.system(.footnote, design: .monospaced))
                         .foregroundStyle(Theme.mutedForeground)
                 }
@@ -387,7 +396,7 @@ private struct ChapterRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(chapter.title)
-            .accessibilityValue(Self.timestamp(start))
+            .accessibilityValue(TimeLabels.clock(start))
             .accessibilityHint("Plays from this chapter")
             .accessibilityIdentifier("file.chapter")
         } else {
@@ -416,14 +425,5 @@ private struct ChapterRow: View {
             .font(.geist(.subheadline))
             .foregroundStyle(Theme.foreground)
             .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// "1:02:03", or "2:03" under an hour.
-    static func timestamp(_ seconds: Double) -> String {
-        let total = Int(seconds)
-        let hours = total / 3600, minutes = (total % 3600) / 60, secs = total % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, secs)
-            : String(format: "%d:%02d", minutes, secs)
     }
 }

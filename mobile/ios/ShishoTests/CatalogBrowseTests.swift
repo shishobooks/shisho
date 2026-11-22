@@ -73,6 +73,7 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(persons.map(\.authoredCount), [0, 2])
         XCTAssertEqual(persons.map(\.narratedCount), [2, 0], "Files narrated")
         XCTAssertEqual(try store.pool.read { try CatalogStore.books($0, kind: .person, id: 2, narrated: true) }.map(\.id), [1, 2])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.resource($0, kind: .person, id: 2) }?.narratedFiles, 2, "as the People list counts")
         XCTAssertEqual(try store.pool.read { try CatalogStore.books($0, kind: .person, id: 2) }.map(\.id), [])
         XCTAssertEqual(try store.pool.read { try CatalogStore.books($0, kind: .series, id: 1) }.map(\.title), ["Dune", "Dune Messiah"])
         let detail = try XCTUnwrap(store.pool.read { try CatalogStore.resource($0, kind: .series, id: 1) })
@@ -380,6 +381,10 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(related.lists.last?.lines.map(\.book.title), ["Dune Messiah", "Dune"])
         XCTAssertEqual(related.lists.last?.lines.map(\.meta), ["#1", "#2"], "an ordered List numbers its Books")
 
+        XCTAssertEqual(SeriesNumbers.label(5, end: nil, unit: "chapter", comic: true), "Ch. 5")
+        XCTAssertEqual(SeriesNumbers.label(1, end: 3, unit: nil, comic: true), "Vol. 1-3")
+        XCTAssertEqual(SeriesNumbers.label(1.5, end: nil, unit: "volume", comic: false), "#1.5")
+
         let other = try XCTUnwrap(store.pool.read { try CatalogStore.related($0, bookID: 2) })
         XCTAssertEqual(other.lists.map(\.title), ["Favorites"], "To Read only when this Book is on it")
     }
@@ -390,5 +395,71 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil), "25%")
         XCTAssertEqual(FileProgressText.text(1, durationSeconds: 7200, pageCount: nil), "100%", "nothing left to say at the end")
         XCTAssertEqual(FileProgressText.text(0.02, durationSeconds: 241, pageCount: nil), "2% · 4m left", "rounded as the Listen card rounds")
+    }
+
+    func testLastReadSortsBooksBeingReadByTheirLatestPlace() throws {
+        try catalog()
+        try store.apply(page(#"""
+            {"entries":[
+             {"kind":"read_through","id":5,"read_through":{"id":5,"book_id":1,"outcome":"underway","paused":false}},
+             {"kind":"read_through","id":6,"read_through":{"id":6,"book_id":2,"outcome":"underway","paused":false}},
+             {"kind":"reading_position","id":10,"reading_position":{"file_id":10,"percentage":0.4,"occurred_at":"2026-01-01T00:00:00Z","source":"web_reader"}},
+             {"kind":"reading_position","id":20,"reading_position":{"file_id":20,"percentage":0.1,"occurred_at":"2026-02-01T00:00:00Z","source":"web_reader"}}
+            ],"cursor":10}
+            """#))
+        let titles = { (sort: String) in try self.store.pool.read { try CatalogStore.books($0, libraryID: nil, sort: sort) }.map(\.title) }
+        XCTAssertEqual(try titles("last_read:desc"), ["Dune Messiah", "Dune"])
+        XCTAssertEqual(try titles("last_read:asc"), ["Dune", "Dune Messiah"])
+        XCTAssertEqual(LibrarySort.levels("last_read:desc,title:asc").map(\.field), ["last_read", "title"], "a saved Last read level is kept")
+
+        // A finished Book isn't being read, so it sorts last.
+        try store.apply(page(#"{"entries":[{"kind":"read_through","id":6,"read_through":{"id":6,"book_id":2,"outcome":"finished","paused":false,"end_day":"2026-02-02"}}],"cursor":11}"#))
+        XCTAssertEqual(try titles("last_read:asc"), ["Dune", "Dune Messiah"])
+        XCTAssertEqual(try titles("last_read:desc"), ["Dune", "Dune Messiah"])
+    }
+
+    func testLanguagesGroupAndMatchAsTheWebDoes() throws {
+        let file = { (id: Int, language: String) in
+            """
+            {"id":\(id),"file_type":"epub","file_role":"main","size_bytes":10,"display_name":"F\(id)","narrators":[],"identifiers":[],"language":"\(language)"}
+            """
+        }
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(book(5, files: file(50, "en"))),\#(book(6, files: file(60, "en-US"))),\#(book(7, files: file(70, "fr-CA"))),\#(book(8, files: file(80, "fr-FR")))],"cursor":9}"#),
+                        access: Shishoapp.FeedAccess(libraryIds: [1], listIds: []))
+        let options = try store.pool.read { try CatalogStore.filterOptions($0, libraryID: nil) }
+        XCTAssertEqual(Set(options.languages), ["en", "fr-CA", "fr-FR"], "a bare tag takes in its variants; without one each variant stays")
+        let filtered = { (language: String) in try self.store.pool.read { try CatalogStore.books($0, libraryID: nil, filter: LibraryFilter(language: language)) }.map(\.id).sorted() }
+        XCTAssertEqual(try filtered("en"), [5, 6], "a tag matches its variants, as the server's filter does")
+        XCTAssertEqual(try filtered("fr-CA"), [7])
+
+        XCTAssertEqual(CatalogStore.languageOptions(["en"]), [], "one language is nothing to filter by")
+        XCTAssertEqual(CatalogStore.languageOptions(["en", "en-GB"]), ["en"])
+    }
+
+    func testTagFiltersCountsMultiLevelSortsAndFileDetails() throws {
+        let file = """
+            {"id":90,"file_type":"m4b","file_role":"main","size_bytes":10,"display_name":"Audio","narrators":[],"identifiers":[],
+             "audiobook_codec":"AAC-LC","audiobook_bitrate_bps":64000,"abridged":false,"filepath":"/books/a.m4b",
+             "file_modified_at":"2026-01-02T00:00:00Z","created_at":"2026-01-03T00:00:00Z"}
+            """
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(book(1, "Dune")),\#(book(2, "Dune Messiah")),\#(book(9, files: file)),\#(resources)],"cursor":9}"#),
+                        access: Shishoapp.FeedAccess(libraryIds: [1], listIds: []))
+
+        let options = try store.pool.read { try CatalogStore.filterOptions($0, libraryID: nil) }
+        XCTAssertEqual(options.tags, [FilterOption(name: "Desert", count: 2)])
+        XCTAssertEqual(options.fileTypes.sorted(), ["epub", "m4b"])
+        let tagged = try store.pool.read { try CatalogStore.books($0, libraryID: nil, filter: LibraryFilter(tags: ["desert"])) }
+        XCTAssertEqual(tagged.map(\.id).sorted(), [1, 2], "names match ignoring case")
+
+        let sorted = try store.pool.read { try CatalogStore.books($0, libraryID: nil, sort: "author:desc,title:desc") }
+        XCTAssertEqual(sorted.map(\.title), ["Dune Messiah", "Dune", "Book 9"], "authorless last, then by title")
+
+        let detail = try XCTUnwrap(store.pool.read { try CatalogStore.book($0, id: 9) }?.files.first)
+        XCTAssertEqual(detail.codec, "AAC-LC")
+        XCTAssertEqual(detail.bitrate, 64000)
+        XCTAssertEqual(detail.abridged, false)
+        XCTAssertEqual(detail.filepath, "/books/a.m4b")
+        XCTAssertNotNil(detail.modifiedAt)
+        XCTAssertNotNil(detail.addedAt)
     }
 }

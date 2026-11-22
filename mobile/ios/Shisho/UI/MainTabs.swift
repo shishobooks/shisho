@@ -25,6 +25,10 @@ struct MainTabs: View {
         .overlay(alignment: .bottom) {
             AppTabBar()
         }
+        // The bar stays at the bottom under the keyboard, as the system's tab
+        // bar does, rather than riding up over search results. Each tab's
+        // screens still make room for the keyboard themselves.
+        .ignoresSafeArea(.keyboard)
         .tint(Theme.primary)
         .sheet(isPresented: Binding(get: { model.showingAccount }, set: { model.showingAccount = $0 })) {
             AccountSheet()
@@ -173,11 +177,16 @@ private struct MiniPlayerOverlay: ViewModifier {
     @Environment(AppModel.self) private var model
 
     func body(content: Content) -> some View {
-        content.overlay(alignment: .bottom) {
-            MiniPlayer()
-                .frame(maxWidth: 680)
-                .padding(.bottom, AppTabBar.height)
-                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
+        // Above the tab bar, and like it, staying put under the keyboard.
+        content.overlay {
+            Color.clear
+                .ignoresSafeArea(.keyboard)
+                .overlay(alignment: .bottom) {
+                    MiniPlayer()
+                        .frame(maxWidth: 680)
+                        .padding(.bottom, AppTabBar.height)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
+                }
         }
     }
 }
@@ -273,6 +282,7 @@ struct SmallOutlineStyle: ButtonStyle {
             .background(Theme.card.opacity(configuration.isPressed ? 0.6 : 1), in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
             .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
+            .hitArea(height: 34)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }

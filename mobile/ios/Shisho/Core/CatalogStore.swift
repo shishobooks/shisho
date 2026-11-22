@@ -62,7 +62,6 @@ struct BookDetail: Hashable, Sendable {
         var durationSeconds: Double?
         var narratorIDs: [Int] = []
         var publisher: String?
-        var publisherID: Int?
         var identifiers: [Identifier] = []
         var pageCount: Int?
         var releaseDate: Date?
@@ -75,7 +74,6 @@ struct BookDetail: Hashable, Sendable {
         var filepath = ""
         var modifiedAt: Date?
         var addedAt: Date?
-        var chapterCount = 0
         /// How far through the File the user is, from 0 to 1: this device's
         /// place when it has one, or the server's.
         var progress: Double?
@@ -627,9 +625,8 @@ final class CatalogStore: Sendable {
         }
         let files = try Row.fetchAll(db, sql: """
             SELECT id, file_type, file_role, size_bytes, display_name, cover_version, narrators, duration_seconds,
-                publisher, publisher_id, identifiers, page_count, release_date, codec, bitrate, language, abridged, url,
+                publisher, identifiers, page_count, release_date, codec, bitrate, language, abridged, url,
                 reading_direction, filepath, file_modified_at, created_at,
-                (SELECT COUNT(*) FROM book_file_chapters WHERE file_id = book_files.id) AS chapter_count,
                 COALESCE((SELECT percentage FROM local_positions WHERE file_id = book_files.id),
                     (SELECT percentage FROM reading_positions WHERE file_id = book_files.id)) AS progress,
                 (SELECT json_group_array(person_id) FROM (SELECT person_id FROM book_narrators WHERE file_id = book_files.id ORDER BY position)) AS narrator_ids
@@ -642,14 +639,14 @@ final class CatalogStore: Sendable {
             return BookDetail.File(id: $0["id"], fileType: $0["file_type"], fileRole: $0["file_role"], sizeBytes: $0["size_bytes"],
                                    displayName: $0["display_name"], coverVersion: $0["cover_version"],
                                    narrators: CatalogStore.names($0["narrators"]), durationSeconds: $0["duration_seconds"],
-                                   narratorIDs: narratorIDs, publisher: $0["publisher"], publisherID: $0["publisher_id"],
+                                   narratorIDs: narratorIDs, publisher: $0["publisher"],
                                    identifiers: identifiers, pageCount: $0["page_count"],
                                    releaseDate: ($0["release_date"] as Double?).map(Date.init(timeIntervalSince1970:)),
                                    codec: $0["codec"], bitrate: $0["bitrate"], language: $0["language"], abridged: $0["abridged"],
                                    url: $0["url"], readingDirection: $0["reading_direction"], filepath: $0["filepath"],
                                    modifiedAt: ($0["file_modified_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
                                    addedAt: ($0["created_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
-                                   chapterCount: $0["chapter_count"], progress: $0["progress"])
+                                   progress: $0["progress"])
         }
         let fileTypes = orderedUnique(files.filter { $0.fileRole != "supplement" }.map(\.fileType))
         let published = try Double.fetchOne(db, sql: """

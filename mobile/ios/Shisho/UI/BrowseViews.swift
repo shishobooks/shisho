@@ -222,8 +222,9 @@ struct ResourceView: View {
         if authored > 0 {
             out.append(String(AttributedString(localized: "^[\(authored) book](inflect: true) authored").characters))
         }
-        if let narrated, !narrated.isEmpty {
-            out.append(String(AttributedString(localized: "^[\(narrated.count) book](inflect: true) narrated").characters))
+        // Files, as the web and the People list count a narrator.
+        if let files = (detail ?? nil)?.narratedFiles, files > 0 {
+            out.append(String(AttributedString(localized: "^[\(files) file](inflect: true) narrated").characters))
         }
         return out
     }

@@ -40,6 +40,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import {
   Tooltip,
   TooltipContent,
@@ -164,19 +165,11 @@ const FileProgress = ({ file, progress }: { file: File; progress: number }) => {
   const left = progress < 1 ? leftLabel(file, progress) : null;
   return (
     <div className="mt-2 flex items-center gap-2 text-xs tabular-nums text-muted-foreground sm:hidden">
-      <div
+      <Progress
         aria-label={`${percent} through`}
-        aria-valuemax={100}
-        aria-valuemin={0}
-        aria-valuenow={Math.round(progress * 100)}
-        className="h-1 max-w-48 flex-1 overflow-hidden rounded-full bg-primary/20"
-        role="progressbar"
-      >
-        <div
-          className="h-full rounded-full bg-primary"
-          style={{ width: percent }}
-        />
-      </div>
+        className="h-1 max-w-48 flex-1"
+        value={Math.round(progress * 100)}
+      />
       <span className="shrink-0">
         {[percent, left].filter(Boolean).join(" · ")}
       </span>

@@ -9,6 +9,9 @@ struct RelatedPanel: View {
     @Environment(AppModel.self) private var model
     let bookID: Int
     let related: BookRelated
+    /// The tab picked on this Book's page, or nil for its first, as the
+    /// web keeps it in the URL.
+    @Binding var selected: String?
 
     enum Tab: String, CaseIterable {
         case series, author, lists
@@ -37,9 +40,8 @@ struct RelatedPanel: View {
         return tabs
     }
 
-    /// The tab picked last, which the next Book opens on if it has it.
     private var active: Tab? {
-        tabs.first { $0.rawValue == model.relatedTab } ?? tabs.first
+        tabs.first { $0.rawValue == selected } ?? tabs.first
     }
 
     private func groups(_ tab: Tab) -> [BookRelated.Group] {
@@ -65,43 +67,45 @@ struct RelatedPanel: View {
         // Scrolls sideways when large text makes the tabs wider than the
         // screen, rather than wrapping their names.
         ScrollView(.horizontal, showsIndicators: false) {
-        HStack(spacing: 4) {
-            ForEach(tabs, id: \.self) { tab in
-                let selected = tab == active
-                Button {
-                    withAnimation(.easeOut(duration: 0.15)) { model.relatedTab = tab.rawValue }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(tab.title)
-                            .font(.geist(.footnote, weight: .medium))
-                            .lineLimit(1)
-                            .fixedSize()
-                            .foregroundStyle(selected ? Theme.foreground : Theme.mutedForeground)
-                        if tab == .lists {
-                            Text(verbatim: "\(related.lists.count)")
-                                .font(.geist(size: 10, relativeTo: .caption2, weight: .semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.mutedForeground)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(Theme.muted, in: Capsule())
+            HStack(spacing: 4) {
+                ForEach(tabs, id: \.self) { tab in
+                    let isActive = tab == active
+                    Button {
+                        // The first tab is the default, kept as none, so the next
+                        // Book opens on its own first tab.
+                        withAnimation(.easeOut(duration: 0.15)) { selected = tab == tabs.first ? nil : tab.rawValue }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(tab.title)
+                                .font(.geist(.footnote, weight: .medium))
+                                .lineLimit(1)
+                                .fixedSize()
+                                .foregroundStyle(isActive ? Theme.foreground : Theme.mutedForeground)
+                            if tab == .lists {
+                                Text(verbatim: "\(related.lists.count)")
+                                    .font(.geist(size: 10, relativeTo: .caption2, weight: .semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(Theme.mutedForeground)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(Theme.muted, in: Capsule())
+                            }
                         }
-                    }
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 36)
-                    .overlay(alignment: .bottom) {
-                        if selected {
-                            Rectangle().fill(Theme.primary).frame(height: 2)
+                        .padding(.horizontal, 12)
+                        .frame(minHeight: 44)
+                        .overlay(alignment: .bottom) {
+                            if isActive {
+                                Rectangle().fill(Theme.primary).frame(height: 2)
+                            }
                         }
+                        .contentShape(Rectangle())
                     }
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(tab == .lists ? "\(tab.title) \(related.lists.count)" : tab.title)
+                    .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                    .accessibilityIdentifier("book.related.\(tab.rawValue)")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(tab == .lists ? "\(tab.title) \(related.lists.count)" : tab.title)
-                .accessibilityAddTraits(selected ? [.isSelected] : [])
-                .accessibilityIdentifier("book.related.\(tab.rawValue)")
             }
-        }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay(alignment: .bottom) {
@@ -121,7 +125,7 @@ struct RelatedPanel: View {
                     ForEach(groups) { group in
                         Section {
                             ForEach(group.lines) { line in
-                                RelatedLine(line: line, current: line.book.id == bookID)
+                                RelatedLine(line: line, current: line.book.id == bookID, rowHeight: rowHeight, tab: selected)
                                     .id("\(group.id)-\(line.book.id)")
                             }
                         } header: {
@@ -154,6 +158,7 @@ struct RelatedPanel: View {
                         .foregroundStyle(Theme.foreground)
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("book.related.heading")
             } else {
                 Text(group.title)
                     .foregroundStyle(Theme.foreground)
@@ -181,11 +186,15 @@ struct RelatedPanel: View {
 }
 
 /// One Book in a tab: its cover, a small line (its number, year, or place),
-/// and its title. This Book is marked, not linked.
+/// and its title. This Book is marked, not linked. Opening another carries
+/// the tab along, as the web's links do.
 private struct RelatedLine: View {
+    @Environment(AppModel.self) private var model
     let line: BookRelated.Line
     let current: Bool
-    @ScaledMetric(relativeTo: .subheadline) private var rowHeight: CGFloat = 56
+    /// The panel's, so its window's height counts these rows right.
+    let rowHeight: CGFloat
+    let tab: String?
 
     private var meta: String? {
         let parts = [line.meta, current ? String(localized: "This book") : nil].compactMap { $0 }
@@ -198,9 +207,15 @@ private struct RelatedLine: View {
                 .background(Theme.muted, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .accessibilityElement(children: .combine)
         } else {
-            NavigationLink(value: Route.book(line.book)) { row }
-                .buttonStyle(.plain)
-                .accessibilityElement(children: .combine)
+            Button {
+                model.relatedTabForNextBook = tab
+                model.push(.book(line.book))
+            } label: {
+                row
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("book.related.book")
         }
     }
 

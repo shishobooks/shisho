@@ -14,6 +14,8 @@ struct LibraryView: View {
     @State private var notes: [JournalNote]?
     /// The sort saved on the web for the Library showing.
     @State private var savedSort: String?
+    @State private var showingFilters = false
+    @State private var showingSort = false
 
     private var libraryID: Int? {
         model.libraryID == 0 ? nil : model.libraryID
@@ -94,6 +96,7 @@ struct LibraryView: View {
             .routeDestinations()
         }
         .tint(Theme.primary)
+        .gallerySheets(showingFilters: $showingFilters, showingSort: $showingSort, sort: sort)
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
             try CatalogStore.journalNotes(db)
         }
@@ -133,11 +136,11 @@ struct LibraryView: View {
                 HStack(alignment: .center) {
                     heading
                     Spacer(minLength: 8)
-                    GalleryControls(sort: sort)
+                    GalleryControls(sort: sort, showingFilters: $showingFilters, showingSort: $showingSort)
                 }
                 VStack(alignment: .leading, spacing: 10) {
                     heading
-                    GalleryControls(sort: sort)
+                    GalleryControls(sort: sort, showingFilters: $showingFilters, showingSort: $showingSort)
                 }
             }
             ActiveFilterChips()

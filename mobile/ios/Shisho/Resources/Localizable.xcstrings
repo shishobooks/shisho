@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    " by " : {
+
+    },
     "%@ #%@" : {
 
     },
@@ -135,6 +138,16 @@
         }
       }
     },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
     "%lld selected" : {
 
     },
@@ -251,6 +264,9 @@
 
     },
     "Cancel" : {
+
+    },
+    "Ch. %@" : {
 
     },
     "Change or clear the filters to see more." : {
@@ -398,6 +414,9 @@
 
     },
     "Language" : {
+
+    },
+    "Last read" : {
 
     },
     "Last synced" : {
@@ -867,6 +886,9 @@
     "Username" : {
 
     },
+    "Vol. %@" : {
+
+    },
     "Writer" : {
 
     },
@@ -895,9 +917,6 @@
 
     },
     "^[%lld book](inflect: true) authored" : {
-
-    },
-    "^[%lld book](inflect: true) narrated" : {
 
     },
     "^[%lld chapter](inflect: true)" : {

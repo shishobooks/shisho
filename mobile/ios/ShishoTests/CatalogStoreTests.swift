@@ -201,16 +201,16 @@ final class CatalogStoreTests: XCTestCase {
         XCTAssertEqual(try store.books(libraryID: nil).map(\.id), [2, 3, 1])
     }
 
-    /// Levels the app can't sort by yet, such as when the reader last read,
-    /// are skipped; with none left, it's the default, newest first.
+    /// Levels the app doesn't know, such as one a newer server adds, are
+    /// skipped; with none left, it's the default, newest first.
     func testASortTheAppCantApplyFallsBack() throws {
         let books = [
             sortable(1, title: "b", added: "2024-01-01T00:00:00Z"),
             sortable(2, title: "a", added: "2026-01-01T00:00:00Z"),
             sortable(3, title: "c", added: "2025-01-01T00:00:00Z"),
         ]
-        XCTAssertEqual(try order("last_read:desc,title:asc", books), [2, 1, 3])
-        XCTAssertEqual(try order("last_read:desc,someday_field:asc", books), [2, 3, 1])
+        XCTAssertEqual(try order("someday_field:desc,title:asc", books), [2, 1, 3])
+        XCTAssertEqual(try order("someday_field:desc,other_field:asc", books), [2, 3, 1])
         XCTAssertEqual(try order("", books), [2, 3, 1])
     }
 

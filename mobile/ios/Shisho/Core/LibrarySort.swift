@@ -61,6 +61,16 @@ enum LibrarySort {
             return nullsLast("(SELECT rating FROM user_books WHERE book_id = b.id)", direction)
         case "date_finished":
             return nullsLast("(SELECT MAX(end_day) FROM read_throughs WHERE book_id = b.id AND outcome = 'finished')", direction)
+        case "last_read":
+            // The latest synced place on any of the Book's own Files while
+            // a Read-through is underway, as the server's `LastReadExpr`
+            // reads its updates; a supplement doesn't count. The player's
+            // unsynced saves are left out, as `readingColumns` explains.
+            return nullsLast("""
+                (SELECT MAX(p.occurred_at) FROM book_files f JOIN reading_positions p ON p.file_id = f.id
+                 WHERE f.book_id = b.id AND f.file_role != 'supplement'
+                   AND EXISTS (SELECT 1 FROM read_throughs WHERE book_id = b.id AND outcome = 'underway'))
+                """, direction)
         default:
             return []
         }
@@ -99,11 +109,10 @@ struct SortLevel: Hashable, Sendable {
 }
 
 extension LibrarySort {
-    /// The fields the sort sheet offers, in the web's order. The web's Last
-    /// read needs reading history the device doesn't keep.
+    /// The fields the sort sheet offers, in the web's order.
     static let fields = [
         "title", "author", "series", "date_added", "date_released",
-        "page_count", "duration", "reading_status", "rating", "date_finished",
+        "page_count", "duration", "reading_status", "rating", "date_finished", "last_read",
     ]
     /// As many levels as `pkg/sortspec` takes.
     static let maxLevels = 10
@@ -122,14 +131,15 @@ extension LibrarySort {
         case "reading_status": String(localized: "Reading status")
         case "rating": String(localized: "Rating")
         case "date_finished": String(localized: "Date finished")
+        case "last_read": String(localized: "Last read")
         default: field
         }
     }
 
     /// A newly added level puts the best rated and most recently finished
-    /// first, as on the web.
+    /// or read first, as on the web.
     static func initiallyDescending(_ field: String) -> Bool {
-        field == "rating" || field == "date_finished"
+        field == "rating" || field == "date_finished" || field == "last_read"
     }
 
     /// The levels of a spec in the sort parameter form, leaving out any it

@@ -5,8 +5,10 @@ import SwiftUI
 struct GalleryControls: View {
     @Environment(AppModel.self) private var model
     let sort: GallerySort
-    @State private var showingFilters = false
-    @State private var showingSort = false
+    /// The screen's, not these buttons': the heading lays them out twice
+    /// to see which fits, and a copy it drops mustn't close an open sheet.
+    @Binding var showingFilters: Bool
+    @Binding var showingSort: Bool
 
     var body: some View {
         HStack(spacing: 8) {
@@ -28,8 +30,14 @@ struct GalleryControls: View {
         // Its natural width, so the header stacks it under the heading
         // rather than squeeze its labels onto two lines.
         .fixedSize(horizontal: true, vertical: false)
-        .sheet(isPresented: $showingFilters) { FilterSheet() }
-        .sheet(isPresented: $showingSort) { SortSheet(sort: sort) }
+    }
+}
+
+extension View {
+    /// The Filter and Sort sheets GalleryControls opens.
+    func gallerySheets(showingFilters: Binding<Bool>, showingSort: Binding<Bool>, sort: GallerySort) -> some View {
+        sheet(isPresented: showingFilters) { FilterSheet() }
+            .sheet(isPresented: showingSort) { SortSheet(sort: sort) }
     }
 }
 
@@ -109,6 +117,7 @@ struct FilterChip: View {
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
             .background(Theme.secondary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .hitArea(height: 28)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(String(localized: "Remove \(label)"))
@@ -139,7 +148,7 @@ struct ActiveFilterChips: View {
                         model.filter.maxRating = nil
                     }
                 }
-                ForEach(model.filter.fileTypes.sorted(), id: \.self) { type in
+                ForEach(FileTypes.sorted(model.filter.fileTypes), id: \.self) { type in
                     FilterChip(kind: .fileType, label: FileTypes.label(type)) { model.filter.fileTypes.remove(type) }
                 }
                 ForEach(model.filter.genres.sorted(by: Self.byName), id: \.self) { genre in
@@ -155,6 +164,7 @@ struct ActiveFilterChips: View {
                     .font(.geist(.caption))
                     .foregroundStyle(Theme.mutedForeground)
                     .buttonStyle(.plain)
+                    .hitArea(height: 16)
                     .accessibilityLabel("Clear all filters")
                     .accessibilityIdentifier("library.filters.clearAll")
             }
@@ -198,14 +208,17 @@ struct SortedByChips: View {
                         .padding(.horizontal, 9)
                         .padding(.vertical, 5)
                         .background(Theme.secondary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .hitArea(height: 28)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("library.sortedBy.\(level.field)")
                     .accessibilityLabel(String(localized: "\(LibrarySort.label(level.field)) \(level.descending ? String(localized: "descending") : String(localized: "ascending")), remove"))
                 }
                 Button("reset to default") { model.sortSpec = nil }
                     .font(.geist(.caption))
                     .foregroundStyle(Theme.mutedForeground)
                     .buttonStyle(.plain)
+                    .hitArea(height: 16)
                     .accessibilityLabel("Reset to the saved sort")
                     .accessibilityIdentifier("library.sort.reset")
             }
@@ -244,6 +257,7 @@ private struct SmallPrimaryStyle: ButtonStyle {
             .padding(.horizontal, 14)
             .frame(minHeight: 34)
             .background(Theme.primary.opacity(configuration.isPressed ? 0.8 : 1), in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .hitArea(height: 34)
     }
 }
 
@@ -325,6 +339,7 @@ private struct FilterSheet: View {
                             .font(.geist(.footnote))
                             .foregroundStyle(Theme.mutedForeground)
                             .buttonStyle(.plain)
+                    .hitArea(height: 16)
                             .accessibilityIdentifier("filters.clear")
                     }
                     Button("Done") { dismiss() }
@@ -339,7 +354,7 @@ private struct FilterSheet: View {
                         }
                         if let options {
                             if !options.fileTypes.isEmpty {
-                                fileTypeSection(options.fileTypes)
+                                fileTypeSection(FileTypes.sorted(options.fileTypes))
                             }
                             if !options.genres.isEmpty {
                                 namesSection(.genre, title: "Genres", selected: $model.filter.genres,
@@ -413,7 +428,9 @@ private struct FilterSheet: View {
     private func fileTypeSection(_ types: [String]) -> some View {
         @Bindable var model = model
         let chosen = types.filter(model.filter.fileTypes.contains)
-        return FilterSection(kind: .fileType, title: "File type", detail: Self.selected(chosen.count)) {
+        // "2 of 5", as the web counts them.
+        return FilterSection(kind: .fileType, title: "File type",
+                             detail: chosen.isEmpty ? nil : String(localized: "\(chosen.count) of \(types.count)")) {
             Menu {
                 ForEach(types, id: \.self) { type in
                     Toggle(FileTypes.label(type), isOn: Binding(
@@ -435,7 +452,9 @@ private struct FilterSheet: View {
     }
 
     /// Genres or tags: the ones picked as chips, and a button to a
-    /// searchable list of the rest, since a Library can have thousands.
+    /// searchable list of the rest, since a Library can have thousands. The
+    /// web's switch between tag namespaces waits for the device to have the
+    /// Library's namespaces; until then every tag is listed by its full name.
     private func namesSection(_ kind: FilterKind, title: LocalizedStringKey, selected: Binding<Set<String>>,
                               add: String, picking: Picking) -> some View {
         FilterSection(kind: kind, title: title, detail: Self.selected(selected.wrappedValue.count)) {
@@ -476,8 +495,9 @@ private struct FilterSheet: View {
     }
 }
 
-/// Every genre or tag in the Library, most used first, to search and check
-/// off, as the web's combobox lists them.
+/// Every genre or tag in the Library to search and check off, as the web's
+/// combobox has them, but most used first rather than by name, which suits a
+/// list of thousands on a phone.
 private struct NamePicker: View {
     let title: LocalizedStringKey
     let prompt: String
@@ -493,9 +513,12 @@ private struct NamePicker: View {
 
     var body: some View {
         List(shown) { option in
-            let on = selected.contains(option.name)
+            // Ignoring case, as the filter matches names, so a pick spelled
+            // differently in another Library still shows as on.
+            let picked = selected.filter { $0.caseInsensitiveCompare(option.name) == .orderedSame }
+            let on = !picked.isEmpty
             Button {
-                if on { selected.remove(option.name) } else { selected.insert(option.name) }
+                if on { selected.subtract(picked) } else { selected.insert(option.name) }
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: on ? "checkmark.square.fill" : "square")
@@ -641,7 +664,7 @@ private struct RatingRangeSlider: View {
             .offset(x: x - 22)
             .accessibilityElement()
             .accessibilityLabel(low ? String(localized: "Lowest rating") : String(localized: "Highest rating"))
-            .accessibilityValue(value == edge ? String(localized: "Any") : String(localized: "\(Ratings.text(value)) stars"))
+            .accessibilityValue(value == edge ? String(localized: "Any") : Ratings.range(min: value, max: value))
             .accessibilityAdjustableAction { direction in
                 let step = direction == .increment ? 1 : -1
                 if low {
@@ -678,6 +701,7 @@ private struct SortSheet: View {
                         .font(.geist(.footnote))
                         .foregroundStyle(Theme.mutedForeground)
                         .buttonStyle(.plain)
+                    .hitArea(height: 16)
                         .accessibilityLabel("Reset to the saved sort")
                         .accessibilityIdentifier("sort.reset")
                 }
@@ -772,7 +796,7 @@ private struct SortSheet: View {
                 Image(systemName: level.descending ? "arrow.down" : "arrow.up")
                     .font(.geist(size: 15, relativeTo: .footnote, weight: .medium))
                     .foregroundStyle(Theme.foreground)
-                    .frame(minWidth: 42, minHeight: 42)
+                    .frame(minWidth: 44, minHeight: 44)
                     .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.input))
                     .contentShape(Rectangle())
@@ -791,7 +815,7 @@ private struct SortSheet: View {
                 Image(systemName: "xmark")
                     .font(.geist(size: 13, relativeTo: .footnote, weight: .semibold))
                     .foregroundStyle(Theme.mutedForeground)
-                    .frame(minWidth: 36, minHeight: 42)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

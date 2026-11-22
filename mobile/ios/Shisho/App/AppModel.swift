@@ -65,9 +65,10 @@ final class AppModel {
     var showingPlayer = false
     /// The tab showing, and each tab's navigation: the pages pushed on it.
     var tab: AppTab = .library
-    /// The Book page's Related tab picked last, which the next Book opens on
-    /// when it has it, as the web carries its tab from Book to Book.
-    var relatedTab: String?
+    /// The Related tab a Book opened from the Related panel starts on, as
+    /// the web carries its tab along the panel's links. The Book's page takes
+    /// it when it opens.
+    var relatedTabForNextBook: String?
     var libraryPath: [Route] = []
     var listsPath: [Route] = []
     /// The Account sheet is open.
@@ -81,6 +82,10 @@ final class AppModel {
             guard let session, libraryID != oldValue else { return }
             UserDefaults.standard.set(libraryID, forKey: "libraryID.\(session.account.id)")
             loadSort()
+            // Filters belong to the Library they were picked in, as the web
+            // drops them with the Library's address: another Library's
+            // genres and tags would match nothing here.
+            filter = LibraryFilter()
         }
     }
     /// What the Library grid is narrowed to, for the account showing.
@@ -189,6 +194,20 @@ final class AppModel {
     }
 
     /// Goes back to tab's first screen.
+    /// Opens a Book from one of its own pages, such as a File's: back to it
+    /// when it's the screen before, rather than a second copy on top.
+    func returnToBook(_ book: BookSummary) {
+        let path = tab == .library ? libraryPath : listsPath
+        if path.count >= 2, case .book(let previous) = path[path.count - 2], previous.id == book.id {
+            switch tab {
+            case .library: libraryPath.removeLast()
+            case .lists: listsPath.removeLast()
+            }
+        } else {
+            push(.book(book))
+        }
+    }
+
     func popToRoot(_ tab: AppTab) {
         switch tab {
         case .library: libraryPath = []
@@ -264,6 +283,9 @@ final class AppModel {
     func listen(fileID: Int, from seconds: Double) {
         guard let player else { return }
         player.open(fileID: fileID, autoplay: false)
+        // A File that couldn't be opened, such as one a sync just removed,
+        // leaves the one before it loaded, whose place mustn't move.
+        guard player.file?.fileID == fileID else { return }
         player.seek(to: seconds)
         player.play()
         showingPlayer = true

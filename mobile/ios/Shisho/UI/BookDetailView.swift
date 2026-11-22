@@ -16,6 +16,9 @@ struct BookDetailView: View {
     @State private var scrolled = false
     @State private var standing: BookStanding?
     @State private var related: BookRelated??
+    /// This page's Related tab, nil for the first.
+    @State private var relatedTab: String?
+    @State private var tookRelatedTab = false
 
     private var summary: BookSummary {
         book??.summary ?? initial
@@ -70,6 +73,13 @@ struct BookDetailView: View {
         }
         .observing(model.session?.store, id: bookID, into: $book) { [bookID] db in
             try CatalogStore.book(db, id: bookID)
+        }
+        .onAppear {
+            // Once, so coming back keeps this page's tab.
+            guard !tookRelatedTab else { return }
+            tookRelatedTab = true
+            relatedTab = model.relatedTabForNextBook
+            model.relatedTabForNextBook = nil
         }
         .observing(model.session?.store, id: bookID, into: $related) { [bookID] db in
             try CatalogStore.related(db, bookID: bookID)
@@ -175,7 +185,7 @@ struct BookDetailView: View {
             if let standing, standing.status != nil || standing.rating != nil {
                 HStack {
                     if let status = standing.status {
-                        Label(ReadingStatusLabel.text(status), systemImage: ReadingStatusLabel.symbol(status))
+                        Label(ReadingStatusLabel.text(status), systemImage: StatusStyle.symbol(status))
                             .font(.geist(.footnote, weight: .medium))
                             .padding(.horizontal, 12)
                             .frame(minHeight: 34)
@@ -242,7 +252,7 @@ struct BookDetailView: View {
             // The Books near this one, at the bottom as the web's phone
             // layout has its Related panel.
             if let related = related ?? nil, !related.isEmpty {
-                RelatedPanel(bookID: book.summary.id, related: related)
+                RelatedPanel(bookID: book.summary.id, related: related, selected: $relatedTab)
                     .padding(.top, 32)
             }
         }
@@ -324,6 +334,21 @@ private struct FileCard: View {
         }
         return file.progress
     }
+
+    /// An audiobook's length at the speed it plays at, so the time left
+    /// matches the Listen card's.
+    private var listeningLength: Double? {
+        guard isAudiobook, let duration = file.durationSeconds else { return file.durationSeconds }
+        let rate: Double
+        if let player = model.player, player.file?.fileID == file.id {
+            rate = player.rate
+        } else if let account = model.session?.account {
+            rate = AudioPlayer.storedRate(accountID: account.id, fileID: file.id)
+        } else {
+            rate = 1
+        }
+        return duration / max(rate, 0.1)
+    }
     /// The square the cover sits in: an audiobook's fills it, and a book's
     /// two-thirds-wide cover is as tall as it.
     private static let coverSlot: CGFloat = 52
@@ -380,7 +405,7 @@ private struct FileCard: View {
                                 .accessibilityIdentifier("book.detail.narrator")
                         }
                         if let progress {
-                            FileProgressLine(progress: progress, durationSeconds: file.durationSeconds, pageCount: file.pageCount)
+                            FileProgressLine(progress: progress, durationSeconds: listeningLength, pageCount: file.pageCount)
                                 .padding(.top, 3)
                         }
                     } else {
@@ -462,19 +487,6 @@ enum ReadingStatusLabel {
         default: status.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
-
-    /// Each Reading Status's icon, as the web app's status menu shows it.
-    static func symbol(_ status: String) -> String {
-        switch status {
-        case "currently_reading": "book"
-        case "paused": "pause.circle"
-        case "to_read": "clock"
-        case "read": "checkmark.circle"
-        case "did_not_finish": "xmark.circle"
-        case "reference": "bookmark"
-        default: "book"
-        }
-    }
 }
 
 /// An identifier's type as the web app names it.
@@ -550,6 +562,7 @@ struct LinkChips: View {
                         .font(.geist(.footnote, weight: .medium))
                         .foregroundStyle(Theme.primary)
                         .padding(.vertical, 4)
+                        .hitArea(height: 26)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("\(identifier).more")

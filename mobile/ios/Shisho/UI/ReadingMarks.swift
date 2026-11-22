@@ -15,9 +15,11 @@ enum StatusStyle {
         }
     }
 
+    /// The one icon each Reading Status has wherever it shows, on a cover's
+    /// ribbon and beside its name, as the web's `ReadingStatusIcon`.
     static func symbol(_ status: String?) -> String {
         switch status {
-        case "paused": "pause.fill"
+        case "paused": "pause"
         case "to_read": "clock"
         case "read": "checkmark"
         case "did_not_finish": "xmark"
@@ -145,12 +147,6 @@ struct FileProgressLine: View {
 }
 
 /// The web app's number formats.
-enum Percent {
-    static func text(_ value: Double) -> String {
-        "\(Int((min(1, max(0, value)) * 100).rounded()))%"
-    }
-}
-
 /// Text cut to a few lines with a Show more button, which shows only when
 /// the text doesn't fit.
 struct ExpandableText: View {

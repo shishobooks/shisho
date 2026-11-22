@@ -40,6 +40,8 @@ struct ResourceDetail: Hashable, Sendable {
     let name: String
     let description: String?
     let aliases: [String]
+    /// A Person's narrated Files, which the web counts rather than Books.
+    var narratedFiles = 0
 }
 
 /// A List as the Lists tab shows it.
@@ -51,8 +53,6 @@ struct ListSummary: Identifiable, Hashable, Sendable {
     let permission: String
     let ownerName: String
     let bookCount: Int
-    /// The first Books' covers, in the List's order.
-    let covers: [BookSummary]
     /// Who it's shared with, for its owner and managers.
     var shares: [ListShare] = []
 }
@@ -670,13 +670,17 @@ extension CatalogStore {
         guard let row = try Row.fetchOne(db, sql: "SELECT name, description, aliases FROM \(kind.table) WHERE id = ?", arguments: [id]) else {
             return nil
         }
-        return ResourceDetail(kind: kind, id: id, name: row["name"], description: row["description"], aliases: names(row["aliases"]))
+        let narrated = kind == .person
+            ? try Int.fetchOne(db, sql: "SELECT COUNT(DISTINCT file_id) FROM book_narrators WHERE person_id = ?", arguments: [id]) ?? 0
+            : 0
+        return ResourceDetail(kind: kind, id: id, name: row["name"], description: row["description"], aliases: names(row["aliases"]),
+                              narratedFiles: narrated)
     }
 
     /// The Books naming a resource: a Series' in its order, a Person's
     /// authored ones (narrated is false) or narrated ones, and a Genre's or
     /// Tag's in the Library's sort.
-    static func books(_ db: Database, kind: ResourceKind, id: Int, narrated: Bool = false) throws -> [BookSummary] {
+    static func books(_ db: Database, kind: ResourceKind, id: Int, narrated: Bool = false, limit: Int? = nil) throws -> [BookSummary] {
         let filter: String
         var order = LibrarySort.orderBy("")
         switch kind {
@@ -695,7 +699,8 @@ extension CatalogStore {
         case .tag:
             filter = "b.id IN (SELECT book_id FROM book_tags WHERE tag_id = ?)"
         }
-        let rows = try Row.fetchAll(db, sql: summarySQL + " WHERE \(filter) ORDER BY \(order)", arguments: [id])
+        let rows = try Row.fetchAll(db, sql: summarySQL + " WHERE \(filter) ORDER BY \(order)" + (limit.map { " LIMIT \($0)" } ?? ""),
+                                    arguments: [id])
         return try summaries(db, rows: rows)
     }
 
@@ -716,11 +721,10 @@ extension CatalogStore {
             FROM lists l ORDER BY l.permission != 'owner', l.name COLLATE NOCASE, l.id
             """).map { row in
             let id: Int = row["id"]
-            let covers = try listBooks(db, listID: id, limit: 3)
             let shares = ((row["shares"] as String?)?.data(using: .utf8))
                 .flatMap { try? JSONDecoder().decode([ListShare].self, from: $0) } ?? []
             return ListSummary(id: id, name: row["name"], description: row["description"], permission: row["permission"],
-                               ownerName: row["owner_name"], bookCount: row["book_count"], covers: covers, shares: shares)
+                               ownerName: row["owner_name"], bookCount: row["book_count"], shares: shares)
         }
     }
 
@@ -968,19 +972,30 @@ extension CatalogStore {
     static func related(_ db: Database, bookID: Int) throws -> BookRelated? {
         guard let libraryID = try Int.fetchOne(db, sql: "SELECT library_id FROM books WHERE id = ?", arguments: [bookID]) else { return nil }
         var related = BookRelated()
+        // Each group lists at most this many and counts the rest, so a List
+        // or To Read of thousands costs no more than it shows.
         let limit = BookRelated.maxBooks
 
         for row in try Row.fetchAll(db, sql: "SELECT series_id, name FROM book_series WHERE book_id = ? ORDER BY position", arguments: [bookID]) {
             let seriesID: Int = row["series_id"]
-            let books = try books(db, kind: .series, id: seriesID)
-            let numbers = try seriesNumbers(db, seriesID: seriesID)
+            let books = try books(db, kind: .series, id: seriesID, limit: limit)
+            let total = try Int.fetchOne(db, sql: """
+                SELECT COUNT(DISTINCT bs.book_id) FROM book_series bs JOIN books b ON b.id = bs.book_id WHERE bs.series_id = ?
+                """, arguments: [seriesID]) ?? books.count
+            // A comic's number reads "Vol. 5" or "Ch. 42", as the web's
+            // `seriesNumberLabel` writes it.
+            var labels: [Int: String] = [:]
+            for number in try Row.fetchAll(db, sql: """
+                SELECT bs.book_id, bs.number, bs.number_end, bs.unit,
+                    EXISTS (SELECT 1 FROM book_files f WHERE f.book_id = bs.book_id AND f.file_type = 'cbz') AS comic
+                FROM book_series bs WHERE bs.series_id = ? AND bs.number IS NOT NULL
+                """, arguments: [seriesID]) {
+                labels[number["book_id"]] = SeriesNumbers.label(number["number"], end: number["number_end"],
+                                                                unit: number["unit"], comic: number["comic"])
+            }
             related.series.append(BookRelated.Group(
-                title: row["name"], link: .series(id: seriesID, name: row["name"]), total: books.count,
-                lines: books.prefix(limit).map { book in
-                    BookRelated.Line(book: book, meta: numbers[book.id].map { number, end in
-                        "#" + seriesNumber(number) + (end.map { "-" + seriesNumber($0) } ?? "")
-                    })
-                }
+                title: row["name"], link: .series(id: seriesID, name: row["name"]), total: total,
+                lines: books.map { BookRelated.Line(book: $0, meta: labels[$0.id]) }
             ))
         }
 
@@ -990,36 +1005,36 @@ extension CatalogStore {
         if let author = try Row.fetchOne(db, sql: "SELECT person_id, name FROM book_authors WHERE book_id = ? ORDER BY position LIMIT 1",
                                           arguments: [bookID]) {
             let personID: Int = author["person_id"]
-            let released = "(SELECT MAX(release_date) FROM book_files WHERE book_id = b.id)"
-            let firstNumber = "(SELECT number FROM book_series WHERE book_id = b.id ORDER BY position LIMIT 1)"
-            let rows = try Row.fetchAll(db, sql: summarySQL + """
-                 WHERE b.library_id = ? AND b.id IN (SELECT book_id FROM book_authors WHERE person_id = ?)
-                 ORDER BY \(released) IS NULL, \(released), \(firstNumber) IS NULL, \(firstNumber), b.title, b.id
-                """, arguments: [libraryID, personID])
-            let books = try summaries(db, rows: rows)
-            if books.contains(where: { $0.id != bookID }) {
+            let mine = "b.library_id = ? AND b.id IN (SELECT book_id FROM book_authors WHERE person_id = ?)"
+            let total = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM books b WHERE \(mine)", arguments: [libraryID, personID]) ?? 0
+            if total > 1 {
+                let released = "(SELECT MAX(release_date) FROM book_files WHERE book_id = b.id)"
+                let firstNumber = "(SELECT number FROM book_series WHERE book_id = b.id ORDER BY position LIMIT 1)"
+                let books = try summaries(db, rows: Row.fetchAll(db, sql: summarySQL + """
+                     WHERE \(mine)
+                     ORDER BY \(released) IS NULL, \(released), \(firstNumber) IS NULL, \(firstNumber), b.title, b.id
+                     LIMIT \(limit)
+                    """, arguments: [libraryID, personID]))
                 var years: [Int: String] = [:]
                 for row in try Row.fetchAll(db, sql: """
                     SELECT book_id, MAX(release_date) AS released FROM book_files
                     WHERE book_id IN (SELECT book_id FROM book_authors WHERE person_id = ?) AND release_date IS NOT NULL GROUP BY book_id
                     """, arguments: [personID]) {
-                    years[row["book_id"]] = year(Date(timeIntervalSince1970: row["released"]))
+                    years[row["book_id"]] = FileFacts.year(Date(timeIntervalSince1970: row["released"]))
                 }
                 related.author = BookRelated.Group(title: author["name"], link: .person(id: personID, name: author["name"]),
-                                                   total: books.count,
-                                                   lines: books.prefix(limit).map { BookRelated.Line(book: $0, meta: years[$0.id]) })
+                                                   total: total, lines: books.map { BookRelated.Line(book: $0, meta: years[$0.id]) })
             }
         }
 
         // To Read, numbered by place, when this Book is on it.
         if try Bool.fetchOne(db, sql: "SELECT to_read_position IS NOT NULL FROM user_books WHERE book_id = ?", arguments: [bookID]) == true {
-            let rows = try Row.fetchAll(db, sql: summarySQL + """
-                 JOIN user_books tr ON tr.book_id = b.id WHERE tr.to_read_position IS NOT NULL ORDER BY tr.to_read_position, b.id
-                """)
-            let books = try summaries(db, rows: rows)
+            let queued = " JOIN user_books tr ON tr.book_id = b.id WHERE tr.to_read_position IS NOT NULL"
+            let total = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM books b" + queued) ?? 0
+            let books = try summaries(db, rows: Row.fetchAll(db, sql: summarySQL + queued + " ORDER BY tr.to_read_position, b.id LIMIT \(limit)"))
             related.lists.append(BookRelated.Group(
-                title: String(localized: "To Read"), link: .none, total: books.count,
-                lines: books.prefix(limit).enumerated().map { BookRelated.Line(book: $1, meta: "#\($0 + 1)") }
+                title: String(localized: "To Read"), link: .none, total: total,
+                lines: books.enumerated().map { BookRelated.Line(book: $1, meta: "#\($0 + 1)") }
             ))
         }
         for row in try Row.fetchAll(db, sql: """
@@ -1028,6 +1043,8 @@ extension CatalogStore {
             """, arguments: [bookID]) {
             let listID: Int = row["id"]
             let ordered: Bool = row["is_ordered"]
+            let total = try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM list_books lb JOIN books b ON b.id = lb.book_id WHERE lb.list_id = ?",
+                                         arguments: [listID]) ?? 0
             // An ordered List reads in its own order and numbers each Book
             // by its place, whatever its default sort, as on the web.
             let books: [BookSummary]
@@ -1036,29 +1053,18 @@ extension CatalogStore {
                 books = try summaries(db, rows: Row.fetchAll(db, sql: summarySQL + """
                      JOIN list_books lb ON lb.book_id = b.id AND lb.list_id = ?
                      ORDER BY lb.sort_order IS NULL, lb.sort_order, lb.added_at DESC, lb.position
+                     LIMIT \(limit)
                     """, arguments: [listID]))
                 for place in try Row.fetchAll(db, sql: "SELECT book_id, sort_order FROM list_books WHERE list_id = ? AND sort_order IS NOT NULL",
                                               arguments: [listID]) {
                     places[place["book_id"]] = "#\(place["sort_order"] as Int)"
                 }
             } else {
-                books = try listBooks(db, listID: listID)
+                books = try listBooks(db, listID: listID, limit: limit)
             }
-            related.lists.append(BookRelated.Group(title: row["name"], link: .list(id: listID, name: row["name"]), total: books.count,
-                                                   lines: books.prefix(limit).map { BookRelated.Line(book: $0, meta: places[$0.id]) }))
+            related.lists.append(BookRelated.Group(title: row["name"], link: .list(id: listID, name: row["name"]), total: total,
+                                                   lines: books.map { BookRelated.Line(book: $0, meta: places[$0.id]) }))
         }
         return related
-    }
-
-    /// A Series Number as the web writes it: "1", "1.5".
-    private static func seriesNumber(_ number: Double) -> String {
-        number.formatted(.number.precision(.fractionLength(0...2)))
-    }
-
-    /// The year a release date falls in, read in UTC as the web does.
-    private static func year(_ date: Date) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
-        return String(calendar.component(.year, from: date))
     }
 }

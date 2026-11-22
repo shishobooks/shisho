@@ -71,7 +71,7 @@ enum FileFacts {
 enum FileProgressText {
     static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?) -> String {
         let clamped = min(1, max(0, progress))
-        let percent = "\(Int((clamped * 100).rounded()))%"
+        let percent = Percent.text(clamped)
         guard clamped < 1 else { return percent }
         let rest = 1 - clamped
         // Rounded as the Listen card rounds it, so the two agree.
@@ -82,5 +82,27 @@ enum FileProgressText {
             return String(localized: "\(percent) · \(FileFacts.pages(Int((Double(pages) * rest).rounded()))) left")
         }
         return percent
+    }
+}
+
+enum SeriesNumbers {
+    /// A Series Number as the web writes it: "1", "1.5".
+    static func format(_ number: Double) -> String {
+        number.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    /// A short label as the web's `seriesNumberLabel` writes it: "#5", or a
+    /// comic's "Vol. 5" or "Ch. 42".
+    static func label(_ number: Double, end: Double?, unit: String?, comic: Bool) -> String {
+        let range = format(number) + (end.map { "-" + format($0) } ?? "")
+        guard comic else { return "#" + range }
+        return unit == "chapter" ? String(localized: "Ch. \(range)") : String(localized: "Vol. \(range)")
+    }
+}
+
+/// A fraction as the web's `formatProgress` writes it: "37%".
+enum Percent {
+    static func text(_ value: Double) -> String {
+        "\(Int((min(1, max(0, value)) * 100).rounded()))%"
     }
 }
