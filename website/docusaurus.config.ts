@@ -35,7 +35,13 @@ const fontFilesNotInlined = (): Plugin => ({
         continue;
       }
       for (const use of rule.use) {
-        if (use && typeof use === "object" && typeof use.options === "object") {
+        if (
+          use &&
+          typeof use === "object" &&
+          typeof use.loader === "string" &&
+          use.loader.includes("url-loader") &&
+          typeof use.options === "object"
+        ) {
           use.options = { ...use.options, limit: false };
           changed++;
         }
