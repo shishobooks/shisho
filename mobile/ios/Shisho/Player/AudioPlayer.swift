@@ -74,6 +74,16 @@ final class AudioPlayer {
     /// before another File opened is dropped.
     @ObservationIgnored private var itemGeneration = 0
     @ObservationIgnored private var endObserver: NSObjectProtocol?
+    @ObservationIgnored private var errorLogObserver: NSObjectProtocol?
+    @ObservationIgnored private var failureObserver: NSObjectProtocol?
+    /// When playback that's wanted began waiting for the stream, and whether
+    /// the wait was long enough to log.
+    @ObservationIgnored private var waitingSince: Date?
+    @ObservationIgnored private var waitingLogged = false
+    /// When the stream last stopped playing with an error while the item
+    /// stayed ready, and whether play was tried again since.
+    @ObservationIgnored private var stoppedAt: Date?
+    @ObservationIgnored private var retriedStop = false
 
     init(session: AccountSession, requestSync: @escaping @MainActor () -> Void) {
         self.session = session
@@ -153,10 +163,10 @@ final class AudioPlayer {
         if autoplay { play() }
     }
 
-    /// How far ahead the stream buffers while playing, so listening goes on
-    /// through a lost connection. Paused, it stops fetching.
-    private static let playingBuffer: TimeInterval = 10 * 60
-    private static let pausedBuffer: TimeInterval = 1
+    /// How far ahead the stream buffers, so listening goes on through a lost
+    /// connection. It keeps filling while paused, so a pause before going
+    /// out of range still leaves this much to play.
+    private static let forwardBuffer: TimeInterval = 10 * 60
 
     /// Starts streaming the open File, the first time it plays.
     private func prepareItem() {
@@ -168,7 +178,7 @@ final class AudioPlayer {
                                options: [AVURLAssetHTTPCookiesKey: session.client.streamCookies])
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .timeDomain
-        item.preferredForwardBufferDuration = AudioPlayer.playingBuffer
+        item.preferredForwardBufferDuration = AudioPlayer.forwardBuffer
         let player = AVPlayer(playerItem: item)
         player.automaticallyWaitsToMinimizeStalling = true
         self.player = player
@@ -183,6 +193,8 @@ final class AudioPlayer {
             }
         }
         observeEnd(of: item, generation: generation)
+        observeErrorLog(of: item, generation: generation)
+        observeFailures(of: item, generation: generation)
     }
 
     private func itemStatusChanged(_ status: AVPlayerItem.Status, failure: String?) {
@@ -231,7 +243,6 @@ final class AudioPlayer {
         if player == nil {
             prepareItem()
         }
-        player?.currentItem?.preferredForwardBufferDuration = AudioPlayer.playingBuffer
         // Playing again at the end starts over.
         if file.duration > 0, currentPosition() >= file.duration - 0.5 {
             move(to: 0)
@@ -255,10 +266,10 @@ final class AudioPlayer {
     func pause() {
         guard file != nil else { return }
         player?.pause()
-        player?.currentItem?.preferredForwardBufferDuration = AudioPlayer.pausedBuffer
         let wasPlaying = isPlaying
         isPlaying = false
         isBuffering = false
+        if let player { noteWaiting(false, player: player, at: Date()) }
         refreshPosition()
         updateNowPlaying()
         guard wasPlaying else { return }
@@ -289,7 +300,8 @@ final class AudioPlayer {
 
     /// Moves to seconds, and saves the place there.
     func seek(to seconds: Double) {
-        guard file != nil else { return }
+        guard let file else { return }
+        log("file \(file.fileID): seek from \(Int(currentPosition())) s to \(Int(seconds)) s, \(isPlaying ? "playing" : "paused")")
         move(to: seconds)
         savePosition()
     }
@@ -380,7 +392,9 @@ final class AudioPlayer {
         refreshPosition()
         let now = Date()
         if isPlaying {
+            retryAfterStop(player, at: now)
             let buffering = player.timeControlStatus != .playing
+            noteWaiting(buffering, player: player, at: now)
             if buffering != isBuffering {
                 isBuffering = buffering
                 updateNowPlaying()
@@ -418,6 +432,41 @@ final class AudioPlayer {
         if chapterIndex != nowPlayingChapter {
             updateNowPlaying()
         }
+    }
+
+    /// Logs a wait for the stream long enough to notice, with what the
+    /// player says it's waiting for, and how it ended. A stall leaves no
+    /// error, so without this it wouldn't show in an export.
+    private func noteWaiting(_ waiting: Bool, player: AVPlayer, at now: Date) {
+        guard let file else { return }
+        if waiting {
+            let since = waitingSince ?? now
+            waitingSince = since
+            if !waitingLogged, now.timeIntervalSince(since) >= 3 {
+                waitingLogged = true
+                log("file \(file.fileID): waiting to play for 3 s, \(AudioPlayer.describeWaiting(player, at: currentPosition()))")
+            }
+        } else if let since = waitingSince {
+            waitingSince = nil
+            if waitingLogged {
+                waitingLogged = false
+                let how = isPlaying ? "playing" : "paused"
+                log("file \(file.fileID): \(how) after waiting \(Int(now.timeIntervalSince(since))) s")
+            }
+        }
+    }
+
+    /// What the player and its item say about a wait, as the log names it.
+    private static func describeWaiting(_ player: AVPlayer, at seconds: Double) -> String {
+        let item = player.currentItem
+        let buffered = (item?.loadedTimeRanges ?? []).map { value in
+            let range = value.timeRangeValue
+            return "\(Int(range.start.seconds))-\(Int(range.end.seconds))"
+        }
+        let reason = player.reasonForWaitingToPlay?.rawValue ?? "none"
+        return "at \(Int(seconds)) s, reason \(reason), buffered \(buffered.isEmpty ? "nothing" : buffered.joined(separator: " ")) s, "
+            + "likely to keep up \(item?.isPlaybackLikelyToKeepUp ?? false), buffer empty \(item?.isPlaybackBufferEmpty ?? true), "
+            + "item status \(item?.status.rawValue ?? -1)"
     }
 
     /// Saves the place locally and queues it for the server.
@@ -623,10 +672,16 @@ final class AudioPlayer {
     private func teardownItem() {
         itemGeneration += 1
         seekingTo = nil
-        if let endObserver {
-            NotificationCenter.default.removeObserver(endObserver)
-            self.endObserver = nil
+        for observer in [endObserver, errorLogObserver, failureObserver].compactMap({ $0 }) {
+            NotificationCenter.default.removeObserver(observer)
         }
+        endObserver = nil
+        errorLogObserver = nil
+        failureObserver = nil
+        waitingSince = nil
+        waitingLogged = false
+        stoppedAt = nil
+        retriedStop = false
         statusObservation?.invalidate()
         statusObservation = nil
         placeWatch?.cancel()
@@ -646,6 +701,62 @@ final class AudioPlayer {
                 self?.reachedEnd()
             }
         }
+    }
+
+    /// Logs what the stream reports going wrong without failing, such as a
+    /// request the server refused, which can leave playback waiting.
+    private func observeErrorLog(of item: AVPlayerItem, generation: Int) {
+        errorLogObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.newErrorLogEntryNotification, object: item,
+                                                                  queue: .main) { [weak self] note in
+            let entry = (note.object as? AVPlayerItem)?.errorLog()?.events.last
+            let text = entry.map { "\($0.errorDomain) \($0.errorStatusCode): \($0.errorComment ?? "no comment")" } ?? "no entry"
+            Task { @MainActor in
+                guard let self, self.itemGeneration == generation, let file = self.file else { return }
+                self.log("file \(file.fileID): stream reported \(text)")
+            }
+        }
+    }
+
+    /// Notes when playback stops partway with an error, so the ticker can
+    /// play again (`retryAfterStop`).
+    private func observeFailures(of item: AVPlayerItem, generation: Int) {
+        failureObserver = NotificationCenter.default.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item,
+                                                                 queue: .main) { [weak self] note in
+            let failure = (note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error).map(Diagnostics.describe)
+            Task { @MainActor in
+                guard let self, self.itemGeneration == generation else { return }
+                self.stoppedWithError(failure ?? "unknown error")
+            }
+        }
+    }
+
+    private func stoppedWithError(_ failure: String) {
+        guard let file else { return }
+        let now = Date()
+        // One failure is reported several times in a row; a new one starts
+        // after a quiet spell and gets its own retry.
+        if stoppedAt.map({ now.timeIntervalSince($0) > AudioPlayer.stopWindow }) ?? true {
+            retriedStop = false
+            log("file \(file.fileID): stopped at \(Int(currentPosition())) s: \(failure)")
+        }
+        stoppedAt = now
+    }
+
+    /// How long after a failure the player may play again on its own.
+    private static let stopWindow: TimeInterval = 5
+
+    /// Plays again, once per failure, when the stream stopped with an error
+    /// although playback is wanted. Some xHE-AAC audiobooks mark every frame
+    /// as a place decoding can start, but only some are; a seek that lands
+    /// on another fails with "Cannot Decode" and AVPlayer pauses itself.
+    /// Playing again from there decodes, as pausing and playing does by hand.
+    private func retryAfterStop(_ player: AVPlayer, at now: Date) {
+        guard isPlaying, ready, !retriedStop, pendingSeek == nil, seekingTo == nil,
+              let stoppedAt, now.timeIntervalSince(stoppedAt) < AudioPlayer.stopWindow,
+              player.timeControlStatus == .paused, let file else { return }
+        retriedStop = true
+        log("file \(file.fileID): playing again at \(Int(currentPosition())) s after the stream stopped")
+        player.playImmediately(atRate: Float(rate))
     }
 
     /// Interruptions, such as a call, pause without counting, and resume
