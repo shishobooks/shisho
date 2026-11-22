@@ -2,7 +2,6 @@ package search
 
 import (
 	"context"
-	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/identifiers"
@@ -44,7 +43,7 @@ func (svc *Service) GlobalSearch(ctx context.Context, libraryID int, query strin
 	}
 
 	// Search books
-	books, err := svc.searchBooksInternal(ctx, ftsQuery, libraryID, nil, globalSearchLimit, 0)
+	books, err := svc.searchBooksInternal(ctx, ftsQuery, query, libraryID, nil, globalSearchLimit, 0)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
@@ -79,7 +78,7 @@ func (svc *Service) SearchBooks(ctx context.Context, libraryID int, query string
 		return []BookSearchResult{}, 0, nil
 	}
 
-	books, err := svc.searchBooksInternal(ctx, ftsQuery, libraryID, fileTypes, limit, offset)
+	books, err := svc.searchBooksInternal(ctx, ftsQuery, query, libraryID, fileTypes, limit, offset)
 	if err != nil {
 		return nil, 0, errors.WithStack(err)
 	}
@@ -135,13 +134,16 @@ func (svc *Service) SearchPeople(ctx context.Context, libraryID int, query strin
 	return people, total, nil
 }
 
-func (svc *Service) searchBooksInternal(ctx context.Context, ftsQuery string, libraryID int, fileTypes []string, limit, offset int) ([]BookSearchResult, error) {
+// searchBooksInternal searches by identifier with query as the user typed
+// it, since an identifier matches exactly and ftsQuery is quoted for FTS5,
+// then by the index with ftsQuery.
+func (svc *Service) searchBooksInternal(ctx context.Context, ftsQuery, query string, libraryID int, fileTypes []string, limit, offset int) ([]BookSearchResult, error) {
 	results := []BookSearchResult{}
 	seenIDs := make(map[int]bool)
 
 	// First, search by exact identifier match (only for first page to avoid complexity)
 	if offset == 0 {
-		idResults, err := svc.searchBooksByIdentifier(ctx, strings.TrimSuffix(ftsQuery, "*"), libraryID, fileTypes, limit)
+		idResults, err := svc.searchBooksByIdentifier(ctx, query, libraryID, fileTypes, limit)
 		if err != nil {
 			return nil, errors.WithStack(err)
 		}
