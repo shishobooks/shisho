@@ -165,17 +165,35 @@ func (h *handler) changes(c echo.Context) error {
 
 	var resp FeedResponse
 	err = h.feed.Read(ctx, func(ctx context.Context, tx bun.Tx) error {
-		page, err := h.feed.Page(ctx, tx, user, query.Cursor, query.ExpiredThrough, limit)
+		var page *changefeed.Page
+		var err error
+		if query.LibraryID > 0 || query.ListID > 0 {
+			scope := changefeed.Scope{LibraryID: query.LibraryID, ListID: query.ListID}
+			page, err = h.feed.ScopedPage(ctx, tx, user, scope, query.Cursor, limit)
+		} else {
+			page, err = h.feed.Page(ctx, tx, user, query.Cursor, query.ExpiredThrough, limit)
+		}
+		if errors.Is(err, changefeed.ErrOutOfReach) {
+			if query.LibraryID > 0 {
+				return errcodes.NotFound("Library")
+			}
+			return errcodes.NotFound("List")
+		}
 		if err != nil {
 			return err
 		}
-		entries, err := buildEntries(ctx, tx, user.ID, page.Entries)
+		entries, err := buildEntries(ctx, tx, user, page.Entries)
+		if err != nil {
+			return err
+		}
+		access, err := h.feed.Access(ctx, tx, user)
 		if err != nil {
 			return err
 		}
 		resp = FeedResponse{
 			Entries: entries, Cursor: page.Cursor, HasMore: page.HasMore,
 			StartOver: page.StartOver, ExpiredThrough: page.ExpiredThrough,
+			Access: FeedAccess{LibraryIDs: access.LibraryIDs, ListIDs: access.ListIDs},
 		}
 		return nil
 	})

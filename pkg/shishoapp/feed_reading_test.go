@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -181,6 +182,12 @@ func TestFeed_FileCarriesItsCoverAndNarrators(t *testing.T) {
 		cursor := resp.Cursor
 		f.exec(write)
 		resp = f.changes(credential, cursor, 0)
-		assert.Equal(t, []string{"book:1"}, summary(resp), write)
+		books := []string{}
+		for _, kind := range summary(resp) {
+			if strings.HasPrefix(kind, "book:") {
+				books = append(books, kind)
+			}
+		}
+		assert.Equal(t, []string{"book:1"}, books, write)
 	}
 }

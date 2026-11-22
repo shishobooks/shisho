@@ -15,6 +15,10 @@ A transaction that reads before it writes can't take SQLite's write lock once an
 
 `pkg/migrations/change_log_invariants_test.go` fails until every table is in the feed or excused, and every column of a table in the feed is compared or excused, each with a reason. Triggers are created in migrations and never edited once released: a column joins the feed through a new migration that drops and recreates its table's update trigger.
 
+## A record that isn't a Library's
+
+`changefeed.Service.Page` shows a catalog entry to users who can access the Library it recorded, and a user's own record to that user. A kind that's neither, as a List reaches everyone it's shared with, needs its own branch in `Page` and a place in `Access`, since losing or gaining it is answered outside the cursor (ADR 0023).
+
 ## The Device surface is a contract
 
 Routes under `/mobile` serve app releases that can't be forced to update (ADR 0020). Within a protocol, responses only grow and request fields stay strict; removing or retyping a field in `pkg/shishoapp/types.go`, or a feed document, needs a new protocol. A feature the app turns on per server gets a capability in `capabilities` in `pkg/shishoapp/contract.go`.

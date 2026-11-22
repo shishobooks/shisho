@@ -467,12 +467,16 @@ func TestFeed_BookDocument(t *testing.T) {
 			{PersonID: 2, Name: "Ann Artist", SortName: "Artist, Ann", Role: &penciller},
 		},
 		Series: []FeedSeriesMembership{{SeriesID: 1, Name: "Dune Chronicles", SortName: "Dune Chronicles", Number: &one}},
+		Genres: []FeedGenreRef{},
+		Tags:   []FeedTagRef{},
 		Files: []FeedFile{{
 			ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345, DisplayName: "dune.epub",
 			ReleaseDate: &released, PageCount: &pages, AudiobookDurationSeconds: &duration,
 			CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),
 			Narrators:    []FeedNarrator{},
 			Chapters:     []FeedChapter{},
+			Identifiers:  []FeedIdentifier{},
+			Pages:        []string{},
 		}},
 		// covers.CacheKey: the File's id and its updated_at.
 		CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),
@@ -500,11 +504,11 @@ func TestFeed_JoinTableChangesMoveTheBook(t *testing.T) {
 		{"date added", `UPDATE books SET created_at = '2020-01-01 00:00:00' WHERE id = 1`, []string{"book:1"}},
 		{"author added", `INSERT INTO authors (id, book_id, person_id, sort_order) VALUES (1, 1, 1, 1)`, []string{"book:1"}},
 		{"author reordered", `UPDATE authors SET sort_order = 2 WHERE id = 1`, []string{"book:1"}},
-		{"person renamed", `UPDATE persons SET name = 'F. Herbert' WHERE id = 1`, []string{"book:1"}},
-		{"person deleted", `DELETE FROM persons WHERE id = 1`, []string{"book:1"}},
+		{"person renamed", `UPDATE persons SET name = 'F. Herbert' WHERE id = 1`, []string{"book:1", "person:1"}},
+		{"person deleted", `DELETE FROM persons WHERE id = 1`, []string{"book:1", "person:1-"}},
 		{"series added", `INSERT INTO book_series (id, book_id, series_id, series_number, sort_order) VALUES (1, 2, 1, 1, 1)`, []string{"book:2"}},
 		{"series number", `UPDATE book_series SET series_number = 2 WHERE id = 1`, []string{"book:2"}},
-		{"series renamed", `UPDATE series SET name = 'Dune Saga' WHERE id = 1`, []string{"book:2"}},
+		{"series renamed", `UPDATE series SET name = 'Dune Saga' WHERE id = 1`, []string{"book:2", "series:1"}},
 		{"membership moved", `UPDATE book_series SET book_id = 1 WHERE id = 1`, []string{"book:1", "book:2"}},
 		{"series removed", `DELETE FROM book_series WHERE id = 1`, []string{"book:1"}},
 		{"file added", `INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (1, 1, 1, '/f.epub', 'epub', 1)`, []string{"book:1"}},
@@ -546,7 +550,7 @@ func TestFeed_WritesThatChangeNothingRecordNothing(t *testing.T) {
 	for _, write := range []string{
 		`UPDATE books SET title = title, sort_title = sort_title, subtitle = subtitle`,
 		// Columns the app doesn't see.
-		`UPDATE books SET description = 'A desert planet', updated_at = '2030-01-01 00:00:00'`,
+		`UPDATE books SET description_source = 'manual', updated_at = '2030-01-01 00:00:00'`,
 		`UPDATE files SET filesize_bytes = 1, scan_error = 'x', reviewed = TRUE`,
 		`UPDATE authors SET sort_order = 1`,
 		`UPDATE persons SET name = 'Frank Herbert', updated_at = '2030-01-01 00:00:00'`,
@@ -772,6 +776,14 @@ func TestFeedKinds_MatchTheChangeLog(t *testing.T) {
 	assert.Equal(t, changefeed.KindLibrary, FeedKindLibrary)
 	assert.Equal(t, changefeed.KindReadingPosition, FeedKindReadingPosition)
 	assert.Equal(t, changefeed.KindReadThrough, FeedKindReadThrough)
+	assert.Equal(t, changefeed.KindSeries, FeedKindSeries)
+	assert.Equal(t, changefeed.KindPerson, FeedKindPerson)
+	assert.Equal(t, changefeed.KindGenre, FeedKindGenre)
+	assert.Equal(t, changefeed.KindTag, FeedKindTag)
+	assert.Equal(t, changefeed.KindPublisher, FeedKindPublisher)
+	assert.Equal(t, changefeed.KindBookLeft, FeedKindBookLeft)
+	assert.Equal(t, changefeed.KindUserBook, FeedKindUserBook)
+	assert.Equal(t, changefeed.KindList, FeedKindList)
 }
 
 func tinyPNG(t *testing.T) []byte {

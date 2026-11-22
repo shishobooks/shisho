@@ -36,16 +36,35 @@ var feedTables = map[string][]string{
 	"files":       {"INSERT", "UPDATE", "DELETE"},
 	"authors":     {"INSERT", "UPDATE", "DELETE"},
 	"book_series": {"INSERT", "UPDATE", "DELETE"},
-	"persons":     {"UPDATE"},
-	"series":      {"UPDATE"},
+	"persons":     {"INSERT", "UPDATE", "DELETE"},
+	"series":      {"INSERT", "UPDATE", "DELETE"},
 	// A user's saved sort for a Library is part of the Library's document.
 	"user_library_settings": {"INSERT", "UPDATE", "DELETE"},
 	// A File's chapters and narrators are part of its Book's document.
 	"chapters":  {"INSERT", "UPDATE", "DELETE"},
 	"narrators": {"INSERT", "UPDATE", "DELETE"},
+	// Catalog records of their own, and their aliases, which are part of
+	// their documents.
+	"genres":            {"INSERT", "UPDATE", "DELETE"},
+	"tags":              {"INSERT", "UPDATE", "DELETE"},
+	"publishers":        {"INSERT", "UPDATE", "DELETE"},
+	"person_aliases":    {"INSERT", "UPDATE", "DELETE"},
+	"series_aliases":    {"INSERT", "UPDATE", "DELETE"},
+	"genre_aliases":     {"INSERT", "UPDATE", "DELETE"},
+	"tag_aliases":       {"INSERT", "UPDATE", "DELETE"},
+	"publisher_aliases": {"INSERT", "UPDATE", "DELETE"},
+	// A Book's genres and tags, and its Files' identifiers.
+	"book_genres":      {"INSERT", "UPDATE", "DELETE"},
+	"book_tags":        {"INSERT", "UPDATE", "DELETE"},
+	"file_identifiers": {"INSERT", "UPDATE", "DELETE"},
+	// Lists, with their Books and the List Shares that say who sees them.
+	"lists":       {"INSERT", "UPDATE", "DELETE"},
+	"list_books":  {"INSERT", "UPDATE", "DELETE"},
+	"list_shares": {"INSERT", "UPDATE", "DELETE"},
 	// The user's own records.
 	"reading_positions": {"INSERT", "UPDATE", "DELETE"},
 	"read_throughs":     {"INSERT", "UPDATE", "DELETE"},
+	"user_books":        {"INSERT", "UPDATE", "DELETE"},
 }
 
 const (
@@ -54,6 +73,8 @@ const (
 	reasonSource     = "provenance, which the app doesn't show"
 	reasonNotYet     = "not in the app's documents yet"
 	reasonLibrary    = "the Library is read from the Book"
+	// An alias belongs to its parent's Library, which never changes.
+	reasonAliasLibrary = "the Library is its parent's"
 )
 
 // columnsNotCompared are the columns of feedTables that no update trigger
@@ -71,7 +92,6 @@ var columnsNotCompared = map[string]string{
 	"books.title_source":       reasonSource,
 	"books.sort_title_source":  reasonSource,
 	"books.subtitle_source":    reasonSource,
-	"books.description":        reasonNotYet,
 	"books.description_source": reasonSource,
 	"books.genre_source":       reasonSource,
 	"books.tag_source":         reasonSource,
@@ -93,7 +113,6 @@ var columnsNotCompared = map[string]string{
 	"files.url":                      reasonNotYet,
 	"files.url_source":               reasonSource,
 	"files.release_date_source":      reasonSource,
-	"files.publisher_id":             reasonNotYet,
 	"files.publisher_source":         reasonSource,
 	"files.chapter_source":           reasonSource,
 	"files.language":                 reasonNotYet,
@@ -122,8 +141,7 @@ var columnsNotCompared = map[string]string{
 	"series.library_id":           "a Series never moves between Libraries",
 	"series.name_source":          reasonSource,
 	"series.sort_name_source":     reasonSource,
-	"series.description":          reasonNotYet,
-	"series.cover_image_filename": reasonNotYet,
+	"series.cover_image_filename": "the app shows a Series by its Books' covers",
 
 	"user_library_settings.id":         reasonPrimaryKey,
 	"user_library_settings.created_at": reasonBookkeep,
@@ -141,6 +159,57 @@ var columnsNotCompared = map[string]string{
 	"reading_positions.reported_device":    "how KOReader named itself, which only KOReader reads back",
 	"reading_positions.reported_device_id": "how KOReader named itself, which only KOReader reads back",
 
+	"genres.id":             reasonPrimaryKey,
+	"genres.created_at":     reasonBookkeep,
+	"genres.updated_at":     reasonBookkeep,
+	"genres.library_id":     "a Genre never moves between Libraries",
+	"tags.id":               reasonPrimaryKey,
+	"tags.created_at":       reasonBookkeep,
+	"tags.updated_at":       reasonBookkeep,
+	"tags.library_id":       "a Tag never moves between Libraries",
+	"publishers.id":         reasonPrimaryKey,
+	"publishers.created_at": reasonBookkeep,
+	"publishers.updated_at": reasonBookkeep,
+	"publishers.library_id": "a Publisher never moves between Libraries",
+
+	"person_aliases.id":            reasonPrimaryKey,
+	"person_aliases.created_at":    reasonBookkeep,
+	"person_aliases.library_id":    reasonAliasLibrary,
+	"series_aliases.id":            reasonPrimaryKey,
+	"series_aliases.created_at":    reasonBookkeep,
+	"series_aliases.library_id":    reasonAliasLibrary,
+	"genre_aliases.id":             reasonPrimaryKey,
+	"genre_aliases.created_at":     reasonBookkeep,
+	"genre_aliases.library_id":     reasonAliasLibrary,
+	"tag_aliases.id":               reasonPrimaryKey,
+	"tag_aliases.created_at":       reasonBookkeep,
+	"tag_aliases.library_id":       reasonAliasLibrary,
+	"publisher_aliases.id":         reasonPrimaryKey,
+	"publisher_aliases.created_at": reasonBookkeep,
+	"publisher_aliases.library_id": reasonAliasLibrary,
+
+	"book_genres.id":              reasonPrimaryKey,
+	"book_tags.id":                reasonPrimaryKey,
+	"file_identifiers.id":         reasonPrimaryKey,
+	"file_identifiers.created_at": reasonBookkeep,
+	"file_identifiers.updated_at": reasonBookkeep,
+	"file_identifiers.source":     reasonSource,
+
+	"lists.id":                      reasonPrimaryKey,
+	"lists.created_at":              reasonBookkeep,
+	"lists.updated_at":              reasonBookkeep,
+	"list_books.id":                 reasonPrimaryKey,
+	"list_books.added_by_user_id":   "who added a Book, which only the web app shows",
+	"list_shares.id":                reasonPrimaryKey,
+	"list_shares.created_at":        reasonBookkeep,
+	"list_shares.shared_by_user_id": "who shared the List, which only the web app shows",
+
+	"user_books.created_at":        reasonBookkeep,
+	"user_books.updated_at":        reasonBookkeep,
+	"user_books.rating_updated_at": "orders late Ratings on the server, which the app doesn't read",
+	"user_books.status_chosen_at":  "orders late journal events on the server, which the app doesn't read",
+	"user_books.page_flow":         reasonNotYet,
+
 	"read_throughs.id":                    reasonPrimaryKey,
 	"read_throughs.created_at":            reasonBookkeep,
 	"read_throughs.updated_at":            reasonBookkeep,
@@ -150,13 +219,12 @@ var columnsNotCompared = map[string]string{
 }
 
 const (
-	reasonServer      = "server-side state the app never shows"
-	reasonPlugins     = "plugin configuration, managed only on the web"
-	reasonDevices     = "Device and sync state for other Device types"
-	reasonAccounts    = "accounts and access, answered outside the cursor"
-	reasonCatalogNext = "catalog data the app's documents don't carry yet"
-	reasonUserNext    = "a user's own records, which the feed doesn't carry yet"
-	reasonFTS         = "a search index the server rebuilds from the catalog"
+	reasonServer   = "server-side state the app never shows"
+	reasonPlugins  = "plugin configuration, managed only on the web"
+	reasonDevices  = "Device and sync state for other Device types"
+	reasonAccounts = "accounts and access, answered outside the cursor"
+	reasonUserNext = "a user's own records, which the feed doesn't carry yet"
+	reasonFTS      = "a search index the server rebuilds from the catalog"
 )
 
 // tablesNotInFeed are the tables without change log triggers, each with why.
@@ -203,24 +271,9 @@ var tablesNotInFeed = map[string]string{
 	"share_links":                   "Share Links, managed only on the web",
 	"user_delivery_rules":           "Delivery Rules, which the Shisho app doesn't follow",
 	"user_settings":                 "web display settings",
-	"file_identifiers":              reasonCatalogNext,
-	"genres":                        reasonCatalogNext,
-	"genre_aliases":                 reasonCatalogNext,
-	"book_genres":                   reasonCatalogNext,
-	"tags":                          reasonCatalogNext,
-	"tag_aliases":                   reasonCatalogNext,
-	"book_tags":                     reasonCatalogNext,
-	"publishers":                    reasonCatalogNext,
-	"publisher_aliases":             reasonCatalogNext,
-	"person_aliases":                reasonCatalogNext,
-	"series_aliases":                reasonCatalogNext,
-	"lists":                         reasonCatalogNext,
-	"list_books":                    reasonCatalogNext,
-	"list_shares":                   reasonCatalogNext,
 	"bookmarks":                     reasonUserNext,
 	"reading_position_updates":      reasonUserNext,
 	"reading_sessions":              reasonUserNext,
-	"user_books":                    reasonUserNext,
 	"books_fts":                     reasonFTS,
 	"genres_fts":                    reasonFTS,
 	"persons_fts":                   reasonFTS,
@@ -387,6 +440,23 @@ func TestChangeLog_WritesThatChangeNothingRecordNothing(t *testing.T) {
 		`INSERT INTO users (id, username, password_hash, role_id, is_active) VALUES (1, 'reader', 'x', 1, TRUE)`,
 		`INSERT INTO reading_positions (user_id, file_id, cfi, percentage, source, occurred_at) VALUES (1, 1, 'epubcfi(/6/2)', 0.5, 'web_reader', '2026-01-01 00:00:00')`,
 		`INSERT INTO read_throughs (id, user_id, book_id, outcome, begin_day) VALUES (1, 1, 1, 'underway', '2026-01-01')`,
+		`INSERT INTO person_aliases (person_id, name, library_id) VALUES (1, 'A. Author', 1)`,
+		`INSERT INTO series_aliases (series_id, name, library_id) VALUES (1, 'The Saga', 1)`,
+		`INSERT INTO genres (id, library_id, name) VALUES (1, 1, 'Drama')`,
+		`INSERT INTO genre_aliases (genre_id, name, library_id) VALUES (1, 'Theatre', 1)`,
+		`INSERT INTO book_genres (book_id, genre_id) VALUES (1, 1)`,
+		`INSERT INTO tags (id, library_id, name) VALUES (1, 1, 'Sea')`,
+		`INSERT INTO tag_aliases (tag_id, name, library_id) VALUES (1, 'Ocean', 1)`,
+		`INSERT INTO book_tags (book_id, tag_id) VALUES (1, 1)`,
+		`INSERT INTO publishers (id, library_id, name) VALUES (1, 1, 'Press')`,
+		`INSERT INTO publisher_aliases (publisher_id, name, library_id) VALUES (1, 'The Press', 1)`,
+		`UPDATE files SET publisher_id = 1 WHERE id = 1`,
+		`INSERT INTO file_identifiers (file_id, type, value, source) VALUES (1, 'isbn_13', '9780000000000', 'file')`,
+		`INSERT INTO lists (id, user_id, name) VALUES (1, 1, 'Favorites')`,
+		`INSERT INTO list_books (list_id, book_id, sort_order) VALUES (1, 1, 1)`,
+		`INSERT INTO users (id, username, password_hash, role_id, is_active) VALUES (2, 'friend', 'x', 1, TRUE)`,
+		`INSERT INTO list_shares (list_id, user_id, permission) VALUES (1, 2, 'viewer')`,
+		`INSERT INTO user_books (user_id, book_id, rating, to_read_position) VALUES (1, 1, 8, 1)`,
 	} {
 		_, err := db.ExecContext(ctx, stmt)
 		require.NoError(t, err, stmt)
