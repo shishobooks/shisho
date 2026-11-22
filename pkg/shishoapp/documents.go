@@ -5,6 +5,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/robinjoseph08/golib/logger"
@@ -276,6 +277,15 @@ func bookDocument(ctx context.Context, book *models.Book) *FeedBook {
 		doc.Files = append(doc.Files, FeedFile{
 			Publisher:                publisher,
 			Identifiers:              identifiers,
+			AudiobookCodec:           file.AudiobookCodec,
+			AudiobookBitrateBps:      file.AudiobookBitrateBps,
+			Language:                 file.Language,
+			Abridged:                 file.Abridged,
+			URL:                      file.URL,
+			ReadingDirection:         file.ReadingDirection,
+			Filepath:                 file.Filepath,
+			FileModifiedAt:           utcPointer(file.FileModifiedAt),
+			CreatedAt:                file.CreatedAt.UTC(),
 			Pages:                    filePages(ctx, file),
 			CoverVersion:             fileCoverVersion(file),
 			Narrators:                narrators,
@@ -623,4 +633,12 @@ func loadLists(ctx context.Context, tx bun.IDB, user *models.User, ids []int) (m
 		out[list.ID] = doc
 	}
 	return out, nil
+}
+
+func utcPointer(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	utc := t.UTC()
+	return &utc
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -484,4 +485,52 @@ func TestFeed_AccessSaysWhichLibrariesAreBehindTheCursor(t *testing.T) {
 	assert.Equal(t, []int{1, 2}, next.Access.LibraryIDs)
 	assert.Equal(t, []int{1}, next.Access.BehindLibraryIDs)
 	assert.ElementsMatch(t, []string{"library:2", "book:2"}, summary(next))
+}
+
+// A File carries what the app's file details show, as the web's file
+// details dialog does, and a change to any of it moves its Book.
+func TestFeed_FileCarriesItsDetails(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Audio")
+	f.addBook(1, 1, "Dune")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, audiobook_bitrate_bps, audiobook_codec,
+		language, abridged, url, reading_direction, file_modified_at, created_at)
+		VALUES (1, 1, 1, '/books/Dune/dune.m4b', 'm4b', 1, 64000, 'AAC', 'en', FALSE, 'https://example.com/dune', NULL,
+		'2026-02-03 04:05:06', '2026-01-02 03:04:05')`)
+	f.addUser()
+	credential := f.signIn()
+
+	resp := f.changes(credential, 0, 0)
+	book := entryOf(resp, FeedKindBook, 1)
+	require.NotNil(t, book)
+	file := book.Book.Files[0]
+	bitrate, codec, language, url := 64000, "AAC", "en", "https://example.com/dune"
+	abridged := false
+	modified := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
+	assert.Equal(t, &bitrate, file.AudiobookBitrateBps)
+	assert.Equal(t, &codec, file.AudiobookCodec)
+	assert.Equal(t, &language, file.Language)
+	assert.Equal(t, &abridged, file.Abridged)
+	assert.Equal(t, &url, file.URL)
+	assert.Nil(t, file.ReadingDirection)
+	assert.Equal(t, "/books/Dune/dune.m4b", file.Filepath)
+	assert.Equal(t, &modified, file.FileModifiedAt)
+	assert.Equal(t, time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC), file.CreatedAt)
+
+	cursor := resp.Cursor
+	for _, write := range []string{
+		`UPDATE files SET audiobook_bitrate_bps = 128000`,
+		`UPDATE files SET audiobook_codec = 'ALAC'`,
+		`UPDATE files SET language = 'fr'`,
+		`UPDATE files SET abridged = TRUE`,
+		`UPDATE files SET url = NULL`,
+		`UPDATE files SET reading_direction = 'rtl'`,
+		`UPDATE files SET file_modified_at = '2026-03-01 00:00:00'`,
+	} {
+		f.exec(write)
+		next := f.changes(credential, cursor, 0)
+		assert.Equal(t, []string{"book:1"}, summary(next), write)
+		cursor = next.Cursor
+	}
 }

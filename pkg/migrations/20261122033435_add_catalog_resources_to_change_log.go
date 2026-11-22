@@ -126,8 +126,8 @@ func init() {
 			moveBooks(fileBook("OLD")+" UNION "+fileBook("NEW"))),
 		trigger("file_identifiers_delete", "DELETE", "file_identifiers", "", moveBooks(fileBook("OLD"))),
 
-		// The Book's description and each File's publisher join their
-		// documents, so their update triggers compare them too.
+		// The Book's description and each File's publisher and details join
+		// their documents, so their update triggers compare them too.
 		`DROP TRIGGER change_log_books_update`,
 		trigger("books_update", "UPDATE", "books",
 			differs("title", "subtitle", "sort_title", "created_at", "library_id", "description"),
@@ -140,7 +140,9 @@ func init() {
 		trigger("files_update", "UPDATE", "files",
 			differs("book_id", "file_type", "file_role", "filesize_bytes", "name", "name_source", "filepath",
 				"release_date", "page_count", "audiobook_duration_seconds",
-				"cover_image_filename", "is_preferred_cover", "updated_at", "publisher_id"),
+				"cover_image_filename", "is_preferred_cover", "updated_at", "publisher_id",
+				"audiobook_codec", "audiobook_bitrate_bps", "language", "abridged", "url", "reading_direction",
+				"file_modified_at", "created_at"),
 			moveBooks("OLD.book_id, NEW.book_id")),
 
 		// Lists, their Books, and their List Shares, since the document says

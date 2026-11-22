@@ -445,9 +445,9 @@ func TestFeed_BookDocument(t *testing.T) {
 	f.exec(`INSERT INTO series (id, library_id, name, name_source, sort_name, sort_name_source) VALUES (1, 1, 'Dune Chronicles', 'file', 'Dune Chronicles', 'file')`)
 	f.exec(`INSERT INTO book_series (book_id, series_id, series_number, sort_order) VALUES (1, 1, 1, 1)`)
 	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, cover_image_filename, updated_at,
-		release_date, page_count, audiobook_duration_seconds)
+		release_date, page_count, audiobook_duration_seconds, created_at)
 		VALUES (7, 1, 1, '/library/1/dune.epub', 'epub', 12345, 'dune.epub.cover.jpg', '2026-01-02 03:04:05',
-		'1965-08-01 00:00:00', 412, 1.5)`)
+		'1965-08-01 00:00:00', 412, 1.5, '2025-01-01 00:00:00')`)
 	f.addUser()
 
 	resp := f.changes(f.signIn(), 0, 0)
@@ -477,6 +477,8 @@ func TestFeed_BookDocument(t *testing.T) {
 			Chapters:     []FeedChapter{},
 			Identifiers:  []FeedIdentifier{},
 			Pages:        []string{},
+			Filepath:     "/library/1/dune.epub",
+			CreatedAt:    time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
 		}},
 		// covers.CacheKey: the File's id and its updated_at.
 		CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),

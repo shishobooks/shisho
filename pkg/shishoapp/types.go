@@ -270,6 +270,21 @@ type FeedFile struct {
 	// Publisher is the File's, or null.
 	Publisher   *FeedPublisherRef `json:"publisher"`
 	Identifiers []FeedIdentifier  `json:"identifiers"`
+	// The rest of what the web's file details show.
+	AudiobookCodec      *string `json:"audiobook_codec"`
+	AudiobookBitrateBps *int    `json:"audiobook_bitrate_bps"`
+	// Language is a BCP 47 tag, such as "en".
+	Language *string `json:"language"`
+	Abridged *bool   `json:"abridged"`
+	URL      *string `json:"url"`
+	// ReadingDirection is a Page-based File's, or null, which runs left to
+	// right.
+	ReadingDirection *string `json:"reading_direction" tstype:"ReadingDirection | null"`
+	// Filepath is where the server keeps the File, as the web shows it.
+	Filepath       string     `json:"filepath"`
+	FileModifiedAt *time.Time `json:"file_modified_at"`
+	// CreatedAt is when the File was added.
+	CreatedAt time.Time `json:"created_at"`
 	// Pages is a CBZ's pages, as the names of its archive entries in the
 	// order the server counts and sorts them (ADR 0025), so a page number
 	// means the same page everywhere. It's empty for every other File
