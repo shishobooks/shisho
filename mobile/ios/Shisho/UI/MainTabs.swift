@@ -139,6 +139,8 @@ extension View {
                 ResourceView(kind: kind, id: id, initialName: name)
             case .list(let id, let name):
                 ListDetailView(listID: id, initialName: name)
+            case .file(let bookID, let fileID):
+                FileView(bookID: bookID, fileID: fileID)
             case .search:
                 SearchView()
             }

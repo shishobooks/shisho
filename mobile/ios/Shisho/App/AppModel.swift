@@ -257,6 +257,15 @@ final class AppModel {
         showingPlayer = true
     }
 
+    /// Plays an audiobook File from seconds in, such as a chapter's start.
+    func listen(fileID: Int, from seconds: Double) {
+        guard let player else { return }
+        player.open(fileID: fileID, autoplay: false)
+        player.seek(to: seconds)
+        player.play()
+        showingPlayer = true
+    }
+
     /// The diagnostics export, for the user to read before sharing it: the
     /// log with every server address and credential removed, and titles
     /// only when includeTitles.
@@ -678,6 +687,8 @@ enum Route: Hashable {
     /// One Series, Person, Genre, or Tag, and its Books.
     case resource(ResourceKind, id: Int, name: String)
     case list(id: Int, name: String)
+    /// One of a Book's Files, on its own page.
+    case file(bookID: Int, fileID: Int)
     /// Search over the device's copy, opened from a tab's toolbar.
     case search
 }

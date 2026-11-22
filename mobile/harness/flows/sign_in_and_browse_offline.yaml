@@ -57,3 +57,18 @@ name: Sign in and browse Books offline
 - assertVisible:
     id: book.detail.authors
     text: .*Ada Writer.*
+
+# A File's page, from its row on the Book page, is on the device too.
+- scrollUntilVisible:
+    element:
+      id: "file\\.open\\..*"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "file\\.open\\..*"
+- assertVisible:
+    id: file.from
+    text: "From The Harness Novel.*"
+- scrollUntilVisible:
+    element: On disk
+    direction: DOWN

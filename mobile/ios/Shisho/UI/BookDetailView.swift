@@ -281,17 +281,16 @@ struct BookDetailView: View {
 
 /// One of a Book's Files, as the web app's file row shows it: its cover,
 /// name, format, a quiet line of facts, its narrators, how far through it
-/// the user is, and Listen. The rest of what's known about it is in its
-/// details sheet, behind the info button, as the web keeps it in a dialog.
+/// the user is, and Listen. Tapping it opens the File's own page, with the
+/// rest of what's known about it.
 private struct FileCard: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     let file: BookDetail.File
     let book: BookSummary
-    @State private var showingDetails = false
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
-    private var name: String { file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName }
+    private var name: String { file.label }
 
     /// Names the File and its narrators, since editions often share a name.
     private var listenLabel: String {
@@ -311,6 +310,7 @@ private struct FileCard: View {
             ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 8))
             : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
         layout {
+            Button { model.push(.file(bookID: book.id, fileID: file.id)) } label: {
             HStack(alignment: .top, spacing: 12) {
                 CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion), width: 46)
                 VStack(alignment: .leading, spacing: 5) {
@@ -341,7 +341,12 @@ private struct FileCard: View {
                 }
                 Spacer(minLength: 0)
             }
+            .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
+            .accessibilityHint("Opens the File's page")
+            .accessibilityIdentifier("file.open.\(file.id)")
             .accessibilityActions {
                 ForEach(Array(narrators.enumerated()), id: \.offset) { _, narrator in
                     Button(String(localized: "Open \(narrator.1)")) { model.push(narrator.0) }
@@ -352,9 +357,6 @@ private struct FileCard: View {
         .padding(12)
         .cardStyle()
         .accessibilityElement(children: .contain)
-        .sheet(isPresented: $showingDetails) {
-            FileDetailsSheet(file: file, name: name)
-        }
     }
 
     private var actions: some View {
@@ -383,14 +385,6 @@ private struct FileCard: View {
                 // Editions can share a name, so the File's id tells them apart.
                 .accessibilityIdentifier("file.listen.\(file.id)")
             }
-            Button { showingDetails = true } label: {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(Theme.mutedForeground)
-                    .frame(width: 32, height: 40)
-            }
-            .accessibilityLabel(String(localized: "Details of \(name)"))
-            .accessibilityIdentifier("file.details.\(file.id)")
         }
     }
 
@@ -405,121 +399,6 @@ private struct FileCard: View {
         parts.append(FileFacts.size(file.sizeBytes))
         if file.fileRole == "supplement" { parts.append(String(localized: "Supplement")) }
         return parts.joined(separator: " · ")
-    }
-}
-
-/// Everything known about a File, as the web's file details dialog lists it.
-private struct FileDetailsSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    let file: BookDetail.File
-    let name: String
-
-    private struct Row: Identifiable {
-        let label: String
-        let value: String
-        var url: URL?
-        var id: String { label }
-    }
-
-    private var rows: [Row] {
-        var rows = [
-            Row(label: String(localized: "Format"), value: FileTypes.label(file.fileType)),
-            Row(label: String(localized: "Size"), value: FileFacts.size(file.sizeBytes)),
-        ]
-        if !file.filepath.isEmpty {
-            rows.append(Row(label: String(localized: "File"), value: (file.filepath as NSString).lastPathComponent))
-            rows.append(Row(label: String(localized: "Path"), value: file.filepath))
-        }
-        if let pages = file.pageCount, pages > 0 { rows.append(Row(label: String(localized: "Pages"), value: FileFacts.pages(pages))) }
-        if let seconds = file.durationSeconds, seconds > 0 {
-            rows.append(Row(label: String(localized: "Duration"), value: FileFacts.duration(seconds)))
-        }
-        let audio = [file.codec, file.bitrate.map(FileFacts.bitrate)].compactMap { $0 }
-        if !audio.isEmpty { rows.append(Row(label: String(localized: "Audio"), value: audio.joined(separator: " · "))) }
-        if file.chapterCount > 0 { rows.append(Row(label: String(localized: "Chapters"), value: String(file.chapterCount))) }
-        if let publisher = file.publisher { rows.append(Row(label: String(localized: "Publisher"), value: publisher)) }
-        if let released = file.releaseDate {
-            // A release date is a day, read in UTC as the web reads it.
-            var style = Date.FormatStyle(date: .abbreviated, time: .omitted)
-            style.timeZone = TimeZone(identifier: "UTC") ?? .current
-            rows.append(Row(label: String(localized: "Released"), value: released.formatted(style)))
-        }
-        if let language = file.language {
-            rows.append(Row(label: String(localized: "Language"), value: Locale.current.localizedString(forIdentifier: language) ?? language))
-        }
-        // Left to right is how nearly every book runs, so only right to left
-        // says something.
-        if file.readingDirection == "rtl" {
-            rows.append(Row(label: String(localized: "Reading Direction"), value: String(localized: "Right to left")))
-        }
-        // Audiobooks were often sold abridged, so an M4B always says which.
-        if file.fileType == "m4b" || file.abridged == true {
-            let value = file.abridged.map { $0 ? String(localized: "Yes") : String(localized: "No") } ?? String(localized: "Unknown")
-            rows.append(Row(label: String(localized: "Abridged"), value: value))
-        }
-        for identifier in file.identifiers {
-            rows.append(Row(label: IdentifierLabel.text(identifier.type), value: identifier.value))
-        }
-        if let link = file.url, let url = URL(string: link) {
-            rows.append(Row(label: String(localized: "URL"), value: url.host()?.replacingOccurrences(of: "www.", with: "") ?? link, url: url))
-        }
-        if let modified = file.modifiedAt {
-            rows.append(Row(label: String(localized: "Modified"), value: modified.formatted(date: .abbreviated, time: .shortened)))
-        }
-        if let added = file.addedAt {
-            rows.append(Row(label: String(localized: "Added"), value: added.formatted(date: .abbreviated, time: .shortened)))
-        }
-        return rows
-    }
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    let stacked = dynamicTypeSize.isAccessibilitySize
-                    let layout = stacked
-                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
-                        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
-                    ForEach(rows) { row in
-                        layout {
-                            Text(row.label.uppercased())
-                                .font(.geist(.caption, weight: .semibold))
-                                .tracking(0.8)
-                                .foregroundStyle(Theme.mutedForeground)
-                                .frame(width: stacked ? nil : 110, alignment: .leading)
-                            Group {
-                                if let url = row.url {
-                                    Link(row.value, destination: url)
-                                        .underline()
-                                        .foregroundStyle(Theme.foreground)
-                                } else {
-                                    Text(row.value)
-                                        .textSelection(.enabled)
-                                }
-                            }
-                            .font(.geist(.subheadline))
-                            if !stacked { Spacer(minLength: 0) }
-                        }
-                        .accessibilityElement(children: .combine)
-                    }
-                }
-                .padding(20)
-            }
-            .background(Theme.background)
-            .navigationTitle(name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .accessibilityIdentifier("file.details.done")
-                }
-            }
-        }
-        .tint(Theme.primary)
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
-        .accessibilityIdentifier("file.details")
     }
 }
 

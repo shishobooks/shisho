@@ -110,7 +110,7 @@ extension CatalogStore {
             // JSON arrays: [{"type","value"}], and a CBZ's page names.
             t.add(column: "identifiers", .text).notNull().defaults(to: "[]")
             t.add(column: "pages", .text).notNull().defaults(to: "[]")
-            // What the file details sheet shows, as the web's does.
+            // What the File's page shows, as the web's does.
             t.add(column: "codec", .text)
             t.add(column: "bitrate", .integer)
             t.add(column: "language", .text)
@@ -893,6 +893,34 @@ extension CatalogStore {
         try pool.read { db in
             try Row.fetchAll(db, sql: "SELECT id, cover_version FROM books WHERE cover_version != '' ORDER BY id")
                 .map { (bookID: $0["id"], version: $0["cover_version"]) }
+        }
+    }
+}
+
+/// One of a File's chapters, as its page lists them.
+struct FileChapter: Equatable, Sendable, Identifiable {
+    let id: Int
+    let title: String
+    /// How far under a top-level chapter it sits, for an EPUB's contents.
+    let depth: Int
+    let startSeconds: Double?
+    /// 0-based, as the server keeps it.
+    let startPage: Int?
+}
+
+extension CatalogStore {
+    /// The File's chapters in the order of its table of contents, which is
+    /// the order the server sends them in, each with its depth.
+    static func fileChapters(_ db: Database, fileID: Int) throws -> [FileChapter] {
+        var depths: [Int: Int] = [:]
+        return try Row.fetchAll(db, sql: """
+            SELECT chapter_id, parent_id, title, start_ms, start_page FROM book_file_chapters WHERE file_id = ? ORDER BY position
+            """, arguments: [fileID]).map { row in
+            let id: Int = row["chapter_id"]
+            let depth = (row["parent_id"] as Int?).flatMap { depths[$0] }.map { $0 + 1 } ?? 0
+            depths[id] = depth
+            return FileChapter(id: id, title: row["title"], depth: depth,
+                               startSeconds: (row["start_ms"] as Int64?).map { Double($0) / 1000 }, startPage: row["start_page"])
         }
     }
 }

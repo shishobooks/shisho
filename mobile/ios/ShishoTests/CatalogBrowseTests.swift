@@ -316,4 +316,44 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(Ratings.range(min: 4, max: 4), "1 star")
         XCTAssertEqual(Ratings.range(min: 16, max: 16), "4 stars")
     }
+
+    /// A Book whose Files are given as JSON, for the File page's tests.
+    private func book(_ id: Int, files: String) -> String {
+        """
+        {"kind":"book","id":\(id),"library_id":1,"book":{"id":\(id),"library_id":1,"title":"Book \(id)","sort_title":"Book \(id)",
+         "created_at":"2026-01-01T00:00:00Z","authors":[],"series":[],"genres":[],"tags":[],"files":[\(files)],"cover_version":""}}
+        """
+    }
+
+    func testAFilesChaptersNestAsItsTableOfContents() throws {
+        let file = """
+            {"id":30,"file_type":"epub","file_role":"main","size_bytes":10,"display_name":"Book.epub","narrators":[],"identifiers":[],
+             "chapters":[{"id":1,"title":"Part One"},{"id":2,"parent_id":1,"title":"Prologue","href":"p.xhtml"},
+               {"id":3,"parent_id":2,"title":"Deeper"},{"id":4,"title":"Part Two","start_page":4,"start_timestamp_ms":61000}]}
+            """
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(book(3, files: file))],"cursor":9}"#),
+                        access: Shishoapp.FeedAccess(libraryIds: [1], listIds: []))
+        let chapters = try store.pool.read { try CatalogStore.fileChapters($0, fileID: 30) }
+        XCTAssertEqual(chapters.map(\.title), ["Part One", "Prologue", "Deeper", "Part Two"])
+        XCTAssertEqual(chapters.map(\.depth), [0, 1, 2, 0])
+        XCTAssertEqual(chapters.last?.startPage, 4)
+        XCTAssertEqual(chapters.last?.startSeconds, 61)
+    }
+
+    func testListenProgressForOneAudiobookOfSeveral() throws {
+        let audiobook = { (id: Int, name: String) in
+            """
+            {"id":\(id),"file_type":"m4b","file_role":"main","size_bytes":10,"display_name":"\(name)","narrators":[],"identifiers":[],
+             "audiobook_duration_seconds":600,"chapters":[{"id":\(id),"title":"One","start_timestamp_ms":0}]}
+            """
+        }
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(book(4, files: audiobook(40, "Unabridged") + "," + audiobook(41, "Abridged")))],"cursor":9}"#),
+                        access: Shishoapp.FeedAccess(libraryIds: [1], listIds: []))
+        let book = try XCTUnwrap(store.pool.read { try CatalogStore.listenProgress($0, bookID: 4, ownDeviceID: "d") })
+        XCTAssertEqual(book.fileID, 40, "the Book's first audiobook, with nothing listened to")
+        XCTAssertEqual(book.audiobookCount, 2)
+        let file = try XCTUnwrap(store.pool.read { try CatalogStore.listenProgress($0, bookID: 4, fileID: 41, ownDeviceID: "d") })
+        XCTAssertEqual(file.fileID, 41)
+        XCTAssertEqual(file.audiobookCount, 1, "a File's own page doesn't say which File it is")
+    }
 }

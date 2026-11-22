@@ -256,6 +256,25 @@ enum LinkedText {
         return name
     }
 
+    /// A Book's title linked to its page. Its Route needs the Book, so the
+    /// page showing it opens it (bookID(_:)).
+    static func bookLink(_ title: String, id: Int) -> AttributedString {
+        var components = URLComponents()
+        components.scheme = scheme
+        components.host = "book"
+        components.path = "/\(id)"
+        var name = AttributedString(title)
+        name.link = components.url
+        name.underlineStyle = .single
+        name.foregroundColor = Theme.foreground
+        return name
+    }
+
+    static func bookID(_ url: URL) -> Int? {
+        guard url.scheme == scheme, url.host() == "book" else { return nil }
+        return Int(url.lastPathComponent)
+    }
+
     /// Muted text between the links.
     static func muted(_ text: String) -> AttributedString {
         var part = AttributedString(text)

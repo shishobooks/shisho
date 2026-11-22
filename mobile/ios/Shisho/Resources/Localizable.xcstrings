@@ -192,9 +192,6 @@
     "App version" : {
 
     },
-    "Audio" : {
-
-    },
     "Author" : {
 
     },
@@ -202,6 +199,9 @@
 
     },
     "Back 30 Seconds" : {
+
+    },
+    "Bitrate" : {
 
     },
     "Book remaining %@" : {
@@ -264,6 +264,9 @@
     "Close Player" : {
 
     },
+    "Codec" : {
+
+    },
     "Colorist" : {
 
     },
@@ -283,9 +286,6 @@
 
     },
     "Date released" : {
-
-    },
-    "Details of %@" : {
 
     },
     "Diagnostics" : {
@@ -354,10 +354,16 @@
     "Finished" : {
 
     },
+    "Folder" : {
+
+    },
     "Format" : {
 
     },
     "Forward 30 Seconds" : {
+
+    },
+    "From " : {
 
     },
     "GENRES" : {
@@ -516,10 +522,16 @@
     "Offline. Showing what's on this device." : {
 
     },
+    "On disk" : {
+
+    },
     "Open %@" : {
 
     },
     "Open Settings" : {
+
+    },
+    "Opens the File's page" : {
 
     },
     "Opens the player" : {
@@ -528,7 +540,13 @@
     "Organize your books into custom collections" : {
 
     },
+    "Other files in this Book" : {
+
+    },
     "PUBLISHED" : {
+
+    },
+    "Page %lld" : {
 
     },
     "Page count" : {
@@ -538,9 +556,6 @@
 
     },
     "Password" : {
-
-    },
-    "Path" : {
 
     },
     "Pause" : {
@@ -559,6 +574,9 @@
 
     },
     "Play" : {
+
+    },
+    "Plays from this chapter" : {
 
     },
     "Position in book" : {
@@ -730,6 +748,9 @@
     "Supplement" : {
 
     },
+    "Supplement to " : {
+
+    },
     "Switches to this account" : {
 
     },
@@ -764,6 +785,9 @@
 
     },
     "This Book isn't in your Libraries anymore" : {
+
+    },
+    "This File isn't in your Libraries anymore" : {
 
     },
     "This List isn't available anymore" : {
@@ -861,6 +885,9 @@
 
     },
     "^[%lld book](inflect: true) narrated" : {
+
+    },
+    "^[%lld chapter](inflect: true)" : {
 
     },
     "^[%lld file](inflect: true)" : {
