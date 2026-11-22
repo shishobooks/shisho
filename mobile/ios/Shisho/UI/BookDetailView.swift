@@ -138,27 +138,33 @@ struct BookDetailView: View {
             }
 
             if !summary.authors.isEmpty {
-                (Text("by ").foregroundStyle(Theme.mutedForeground) + Text(summary.authors).underline(color: Theme.mutedForeground.opacity(0.5)))
-                    .font(.geist(.callout))
-                    .multilineTextAlignment(.center)
+                AuthorsLink(authors: (book ?? nil)?.authors.filter { $0.role == nil } ?? [], names: summary.authors)
                     .padding(.top, 10)
-                    .accessibilityLabel(String(localized: "By \(summary.authors)"))
-                    .accessibilityIdentifier("book.detail.authors")
             }
         }
     }
 
     private func details(_ book: BookDetail) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let description = book.description, !description.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(PlainText.from(description))
-                        .font(.geist(.subheadline))
-                        .lineLimit(showingFullDescription ? nil : 5)
-                        .accessibilityIdentifier("book.detail.description")
-                    ShowMoreButton(expanded: $showingFullDescription, identifier: "book.detail.description.more")
+            // The user's Reading Status and Rating, as the prototype sets
+            // them above the details. They're changed on the web for now.
+            if let standing, standing.status != nil || standing.rating != nil {
+                HStack {
+                    if let status = standing.status {
+                        Label(ReadingStatusLabel.text(status), systemImage: ReadingStatusLabel.symbol(status))
+                            .font(.geist(.footnote, weight: .medium))
+                            .padding(.horizontal, 12)
+                            .frame(minHeight: 34)
+                            .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
+                            .accessibilityIdentifier("book.detail.status")
+                    }
+                    Spacer(minLength: 8)
+                    if let rating = standing.rating {
+                        RatingStars(units: rating)
+                    }
                 }
-                .padding(.top, 28)
+                .padding(.top, 24)
             }
             let rows = infoRows(book)
             if !rows.isEmpty {
@@ -182,7 +188,20 @@ struct BookDetailView: View {
                         .accessibilityElement(children: .combine)
                     }
                 }
-                .padding(.top, 34)
+                .padding(.top, 22)
+            }
+
+            if let description = book.description, !description.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(PlainText.from(description))
+                        .font(.geist(.subheadline))
+                        .foregroundStyle(Theme.foreground.opacity(0.85))
+                        .lineSpacing(3)
+                        .lineLimit(showingFullDescription ? nil : 5)
+                        .accessibilityIdentifier("book.detail.description")
+                    ShowMoreButton(expanded: $showingFullDescription, identifier: "book.detail.description.more")
+                }
+                .padding(.top, 22)
             }
 
             if !book.files.isEmpty {
@@ -207,46 +226,22 @@ struct BookDetailView: View {
         let value: AnyView
     }
 
+    /// The details the prototype lists under labels: Series as links, each
+    /// creator with a role, genres and tags as badges, and when the Book was
+    /// published. Authors are linked under the title, and narrators on
+    /// their Files.
     private func infoRows(_ book: BookDetail) -> [InfoRow] {
         var rows: [InfoRow] = []
-        if let status = standing?.status {
-            rows.append(InfoRow(label: String(localized: "STATUS"), value: AnyView(
-                Text(ReadingStatusLabel.text(status)).font(.geist(.subheadline, weight: .medium))
-                    .accessibilityIdentifier("book.detail.status")
-            )))
-        }
-        if let rating = standing?.rating {
-            rows.append(InfoRow(label: String(localized: "RATING"), value: AnyView(RatingStars(units: rating))))
-        }
         if !book.series.isEmpty {
-            rows.append(InfoRow(label: String(localized: "SERIES"), value: AnyView(LinkChips(items: book.series.map {
+            rows.append(InfoRow(label: String(localized: "SERIES"), value: AnyView(TextLinks(items: book.series.map {
                 (Route.resource(.series, id: $0.seriesID, name: $0.name), seriesLine($0))
             }, identifier: "book.detail.series.link"))))
         }
-        let uncredited = book.authors.filter { $0.role == nil }
-        if !uncredited.isEmpty {
-            rows.append(InfoRow(label: String(localized: "AUTHORS"), value: AnyView(LinkChips(items: uncredited.map {
-                (Route.resource(.person, id: $0.personID, name: $0.name), $0.name)
-            }, identifier: "book.detail.author"))))
-        }
         let credited = book.authors.filter { $0.role != nil }
         if !credited.isEmpty {
-            rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(LinkChips(items: credited.map {
+            rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(TextLinks(items: credited.map {
                 (Route.resource(.person, id: $0.personID, name: $0.name), "\($0.name) (\(roleLabel($0.role ?? "")))")
             }, identifier: "book.detail.creator"))))
-        }
-        // Each narrator once, across the Book's Files, as the web app's
-        // Book page lists them.
-        var narrators: [(Int, String)] = []
-        for file in book.files {
-            for (id, name) in zip(file.narratorIDs, file.narrators) where !narrators.contains(where: { $0.0 == id }) {
-                narrators.append((id, name))
-            }
-        }
-        if !narrators.isEmpty {
-            rows.append(InfoRow(label: String(localized: "NARRATORS"), value: AnyView(LinkChips(items: narrators.map {
-                (Route.resource(.person, id: $0.0, name: $0.1), $0.1)
-            }, identifier: "book.detail.narrator"))))
         }
         if !book.genres.isEmpty {
             rows.append(InfoRow(label: String(localized: "GENRES"), value: AnyView(LinkChips(items: book.genres.map {
@@ -258,11 +253,9 @@ struct BookDetailView: View {
                 (Route.resource(.tag, id: $0.id, name: $0.name), $0.name)
             }, identifier: "book.detail.tag"))))
         }
-        if !book.summary.fileTypes.isEmpty {
-            rows.append(InfoRow(label: String(localized: "FORMATS"), value: AnyView(
-                HStack(spacing: 6) { ForEach(book.summary.fileTypes, id: \.self) { FileTypeChip(fileType: $0) } }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(book.summary.fileTypes.map(FileTypes.label).joined(separator: ", "))
+        if let published = book.published {
+            rows.append(InfoRow(label: String(localized: "PUBLISHED"), value: AnyView(
+                Text(published, format: .dateTime.year()).font(.geist(.subheadline))
             )))
         }
         return rows
@@ -298,6 +291,10 @@ private struct FileCard: View {
     }
     private var playing: Bool { model.player?.file?.fileID == file.id && model.player?.isPlaying == true }
 
+    private var narrators: [(Route, String)] {
+        zip(file.narratorIDs, file.narrators).map { (Route.resource(.person, id: $0.0, name: $0.1), $0.1) }
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
             HStack(alignment: .center, spacing: 14) {
@@ -317,10 +314,14 @@ private struct FileCard: View {
                                 .monospacedDigit()
                         }
                         if !file.narrators.isEmpty {
-                            Text("Narrated by \(file.narrators.joined(separator: ", "))")
-                                .font(.geist(.footnote))
-                                .foregroundStyle(Theme.mutedForeground)
-                                .lineLimit(2)
+                            // Each narrator links to their page, as the
+                            // prototype's file card does.
+                            FlowLayout(spacing: 4) {
+                                Text("Narrated by")
+                                    .foregroundStyle(Theme.mutedForeground)
+                                TextLinks(items: narrators, identifier: "book.detail.narrator")
+                            }
+                            .font(.geist(.footnote))
                         }
                         if let publisher = file.publisher {
                             Text("Published by \(publisher)")
@@ -346,6 +347,11 @@ private struct FileCard: View {
                 Spacer(minLength: 0)
             }
             .accessibilityElement(children: .combine)
+            .accessibilityActions {
+                ForEach(Array(narrators.enumerated()), id: \.offset) { _, narrator in
+                    Button(String(localized: "Open \(narrator.1)")) { model.push(narrator.0) }
+                }
+            }
             if isAudiobook {
                 // Every audiobook File plays from here; the Listen button
                 // above plays the one listened to last.
@@ -400,6 +406,19 @@ enum ReadingStatusLabel {
         default: status.replacingOccurrences(of: "_", with: " ").capitalized
         }
     }
+
+    /// Each Reading Status's icon, as the web app's status menu shows it.
+    static func symbol(_ status: String) -> String {
+        switch status {
+        case "currently_reading": "book"
+        case "paused": "pause.circle"
+        case "to_read": "clock"
+        case "read": "checkmark.circle"
+        case "did_not_finish": "xmark.circle"
+        case "reference": "bookmark"
+        default: "book"
+        }
+    }
 }
 
 /// An identifier's type as the web app names it.
@@ -428,8 +447,8 @@ struct RatingStars: View {
             ForEach(0..<5, id: \.self) { index in
                 let fill = min(1, max(0, stars - Double(index)))
                 Image(systemName: fill >= 0.75 ? "star.fill" : fill >= 0.25 ? "star.leadinghalf.filled" : "star")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.primary)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.rating)
             }
             Text(stars.formatted(.number.precision(.fractionLength(0...2))))
                 .font(.geist(.subheadline))
@@ -451,17 +470,71 @@ struct LinkChips: View {
         FlowLayout(spacing: 6) {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 NavigationLink(value: item.0) {
-                    Text(item.1)
-                        .font(.geist(.subheadline, weight: .medium))
-                        .foregroundStyle(Theme.foreground)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Theme.secondary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    CountBadge(text: item.1)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(identifier)
             }
         }
+    }
+}
+
+/// Links in running text, underlined as the web app's are, separated by
+/// commas and wrapping as text does.
+struct TextLinks: View {
+    let items: [(Route, String)]
+    let identifier: String
+
+    var body: some View {
+        FlowLayout(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                NavigationLink(value: item.0) {
+                    Text(item.1)
+                        .underline(color: Theme.mutedForeground.opacity(0.5))
+                        .foregroundStyle(Theme.foreground)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(identifier)
+                if index < items.count - 1 {
+                    Text(verbatim: ", ")
+                        .foregroundStyle(Theme.mutedForeground)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .font(.geist(.subheadline))
+    }
+}
+
+/// The Book's authors under its title, each linking to their page: one as a
+/// link, several as a menu of them.
+struct AuthorsLink: View {
+    @Environment(AppModel.self) private var model
+    let authors: [BookDetail.Author]
+    /// The names as the summary has them, until the full Book loads.
+    let names: String
+
+    var body: some View {
+        let label = (Text("by ").foregroundStyle(Theme.mutedForeground)
+            + Text(names).foregroundStyle(Theme.foreground).underline(color: Theme.mutedForeground.opacity(0.5)))
+            .font(.geist(.callout))
+            .multilineTextAlignment(.center)
+        Group {
+            if authors.count == 1, let author = authors.first {
+                NavigationLink(value: Route.resource(.person, id: author.personID, name: author.name)) { label }
+                    .buttonStyle(.plain)
+            } else if authors.count > 1 {
+                Menu {
+                    ForEach(authors, id: \.personID) { author in
+                        Button(author.name) { model.push(.resource(.person, id: author.personID, name: author.name)) }
+                    }
+                } label: { label }
+            } else {
+                label
+            }
+        }
+        .accessibilityLabel(String(localized: "By \(names)"))
+        .accessibilityIdentifier("book.detail.authors")
     }
 }
 

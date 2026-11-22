@@ -60,16 +60,6 @@
     "%@ · Signed out" : {
 
     },
-    "%@ · by %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ · by %2$@"
-          }
-        }
-      }
-    },
     "%@, %@" : {
       "localizations" : {
         "en" : {
@@ -109,9 +99,6 @@
     "A change made on this device couldn't be saved on the server: %@" : {
 
     },
-    "AUTHORS" : {
-
-    },
     "Account" : {
 
     },
@@ -130,6 +117,9 @@
     "App version" : {
 
     },
+    "Authors, narrators, and other contributors" : {
+
+    },
     "Back 30 Seconds" : {
 
     },
@@ -139,13 +129,31 @@
     "Books" : {
 
     },
+    "Books Authored" : {
+
+    },
+    "Books Narrated" : {
+
+    },
     "Books added to this List appear here." : {
+
+    },
+    "Books in Series" : {
 
     },
     "Books in the Libraries you can access appear here." : {
 
     },
     "Books, series, people" : {
+
+    },
+    "Browse book series in your library" : {
+
+    },
+    "Browse genres in your library" : {
+
+    },
+    "Browse tags in your library" : {
 
     },
     "By %@" : {
@@ -202,16 +210,10 @@
     "Export Diagnostics" : {
 
     },
-    "FORMATS" : {
-
-    },
     "Faster" : {
 
     },
-    "Filter %@" : {
-
-    },
-    "Find Books by title, author, narrator, or series, and find series, people, genres, and tags. It works offline." : {
+    "Find Books by title, author, narrator, series, or ISBN, and find series, people, genres, and tags. It works offline." : {
 
     },
     "Finished" : {
@@ -281,13 +283,7 @@
     "Makes the bar span the whole book" : {
 
     },
-    "My Lists" : {
-
-    },
-    "NARRATORS" : {
-
-    },
-    "Narrated" : {
+    "Narrated by" : {
 
     },
     "Narrated by %@" : {
@@ -349,10 +345,19 @@
     "Offline. Showing what's on this device." : {
 
     },
+    "Open %@" : {
+
+    },
     "Open Settings" : {
 
     },
     "Opens the player" : {
+
+    },
+    "Organize your books into custom collections" : {
+
+    },
+    "PUBLISHED" : {
 
     },
     "Password" : {
@@ -388,9 +393,6 @@
     "Published by %@" : {
 
     },
-    "RATING" : {
-
-    },
     "Rated %@ of 5 stars" : {
 
     },
@@ -406,10 +408,10 @@
     "SERIES" : {
 
     },
-    "STATUS" : {
+    "Search" : {
 
     },
-    "Search" : {
+    "Search %@" : {
 
     },
     "Search your Libraries" : {
@@ -433,10 +435,10 @@
     "Share" : {
 
     },
-    "Shared with %@" : {
+    "Shared by %@" : {
 
     },
-    "Shared with Me" : {
+    "Shared with %@" : {
 
     },
     "Shisho" : {
@@ -591,7 +593,16 @@
     "^[%lld book](inflect: true)" : {
 
     },
+    "^[%lld book](inflect: true) authored" : {
+
+    },
+    "^[%lld book](inflect: true) narrated" : {
+
+    },
     "^[%lld file](inflect: true)" : {
+
+    },
+    "^[%lld file](inflect: true) narrated" : {
 
     },
     "a newer release" : {
@@ -615,7 +626,16 @@
     "can view" : {
 
     },
+    "editor" : {
+
+    },
     "https://shisho.example.com" : {
+
+    },
+    "manager" : {
+
+    },
+    "viewer" : {
 
     }
   },

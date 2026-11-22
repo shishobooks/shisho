@@ -68,6 +68,8 @@ struct BookDetail: Hashable, Sendable {
     var description: String?
     var genres: [Named] = []
     var tags: [Named] = []
+    /// When its newest File with a release date was released.
+    var published: Date?
 }
 
 struct LibrarySummary: Identifiable, Hashable, Sendable {
@@ -613,8 +615,11 @@ final class CatalogStore: Sendable {
                                    pageCount: $0["page_count"])
         }
         let fileTypes = orderedUnique(files.filter { $0.fileRole != "supplement" }.map(\.fileType))
+        let published = try Double.fetchOne(db, sql: """
+            SELECT release_date FROM book_files WHERE book_id = ? AND release_date IS NOT NULL ORDER BY id DESC LIMIT 1
+            """, arguments: [id]).map { Date(timeIntervalSince1970: $0) }
         return BookDetail(summary: summary(row, fileTypes: fileTypes), subtitle: row["subtitle"], authors: authors, series: series,
-                          files: files, description: row["description"], genres: genres, tags: tags)
+                          files: files, description: row["description"], genres: genres, tags: tags, published: published)
     }
 
     /// Each Book's main File Types, in order, each once.

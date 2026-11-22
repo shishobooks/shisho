@@ -25,7 +25,8 @@ name: Search the library offline
       id: library.grid
     timeout: 15000
 
-- tapOn: Search
+- tapOn:
+    id: search.button
 - tapOn: Books, series, people
 # An author's name finds their Book.
 - inputText: Ada

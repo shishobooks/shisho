@@ -17,6 +17,9 @@ enum Theme {
     static let border = Color("Border")
     static let input = Color("Input")
     static let destructive = Color("Destructive")
+    /// The web app's Rating stars, Tailwind's amber-400, the same in light
+    /// and dark.
+    static let rating = Color(red: 251 / 255, green: 191 / 255, blue: 36 / 255)
 
     /// Covers and inputs, as the web app rounds them.
     static let radius: CGFloat = 8

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The user's Lists and the ones shared with them, read from the device.
+/// The user's Lists and the ones shared with them, read from the device,
+/// as the web app's Lists page shows them.
 struct ListsView: View {
     @Environment(AppModel.self) private var model
     @State private var lists: [ListSummary]?
@@ -10,23 +11,28 @@ struct ListsView: View {
         NavigationStack(path: $model.listsPath) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    Text("Organize your books into custom collections")
+                        .font(.geist(.subheadline))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .padding(.horizontal, GridLayout.margin)
+                        .padding(.bottom, 16)
                     if let lists {
-                        let mine = lists.filter { $0.permission == "owner" }
-                        let shared = lists.filter { $0.permission != "owner" }
                         if lists.isEmpty {
                             EmptyNotice(title: String(localized: "No Lists yet"),
                                         message: String(localized: "Lists you make on the web, and Lists shared with you, appear here."),
-                                        systemImage: "list.bullet.rectangle")
+                                        systemImage: "list.bullet")
                                 .accessibilityIdentifier("lists.empty")
                         }
-                        if !mine.isEmpty {
-                            SectionHeading(title: String(localized: "My Lists"))
-                            rows(mine)
+                        LazyVStack(spacing: 8) {
+                            ForEach(lists) { list in
+                                NavigationLink(value: Route.list(id: list.id, name: list.name)) {
+                                    ListRow(list: list)
+                                }
+                                .buttonStyle(PressableStyle())
+                                .accessibilityIdentifier("lists.row")
+                            }
                         }
-                        if !shared.isEmpty {
-                            SectionHeading(title: String(localized: "Shared with Me"))
-                            rows(shared)
-                        }
+                        .padding(.horizontal, GridLayout.margin)
                     }
                 }
                 .padding(.bottom, 32)
@@ -38,70 +44,54 @@ struct ListsView: View {
             .refreshable { await model.syncNow() }
             .navigationTitle("Lists")
             .navigationBarTitleDisplayMode(.large)
+            .toolbar { RootToolbar() }
             .routeDestinations()
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $lists) { db in
             try CatalogStore.lists(db)
         }
     }
-
-    private func rows(_ lists: [ListSummary]) -> some View {
-        VStack(spacing: 10) {
-            ForEach(lists) { list in
-                NavigationLink(value: Route.list(id: list.id, name: list.name)) {
-                    ListRow(list: list)
-                }
-                .buttonStyle(PressableStyle())
-                .accessibilityIdentifier("lists.row")
-            }
-        }
-        .padding(.horizontal, GridLayout.margin)
-    }
 }
 
-/// A List with its first covers fanned beside its name.
+/// A List as the web app's Lists page shows one: its name over its
+/// description, what the user may do with it when it's someone else's, and
+/// how many Books it has.
 private struct ListRow: View {
     let list: ListSummary
 
     var body: some View {
-        HStack(spacing: 14) {
-            ZStack(alignment: .leading) {
-                ForEach(Array(list.covers.enumerated().reversed()), id: \.element.id) { index, book in
-                    CoverView(book: book, width: 44)
-                        .offset(x: CGFloat(index) * 14)
-                }
-                if list.covers.isEmpty {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Theme.muted)
-                        .frame(width: 44, height: 66)
-                }
-            }
-            .frame(width: 44 + 28, alignment: .leading)
-            .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(list.name)
-                    .font(.geist(.body, weight: .semibold))
+                    .font(.geist(.callout, weight: .medium))
                     .foregroundStyle(Theme.foreground)
                     .multilineTextAlignment(.leading)
-                Text(subtitle)
-                    .font(.geist(.footnote))
-                    .foregroundStyle(Theme.mutedForeground)
+                if let description = list.description, !description.isEmpty {
+                    Text(PlainText.from(description))
+                        .font(.geist(.footnote))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .lineLimit(1)
+                } else if list.permission != "owner" {
+                    Text("Shared by \(list.ownerName)")
+                        .font(.geist(.footnote))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .lineLimit(1)
+                }
             }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.geist(.footnote, weight: .semibold))
-                .foregroundStyle(Theme.mutedForeground)
-                .accessibilityHidden(true)
+            Spacer(minLength: 8)
+            if list.permission != "owner" {
+                Text(SharePermission.name(list.permission))
+                    .font(.geist(.caption, weight: .medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.border))
+            }
+            CountBadge(text: Counts.books(list.bookCount))
         }
         .padding(12)
-        .cardStyle()
+        .cardStyle(radius: Theme.radius + 2)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-    }
-
-    private var subtitle: String {
-        let count = Counts.books(list.bookCount)
-        guard list.permission != "owner" else { return count }
-        return String(localized: "\(count) · by \(list.ownerName)")
     }
 }
 
@@ -168,6 +158,16 @@ struct ListDetailView: View {
 
 /// What a List Share allows, as the web app names it.
 enum SharePermission {
+    /// The permission on its own, as the web app's badge shows it.
+    static func name(_ permission: String) -> String {
+        switch permission {
+        case "viewer": String(localized: "viewer")
+        case "editor": String(localized: "editor")
+        case "manager": String(localized: "manager")
+        default: permission
+        }
+    }
+
     static func text(_ permission: String) -> String {
         switch permission {
         case "viewer": String(localized: "can view")

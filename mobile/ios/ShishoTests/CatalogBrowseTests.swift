@@ -63,9 +63,15 @@ final class CatalogBrowseTests: XCTestCase {
     func testBrowsesResources() throws {
         try catalog()
         let series = try store.pool.read { try CatalogStore.resources($0, kind: .series, libraryID: nil) }
-        XCTAssertEqual(series, [ResourceSummary(id: 1, name: "Dune Chronicles", bookCount: 2)])
+        XCTAssertEqual(series.map(\.name), ["Dune Chronicles"])
+        XCTAssertEqual(series.first?.bookCount, 2)
+        XCTAssertEqual(series.first?.previews.map(\.title), ["Dune", "Dune Messiah"], "its first Books, in its order")
+        XCTAssertEqual(series.first?.detail, "Dune Saga", "its other names")
         let persons = try store.pool.read { try CatalogStore.resources($0, kind: .person, libraryID: 1) }
         XCTAssertEqual(persons.map(\.name), ["Scott Brick", "Frank Herbert"], "by sort name")
+        XCTAssertEqual(persons.map(\.detail), ["Brick, Scott", "Herbert, Frank, F. P. Herbert"])
+        XCTAssertEqual(persons.map(\.authoredCount), [0, 2])
+        XCTAssertEqual(persons.map(\.narratedCount), [2, 0], "Files narrated")
         XCTAssertEqual(try store.pool.read { try CatalogStore.books($0, kind: .person, id: 2, narrated: true) }.map(\.id), [1, 2])
         XCTAssertEqual(try store.pool.read { try CatalogStore.books($0, kind: .person, id: 2) }.map(\.id), [])
         XCTAssertEqual(try store.pool.read { try CatalogStore.books($0, kind: .series, id: 1) }.map(\.title), ["Dune", "Dune Messiah"])

@@ -8,6 +8,14 @@ struct ResourceSummary: Identifiable, Hashable, Sendable {
     let name: String
     /// How many of the device's Books name it.
     let bookCount: Int
+    /// The line under the name, as the web app's lists show it: a Person's
+    /// sort name, and other names it's found by.
+    var detail = ""
+    /// A Person's Books they wrote, and Files they narrated.
+    var authoredCount = 0
+    var narratedCount = 0
+    /// Its first Books, for the covers its row shows.
+    var previews: [BookSummary] = []
 }
 
 /// Which kind of resource a browsing screen lists.
@@ -572,14 +580,25 @@ extension CatalogStore {
     /// The Series, Persons, Genres, or Tags of libraryID, or of every
     /// Library, by sort name, each with how many Books name it.
     static func resources(_ db: Database, kind: ResourceKind, libraryID: Int?, ids: [Int]? = nil) throws -> [ResourceSummary] {
-        let count: String
+        // Each kind's Books, in the order its covers show, as rid, book_id.
+        let books: String
         switch kind {
-        case .series: count = "(SELECT COUNT(DISTINCT book_id) FROM book_series WHERE series_id = r.id)"
-        case .person: count = "(SELECT COUNT(*) FROM (SELECT book_id FROM book_authors WHERE person_id = r.id UNION SELECT book_id FROM book_narrators WHERE person_id = r.id))"
-        case .genre: count = "(SELECT COUNT(*) FROM book_genres WHERE genre_id = r.id)"
-        case .tag: count = "(SELECT COUNT(*) FROM book_tags WHERE tag_id = r.id)"
+        case .series:
+            books = "SELECT series_id AS rid, book_id, COALESCE(number, 1e9) AS ord FROM book_series"
+        case .person:
+            books = "SELECT person_id AS rid, book_id, 0 AS ord FROM book_authors UNION SELECT person_id, book_id, 1 FROM book_narrators"
+        case .genre:
+            books = "SELECT genre_id AS rid, book_id, 0 AS ord FROM book_genres"
+        case .tag:
+            books = "SELECT tag_id AS rid, book_id, 0 AS ord FROM book_tags"
         }
-        var sql = "SELECT r.id, r.name, \(count) AS book_count FROM \(kind.table) r"
+        var sql = """
+            SELECT r.id, r.name, r.sort_name, r.aliases,
+                (SELECT COUNT(DISTINCT j.book_id) FROM (\(books)) j WHERE j.rid = r.id) AS book_count,
+                \(kind == .person ? "(SELECT COUNT(DISTINCT book_id) FROM book_authors WHERE person_id = r.id)" : "0") AS authored,
+                \(kind == .person ? "(SELECT COUNT(DISTINCT file_id) FROM book_narrators WHERE person_id = r.id)" : "0") AS narrated
+            FROM \(kind.table) r
+            """
         var arguments: StatementArguments = []
         var conditions: [String] = []
         if let libraryID {
@@ -593,11 +612,42 @@ extension CatalogStore {
             sql += " WHERE " + conditions.joined(separator: " AND ")
         }
         sql += " ORDER BY r.sort_name COLLATE NOCASE, r.id"
-        return try Row.fetchAll(db, sql: sql, arguments: arguments)
-            .map { ResourceSummary(id: $0["id"], name: $0["name"], bookCount: $0["book_count"]) }
-            // A resource no Book names yet, before its Books arrive, isn't
-            // worth a row.
-            .filter { $0.bookCount > 0 }
+        var items = try Row.fetchAll(db, sql: sql, arguments: arguments).map { row -> ResourceSummary in
+            let name: String = row["name"]
+            let sortName: String = row["sort_name"]
+            var parts = kind == .person && sortName != name ? [sortName] : []
+            parts += names(row["aliases"])
+            return ResourceSummary(id: row["id"], name: name, bookCount: row["book_count"], detail: parts.joined(separator: ", "),
+                                   authoredCount: row["authored"], narratedCount: row["narrated"])
+        }
+        // A resource no Book names yet, before its Books arrive, isn't
+        // worth a row.
+        .filter { $0.bookCount > 0 }
+
+        // Up to three covers each, in one query.
+        guard !items.isEmpty else { return items }
+        let listed = items.map { String($0.id) }.joined(separator: ",")
+        let previewRows = try Row.fetchAll(db, sql: """
+            SELECT rid, book_id FROM (
+                SELECT j.rid, j.book_id, ROW_NUMBER() OVER (PARTITION BY j.rid ORDER BY MIN(j.ord), j.book_id) AS n
+                FROM (\(books)) j JOIN books b ON b.id = j.book_id
+                WHERE j.rid IN (\(listed))
+                GROUP BY j.rid, j.book_id
+            ) WHERE n <= 3 ORDER BY rid, n
+            """)
+        let bookIDs = Set(previewRows.map { $0["book_id"] as Int })
+        let summaries = try summaries(db, rows: Row.fetchAll(db, sql: summarySQL + " WHERE b.id IN (\(bookIDs.map(String.init).joined(separator: ",")))"))
+        let byID = Dictionary(uniqueKeysWithValues: summaries.map { ($0.id, $0) })
+        var previews: [Int: [BookSummary]] = [:]
+        for row in previewRows {
+            if let book = byID[row["book_id"]] {
+                previews[row["rid"], default: []].append(book)
+            }
+        }
+        for index in items.indices {
+            items[index].previews = previews[items[index].id] ?? []
+        }
+        return items
     }
 
     static func resource(_ db: Database, kind: ResourceKind, id: Int) throws -> ResourceDetail? {

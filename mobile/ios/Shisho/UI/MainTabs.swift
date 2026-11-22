@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The signed-in app: the Library, Lists, and Search tabs, each with its own
-/// navigation, and the mini player above the tab bar on every one.
+/// The signed-in app: the Library and Lists tabs of the prototype's native
+/// structure (variant E), each with its own navigation, the mini player
+/// above the tab bar on every one, and the Account sheet any tab opens.
 struct MainTabs: View {
     @Environment(AppModel.self) private var model
 
@@ -14,14 +15,32 @@ struct MainTabs: View {
                 .tag(AppTab.library)
             ListsView()
                 .withMiniPlayer()
-                .tabItem { Label("Lists", systemImage: "list.bullet.rectangle").accessibilityIdentifier("tab.lists") }
+                .tabItem { Label("Lists", systemImage: "list.bullet").accessibilityIdentifier("tab.lists") }
                 .tag(AppTab.lists)
-            SearchView()
-                .withMiniPlayer()
-                .tabItem { Label("Search", systemImage: "magnifyingglass").accessibilityIdentifier("tab.search") }
-                .tag(AppTab.search)
         }
         .tint(Theme.primary)
+        .sheet(isPresented: $model.showingAccount) {
+            AccountSheet()
+        }
+    }
+}
+
+/// The top right of each tab's first screen, as the prototype has it:
+/// search, which opens on top of the tab, and the account.
+struct RootToolbar: ToolbarContent {
+    @Environment(AppModel.self) private var model
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            NavigationLink(value: Route.search) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(Theme.foreground)
+            }
+            .accessibilityLabel("Search")
+            .accessibilityIdentifier("search.button")
+            AccountButton { model.showingAccount = true }
+        }
     }
 }
 
@@ -34,7 +53,7 @@ extension View {
     }
 
     /// The pages any tab can push: a Book, a browsing list, a Series,
-    /// Person, Genre, or Tag, and a List.
+    /// Person, Genre, or Tag, a List, and search.
     func routeDestinations() -> some View {
         navigationDestination(for: Route.self) { route in
             switch route {
@@ -46,6 +65,8 @@ extension View {
                 ResourceView(kind: kind, id: id, initialName: name)
             case .list(let id, let name):
                 ListDetailView(listID: id, initialName: name)
+            case .search:
+                SearchView()
             }
         }
     }
@@ -137,5 +158,141 @@ struct EmptyNotice: View {
         .padding(.vertical, 56)
         .padding(.horizontal, 32)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - The web app's pieces
+
+/// The web app's small outlined button (`Button variant="outline"
+/// size="sm"`), for choosing and browsing.
+struct SmallOutlineStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.geist(.footnote, weight: .medium))
+            .foregroundStyle(Theme.foreground)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 34)
+            .background(Theme.card.opacity(configuration.isPressed ? 0.6 : 1), in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
+            .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+/// The web app's secondary badge: a count or label in a muted rounded
+/// rectangle, such as "3 books".
+struct CountBadge: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.geist(.caption, weight: .medium))
+            .foregroundStyle(Theme.foreground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Theme.secondary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
+
+/// A resource's first covers, fanned, as the web app's lists show them.
+struct PreviewStack: View {
+    let books: [BookSummary]
+    var height: CGFloat = 54
+
+    var body: some View {
+        let width = height * 2 / 3
+        // Room for three, whatever the count, so the names beside the
+        // stacks line up, as on the web.
+        ZStack(alignment: .leading) {
+            if books.isEmpty {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Theme.muted)
+                    .frame(width: width, height: height)
+            }
+            ForEach(Array(books.prefix(3).enumerated().reversed()), id: \.element.id) { index, book in
+                CoverView(book: book, width: width)
+                    .frame(height: height, alignment: .top)
+                    .clipped()
+                    .offset(x: CGFloat(index) * width * 0.22)
+            }
+        }
+        .frame(width: width * 1.44, height: height, alignment: .leading)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A Person, Genre, or Tag in a list, as the web app's resource lists show
+/// one: its covers, its name over its sort name and other names, and its
+/// counts.
+struct ResourceRow: View {
+    let item: ResourceSummary
+    let kind: ResourceKind
+
+    private var badges: [String] {
+        guard kind == .person else { return [Counts.books(item.bookCount)] }
+        var out: [String] = []
+        if item.authoredCount > 0 {
+            out.append(String(AttributedString(localized: "^[\(item.authoredCount) book](inflect: true) authored").characters))
+        }
+        if item.narratedCount > 0 {
+            out.append(String(AttributedString(localized: "^[\(item.narratedCount) file](inflect: true) narrated").characters))
+        }
+        return out
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            PreviewStack(books: item.previews)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.geist(.headline, weight: .semibold))
+                    .foregroundStyle(Theme.foreground)
+                    .lineLimit(2)
+                if !item.detail.isEmpty {
+                    Text(item.detail)
+                        .font(.geist(.footnote))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 4) {
+                ForEach(badges, id: \.self) { CountBadge(text: $0) }
+            }
+        }
+        .padding(12)
+        .cardStyle(radius: Theme.radius + 2)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(([item.name] + badges).joined(separator: ", "))
+        .accessibilityAddTraits(.isButton)
+    }
+}
+
+/// A Series in a grid, as the web app shows one: its first Book's cover,
+/// its name, and how many Books it has.
+struct SeriesCard: View {
+    let item: ResourceSummary
+    let width: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let first = item.previews.first {
+                CoverView(book: first, width: width)
+                    .padding(.bottom, 4)
+            }
+            Text(item.name)
+                .font(.geist(.subheadline, weight: .semibold))
+                .foregroundStyle(Theme.foreground)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+            CountBadge(text: Counts.books(item.bookCount))
+        }
+        .frame(width: width, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(item.name + ", " + Counts.books(item.bookCount))
+        .accessibilityAddTraits(.isButton)
     }
 }

@@ -11,7 +11,6 @@ struct LibraryView: View {
     @State private var libraries: [LibrarySummary]?
     /// How far the content has scrolled up, which shrinks the logo.
     @State private var scrolledBy: CGFloat = 0
-    @State private var showingAccount = false
     @State private var notes: [JournalNote]?
 
     private var libraryID: Int? {
@@ -32,13 +31,16 @@ struct LibraryView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ScrollTopMarker(space: "library")
-                        if let libraries, libraries.count > 1 {
-                            LibraryPicker(libraries: libraries, selection: $model.libraryID, name: libraryName)
-                                .padding(.horizontal, GridLayout.margin)
-                                .padding(.top, 8)
+                        // The Library picked, as the prototype has it under
+                        // the title, and the ways into it besides the grid.
+                        FlowLayout(spacing: 8) {
+                            if let libraries, libraries.count > 1 {
+                                LibraryPicker(libraries: libraries, selection: $model.libraryID, name: libraryName)
+                            }
+                            BrowseButtons()
                         }
-                        BrowseRow()
-                            .padding(.top, 12)
+                        .padding(.horizontal, GridLayout.margin)
+                        .padding(.top, 8)
                         SyncBanner()
                             .padding(.horizontal, GridLayout.margin)
                             .padding(.top, 14)
@@ -66,14 +68,9 @@ struct LibraryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 LogoToolbarItem(scrolledBy: scrolledBy)
-                ToolbarItem(placement: .topBarTrailing) {
-                    AccountButton { showingAccount = true }
-                }
+                RootToolbar()
             }
             .routeDestinations()
-            .sheet(isPresented: $showingAccount) {
-                AccountSheet()
-            }
         }
         .tint(Theme.primary)
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
@@ -95,7 +92,7 @@ struct LibraryView: View {
     private func sectionHeader(count: Int) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text("Library")
-                .font(.geist(.title2, weight: .semibold))
+                .font(.geist(.title3, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
             Spacer()
             Text("^[\(count) book](inflect: true)")
@@ -173,21 +170,17 @@ private struct LibraryPicker: View {
                 }
             }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "books.vertical")
-                    .foregroundStyle(Theme.mutedForeground)
+                    .accessibilityHidden(true)
                 Text(name)
-                    .foregroundStyle(Theme.foreground)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.geist(.caption, weight: .semibold))
+                    .font(.geist(.caption2, weight: .semibold))
                     .foregroundStyle(Theme.mutedForeground)
             }
-            .font(.geist(.subheadline, weight: .medium))
-            .padding(.horizontal, 14)
-            .frame(minHeight: 40)
-            .cardStyle(radius: 10)
         }
+        .buttonStyle(SmallOutlineStyle())
         .accessibilityLabel("Library: \(name)")
         .accessibilityIdentifier("library.picker")
     }
@@ -219,7 +212,7 @@ private struct LogoToolbarItem: ToolbarContent {
 }
 
 /// The signed-in account, top right, as the user's initial.
-private struct AccountButton: View {
+struct AccountButton: View {
     @Environment(AppModel.self) private var model
     let action: () -> Void
 
@@ -275,13 +268,16 @@ struct BookCell: View {
         .accessibilityIdentifier("book.cell")
     }
 
+    @Environment(\.displayScale) private var displayScale
+
+    /// The title, after its Series Number's badge on a Series' page. The
+    /// badge is drawn into the text as an image, so the title wraps under
+    /// it rather than beside it.
     private var titleText: Text {
-        guard let (number, end) = seriesNumber else { return Text(book.title) }
-        var badge = AttributedString(" " + SeriesNumbers.format(number) + (end.map { "-" + SeriesNumbers.format($0) } ?? "") + " ")
-        badge.backgroundColor = Theme.primary
-        badge.foregroundColor = Theme.primaryForeground
-        badge.font = .geist(.caption, weight: .heavy)
-        return Text(badge) + Text(verbatim: " ") + Text(book.title)
+        guard let (number, end) = seriesNumber,
+              let badge = BadgeImages.image(number: number, end: end, scale: displayScale, size: dynamicTypeSize)
+        else { return Text(book.title) }
+        return Text(Image(uiImage: badge)).baselineOffset(-3) + Text(verbatim: " ") + Text(book.title)
     }
 
     private var accessibilityText: String {
@@ -357,5 +353,23 @@ struct JournalNotesBanner: View {
                 .accessibilityIdentifier("journal.notes.dismiss")
         }
         .accessibilityIdentifier("journal.notes")
+    }
+}
+
+/// Series Number badges drawn as images, for setting inline in text.
+@MainActor
+enum BadgeImages {
+    private static var cache: [String: UIImage] = [:]
+
+    static func image(number: Double, end: Double?, scale: CGFloat, size: DynamicTypeSize) -> UIImage? {
+        let key = "\(number)-\(end.map { "\($0)" } ?? "")-\(scale)-\(size)"
+        if let image = cache[key] {
+            return image
+        }
+        let renderer = ImageRenderer(content: SeriesNumberBadge(number: number, end: end).environment(\.dynamicTypeSize, size))
+        renderer.scale = scale
+        let image = renderer.uiImage
+        cache[key] = image
+        return image
     }
 }

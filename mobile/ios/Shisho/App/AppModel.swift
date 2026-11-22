@@ -67,7 +67,8 @@ final class AppModel {
     var tab: AppTab = .library
     var libraryPath: [Route] = []
     var listsPath: [Route] = []
-    var searchPath: [Route] = []
+    /// The Account sheet is open.
+    var showingAccount = false
     /// The sign-in sheet for adding another account is open.
     var addingAccount = false
     /// The Library picked in the Library, kept for each account, or 0 for
@@ -120,7 +121,7 @@ final class AppModel {
         showingPlayer = false
         libraryPath = []
         listsPath = []
-        searchPath = []
+        showingAccount = false
         stopPrefetching()
         libraryID = session.map { UserDefaults.standard.integer(forKey: "libraryID.\($0.account.id)") } ?? 0
         if let session {
@@ -157,8 +158,15 @@ final class AppModel {
         switch tab {
         case .library where libraryPath.last != route: libraryPath.append(route)
         case .lists where listsPath.last != route: listsPath.append(route)
-        case .search where searchPath.last != route: searchPath.append(route)
         default: break
+        }
+    }
+
+    /// Opens route on the tab showing.
+    func push(_ route: Route) {
+        switch tab {
+        case .library: libraryPath.append(route)
+        case .lists: listsPath.append(route)
         }
     }
 
@@ -610,7 +618,7 @@ enum Messages {
 
 /// The app's tabs.
 enum AppTab: Hashable {
-    case library, lists, search
+    case library, lists
 }
 
 /// A page pushed on a tab's navigation.
@@ -621,4 +629,6 @@ enum Route: Hashable {
     /// One Series, Person, Genre, or Tag, and its Books.
     case resource(ResourceKind, id: Int, name: String)
     case list(id: Int, name: String)
+    /// Search over the device's copy, opened from a tab's toolbar.
+    case search
 }

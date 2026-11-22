@@ -25,25 +25,16 @@ extension ResourceKind {
 }
 
 /// The ways into the Library besides its grid: its Series, People, Genres,
-/// and Tags, as the web app's sidebar lists them.
-struct BrowseRow: View {
+/// and Tags, as the web app's navigation lists them, in its small outlined
+/// buttons.
+struct BrowseButtons: View {
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(ResourceKind.allCases, id: \.self) { kind in
-                    NavigationLink(value: Route.browse(kind)) {
-                        Label(kind.title, systemImage: kind.systemImage)
-                            .font(.geist(.subheadline, weight: .medium))
-                            .foregroundStyle(Theme.foreground)
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 38)
-                            .cardStyle(radius: 19)
-                    }
-                    .buttonStyle(PressableStyle())
-                    .accessibilityIdentifier("browse.\(kind.identifier)")
-                }
+        ForEach(ResourceKind.allCases, id: \.self) { kind in
+            NavigationLink(value: Route.browse(kind)) {
+                Label(kind.title, systemImage: kind.systemImage)
             }
-            .padding(.horizontal, GridLayout.margin)
+            .buttonStyle(SmallOutlineStyle())
+            .accessibilityIdentifier("browse.\(kind.identifier)")
         }
     }
 }
@@ -52,6 +43,8 @@ struct BrowseRow: View {
 /// with how many Books name each, filtered as the user types.
 struct ResourceListView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let kind: ResourceKind
 
     @State private var items: [ResourceSummary]?
@@ -61,47 +54,76 @@ struct ResourceListView: View {
         let all = items ?? []
         let text = filter.trimmingCharacters(in: .whitespaces)
         guard !text.isEmpty else { return all }
-        return all.filter { $0.name.localizedStandardContains(text) }
+        return all.filter { $0.name.localizedStandardContains(text) || $0.detail.localizedStandardContains(text) }
+    }
+
+    /// The web app's line under each list's title.
+    private var subtitle: String {
+        switch kind {
+        case .series: String(localized: "Browse book series in your library")
+        case .person: String(localized: "Authors, narrators, and other contributors")
+        case .genre: String(localized: "Browse genres in your library")
+        case .tag: String(localized: "Browse tags in your library")
+        }
     }
 
     var body: some View {
-        List {
-            ForEach(shown) { item in
-                NavigationLink(value: Route.resource(kind, id: item.id, name: item.name)) {
-                    HStack {
-                        Text(item.name)
-                            .font(.geist(.body))
-                            .foregroundStyle(Theme.foreground)
-                        Spacer()
-                        Text(verbatim: "\(item.bookCount)")
-                            .font(.geist(.subheadline))
-                            .foregroundStyle(Theme.mutedForeground)
-                            .monospacedDigit()
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(subtitle)
+                        .font(.geist(.subheadline))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .padding(.horizontal, GridLayout.margin)
+                        .padding(.bottom, 16)
+                    if let items, items.isEmpty {
+                        EmptyNotice(title: String(localized: "Nothing here yet"),
+                                    message: String(localized: "\(kind.title) in your Libraries appear here."),
+                                    systemImage: kind.systemImage)
+                    } else if kind == .series {
+                        seriesGrid(width: geometry.size.width)
+                    } else {
+                        LazyVStack(spacing: 8) {
+                            ForEach(shown) { item in
+                                NavigationLink(value: Route.resource(kind, id: item.id, name: item.name)) {
+                                    ResourceRow(item: item, kind: kind)
+                                }
+                                .buttonStyle(PressableStyle())
+                                .accessibilityIdentifier("browse.item")
+                            }
+                        }
+                        .padding(.horizontal, GridLayout.margin)
                     }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(item.name + ", " + Counts.books(item.bookCount))
                 }
-                .listRowBackground(Theme.card)
-                .accessibilityIdentifier("browse.item")
+                .padding(.bottom, 32)
             }
+            .miniPlayerClearance()
         }
-        .overlay {
-            if let items, items.isEmpty {
-                EmptyNotice(title: String(localized: "Nothing here yet"),
-                            message: String(localized: "\(kind.title) in your Libraries appear here."),
-                            systemImage: kind.systemImage)
-            }
-        }
-        .scrollContentBackground(.hidden)
         .background(Theme.background)
-        .searchable(text: $filter, prompt: Text("Filter \(kind.title)"))
+        .searchable(text: $filter, prompt: Text("Search \(kind.title.lowercased())"))
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.large)
-        .miniPlayerClearance()
         .refreshable { await model.syncNow() }
         .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(kind)-\(model.libraryID)", into: $items) { [kind, libraryID = model.libraryID == 0 ? nil : model.libraryID] db in
             try CatalogStore.resources(db, kind: kind, libraryID: libraryID)
         }
+    }
+
+    /// Series as the web app shows them: a grid of their first covers.
+    private func seriesGrid(width: CGFloat) -> some View {
+        let layout = GridLayout(width: width, regular: sizeClass == .regular,
+                                accessibility: dynamicTypeSize.isAccessibilitySize)
+        let column = GridItem(.fixed(layout.cellWidth), spacing: GridLayout.spacing, alignment: .top)
+        return LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
+            ForEach(shown) { item in
+                NavigationLink(value: Route.resource(.series, id: item.id, name: item.name)) {
+                    SeriesCard(item: item, width: layout.cellWidth)
+                }
+                .buttonStyle(PressableStyle())
+                .accessibilityIdentifier("browse.item")
+            }
+        }
+        .padding(.horizontal, GridLayout.margin)
     }
 }
 
@@ -134,15 +156,15 @@ struct ResourceView: View {
                         if let books {
                             if kind == .person {
                                 if !books.isEmpty {
-                                    SectionHeading(title: String(localized: "Books"), count: Counts.books(books.count))
+                                    SectionHeading(title: String(localized: "Books Authored"))
                                     BookGrid(books: books, width: geometry.size.width, identifier: "resource.grid")
                                 }
                                 if let narrated, !narrated.isEmpty {
-                                    SectionHeading(title: String(localized: "Narrated"), count: Counts.books(narrated.count))
+                                    SectionHeading(title: String(localized: "Books Narrated"))
                                     BookGrid(books: narrated, width: geometry.size.width, identifier: "resource.narrated")
                                 }
                             } else {
-                                SectionHeading(title: String(localized: "Books"), count: Counts.books(books.count))
+                                SectionHeading(title: kind == .series ? String(localized: "Books in Series") : String(localized: "Books"))
                                 BookGrid(books: books, width: geometry.size.width, badges: numbers?.values ?? [:], identifier: "resource.grid")
                             }
                         }
@@ -172,8 +194,13 @@ struct ResourceView: View {
 
     @ViewBuilder
     private var header: some View {
-        if let detail = detail ?? nil, detail.description?.isEmpty == false || !detail.aliases.isEmpty {
+        if let detail = detail ?? nil {
             VStack(alignment: .leading, spacing: 10) {
+                // Its counts, as the web app badges them under the name.
+                HStack(spacing: 6) {
+                    ForEach(counts, id: \.self) { CountBadge(text: $0) }
+                }
+                .accessibilityElement(children: .combine)
                 if let description = detail.description, !description.isEmpty {
                     Text(PlainText.from(description))
                         .font(.geist(.subheadline))
@@ -188,8 +215,21 @@ struct ResourceView: View {
                 }
             }
             .padding(.horizontal, GridLayout.margin)
-            .padding(.top, 8)
+            .padding(.top, 4)
         }
+    }
+
+    private var counts: [String] {
+        let authored = books?.count ?? 0
+        guard kind == .person else { return [Counts.books(authored)] }
+        var out: [String] = []
+        if authored > 0 {
+            out.append(String(AttributedString(localized: "^[\(authored) book](inflect: true) authored").characters))
+        }
+        if let narrated, !narrated.isEmpty {
+            out.append(String(AttributedString(localized: "^[\(narrated.count) book](inflect: true) narrated").characters))
+        }
+        return out
     }
 }
 
