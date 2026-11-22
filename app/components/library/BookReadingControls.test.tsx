@@ -340,6 +340,36 @@ describe("BookReadingControls", () => {
     await waitFor(() => expect(gets()).toBeGreaterThan(before));
   });
 
+  it("closes the confirmation when the server refuses, so a new one is asked for", async () => {
+    const underway = readThrough({ id: 12, outcome: "underway" });
+    const request = renderControls(
+      reading({ status: "currently_reading", read_throughs: [underway] }),
+    );
+    await openStatusMenu("Currently Reading");
+    await user().click(
+      screen.getByRole("menuitem", { name: "Mark as Reference" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Mark as Reference?",
+    });
+    request.mockRejectedValueOnce(new Error("started since"));
+    await user().click(
+      within(dialog).getByRole("button", { name: "Mark as Reference" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Mark as Reference?" }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(request).toHaveBeenCalledWith(
+      "POST",
+      "/reading/books/7/reference",
+      { read_through_id: 12 },
+      null,
+    );
+  });
+
   it("removes a book from Reference", async () => {
     const request = renderControls(reading({ status: "reference" }));
     await openStatusMenu("Reference");

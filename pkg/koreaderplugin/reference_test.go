@@ -57,3 +57,31 @@ func TestReference_BackfillDoesntChangeIt(t *testing.T) {
 	assert.Empty(t, f.readThroughs(f.file))
 	assert.NotEmpty(t, f.sessionsOf(f.file))
 }
+
+// Time that marking Reference took off a Read-through stays off any, even
+// when the device's next upload extends its session and a finish earlier
+// that day would cover it.
+func TestReference_AnExtendedSessionStaysDetached(t *testing.T) {
+	t.Parallel()
+	f := newSyncFixture(t)
+	now := time.Now()
+	// The user has no time zone, so their days are UTC's.
+	today := day(now.Add(-time.Hour).UTC())
+	require.NoError(t, f.reading.End(f.ctx, f.user.ID, f.file.BookID, models.ReadThroughOutcomeFinished, today))
+	require.NoError(t, f.reading.Start(f.ctx, f.user.ID, f.file.BookID, today))
+	f.upload(UploadPayload{Pages: pages(syncHash, 1, 5, now.Add(-time.Hour))})
+	var underway *int
+	for _, rt := range f.readThroughs(f.file) {
+		if rt.Outcome == models.ReadThroughOutcomeUnderway {
+			underway = &rt.ID
+		}
+	}
+	require.NotNil(t, underway)
+	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.file.BookID, underway))
+
+	f.upload(UploadPayload{Pages: pages(syncHash, 6, 8, now.Add(-time.Hour+5*time.Minute))})
+
+	sessions := f.sessionsOf(f.file)
+	require.Len(t, sessions, 1, "the upload extended the session")
+	assert.Nil(t, sessions[0].ReadThroughID)
+}

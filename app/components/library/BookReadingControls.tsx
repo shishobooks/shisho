@@ -82,7 +82,12 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const deleteMutation = useDeleteReadThrough();
   const referenceMutation = useSetReference();
   const [confirmingNotStarted, setConfirmingNotStarted] = useState(false);
-  const [confirmingReference, setConfirmingReference] = useState(false);
+  // The Read-through underway that the open Mark as Reference confirmation
+  // names, captured when it opens, so the deletion confirmed is that one;
+  // null while it's closed.
+  const [referenceConfirmation, setReferenceConfirmation] = useState<
+    number | null
+  >(null);
 
   // A failed load leaves the controls out; the history section reports it.
   const reading = readingQuery.data;
@@ -127,15 +132,19 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
     }
   };
 
-  const handleReference = async (reference: boolean) => {
+  // readThroughId is the Read-through underway the user confirmed deleting,
+  // or null for none. A refusal, as when a device started or finished the
+  // Book since, closes the confirmation, so the user decides again on what's
+  // there now.
+  const handleReference = async (
+    reference: boolean,
+    readThroughId: number | null = null,
+  ) => {
     try {
-      await referenceMutation.mutateAsync({
-        bookId,
-        reference,
-        readThroughId: underway?.id ?? null,
-      });
-      setConfirmingReference(false);
+      await referenceMutation.mutateAsync({ bookId, reference, readThroughId });
+      setReferenceConfirmation(null);
     } catch (error) {
+      setReferenceConfirmation(null);
       toastRequestError(
         error,
         reference
@@ -149,10 +158,10 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   // with nothing underway it just applies.
   const handleMarkReference = () => {
     if (underway) {
-      setConfirmingReference(true);
+      setReferenceConfirmation(underway.id);
       return;
     }
-    handleReference(true);
+    handleReference(true, null);
   };
   const readBefore = (reading.read_throughs ?? []).some(
     (rt) => rt.outcome !== "underway",
@@ -282,9 +291,11 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
         confirmLabel="Mark as Reference"
         description="Your current Read-through of this book is deleted from your reading history, and this can't be undone. The reading time recorded during it still counts toward your Reading Stats, and every file keeps its place. While the book is Reference, opening it never starts or finishes a Read-through."
         isPending={referenceMutation.isPending}
-        onConfirm={() => handleReference(true)}
-        onOpenChange={setConfirmingReference}
-        open={confirmingReference}
+        onConfirm={() => handleReference(true, referenceConfirmation)}
+        onOpenChange={(open) => {
+          if (!open) setReferenceConfirmation(null);
+        }}
+        open={referenceConfirmation !== null}
         title="Mark as Reference?"
       />
     </div>
