@@ -1,9 +1,10 @@
-import { BookOpen, ChevronDown, X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import LastRead from "@/components/library/LastRead";
+import ReadingStatusIcon from "@/components/library/ReadingStatusIcon";
 import StarRating from "@/components/library/StarRating";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -20,6 +21,7 @@ import {
   useReadingTransition,
   useSetOnToRead,
   useSetRating,
+  useSetReference,
 } from "@/hooks/queries/reading";
 import { useAuth } from "@/hooks/useAuth";
 import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
@@ -34,10 +36,13 @@ import {
 const transitionLabel = (
   transition: ReadingTransition,
   status: ReadingStatus | null | undefined,
+  readBefore: boolean,
 ): string => {
   switch (transition) {
     case "start":
-      return status === "read" || status === "did_not_finish"
+      return status === "read" ||
+        status === "did_not_finish" ||
+        (status === "reference" && readBefore)
         ? "Read again"
         : "Start reading";
     case "pause":
@@ -65,8 +70,9 @@ interface BookReadingControlsProps {
 
 // The signed-in user's Reading Status and Rating for a Book. The status
 // menu offers only the transitions valid from the current status, plus
-// adding to or removing from To Read while the Book isn't being read. In
-// Demo Mode both render disabled with the demo's explanation.
+// adding to or removing from To Read while the Book isn't being read, and
+// marking it Reference or removing the mark. In Demo Mode both render
+// disabled with the demo's explanation.
 const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const { demoMode } = useAuth();
   const readingQuery = useBookReading(bookId);
@@ -74,7 +80,14 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
   const ratingMutation = useSetRating();
   const toReadMutation = useSetOnToRead();
   const deleteMutation = useDeleteReadThrough();
+  const referenceMutation = useSetReference();
   const [confirmingNotStarted, setConfirmingNotStarted] = useState(false);
+  // The Read-through underway that the open Mark as Reference confirmation
+  // names, captured when it opens, so the deletion confirmed is that one;
+  // null while it's closed.
+  const [referenceConfirmation, setReferenceConfirmation] = useState<
+    number | null
+  >(null);
 
   // A failed load leaves the controls out; the history section reports it.
   const reading = readingQuery.data;
@@ -119,6 +132,41 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
     }
   };
 
+  // readThroughId is the Read-through underway the user confirmed deleting,
+  // or null for none. A refusal, as when a device started or finished the
+  // Book since, closes the confirmation, so the user decides again on what's
+  // there now.
+  const handleReference = async (
+    reference: boolean,
+    readThroughId: number | null = null,
+  ) => {
+    try {
+      await referenceMutation.mutateAsync({ bookId, reference, readThroughId });
+      setReferenceConfirmation(null);
+    } catch (error) {
+      setReferenceConfirmation(null);
+      toastRequestError(
+        error,
+        reference
+          ? "Failed to mark as Reference"
+          : "Failed to remove from Reference",
+      );
+    }
+  };
+
+  // Marking Reference deletes the Read-through underway, so it asks first;
+  // with nothing underway it just applies.
+  const handleMarkReference = () => {
+    if (underway) {
+      setReferenceConfirmation(underway.id);
+      return;
+    }
+    handleReference(true, null);
+  };
+  const readBefore = (reading.read_throughs ?? []).some(
+    (rt) => rt.outcome !== "underway",
+  );
+
   const handleRating = async (stars: number | null) => {
     try {
       await ratingMutation.mutateAsync({ bookId, payload: { rating: stars } });
@@ -138,7 +186,12 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
               size="sm"
               variant="outline"
             >
-              <BookOpen aria-hidden className="h-4 w-4" />
+              {/* The status's own icon, as on its cover bookmark. */}
+              <ReadingStatusIcon
+                aria-hidden
+                className="h-4 w-4"
+                status={status}
+              />
               {statusLabel}
               <ChevronDown aria-hidden className="h-3.5 w-3.5 opacity-60" />
             </Button>
@@ -166,18 +219,23 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
                 key={transition}
                 onSelect={() => handleTransition(transition)}
               >
-                {transitionLabel(transition, status)}
+                {transitionLabel(transition, status, readBefore)}
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator />
+            {status === "reference" ? (
+              <DropdownMenuItem onSelect={() => handleReference(false)}>
+                Remove from Reference
+              </DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={handleMarkReference}>
+                Mark as Reference
+              </DropdownMenuItem>
+            )}
             {underway && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => setConfirmingNotStarted(true)}
-                >
-                  Mark as not started
-                </DropdownMenuItem>
-              </>
+              <DropdownMenuItem onSelect={() => setConfirmingNotStarted(true)}>
+                Mark as not started
+              </DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
@@ -222,12 +280,23 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       )}
       <ConfirmDialog
         confirmLabel="Mark as not started"
-        description="This read is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
+        description="Your current Read-through is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there."
         isPending={deleteMutation.isPending}
         onConfirm={handleNotStarted}
         onOpenChange={setConfirmingNotStarted}
         open={confirmingNotStarted}
         title="Mark as not started?"
+      />
+      <ConfirmDialog
+        confirmLabel="Mark as Reference"
+        description="Your current Read-through of this book is deleted from your reading history, and this can't be undone. The reading time recorded during it still counts toward your Reading Stats, and every file keeps its place. While the book is Reference, opening it never starts or finishes a Read-through."
+        isPending={referenceMutation.isPending}
+        onConfirm={() => handleReference(true, referenceConfirmation)}
+        onOpenChange={(open) => {
+          if (!open) setReferenceConfirmation(null);
+        }}
+        open={referenceConfirmation !== null}
+        title="Mark as Reference?"
       />
     </div>
   );

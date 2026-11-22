@@ -6,16 +6,17 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// Reading Statuses. A status is derived from a user's Read-throughs and To
-// Read membership on every read and never stored (ADR 0013); see
-// reading.StatusExpr for the order.
+// Reading Statuses. A status is derived from a user's Read-throughs, To
+// Read membership, and Reference mark on every read and never stored (ADRs
+// 0013 and 0028); see reading.StatusExpr for the order.
 const (
-	//tygo:emit export type ReadingStatus = typeof ReadingStatusCurrentlyReading | typeof ReadingStatusPaused | typeof ReadingStatusToRead | typeof ReadingStatusRead | typeof ReadingStatusDidNotFinish;
+	//tygo:emit export type ReadingStatus = typeof ReadingStatusCurrentlyReading | typeof ReadingStatusPaused | typeof ReadingStatusToRead | typeof ReadingStatusRead | typeof ReadingStatusDidNotFinish | typeof ReadingStatusReference;
 	ReadingStatusCurrentlyReading = "currently_reading"
 	ReadingStatusPaused           = "paused"
 	ReadingStatusToRead           = "to_read"
 	ReadingStatusRead             = "read"
 	ReadingStatusDidNotFinish     = "did_not_finish"
+	ReadingStatusReference        = "reference"
 )
 
 // ReadingStatusFilterNone filters book listings to Books with no Reading
@@ -86,6 +87,15 @@ type UserBook struct {
 	RatingUpdatedAt *time.Time `json:"-"`
 	ToReadPosition  *int       `json:"to_read_position"`
 	PageFlow        *string    `json:"page_flow" tstype:"PageFlow | null"`
+	// Reference is the user's choice to dip into the Book rather than read
+	// it through (ADR 0028). It never holds alongside a Read-through underway
+	// or a place on To Read.
+	Reference bool `bun:",notnull" json:"-"`
+	// StatusChosenAt is the user's latest explicit status choice for the
+	// Book, of any kind, made whether or not it was Reference then: marking
+	// or removing Reference, starting, Mark as read, Mark as Did Not Finish,
+	// or Add to To Read. Nil when they've made none since it was recorded.
+	StatusChosenAt *time.Time `json:"-"`
 }
 
 // Reading sources: what reported a Reading Position update or a Reading

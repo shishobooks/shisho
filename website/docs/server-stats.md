@@ -11,8 +11,8 @@ The totals across every library: books, files, library size, users, active reade
 Reading totals across every user for one year, the current year unless you pick another with the range menu, or for all time. The menu offers each year back to the first one with any reading.
 
 - **Reading time** and **Listening time** are the time recorded in reading sessions. Listening is time spent in an audiobook; everything else counts as reading. A session counts in the year it started. Time from Kobo, and from KOReader without the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin), is estimated, as [Reading Time From Devices](./reading-tracking.md#reading-time-from-devices) explains.
-- **Read-throughs finished** and **Did Not Finish** count every read that ended in the year, so a reread counts again. A read with no end date counts only toward all time.
-- **Readers** counts users with a reading session in the year, or a read that ended in it.
+- **Read-throughs finished** and **Did Not Finish** count every Read-through that ended in the year, so a reread counts again. A Read-through with no end date counts only toward all time.
+- **Readers** counts users with a reading session in the year, or a Read-through that ended in it.
 
 Years are counted in the server's time zone, not each reader's: the `TZ` environment variable, or the host's time zone when it isn't set. The Docker image uses UTC unless you set `TZ`.
 

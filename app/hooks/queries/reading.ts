@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { API, ShishoAPIError } from "@/libraries/api";
 import { writeDemoSettings } from "@/libraries/demoSettings";
 import {
+  MarkReferencePayload,
   PageFlowPaginated,
   PageFlowScrolled,
   type BookReadingResponse,
@@ -455,10 +456,58 @@ export const useDeleteReadThrough = () => {
   });
 };
 
+interface SetReferenceVariables {
+  bookId: number;
+  reference: boolean;
+  // For marking: the Read-through underway the user confirmed deleting, or
+  // null when they saw none. The server refuses when another is underway.
+  readThroughId?: number | null;
+}
+
+// Marks a Book Reference, or removes the mark. Marking it turns a
+// Read-through underway into plain Reading Sessions, which Reading History
+// and Stats show, so onReadingChanged refetches them. A refusal, as when a
+// device started the Book since, reloads its record so the status menu
+// shows what's there now.
+export const useSetReference = () => {
+  const queryClient = useQueryClient();
+  return useMutation<
+    BookReadingResponse,
+    ShishoAPIError,
+    SetReferenceVariables
+  >({
+    mutationFn: ({ bookId, reference, readThroughId = null }) => {
+      if (!reference) {
+        return API.request(
+          "DELETE",
+          `/reading/books/${bookId}/reference`,
+          null,
+          null,
+        );
+      }
+      const payload: MarkReferencePayload = { read_through_id: readThroughId };
+      return API.request(
+        "POST",
+        `/reading/books/${bookId}/reference`,
+        payload,
+        null,
+      );
+    },
+    onSuccess: (data) => onReadingChanged(queryClient, data),
+    onError: (_error, { bookId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.BookReading, bookId],
+      });
+    },
+  });
+};
+
 // A reading change made to many Books at once from the selection toolbar,
-// named by its route (pkg/reading/routes.go): marking each read, or marking
-// each not started, which deletes its Read-through underway.
-export type BulkReadingAction = "finish" | "not-started";
+// named by its route (pkg/reading/routes.go): marking each read, marking
+// each not started, which deletes its Read-through underway, or marking each
+// Reference or removing the mark.
+export type BulkReadingAction =
+  "finish" | "not-started" | "reference" | "remove-reference";
 
 interface BulkReadingChangeVariables {
   action: BulkReadingAction;
@@ -477,10 +526,10 @@ export const useBulkReadingChange = () => {
     BulkReadingChangeVariables
   >({
     mutationFn: ({ action, bookIds }) => {
-      if (action === "not-started") {
+      if (action !== "finish") {
         return API.request(
           "POST",
-          "/reading/books/bulk/not-started",
+          `/reading/books/bulk/${action}`,
           { book_ids: bookIds },
           null,
         );
@@ -503,6 +552,9 @@ export const useBulkReadingChange = () => {
       queryClient.invalidateQueries({
         queryKey: [ServerStatsQueryKey.ServerStats],
       });
+      // Taking Books off To Read or ending Read-throughs can untick Getting
+      // Started's personal steps.
+      invalidateGettingStarted(queryClient);
     },
   });
 };

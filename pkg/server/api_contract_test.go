@@ -133,6 +133,7 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(f.request(http.MethodPost, fmt.Sprintf("/api/reading/books/%d/finish", fileBook.ID), `{"today":"2026-03-01"}`, http.StatusOK)), &finished))
 	require.Len(t, finished.ReadThroughs, 1)
+	f.request(http.MethodPost, fmt.Sprintf("/api/reading/books/%d/reference", fileBook.ID), `{"read_through_id":null}`, http.StatusOK)
 	f.request(http.MethodPost, "/api/lists", `{"name":"Favorites"}`, http.StatusCreated)
 	var classics struct {
 		ID int `json:"id"`
@@ -254,6 +255,28 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			name:   "undoing a finish no position update made",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/read-throughs/%d/undo-finish", underway.ReadThroughs[0].ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This finish can't be undone.",
+		},
+		{
+			name:   "marking Reference a book that already is",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/reference", fileBook.ID),
+			body:   `{"read_through_id":null}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book is already Reference.",
+		},
+		{
+			name:   "marking Reference without confirming the Read-through underway",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/books/%d/reference", seeded.bookID),
+			body:   `{"read_through_id":null}`,
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book was started or finished since you looked. Check its status and try again.",
+		},
+		{
+			name:   "removing Reference from a book that isn't",
+			method: http.MethodDelete, path: fmt.Sprintf("/api/reading/books/%d/reference", seeded.bookID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This book isn't Reference.",
+		},
+		{
+			name:   "undoing a finish of a book marked Reference since",
+			method: http.MethodPost, path: fmt.Sprintf("/api/reading/read-throughs/%d/undo-finish", finished.ReadThroughs[0].ID),
+			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This finish can't be undone because the book is Reference now.",
 		},
 		{
 			name:   "ending a Read-through that already ended",

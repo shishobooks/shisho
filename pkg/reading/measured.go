@@ -152,6 +152,10 @@ func replaceEstimates(ctx context.Context, tx bun.Tx, userID int, deviceID strin
 // placeUnattached places again each of sessions on no Read-through, since a
 // later session in the same upload may have started one that covers it, as
 // reading in earnest an hour after opening a book on its first page does.
+// Nothing starts one in a Reference Book, and a session there that this
+// upload extended may hold time marking Reference took off a Read-through
+// (ADR 0028), so there it places nothing again: new sessions were already
+// placed by day when they were recorded.
 func placeUnattached(ctx context.Context, tx bun.Tx, userID, fileID int, sessions []*models.ReadingSession) error {
 	var bookID int
 	for _, session := range sessions {
@@ -162,6 +166,10 @@ func placeUnattached(ctx context.Context, tx bun.Tx, userID, fileID int, session
 			err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
 			if err != nil {
 				return errors.WithStack(err)
+			}
+			reference, err := isReference(ctx, tx, userID, bookID)
+			if err != nil || reference {
+				return err
 			}
 		}
 		rt, err := readThroughAt(ctx, tx, userID, bookID, session.StartedAt)

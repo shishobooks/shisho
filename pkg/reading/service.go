@@ -68,7 +68,10 @@ func newServiceWithClock(db *bun.DB, now func() time.Time) *Service {
 //
 //  1. A Read-through underway: currently_reading, or paused.
 //  2. Otherwise, on To Read: to_read.
-//  3. Otherwise, the latest ended Read-through: read or did_not_finish.
+//  3. Otherwise, marked Reference: reference, whatever the ended
+//     Read-throughs say (ADR 0028). Choosing Reference ends anything underway
+//     and leaves To Read, so it never meets the first two.
+//  4. Otherwise, the latest ended Read-through: read or did_not_finish.
 //     Latest means the latest end day; undated ones rank below dated ones,
 //     and ties go to the one recorded last.
 func StatusExpr(userID int, bookIDColumn string) string {
@@ -76,6 +79,7 @@ func StatusExpr(userID int, bookIDColumn string) string {
 		WHEN EXISTS (SELECT 1 FROM read_throughs rts WHERE rts.user_id = %[1]d AND rts.book_id = %[2]s AND rts.outcome = '%[3]s' AND NOT rts.paused) THEN '%[6]s'
 		WHEN EXISTS (SELECT 1 FROM read_throughs rts WHERE rts.user_id = %[1]d AND rts.book_id = %[2]s AND rts.outcome = '%[3]s' AND rts.paused) THEN '%[7]s'
 		WHEN EXISTS (SELECT 1 FROM user_books ubs WHERE ubs.user_id = %[1]d AND ubs.book_id = %[2]s AND ubs.to_read_position IS NOT NULL) THEN '%[8]s'
+		WHEN EXISTS (SELECT 1 FROM user_books ubs WHERE ubs.user_id = %[1]d AND ubs.book_id = %[2]s AND ubs.reference) THEN '%[11]s'
 		ELSE (
 			SELECT CASE rts.outcome WHEN '%[4]s' THEN '%[9]s' WHEN '%[5]s' THEN '%[10]s' END
 			FROM read_throughs rts
@@ -87,19 +91,19 @@ func StatusExpr(userID int, bookIDColumn string) string {
 		userID, bookIDColumn,
 		models.ReadThroughOutcomeUnderway, models.ReadThroughOutcomeFinished, models.ReadThroughOutcomeAbandoned,
 		models.ReadingStatusCurrentlyReading, models.ReadingStatusPaused, models.ReadingStatusToRead,
-		models.ReadingStatusRead, models.ReadingStatusDidNotFinish,
+		models.ReadingStatusRead, models.ReadingStatusDidNotFinish, models.ReadingStatusReference,
 	)
 }
 
 // StatusRankExpr is the SQL expression ranking userID's Reading Status of
 // the Book whose id is in bookIDColumn, for sorting: Currently Reading 1,
-// Paused 2, To Read 3, Read 4, Did Not Finish 5, and no status 6.
-// bookIDColumn is interpolated as in StatusExpr.
+// Paused 2, To Read 3, Read 4, Did Not Finish 5, Reference 6, and no status
+// 7. bookIDColumn is interpolated as in StatusExpr.
 func StatusRankExpr(userID int, bookIDColumn string) string {
-	return fmt.Sprintf(`(CASE %s WHEN '%s' THEN 1 WHEN '%s' THEN 2 WHEN '%s' THEN 3 WHEN '%s' THEN 4 WHEN '%s' THEN 5 ELSE 6 END)`,
+	return fmt.Sprintf(`(CASE %s WHEN '%s' THEN 1 WHEN '%s' THEN 2 WHEN '%s' THEN 3 WHEN '%s' THEN 4 WHEN '%s' THEN 5 WHEN '%s' THEN 6 ELSE 7 END)`,
 		StatusExpr(userID, bookIDColumn),
 		models.ReadingStatusCurrentlyReading, models.ReadingStatusPaused, models.ReadingStatusToRead,
-		models.ReadingStatusRead, models.ReadingStatusDidNotFinish)
+		models.ReadingStatusRead, models.ReadingStatusDidNotFinish, models.ReadingStatusReference)
 }
 
 // RatingUnitsExpr is the SQL expression for userID's Rating, in
@@ -352,11 +356,15 @@ func (svc *Service) ToReadPlace(ctx context.Context, userID, bookID int, library
 
 // Start begins a new Read-through on today, takes the Book off To Read, and
 // resets the Book's Reading Positions so its readers open at the start.
-// Reading a finished or abandoned Book again is the same transition.
+// Reading a finished or abandoned Book again is the same transition. It's the
+// user's explicit choice, so it clears Reference.
 func (svc *Service) Start(ctx context.Context, userID, bookID int, today string) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		_, err := startReadThrough(ctx, tx, userID, bookID, today, svc.now(), 0)
-		return err
+		now := svc.now()
+		if _, err := startReadThrough(ctx, tx, userID, bookID, today, now, 0); err != nil {
+			return err
+		}
+		return chooseStatus(ctx, tx, userID, bookID, false, now)
 	})
 }
 
@@ -435,10 +443,10 @@ func (svc *Service) SetPaused(ctx context.Context, userID, bookID int, paused bo
 // begin day ending today, for a Book read before the user tracked it;
 // abandoning needs one underway. Either way the Book leaves To Read, so a
 // queued Book marked read shows Read; adding it again afterwards plans a
-// reread.
+// reread. It's the user's explicit choice, so it clears Reference.
 func (svc *Service) End(ctx context.Context, userID, bookID int, outcome, today string) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		return end(ctx, tx, userID, bookID, outcome, today, time.Now())
+		return end(ctx, tx, userID, bookID, outcome, today, svc.now())
 	})
 }
 
@@ -452,8 +460,10 @@ func end(ctx context.Context, tx bun.Tx, userID, bookID int, outcome, today stri
 		if outcome != models.ReadThroughOutcomeFinished {
 			return ErrNothingUnderway
 		}
-		_, err := insertFinishedReadThrough(ctx, tx, userID, bookID, today, now)
-		return err
+		if _, err := insertFinishedReadThrough(ctx, tx, userID, bookID, today, now); err != nil {
+			return err
+		}
+		return chooseStatus(ctx, tx, userID, bookID, false, now)
 	}
 
 	endDay, err := manualEndDay(ctx, tx, underway, today)
@@ -472,7 +482,10 @@ func end(ctx context.Context, tx bun.Tx, userID, bookID int, outcome, today stri
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	return leaveToRead(ctx, tx, userID, bookID, now)
+	if err := leaveToRead(ctx, tx, userID, bookID, now); err != nil {
+		return err
+	}
+	return chooseStatus(ctx, tx, userID, bookID, false, now)
 }
 
 // insertFinishedReadThrough records a finished Read-through of bookID ending
@@ -591,9 +604,18 @@ func (svc *Service) DeleteReadThrough(ctx context.Context, rt *models.ReadThroug
 }
 
 // deleteReadThrough is DeleteReadThrough inside the caller's transaction.
+// rt may have been loaded before another change, such as marking its Book
+// Reference, deleted it, so the Book is taken back only when the delete
+// removed it.
 func deleteReadThrough(ctx context.Context, tx bun.Tx, rt *models.ReadThrough, now time.Time) error {
-	if _, err := tx.NewDelete().Model(rt).WherePK().Exec(ctx); err != nil {
+	res, err := tx.NewDelete().Model(rt).WherePK().Exec(ctx)
+	if err != nil {
 		return errors.WithStack(err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return errors.WithStack(err)
+	} else if n == 0 {
+		return nil
 	}
 	if rt.Outcome != models.ReadThroughOutcomeUnderway || rt.BookID == nil {
 		return nil
@@ -616,7 +638,19 @@ func (svc *Service) EndReadThrough(ctx context.Context, rt *models.ReadThrough, 
 		return ErrReadThroughEnded
 	}
 	if rt.BookID != nil {
-		return svc.End(ctx, rt.UserID, *rt.BookID, outcome, today)
+		return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+			// rt may have ended or been deleted since it was loaded, as marking
+			// its Book Reference does, so end it only if it's still the one
+			// underway.
+			underway, err := retrieveUnderway(ctx, tx, rt.UserID, *rt.BookID)
+			if err != nil {
+				return err
+			}
+			if underway == nil || underway.ID != rt.ID {
+				return ErrReadThroughEnded
+			}
+			return end(ctx, tx, rt.UserID, *rt.BookID, outcome, today, svc.now())
+		})
 	}
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		endDay, err := manualEndDay(ctx, tx, rt, today)
@@ -659,7 +693,7 @@ func (svc *Service) AddToRead(ctx context.Context, userID, bookID int) error {
 		if underway != nil {
 			return ErrAlreadyUnderway
 		}
-		_, err = appendToRead(ctx, tx, userID, []int{bookID})
+		_, err = appendToRead(ctx, tx, userID, []int{bookID}, svc.now())
 		return err
 	})
 }
@@ -671,7 +705,7 @@ func (svc *Service) AppendToRead(ctx context.Context, userID int, bookIDs []int)
 	added := 0
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		var err error
-		added, err = appendToRead(ctx, tx, userID, bookIDs)
+		added, err = appendToRead(ctx, tx, userID, bookIDs, svc.now())
 		return err
 	})
 	return added, err
@@ -683,7 +717,7 @@ func (svc *Service) AppendToRead(ctx context.Context, userID int, bookIDs []int)
 // it in a transaction; the server's one database connection runs
 // transactions one at a time, so a concurrent add can't take the same
 // positions.
-func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int) (int, error) {
+func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int, now time.Time) (int, error) {
 	var last int
 	err := tx.NewSelect().
 		Model((*models.UserBook)(nil)).
@@ -695,7 +729,6 @@ func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int) (in
 	}
 
 	added := 0
-	now := time.Now()
 	for _, bookID := range bookIDs {
 		res, err := tx.ExecContext(ctx, `
 			INSERT INTO user_books (user_id, book_id, created_at, updated_at, to_read_position)
@@ -720,6 +753,10 @@ func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int) (in
 		// Joining To Read plans a read from the start, so a Book read before
 		// doesn't open at the old last page.
 		if err := resetPositions(ctx, tx, userID, bookID, 0); err != nil {
+			return 0, err
+		}
+		// Adding is the user's explicit choice, so it clears Reference.
+		if err := chooseStatus(ctx, tx, userID, bookID, false, now); err != nil {
 			return 0, err
 		}
 		added += int(n)
@@ -867,6 +904,11 @@ func (svc *Service) SetPageFlow(ctx context.Context, userID, bookID int, flow *s
 //     place either left.
 //   - A user with a Read-through underway on the target afterwards has it
 //     off To Read.
+//   - The target keeps whichever Book's latest explicit status choice is
+//     later, with its instant and whether it was Reference (ADR 0028). A
+//     merge never deletes a Read-through to keep Reference, so a user left
+//     with one underway or a place on To Read has Reference cleared, keeping
+//     the instant.
 func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int) error {
 	if sourceBookID == targetBookID {
 		return nil
@@ -875,11 +917,15 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 		query string
 		args  []any
 	}{
+		// Every SET reads the target's values from before the statement, so
+		// the source's choice is judged against the target's own.
 		{`UPDATE user_books AS t
 			SET rating_updated_at = CASE WHEN t.rating IS NULL THEN s.rating_updated_at ELSE t.rating_updated_at END,
 				rating = COALESCE(t.rating, s.rating),
 				to_read_position = COALESCE(t.to_read_position, s.to_read_position),
-				page_flow = COALESCE(t.page_flow, s.page_flow)
+				page_flow = COALESCE(t.page_flow, s.page_flow),
+				reference = CASE WHEN ` + sourceChoiceLater + ` THEN s.reference ELSE t.reference END,
+				status_chosen_at = CASE WHEN ` + sourceChoiceLater + ` THEN s.status_chosen_at ELSE t.status_chosen_at END
 			FROM user_books AS s
 			WHERE s.book_id = ? AND t.book_id = ? AND s.user_id = t.user_id`,
 			[]any{sourceBookID, targetBookID}},
@@ -920,6 +966,14 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 			WHERE book_id = ? AND to_read_position IS NOT NULL
 				AND user_id IN (SELECT user_id FROM read_throughs WHERE book_id = ? AND outcome = ?)`,
 			[]any{targetBookID, targetBookID, models.ReadThroughOutcomeUnderway}},
+		// Reference never holds alongside a Read-through underway or a place on
+		// To Read. The merge isn't the user's choice, so the instant of their
+		// last one stays.
+		{`UPDATE user_books SET reference = FALSE
+			WHERE book_id = ? AND reference
+				AND (to_read_position IS NOT NULL
+					OR user_id IN (SELECT user_id FROM read_throughs WHERE book_id = ? AND outcome = ?))`,
+			[]any{targetBookID, targetBookID, models.ReadThroughOutcomeUnderway}},
 	}
 	for _, s := range statements {
 		if _, err := db.ExecContext(ctx, s.query, s.args...); err != nil {
@@ -928,6 +982,16 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 	}
 	return nil
 }
+
+// sourceChoiceLater is MergeBooks' condition, on user_books rows s and t,
+// that the source's latest explicit status choice came after the target's.
+// A Book with none has the earlier one.
+// julianday resolves only milliseconds, so instants within one compare as
+// stored, which orders them when they're written in one zone.
+const sourceChoiceLater = `(s.status_chosen_at IS NOT NULL
+	AND (t.status_chosen_at IS NULL
+		OR julianday(s.status_chosen_at) > julianday(t.status_chosen_at)
+		OR (julianday(s.status_chosen_at) = julianday(t.status_chosen_at) AND s.status_chosen_at > t.status_chosen_at)))`
 
 // collapsedHistoryUpdate is MergeBooks' statement moving table's rows from
 // the source's Read-through underway to the target's, for users with one

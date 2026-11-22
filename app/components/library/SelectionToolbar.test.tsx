@@ -19,12 +19,15 @@ beforeAll(() => {
 const mockExitSelectionMode = vi.fn();
 const mockClearSelection = vi.fn();
 const selection = vi.hoisted(() => ({ ids: [1, 2, 3] }));
+// Whether the selected books' query still shows the previous selection's.
+const booksQuery = vi.hoisted(() => ({ placeholder: false }));
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 beforeEach(() => {
   setAuth({ permissions: ["books:read", "books:write"] });
   selection.ids = [1, 2, 3];
+  booksQuery.placeholder = false;
 });
 
 vi.mock("@/hooks/useBulkSelection", () => ({
@@ -100,7 +103,11 @@ const mockUseBooks = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/queries/books", () => ({
   useBooks: (...args: unknown[]) => {
     mockUseBooks(...args);
-    return { data: { items: mockBooks, total: 3 }, isLoading: false };
+    return {
+      data: { items: mockBooks, total: 3 },
+      isLoading: false,
+      isPlaceholderData: booksQuery.placeholder,
+    };
   },
   useDeleteBooks: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -474,7 +481,7 @@ describe("SelectionToolbar reading status actions", () => {
     success.mockRestore();
   });
 
-  it("confirms marking not started, naming how many reads it deletes", async () => {
+  it("confirms marking not started, naming how many Read-throughs it deletes", async () => {
     const user = createUser();
     const success = vi.spyOn(toast, "success");
     mockBulkReadingMutateAsync.mockResolvedValueOnce({
@@ -492,7 +499,7 @@ describe("SelectionToolbar reading status actions", () => {
     const dialog = screen.getByRole("dialog");
     // Books One and Two are being read; Book Three is already read.
     expect(dialog).toHaveTextContent(
-      "The reads underway on 2 books are deleted",
+      "The Read-throughs underway on 2 books are deleted",
     );
     await user.click(
       within(dialog).getByRole("button", { name: "Mark as not started" }),
@@ -528,6 +535,113 @@ describe("SelectionToolbar reading status actions", () => {
     info.mockRestore();
   });
 
+  it("confirms marking Reference, naming how many Read-throughs it deletes", async () => {
+    const user = createUser();
+    const success = vi.spyOn(toast, "success");
+    mockBulkReadingMutateAsync.mockResolvedValueOnce({
+      changed: 3,
+      skipped: 0,
+    });
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as Reference" }));
+    expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
+
+    const dialog = screen.getByRole("dialog");
+    // Books One and Two are being read; Book Three is already read.
+    expect(dialog).toHaveTextContent(
+      "The current Read-throughs of 2 books are deleted from your reading history, and this can't be undone. The reading time recorded during them still counts",
+    );
+    await user.click(
+      within(dialog).getByRole("button", { name: "Mark as Reference" }),
+    );
+
+    expect(mockBulkReadingMutateAsync).toHaveBeenCalledWith({
+      action: "reference",
+      bookIds: [1, 2, 3],
+    });
+    expect(success).toHaveBeenCalledWith("Marked 3 books as Reference");
+    expect(mockExitSelectionMode).toHaveBeenCalled();
+    success.mockRestore();
+  });
+
+  it("marks Reference without confirming when none is being read", async () => {
+    const user = createUser();
+    mockBulkReadingMutateAsync.mockResolvedValueOnce({
+      changed: 1,
+      skipped: 0,
+    });
+    selection.ids = [3];
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as Reference" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mockBulkReadingMutateAsync).toHaveBeenCalledWith({
+      action: "reference",
+      bookIds: [3],
+    });
+  });
+
+  it("confirms marking Reference when a selected book hasn't loaded", async () => {
+    const user = createUser();
+    // Book 99 isn't among the loaded books, so it may be being read.
+    selection.ids = [3, 99];
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as Reference" }));
+
+    expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Any Read-through underway on the selected books is deleted from your reading history",
+    );
+  });
+
+  it("confirms marking Reference while the selection's books are still loading", async () => {
+    const user = createUser();
+    // Book 3 isn't being read, but these may be the previous selection's
+    // books, shown while the new selection's load.
+    selection.ids = [3];
+    booksQuery.placeholder = true;
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as Reference" }));
+
+    expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Any Read-through underway on the selected books is deleted",
+    );
+  });
+
+  it("removes the selected books from Reference", async () => {
+    const user = createUser();
+    const success = vi.spyOn(toast, "success");
+    mockBulkReadingMutateAsync.mockResolvedValueOnce({
+      changed: 1,
+      skipped: 2,
+    });
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(
+      screen.getByRole("button", { name: "Remove from Reference" }),
+    );
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(mockBulkReadingMutateAsync).toHaveBeenCalledWith({
+      action: "remove-reference",
+      bookIds: [1, 2, 3],
+    });
+    expect(success).toHaveBeenCalledWith(
+      "Removed 1 book from Reference, 2 skipped",
+    );
+    success.mockRestore();
+  });
+
   it("fetches every selected book, up to the most one page holds", () => {
     selection.ids = Array.from({ length: 30 }, (_, i) => i + 1);
     render(wrap(<SelectionToolbar />));
@@ -550,7 +664,7 @@ describe("SelectionToolbar reading status actions", () => {
     );
 
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "The read underway on each selected book is deleted",
+      "Any Read-through underway on the selected books is deleted",
     );
   });
 

@@ -40,6 +40,16 @@ describe("ReadingStatusBookmark", () => {
     },
   );
 
+  it("marks a Reference book with its own icon", () => {
+    const { container } = render(<ReadingStatusBookmark status="reference" />);
+
+    expect(screen.getByRole("img", { name: "Reference" })).toHaveAttribute(
+      "data-status",
+      "reference",
+    );
+    expect(container.querySelector("svg.lucide-library")).not.toBeNull();
+  });
+
   it("keeps a read book's check mark, not a percentage", () => {
     const { container } = render(
       <ReadingStatusBookmark progress={1} status="read" />,

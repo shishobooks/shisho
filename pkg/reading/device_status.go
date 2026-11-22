@@ -35,13 +35,14 @@ type DeviceStatus struct {
 //
 // Reading Sessions on no Read-through are then placed again by their time,
 // since sessions a device sent before the status may now belong to the
-// Read-through it started or finished. A supplement isn't the Book, so its
-// status changes nothing. The caller decides whether the status is new: a
-// Read with nothing underway records another finished Read-through.
+// Read-through it started or finished. A supplement isn't the Book, and a
+// Reference Book's status changes only by the user's choice (ADR 0028), so
+// for either it changes nothing. The caller decides whether the status is
+// new: a Read with nothing underway records another finished Read-through.
 func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		now := svc.now()
-		bookID, err := statusBook(ctx, tx, s.FileID)
+		bookID, err := statusBook(ctx, tx, s.UserID, s.FileID)
 		if err != nil || bookID == 0 {
 			return err
 		}
@@ -98,9 +99,10 @@ func (svc *Service) SetDeviceStatus(ctx context.Context, s DeviceStatus) error {
 }
 
 // statusBook is the Book a device's status for its copy of fileID is about,
-// or 0 for a supplement, which isn't the Book, so its status changes
-// nothing.
-func statusBook(ctx context.Context, tx bun.Tx, fileID int) (int, error) {
+// or 0 when the status changes nothing: for a supplement, which isn't the
+// Book, or a Book userID marked Reference, whose status only their own choice
+// changes.
+func statusBook(ctx context.Context, tx bun.Tx, userID, fileID int) (int, error) {
 	file := &models.File{}
 	err := tx.NewSelect().Model(file).Column("f.book_id", "f.file_role").Where("f.id = ?", fileID).Scan(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -111,6 +113,10 @@ func statusBook(ctx context.Context, tx bun.Tx, fileID int) (int, error) {
 	}
 	if file.FileRole == models.FileRoleSupplement {
 		return 0, nil
+	}
+	reference, err := isReference(ctx, tx, userID, file.BookID)
+	if err != nil || reference {
+		return 0, err
 	}
 	return file.BookID, nil
 }
@@ -143,8 +149,9 @@ func placeBookSessions(ctx context.Context, tx bun.Tx, userID, bookID int) error
 	return nil
 }
 
-// ChangedSince returns userID's Books whose Read-throughs or Rating changed
-// after since. A deleted Read-through leaves nothing to find.
+// ChangedSince returns userID's Books whose Read-throughs, Rating, or
+// explicit status choice changed after since. A deleted Read-through leaves
+// nothing to find, but marking Reference, which deletes one, is a choice.
 func (svc *Service) ChangedSince(ctx context.Context, userID int, since time.Time) ([]int, error) {
 	var bookIDs []int
 	err := svc.db.NewSelect().
@@ -154,7 +161,7 @@ func (svc *Service) ChangedSince(ctx context.Context, userID int, since time.Tim
 		Union(svc.db.NewSelect().
 			ColumnExpr("ub.book_id").
 			TableExpr("user_books AS ub").
-			Where("ub.user_id = ? AND ub.rating_updated_at > ?", userID, since)).
+			Where("ub.user_id = ? AND (ub.rating_updated_at > ? OR ub.status_chosen_at > ?)", userID, since, since)).
 		Scan(ctx, &bookIDs)
 	return bookIDs, errors.WithStack(err)
 }

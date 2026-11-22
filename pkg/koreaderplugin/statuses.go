@@ -21,8 +21,9 @@ import (
 // finished after it isn't missed. A change sent twice is written once.
 const cursorOverlap = time.Minute
 
-// koreaderStatus is how KOReader shows a Reading Status, or "" for To Read
-// and none, which KOReader has nothing for.
+// koreaderStatus is how KOReader shows a Reading Status, or "" for To Read,
+// Reference, and none, which KOReader has nothing for. Sending none leaves
+// KOReader's own status in place (ADR 0028).
 func koreaderStatus(status *string) string {
 	if status == nil {
 		return ""

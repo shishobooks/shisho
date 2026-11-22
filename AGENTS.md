@@ -89,6 +89,10 @@ Run `mise check:quiet` once when the work is done, before pushing or opening a P
 - **`website/docs/` holds only what an operator of Shisho needs to know**: how to deploy, configure, use, troubleshoot, or extend it through the supported plugin contract. A change that alters what an operator sees or does updates the page that owns that fact, in the same change, and plans for such changes include a docs task. How the feature works inside (endpoints the UI calls, the data model, package layout, internal behavior) stays out, however large the change. Read `website/AGENTS.md` before editing the site; its inclusion test decides what belongs.
 - **A new field in `config.Config`** (`pkg/config/config.go`) also updates `shisho.example.yaml` (field, env var, default, description), `website/docs/configuration.md`, and the Server Settings page in `app/components/pages/AdminSettings.tsx`. The yaml file and the docs page stay complete references; the few exempt fields say so in their comments. Validation and env parsing are under "Config" in `pkg/AGENTS.md`.
 
+## User-facing copy
+
+**Never use "read" or "reading" as a noun for a record**, in the app, plugin strings, server messages, and `website/docs/`: "this read is deleted" and "the reading held for it" read as confusing. Name the record by its `CONTEXT.md` term, such as Read-through or Reading Session, or say plainly what it is, such as reading history or a status. The verb and activity senses are fine ("Last read 5 days ago", "Mark as read", "No reading on this day").
+
 ## Tool versions
 
 `mise.toml` is the source of truth for tool versions, but Docker does not use mise, so a bump also updates the copies in the `Dockerfile` and `package.json`; `mise lint` (`tools/checkversions`) names any that disagree.

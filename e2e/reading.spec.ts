@@ -15,11 +15,15 @@ const PASSWORD = "password123";
 // Reading Stats sums everything a user has read, so its test reads as a
 // user of its own.
 const STATS_USERNAME = "statstest";
+// The Reference test checks the Currently Reading page empties, so it reads
+// as a user of its own too.
+const REFERENCE_USERNAME = "referencetest";
 
 let libraryId: number;
 let bookId: number;
 let underwayBookId: number;
 let statsBookId: number;
+let referenceBookId: number;
 
 test.describe("Reading", () => {
   test.beforeAll(async ({ browser }) => {
@@ -52,12 +56,21 @@ test.describe("Reading", () => {
     await apiContext.post("/api/test/users", {
       data: { username: STATS_USERNAME, password: PASSWORD },
     });
+    await apiContext.post("/api/test/users", {
+      data: { username: REFERENCE_USERNAME, password: PASSWORD },
+    });
     const statsBook = (await (
       await apiContext.post("/api/test/books", {
         data: { libraryId, title: "Counted Book", fileType: "epub" },
       })
     ).json()) as { id: number };
     statsBookId = statsBook.id;
+    const referenceBook = (await (
+      await apiContext.post("/api/test/books", {
+        data: { libraryId, title: "Cookbook", fileType: "epub" },
+      })
+    ).json()) as { id: number };
+    referenceBookId = referenceBook.id;
     await apiContext.dispose();
   });
 
@@ -210,5 +223,49 @@ test.describe("Reading", () => {
     });
     await expect(cardTitles.first()).toContainText("Tracked Book");
     await expect(cardTitles.last()).toContainText("Underway Book");
+  });
+
+  test("marks a book being read as Reference, which leaves Currently Reading", async ({
+    page,
+  }) => {
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.getByLabel("Username").fill(REFERENCE_USERNAME);
+    await page.getByLabel("Password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.waitForURL(/\/admin\/libraries|\/libraries\//);
+
+    await page.goto(`/libraries/${libraryId}/books/${referenceBookId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page
+      .getByRole("button", { name: "Reading status: Track reading" })
+      .click();
+    await page.getByRole("menuitem", { name: "Start reading" }).click();
+    await page
+      .getByRole("button", { name: "Reading status: Currently Reading" })
+      .click();
+    await page.getByRole("menuitem", { name: "Mark as Reference" }).click();
+    const dialog = page.getByRole("dialog", { name: "Mark as Reference?" });
+    await expect(dialog).toContainText("deleted from your reading history");
+    await dialog.getByRole("button", { name: "Mark as Reference" }).click();
+    await expect(
+      page.getByRole("button", { name: "Reading status: Reference" }),
+    ).toBeVisible();
+
+    await page.goto(`/libraries/${libraryId}/currently-reading`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(
+      page.getByRole("heading", { name: "Nothing in progress" }),
+    ).toBeVisible();
+    await expect(page.getByText("Cookbook")).not.toBeVisible();
+
+    await page.goto(`/libraries/${libraryId}`, {
+      waitUntil: "domcontentloaded",
+    });
+    const card = page.getByRole("link").filter({ hasText: "Cookbook" });
+    await expect(
+      card.getByRole("img", { name: "Reference", exact: true }),
+    ).toBeVisible();
   });
 });

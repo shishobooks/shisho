@@ -27,11 +27,12 @@ import (
 //
 // Reading Sessions on no Read-through are then placed again by their time.
 // A Book with a Read-through already has a record of its own, which history
-// can't improve on, and a supplement isn't the Book, so neither changes.
+// can't improve on, a supplement isn't the Book, and a Reference Book's
+// status changes only by the user's choice, so none of them changes.
 func (svc *Service) RecordHistoryStatus(ctx context.Context, s DeviceStatus) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		now := svc.now()
-		bookID, err := statusBook(ctx, tx, s.FileID)
+		bookID, err := statusBook(ctx, tx, s.UserID, s.FileID)
 		if err != nil || bookID == 0 {
 			return err
 		}

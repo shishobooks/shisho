@@ -30,6 +30,7 @@ const STATUS_LABELS: Record<ReadingStatus, string> = {
   to_read: "To Read",
   read: "Read",
   did_not_finish: "Did Not Finish",
+  reference: "Reference",
 };
 
 export const readingStatusLabel = (status: ReadingStatus): string =>

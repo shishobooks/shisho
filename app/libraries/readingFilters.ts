@@ -23,6 +23,7 @@ const STATUSES: readonly ReadingStatus[] = [
   "to_read",
   "read",
   "did_not_finish",
+  "reference",
 ];
 
 /** The status filter's options, in the order the controls show them. */

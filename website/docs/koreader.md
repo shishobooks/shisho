@@ -129,15 +129,17 @@ Opening a book you've already marked never changes its status in KOReader, so op
 
 From Shisho, at the next sync:
 
-| In Shisho             | In KOReader |
-| --------------------- | ----------- |
-| Read                  | Finished    |
-| Paused                | On hold     |
-| Did Not Finish        | On hold     |
-| Currently Reading     | Reading     |
-| To Read, or no status | Left alone  |
+| In Shisho                        | In KOReader |
+| -------------------------------- | ----------- |
+| Read                             | Finished    |
+| Paused                           | On hold     |
+| Did Not Finish                   | On hold     |
+| Currently Reading                | Reading     |
+| To Read, Reference, or no status | Left alone  |
 
 KOReader has nothing closer to Did Not Finish than On hold. The plugin remembers that it wrote On hold, so the book stays **Did Not Finish** in Shisho and never comes back as **Paused**.
+
+A [Reference](./reading-tracking.md#reference-books) book keeps whatever status it had in KOReader, such as Reading. Changing its status in KOReader, or sending your history, never changes it in Shisho, but your reading time and place in it still sync.
 
 A status from Shisho reaches a book KOReader has never opened too, as when you finish a book on one e-reader and copy it onto another: the plugin keeps an index of the EPUB, KePub, PDF, CBZ, MOBI, and AZW3 files on the device, and marks the book as KOReader's file browser does. On an e-reader, such as a Kobo, Kindle, or PocketBook, the index covers every folder of its storage except hidden ones, wherever you copied or downloaded a book. On Android and computers, it covers the home folder and the OPDS download folder you've set in KOReader, if you've set them. Every **Sync now** brings the index up to date, as do the syncs when Wi-Fi comes on, **Sync on sleep**, and **Daily sync**, at most every ten minutes. The syncs as you read, when you close a book, and as the device sleeps with Wi-Fi already on leave it alone. A change made in the file browser to a book that isn't in KOReader's history goes at the next sync that brings the index up to date. A very large library is indexed over several syncs.
 
@@ -158,7 +160,7 @@ Once history has been sent, **Send reading history again** under the server send
 For each book the server [recognizes](#which-books-sync), history sends:
 
 - **Reading time:** every page KOReader's statistics timed, as reading sessions on the days they happened, however long ago, as [the e-reader's clock](#the-e-readers-clock) dated them.
-- **Statuses:** for a book with no Read-through in Shisho, its status in KOReader makes one, beginning on the day of its first reading session in Shisho, or on the day KOReader recorded the status when that's earlier or the book has no sessions.
+- **Statuses:** for a book with no Read-through in Shisho, its status in KOReader makes one, beginning on the day of its first reading session in Shisho, or on the day KOReader recorded the status when that's earlier or the book has no sessions. A [Reference](./reading-tracking.md#reference-books) book gets none.
 - **Ratings:** a book with no Rating in Shisho takes its stars from KOReader.
 
 | In KOReader | Read-through made in Shisho                                      |
@@ -171,7 +173,7 @@ A book that already has a Read-through or a Rating in Shisho keeps what it has: 
 
 History can't know everything:
 
-- **Rereads:** KOReader keeps only a book's current status, not its earlier reads, so history makes at most one Read-through per book. A book you read twice gets one Read-through, from your first session, and reading outside its dates still counts toward your reading time.
+- **Rereads:** KOReader keeps only a book's current status, not the times you read it before, so history makes at most one Read-through per book. A book you read twice gets one Read-through, from your first session, and reading outside its dates still counts toward your reading time.
 - **Books with no status:** reading in a book KOReader shows no status for counts toward your reading time but starts no Read-through.
 - **Books Shisho doesn't recognize:** their reading time, statuses, and stars wait on the Device's page, and arrive when you [link the book](#books-shisho-doesnt-recognize), by the same rules as the rest of history.
 
@@ -267,7 +269,7 @@ KOReader offers to jump to a position saved anywhere else, and names where it ca
 
 ## Finishing a Book
 
-With the plugin, marking a book finished in KOReader marks it **Read**; see [Statuses and Ratings](#statuses-and-ratings). With either, pushing a position 99% or more through a book marks it **Read**, as a streaming service counts an episode watched once the credits start. The last pages are usually back matter, and KOReader's continuous view never reports exactly 100%. In continuous view KOReader reports the top of the screen, so the last screen of a very short book can stay below 99%; use **Mark as read** in Shisho for those. Going back before that point in KOReader within 15 minutes undoes the finish, as it does in the [Shisho reader](./reading-tracking.md#starting-and-finishing-automatically). A push from KOReader can't undo a finish made in another reader, since it may be one KOReader queued from before.
+With the plugin, marking a book finished in KOReader marks it **Read**; see [Statuses and Ratings](#statuses-and-ratings). With either, pushing a position 99% or more through a book marks it **Read**, as a streaming service counts an episode watched once the credits start. A [Reference](./reading-tracking.md#reference-books) book is never marked read either way. The last pages are usually back matter, and KOReader's continuous view never reports exactly 100%. In continuous view KOReader reports the top of the screen, so the last screen of a very short book can stay below 99%; use **Mark as read** in Shisho for those. Going back before that point in KOReader within 15 minutes undoes the finish, as it does in the [Shisho reader](./reading-tracking.md#starting-and-finishing-automatically). A push from KOReader can't undo a finish made in another reader, since it may be one KOReader queued from before.
 
 ## Troubleshooting
 
