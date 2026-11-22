@@ -90,8 +90,20 @@ const fileDetailRows = (
     { label: "Size", value: formatFileSize(file.filesize_bytes) },
   ];
   if (!isShareLink && file.filepath) {
-    rows.push({ label: "File", value: getFilename(file.filepath) });
-    rows.push({ label: "Path", value: file.filepath });
+    rows.push({
+      label: "File",
+      value: (
+        <span className="break-all font-mono text-[13px]">
+          {getFilename(file.filepath)}
+        </span>
+      ),
+    });
+    rows.push({
+      label: "Path",
+      value: (
+        <span className="break-all font-mono text-[13px]">{file.filepath}</span>
+      ),
+    });
   }
   if (file.page_count) {
     rows.push({ label: "Pages", value: formatPageCount(file.page_count) });

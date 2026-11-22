@@ -168,12 +168,16 @@ export const fileDiskRows = (file: File): LabelGridRow[] => {
   const slash = file.filepath.lastIndexOf("/");
   rows.push({
     label: "File",
-    value: <span className="break-all">{getFilename(file.filepath)}</span>,
+    value: (
+      <span className="break-all font-mono text-[13px]">
+        {getFilename(file.filepath)}
+      </span>
+    ),
   });
   rows.push({
     label: "Folder",
     value: (
-      <span className="break-all text-muted-foreground">
+      <span className="break-all font-mono text-[13px] text-muted-foreground">
         {slash > 0 ? file.filepath.slice(0, slash) : "/"}
       </span>
     ),

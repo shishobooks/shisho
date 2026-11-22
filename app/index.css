@@ -1,13 +1,39 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Fonts ship with the app rather than from a CDN, so a server with no
+   internet access looks the same and no visitor's address goes to a third
+   party. Each family is split by character range, and a browser downloads
+   only the pieces a page's text uses. The CJK families follow Geist and Noto
+   Sans so text looks the same on every OS; Japanese comes first, so a
+   character the four share takes its Japanese form. The docs site
+   (website/src/css/custom.css) and the iOS app (mobile/ios/Shisho/UI/Theme.swift)
+   use the same families. */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist/wght-italic.css";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/geist-mono/wght-italic.css";
+@import "@fontsource-variable/noto-sans";
+@import "@fontsource-variable/noto-sans/wght-italic.css";
+@import "@fontsource-variable/noto-sans-jp";
+@import "@fontsource-variable/noto-sans-sc";
+@import "@fontsource-variable/noto-sans-tc";
+@import "@fontsource-variable/noto-sans-kr";
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans:
-    Geist, Noto Sans, Noto Sans Japanese, ui-sans-serif, system-ui, sans-serif,
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  --font-logo: "Noto Sans", "Noto Sans Japanese", sans-serif;
+    "Geist Variable", "Noto Sans Variable", "Noto Sans JP Variable",
+    "Noto Sans SC Variable", "Noto Sans TC Variable", "Noto Sans KR Variable",
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono:
+    "Geist Mono Variable", "Noto Sans JP Variable", "Noto Sans SC Variable",
+    "Noto Sans TC Variable", "Noto Sans KR Variable", ui-monospace, monospace;
+  --font-logo:
+    "Noto Sans Variable", "Noto Sans JP Variable", "Noto Sans SC Variable",
+    "Noto Sans TC Variable", "Noto Sans KR Variable", sans-serif;
 }
 
 @utility container {

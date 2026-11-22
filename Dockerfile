@@ -42,7 +42,7 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy frontend source
 COPY app/ ./app/
 COPY public/ ./public/
-COPY index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts tailwind.config.js components.json ./
+COPY index.html tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts components.json ./
 
 # Copy generated TypeScript types from typegen stage
 COPY --from=typegen /app/app/types/generated/ ./app/types/generated/

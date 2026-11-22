@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import type * as Preset from "@docusaurus/preset-classic";
-import type { Config } from "@docusaurus/types";
+import type { Config, Plugin } from "@docusaurus/types";
 import { themes as prismThemes } from "prism-react-renderer";
 
 const repository = process.env.GITHUB_REPOSITORY ?? "shishobooks/shisho";
@@ -13,6 +13,33 @@ const releasedDocVersions = fs.existsSync(versionsFilePath)
   : [];
 const latestReleasedDocsVersion = releasedDocVersions[0];
 const baseUrl = "/";
+
+// Docusaurus inlines font files under 10 KB into the stylesheet. The
+// self-hosted CJK fonts are hundreds of small files split by character range,
+// so inlining them puts every piece in every page's CSS, needed or not. Keep
+// them as files, which a browser fetches only for the characters a page uses.
+const fontFilesNotInlined = (): Plugin => ({
+  name: "font-files-not-inlined",
+  configureWebpack(webpackConfig) {
+    for (const rule of webpackConfig.module?.rules ?? []) {
+      if (
+        !rule ||
+        typeof rule !== "object" ||
+        !(rule.test instanceof RegExp) ||
+        !rule.test.test("font.woff2") ||
+        !Array.isArray(rule.use)
+      ) {
+        continue;
+      }
+      for (const use of rule.use) {
+        if (use && typeof use === "object" && typeof use.options === "object") {
+          use.options = { ...use.options, limit: false };
+        }
+      }
+    }
+    return {};
+  },
+});
 
 const config: Config = {
   title: "Shisho",
@@ -31,9 +58,7 @@ const config: Config = {
     defaultLocale: "en",
     locales: ["en"],
   },
-  stylesheets: [
-    "https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Noto+Sans+JP:wght@100..900&family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap",
-  ],
+  plugins: [fontFilesNotInlined],
   presets: [
     [
       "classic",

@@ -109,7 +109,7 @@ export const LibraryStep = ({
                   }
                   aria-invalid={missing || errors.paths ? true : undefined}
                   aria-label={`Folder ${index + 1}`}
-                  className="min-w-0 flex-1"
+                  className="min-w-0 flex-1 font-mono"
                   onChange={(e) => setPath(index, e.target.value)}
                   placeholder="/media"
                   value={path}

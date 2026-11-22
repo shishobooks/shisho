@@ -287,7 +287,7 @@ const LibrarySettings = () => {
             <div className="flex items-center gap-2" key={index}>
               <Input
                 aria-label={`Library path ${index + 1}`}
-                className="flex-1"
+                className="flex-1 font-mono"
                 onChange={(e) => handlePathChange(index, e.target.value)}
                 placeholder="Enter directory path"
                 value={path}

@@ -48,7 +48,9 @@ targets:
           UIColorName: LaunchBackground
         UIAppFonts:
           - Geist.ttf
+          - GeistMono.ttf
           - ShishoWordmark-Bold.ttf
+          - ShishoWordmarkJP-Regular.ttf
         # Plain HTTP only to the local network; everything else is HTTPS.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

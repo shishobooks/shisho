@@ -50,7 +50,7 @@ struct ReadingStatusRibbon: View {
                 // Geist at 9 points, as the web's bookmark sets it, so the
                 // ribbon is as narrow as the web's.
                 Text(verbatim: percent)
-                    .font(.custom("Geist", size: 9 * scale).weight(.bold))
+                    .font(.custom(Theme.Fonts.geist, size: 9 * scale).weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(.white)
                     .padding(.top, 6 * scale)

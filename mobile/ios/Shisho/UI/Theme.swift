@@ -32,6 +32,18 @@ enum Theme {
     static let radius: CGFloat = 8
     /// Cards and sheets.
     static let cardRadius: CGFloat = 14
+
+    /// The bundled fonts, listed under `UIAppFonts` in `project.yml`. A name
+    /// iOS doesn't know falls back to the system font without a word, so
+    /// `BundledFontsTests` checks each one.
+    enum Fonts {
+        static let geist = "Geist"
+        static let geistMono = "Geist Mono"
+        /// Cuts of the web logo's Noto Sans Bold and Noto Sans JP holding
+        /// only "SHISHO" and "司書".
+        static let wordmark = "ShishoWordmark-Bold"
+        static let wordmarkJP = "ShishoWordmarkJP-Regular"
+    }
 }
 
 extension Theme {
@@ -41,7 +53,7 @@ extension Theme {
     @MainActor static func applyUIKitFonts() {
         func geist(_ size: CGFloat, _ weight: UIFont.Weight, _ style: UIFont.TextStyle) -> UIFont {
             let descriptor = UIFontDescriptor(fontAttributes: [
-                .family: "Geist",
+                .family: Theme.Fonts.geist,
                 .traits: [UIFontDescriptor.TraitKey.weight: weight],
             ])
             return UIFontMetrics(forTextStyle: style).scaledFont(for: UIFont(descriptor: descriptor, size: size))
@@ -67,15 +79,22 @@ extension View {
 extension Font {
     /// Geist at style's size, scaling with Dynamic Type.
     static func geist(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
-        .custom("Geist", size: geistSize(style), relativeTo: style).weight(weight)
+        .custom(Theme.Fonts.geist, size: textStyleSize(style), relativeTo: style).weight(weight)
     }
 
     /// Geist at an exact size, scaling with Dynamic Type relative to style.
     static func geist(size: CGFloat, relativeTo style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
-        .custom("Geist", size: size, relativeTo: style).weight(weight)
+        .custom(Theme.Fonts.geist, size: size, relativeTo: style).weight(weight)
     }
 
-    private static func geistSize(_ style: Font.TextStyle) -> CGFloat {
+    /// Geist Mono, the web app's monospace, at style's size, scaling with
+    /// Dynamic Type. For text read character by character, like ids and
+    /// diagnostics; `.monospacedDigit()` on Geist suits numbers in prose.
+    static func geistMono(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {
+        .custom(Theme.Fonts.geistMono, size: textStyleSize(style), relativeTo: style).weight(weight)
+    }
+
+    private static func textStyleSize(_ style: Font.TextStyle) -> CGFloat {
         switch style {
         case .largeTitle: 34
         case .title: 28
@@ -118,11 +137,11 @@ struct Wordmark: View {
             }
             // 司書 sits raised beside the name, as the web app's superscript does.
             Text(verbatim: "SHISHO")
-                .font(.custom("ShishoWordmark-Bold", fixedSize: size))
+                .font(.custom(Theme.Fonts.wordmark, fixedSize: size))
                 .tracking(size * 0.05)
                 .foregroundStyle(Theme.foreground)
                 + Text(verbatim: "司書")
-                .font(.system(size: size * 0.5))
+                .font(.custom(Theme.Fonts.wordmarkJP, fixedSize: size * 0.5))
                 .foregroundStyle(Theme.primary)
                 .baselineOffset(size * 0.36)
         }
