@@ -22,6 +22,7 @@ import DetailsDialog, {
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import FileDownloadControl from "@/components/library/FileDownloadControl";
 import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
+import ProgressRing from "@/components/library/ProgressRing";
 import TextLink from "@/components/library/TextLink";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -154,14 +155,15 @@ const leftLabel = (file: File, progress: number): string | null => {
 };
 
 /**
- * How far through the file the reader is, under its facts: a thin bar, the
- * percentage, and what's left, as the Shisho app's file row shows it.
+ * How far through the file the reader is, under its facts on a phone: a thin
+ * bar, the percentage, and what's left, as the Shisho app's file row shows
+ * it. From sm up the ring beside the actions shows it instead.
  */
 const FileProgress = ({ file, progress }: { file: File; progress: number }) => {
   const percent = formatProgress(progress);
   const left = progress < 1 ? leftLabel(file, progress) : null;
   return (
-    <div className="mt-2 flex items-center gap-2 text-xs tabular-nums text-muted-foreground">
+    <div className="mt-2 flex items-center gap-2 text-xs tabular-nums text-muted-foreground sm:hidden">
       <div
         aria-label={`${percent} through`}
         aria-valuemax={100}
@@ -350,6 +352,12 @@ const BookFileRow = ({
           onDownloadAs={onDownloadAs}
           onDownloadOriginal={onDownloadOriginal}
         />
+        {/* Right before Read or Listen on a wide screen, so how far through
+            sits by the button that goes on from there; a phone has the bar.
+            The icons from Read on keep their places row to row. */}
+        {progress != null && (
+          <ProgressRing className="mx-1 max-sm:hidden" progress={progress} />
+        )}
         {readingAction && (
           <Tooltip>
             <TooltipTrigger asChild>
