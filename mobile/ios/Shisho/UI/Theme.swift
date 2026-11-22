@@ -42,6 +42,28 @@ enum Theme {
     static let cardRadius: CGFloat = 14
 }
 
+extension Theme {
+    /// Geist for what SwiftUI's font doesn't reach: navigation bar titles,
+    /// bar buttons such as Cancel and Done, and the search field. System
+    /// menus, alerts, and the keyboard stay as iOS draws them.
+    @MainActor static func applyUIKitFonts() {
+        func geist(_ size: CGFloat, _ weight: UIFont.Weight, _ style: UIFont.TextStyle) -> UIFont {
+            let descriptor = UIFontDescriptor(fontAttributes: [
+                .family: "Geist",
+                .traits: [UIFontDescriptor.TraitKey.weight: weight],
+            ])
+            return UIFontMetrics(forTextStyle: style).scaledFont(for: UIFont(descriptor: descriptor, size: size))
+        }
+        let bar = UINavigationBar.appearance()
+        bar.titleTextAttributes = [.font: geist(17, .semibold, .headline)]
+        bar.largeTitleTextAttributes = [.font: geist(34, .bold, .largeTitle)]
+        for state in [UIControl.State.normal, .highlighted, .disabled] {
+            UIBarButtonItem.appearance().setTitleTextAttributes([.font: geist(17, .regular, .body)], for: state)
+        }
+        UISearchTextField.appearance().font = geist(17, .regular, .body)
+    }
+}
+
 extension Font {
     /// Geist at style's size, scaling with Dynamic Type.
     static func geist(_ style: Font.TextStyle, weight: Font.Weight = .regular) -> Font {

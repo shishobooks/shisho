@@ -229,7 +229,7 @@ struct BookDetailView: View {
                     .accessibilityAddTraits(.isHeader)
                 VStack(spacing: 10) {
                     ForEach(book.files) { file in
-                        FileCard(file: file, book: book.summary)
+                        FileCard(file: file, book: book.summary, listen: listen ?? nil)
                     }
                 }
             }
@@ -299,8 +299,25 @@ private struct FileCard: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     let file: BookDetail.File
     let book: BookSummary
+    /// The Listen card's progress, which this row matches when it's for
+    /// this File, so the two never show different numbers.
+    var listen: ListenProgress?
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
+
+    /// How far through the File the user is: for the audiobook the Listen
+    /// card is about, the card's own place, live while it plays, so both say
+    /// the same; for any other File, the place saved with its percentage.
+    private var progress: Double? {
+        guard isAudiobook else { return file.progress }
+        if let player = model.player, player.file?.fileID == file.id, let duration = player.file?.duration, duration > 0 {
+            return min(1, max(0, player.position / duration))
+        }
+        if let listen, listen.fileID == file.id {
+            return listen.seconds > 1 ? listen.fraction : file.progress
+        }
+        return file.progress
+    }
     /// The square the cover sits in: an audiobook's fills it, and a book's
     /// two-thirds-wide cover is as tall as it.
     private static let coverSlot: CGFloat = 52
@@ -351,7 +368,7 @@ private struct FileCard: View {
                                 .tint(Theme.foreground)
                                 .accessibilityIdentifier("book.detail.narrator")
                         }
-                        if let progress = file.progress {
+                        if let progress {
                             FileProgressLine(progress: progress, durationSeconds: file.durationSeconds, pageCount: file.pageCount)
                                 .padding(.top, 3)
                         }
