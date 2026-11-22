@@ -1,0 +1,38 @@
+# Listen to a short audiobook to its end, then check the server: the place,
+# a Reading Session attributed to the phone, and a finished Read-through
+# (#912).
+appId: ${APP_ID}
+name: Listen to the end and check the server
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Quiet Lighthouse
+# Chapters come from Shisho's list.
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: Chapter 2
+    timeout: 20000
+# Playback ending stops the player, which syncs.
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 5000
+    optional: true
+- runScript:
+    file: scripts/assert_listened.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Quiet Lighthouse

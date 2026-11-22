@@ -1,6 +1,8 @@
+import BackgroundTasks
 import Foundation
 import Network
 import Observation
+import os
 import ShishoAPI
 import UIKit
 
@@ -13,12 +15,21 @@ final class AccountSession {
     let sync: SyncEngine
     let covers: CoverCache
 
+    /// The capabilities the server listed in its last response, which any
+    /// thread may read.
+    let capabilities: OSAllocatedUnfairLock<[String]>
+
     init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void) throws {
         self.account = account
-        client = APIClient(baseURL: account.serverURL, credential: credential, onCapabilities: onCapabilities)
+        let capabilities = OSAllocatedUnfairLock(initialState: account.capabilities)
+        self.capabilities = capabilities
+        client = APIClient(baseURL: account.serverURL, credential: credential) { listed in
+            capabilities.withLock { $0 = listed }
+            onCapabilities(listed)
+        }
         try FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true)
         store = try CatalogStore(path: account.folder.appendingPathComponent("catalog.sqlite").path)
-        sync = SyncEngine(client: client, store: store)
+        sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
     }
 }
@@ -44,8 +55,16 @@ enum SyncStatus: Equatable {
 final class AppModel {
     private let accounts = AccountStore()
 
-    private(set) var session: AccountSession?
+    private(set) var session: AccountSession? {
+        didSet { sessionChanged(from: oldValue) }
+    }
     private(set) var syncStatus: SyncStatus = .idle
+    /// The signed-in account's audiobook player.
+    private(set) var player: AudioPlayer?
+    /// Now Playing is open.
+    var showingPlayer = false
+    /// The Library's navigation: the Book pages pushed on it.
+    var libraryPath: [BookSummary] = []
     private let syncs = SyncRunner()
     var isSyncing: Bool { syncs.isRunning }
     /// False while the device has no network at all, as in airplane mode
@@ -69,6 +88,90 @@ final class AppModel {
                 self?.networkChanged(available: path.status != .unsatisfied)
             }
         }
+        // Observers don't run for what init sets.
+        sessionChanged(from: nil)
+        let device = Installation.deviceName
+        Task {
+            await Diagnostics.shared.log(.app, "launched \(Installation.appVersion) on \(device), iOS \(UIDevice.current.systemVersion)")
+        }
+    }
+
+    /// A new session gets its own player, which picks up where the last
+    /// launch left off; the old one stops, recording what was listened.
+    private func sessionChanged(from old: AccountSession?) {
+        guard old !== session else { return }
+        player?.stop()
+        player = nil
+        showingPlayer = false
+        libraryPath = []
+        if let session {
+            let player = AudioPlayer(session: session) { [weak self] in
+                Task { await self?.syncNow() }
+            }
+            self.player = player
+            player.restore()
+        }
+    }
+
+    /// Audio was playing when the app went to the background.
+    @ObservationIgnored private var playingInBackground = false
+
+    func didEnterBackground() {
+        playingInBackground = player?.isPlaying == true
+    }
+
+    /// Coming back while the audio played on, as by tapping it on the lock
+    /// screen or in Control Center, opens Now Playing, where its controls
+    /// are. iOS doesn't say which of those brought the app back.
+    func didBecomeActive() {
+        if playingInBackground, player?.isPlaying == true, player?.file != nil {
+            showingPlayer = true
+        }
+        playingInBackground = false
+    }
+
+    /// Closes Now Playing onto book's page, pushing it unless it's showing.
+    func showBook(_ book: BookSummary) {
+        showingPlayer = false
+        if libraryPath.last?.id != book.id {
+            libraryPath.append(book)
+        }
+    }
+
+    /// Opens an audiobook File in the player and shows Now Playing.
+    func listen(fileID: Int) {
+        player?.open(fileID: fileID, autoplay: true)
+        showingPlayer = true
+    }
+
+    /// The diagnostics export, for the user to read before sharing it: the
+    /// log with every server address and credential removed, and titles
+    /// only when includeTitles.
+    func diagnosticsText(includeTitles: Bool) async -> String {
+        var summaries: [Diagnostics.AccountSummary] = []
+        var titles: [String: String]?
+        if let session {
+            let pending = (try? await session.store.pool.read(CatalogStore.pendingCount)) ?? 0
+            summaries.append(Diagnostics.AccountSummary(
+                serverVersion: session.account.serverVersion,
+                capabilities: session.capabilities.withLock { $0 },
+                pendingEvents: pending
+            ))
+            if includeTitles {
+                let ids = await Diagnostics.shared.mentionedIDs()
+                titles = try? await session.store.pool.read { db in
+                    try CatalogStore.titles(db, books: ids.books, files: ids.files)
+                }
+            }
+        }
+        return await Diagnostics.shared.export(
+            accounts: summaries, servers: accounts.accounts.map(\.serverURL), titles: titles,
+            device: Installation.deviceName, system: "iOS \(UIDevice.current.systemVersion)"
+        )
+    }
+
+    func dismissJournalNotes() {
+        try? session?.store.dismissJournalNotes()
     }
 
     // MARK: - Signing in and out
@@ -170,9 +273,53 @@ final class AppModel {
             syncStatus = .offline
             return
         }
+        // A sync asked for as playback pauses, with the phone locked, gets
+        // the time to finish.
+        // Each call has its own, since calls that overlap wait on one run.
+        let key = UUID()
+        backgroundSyncs[key] = UIApplication.shared.beginBackgroundTask(withName: "Sync") { [weak self] in
+            // Out of time: the sync stops, keeping what it hadn't sent.
+            self?.endBackgroundSync(key, stopping: true)
+        }
         await syncs.run { [weak self] isCurrent in
             await self?.sync(session, isCurrent: isCurrent)
         }
+        endBackgroundSync(key, stopping: false)
+    }
+
+    @ObservationIgnored private var backgroundSyncs: [UUID: UIBackgroundTaskIdentifier] = [:]
+
+    private func endBackgroundSync(_ key: UUID, stopping: Bool) {
+        guard let task = backgroundSyncs.removeValue(forKey: key) else { return }
+        if stopping { syncs.stop() }
+        if task != .invalid {
+            UIApplication.shared.endBackgroundTask(task)
+        }
+    }
+
+    // MARK: - Background refresh
+
+    /// The background refresh task's identifier, listed in Info.plist.
+    nonisolated static var refreshTaskID: String {
+        (Bundle.main.bundleIdentifier ?? "com.shishobooks.shisho") + ".refresh"
+    }
+
+    /// Asks iOS to wake the app now and then to sync, so listening done
+    /// offline reaches the server without opening the app.
+    func scheduleBackgroundRefresh() {
+        let request = BGAppRefreshTaskRequest(identifier: AppModel.refreshTaskID)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            Task { await Diagnostics.shared.log(.app, "background refresh not scheduled: \(Diagnostics.describe(error))") }
+        }
+    }
+
+    /// A background refresh: sync once, and ask for the next.
+    func backgroundRefresh() async {
+        scheduleBackgroundRefresh()
+        await syncNow()
     }
 
     /// One sync of session's catalog. A result the runner has since
@@ -187,6 +334,7 @@ final class AppModel {
             guard isCurrent() else { return }
             syncStatus = .idle
         } catch {
+            await Diagnostics.shared.log(.sync, "sync failed: \(Diagnostics.describe(error))")
             guard isCurrent() else { return }
             record(error, for: session)
         }

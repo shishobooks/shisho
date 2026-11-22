@@ -82,7 +82,9 @@ export default defineConfig({
     host: "0.0.0.0",
     strictPort: false, // Allow Vite to auto-increment port if busy
     watch: {
-      ignored: ["**/coverage/**", "**/website/**"],
+      // The iOS build (mobile/ios/build) holds thousands of files that are
+      // never the web app's.
+      ignored: ["**/coverage/**", "**/website/**", "**/mobile/**"],
     },
     proxy: {
       "/api": {
@@ -132,6 +134,13 @@ export default defineConfig({
         },
       },
     },
+  },
+  // Only the web app's page decides what to pre-bundle. Without this, Vite
+  // scans every HTML file in the repository, including demo pages inside the
+  // iOS build's package checkouts, fails on their imports, and skips
+  // pre-bundling.
+  optimizeDeps: {
+    entries: ["index.html"],
   },
   resolve: {
     alias: {

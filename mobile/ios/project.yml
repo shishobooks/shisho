@@ -55,6 +55,13 @@ targets:
         NSLocalNetworkUsageDescription: Shisho connects to your Shisho server when it's on your local network.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # Audiobooks play with the phone locked, and a background refresh
+        # sends listening done offline (AppModel.refreshTaskID).
+        UIBackgroundModes:
+          - audio
+          - fetch
+        BGTaskSchedulerPermittedIdentifiers:
+          - $(PRODUCT_BUNDLE_IDENTIFIER).refresh
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft

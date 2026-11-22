@@ -136,6 +136,80 @@ final class APIClient: Sendable {
         return response
     }
 
+    /// Sends a batch of the journal (ADR 0024), answered with one result per
+    /// event. A response without them, from something other than Shisho,
+    /// is an error, so the app keeps every event.
+    func journal(_ rows: [JournalRow], clock: Date = Date()) async throws -> Shishoapp.JournalResponse {
+        let decoder = JSONDecoder()
+        let events = try rows.map { row in
+            Shishoapp.JournalEvent(
+                id: row.eventID, type: Shishoapp.JournalEventType(rawValue: row.type), at: JournalTime.string(row.at),
+                payload: try decoder.decode(JSONValue.self, from: row.payload)
+            )
+        }
+        let payload = Shishoapp.JournalPayload(clock: JournalTime.string(clock), events: try events.map {
+            try decoder.decode(JSONValue.self, from: JSONEncoder().encode($0))
+        })
+        let body = try JSONEncoder().encode(payload)
+        return try APIClient.journalResponse(await data("mobile/journal", method: "POST", body: body), sent: rows.count)
+    }
+
+    static func journalResponse(_ data: Data, sent: Int) throws -> Shishoapp.JournalResponse {
+        struct Shape: Decodable {
+            struct Result: Decodable {
+                let id: String
+                let result: String
+            }
+
+            let results: [Result]
+        }
+        guard let shape = try? JSONDecoder().decode(Shape.self, from: data), shape.results.count == sent,
+              let response = try? makeShishoDecoder().decode(Shishoapp.JournalResponse.self, from: data)
+        else { throw APIError.serverPredatesApp }
+        return response
+    }
+
+    /// A File's own cover at size pixels, keyed by its cover version.
+    func fileCover(fileID: Int, version: String, size: Int, renderKey: String) async throws -> Data {
+        try await data("mobile/files/\(fileID)/cover", query: [
+            URLQueryItem(name: "v", value: version),
+            URLQueryItem(name: "size", value: String(size)),
+            URLQueryItem(name: "r", value: renderKey),
+        ], readsCapabilities: false)
+    }
+
+    /// Where an audiobook File streams from, with Range support.
+    func streamURL(fileID: Int) -> URL {
+        baseURL.appendingPathComponent("mobile/files/\(fileID)/stream")
+    }
+
+    /// The credential, protocol, and version as cookies, for the system
+    /// player, which makes its own requests and takes cookies but no
+    /// headers. The server takes the credential and protocol from cookies
+    /// on the stream route only, and they go only with requests for Files,
+    /// so a redirect elsewhere on the host doesn't carry the credential.
+    var streamCookies: [HTTPCookie] {
+        // As the stream's URL spells it, so a path with spaces still matches.
+        let files = baseURL.appendingPathComponent("mobile/files")
+        let path = (URLComponents(url: files, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? files.path) + "/"
+        let values = [
+            ("shisho_app_credential", credential),
+            ("shisho_app_protocol", String(Installation.appProtocol)),
+            // For the server's access log, as the header names it elsewhere.
+            ("shisho_app_version", Installation.appVersion),
+        ]
+        return values.compactMap { name, value in
+            guard let value else { return nil }
+            var properties: [HTTPCookiePropertyKey: Any] = [
+                .name: name, .value: value, .path: path, .originURL: baseURL,
+            ]
+            if baseURL.scheme == "https" {
+                properties[.secure] = "TRUE"
+            }
+            return HTTPCookie(properties: properties)
+        }
+    }
+
     /// A Book's cover at size pixels, keyed by its cover version so the
     /// server sends it as immutable.
     func cover(bookID: Int, version: String, size: Int, renderKey: String) async throws -> Data {

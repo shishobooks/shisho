@@ -98,6 +98,12 @@ func CacheKey(files []*models.File, coverAspectRatio string) string {
 	if f == nil {
 		return ""
 	}
+	return FileCacheKey(f)
+}
+
+// FileCacheKey is the cache key of f's own cover, which CacheKey also gives
+// a Book whose cover f supplies.
+func FileCacheKey(f *models.File) string {
 	return fmt.Sprintf("%d-%d", f.ID, f.UpdatedAt.Unix())
 }
 

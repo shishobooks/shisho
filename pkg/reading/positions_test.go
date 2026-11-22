@@ -460,6 +460,26 @@ func TestUpdatePosition_AnOlderUpdateArrivingLateIsIgnored(t *testing.T) {
 	assert.Equal(t, 1, f.count("reading_position_updates"), "an ignored update isn't logged")
 }
 
+// A device offline since before a reread began sends the end of the earlier
+// read late. It belongs to that read, so it doesn't finish the one underway.
+func TestUpdatePosition_ALateFinishDoesntEndALaterRead(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	require.NoError(t, f.svc.Start(f.ctx, f.user.ID, f.book.ID, "2026-10-15"))
+
+	cfi := "epubcfi(/6/40!/4/2)"
+	twoDaysAgo := f.clock.now.Add(-48 * time.Hour)
+	_, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
+		UserID: f.user.ID, FileID: f.file.ID, Source: models.ReadingSourceKOReader,
+		Locator: models.ReadingLocator{CFI: &cfi}, Percentage: 1, AtEnd: true, OccurredAt: &twoDaysAgo,
+	})
+	require.NoError(t, err)
+
+	readThroughs := f.readThroughs()
+	require.Len(t, readThroughs, 1)
+	assert.Equal(t, models.ReadThroughOutcomeUnderway, readThroughs[0].Outcome)
+}
+
 func TestUpdatePosition_AFutureInstantIsClampedToNow(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)

@@ -12,9 +12,19 @@ struct ShishoApp: App {
                 .tint(Color("AccentColor"))
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            switch phase {
+            case .active:
+                model.didBecomeActive()
                 Task { await model.syncNow() }
+            case .background:
+                model.didEnterBackground()
+                model.scheduleBackgroundRefresh()
+            default:
+                break
             }
+        }
+        .backgroundTask(.appRefresh(AppModel.refreshTaskID)) {
+            await model.backgroundRefresh()
         }
     }
 }

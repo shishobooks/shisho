@@ -15,14 +15,24 @@ type Fixture struct {
 	Title    string
 	Author   string
 	FileType string
+	// Duration is an audiobook's length in seconds, and Chapters where its
+	// chapters start.
+	Duration float64
+	Chapters []testgen.M4BChapter
 }
 
 // fixtures are made fresh for every run, small and the same each time, so
-// there's no shared store of test books to keep.
+// there's no shared store of test books to keep. Quiet Lighthouse is short
+// enough to listen to the end of; Harbor Lights is long enough to listen to
+// for a while, and small enough that the player buffers all of it, so the
+// flows can listen offline.
 var fixtures = []Fixture{
 	{Title: "The Harness Novel", Author: "Ada Writer", FileType: "epub"},
 	{Title: "Harness Comic", Author: "Pat Penciller", FileType: "cbz"},
-	{Title: "Quiet Lighthouse", Author: "Ann Author", FileType: "m4b"},
+	{Title: "Quiet Lighthouse", Author: "Ann Author", FileType: "m4b", Duration: 9,
+		Chapters: []testgen.M4BChapter{{Title: "Chapter 1", Start: 0}, {Title: "Chapter 2", Start: 3}, {Title: "Chapter 3", Start: 6}}},
+	{Title: "Harbor Lights", Author: "Ann Author", FileType: "m4b", Duration: 240,
+		Chapters: []testgen.M4BChapter{{Title: "The Harbor", Start: 0}, {Title: "The Lights", Start: 120}}},
 	{Title: "Harness Manual", FileType: "pdf"},
 }
 
@@ -73,9 +83,9 @@ func writeFixtures(ctx context.Context, dir string) (err error) {
 				Title: f.Title, Penciller: f.Author, HasComicInfo: true, PageCount: 3,
 			})
 		case "m4b":
-			testgen.GenerateM4B(t, folder, "lighthouse.m4b", testgen.M4BOptions{
-				Title: f.Title, Artist: f.Author, Composer: "Ned Narrator", Duration: 9, HasCover: true,
-				Chapters: []testgen.M4BChapter{{Title: "Chapter 1", Start: 0}, {Title: "Chapter 2", Start: 3}, {Title: "Chapter 3", Start: 6}},
+			testgen.GenerateM4B(t, folder, "audiobook.m4b", testgen.M4BOptions{
+				Title: f.Title, Artist: f.Author, Composer: "Ned Narrator", Duration: f.Duration, HasCover: true,
+				Chapters: f.Chapters,
 			})
 		case "pdf":
 			testgen.GeneratePDF(t, folder, "manual.pdf", testgen.PDFOptions{PageCount: 2})

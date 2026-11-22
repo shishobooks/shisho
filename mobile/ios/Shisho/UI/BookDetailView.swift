@@ -11,6 +11,7 @@ struct BookDetailView: View {
     let initial: BookSummary
 
     @State private var book: BookDetail??
+    @State private var listen: ListenProgress??
     @State private var tint: Color?
     @State private var scrolled = false
 
@@ -27,6 +28,11 @@ struct BookDetailView: View {
                         .padding(.top, 80)
                 } else {
                     hero
+                    if let progress = listen ?? nil {
+                        ListenCard(progress: progress, bookID: bookID)
+                            .padding(.top, 22)
+                            .frame(maxWidth: 520)
+                    }
                     if let detail = book ?? nil {
                         details(detail)
                     }
@@ -38,6 +44,7 @@ struct BookDetailView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable { await model.syncNow() }
+        .miniPlayerClearance()
         .onScrolledDistanceChange(space: "book") { distance in
             // The title shows in the bar once the cover has scrolled away.
             let collapsed = distance > 210
@@ -60,6 +67,9 @@ struct BookDetailView: View {
         }
         .observing(model.session?.store, id: bookID, into: $book) { [bookID] db in
             try CatalogStore.book(db, id: bookID)
+        }
+        .observing(model.session?.store, id: bookID, into: $listen) { [bookID, deviceID = model.session?.account.deviceID ?? ""] db in
+            try CatalogStore.listenProgress(db, bookID: bookID, ownDeviceID: deviceID)
         }
     }
 
@@ -85,14 +95,14 @@ struct BookDetailView: View {
                 let average = await CoverTint.average(of: image)
                 // A cover replaced meanwhile has its own tint coming.
                 guard !Task.isCancelled else { return }
-                tint = average.map { Color(red: $0.red, green: $0.green, blue: $0.blue) }
+                tint = average?.color
             }
             .padding(.top, 8)
 
             if let detail = book ?? nil, let series = detail.series.first {
                 HStack(spacing: 8) {
                     if let number = series.number {
-                        SeriesNumberBadge(number: number)
+                        SeriesNumberBadge(number: number, end: series.numberEnd)
                     }
                     Text(series.name)
                         .font(.geist(.callout, weight: .semibold))
@@ -201,7 +211,7 @@ struct BookDetailView: View {
     private func seriesLine(_ series: BookDetail.Series) -> String {
         guard let number = series.number else { return series.name }
         if let end = series.numberEnd {
-            return String(localized: "\(series.name) #\(SeriesNumbers.format(number))–\(SeriesNumbers.format(end))")
+            return String(localized: "\(series.name) #\(SeriesNumbers.format(number))-\(SeriesNumbers.format(end))")
         }
         return String(localized: "\(series.name) #\(SeriesNumbers.format(number))")
     }
@@ -213,41 +223,90 @@ struct BookDetailView: View {
 
 /// One of a Book's Files, as the web app's file card shows it.
 private struct FileCard: View {
+    @Environment(AppModel.self) private var model
     let file: BookDetail.File
     let book: BookSummary
 
+    private var isAudiobook: Bool { file.fileType == "m4b" }
+
+    /// Names the File and its narrators, since editions often share a name.
+    private var listenLabel: String {
+        let name = file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName
+        guard !file.narrators.isEmpty else { return String(localized: "Listen to \(name)") }
+        return String(localized: "Listen to \(name), narrated by \(file.narrators.joined(separator: ", "))")
+    }
+    private var playing: Bool { model.player?.file?.fileID == file.id && model.player?.isPlaying == true }
+
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            CoverView(book: book, width: 46)
-            VStack(alignment: .leading, spacing: 6) {
-                // Each File by its own label, as the web app's file list does;
-                // the Book's title would name every File the same.
-                Text(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)
-                    .font(.geist(.subheadline, weight: .semibold))
-                    .lineLimit(2)
-                if FileTypes.isKnown(file.fileType) {
-                    HStack(spacing: 8) {
-                        FileTypeChip(fileType: file.fileType, outlined: true)
-                        Text(ByteCountFormatter.string(fromByteCount: Int64(file.sizeBytes), countStyle: .file))
-                            .font(.geist(.footnote))
-                            .foregroundStyle(Theme.mutedForeground)
-                            .monospacedDigit()
-                        if file.fileRole == "supplement" {
-                            Text("Supplement")
+            HStack(alignment: .center, spacing: 14) {
+                CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion), width: 46)
+                VStack(alignment: .leading, spacing: 6) {
+                    // Each File by its own label, as the web app's file list does;
+                    // the Book's title would name every File the same.
+                    Text(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)
+                        .font(.geist(.subheadline, weight: .semibold))
+                        .lineLimit(2)
+                    if FileTypes.isKnown(file.fileType) {
+                        HStack(spacing: 8) {
+                            FileTypeChip(fileType: file.fileType, outlined: true)
+                            Text(details)
                                 .font(.geist(.footnote))
                                 .foregroundStyle(Theme.mutedForeground)
+                                .monospacedDigit()
+                        }
+                        if !file.narrators.isEmpty {
+                            Text("Narrated by \(file.narrators.joined(separator: ", "))")
+                                .font(.geist(.footnote))
+                                .foregroundStyle(Theme.mutedForeground)
+                                .lineLimit(2)
+                        }
+                    } else {
+                        Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
+                            .font(.geist(.footnote))
+                            .foregroundStyle(Theme.mutedForeground)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+            if isAudiobook {
+                // Every audiobook File plays from here; the Listen button
+                // above plays the one listened to last.
+                Button { model.listen(fileID: file.id) } label: {
+                    Group {
+                        if playing {
+                            PlayingIndicator(playing: true, height: 14)
+                        } else {
+                            Image(systemName: "headphones")
+                                .font(.system(size: 16, weight: .semibold))
                         }
                     }
-                } else {
-                    Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
-                        .font(.geist(.footnote))
-                        .foregroundStyle(Theme.mutedForeground)
+                    .foregroundStyle(Theme.primary)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
+                .buttonStyle(PlayerControlStyle())
+                .accessibilityLabel(listenLabel)
+                // Editions can share a name, so the File's id tells them apart.
+                .accessibilityIdentifier("file.listen.\(file.id)")
             }
-            Spacer(minLength: 0)
         }
         .padding(14)
         .cardStyle()
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Its length for an audiobook, its size, and whether it's a supplement.
+    private var details: String {
+        var parts: [String] = []
+        if isAudiobook, let seconds = file.durationSeconds, seconds > 0 {
+            parts.append(TimeLabels.left(seconds))
+        }
+        parts.append(ByteCountFormatter.string(fromByteCount: Int64(file.sizeBytes), countStyle: .file))
+        if file.fileRole == "supplement" {
+            parts.append(String(localized: "Supplement"))
+        }
+        return parts.joined(separator: " · ")
     }
 }

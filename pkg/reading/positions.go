@@ -19,9 +19,9 @@ const RevertWindow = 15 * time.Minute
 
 const (
 	// AudioStartSeconds is how much of one sitting of listening counts as real
-	// progress: a minute of it, not a few seconds of checking what it sounds
-	// like or a seek to somewhere later.
-	AudioStartSeconds = 60.0
+	// progress: enough that pressing play by accident, or a seek to somewhere
+	// later, doesn't start a read.
+	AudioStartSeconds = 5.0
 	// AudioEndSeconds is how close to an audiobook's end counts as reaching
 	// it, so end credits don't stop it being marked read.
 	AudioEndSeconds = 60.0
@@ -96,7 +96,7 @@ type PositionUpdate struct {
 	ListenedSeconds float64
 	// ListeningSince is when this sitting of listening or reading began, for
 	// a source that knows. A sitting that starts a Read-through belongs to it
-	// from here, first minute included, and dates its begin day.
+	// from here, its first seconds included, and dates its begin day.
 	ListeningSince *time.Time
 	// Opened is a reader opened at this place by a link, such as a page
 	// thumbnail or a shared URL, which saves it as the place but isn't
@@ -109,6 +109,12 @@ type PositionUpdate struct {
 	// Session is a Reading Session the source finished, recorded with the
 	// update.
 	Session *SessionInput
+
+	// Claim, when set, runs first in the update's transaction, so what the
+	// caller records about the update, such as a journal event being taken
+	// in, commits or rolls back with it. An error from it rolls back the
+	// update and is returned.
+	Claim func(ctx context.Context, tx bun.Tx) error
 }
 
 // SessionInput is a finished Reading Session handed in with an update.
@@ -125,6 +131,12 @@ type SessionInput struct {
 	// Duration is the seconds the source counted, when it counted less than
 	// the span; more is taken as the span.
 	Duration *int
+	// Claim, when set, runs first in RecordSession's transaction, as
+	// PositionUpdate.Claim does in UpdatePosition's.
+	Claim func(ctx context.Context, tx bun.Tx) error
+	// Recorded, when set, runs in RecordSession's transaction with the new
+	// session's id, for a caller that links it to its own records.
+	Recorded func(ctx context.Context, tx bun.Tx, sessionID int) error
 }
 
 // UpdatePosition is the position update service. In one transaction it:
@@ -154,6 +166,11 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		u.Session = &session
 	}
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if u.Claim != nil {
+			if err := u.Claim(ctx, tx); err != nil {
+				return err
+			}
+		}
 		now := svc.now()
 		occurredAt := now
 		if u.OccurredAt != nil && u.OccurredAt.Before(now) {
@@ -248,6 +265,12 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			if err != nil {
 				return err
 			}
+		}
+		// A finish from before the read underway began, sent late from a
+		// device that was offline through a reread starting, belongs to the
+		// earlier read, so it ends nothing.
+		if finishing && !starting && underway != nil && underway.BeginDay != nil && day < *underway.BeginDay {
+			finishing = false
 		}
 		// A read that a sitting of listening started began when the sitting did.
 		beginDay := day
@@ -380,8 +403,9 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 }
 
 // isRealProgress reports whether u's position is past where merely opening
-// the File leaves a reader: past the first page or screen, or a minute of
-// listening in one sitting. A Read-through already going needs no such minute.
+// the File leaves a reader: past the first page or screen, or
+// AudioStartSeconds of listening in one sitting. A Read-through already going
+// needs no such seconds.
 func isRealProgress(u PositionUpdate, underway *models.ReadThrough) bool {
 	switch {
 	case u.Locator.Seconds != nil:
@@ -396,12 +420,20 @@ func isRealProgress(u PositionUpdate, underway *models.ReadThrough) bool {
 	}
 }
 
+// sittingSlack widens what claimSitting takes. A device whose clock is off
+// has each batch corrected by its own offset, which the network's delay
+// varies, so a sitting's first session can land a little before its start
+// as a later batch reports it. Another sitting can't start this close: one
+// ends after a pause of five minutes.
+const sittingSlack = time.Minute
+
 // claimSitting puts what u's sitting already recorded, before it knew it would
-// start a Read-through, on rtID, so its first minute counts toward the read.
+// start a Read-through, on rtID, so its first seconds count toward the read.
 func claimSitting(ctx context.Context, tx bun.Tx, u PositionUpdate, rtID int, since time.Time) error {
 	if u.ListeningSince == nil {
 		return nil
 	}
+	since = since.Add(-sittingSlack)
 	_, err := tx.NewUpdate().
 		Model((*models.ReadingPositionUpdate)(nil)).
 		Set("read_through_id = ?", rtID).
@@ -447,6 +479,11 @@ func readThroughID(rt *models.ReadThrough) *int {
 func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, source string, session SessionInput) (int, error) {
 	var bookID int
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if session.Claim != nil {
+			if err := session.Claim(ctx, tx); err != nil {
+				return err
+			}
+		}
 		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrFileNotFound
@@ -458,9 +495,62 @@ func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, sourc
 		if err != nil {
 			return err
 		}
-		return recordSession(ctx, tx, userID, fileID, source, &session, underway, svc.now())
+		id, err := insertSession(ctx, tx, userID, fileID, source, session, underway, svc.now())
+		if err != nil {
+			return err
+		}
+		if session.Recorded != nil {
+			return session.Recorded(ctx, tx, id)
+		}
+		return nil
 	})
 	return bookID, err
+}
+
+// ExtendSession moves the end of userID's Reading Session sessionID to a
+// later snapshot of it, as a source that sends a session so far on every
+// pause does, keeping the Read-through it was placed on. A snapshot that
+// isn't newer changes nothing. Newer means more time played when the
+// snapshot says how much, since each batch from a device whose clock is off
+// is corrected by its own offset and a later snapshot can come out ending
+// earlier. snapshot.Claim, when set, runs first in the transaction.
+func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, snapshot SessionInput) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if snapshot.Claim != nil {
+			if err := snapshot.Claim(ctx, tx); err != nil {
+				return err
+			}
+		}
+		stored := &models.ReadingSession{}
+		err := tx.NewSelect().Model(stored).Where("rs.id = ? AND rs.user_id = ?", sessionID, userID).Scan(ctx)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		newer := snapshot.EndedAt.After(stored.EndedAt)
+		if snapshot.Duration != nil {
+			newer = *snapshot.Duration > stored.Duration
+		}
+		if !newer {
+			return nil
+		}
+		if snapshot.EndedAt.After(stored.EndedAt) {
+			stored.EndedAt = snapshot.EndedAt
+		}
+		// Time played fits within the session's span, or the snapshot's own,
+		// whose times one batch's correction keeps consistent.
+		span := max(stored.EndedAt.Sub(stored.StartedAt), snapshot.EndedAt.Sub(snapshot.StartedAt))
+		duration := int(span.Round(time.Second) / time.Second)
+		if snapshot.Duration != nil && *snapshot.Duration < duration {
+			duration = *snapshot.Duration
+		}
+		stored.EndPercentage = snapshot.EndPercentage
+		stored.Duration = duration
+		_, err = tx.NewUpdate().Model(stored).Column("ended_at", "end_percentage", "duration").WherePK().Exec(ctx)
+		return errors.WithStack(err)
+	})
 }
 
 // recordSession records session, if there is one, on rt, the Read-through

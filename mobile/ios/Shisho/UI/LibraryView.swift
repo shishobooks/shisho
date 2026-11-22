@@ -13,6 +13,7 @@ struct LibraryView: View {
     /// How far the content has scrolled up, which shrinks the logo.
     @State private var scrolledBy: CGFloat = 0
     @State private var showingAccount = false
+    @State private var notes: [JournalNote]?
 
     private var libraryID: Int? {
         storedLibraryID == 0 ? nil : storedLibraryID
@@ -24,7 +25,8 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        @Bindable var model = model
+        NavigationStack(path: $model.libraryPath) {
             // The width comes from outside the scroll view, so a grid laid
             // out for a wider screen can't hold it wide after a rotation.
             GeometryReader { geometry in
@@ -39,6 +41,11 @@ struct LibraryView: View {
                         SyncBanner()
                             .padding(.horizontal, GridLayout.margin)
                             .padding(.top, 14)
+                        if let notes, !notes.isEmpty {
+                            JournalNotesBanner(notes: notes) { model.dismissJournalNotes() }
+                                .padding(.horizontal, GridLayout.margin)
+                                .padding(.top, 10)
+                        }
                         if let books {
                             sectionHeader(count: books.count)
                             if books.isEmpty {
@@ -51,6 +58,7 @@ struct LibraryView: View {
                     .padding(.bottom, 32)
                 }
                 .onScrolledDistanceChange(space: "library") { scrolledBy = $0 }
+                .miniPlayerClearance()
             }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
@@ -68,7 +76,17 @@ struct LibraryView: View {
                 AccountSheet()
             }
         }
+        // Outside the stack, so the mini player stays on every pushed screen.
+        // Each screen's scroll view leaves room for it (miniPlayerClearance).
+        .overlay(alignment: .bottom) {
+            MiniPlayer()
+                .frame(maxWidth: 680)
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
+        }
         .tint(Theme.primary)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
+            try CatalogStore.journalNotes(db)
+        }
         .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(storedLibraryID)", into: $books) { [libraryID] db in
             try CatalogStore.books(db, libraryID: libraryID)
         }
@@ -333,5 +351,28 @@ struct SyncBanner: View {
         .transition(.move(edge: .top).combined(with: .opacity))
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.syncStatus)
         .accessibilityIdentifier("sync.banner")
+    }
+}
+
+/// Changes made on this device that the server refused, such as listening
+/// to a Book that has since been deleted. They're dropped rather than sent
+/// forever (ADR 0024); this says so until the user dismisses it.
+struct JournalNotesBanner: View {
+    let notes: [JournalNote]
+    let dismiss: () -> Void
+
+    var body: some View {
+        NoticeCard(
+            text: notes.count == 1
+                ? String(localized: "A change made on this device couldn't be saved on the server: \(notes[0].reason)")
+                : String(localized: "\(notes.count) changes made on this device couldn't be saved on the server. The last: \(notes[notes.count - 1].reason)"),
+            systemImage: "exclamationmark.bubble",
+            tint: Theme.destructive
+        ) {
+            Button("Dismiss", action: dismiss)
+                .font(.geist(.subheadline, weight: .semibold))
+                .accessibilityIdentifier("journal.notes.dismiss")
+        }
+        .accessibilityIdentifier("journal.notes")
     }
 }

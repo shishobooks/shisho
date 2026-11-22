@@ -30,13 +30,27 @@ The app stays signed in until one of these happens:
 
 Changing your password doesn't sign the app out. A signed-out app asks you to sign in again and keeps what's on the device until you do.
 
+## Listening
+
+Books with an M4B audiobook have a **Listen** button that plays it from your server. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip 30 seconds. Headphone and car controls skip 30 seconds too; chapters change in the app. The chapters are the ones Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. Speed moves in steps of 0.1 and is kept for each audiobook file on that phone, since it usually suits the narrator; a new one starts at 1x. Tap the time left under the position bar to switch the bar between the chapter and the whole book.
+
+The app saves your place every few seconds while playing and when you pause, and sends it, with your listening time, the next time it reaches your server. Listening done offline, such as on a plane, counts at the time you listened, not when it synced: [Reading History](./reading-tracking.md#reading-history) and [Reading Stats](./reading-stats.md) show it on the right day, under the phone's Device. Listening starts and finishes a book's Read-through by the same rules as the [web player](./reading-tracking.md#starting-and-finishing-automatically).
+
+Opening a book takes you to your latest place from any device, unless you've also listened on this phone since it last synced. Then it stays where the phone was and offers the other place, without jumping. A place that arrives while you listen is only offered too.
+
+If the server turns down a change the app made offline, for example listening to a book that has since been deleted, the app drops it and says so in the library.
+
+## Diagnostics
+
+**Account > Export Diagnostics** shows the app's log of syncs and playback problems, with the app, iOS, and server versions, and shares it as a text file. Server addresses and sign-in details are always removed. Books and files are named by id unless you turn on **Include titles**. Read it before you send it anywhere.
+
 ## Paths the App Uses
 
 The app calls these paths on your server. A reverse proxy has to pass them, as [HTTPS and Reverse Proxies](./deployment-and-maintenance.md#https-and-reverse-proxies) describes. If an authentication proxy sits in front of Shisho, let them through without the proxy's login, as you would for [OPDS](./opds.md) or [Kobo Sync](./kobo-sync.md): Shisho authenticates them itself.
 
 | Path | Used for |
 |------|----------|
-| `/mobile/*` | Signing in, syncing the library, and covers |
+| `/mobile/*` | Signing in, syncing the library and your listening, covers, and playing audiobooks |
 
 ## Local Network and Certificates
 
@@ -45,6 +59,16 @@ The app connects over HTTPS. It also connects over plain HTTP to a server on you
 A server with a certificate from your own certificate authority works once the authority's profile is installed on the iPhone or iPad and turned on under **Settings > General > About > Certificate Trust Settings**. The app trusts what iOS trusts.
 
 ## Troubleshooting
+
+### An Audiobook Won't Play
+
+**Symptom:** Now Playing says the audiobook couldn't be played.
+
+**Likely cause:** The phone can't reach the server, or the file is missing from the library on disk.
+
+**Verify:** Play the same book in the web player.
+
+**Fix:** Reconnect and press play again. A file the web player can't play either needs a [rescan](./libraries.md) or restoring on disk.
 
 ### The Server Is Too Old for the App
 

@@ -505,6 +505,13 @@ describe("ReadingStatsPage", () => {
             reading_seconds: 600,
             listening_seconds: 0,
           },
+          // The Shisho app times its listening, as the web player does.
+          {
+            source: "shisho_app",
+            device_name: "iPhone 17 Pro",
+            reading_seconds: 0,
+            listening_seconds: 900,
+          },
         ],
       }),
     });

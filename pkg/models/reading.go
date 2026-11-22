@@ -101,10 +101,12 @@ type UserBook struct {
 // Reading sources: what reported a Reading Position update or a Reading
 // Session.
 const (
-	//tygo:emit export type ReadingSource = typeof ReadingSourceWebReader | typeof ReadingSourceKOReader | typeof ReadingSourceKobo;
+	//tygo:emit export type ReadingSource = typeof ReadingSourceWebReader | typeof ReadingSourceKOReader | typeof ReadingSourceKobo | typeof ReadingSourceShishoApp;
 	ReadingSourceWebReader = "web_reader"
 	ReadingSourceKOReader  = "koreader"
 	ReadingSourceKobo      = "kobo"
+	// ReadingSourceShishoApp is the Shisho app, through its journal (ADR 0024).
+	ReadingSourceShishoApp = "shisho_app"
 )
 
 // ReadingLocator is where in a File a reader is, in exactly one form: an

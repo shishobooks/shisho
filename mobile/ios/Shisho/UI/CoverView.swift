@@ -1,11 +1,15 @@
 import SwiftUI
 
-/// A Book's cover from the cover cache, fading in once loaded. A Book with
-/// no cover gets one drawn from its title, so the grid never shows a blank.
+/// A cover from the cover cache, fading in once loaded: a Book's, as the
+/// Library shows it, or one File's own. A Book with no cover gets one drawn
+/// from its title, so the grid never shows a blank.
 struct CoverView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.displayScale) private var displayScale
     let book: BookSummary
+    /// The File whose own cover to show, shaped by its File Type; its Book's
+    /// cover stands in when it has none.
+    var file: CoverFile?
     let width: CGFloat
     var shadow: CoverShadow = .small
     /// Called with the cover once it shows. It runs in the view's task, so
@@ -23,6 +27,22 @@ struct CoverView: View {
     /// Library's setting, and in its fallback modes by which kinds of File
     /// the Book has.
     private var aspectRatio: CGFloat {
+        if let file {
+            return file.fileType == "m4b" ? 1 : 2.0 / 3.0
+        }
+        return CoverView.aspectRatio(of: book)
+    }
+
+    /// Whose cover shows, and its version.
+    private var source: (owner: CoverCache.Owner, version: String) {
+        if let file, !file.coverVersion.isEmpty {
+            return (.file(file.id), file.coverVersion)
+        }
+        return (.book(book.id), book.coverVersion)
+    }
+
+    /// The width over the height of book's cover.
+    static func aspectRatio(of book: BookSummary) -> CGFloat {
         let hasAudiobook = book.fileTypes.contains("m4b")
         let hasEbook = book.fileTypes.contains { $0 != "m4b" && FileTypes.isKnown($0) }
         let square = switch book.coverAspectRatio {
@@ -45,7 +65,7 @@ struct CoverView: View {
                     .resizable()
                     .scaledToFill()
                     .transition(.opacity)
-            } else if loaded || book.coverVersion.isEmpty {
+            } else if loaded || source.version.isEmpty {
                 DrawnCover(title: book.title, authors: book.authors, width: width)
             } else {
                 Theme.muted
@@ -56,12 +76,13 @@ struct CoverView: View {
         .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
         .shadow(color: .black.opacity(shadow == .large ? 0.22 : 0.08), radius: shadow == .large ? 18 : 3, y: shadow == .large ? 12 : 1)
         .accessibilityHidden(true)
-        .task(id: "\(book.id)-\(book.coverVersion)-\(size)") {
+        .task(id: "\(source.owner)-\(source.version)-\(size)") {
             guard let covers = model.session?.covers else { return }
-            if let cached = covers.memoryImage(bookID: book.id, version: book.coverVersion, size: size) {
+            let (owner, version) = source
+            if let cached = covers.memoryImage(owner, version: version, size: size) {
                 image = cached
             } else {
-                let fetched = await covers.image(bookID: book.id, version: book.coverVersion, size: size)
+                let fetched = await covers.image(owner, version: version, size: size)
                 // A cover replaced meanwhile is its replacement's to show.
                 guard !Task.isCancelled else { return }
                 withAnimation(.easeOut(duration: 0.25)) {
@@ -72,6 +93,13 @@ struct CoverView: View {
             if let image { await onImage?(image) }
         }
     }
+}
+
+/// A File whose own cover a CoverView shows.
+struct CoverFile: Hashable, Sendable {
+    let id: Int
+    let fileType: String
+    let coverVersion: String
 }
 
 /// A cover for a Book that has none: its title and authors on a quiet
@@ -106,5 +134,12 @@ private struct DrawnCover: View {
             }
             .padding(width * 0.09)
         }
+    }
+}
+
+extension CoverTint.RGB {
+    /// The tint as a color to wash a screen with.
+    var color: Color {
+        Color(red: red, green: green, blue: blue)
     }
 }

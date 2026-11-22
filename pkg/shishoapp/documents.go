@@ -16,7 +16,7 @@ import (
 // from. A record the entry doesn't mark deleted always exists in that
 // snapshot, since its delete would have moved its entry.
 func buildEntries(ctx context.Context, tx bun.IDB, userID int, entries []*changefeed.Entry) ([]FeedEntry, error) {
-	var bookIDs, libraryIDs []int
+	var bookIDs, libraryIDs, positionFileIDs, readThroughIDs []int
 	for _, entry := range entries {
 		if entry.Deleted {
 			continue
@@ -26,6 +26,10 @@ func buildEntries(ctx context.Context, tx bun.IDB, userID int, entries []*change
 			bookIDs = append(bookIDs, entry.RecordID)
 		case changefeed.KindLibrary:
 			libraryIDs = append(libraryIDs, entry.RecordID)
+		case changefeed.KindReadingPosition:
+			positionFileIDs = append(positionFileIDs, entry.RecordID)
+		case changefeed.KindReadThrough:
+			readThroughIDs = append(readThroughIDs, entry.RecordID)
 		}
 	}
 	books, err := loadBooks(ctx, tx, bookIDs)
@@ -33,6 +37,14 @@ func buildEntries(ctx context.Context, tx bun.IDB, userID int, entries []*change
 		return nil, err
 	}
 	libraries, err := loadLibraries(ctx, tx, userID, libraryIDs)
+	if err != nil {
+		return nil, err
+	}
+	positions, err := loadPositions(ctx, tx, userID, positionFileIDs)
+	if err != nil {
+		return nil, err
+	}
+	readThroughs, err := loadReadThroughs(ctx, tx, userID, readThroughIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -57,6 +69,18 @@ func buildEntries(ctx context.Context, tx bun.IDB, userID int, entries []*change
 					continue
 				}
 				item.Library = library
+			case changefeed.KindReadingPosition:
+				position, ok := positions[entry.RecordID]
+				if !ok {
+					continue
+				}
+				item.ReadingPosition = position
+			case changefeed.KindReadThrough:
+				readThrough, ok := readThroughs[entry.RecordID]
+				if !ok {
+					continue
+				}
+				item.ReadThrough = readThrough
 			default:
 				// A kind this server doesn't build documents for yet.
 				continue
@@ -122,6 +146,13 @@ func loadBooks(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedBook, e
 		Relation("Files", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.Order("f.id ASC")
 		}).
+		Relation("Files.Narrators", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Order("n.sort_order ASC")
+		}).
+		Relation("Files.Narrators.Person").
+		Relation("Files.Chapters", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Order("ch.sort_order ASC", "ch.id ASC")
+		}).
 		Where("b.id IN (?)", bun.List(ids)).
 		Scan(ctx)
 	if err != nil {
@@ -172,7 +203,19 @@ func bookDocument(book *models.Book) *FeedBook {
 		})
 	}
 	for _, file := range book.Files {
+		narrators := []FeedNarrator{}
+		for _, narrator := range file.Narrators {
+			if narrator.Person == nil {
+				continue
+			}
+			narrators = append(narrators, FeedNarrator{
+				PersonID: narrator.PersonID, Name: narrator.Person.Name, SortName: narrator.Person.SortName,
+			})
+		}
 		doc.Files = append(doc.Files, FeedFile{
+			CoverVersion:             fileCoverVersion(file),
+			Narrators:                narrators,
+			Chapters:                 chapterDocuments(file.Chapters),
 			ID:                       file.ID,
 			FileType:                 file.FileType,
 			FileRole:                 file.FileRole,
@@ -189,4 +232,90 @@ func bookDocument(book *models.Book) *FeedBook {
 	}
 	doc.CoverVersion = covers.CacheKey(book.Files, aspect)
 	return doc
+}
+
+// chapterDocuments orders chapters as a table of contents: each parent's
+// children, by their sort order, right after it.
+func chapterDocuments(chapters []*models.Chapter) []FeedChapter {
+	children := map[int][]*models.Chapter{}
+	var roots []*models.Chapter
+	byID := map[int]bool{}
+	for _, chapter := range chapters {
+		byID[chapter.ID] = true
+	}
+	for _, chapter := range chapters {
+		if chapter.ParentID != nil && byID[*chapter.ParentID] {
+			children[*chapter.ParentID] = append(children[*chapter.ParentID], chapter)
+		} else {
+			roots = append(roots, chapter)
+		}
+	}
+	out := make([]FeedChapter, 0, len(chapters))
+	var add func(list []*models.Chapter)
+	add = func(list []*models.Chapter) {
+		for _, chapter := range list {
+			out = append(out, FeedChapter{
+				ID: chapter.ID, ParentID: chapter.ParentID, Title: chapter.Title,
+				StartTimestampMs: chapter.StartTimestampMs, StartPage: chapter.StartPage, Href: chapter.Href,
+			})
+			add(children[chapter.ID])
+		}
+	}
+	add(roots)
+	return out
+}
+
+// loadPositions reads userID's Reading Positions in fileIDs, by File.
+func loadPositions(ctx context.Context, tx bun.IDB, userID int, fileIDs []int) (map[int]*FeedReadingPosition, error) {
+	out := map[int]*FeedReadingPosition{}
+	if len(fileIDs) == 0 {
+		return out, nil
+	}
+	var positions []*models.ReadingPosition
+	err := tx.NewSelect().Model(&positions).
+		Where("rp.user_id = ?", userID).
+		Where("rp.file_id IN (?)", bun.List(fileIDs)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, position := range positions {
+		out[position.FileID] = &FeedReadingPosition{
+			FileID: position.FileID, CFI: position.CFI, Page: position.Page, Seconds: position.Seconds,
+			Percentage: position.Percentage, OccurredAt: position.OccurredAt.UTC(), Source: position.Source,
+			DeviceID: position.SourceDeviceID,
+		}
+	}
+	return out, nil
+}
+
+// loadReadThroughs reads userID's Read-throughs among ids.
+func loadReadThroughs(ctx context.Context, tx bun.IDB, userID int, ids []int) (map[int]*FeedReadThrough, error) {
+	out := map[int]*FeedReadThrough{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var readThroughs []*models.ReadThrough
+	err := tx.NewSelect().Model(&readThroughs).
+		Where("rt.user_id = ?", userID).
+		Where("rt.id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, rt := range readThroughs {
+		out[rt.ID] = &FeedReadThrough{
+			ID: rt.ID, BookID: rt.BookID, BeginDay: rt.BeginDay, EndDay: rt.EndDay, Outcome: rt.Outcome, Paused: rt.Paused,
+		}
+	}
+	return out, nil
+}
+
+// fileCoverVersion keys file's own cover, or is empty when the File has no
+// cover.
+func fileCoverVersion(file *models.File) string {
+	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
+		return ""
+	}
+	return covers.FileCacheKey(file)
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"mime"
+	"net/http"
 	"net/netip"
 	"path"
 	"strconv"
@@ -14,7 +15,30 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/shishoapp"
 )
+
+// clientVersion is the version of what sent the request, for the access
+// log. The web app sends the version of the bundle it runs, which lags the
+// server's in a tab left open across an upgrade. The Shisho app sends its
+// own, in a header, or in a cookie from the system player, which streams
+// audio and sends no headers; it's marked as the app's. Other devices send
+// nothing.
+func clientVersion(r *http.Request) string {
+	if version := r.Header.Get("X-Version"); version != "" {
+		return version
+	}
+	version := r.Header.Get(shishoapp.HeaderAppVersion)
+	if version == "" {
+		if cookie, err := r.Cookie(shishoapp.CookieAppVersion); err == nil {
+			version = cookie.Value
+		}
+	}
+	if version != "" {
+		return "app/" + version
+	}
+	return "unknown"
+}
 
 // requestLoggerMiddleware preserves the request context and fields used by
 // golib's logger, but omits successful frontend and log viewer requests from
@@ -27,16 +51,10 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return err
 		}
 		c.Set("id", id.String())
-		// The web app sends the version of the bundle it runs, which lags
-		// the server's in a tab left open across an upgrade. Devices send
-		// nothing.
-		clientVersion := c.Request().Header.Get("X-Version")
-		if clientVersion == "" {
-			clientVersion = "unknown"
-		}
+		version := clientVersion(c.Request())
 		log := logger.NewWithLevel(c.Request().Header.Get("X-Log-Level")).ID(id.String()).Root(logger.Data{
 			"method": c.Request().Method, "path": loggedPath(c),
-			"route": c.Path(), "client_version": clientVersion,
+			"route": c.Path(), "client_version": version,
 		})
 		c.SetRequest(c.Request().WithContext(log.WithContext(c.Request().Context())))
 		if err := next(c); err != nil {

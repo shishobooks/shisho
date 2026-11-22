@@ -152,6 +152,13 @@ func (b *Binder) Bind(i interface{}, c echo.Context) error {
 		return errors.WithStack(err)
 	}
 
+	return b.Validate(i)
+}
+
+// Validate checks i, a struct, against its validate tags, as Bind does after
+// binding, for input decoded some other way, such as each event of a batch
+// judged on its own.
+func (b *Binder) Validate(i interface{}) error {
 	if err := b.validate.Struct(i); err != nil {
 		errs := err.(validator.ValidationErrors)
 		msg := formatValidationError(errs[0])

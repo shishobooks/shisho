@@ -53,19 +53,24 @@ export const ratingRows = (ratings: ReadingStatsRatingCount[]): CountRow[] =>
     }));
 
 // What each reading source is called. Shisho's own are named as Shisho's,
-// apart from third-party devices and readers; "web" leaves room for other
-// apps of Shisho's. The web app has a reader and a player, named apart.
+// apart from third-party devices and readers. The web app has a reader and
+// a player, named apart (PLAYER_LABELS), and so will the Shisho app once it
+// has a reader; until then its time is all from its player.
 const SOURCE_LABELS: Record<ReadingSource, string> = {
   web_reader: "Shisho web reader",
   kobo: "Kobo",
   koreader: "KOReader",
+  shisho_app: "Shisho app reader",
 };
-const WEB_PLAYER = "Shisho web player";
+const PLAYER_LABELS: Partial<Record<ReadingSource, string>> = {
+  web_reader: "Shisho web player",
+  shisho_app: "Shisho app player",
+};
 
 /**
- * Where a Reading Session happened: "Shisho web reader", "Shisho web
- * player" for listening in the web app, or the device's kind, marked when
- * its time was estimated.
+ * Where a Reading Session happened: the web app's or the Shisho app's
+ * reader or player, or the device's kind, marked when its time was
+ * estimated.
  */
 export const sessionSourceLabel = (session: {
   source: ReadingSource;
@@ -73,9 +78,8 @@ export const sessionSourceLabel = (session: {
   measured: boolean;
 }): string => {
   const name =
-    session.source === "web_reader" && session.kind === "listening"
-      ? WEB_PLAYER
-      : SOURCE_LABELS[session.source];
+    (session.kind === "listening" && PLAYER_LABELS[session.source]) ||
+    SOURCE_LABELS[session.source];
   return withEstimate(name, session.measured);
 };
 
@@ -91,14 +95,16 @@ export interface PlaceRow {
 }
 
 /**
- * The rows of "Where you read", most time first: the web app split into
- * its reader and its player, each shown only with time, and each device by
- * its name, or by its kind once it's removed.
+ * The rows of "Where you read", most time first: each device by its name,
+ * and the web app, or a Shisho app whose Device was removed, split into its
+ * reader and its player, each shown only with time. Any other removed
+ * device is named by its kind.
  */
 export const placeRows = (places: ReadingStatsPlace[]): PlaceRow[] =>
   places
     .flatMap((place): PlaceRow[] => {
-      if (place.source !== "web_reader") {
+      const player = PLAYER_LABELS[place.source];
+      if (place.device_name || !player) {
         return [
           {
             label: place.device_name ?? SOURCE_LABELS[place.source],
@@ -109,12 +115,12 @@ export const placeRows = (places: ReadingStatsPlace[]): PlaceRow[] =>
       }
       return [
         {
-          label: SOURCE_LABELS.web_reader,
+          label: SOURCE_LABELS[place.source],
           reading_seconds: place.reading_seconds,
           listening_seconds: 0,
         },
         {
-          label: WEB_PLAYER,
+          label: player,
           reading_seconds: 0,
           listening_seconds: place.listening_seconds,
         },

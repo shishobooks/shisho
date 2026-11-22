@@ -237,9 +237,13 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         http: "readonly",
+        json: "readonly",
+        console: "readonly",
         maestro: "readonly",
         output: "readonly",
+        // Each flow's env, passed to its scripts.
         CONTROL: "readonly",
+        TITLE: "readonly",
       },
     },
   },

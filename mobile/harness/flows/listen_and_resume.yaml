@@ -1,0 +1,64 @@
+# Listen, kill the app while it plays, and relaunch: it resumes where it was,
+# and the server has the place too (#912).
+appId: ${APP_ID}
+name: Listen, kill, and resume
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Harbor Lights
+# Another flow may have listened already: start from the beginning.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.prevChapter
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.prevChapter
+- assertVisible:
+    id: player.chapter
+    text: The Harbor
+# Listening long enough for a save or two.
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: ".*0:1[2-9]"
+    timeout: 40000
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.beforeKill = maestro.copiedText}
+
+# Killed while playing: only the saves every five seconds kept the place.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: miniplayer.open
+    timeout: 20000
+- tapOn:
+    id: miniplayer.open
+- extendedWaitUntil:
+    visible:
+      id: player.position
+    timeout: 10000
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.afterRelaunch = maestro.copiedText}
+# Relaunching syncs what the last save kept.
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 5000
+    optional: true
+- runScript:
+    file: scripts/assert_resumed.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights

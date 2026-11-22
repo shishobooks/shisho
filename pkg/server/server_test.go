@@ -276,7 +276,9 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				// The Shisho app's Device surface stays registered, so
 				// signing in hears Demo Mode's refusal.
 				"GET /mobile/server", "POST /mobile/sign-in", "DELETE /mobile/device",
-				"GET /mobile/changes", "GET /mobile/books/:id/cover",
+				"GET /mobile/changes", "GET /mobile/books/:id/cover", "GET /mobile/files/:id/cover", "POST /mobile/journal",
+				"GET /mobile/files/:id/download", "HEAD /mobile/files/:id/download",
+				"GET /mobile/files/:id/stream", "HEAD /mobile/files/:id/stream",
 			} {
 				assert.True(t, routes[route], route)
 			}

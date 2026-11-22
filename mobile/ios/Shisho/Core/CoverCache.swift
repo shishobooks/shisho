@@ -26,33 +26,58 @@ final class CoverCache: Sendable {
         return [128, 256, 512, 1024].first { $0 >= pixels } ?? 1024
     }
 
+    /// Whose cover: a Book's, as the Library shows it, or one File's own.
+    enum Owner: Hashable, Sendable {
+        case book(Int)
+        case file(Int)
+
+        /// The folder that holds the owner's covers, and starts their names.
+        fileprivate var name: String {
+            switch self {
+            case .book(let id): String(id)
+            case .file(let id): "file-\(id)"
+            }
+        }
+    }
+
     /// The cover if it's in memory: what a view can show at once, without
     /// waiting for the disk.
-    func memoryImage(bookID: Int, version: String, size: Int) -> UIImage? {
-        memory[fileName(version: version, size: size, bookID: bookID)]
+    func memoryImage(_ owner: Owner, version: String, size: Int) -> UIImage? {
+        memory[fileName(owner, version: version, size: size)]
     }
 
     /// The cover, from memory, disk, or the server, or nil when there's
     /// none or the server can't be reached. It runs off the main actor.
     func image(bookID: Int, version: String, size: Int) async -> UIImage? {
+        await image(.book(bookID), version: version, size: size)
+    }
+
+    func image(_ owner: Owner, version: String, size: Int) async -> UIImage? {
         guard !version.isEmpty else { return nil }
-        let name = fileName(version: version, size: size, bookID: bookID)
+        let name = fileName(owner, version: version, size: size)
         if let image = memory[name] {
             return image
         }
-        let file = bookFolder(bookID).appendingPathComponent(name)
+        let file = folder(owner).appendingPathComponent(name)
         if let data = try? Data(contentsOf: file), let image = UIImage(data: data) {
             memory[name] = image
             return image
         }
-        guard let data = try? await client.cover(bookID: bookID, version: version, size: size, renderKey: renderKey),
-              let image = UIImage(data: data)
-        else { return otherSize(bookID: bookID, version: version) }
+        let fetched: Data?
+        switch owner {
+        case .book(let id):
+            fetched = try? await client.cover(bookID: id, version: version, size: size, renderKey: renderKey)
+        case .file(let id):
+            fetched = try? await client.fileCover(fileID: id, version: version, size: size, renderKey: renderKey)
+        }
+        guard let data = fetched, let image = UIImage(data: data) else {
+            return otherSize(owner, version: version)
+        }
         // A view that moved on to a newer version cancelled this download;
         // its answer must not prune the newer version from disk.
         guard !Task.isCancelled else { return image }
-        removeOlderVersions(bookID: bookID, keeping: version)
-        try? FileManager.default.createDirectory(at: bookFolder(bookID), withIntermediateDirectories: true)
+        removeOlderVersions(owner, keeping: version)
+        try? FileManager.default.createDirectory(at: folder(owner), withIntermediateDirectories: true)
         try? data.write(to: file, options: .atomic)
         memory[name] = image
         return image
@@ -61,13 +86,13 @@ final class CoverCache: Sendable {
     /// The largest size kept of this version of the cover, for when the size
     /// asked for can't be fetched: a Book seen in the grid offline still has
     /// its cover on its own page.
-    private func otherSize(bookID: Int, version: String) -> UIImage? {
-        let prefix = "\(bookID)-\(version)-"
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: bookFolder(bookID).path)) ?? []
+    private func otherSize(_ owner: Owner, version: String) -> UIImage? {
+        let prefix = "\(owner.name)-\(version)-"
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder(owner).path)) ?? []
         let largest = names
             .filter { $0.hasPrefix(prefix) && $0.hasSuffix("-r\(renderKey).jpg") }
             .max { size(of: $0, after: prefix) < size(of: $1, after: prefix) }
-        guard let largest, let data = try? Data(contentsOf: bookFolder(bookID).appendingPathComponent(largest)) else {
+        guard let largest, let data = try? Data(contentsOf: folder(owner).appendingPathComponent(largest)) else {
             return nil
         }
         return UIImage(data: data)
@@ -77,22 +102,22 @@ final class CoverCache: Sendable {
         Int(name.dropFirst(prefix.count).prefix { $0.isNumber }) ?? 0
     }
 
-    private func bookFolder(_ bookID: Int) -> URL {
-        folder.appendingPathComponent(String(bookID), isDirectory: true)
+    private func folder(_ owner: Owner) -> URL {
+        self.folder.appendingPathComponent(owner.name, isDirectory: true)
     }
 
-    /// Unique across Books too, since the memory cache holds every Book's.
-    private func fileName(version: String, size: Int, bookID: Int) -> String {
-        "\(bookID)-\(version)-\(size)-r\(renderKey).jpg"
+    /// Unique across owners too, since the memory cache holds every one's.
+    private func fileName(_ owner: Owner, version: String, size: Int) -> String {
+        "\(owner.name)-\(version)-\(size)-r\(renderKey).jpg"
     }
 
-    /// Deletes the Book's covers of other versions: an edited cover
+    /// Deletes the owner's covers of other versions: an edited cover
     /// replaces them.
-    private func removeOlderVersions(bookID: Int, keeping version: String) {
-        let current = "\(bookID)-\(version)-"
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: bookFolder(bookID).path)) ?? []
+    private func removeOlderVersions(_ owner: Owner, keeping version: String) {
+        let current = "\(owner.name)-\(version)-"
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder(owner).path)) ?? []
         for name in names where !name.hasPrefix(current) {
-            try? FileManager.default.removeItem(at: bookFolder(bookID).appendingPathComponent(name))
+            try? FileManager.default.removeItem(at: folder(owner).appendingPathComponent(name))
         }
     }
 }

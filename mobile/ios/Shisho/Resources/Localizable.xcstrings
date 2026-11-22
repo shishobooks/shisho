@@ -4,7 +4,93 @@
     "%@ #%@" : {
 
     },
-    "%@ #%@–%@" : {
+    "%@ #%@-%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ #%2$@-%3$@"
+          }
+        }
+      }
+    },
+    "%@ left at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ left at %2$@"
+          }
+        }
+      }
+    },
+    "%@ left in the book at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ left in the book at %2$@"
+          }
+        }
+      }
+    },
+    "%@ left in the chapter at %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ left in the chapter at %2$@"
+          }
+        }
+      }
+    },
+    "%@ of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ of %2$@"
+          }
+        }
+      }
+    },
+    "%@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%lld changes made on this device couldn't be saved on the server. The last: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld changes made on this device couldn't be saved on the server. The last: %2$@"
+          }
+        }
+      }
+    },
+    "%lldh %lldm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lldh %2$lldm"
+          }
+        }
+      }
+    },
+    "%lldm" : {
+
+    },
+    "-%@" : {
+
+    },
+    "A change made on this device couldn't be saved on the server: %@" : {
 
     },
     "Account" : {
@@ -16,6 +102,12 @@
     "App version" : {
 
     },
+    "Back 30 Seconds" : {
+
+    },
+    "Book remaining %@" : {
+
+    },
     "Books in the Libraries you can access appear here." : {
 
     },
@@ -25,7 +117,22 @@
     "CREATORS" : {
 
     },
+    "Chapter %lld" : {
+
+    },
+    "Chapter remaining %@" : {
+
+    },
+    "Close Player" : {
+
+    },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
+
+    },
+    "Diagnostics" : {
+
+    },
+    "Dismiss" : {
 
     },
     "Done" : {
@@ -34,10 +141,34 @@
     "Downloading your library…" : {
 
     },
+    "Elapsed %@" : {
+
+    },
     "Enter your Shisho server's address." : {
 
     },
+    "Export Diagnostics" : {
+
+    },
     "FORMATS" : {
+
+    },
+    "Faster" : {
+
+    },
+    "Finished" : {
+
+    },
+    "Forward 30 Seconds" : {
+
+    },
+    "Go There" : {
+
+    },
+    "Go to %@" : {
+
+    },
+    "Include titles" : {
 
     },
     "Last synced" : {
@@ -49,7 +180,44 @@
     "Library: %@" : {
 
     },
+    "Listen" : {
+
+    },
+    "Listen again" : {
+
+    },
+    "Listen to %@" : {
+
+    },
+    "Listen to %@, narrated by %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Listen to %1$@, narrated by %2$@"
+          }
+        }
+      }
+    },
+    "Listening" : {
+
+    },
+    "Loading" : {
+
+    },
+    "Makes the bar span the chapter" : {
+
+    },
+    "Makes the bar span the whole book" : {
+
+    },
+    "Narrated by %@" : {
+
+    },
     "Never" : {
+
+    },
+    "Next Chapter" : {
 
     },
     "Next field" : {
@@ -58,11 +226,27 @@
     "No Books yet" : {
 
     },
+    "No chapters" : {
+
+    },
     "Not supported in this version of the app" : {
+
+    },
+    "Nothing is playing" : {
 
     },
     "Number %@" : {
 
+    },
+    "Numbers %@ to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Numbers %1$@ to %2$@"
+          }
+        }
+      }
     },
     "Offline. Showing what's on this device." : {
 
@@ -70,13 +254,34 @@
     "Open Settings" : {
 
     },
+    "Opens the player" : {
+
+    },
     "Password" : {
+
+    },
+    "Pause" : {
 
     },
     "Plain HTTP only works for servers on your local network. Use the server's https:// address." : {
 
     },
+    "Play" : {
+
+    },
+    "Position in book" : {
+
+    },
+    "Position in chapter" : {
+
+    },
+    "Previous Chapter" : {
+
+    },
     "Previous field" : {
+
+    },
+    "Resume listening" : {
 
     },
     "SERIES" : {
@@ -88,7 +293,13 @@
     "Server address" : {
 
     },
+    "Server addresses and sign-in details are always removed. Books and Files are named by id unless you include titles." : {
+
+    },
     "Server version" : {
+
+    },
+    "Share" : {
 
     },
     "Shisho" : {
@@ -112,7 +323,19 @@
     "Signing out removes this device from your account on the server. The library on it stays until you sign in again." : {
 
     },
+    "Slower" : {
+
+    },
     "Something in front of your Shisho server, such as an authentication proxy, turned the app away. Its owner can let the app through; Shisho's documentation on the Shisho app explains how." : {
+
+    },
+    "Speed" : {
+
+    },
+    "Speed %@" : {
+
+    },
+    "Stay Here" : {
 
     },
     "Supplement" : {
@@ -137,6 +360,9 @@
 
     },
     "This Book isn't in your Libraries anymore" : {
+
+    },
+    "This audiobook couldn't be played. Check your connection to the server and try again." : {
 
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
@@ -174,6 +400,12 @@
 
     },
     "Wrong username or password." : {
+
+    },
+    "You listened up to %@ on another device." : {
+
+    },
+    "You listened up to %@ on the web." : {
 
     },
     "Your account can't read Books on this server. Ask the server's owner for access." : {

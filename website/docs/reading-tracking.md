@@ -69,6 +69,7 @@ To stop treating a book as Reference, choose another status. **Mark as read**, *
 
 - **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does. With the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin), reading done offline is dated by when you read it: a book you start offline starts on the day you read it. The plugin also syncs KOReader's own [statuses and stars](./koreader.md#statuses-and-ratings) both ways, so finishing, pausing, or rating a book in KOReader counts in Shisho, and so does opening one for the first time, which KOReader counts as reading it.
 - **A Kobo** says outright when you are reading a book and when you finish it, so opening a book on the Kobo starts it even on its first page, and a finish from the Kobo is never undone the way an automatic finish can be.
+- **The [Shisho app](./shisho-app.md#listening)** follows the same rules as the web player, and listening done offline is dated by when you listened.
 
 ### Moving Between Readers
 
@@ -84,11 +85,12 @@ When the exact spot can't be found, such as a place saved before the file was re
 
 ### Reading Time From Devices
 
-Reading time from KOReader with the plugin is measured. Elsewhere, Shisho estimates it:
+Reading time from KOReader with the plugin and listening time from the Shisho app are measured. Elsewhere, Shisho estimates it:
 
 - **KOReader with the plugin** sends the time its statistics recorded on each page. A break of more than ten minutes starts a new session, and a session's time counts only the time spent on its pages, so it can be shorter than the span from its start to its end. KOReader's statistics also leave out a page you turned past in under 5 seconds and count at most 2 minutes on any one page, by default; both are **Read page duration limits** under **Reading statistics > Settings** in KOReader.
 - **KOReader without the plugin**, using progress sync, doesn't report how long you read. A session runs from when KOReader pulls your position on opening a book to its last push before you close it.
 - **A Kobo** counts the minutes it spends on each book. Each time it reports more, the extra minutes become one session that ends when the Kobo reported them, so reading over a few days with Wi-Fi off becomes one session.
+- **The Shisho app** times listening on the phone. A session counts only the time playing. Each pause sends the session so far, so it shows here moments later, or when the phone next connects. Playing again within 5 minutes of a pause or phone call continues the same session; a longer break starts a new one.
 
 A session that reaches Shisho late belongs to the Read-through you were on when it started, or to none if you weren't reading the book then, and counts toward your reading time either way.
 
@@ -108,9 +110,9 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 
 ### Starting and Finishing Automatically
 
-- **Starting**: turning past the first page of a book you have never read, or listening to a minute of its audiobook in one sitting, starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing, and neither does seeking around an audiobook, short of its last 60 seconds, or listening to less than a minute of it. Sittings don't add up, but pausing for under 5 minutes doesn't end one. The minute that starts a Read-through counts toward it, and the Read-through is dated from when you started listening.
+- **Starting**: turning past the first page of a book you have never read, or listening to 5 seconds of its audiobook in one sitting, starts a Read-through dated today, as **Start reading** would, and takes the book off To Read. Opening a book and closing it without turning a page changes nothing, and neither does seeking around an audiobook, short of its last 60 seconds, or listening to less than 5 seconds of it, as when you press play by accident. Sittings don't add up, but pausing for under 5 minutes doesn't end one. The seconds that start a Read-through count toward it, and the Read-through is dated from when you started listening.
 - **Rereading**: a book you have read or abandoned starts again only when you choose **Read again**, or when you've added it back to To Read to plan a reread. Otherwise you can open it to look something up, and only your place in it is saved.
-- **Resuming**: turning a page of a paused book, or listening to a minute of it in one sitting, makes it **Currently Reading** again.
+- **Resuming**: turning a page of a paused book, or listening to 5 seconds of it in one sitting, makes it **Currently Reading** again.
 - **Finishing**: reaching the last page finishes the Read-through, dated today. An audiobook finishes when playback ends or you're within its last 60 seconds, so end credits don't stop it being marked read. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
 - **Peeking at the end**: going back before the end within 15 minutes of an automatic finish, in the reader that finished it, undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way, and neither is one from another reader or device. After 15 minutes, the book stays **Read**.
 

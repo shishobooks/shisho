@@ -1,5 +1,6 @@
 // Package shishoapp is the Shisho app's Device surface (ADR 0020): signing
-// in, server info, the catalog change feed (ADR 0023), and covers. It's
+// in, server info, the catalog change feed (ADR 0023), the journal (ADR
+// 0024), Original File downloads and streams (ADR 0022), and covers. It's
 // versioned apart from the web app's /api, because a phone app can't be
 // forced to update and a self-hosted server upgrades whenever its owner
 // gets to it.
@@ -29,6 +30,16 @@ const (
 	// use the same header for their own list.
 	HeaderCapabilities = "X-Shisho-Capabilities"
 
+	// CookieCredential and CookieProtocol carry the Device credential and
+	// the app's protocol to an audiobook stream, since the system player
+	// makes its own requests and takes cookies but no headers. Only the
+	// stream route reads them.
+	CookieCredential = "shisho_app_credential" //nolint:gosec // A cookie name, not a credential.
+	CookieProtocol   = "shisho_app_protocol"
+	// CookieAppVersion carries the app's version to a stream, for the access
+	// log.
+	CookieAppVersion = "shisho_app_version"
+
 	// The headers a refused app that signed in reads what to tell the user
 	// from, since the refusal has Shisho's usual error body.
 	HeaderProtocolMin   = "X-Shisho-App-Protocol-Min"
@@ -49,7 +60,9 @@ const (
 // before it, never offers it. A protocol bump starts a new entry, since an
 // app on the new protocol assumes everything listed before it. Never remove
 // one while its protocol is accepted. Protocol 1's baseline is signing in,
-// the feed, and covers, so it lists nothing yet.
+// the feed, covers, Original File downloads and streams, and the journal's
+// position and session events, so it lists nothing yet. A journal event
+// type added later is a capability (ADR 0024).
 var capabilities = map[int][]string{
 	1: {},
 }

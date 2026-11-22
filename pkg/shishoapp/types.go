@@ -7,7 +7,10 @@ package shishoapp
 // leniently, ignoring fields it doesn't know and mapping unknown enum values
 // to an unknown case (ADR 0021).
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ServerInfo is what the server accepts and offers, for any app protocol.
 type ServerInfo struct {
@@ -71,9 +74,13 @@ type FeedQuery struct {
 // The kinds of record the feed sends. An app ignores a kind it doesn't
 // know, and its cursor moves past it anyway (ADR 0023).
 const (
-	//tygo:emit export type FeedKind = typeof FeedKindBook | typeof FeedKindLibrary;
+	//tygo:emit export type FeedKind = typeof FeedKindBook | typeof FeedKindLibrary | typeof FeedKindReadingPosition | typeof FeedKindReadThrough;
 	FeedKindBook    = "book"
 	FeedKindLibrary = "library"
+	// The signed-in user's own records. A Reading Position's entry is
+	// keyed by its File's id.
+	FeedKindReadingPosition = "reading_position"
+	FeedKindReadThrough     = "read_through"
 )
 
 // FeedResponse is one page of the catalog's changes (ADR 0023).
@@ -100,13 +107,18 @@ type FeedResponse struct {
 // FeedEntry is one record that changed. Exactly one of the record fields
 // is set, the one Kind names, unless Deleted.
 type FeedEntry struct {
-	Kind    string `json:"kind" tstype:"FeedKind"`
-	ID      int    `json:"id"`
-	Deleted bool   `json:"deleted"`
-	// LibraryID is the Library the record belongs to.
-	LibraryID int          `json:"library_id"`
-	Book      *FeedBook    `json:"book,omitempty"`
-	Library   *FeedLibrary `json:"library,omitempty"`
+	Kind string `json:"kind" tstype:"FeedKind"`
+	// ID is the record's id. A Reading Position has none of its own, so its
+	// entry carries its File's.
+	ID      int  `json:"id"`
+	Deleted bool `json:"deleted"`
+	// LibraryID is the Library a catalog record belongs to, and 0 for the
+	// user's own records.
+	LibraryID       int                  `json:"library_id"`
+	Book            *FeedBook            `json:"book,omitempty"`
+	Library         *FeedLibrary         `json:"library,omitempty"`
+	ReadingPosition *FeedReadingPosition `json:"reading_position,omitempty"`
+	ReadThrough     *FeedReadThrough     `json:"read_through,omitempty"`
 }
 
 // FeedLibrary is a Library the user can access.
@@ -173,4 +185,162 @@ type FeedFile struct {
 	ReleaseDate              *time.Time `json:"release_date"`
 	PageCount                *int       `json:"page_count"`
 	AudiobookDurationSeconds *float64   `json:"audiobook_duration_seconds"`
+	// CoverVersion keys the File's own cover (GET
+	// /mobile/files/:id/cover?v=), which can differ from its Book's, so it
+	// can be cached as immutable. It's empty for a File with no cover.
+	CoverVersion string `json:"cover_version"`
+	// Narrators are the File's, in order.
+	Narrators []FeedNarrator `json:"narrators"`
+	// Chapters are Shisho's chapter list, which the app navigates by
+	// instead of the file's own (ADR 0022), in order, each after its
+	// parent.
+	Chapters []FeedChapter `json:"chapters"`
+}
+
+// FeedNarrator is one of a File's narrators.
+type FeedNarrator struct {
+	PersonID int    `json:"person_id"`
+	Name     string `json:"name"`
+	SortName string `json:"sort_name"`
+}
+
+// FeedChapter is one of a File's chapters. Where it starts takes the form
+// the File Type reads: StartTimestampMs for an audiobook, StartPage for a
+// Page-based File, and Href for an EPUB.
+type FeedChapter struct {
+	ID               int     `json:"id"`
+	ParentID         *int    `json:"parent_id"`
+	Title            string  `json:"title"`
+	StartTimestampMs *int64  `json:"start_timestamp_ms"`
+	StartPage        *int    `json:"start_page"`
+	Href             *string `json:"href"`
+}
+
+// FeedReadingPosition is the user's place in a File, the newest any source
+// reported (the web, a device, or this or another installation of the app).
+// The locator is in one form, the one the source reads; a form the app
+// can't go to, such as KOReader's, is opened at Percentage.
+type FeedReadingPosition struct {
+	FileID     int      `json:"file_id"`
+	CFI        *string  `json:"cfi"`
+	Page       *int     `json:"page"`
+	Seconds    *float64 `json:"seconds"`
+	Percentage float64  `json:"percentage"`
+	// OccurredAt is when the reader was there, after the server corrected
+	// the clock of the device that sent it.
+	OccurredAt time.Time `json:"occurred_at"`
+	Source     string    `json:"source" tstype:"ReadingSource"`
+	// DeviceID is the Device that reported it, so an installation knows its
+	// own, or null for the web.
+	DeviceID *string `json:"device_id"`
+}
+
+// FeedReadThrough is one of the user's passes through a Book (ADR 0013).
+// BookID is null once its Book was deleted.
+type FeedReadThrough struct {
+	ID       int     `json:"id"`
+	BookID   *int    `json:"book_id"`
+	BeginDay *string `json:"begin_day"`
+	EndDay   *string `json:"end_day"`
+	Outcome  string  `json:"outcome" tstype:"ReadThroughOutcome"`
+	Paused   bool    `json:"paused"`
+}
+
+// JournalPayload is a batch of the app's journal (ADR 0024): events made on
+// the device, each judged on its own. Events are raw so that one the server
+// doesn't understand, an unknown type or field, is answered for that event
+// alone instead of refusing the batch.
+type JournalPayload struct {
+	// Clock is the device's clock when it sent the batch, which the server
+	// corrects the events' times by when it's far off.
+	Clock  time.Time         `json:"clock" validate:"required"`
+	Events []json.RawMessage `json:"events" validate:"max=500" tstype:"JournalEvent[]"`
+}
+
+// The journal's event types. A new kind of change the app can make is a new
+// type, not a new protocol (ADR 0024).
+const (
+	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession;
+	JournalEventReadingPosition = "reading_position"
+	JournalEventReadingSession  = "reading_session"
+)
+
+// JournalEvent is one change the app made. ID is unique to the
+// installation and never reused; At is when it happened, on the device's
+// clock.
+type JournalEvent struct {
+	ID      string          `json:"id"`
+	Type    string          `json:"type" tstype:"JournalEventType"`
+	At      time.Time       `json:"at"`
+	Payload json.RawMessage `json:"payload" tstype:"JournalPositionPayload | JournalSessionPayload"`
+}
+
+// JournalPositionPayload is a Reading Position update: where the user is in
+// a File, in one form, plus how far through it that is.
+type JournalPositionPayload struct {
+	FileID     int      `json:"file_id" validate:"required,min=1"`
+	CFI        *string  `json:"cfi,omitempty" validate:"omitempty,min=1,max=4096"`
+	Page       *int     `json:"page,omitempty" validate:"omitempty,min=0"`
+	Seconds    *float64 `json:"seconds,omitempty" validate:"omitempty,min=0"`
+	Percentage float64  `json:"percentage" validate:"min=0,max=1"`
+	// AtEnd is playback or the reader reaching the end of the File, which
+	// finishes the Read-through underway, as in the web readers.
+	AtEnd bool `json:"at_end,omitempty"`
+	// ListenedSeconds is how long this sitting has played. Five seconds of
+	// it start or resume a Read-through, as in the web player.
+	ListenedSeconds *float64 `json:"listened_seconds,omitempty" validate:"omitempty,min=0"`
+	// ListeningSince is when this sitting began, on the device's clock: a
+	// Read-through it starts begins that day.
+	ListeningSince *time.Time `json:"listening_since,omitempty"`
+}
+
+// JournalSessionPayload is a Reading Session, timed on the device with the
+// web reader's rules, on the device's clock: a finished one, or one so far.
+type JournalSessionPayload struct {
+	// SessionID is the device's own id for the session, unique to the
+	// installation; the server's id for it is a different number. The app
+	// sends the session so far on every pause under it, and the server
+	// keeps one session for it, extended by each later snapshot. A session
+	// the user deleted stays deleted. Without it, each event is a session of
+	// its own.
+	SessionID       string    `json:"session_id,omitempty" validate:"omitempty,max=64"`
+	FileID          int       `json:"file_id" validate:"required,min=1"`
+	StartedAt       time.Time `json:"started_at" validate:"required"`
+	EndedAt         time.Time `json:"ended_at" validate:"required"`
+	StartPercentage float64   `json:"start_percentage" validate:"min=0,max=1"`
+	EndPercentage   float64   `json:"end_percentage" validate:"min=0,max=1"`
+	// Duration is the seconds the session counted, when less than its span.
+	Duration *int `json:"duration,omitempty" validate:"omitempty,min=0"`
+}
+
+// What the server did with each event.
+const (
+	//tygo:emit export type JournalResultKind = typeof JournalAccepted | typeof JournalDuplicate | typeof JournalNotUnderstood | typeof JournalRefused;
+	// JournalAccepted is applied. The app drops it.
+	JournalAccepted = "accepted"
+	// JournalDuplicate was taken in before, from this installation, under any
+	// of its sign-ins. The app drops it.
+	JournalDuplicate = "duplicate"
+	// JournalNotUnderstood is a type or field this server doesn't know. The
+	// app keeps it queued for when the server lists it (ADR 0024).
+	JournalNotUnderstood = "not_understood"
+	// JournalRefused was understood and can never apply, such as a deleted
+	// File's. The app drops it and tells the user why.
+	JournalRefused = "refused"
+)
+
+// JournalResponse answers every event in the batch, in its order.
+type JournalResponse struct {
+	Results []JournalResult `json:"results"`
+	// ClockOffsetSeconds is the server's clock minus the device's when the
+	// batch arrived, for the app's diagnostics.
+	ClockOffsetSeconds float64 `json:"clock_offset_seconds"`
+}
+
+// JournalResult is what happened to one event. Reason says why it was
+// refused or not understood, for the user and the app's diagnostics.
+type JournalResult struct {
+	ID     string `json:"id"`
+	Result string `json:"result" tstype:"JournalResultKind"`
+	Reason string `json:"reason,omitempty"`
 }

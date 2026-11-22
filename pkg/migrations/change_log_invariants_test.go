@@ -40,6 +40,12 @@ var feedTables = map[string][]string{
 	"series":      {"UPDATE"},
 	// A user's saved sort for a Library is part of the Library's document.
 	"user_library_settings": {"INSERT", "UPDATE", "DELETE"},
+	// A File's chapters and narrators are part of its Book's document.
+	"chapters":  {"INSERT", "UPDATE", "DELETE"},
+	"narrators": {"INSERT", "UPDATE", "DELETE"},
+	// The user's own records.
+	"reading_positions": {"INSERT", "UPDATE", "DELETE"},
+	"read_throughs":     {"INSERT", "UPDATE", "DELETE"},
 }
 
 const (
@@ -122,6 +128,25 @@ var columnsNotCompared = map[string]string{
 	"user_library_settings.id":         reasonPrimaryKey,
 	"user_library_settings.created_at": reasonBookkeep,
 	"user_library_settings.updated_at": reasonBookkeep,
+
+	"chapters.id":         reasonPrimaryKey,
+	"narrators.id":        reasonPrimaryKey,
+	"chapters.created_at": reasonBookkeep,
+	"chapters.updated_at": reasonBookkeep,
+
+	"reading_positions.created_at":         reasonBookkeep,
+	"reading_positions.updated_at":         "bookkeeping; occurred_at says when the reader was there",
+	"reading_positions.locator_file_type":  "changes only with the locator, which is compared",
+	"reading_positions.chapter_percentage": "a Kobo's fallback for placing its span, which the app doesn't read",
+	"reading_positions.reported_device":    "how KOReader named itself, which only KOReader reads back",
+	"reading_positions.reported_device_id": "how KOReader named itself, which only KOReader reads back",
+
+	"read_throughs.id":                    reasonPrimaryKey,
+	"read_throughs.created_at":            reasonBookkeep,
+	"read_throughs.updated_at":            reasonBookkeep,
+	"read_throughs.book_title":            "set only when its Book is deleted, which clears book_id",
+	"read_throughs.book_authors":          "set only when its Book is deleted, which clears book_id",
+	"read_throughs.left_to_read_position": "the To Read place a delete restores, which only the server uses",
 }
 
 const (
@@ -141,6 +166,8 @@ var tablesNotInFeed = map[string]string{
 	"bun_migrations":                "created by Bun's migrator",
 	"change_log_entries":            "the change log itself",
 	"change_log_expiries":           "the change log's own bookkeeping",
+	"app_journal_events":            "which Shisho app journal events were taken in, for ignoring repeats",
+	"app_journal_sessions":          "which Reading Session each Shisho app sitting's snapshots update",
 	"jobs":                          reasonServer,
 	"job_logs":                      reasonServer,
 	"library_paths":                 reasonServer,
@@ -176,8 +203,6 @@ var tablesNotInFeed = map[string]string{
 	"share_links":                   "Share Links, managed only on the web",
 	"user_delivery_rules":           "Delivery Rules, which the Shisho app doesn't follow",
 	"user_settings":                 "web display settings",
-	"chapters":                      reasonCatalogNext,
-	"narrators":                     reasonCatalogNext,
 	"file_identifiers":              reasonCatalogNext,
 	"genres":                        reasonCatalogNext,
 	"genre_aliases":                 reasonCatalogNext,
@@ -193,8 +218,6 @@ var tablesNotInFeed = map[string]string{
 	"list_books":                    reasonCatalogNext,
 	"list_shares":                   reasonCatalogNext,
 	"bookmarks":                     reasonUserNext,
-	"read_throughs":                 reasonUserNext,
-	"reading_positions":             reasonUserNext,
 	"reading_position_updates":      reasonUserNext,
 	"reading_sessions":              reasonUserNext,
 	"user_books":                    reasonUserNext,
@@ -360,6 +383,10 @@ func TestChangeLog_WritesThatChangeNothingRecordNothing(t *testing.T) {
 		`INSERT INTO authors (id, book_id, person_id, sort_order) VALUES (1, 1, 1, 1)`,
 		`INSERT INTO series (id, library_id, name, name_source, sort_name, sort_name_source) VALUES (1, 1, 'Saga', 'file', 'Saga', 'file')`,
 		`INSERT INTO book_series (id, book_id, series_id, series_number, sort_order) VALUES (1, 1, 1, 1, 1)`,
+		`INSERT INTO chapters (id, file_id, sort_order, title, href) VALUES (1, 1, 0, 'One', 'one.xhtml')`,
+		`INSERT INTO users (id, username, password_hash, role_id, is_active) VALUES (1, 'reader', 'x', 1, TRUE)`,
+		`INSERT INTO reading_positions (user_id, file_id, cfi, percentage, source, occurred_at) VALUES (1, 1, 'epubcfi(/6/2)', 0.5, 'web_reader', '2026-01-01 00:00:00')`,
+		`INSERT INTO read_throughs (id, user_id, book_id, outcome, begin_day) VALUES (1, 1, 1, 'underway', '2026-01-01')`,
 	} {
 		_, err := db.ExecContext(ctx, stmt)
 		require.NoError(t, err, stmt)
