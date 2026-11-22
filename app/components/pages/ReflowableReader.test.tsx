@@ -14,7 +14,7 @@ import {
   vi,
 } from "vitest";
 
-import { useReflowableBlob } from "@/hooks/queries/reflowable";
+import { useReflowableBook } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
@@ -22,8 +22,13 @@ import {
 import { READER_SETTINGS_KEY } from "@/hooks/useReaderSettings";
 import { POSITION_SAVE_DELAY_MS } from "@/hooks/useReadingProgress";
 import { API } from "@/libraries/api";
+import { openRangeEPUB } from "@/libraries/rangeEpub";
+import { RangeFile } from "@/libraries/rangeFile";
+import { openRangeMOBI } from "@/libraries/rangeMobi";
+import { canKeepWholeBook } from "@/libraries/wholeBook";
 import { setAuth } from "@/testing/auth";
 import { rejectingMutate, REJECTION_MESSAGE } from "@/testing/mutations";
+import { createRangeServer } from "@/testing/rangeServer";
 import type { UpdatePositionPayload } from "@/types";
 
 import ReflowableReader from "./ReflowableReader";
@@ -35,7 +40,19 @@ vi.mock("@/libraries/foliate/view.js", () => ({}));
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 vi.mock("@/hooks/queries/reflowable", () => ({
-  useReflowableBlob: vi.fn(),
+  useReflowableBook: vi.fn(),
+}));
+
+// The real ones parse a book, which these tests don't have.
+vi.mock("@/libraries/rangeEpub", () => ({
+  openRangeEPUB: vi.fn(),
+}));
+vi.mock("@/libraries/rangeMobi", () => ({
+  openRangeMOBI: vi.fn(),
+}));
+
+vi.mock("@/libraries/wholeBook", () => ({
+  canKeepWholeBook: vi.fn(() => false),
 }));
 
 // The table of contents the mocked foliate view reports once a book opens.
@@ -192,7 +209,7 @@ const renderReader = (
 
 describe("ReflowableReader", () => {
   it("sets the tab title to the file's name", () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       isLoading: true,
       isError: false,
       refetch: vi.fn(),
@@ -204,7 +221,7 @@ describe("ReflowableReader", () => {
   it.each([undefined, ""])(
     "sets the tab title to the book's title when the file's name is %j",
     (name) => {
-      vi.mocked(useReflowableBlob).mockReturnValue({
+      vi.mocked(useReflowableBook).mockReturnValue({
         isLoading: true,
         isError: false,
         refetch: vi.fn(),
@@ -222,7 +239,7 @@ describe("ReflowableReader", () => {
         subitems: [{ label: "Chapter 3", href: "ch3.xhtml" }],
       },
     ];
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -261,7 +278,7 @@ describe("ReflowableReader", () => {
     ];
     mockSectionOf = { "cover.xhtml": 0, "ch1.xhtml": 1, "ch2.xhtml": 2 };
     mockFractions = [0, 0.05, 0.5, 1];
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -293,7 +310,7 @@ describe("ReflowableReader", () => {
     ];
     mockSectionOf = { "ch1.xhtml": 0, "ch2.xhtml": 1 };
     mockFractions = [0, 0.4, 1];
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -320,7 +337,7 @@ describe("ReflowableReader", () => {
   });
 
   it("shows progress to a tenth of a percent", async () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -353,7 +370,7 @@ describe("ReflowableReader", () => {
       },
       { label: "Afterword", href: "after.xhtml" },
     ];
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -391,7 +408,7 @@ describe("ReflowableReader", () => {
   });
 
   it("shows a loading indicator while fetching the book", () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -405,7 +422,7 @@ describe("ReflowableReader", () => {
 
   it("shows an error state with a retry button on fetch failure", () => {
     const refetch = vi.fn();
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,
@@ -424,7 +441,7 @@ describe("ReflowableReader", () => {
   });
 
   it("keeps an open book on screen when a background refetch fails", () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: true,
@@ -438,7 +455,7 @@ describe("ReflowableReader", () => {
   });
 
   it("opens a MOBI file in foliate under its own type", async () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/x-mobipocket-ebook" }),
       isLoading: false,
       isError: false,
@@ -457,9 +474,107 @@ describe("ReflowableReader", () => {
     expect(opened.type).toBe("application/x-mobipocket-ebook");
   });
 
+  describe("an EPUB read by part", () => {
+    const server = () => createRangeServer(new Uint8Array(1024 * 1024));
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    const readByPart = async (from: ReturnType<typeof server>) => {
+      fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(from.fetch);
+      const source = await RangeFile.open("/api/books/files/7/download");
+      vi.mocked(useReflowableBook).mockReturnValue({
+        data: source,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isEnabled: true,
+        refetch: vi.fn(),
+      } as never);
+      return source;
+    };
+
+    it("opens the book parsed from it", async () => {
+      const parsed = { sections: [] };
+      vi.mocked(openRangeEPUB).mockResolvedValue(parsed as never);
+      const source = await readByPart(server());
+
+      const { container } = renderReader();
+      const view = container.querySelector("foliate-view")!;
+
+      await vi.waitFor(() =>
+        expect(vi.mocked(view.open)).toHaveBeenCalledWith(parsed),
+      );
+      expect(openRangeEPUB).toHaveBeenCalledWith(source);
+    });
+
+    it("opens an AZW3 with the MOBI reader", async () => {
+      const parsed = { sections: [] };
+      vi.mocked(openRangeMOBI).mockResolvedValue(parsed as never);
+      const source = await readByPart(server());
+
+      const { container } = renderReader("azw3");
+      const view = container.querySelector("foliate-view")!;
+
+      await vi.waitFor(() =>
+        expect(vi.mocked(view.open)).toHaveBeenCalledWith(parsed),
+      );
+      expect(openRangeMOBI).toHaveBeenCalledWith(source);
+    });
+
+    it("downloads the whole book once it opens, on a device that can hold it", async () => {
+      vi.mocked(openRangeEPUB).mockResolvedValue({ sections: [] } as never);
+      vi.mocked(canKeepWholeBook).mockReturnValue(true);
+      const source = await readByPart(server());
+      const downloadWhole = vi.spyOn(source, "downloadWhole");
+
+      const { unmount } = renderReader();
+
+      await vi.waitFor(() => expect(downloadWhole).toHaveBeenCalled());
+      const { signal } = downloadWhole.mock.calls[0][0]!;
+      expect(signal!.aborted).toBe(false);
+      // Closing the reader stops it.
+      unmount();
+      expect(signal!.aborted).toBe(true);
+    });
+
+    it("keeps reading by part on a phone", async () => {
+      vi.mocked(openRangeEPUB).mockResolvedValue({ sections: [] } as never);
+      vi.mocked(canKeepWholeBook).mockReturnValue(false);
+      const source = await readByPart(server());
+      const downloadWhole = vi.spyOn(source, "downloadWhole");
+
+      const { container } = renderReader();
+      const view = container.querySelector("foliate-view")!;
+      await vi.waitFor(() => expect(vi.mocked(view.open)).toHaveBeenCalled());
+      await act(() => Promise.resolve());
+
+      expect(downloadWhole).not.toHaveBeenCalled();
+    });
+
+    it("says so when the book changes on the server while it's open", async () => {
+      vi.mocked(openRangeEPUB).mockResolvedValue({ sections: [] } as never);
+      const from = server();
+      const source = await readByPart(from);
+      const { container } = renderReader();
+      const view = container.querySelector("foliate-view")!;
+      await vi.waitFor(() => expect(vi.mocked(view.open)).toHaveBeenCalled());
+
+      from.replace(new Uint8Array(10), "Mon, 23 Nov 2026 08:00:00 GMT");
+      await act(() => source.read(1000, 10).catch(() => undefined));
+
+      expect(screen.getByText(/couldn't load/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/changed on the server while it was open/),
+      ).toBeInTheDocument();
+    });
+  });
+
   // foliate throws if asked to turn a page before a book has opened.
   it("disables the page buttons until the book is ready", () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -476,7 +591,7 @@ describe("ReflowableReader", () => {
 
   describe("page buttons once the book opens", () => {
     const openBook = async () => {
-      vi.mocked(useReflowableBlob).mockReturnValue({
+      vi.mocked(useReflowableBook).mockReturnValue({
         data: new Blob(["x"], { type: "application/epub+zip" }),
         isLoading: false,
         isError: false,
@@ -525,7 +640,7 @@ describe("ReflowableReader", () => {
   });
 
   it("shows the extended-wait hint after 10 seconds of loading", () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -555,7 +670,7 @@ describe("ReflowableReader", () => {
       isLoading: false,
     } as never);
 
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -593,7 +708,7 @@ describe("ReflowableReader", () => {
         },
         isLoading: false,
       } as never);
-      vi.mocked(useReflowableBlob).mockReturnValue({
+      vi.mocked(useReflowableBook).mockReturnValue({
         data: undefined,
         isLoading: true,
         isError: false,
@@ -672,7 +787,7 @@ describe("ReflowableReader", () => {
         },
         isLoading: false,
       } as never);
-      vi.mocked(useReflowableBlob).mockReturnValue({
+      vi.mocked(useReflowableBook).mockReturnValue({
         data: undefined,
         isLoading: true,
         isError: false,
@@ -1034,7 +1149,7 @@ describe("ReflowableReader", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       isLoading: false,
       error: new Error("boom"),
       isEnabled: false,
@@ -1053,7 +1168,7 @@ describe("ReflowableReader", () => {
     );
     const { container, rerender } = render(tree());
     expect(container.querySelector("foliate-view")).toBeNull();
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       isLoading: true,
       error: null,
       refetch: vi.fn(),
@@ -1087,7 +1202,7 @@ describe("ReflowableReader", () => {
         },
         isLoading: false,
       } as never);
-      vi.mocked(useReflowableBlob).mockReturnValue({
+      vi.mocked(useReflowableBook).mockReturnValue({
         data: undefined,
         isLoading: true,
         error: null,
@@ -1182,7 +1297,7 @@ describe("ReflowableReader", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: undefined,
       isLoading: true,
       isError: false,
@@ -1220,7 +1335,7 @@ describe("ReflowableReader", () => {
     vi.mocked(useUpdateUserSettings).mockReturnValue({
       mutate: rejectingMutate(),
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -1249,7 +1364,7 @@ describe("ReflowableReader", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -1277,7 +1392,7 @@ describe("ReflowableReader", () => {
       data: { viewer_hide_chrome: false },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -1304,7 +1419,7 @@ describe("ReflowableReader", () => {
       data: { viewer_hide_chrome: false },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -1339,7 +1454,7 @@ describe("ReflowableReader", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -1359,7 +1474,7 @@ describe("ReflowableReader", () => {
 
 describe("ReflowableReader resuming", () => {
   const openBook = async (client?: QueryClient) => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -1773,7 +1888,7 @@ describe("ReflowableReader display settings", () => {
       data: { viewer_hide_chrome: false },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -2124,7 +2239,7 @@ describe("ReflowableReader footnotes", () => {
       data: { viewer_hide_chrome: false },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -2336,7 +2451,7 @@ describe("ReflowableReader search", () => {
       data: { viewer_hide_chrome: hideChrome },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -2455,7 +2570,7 @@ describe("ReflowableReader location history", () => {
       data: { viewer_hide_chrome: false },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -2735,7 +2850,7 @@ describe("ReflowableReader location history", () => {
     await toTheEnd(u);
     expect(back()).toBeEnabled();
     // The file arrives again, as after a retry, and the book reopens.
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["again"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -2809,7 +2924,7 @@ describe("ReflowableReader search shortcuts", () => {
       data: { viewer_hide_chrome: false },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -2991,7 +3106,7 @@ describe("ReflowableReader search shortcuts", () => {
       data: { viewer_hide_chrome: true },
       isLoading: false,
     } as never);
-    vi.mocked(useReflowableBlob).mockReturnValue({
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,

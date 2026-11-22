@@ -65,4 +65,20 @@ describe("vendored mobi.js patches", () => {
   it("gives KF8 resource blobs their MIME type", () => {
     expect(source).toContain("new Blob([newData], { type: newType })");
   });
+
+  // Read a part at a time from the server, each of these is a request.
+  it("loads a KF8 section's resources at once", () => {
+    expect(source).toMatch(
+      /const replaceSeries = async[\s\S]*?await Promise\.all\(matches\.map/,
+    );
+    expect(source).toMatch(
+      /async loadResource\(str\) \{[\s\S]*?this\.#loading\.set\(str/,
+    );
+  });
+
+  it("reads every KF8 resource record's magic at once", () => {
+    expect(source).toMatch(
+      /async getResourcesByMagic\(keys\) \{[\s\S]*?await Promise\.all\(/,
+    );
+  });
 });

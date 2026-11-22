@@ -936,11 +936,16 @@ const getFragmentSelector = str => {
 }
 
 // replace asynchronously and sequentially
+// Shisho patch: upstream awaits each match before starting the next. The
+// web reader reads a large book a part at a time from the server
+// (app/libraries/rangeFile.ts), where each resource is a request, and a
+// cookbook chapter names dozens of photos, so they load at once. Only
+// KF8.replaceResources uses this, and KF8.loadResource loads a resource
+// named twice once.
 const replaceSeries = async (str, regex, f) => {
     const matches = []
     str.replace(regex, (...args) => (matches.push(args), null))
-    const results = []
-    for (const args of matches) results.push(await f(...args))
+    const results = await Promise.all(matches.map(args => f(...args)))
     return str.replace(regex, () => results.shift())
 }
 
@@ -970,6 +975,8 @@ class KF8 {
     #lastLoadedTail = -1
     #type = MIME.XHTML
     #inlineMap = new Map()
+    // Shisho patch: resources loading, for replaceSeries's concurrent loads.
+    #loading = new Map()
     constructor(mobi) {
         this.mobi = mobi
     }
@@ -1073,17 +1080,22 @@ class KF8 {
         return this
     }
     // is this really the only way of getting to RESC, PAGE, etc.?
+    // Shisho patch: upstream reads each record's magic after the one before.
+    // Read a part at a time from the server (app/libraries/rangeFile.ts),
+    // that's hundreds of requests in a row before a book with many photos
+    // opens; started at once, they go out together.
     async getResourcesByMagic(keys) {
         const results = {}
         const start = this.mobi.headers.kf8.resourceStart
         const end = this.mobi.pdb.numRecords
-        for (let i = start; i < end; i++) {
-            try {
-                const magic = await this.mobi.loadMagic(i)
-                const match = keys.find(key => key === magic)
-                if (match) results[match] = i
-            } catch {}
-        }
+        const magics = await Promise.all(
+            Array.from({ length: Math.max(0, end - start) }, (_, i) =>
+                Promise.resolve().then(() => this.mobi.loadMagic(start + i))
+                    .catch(() => null)))
+        magics.forEach((magic, i) => {
+            const match = keys.find(key => key === magic)
+            if (match) results[match] = start + i
+        })
         return results
     }
     async getGuide() {
@@ -1120,6 +1132,12 @@ class KF8 {
     }
     async loadResource(str) {
         if (this.#cache.has(str)) return this.#cache.get(str)
+        // Shisho patch: a resource named twice in a section loads once.
+        if (!this.#loading.has(str)) this.#loading.set(str,
+            this.#loadResource(str).finally(() => this.#loading.delete(str)))
+        return this.#loading.get(str)
+    }
+    async #loadResource(str) {
         const [blob, inline] = await this.loadResourceBlob(str)
         const url = inline ? str : URL.createObjectURL(blob)
         if (inline) this.#inlineMap.set(url, inline)

@@ -29,7 +29,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useReflowableBlob } from "@/hooks/queries/reflowable";
+import { useReflowableBook } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
@@ -43,6 +43,11 @@ import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
 import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import type { FoliateEPUB } from "@/libraries/foliate/epub.js";
+import type { FoliateMOBI } from "@/libraries/foliate/mobi.js";
+import { openRangeEPUB } from "@/libraries/rangeEpub";
+import { RangeFile } from "@/libraries/rangeFile";
+import { openRangeMOBI } from "@/libraries/rangeMobi";
 import {
   chapterMarks as findChapterMarks,
   type ChapterMark,
@@ -59,7 +64,14 @@ import {
 } from "@/libraries/readerSettings";
 import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
-import type { File, ReadingPosition, UserSettingsPayload } from "@/types";
+import { canKeepWholeBook } from "@/libraries/wholeBook";
+import {
+  FileTypeEPUB,
+  FileTypeKePub,
+  type File,
+  type ReadingPosition,
+  type UserSettingsPayload,
+} from "@/types";
 import { fileTitle } from "@/utils/format";
 import {
   readerAtEnd,
@@ -198,6 +210,10 @@ function LocationButton({
   );
 }
 
+// The File Types this reader opens that are zips, which foliate reads as
+// EPUBs; the others are MOBI and AZW3.
+const ZIPPED_TYPES = new Set<string>([FileTypeEPUB, FileTypeKePub]);
+
 export default function ReflowableReader({
   file,
   bookTitle,
@@ -206,12 +222,12 @@ export default function ReflowableReader({
   usePageTitle(title ? `Reading: ${title}` : "Reader");
 
   const {
-    data: blob,
+    data: source,
     isLoading,
     error,
     isEnabled,
     refetch,
-  } = useReflowableBlob(file.id);
+  } = useReflowableBook(file.id);
   const fileType = file.file_type;
 
   const { data: settings, isLoading: settingsLoading } = useUserSettings();
@@ -357,13 +373,13 @@ export default function ReflowableReader({
     footnote &&
     footnoteStyle(readerSettings, noteFontFace, footnote.bookFontFamily);
 
-  // Load the blob into foliate once both it and the saved location are
+  // Load the book into foliate once both it and the saved location are
   // available.
   useEffect(() => {
-    if (!blob || !positionSettled) return;
+    if (!source || !positionSettled) return;
     const view = viewRef.current as
       | (HTMLElement & {
-          open?: (book: Blob | File) => Promise<void>;
+          open?: (book: Blob | FoliateEPUB | FoliateMOBI) => Promise<void>;
           book?: {
             toc?: Array<{ label: string; href: string; subitems?: unknown[] }>;
             dir?: string;
@@ -396,17 +412,27 @@ export default function ReflowableReader({
     setRtl(false);
     setLoadError(null);
 
-    // Hardcoded name. foliate doesn't surface the synthetic File's name
-    // anywhere user-visible — using bookTitle would just cause the effect
-    // to re-fire when useBook resolves (undefined → real value), launching
-    // a second overlapping open() on the same element. foliate picks EPUB or
-    // MOBI from the bytes, so the name and type are only labels.
-    const bookFile = new globalThis.File([blob], `book.${fileType}`, {
-      type: blob.type,
-    });
-
     (async () => {
-      await view.open!(bookFile);
+      // A book read by part is parsed here, and foliate opens the parsed
+      // book; a whole file foliate parses itself.
+      let book: Blob | FoliateEPUB | FoliateMOBI;
+      if (source instanceof RangeFile) {
+        book = ZIPPED_TYPES.has(fileType)
+          ? await openRangeEPUB(source)
+          : await openRangeMOBI(source);
+        if (cancelled) return;
+      } else {
+        // Hardcoded name. foliate doesn't surface the synthetic File's name
+        // anywhere user-visible, and using bookTitle would just cause the
+        // effect to re-fire when useBook resolves (undefined → real value),
+        // launching a second overlapping open() on the same element. foliate
+        // picks EPUB or MOBI from the bytes, so the name and type are only
+        // labels.
+        book = new globalThis.File([source], `book.${fileType}`, {
+          type: source.type,
+        });
+      }
+      await view.open!(book);
       if (cancelled) return;
       setToc(flattenToc(view.book?.toc));
       setRtl(view.book?.dir === "rtl");
@@ -499,7 +525,26 @@ export default function ReflowableReader({
         // no-op
       }
     };
-  }, [blob, fileType, positionSettled, opened, resetLocations]);
+  }, [source, fileType, positionSettled, opened, resetLocations]);
+
+  // A book read by part can't go on once the server's copy changes: the
+  // parts still to come would be from another file.
+  useEffect(() => {
+    if (!(source instanceof RangeFile)) return;
+    return source.onChanged(setLoadError);
+  }, [source]);
+
+  // A device that can hold the whole book downloads it once the first page
+  // is up, after which jumps read it locally. Until then, and on a phone,
+  // reading goes on by part.
+  useEffect(() => {
+    if (!bookReady || !(source instanceof RangeFile) || !canKeepWholeBook()) {
+      return;
+    }
+    const controller = new AbortController();
+    void source.downloadWhole({ signal: controller.signal });
+    return () => controller.abort();
+  }, [bookReady, source]);
 
   const goPrev = useCallback(() => {
     const view = viewRef.current as
@@ -1052,7 +1097,7 @@ export default function ReflowableReader({
   );
 
   // A failed background refetch keeps an open book on screen.
-  if ((error && !blob) || loadError) {
+  if ((error && !source) || loadError) {
     // foliate's loadError is client-side and says what went wrong in the
     // reader; a request error reads through requestErrorMessage.
     const message = loadError
@@ -1185,7 +1230,7 @@ export default function ReflowableReader({
             : "flex-1",
         )}
       >
-        {(isLoading || !blob || !bookReady) && (
+        {(isLoading || !source || !bookReady) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background z-20">
             <LoadingSpinner />
             <p className="text-sm text-muted-foreground">Preparing book…</p>

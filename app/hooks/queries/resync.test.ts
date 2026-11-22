@@ -27,7 +27,7 @@ const newClient = () => {
     defaultOptions: { queries: { retry: false } },
   });
   client.setQueryData(
-    [ReflowableQueryKey.ReflowableBlob, 7],
+    [ReflowableQueryKey.ReflowableBook, 7],
     new Blob(["epub"]),
   );
   return client;
@@ -48,7 +48,7 @@ describe("resync", () => {
 
     await waitFor(() => {
       expect(
-        client.getQueryState([ReflowableQueryKey.ReflowableBlob, 7])
+        client.getQueryState([ReflowableQueryKey.ReflowableBook, 7])
           ?.isInvalidated,
       ).toBe(true);
     });
@@ -66,7 +66,7 @@ describe("resync", () => {
 
     await waitFor(() => {
       expect(
-        client.getQueryState([ReflowableQueryKey.ReflowableBlob, 7])
+        client.getQueryState([ReflowableQueryKey.ReflowableBook, 7])
           ?.isInvalidated,
       ).toBe(true);
     });
