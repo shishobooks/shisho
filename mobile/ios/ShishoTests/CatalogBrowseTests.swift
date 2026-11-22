@@ -356,4 +356,38 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(file.fileID, 41)
         XCTAssertEqual(file.audiobookCount, 1, "a File's own page doesn't say which File it is")
     }
+
+    func testTheBooksRelatedToABookAsTheWebsPanelGroupsThem() throws {
+        try catalog(access: Shishoapp.FeedAccess(libraryIds: [1], listIds: [7]))
+        let list = """
+        {"kind":"list","id":7,"list":{"id":7,"name":"Favorites","is_ordered":true,"default_sort":"manual","owner":{"id":3,"username":"ann"},
+         "permission":"viewer","books":[{"book_id":2,"sort_order":1,"added_at":"2026-01-02T00:00:00Z"},{"book_id":1,"sort_order":2,"added_at":"2026-01-01T00:00:00Z"}]}}
+        """
+        try store.apply(page(#"{"entries":[\#(list),{"kind":"user_book","id":1,"user_book":{"book_id":1,"to_read_position":1,"reference":false}}],"cursor":10}"#))
+        let related = try XCTUnwrap(store.pool.read { try CatalogStore.related($0, bookID: 1) })
+
+        XCTAssertEqual(related.series.map(\.title), ["Dune Chronicles"])
+        XCTAssertEqual(related.series.first?.link, .series(id: 1, name: "Dune Chronicles"))
+        XCTAssertEqual(related.series.first?.total, 2)
+        XCTAssertEqual(related.series.first?.lines.map(\.book.title), ["Dune", "Dune Messiah"])
+        XCTAssertEqual(related.series.first?.lines.map(\.meta), ["#1", "#2"])
+
+        XCTAssertEqual(related.author?.title, "Frank Herbert")
+        XCTAssertEqual(related.author?.lines.map(\.book.title), ["Dune", "Dune Messiah"], "undated, so in series order")
+
+        XCTAssertEqual(related.lists.map(\.title), ["To Read", "Favorites"], "To Read leads, as on the web")
+        XCTAssertEqual(related.lists.first?.lines.map(\.meta), ["#1"])
+        XCTAssertEqual(related.lists.last?.lines.map(\.book.title), ["Dune Messiah", "Dune"])
+        XCTAssertEqual(related.lists.last?.lines.map(\.meta), ["#1", "#2"], "an ordered List numbers its Books")
+
+        let other = try XCTUnwrap(store.pool.read { try CatalogStore.related($0, bookID: 2) })
+        XCTAssertEqual(other.lists.map(\.title), ["Favorites"], "To Read only when this Book is on it")
+    }
+
+    func testAFileRowSaysHowMuchIsLeftAsTheWebDoes() {
+        XCTAssertEqual(FileProgressText.text(0.5, durationSeconds: 7200, pageCount: nil), "50% · 1h 0m left")
+        XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: 200), "25% · 150 pages left")
+        XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil), "25%")
+        XCTAssertEqual(FileProgressText.text(1, durationSeconds: 7200, pageCount: nil), "100%", "nothing left to say at the end")
+    }
 }

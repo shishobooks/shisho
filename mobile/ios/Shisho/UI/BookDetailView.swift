@@ -15,6 +15,7 @@ struct BookDetailView: View {
     @State private var tint: Color?
     @State private var scrolled = false
     @State private var standing: BookStanding?
+    @State private var related: BookRelated??
 
     private var summary: BookSummary {
         book??.summary ?? initial
@@ -69,6 +70,9 @@ struct BookDetailView: View {
         }
         .observing(model.session?.store, id: bookID, into: $book) { [bookID] db in
             try CatalogStore.book(db, id: bookID)
+        }
+        .observing(model.session?.store, id: bookID, into: $related) { [bookID] db in
+            try CatalogStore.related(db, bookID: bookID)
         }
         .observing(model.session?.store, id: bookID, into: $standing) { [bookID] db in
             try CatalogStore.standing(db, bookID: bookID)
@@ -229,6 +233,13 @@ struct BookDetailView: View {
                     }
                 }
             }
+
+            // The Books near this one, at the bottom as the web's phone
+            // layout has its Related panel.
+            if let related = related ?? nil, !related.isEmpty {
+                RelatedPanel(bookID: book.summary.id, related: related)
+                    .padding(.top, 32)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -304,12 +315,9 @@ private struct FileCard: View {
     }
 
     var body: some View {
-        // On a phone the actions take a line of their own under the File, as
-        // the web's file row does on a narrow screen, so its facts don't wrap.
-        let layout = sizeClass == .compact
-            ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 8))
-            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
-        layout {
+        // One line: the File, then its one action. How far through it the
+        // user is sits under its facts, as on the web's row.
+        HStack(alignment: .center, spacing: 10) {
             Button { model.push(.file(bookID: book.id, fileID: file.id)) } label: {
             HStack(alignment: .top, spacing: 12) {
                 CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion), width: 46)
@@ -332,6 +340,10 @@ private struct FileCard: View {
                                 .font(.geist(.footnote))
                                 .tint(Theme.foreground)
                                 .accessibilityIdentifier("book.detail.narrator")
+                        }
+                        if let progress = file.progress {
+                            FileProgressLine(progress: progress, durationSeconds: file.durationSeconds, pageCount: file.pageCount)
+                                .padding(.top, 3)
                         }
                     } else {
                         Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
@@ -360,10 +372,7 @@ private struct FileCard: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 12) {
-            if let progress = file.progress, progress > 0 {
-                ProgressRing(value: progress)
-            }
+        Group {
             if isAudiobook {
                 // Every audiobook File plays from here; the Listen button
                 // above plays the one listened to last.

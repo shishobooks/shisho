@@ -83,6 +83,16 @@
         }
       }
     },
+    "%@ · %@ left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ left"
+          }
+        }
+      }
+    },
     "%@ · Signed out" : {
 
     },
@@ -540,9 +550,6 @@
     "Organize your books into custom collections" : {
 
     },
-    "Other files in this Book" : {
-
-    },
     "PUBLISHED" : {
 
     },
@@ -794,6 +801,9 @@
 
     },
     "This audiobook couldn't be played. Check your connection to the server and try again." : {
+
+    },
+    "This book" : {
 
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {

@@ -924,3 +924,141 @@ extension CatalogStore {
         }
     }
 }
+
+/// The Books near a Book, as the web Book page's Related panel groups them:
+/// the rest of each of its Series, its first author's Books, and the Lists
+/// it's on, led by To Read when it's queued.
+struct BookRelated: Equatable, Sendable {
+    /// Where a group's heading goes.
+    enum Link: Equatable, Sendable {
+        case series(id: Int, name: String)
+        case person(id: Int, name: String)
+        case list(id: Int, name: String)
+        case none
+    }
+
+    struct Line: Equatable, Sendable, Identifiable {
+        let book: BookSummary
+        /// A Series Number, a year, or a place in a List.
+        let meta: String?
+        var id: Int { book.id }
+    }
+
+    struct Group: Equatable, Sendable, Identifiable {
+        let title: String
+        let link: Link
+        /// Every Book in it, which can be more than it lists.
+        let total: Int
+        let lines: [Line]
+        var id: String { "\(link)-\(title)" }
+    }
+
+    var series: [Group] = []
+    /// Only when the author has another Book.
+    var author: Group?
+    var lists: [Group] = []
+
+    var isEmpty: Bool { series.isEmpty && author == nil && lists.isEmpty }
+
+    /// The most Books a group lists, as on the web; its page has the rest.
+    static let maxBooks = 100
+}
+
+extension CatalogStore {
+    static func related(_ db: Database, bookID: Int) throws -> BookRelated? {
+        guard let libraryID = try Int.fetchOne(db, sql: "SELECT library_id FROM books WHERE id = ?", arguments: [bookID]) else { return nil }
+        var related = BookRelated()
+        let limit = BookRelated.maxBooks
+
+        for row in try Row.fetchAll(db, sql: "SELECT series_id, name FROM book_series WHERE book_id = ? ORDER BY position", arguments: [bookID]) {
+            let seriesID: Int = row["series_id"]
+            let books = try books(db, kind: .series, id: seriesID)
+            let numbers = try seriesNumbers(db, seriesID: seriesID)
+            related.series.append(BookRelated.Group(
+                title: row["name"], link: .series(id: seriesID, name: row["name"]), total: books.count,
+                lines: books.prefix(limit).map { book in
+                    BookRelated.Line(book: book, meta: numbers[book.id].map { number, end in
+                        "#" + seriesNumber(number) + (end.map { "-" + seriesNumber($0) } ?? "")
+                    })
+                }
+            ))
+        }
+
+        // The first author's Books in this Library, oldest first and undated
+        // last, then in series order, then by title, so the list stays put
+        // as the reader goes from Book to Book.
+        if let author = try Row.fetchOne(db, sql: "SELECT person_id, name FROM book_authors WHERE book_id = ? ORDER BY position LIMIT 1",
+                                          arguments: [bookID]) {
+            let personID: Int = author["person_id"]
+            let released = "(SELECT MAX(release_date) FROM book_files WHERE book_id = b.id)"
+            let firstNumber = "(SELECT number FROM book_series WHERE book_id = b.id ORDER BY position LIMIT 1)"
+            let rows = try Row.fetchAll(db, sql: summarySQL + """
+                 WHERE b.library_id = ? AND b.id IN (SELECT book_id FROM book_authors WHERE person_id = ?)
+                 ORDER BY \(released) IS NULL, \(released), \(firstNumber) IS NULL, \(firstNumber), b.title, b.id
+                """, arguments: [libraryID, personID])
+            let books = try summaries(db, rows: rows)
+            if books.contains(where: { $0.id != bookID }) {
+                var years: [Int: String] = [:]
+                for row in try Row.fetchAll(db, sql: """
+                    SELECT book_id, MAX(release_date) AS released FROM book_files
+                    WHERE book_id IN (SELECT book_id FROM book_authors WHERE person_id = ?) AND release_date IS NOT NULL GROUP BY book_id
+                    """, arguments: [personID]) {
+                    years[row["book_id"]] = year(Date(timeIntervalSince1970: row["released"]))
+                }
+                related.author = BookRelated.Group(title: author["name"], link: .person(id: personID, name: author["name"]),
+                                                   total: books.count,
+                                                   lines: books.prefix(limit).map { BookRelated.Line(book: $0, meta: years[$0.id]) })
+            }
+        }
+
+        // To Read, numbered by place, when this Book is on it.
+        if try Bool.fetchOne(db, sql: "SELECT to_read_position IS NOT NULL FROM user_books WHERE book_id = ?", arguments: [bookID]) == true {
+            let rows = try Row.fetchAll(db, sql: summarySQL + """
+                 JOIN user_books tr ON tr.book_id = b.id WHERE tr.to_read_position IS NOT NULL ORDER BY tr.to_read_position, b.id
+                """)
+            let books = try summaries(db, rows: rows)
+            related.lists.append(BookRelated.Group(
+                title: String(localized: "To Read"), link: .none, total: books.count,
+                lines: books.prefix(limit).enumerated().map { BookRelated.Line(book: $1, meta: "#\($0 + 1)") }
+            ))
+        }
+        for row in try Row.fetchAll(db, sql: """
+            SELECT l.id, l.name, l.is_ordered FROM lists l WHERE l.id IN (SELECT list_id FROM list_books WHERE book_id = ?)
+            ORDER BY l.name COLLATE NOCASE, l.id
+            """, arguments: [bookID]) {
+            let listID: Int = row["id"]
+            let ordered: Bool = row["is_ordered"]
+            // An ordered List reads in its own order and numbers each Book
+            // by its place, whatever its default sort, as on the web.
+            let books: [BookSummary]
+            var places: [Int: String] = [:]
+            if ordered {
+                books = try summaries(db, rows: Row.fetchAll(db, sql: summarySQL + """
+                     JOIN list_books lb ON lb.book_id = b.id AND lb.list_id = ?
+                     ORDER BY lb.sort_order IS NULL, lb.sort_order, lb.added_at DESC, lb.position
+                    """, arguments: [listID]))
+                for place in try Row.fetchAll(db, sql: "SELECT book_id, sort_order FROM list_books WHERE list_id = ? AND sort_order IS NOT NULL",
+                                              arguments: [listID]) {
+                    places[place["book_id"]] = "#\(place["sort_order"] as Int)"
+                }
+            } else {
+                books = try listBooks(db, listID: listID)
+            }
+            related.lists.append(BookRelated.Group(title: row["name"], link: .list(id: listID, name: row["name"]), total: books.count,
+                                                   lines: books.prefix(limit).map { BookRelated.Line(book: $0, meta: places[$0.id]) }))
+        }
+        return related
+    }
+
+    /// A Series Number as the web writes it: "1", "1.5".
+    private static func seriesNumber(_ number: Double) -> String {
+        number.formatted(.number.precision(.fractionLength(0...2)))
+    }
+
+    /// The year a release date falls in, read in UTC as the web does.
+    private static func year(_ date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
+        return String(calendar.component(.year, from: date))
+    }
+}

@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// A File's own page, as the web's: its cover, name, the Book it's from, its
-/// narrators and facts, Listen, what edition it is, the Book's other Files,
-/// its chapters, and where it sits on disk. It's all in the device's copy,
+/// narrators and facts, Listen, what edition it is, its chapters, and where
+/// it sits on disk. The Book's other Files are a step back, on the Book page. It's all in the device's copy,
 /// so it works offline.
 struct FileView: View {
     @Environment(AppModel.self) private var model
@@ -105,15 +105,6 @@ struct FileView: View {
             if !edition.isEmpty {
                 LabelRows(rows: edition)
                     .padding(.top, 24)
-            }
-            let others = book.files.filter { $0.id != file.id }
-            if !others.isEmpty {
-                FileSectionHeading(text: String(localized: "Other files in this Book"))
-                VStack(spacing: 8) {
-                    ForEach(others) { other in
-                        OtherFileRow(file: other, book: book.summary)
-                    }
-                }
             }
             chaptersSection(file)
             FileSectionHeading(text: String(localized: "On disk"))
@@ -378,7 +369,7 @@ private struct ChapterRow: View {
     var body: some View {
         if file.fileType == "m4b", let start = chapter.startSeconds {
             Button { model.listen(fileID: file.id, from: start) } label: {
-                HStack(spacing: 10) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
                     title
                     Image(systemName: "play")
                         .font(.system(size: 12, weight: .semibold))
@@ -388,6 +379,7 @@ private struct ChapterRow: View {
                         .foregroundStyle(Theme.mutedForeground)
                 }
                 .padding(.horizontal, 14)
+                .padding(.vertical, 12)
                 .frame(minHeight: 46)
                 .contentShape(Rectangle())
             }
@@ -399,7 +391,7 @@ private struct ChapterRow: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("file.chapter")
         } else {
-            HStack(spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
                 title
                 if let page = chapter.startPage, file.fileType == "cbz" || file.fileType == "pdf" {
                     Text("Page \(page + 1)")
@@ -410,6 +402,7 @@ private struct ChapterRow: View {
             }
             .padding(.leading, 14 + CGFloat(min(chapter.depth, 6)) * 16)
             .padding(.trailing, 14)
+            .padding(.vertical, 12)
             .frame(minHeight: 46)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("file.chapter")
@@ -430,41 +423,5 @@ private struct ChapterRow: View {
         return hours > 0
             ? String(format: "%d:%02d:%02d", hours, minutes, secs)
             : String(format: "%d:%02d", minutes, secs)
-    }
-}
-
-/// Another of the Book's Files, which opens its own page.
-private struct OtherFileRow: View {
-    let file: BookDetail.File
-    let book: BookSummary
-
-    var body: some View {
-        NavigationLink(value: Route.file(bookID: book.id, fileID: file.id)) {
-            HStack(spacing: 12) {
-                CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion), width: 36)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(file.label)
-                        .font(.geist(.subheadline, weight: .semibold))
-                        .foregroundStyle(Theme.foreground)
-                        .lineLimit(2)
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        FileTypeChip(fileType: file.fileType, outlined: true)
-                        Text(file.headerFacts.joined(separator: " · "))
-                            .font(.geist(.footnote))
-                            .foregroundStyle(Theme.mutedForeground)
-                            .lineLimit(1)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.mutedForeground)
-            }
-            .padding(10)
-            .cardStyle()
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("file.other.\(file.id)")
     }
 }

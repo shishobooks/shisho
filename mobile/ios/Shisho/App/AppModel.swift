@@ -65,6 +65,9 @@ final class AppModel {
     var showingPlayer = false
     /// The tab showing, and each tab's navigation: the pages pushed on it.
     var tab: AppTab = .library
+    /// The Book page's Related tab picked last, which the next Book opens on
+    /// when it has it, as the web carries its tab from Book to Book.
+    var relatedTab: String?
     var libraryPath: [Route] = []
     var listsPath: [Route] = []
     /// The Account sheet is open.

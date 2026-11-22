@@ -118,26 +118,27 @@ struct ProgressBar: View {
     }
 }
 
-/// How far through a File the user is, as the web's file row ring shows it.
-struct ProgressRing: View {
-    let value: Double
-    var size: CGFloat = 32
+/// How far through a File the user is, under its facts on its row: a thin
+/// bar, the percentage, and the time or pages left, as the web's row has it.
+struct FileProgressLine: View {
+    let progress: Double
+    let durationSeconds: Double?
+    let pageCount: Int?
 
     var body: some View {
-        ZStack {
-            Circle().stroke(Theme.primary.opacity(0.18), lineWidth: 3)
-            Circle()
-                .trim(from: 0, to: min(1, max(0, value)))
-                .stroke(Theme.primary, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            Text(verbatim: Percent.text(value))
-                .font(.system(size: size * 0.28, weight: .semibold))
+        let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount)
+        HStack(spacing: 8) {
+            ProgressBar(value: progress)
+                .frame(maxWidth: 150)
+            Text(verbatim: text)
+                .font(.geist(.caption))
                 .monospacedDigit()
-                .foregroundStyle(Theme.foreground)
+                .foregroundStyle(Theme.mutedForeground)
+                .lineLimit(1)
+                .layoutPriority(1)
         }
-        .frame(width: size, height: size)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "\(Percent.text(value)) through"))
+        .accessibilityLabel(text)
     }
 }
 
@@ -145,35 +146,6 @@ struct ProgressRing: View {
 enum Percent {
     static func text(_ value: Double) -> String {
         "\(Int((min(1, max(0, value)) * 100).rounded()))%"
-    }
-}
-
-enum FileFacts {
-    /// A length as the web shows it: "6h 43m", "12m", or "<1m".
-    static func duration(_ seconds: Double) -> String {
-        if seconds > 0, seconds < 60 { return "<1m" }
-        let hours = Int(seconds) / 3600
-        let minutes = (Int(seconds) % 3600) / 60
-        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
-    }
-
-    static func bitrate(_ bitsPerSecond: Int) -> String {
-        "\(Int((Double(bitsPerSecond) / 1000).rounded())) kbps"
-    }
-
-    /// The year a date falls in, read in UTC as the web does.
-    static func year(_ date: Date) -> String {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
-        return String(calendar.component(.year, from: date))
-    }
-
-    static func pages(_ count: Int) -> String {
-        String(AttributedString(localized: "^[\(count) page](inflect: true)").characters)
-    }
-
-    static func size(_ bytes: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 }
 
