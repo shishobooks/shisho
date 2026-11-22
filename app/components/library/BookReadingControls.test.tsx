@@ -300,7 +300,7 @@ describe("BookReadingControls", () => {
         name: "Mark as Reference?",
       });
       expect(dialog).toHaveTextContent(
-        "The read you're on is deleted from your reading history, and this can't be undone.",
+        "Your current Read-through of this book is deleted from your reading history, and this can't be undone.",
       );
       expect(dialog).toHaveTextContent(
         "still counts toward your Reading Stats",

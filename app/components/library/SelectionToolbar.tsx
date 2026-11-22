@@ -327,13 +327,13 @@ export const SelectionToolbar = ({ library }: SelectionToolbarProps) => {
   const duringReads =
     !underwayKnown || underwayCount === 1 ? "during it" : "during them";
   const notStartedDescription = `${readsUnderway}, along with the reading time and places recorded ${duringReads}, and the books' main files open at the start again. A book that left To Read when it was started goes back to its place there. Books that aren't being read are skipped.`;
-  // Marking Reference deletes each read underway but keeps its time, so its
-  // confirmation counts them the same way.
-  const referenceReadsDeleted =
+  // Marking Reference deletes each Read-through underway but keeps its time,
+  // so its confirmation counts them the same way.
+  const referenceReadThroughsDeleted =
     !underwayKnown || underwayCount === 1
-      ? `The read underway on ${underwayKnown ? "1 book" : "each selected book"} is deleted from your reading history`
-      : `The reads underway on ${formatCount(underwayCount, "book")} are deleted from your reading history`;
-  const referenceDescription = `${referenceReadsDeleted}, and this can't be undone. The reading time recorded ${duringReads} still counts toward your Reading Stats, and every file keeps its place. The books leave To Read, and opening them never starts or finishes a read while they're Reference.`;
+      ? `The current Read-through of ${underwayKnown ? "1 book" : "each selected book"} is deleted from your reading history`
+      : `The current Read-throughs of ${formatCount(underwayCount, "book")} are deleted from your reading history`;
+  const referenceDescription = `${referenceReadThroughsDeleted}, and this can't be undone. The reading time recorded ${duringReads} still counts toward your Reading Stats, and every file keeps its place. The books leave To Read, and opening them never starts or finishes a Read-through while they're Reference.`;
 
   // The reading actions, for the phone menu and the desktop popover. onPick
   // closes whichever holds them.

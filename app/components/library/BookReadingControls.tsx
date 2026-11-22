@@ -276,7 +276,7 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
       />
       <ConfirmDialog
         confirmLabel="Mark as Reference"
-        description="The read you're on is deleted from your reading history, and this can't be undone. The reading time recorded during it still counts toward your Reading Stats, and every file keeps its place. While the book is Reference, opening it never starts or finishes a read."
+        description="Your current Read-through of this book is deleted from your reading history, and this can't be undone. The reading time recorded during it still counts toward your Reading Stats, and every file keeps its place. While the book is Reference, opening it never starts or finishes a Read-through."
         isPending={referenceMutation.isPending}
         onConfirm={() => handleReference(true)}
         onOpenChange={setConfirmingReference}

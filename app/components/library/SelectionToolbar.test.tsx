@@ -544,7 +544,7 @@ describe("SelectionToolbar reading status actions", () => {
     const dialog = screen.getByRole("dialog");
     // Books One and Two are being read; Book Three is already read.
     expect(dialog).toHaveTextContent(
-      "The reads underway on 2 books are deleted from your reading history, and this can't be undone. The reading time recorded during them still counts",
+      "The current Read-throughs of 2 books are deleted from your reading history, and this can't be undone. The reading time recorded during them still counts",
     );
     await user.click(
       within(dialog).getByRole("button", { name: "Mark as Reference" }),
@@ -589,7 +589,7 @@ describe("SelectionToolbar reading status actions", () => {
 
     expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "The read underway on each selected book is deleted from your reading history",
+      "The current Read-through of each selected book is deleted from your reading history",
     );
   });
 

@@ -39,7 +39,7 @@ To fix the status of many books together, such as books a device's reading histo
 
 - **Mark as read** does what it does on one book for each selected book. Books already **Read** are skipped, so they don't gain a second finished read.
 - **Mark as not started** does what it does on one book for each selected book you're reading or have paused, after you confirm how many reads it deletes. Other books are skipped.
-- **Mark as Reference** does what it does on one book for each selected book. When any of them are being read or paused, you confirm first, told how many reads it deletes. Books already **Reference** are skipped.
+- **Mark as Reference** does what it does on one book for each selected book. When any of them are being read or paused, you confirm first, told how many Read-throughs it deletes. Books already **Reference** are skipped.
 - **Remove from Reference** does what it does on one book for each selected **Reference** book. Other books are skipped.
 
 A message says how many books changed and how many were skipped.
@@ -51,17 +51,17 @@ Some books you dip into rather than read through: a cookbook opened for one reci
 **Mark as Reference** in the status menu:
 
 - takes the book off To Read;
-- turns a read you're on, paused or not, into plain reading sessions. The read is deleted from your [reading history](#reading-history) and can't be restored, but the reading time recorded during it still counts toward your [Reading Stats](./reading-stats.md), and every file keeps its place. Because this deletes a read, Shisho asks you to confirm first. With no read underway, it applies right away.
+- turns your current Read-through, paused or not, into plain reading sessions. The Read-through is deleted from your [reading history](#reading-history) and can't be restored, but the reading time recorded during it still counts toward your [Reading Stats](./reading-stats.md), and every file keeps its place. Because this deletes a Read-through, Shisho asks you to confirm first. With no Read-through underway, it applies right away.
 
 While a book is **Reference**:
 
-- Reading it in Shisho or on a device moves your place and adds reading time, but never starts, finishes, or resumes a read. Reaching the last page doesn't mark it read, and **Undo** on an earlier automatic finish is refused.
+- Reading it in Shisho or on a device moves your place and adds reading time, but never starts, finishes, or resumes a Read-through. Reaching the last page doesn't mark it read, and **Undo** on an earlier automatic finish is refused.
 - It never shows on the [Currently Reading page](#currently-reading-page).
-- Its earlier finished and abandoned reads stay in the history and keep counting in Reading Stats, so a textbook you finished in 2024 still counts in 2024.
+- Its earlier finished and abandoned Read-throughs stay in the history and keep counting in Reading Stats, so a textbook you finished in 2024 still counts in 2024.
 - Only your own choices in Shisho change its status. [KOReader](./koreader.md#statuses-and-ratings) and a [Kobo](./kobo-sync.md#reading-progress) can't, though their reading time and place still come through.
 - You can still rate it.
 
-To stop treating a book as Reference, choose another status. **Mark as read**, **Add to To Read**, and **Start reading** (**Read again** on a book you read before) each clear it, and starting sends the book's files back to the start, as it always does. **Remove from Reference** clears it and records nothing: the book shows **Read** or **Did Not Finish** again if you read it before, or no status if you never did, and a book you never read starts a read the next time you turn past its first page.
+To stop treating a book as Reference, choose another status. **Mark as read**, **Add to To Read**, and **Start reading** (**Read again** on a book you read before) each clear it, and starting sends the book's files back to the start, as it always does. **Remove from Reference** clears it and records nothing: the book shows **Read** or **Did Not Finish** again if you read it before, or no status if you never did, and a book you never read starts a Read-through the next time you turn past its first page.
 
 ## Reading on Devices
 
@@ -215,7 +215,7 @@ When [merging books](./managing-books-and-files.md#merging-books) removes a book
 
 - The merged book keeps its own rating and its place on To Read. When it has none, it takes those of a removed book, the one added to Shisho first if several have one.
 - If both books were being read, the two reads become one, starting on the earlier start date.
-- Whether the merged book is [Reference](#reference-books) follows whichever book you chose a status for more recently. Merging never deletes a read to keep Reference, so a merged book you're reading or have on To Read stops being Reference.
+- Whether the merged book is [Reference](#reference-books) follows whichever book you chose a status for more recently. Merging never deletes a Read-through to keep Reference, so a merged book you're reading or have on To Read stops being Reference.
 
 Moving only some of a book's files moves no reading data. A user who loses access to a library keeps their reading data, and sees it again if their access returns.
 
