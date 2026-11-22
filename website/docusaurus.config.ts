@@ -15,12 +15,15 @@ const latestReleasedDocsVersion = releasedDocVersions[0];
 const baseUrl = "/";
 
 // Docusaurus inlines font files under 10 KB into the stylesheet. The
-// self-hosted CJK fonts are hundreds of small files split by character range,
-// so inlining them puts every piece in every page's CSS, needed or not. Keep
+// self-hosted fonts are hundreds of small files split by character range, so
+// inlining them puts every piece in every page's CSS, needed or not. Keep
 // them as files, which a browser fetches only for the characters a page uses.
+// A Docusaurus upgrade that changes its font rule fails the build here rather
+// than quietly inlining them again.
 const fontFilesNotInlined = (): Plugin => ({
   name: "font-files-not-inlined",
   configureWebpack(webpackConfig) {
+    let changed = 0;
     for (const rule of webpackConfig.module?.rules ?? []) {
       if (
         !rule ||
@@ -34,8 +37,14 @@ const fontFilesNotInlined = (): Plugin => ({
       for (const use of rule.use) {
         if (use && typeof use === "object" && typeof use.options === "object") {
           use.options = { ...use.options, limit: false };
+          changed++;
         }
       }
+    }
+    if (changed === 0) {
+      throw new Error(
+        "font-files-not-inlined found no font loader to change; update it for this Docusaurus version",
+      );
     }
     return {};
   },

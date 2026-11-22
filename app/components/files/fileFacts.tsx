@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import MonoValue from "@/components/common/MonoValue";
 import type { LabelGridRow } from "@/components/library/LabelGrid";
 import TextLink from "@/components/library/TextLink";
 import { languageLabel } from "@/constants/languages";
@@ -115,11 +116,7 @@ export const fileIdentifierRows = (
 ): LabelGridRow[] => {
   const rows: LabelGridRow[] = (file.identifiers ?? []).map((id) => {
     const url = getIdentifierUrl(id.type, id.value, pluginIdentifierTypes);
-    const value = (
-      <span className="select-all break-all font-mono text-[13px]">
-        {id.value}
-      </span>
-    );
+    const value = <MonoValue className="select-all">{id.value}</MonoValue>;
     return {
       label: formatIdentifierType(id.type, pluginIdentifierTypes),
       value: url ? externalLink(url, value) : value,
@@ -168,18 +165,14 @@ export const fileDiskRows = (file: File): LabelGridRow[] => {
   const slash = file.filepath.lastIndexOf("/");
   rows.push({
     label: "File",
-    value: (
-      <span className="break-all font-mono text-[13px]">
-        {getFilename(file.filepath)}
-      </span>
-    ),
+    value: <MonoValue>{getFilename(file.filepath)}</MonoValue>,
   });
   rows.push({
     label: "Folder",
     value: (
-      <span className="break-all font-mono text-[13px] text-muted-foreground">
+      <MonoValue className="text-muted-foreground">
         {slash > 0 ? file.filepath.slice(0, slash) : "/"}
-      </span>
+      </MonoValue>
     ),
   });
   if (file.file_modified_at) {

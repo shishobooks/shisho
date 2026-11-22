@@ -13,6 +13,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import MonoValue from "@/components/common/MonoValue";
 import AddToListPopover from "@/components/library/AddToListPopover";
 import BookDetailHeader from "@/components/library/BookDetailHeader";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
@@ -533,17 +534,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
             },
             {
               label: "Folder",
-              value: book.filepath.split("/").map((segment, i, arr) => (
-                <React.Fragment key={i}>
-                  {segment}
-                  {i < arr.length - 1 && (
-                    <>
-                      /
-                      <wbr />
-                    </>
-                  )}
-                </React.Fragment>
-              )),
+              value: <MonoValue>{book.filepath}</MonoValue>,
             },
             { label: "Sort title", value: book.sort_title },
             { label: "Added", value: formatDateTime(book.created_at) },

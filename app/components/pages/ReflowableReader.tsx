@@ -239,8 +239,7 @@ export default function ReflowableReader({
     [readerSettings.font, chosenImportedUrl],
   );
   // The same font for a footnote popover, which this page draws itself. A
-  // private name keeps it from replacing the app's own font of that name
-  // (the app uses Noto Sans).
+  // private name keeps it from replacing any font the app page declares.
   const noteFontFace = useMemo(
     () =>
       fontFaceFor(readerSettings.font, chosenImportedUrl, "Shisho Note Font"),

@@ -277,15 +277,6 @@ importers:
       '@fontsource-variable/noto-sans-jp':
         specifier: ^5.3.1
         version: 5.3.1
-      '@fontsource-variable/noto-sans-kr':
-        specifier: ^5.3.1
-        version: 5.3.1
-      '@fontsource-variable/noto-sans-sc':
-        specifier: ^5.3.1
-        version: 5.3.1
-      '@fontsource-variable/noto-sans-tc':
-        specifier: ^5.3.1
-        version: 5.3.1
       '@mdx-js/react':
         specifier: ^3.0.0
         version: 3.1.1(@types/react@19.3.0)(react@19.3.1)

@@ -150,6 +150,10 @@ export default defineConfig({
   build: {
     outDir: "./build/app",
     emptyOutDir: true, // also necessary
+    // Vite inlines files under 4 KB as data URLs. The self-hosted fonts are
+    // split by character range so a browser fetches only the pieces a page
+    // uses; inlined, the small pieces would load on every page.
+    assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined),
   },
   clearScreen: false,
   plugins: [react(), tailwindcss(), buildId()],

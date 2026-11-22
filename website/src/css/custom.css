@@ -1,4 +1,6 @@
-/* The same self-hosted fonts as the app (app/index.css explains the stacks). */
+/* The same self-hosted fonts as the app (app/index.css explains the stacks),
+   but Japanese is the only CJK family: these pages hold no Chinese or Korean
+   text, and each family's declarations add to every page's stylesheet. */
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist/wght-italic.css";
 @import "@fontsource-variable/geist-mono";
@@ -6,9 +8,6 @@
 @import "@fontsource-variable/noto-sans";
 @import "@fontsource-variable/noto-sans/wght-italic.css";
 @import "@fontsource-variable/noto-sans-jp";
-@import "@fontsource-variable/noto-sans-sc";
-@import "@fontsource-variable/noto-sans-tc";
-@import "@fontsource-variable/noto-sans-kr";
 
 :root {
   color-scheme: dark;
@@ -29,12 +28,11 @@
   --shisho-violet-300: oklch(0.811 0.111 293.571);
   --ifm-font-family-base:
     "Geist Variable", "Noto Sans Variable", "Noto Sans JP Variable",
-    "Noto Sans SC Variable", "Noto Sans TC Variable", "Noto Sans KR Variable",
     ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
     "Segoe UI Symbol", "Noto Color Emoji";
   --ifm-font-family-monospace:
-    "Geist Mono Variable", "Noto Sans JP Variable", "Noto Sans SC Variable",
-    "Noto Sans TC Variable", "Noto Sans KR Variable", ui-monospace, monospace;
+    "Geist Mono Variable", "Noto Sans Variable", "Noto Sans JP Variable",
+    ui-monospace, monospace;
   --ifm-heading-font-family: var(--ifm-font-family-base);
   --ifm-font-weight-bold: 700;
   --ifm-line-height-base: 1.6;
@@ -246,9 +244,7 @@ h3 {
   align-items: center;
   color: var(--foreground);
   display: inline-flex;
-  font-family:
-    "Noto Sans Variable", "Noto Sans JP Variable", "Noto Sans SC Variable",
-    "Noto Sans TC Variable", "Noto Sans KR Variable", sans-serif;
+  font-family: "Noto Sans Variable", "Noto Sans JP Variable", sans-serif;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;

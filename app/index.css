@@ -4,11 +4,15 @@
 /* Fonts ship with the app rather than from a CDN, so a server with no
    internet access looks the same and no visitor's address goes to a third
    party. Each family is split by character range, and a browser downloads
-   only the pieces a page's text uses. The CJK families follow Geist and Noto
-   Sans so text looks the same on every OS; Japanese comes first, so a
-   character the four share takes its Japanese form. The docs site
-   (website/src/css/custom.css) and the iOS app (mobile/ios/Shisho/UI/Theme.swift)
-   use the same families. */
+   only the pieces a page's text uses. Noto Sans and the CJK families follow
+   Geist and Geist Mono, for the characters those lack, so book titles look
+   the same on every OS; Japanese comes first, so a character the four share
+   takes its Japanese form. app/fonts.test.ts checks that every family named
+   here is one these packages declare. The docs site
+   (website/src/css/custom.css) uses the same stacks without the Chinese and
+   Korean families, which its pages never need; the iOS app
+   (mobile/ios/Shisho/UI/Theme.swift) bundles Geist and Geist Mono and leaves
+   CJK text to iOS's own fonts. */
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist/wght-italic.css";
 @import "@fontsource-variable/geist-mono";
@@ -29,8 +33,9 @@
     ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
     "Segoe UI Symbol", "Noto Color Emoji";
   --font-mono:
-    "Geist Mono Variable", "Noto Sans JP Variable", "Noto Sans SC Variable",
-    "Noto Sans TC Variable", "Noto Sans KR Variable", ui-monospace, monospace;
+    "Geist Mono Variable", "Noto Sans Variable", "Noto Sans JP Variable",
+    "Noto Sans SC Variable", "Noto Sans TC Variable", "Noto Sans KR Variable",
+    ui-monospace, monospace;
   --font-logo:
     "Noto Sans Variable", "Noto Sans JP Variable", "Noto Sans SC Variable",
     "Noto Sans TC Variable", "Noto Sans KR Variable", sans-serif;

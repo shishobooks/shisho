@@ -13,7 +13,7 @@ The Shisho app for iPhone and iPad (`ios/`), and one suite of Maestro flows (`ha
 - **One HTTP layer per account carries every request** (`ios/Shisho/Core/APIClient.swift`). It skips the URL cache, so capability headers are only read from live responses.
 - **Every control has an accessibility identifier and a VoiceOver label.** Flows find controls by identifier or visible text, never by position, so the Android app can run them unchanged: give the same control the same identifier on both platforms.
 - **Strings go in the String Catalog** (`ios/Shisho/Resources/Localizable.xcstrings`). Command-line builds don't update it; run `mise ios:strings` after adding or removing strings.
-- **The look comes from the web app**: its colors, from `app/index.css`, are in the asset catalog, and its typefaces, Geist and Geist Mono, are bundled from the same Google Fonts sources the web's packages use. Use `Theme`, `Font.geist`, and `Font.geistMono`, never system colors or system fonts for brand surfaces. CJK text falls back to iOS's own fonts, such as Hiragino for Japanese, on purpose: bundling Noto Sans CJK would add megabytes and needs a font cascade that SwiftUI's `.custom` can't express.
+- **The look comes from the web app**: its colors, from `app/index.css`, are in the asset catalog, and its typefaces, Geist and Geist Mono, are bundled. Use `Theme`, `Font.geist`, and `Font.geistMono`, never system colors or system fonts for brand surfaces. CJK text falls back to iOS's own fonts, such as Hiragino for Japanese, on purpose: bundling Noto Sans CJK would add megabytes and needs a font cascade that SwiftUI's `.custom` can't express.
 
 ## Accessibility
 
