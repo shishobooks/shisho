@@ -101,7 +101,7 @@ final class SyncEngine: Sendable {
             // Every page's access counts: a Library lost and gained again
             // between two pages had its records skipped meanwhile.
             if let access = fetched.access {
-                try store.reconcileAccess(access)
+                try store.reconcileAccess(access, fromFeed: true)
             }
             if !page.hasMore {
                 if fetched.access != nil {

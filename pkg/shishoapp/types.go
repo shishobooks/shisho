@@ -130,6 +130,12 @@ type FeedResponse struct {
 type FeedAccess struct {
 	LibraryIDs []int `json:"library_ids"`
 	ListIDs    []int `json:"list_ids"`
+	// BehindLibraryIDs are those of LibraryIDs with records at or before
+	// the cursor the page was asked for, which the feed won't send again. A
+	// Library the app gains needs fetching whole only when it's listed: one
+	// made since, say, arrives in the feed. A Library or List's whole fetch
+	// leaves it empty, so the app fetches whatever it gains then.
+	BehindLibraryIDs []int `json:"behind_library_ids"`
 }
 
 // FeedEntry is one record that changed. Exactly one of the record fields

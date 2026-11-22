@@ -184,11 +184,15 @@ func (h *handler) changes(c echo.Context) error {
 			return err
 		}
 		var page *changefeed.Page
+		behind := []int{}
 		if query.LibraryID > 0 || query.ListID > 0 {
 			scope := changefeed.Scope{LibraryID: query.LibraryID, ListID: query.ListID}
 			page, err = h.feed.ScopedPage(ctx, tx, access, scope, query.Cursor, limit)
 		} else {
 			page, err = h.feed.Page(ctx, tx, user, query.Cursor, query.ExpiredThrough, limit)
+			if err == nil {
+				behind, err = h.feed.Behind(ctx, tx, access.LibraryIDs, query.Cursor)
+			}
 		}
 		if errors.Is(err, changefeed.ErrOutOfReach) {
 			if query.LibraryID > 0 {
@@ -210,7 +214,7 @@ func (h *handler) changes(c echo.Context) error {
 		resp = FeedResponse{
 			Entries: entries, Cursor: page.Cursor, HasMore: page.HasMore,
 			StartOver: page.StartOver, ExpiredThrough: page.ExpiredThrough,
-			Access: FeedAccess{LibraryIDs: access.LibraryIDs, ListIDs: access.ListIDs},
+			Access: FeedAccess{LibraryIDs: access.LibraryIDs, ListIDs: access.ListIDs, BehindLibraryIDs: behind},
 		}
 		return nil
 	})

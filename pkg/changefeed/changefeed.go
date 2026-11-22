@@ -266,6 +266,26 @@ func (s *Service) Access(ctx context.Context, tx bun.IDB, user *models.User) (*A
 	return access, nil
 }
 
+// Behind returns those of libraryIDs with a record at or before cursor
+// that's still current, in id order: the ones a page after cursor won't
+// send again.
+func (s *Service) Behind(ctx context.Context, tx bun.IDB, libraryIDs []int, cursor int64) ([]int, error) {
+	behind := []int{}
+	if cursor == 0 || len(libraryIDs) == 0 {
+		return behind, nil
+	}
+	err := tx.NewSelect().Table("libraries").Column("id").
+		Where("id IN (?)", bun.List(libraryIDs)).
+		Where(`EXISTS (SELECT 1 FROM change_log_entries cle
+			WHERE cle.library_id = libraries.id AND cle.seq <= ? AND NOT cle.deleted AND cle.user_id IS NULL)`, cursor).
+		Order("id").
+		Scan(ctx, &behind)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return behind, nil
+}
+
 // ExpireIfDue runs Expire when it hasn't run for an hour, so the feed can
 // call it on every sync without writing on every sync.
 func (s *Service) ExpireIfDue(ctx context.Context) error {

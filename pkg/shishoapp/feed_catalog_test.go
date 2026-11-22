@@ -462,3 +462,26 @@ func TestFeed_SlowPageEndsEarly(t *testing.T) {
 	assert.Equal(t, []string{"book:4"}, summary(third))
 	assert.False(t, third.HasMore)
 }
+
+// A page says which Libraries the user can see have records at or before
+// its cursor, which the feed won't send again: only those, when the app
+// gains them, need fetching whole. A Library made since arrives in the
+// feed.
+func TestFeed_AccessSaysWhichLibrariesAreBehindTheCursor(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Old")
+	f.addBook(1, 1, "Dune")
+	f.addUser()
+	credential := f.signIn()
+
+	first := f.changes(credential, 0, 0)
+	assert.Empty(t, first.Access.BehindLibraryIDs, "nothing is behind a cursor of 0")
+
+	f.addLibrary(2, "New")
+	f.addBook(2, 2, "Emma")
+	next := f.changes(credential, first.Cursor, 0)
+	assert.Equal(t, []int{1, 2}, next.Access.LibraryIDs)
+	assert.Equal(t, []int{1}, next.Access.BehindLibraryIDs)
+	assert.ElementsMatch(t, []string{"library:2", "book:2"}, summary(next))
+}

@@ -100,6 +100,8 @@ func init() {
 		`DROP INDEX ux_change_log_entries_kind_record_id_user_id`,
 		`CREATE UNIQUE INDEX ux_change_log_entries_record ON change_log_entries
 			(kind, record_id, IFNULL(user_id, 0), CASE WHEN kind = 'book_left' THEN library_id ELSE 0 END)`,
+		// Each page says which Libraries have records behind its cursor.
+		`CREATE INDEX ix_change_log_entries_library_id_seq ON change_log_entries (library_id, seq)`,
 	}
 	statements = append(statements, resource("series", "series", "series_aliases", "series_id", "name", "sort_name", "description")...)
 	statements = append(statements, resource("person", "persons", "person_aliases", "person_id", "name", "sort_name")...)
@@ -225,6 +227,7 @@ func init() {
 						"cover_image_filename", "is_preferred_cover", "updated_at"),
 					moveBooks("OLD.book_id, NEW.book_id")),
 				`DELETE FROM change_log_entries WHERE kind IN ('series', 'person', 'genre', 'tag', 'publisher', 'list', 'user_book', 'book_left')`,
+				`DROP INDEX IF EXISTS ix_change_log_entries_library_id_seq`,
 				`DROP INDEX IF EXISTS ux_change_log_entries_record`,
 				`CREATE UNIQUE INDEX ux_change_log_entries_kind_record_id_user_id ON change_log_entries (kind, record_id, IFNULL(user_id, 0))`,
 			} {

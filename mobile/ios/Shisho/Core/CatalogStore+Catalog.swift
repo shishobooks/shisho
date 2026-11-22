@@ -402,7 +402,12 @@ extension CatalogStore {
     /// again too. Until a download from the start has recorded the access
     /// it began with, there's nothing to compare against. force applies it
     /// even then, as when the server refuses the user every Book.
-    func reconcileAccess(_ access: Shishoapp.FeedAccess, force: Bool = false) throws {
+    ///
+    /// fromFeed says access came with a feed page, whose behind list names
+    /// the Libraries with records before its cursor: a gained Library not
+    /// listed, such as one just made, arrives in the feed and isn't fetched
+    /// again. Access from a whole fetch says nothing about that.
+    func reconcileAccess(_ access: Shishoapp.FeedAccess, fromFeed: Bool = false, force: Bool = false) throws {
         try pool.write { db in
             let known = try Bool.fetchOne(db, sql: "SELECT access_known FROM sync_state WHERE id = 1") ?? false
             guard known || force else { return }
@@ -424,8 +429,11 @@ extension CatalogStore {
                 try CatalogStore.dropLibrary(lost, in: db)
             }
             let gained = libraries.subtracting(recorded)
+            let behind = Set(access.behindLibraryIds)
             for id in gained {
-                try db.execute(sql: "INSERT OR REPLACE INTO library_access (library_id, cursor, complete) VALUES (?, 0, 0)", arguments: [id])
+                let complete = fromFeed && !behind.contains(id)
+                try db.execute(sql: "INSERT OR REPLACE INTO library_access (library_id, cursor, complete) VALUES (?, 0, ?)",
+                               arguments: [id, complete])
             }
             let lists = Set(access.listIds)
             let recordedLists = Set(try Int.fetchAll(db, sql: "SELECT list_id FROM list_access"))
