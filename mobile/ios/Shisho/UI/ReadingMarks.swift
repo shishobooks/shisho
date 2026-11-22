@@ -45,8 +45,10 @@ struct ReadingStatusRibbon: View {
             RibbonShape()
                 .fill(StatusStyle.color(status))
             if let percent {
+                // Geist at 9 points, as the web's bookmark sets it, so the
+                // ribbon is as narrow as the web's.
                 Text(verbatim: percent)
-                    .font(.system(size: 9 * scale, weight: .bold))
+                    .font(.custom("Geist", size: 9 * scale).weight(.bold))
                     .monospacedDigit()
                     .foregroundStyle(.white)
                     .padding(.top, 6 * scale)
@@ -57,7 +59,7 @@ struct ReadingStatusRibbon: View {
                     .padding(.top, 6 * scale)
             }
         }
-        .frame(width: (percent == nil ? 24 : 30) * scale, height: 32 * scale)
+        .frame(width: (percent == nil ? 24 : 28) * scale, height: 32 * scale)
         .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(percent.map { String(localized: "\(ReadingStatusLabel.text(status)), \($0) through") }

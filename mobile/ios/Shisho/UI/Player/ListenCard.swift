@@ -45,16 +45,20 @@ struct ListenCard: View {
         return lines
     }
 
+    /// The chapter by its name, as Now Playing names it, or by number when
+    /// it has none. It has a line of its own, so a long name can't push the
+    /// time left out of view.
+    private var chapter: String? {
+        guard !(finished && !playing), let index = AudioChapters.index(at: seconds, in: progress.chapters) else { return nil }
+        let title = progress.chapters[index].title.trimmingCharacters(in: .whitespaces)
+        return title.isEmpty ? String(localized: "Chapter \(index + 1)") : title
+    }
+
     private var detail: String {
         if finished && !playing {
             return String(localized: "Finished")
         }
-        var parts: [String] = []
-        if let index = AudioChapters.index(at: seconds, in: progress.chapters) {
-            parts.append(String(localized: "Chapter \(index + 1)"))
-        }
-        parts.append(String(localized: "\(TimeLabels.left(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))"))
-        return parts.joined(separator: " · ")
+        return String(localized: "\(TimeLabels.left(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))")
     }
 
     private var icon: some View {
@@ -95,6 +99,12 @@ struct ListenCard: View {
                             .lineLimit(2)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    if let chapter {
+                        Text(chapter)
+                            .font(.geist(.caption, weight: .medium))
+                            .lineLimit(stacked ? nil : 1)
+                            .fixedSize(horizontal: false, vertical: stacked)
+                    }
                     Text(detail)
                         .font(.geist(.caption))
                         .opacity(0.8)
@@ -132,7 +142,8 @@ struct ListenCard: View {
         .buttonStyle(PressableStyle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(title))
-        .accessibilityValue((whichFile + [seconds > 1 ? "\(fraction.formatted(.percent.precision(.fractionLength(0)))), \(detail)" : detail])
+        .accessibilityValue((whichFile + [chapter].compactMap { $0 }
+            + [seconds > 1 ? "\(fraction.formatted(.percent.precision(.fractionLength(0)))), \(detail)" : detail])
             .joined(separator: ", "))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("book.listen")

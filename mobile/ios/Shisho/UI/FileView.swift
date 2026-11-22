@@ -153,7 +153,7 @@ struct FileView: View {
                     .accessibilityIdentifier("file.narrators")
             }
 
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 FileTypeChip(fileType: file.fileType, outlined: true)
                 Text(file.headerFacts.joined(separator: " · "))
                     .font(.geist(.footnote))
@@ -369,7 +369,7 @@ private struct ChapterRow: View {
     var body: some View {
         if file.fileType == "m4b", let start = chapter.startSeconds {
             Button { model.listen(fileID: file.id, from: start) } label: {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                HStack(alignment: .center, spacing: 10) {
                     title
                     Image(systemName: "play")
                         .font(.system(size: 12, weight: .semibold))
@@ -391,7 +391,7 @@ private struct ChapterRow: View {
             .accessibilityAddTraits(.isButton)
             .accessibilityIdentifier("file.chapter")
         } else {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 title
                 if let page = chapter.startPage, file.fileType == "cbz" || file.fileType == "pdf" {
                     Text("Page \(page + 1)")

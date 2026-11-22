@@ -301,6 +301,9 @@ private struct FileCard: View {
     let book: BookSummary
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
+    /// The square the cover sits in: an audiobook's fills it, and a book's
+    /// two-thirds-wide cover is as tall as it.
+    private static let coverSlot: CGFloat = 52
     private var name: String { file.label }
 
     /// Names the File and its narrators, since editions often share a name.
@@ -319,8 +322,14 @@ private struct FileCard: View {
         // user is sits under its facts, as on the web's row.
         HStack(alignment: .center, spacing: 10) {
             Button { model.push(.file(bookID: book.id, fileID: file.id)) } label: {
+            // The cover in a square slot, as on the web, so a tall ebook cover
+            // doesn't make its row taller than an audiobook's. A cover taller
+            // than the text centers the text beside it; text taller than the
+            // cover keeps the cover at the top.
             HStack(alignment: .top, spacing: 12) {
-                CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion), width: 46)
+                CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion),
+                          width: isAudiobook ? Self.coverSlot : Self.coverSlot * 2 / 3)
+                    .frame(width: Self.coverSlot)
                 VStack(alignment: .leading, spacing: 5) {
                     // Each File by its own label, as the web app's file list does;
                     // the Book's title would name every File the same.
@@ -328,7 +337,8 @@ private struct FileCard: View {
                         .font(.geist(.subheadline, weight: .semibold))
                         .lineLimit(2)
                     if FileTypes.isKnown(file.fileType) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        // The chip stays centered on facts that wrap.
+                        HStack(alignment: .center, spacing: 8) {
                             FileTypeChip(fileType: file.fileType, outlined: true)
                             Text(facts)
                                 .font(.geist(.footnote))
@@ -351,7 +361,7 @@ private struct FileCard: View {
                             .foregroundStyle(Theme.mutedForeground)
                     }
                 }
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, minHeight: Self.coverSlot, alignment: .leading)
             }
             .contentShape(Rectangle())
             }
