@@ -151,8 +151,11 @@ const parseByteRanges = (body: Uint8Array, boundary: string): Part[] => {
   if (at === -1) throw new BrokenAnswerError("No multipart delimiter.");
   for (;;) {
     const pos = at + delimiter.length;
-    // "--" closes the body.
+    // "--" closes the body; a part's headers start on the next line.
     if (body[pos] === 45 && body[pos + 1] === 45) return parts;
+    if (!startsWith(body, CRLF, pos)) {
+      throw new BrokenAnswerError("A multipart delimiter is malformed.");
+    }
     const headerEnd = indexOf(body, CRLFCRLF, pos);
     const range =
       headerEnd === -1
@@ -299,11 +302,15 @@ export class RangeFile {
           const range = parseContentRange(
             response.headers.get("Content-Range"),
           );
-          if (!range) {
+          // The end of the file, as asked for.
+          if (!range || range.end !== range.total) {
             drop();
-            throw new RangeNotSupportedError(url);
+            throw new BrokenAnswerError("The server sent another range.");
           }
           const data = new Uint8Array(await response.arrayBuffer());
+          if (data.length !== range.end - range.start) {
+            throw new BrokenAnswerError("The server sent part of the range.");
+          }
           return new RangeFile(url, range.total, validatorOf(response), {
             start: range.start,
             data,
@@ -380,13 +387,27 @@ export class RangeFile {
   }
 
   /**
-   * Calls listener when a read fails for good: the copy on the server
-   * changed (BookChangedError), or the server stayed unreachable. A read
-   * stopped by cancelPending() isn't a failure.
+   * Calls listener when the book can't go on: once when the copy on the
+   * server changes (BookChangedError), whichever read finds it, and for each
+   * failure a reader passes to reportFailure().
    */
   onFailed(listener: (error: Error) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /**
+   * Tells the listeners a read the book needed failed for good, such as a
+   * page's chapter. Not for reads made ahead, whose failure a later read
+   * may not repeat, nor for reads cancelPending() stopped.
+   */
+  reportFailure(error: unknown) {
+    if (isAbort(error) || error instanceof BookChangedError) return;
+    this.#notify(error instanceof Error ? error : new Error(String(error)));
+  }
+
+  #notify(error: Error) {
+    for (const listener of this.#listeners) listener(error);
   }
 
   /**
@@ -397,6 +418,11 @@ export class RangeFile {
   cancelPending() {
     this.#cancel.abort();
     this.#cancel = new AbortController();
+    // A read made from here on asks again rather than joining one stopped.
+    for (const segment of this.#segments.filter((s) => !s.settled)) {
+      this.#drop(segment);
+    }
+    this.#tinyReads = null;
   }
 
   /**
@@ -435,15 +461,7 @@ export class RangeFile {
     } else {
       segment = this.#fetch(offset, end, through);
     }
-    let data: Uint8Array;
-    try {
-      data = await segment.data;
-    } catch (error) {
-      if (!isAbort(error)) {
-        for (const listener of this.#listeners) listener(error as Error);
-      }
-      throw error;
-    }
+    const data = await segment.data;
     // A part fetched for this read, or read to its end by the last read of
     // its run, has nothing left to give.
     if (segment.run && end >= segment.end) this.#drop(segment);
@@ -512,19 +530,20 @@ export class RangeFile {
       read = { start: offset, end, resolve, reject };
     });
     if (!this.#tinyReads) {
-      this.#tinyReads = [];
+      const batch: TinyRead[] = [];
+      this.#tinyReads = batch;
       // The reads belong to the opening under way now, even if the reader
       // leaves before they go out.
       const signal = this.#cancel.signal;
-      queueMicrotask(() => this.#sendTinyReads(signal));
+      queueMicrotask(() => this.#sendTinyReads(batch, signal));
     }
     this.#tinyReads.push(read);
     return this.#forgetIfFailed(this.#keep(offset, end, data, true));
   }
 
-  #sendTinyReads(signal: AbortSignal) {
-    const reads = (this.#tinyReads ?? []).sort((a, b) => a.start - b.start);
-    this.#tinyReads = null;
+  #sendTinyReads(batch: TinyRead[], signal: AbortSignal) {
+    const reads = batch.sort((a, b) => a.start - b.start);
+    if (this.#tinyReads === batch) this.#tinyReads = null;
     for (let i = 0; i < reads.length; i += MAX_RANGES) {
       const group = reads.slice(i, i + MAX_RANGES);
       // A request for several ranges that keeps failing leaves each to be
@@ -589,6 +608,13 @@ export class RangeFile {
           const single = parseContentRange(
             response.headers.get("Content-Range"),
           );
+          if (
+            !boundary &&
+            single &&
+            body.length !== single.end - single.start
+          ) {
+            throw new BrokenAnswerError("The server sent part of the range.");
+          }
           const parts = boundary
             ? parseByteRanges(body, boundary)
             : single
@@ -627,24 +653,31 @@ export class RangeFile {
       run,
     };
     if (data instanceof Promise) {
-      data.then(
-        () => (segment.settled = true),
-        () => (segment.settled = true),
-      );
+      const settle = () => {
+        segment.settled = true;
+        this.#evict(segment);
+      };
+      data.then(settle, settle);
     }
     this.#segments.push(segment);
     this.#cached += end - start;
+    this.#evict(segment);
+    return segment;
+  }
+
+  // Drops the parts used longest ago until the cache is within its limit,
+  // keeping fetches in flight, which have readers waiting, and `keep`, which
+  // one is about to read.
+  #evict(keep: Segment) {
     for (let i = 0; this.#cached > CACHE_LIMIT && i < this.#segments.length;) {
       const oldest = this.#segments[i];
-      // A fetch in flight has readers waiting on it.
-      if (!oldest.settled || oldest === segment) {
+      if (!oldest.settled || oldest === keep) {
         i++;
         continue;
       }
       this.#segments.splice(i, 1);
       this.#cached -= oldest.end - oldest.start;
     }
-    return segment;
   }
 
   // Waits for one of MAX_REQUESTS to be free, then makes the request. A
@@ -730,7 +763,11 @@ export class RangeFile {
   }
 
   #markChanged(): BookChangedError {
-    this.#changed ??= new BookChangedError();
+    if (!this.#changed) {
+      this.#changed = new BookChangedError();
+      const changed = this.#changed;
+      queueMicrotask(() => this.#notify(changed));
+    }
     return this.#changed;
   }
 }

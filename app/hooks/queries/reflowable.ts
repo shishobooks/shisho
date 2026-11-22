@@ -1,8 +1,16 @@
-import { useQuery, type UseQueryOptions } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
 
 import { useAuth } from "@/hooks/useAuth";
 import { API, ShishoAPIError } from "@/libraries/api";
-import { RangeFile, RangeNotSupportedError } from "@/libraries/rangeFile";
+import {
+  BuildTimeoutError,
+  RangeFile,
+  RangeNotSupportedError,
+} from "@/libraries/rangeFile";
 import { fileDownloadUrl, fileOriginalDownloadUrl } from "@/utils/downloadUrl";
 
 import { useRequires } from "./permissions";
@@ -25,7 +33,14 @@ export const useReflowableBook = (
   > = {},
 ) => {
   const { demoMode } = useAuth();
+  const defaultRetry = useQueryClient().getDefaultOptions().queries?.retry;
   return useQuery<ReflowableBook, ShishoAPIError>({
+    // A build that outlasted the wait is reported, not waited on again.
+    retry: (failureCount, error) =>
+      !(error instanceof BuildTimeoutError) &&
+      (typeof defaultRetry === "function"
+        ? defaultRetry(failureCount, error)
+        : failureCount < Number(defaultRetry ?? 0)),
     ...options,
     enabled: useRequires("books:read", options.enabled ?? true),
     queryKey: [QueryKey.ReflowableBook, fileId],
@@ -40,15 +55,18 @@ export const useReflowableBook = (
     gcTime: 0,
     queryFn: async ({ signal }) => {
       // Only Shisho refusing the Generated File falls back to the original:
-      // no generator for the type, or a failed build. A proxy's error page
-      // or a dropped connection would fail the original's too. Demo Mode
-      // denies the original, so its rejection would only hide why the
+      // no generator for the type, a file it can't decrypt, or an earlier
+      // build that failed partway (422), or a build failing now (Shisho's
+      // own 5xx). A proxy's error page, a dropped connection, a missing
+      // file, or a session that ended would fail the original's too. Demo
+      // Mode denies the original, so its rejection would only hide why the
       // Generated File failed.
       const refused = (error: unknown) =>
         !signal.aborted &&
         !demoMode &&
         error instanceof ShishoAPIError &&
-        error.code !== undefined;
+        error.code !== undefined &&
+        (error.status === 422 || error.status >= 500);
       try {
         return await openBook(fileDownloadUrl(fileId), signal);
       } catch (error) {

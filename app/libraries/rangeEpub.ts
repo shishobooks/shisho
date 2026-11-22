@@ -53,13 +53,15 @@ const documentHrefs = (text: string, base: string): string[] => {
     doc = new DOMParser().parseFromString(text, "text/html");
   }
   const refs: string[] = [];
-  for (const el of doc.querySelectorAll("[src], [poster], object[data]")) {
-    refs.push(
-      el.getAttribute("src") ??
-        el.getAttribute("poster") ??
-        el.getAttribute("data") ??
-        "",
-    );
+  for (const [selector, attribute] of [
+    ["link[href]", "href"],
+    ["[src]", "src"],
+    ["[poster]", "poster"],
+    ["object[data]", "data"],
+  ]) {
+    for (const el of doc.querySelectorAll(selector)) {
+      refs.push(el.getAttribute(attribute) ?? "");
+    }
   }
   for (const el of doc.querySelectorAll("[*|href]:not([href])")) {
     refs.push(el.getAttributeNS(XLINK, "href") ?? "");
@@ -208,9 +210,14 @@ export const openRangeEPUB = async (file: RangeFile): Promise<FoliateEPUB> => {
         const text = await map.get(section.id)?.getData(new TextWriter());
         if (text) prefetch(documentHrefs(text, section.id));
       } catch {
-        // foliate's load reports it.
+        // The load below fails the same way.
       }
-      return load();
+      // foliate only logs a chapter that fails to load, which leaves the
+      // page buttons going nowhere, so the reader hears of it.
+      return load().catch((error: unknown) => {
+        file.reportFailure(error);
+        throw error;
+      });
     };
   }
   return book;

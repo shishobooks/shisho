@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
 import { queryClient } from "@/libraries/query-client";
-import { RangeFile } from "@/libraries/rangeFile";
+import { BuildTimeoutError, RangeFile } from "@/libraries/rangeFile";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
 import { createRangeServer } from "@/testing/rangeServer";
 
@@ -88,7 +88,25 @@ describe("useReflowableBook", () => {
     },
   );
 
-  it("surfaces the API's error when the original fails too", async () => {
+  it.each([
+    [401, "unauthorized", "Not signed in"],
+    [404, "not_found", "File not found"],
+  ])(
+    "doesn't load the original for a %i, which the original would get too",
+    async (status, code, message) => {
+      fetchSpy.mockImplementation(async () => apiError(status, code, message));
+
+      const { result } = renderHook(() => useReflowableBook(42), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(result.current.error?.status).toBe(status);
+    },
+  );
+
+  it("surfaces the API's error", async () => {
     fetchSpy.mockImplementation(async () =>
       apiError(404, "not_found", "File not found"),
     );
@@ -149,6 +167,29 @@ describe("useReflowableBook", () => {
     expect(result.current.error?.message).toBe(
       "Request failed with status 502 (Bad Gateway)",
     );
+  });
+
+  it("reports a build that outlasted the wait without waiting again", async () => {
+    const open = vi
+      .spyOn(RangeFile, "open")
+      .mockRejectedValue(new BuildTimeoutError());
+    // The app's defaults, which retry a failed query.
+    const client = new QueryClient({
+      defaultOptions: queryClient.getDefaultOptions(),
+    });
+    const appWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client }, children);
+    try {
+      const { result } = renderHook(() => useReflowableBook(42), {
+        wrapper: appWrapper,
+      });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(open).toHaveBeenCalledTimes(1);
+    } finally {
+      open.mockRestore();
+      client.clear();
+    }
   });
 
   it("doesn't download the original when the connection drops", async () => {

@@ -8,8 +8,9 @@ declare module "@/libraries/foliate/mobi.js" {
   // a file.
   export interface FoliateMOBI {
     metadata: { title?: string; language?: string };
+    // A section foliate doesn't show (linear: "no") has no load.
     sections: Array<{
-      load(): Promise<string>;
+      load?: () => Promise<string>;
       createDocument(): Promise<Document>;
     }>;
   }

@@ -209,4 +209,26 @@ describe("openRangeEPUB", () => {
     expect(peak).toBeGreaterThanOrEqual(3);
     expect(requests).toBeLessThanOrEqual(4);
   });
+
+  // foliate only logs a chapter it couldn't load.
+  it("tells the reader when a chapter can't be fetched", async () => {
+    const file = await RangeFile.open(URL);
+    const book = await openRangeEPUB(file);
+    const failed = vi.fn();
+    file.onFailed(failed);
+    server.failFor(1000);
+    const createObjectURL = vi
+      .spyOn(globalThis.URL, "createObjectURL")
+      .mockReturnValue("blob:x");
+    try {
+      const loading = book.sections[2].load();
+      const settled = expect(loading).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settled;
+    } finally {
+      createObjectURL.mockRestore();
+    }
+
+    expect(failed).toHaveBeenCalledWith(expect.any(TypeError));
+  });
 });

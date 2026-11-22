@@ -38,5 +38,19 @@ export const openRangeMOBI = async (file: RangeFile): Promise<FoliateMOBI> => {
     import("@/libraries/foliate/mobi.js"),
     import("@/libraries/foliate/vendor/fflate.js"),
   ]);
-  return new MOBI({ unzlib: unzlibSync }).open(rangeBlob(file, 0, file.size));
+  const book = await new MOBI({ unzlib: unzlibSync }).open(
+    rangeBlob(file, 0, file.size),
+  );
+  // foliate only logs a section that fails to load, which leaves the page
+  // buttons going nowhere, so the reader hears of it.
+  for (const section of book.sections) {
+    const load = section.load?.bind(section);
+    if (!load) continue;
+    section.load = () =>
+      load().catch((error: unknown) => {
+        file.reportFailure(error);
+        throw error;
+      });
+  }
+  return book;
 };

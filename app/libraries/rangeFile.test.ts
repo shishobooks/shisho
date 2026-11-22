@@ -439,18 +439,56 @@ describe("RangeFile", () => {
     expect(await reading).toEqual(bytes.slice(MB, MB + 10));
   });
 
-  it("tells its listeners about a read that fails for good", async () => {
+  it("tells its listeners once when the copy on the server changes", async () => {
+    const file = await RangeFile.open(URL);
+    const failed = vi.fn();
+    file.onFailed(failed);
+    server.replace(fileOf(10 * MB), "Sun, 22 Nov 2026 20:00:00 GMT");
+
+    // Read ahead, which no one waits on, finds it too.
+    await Promise.all([
+      file.read(MB, 10_000).catch(() => undefined),
+      file.read(5 * MB, 10_000).catch(() => undefined),
+    ]);
+    await Promise.resolve();
+
+    expect(failed).toHaveBeenCalledTimes(1);
+    expect(failed).toHaveBeenCalledWith(expect.any(BookChangedError));
+  });
+
+  // A read made ahead that fails may well succeed when the book needs it,
+  // so only the failures a reader reports reach the listeners.
+  it("tells its listeners of the failures a reader reports", async () => {
     const file = await RangeFile.open(URL);
     const failed = vi.fn();
     file.onFailed(failed);
     server.failFor(100);
 
-    const reading = file.read(MB, 10);
+    const reading = file.read(MB, 10_000);
     const settled = expect(reading).rejects.toBeInstanceOf(TypeError);
     await vi.advanceTimersByTimeAsync(30_000);
     await settled;
+    expect(failed).not.toHaveBeenCalled();
 
-    expect(failed).toHaveBeenCalledWith(expect.any(TypeError));
+    file.reportFailure(new TypeError("Failed to fetch"));
+    file.reportFailure(new DOMException("Stopped", "AbortError"));
+
+    expect(failed).toHaveBeenCalledTimes(1);
+  });
+
+  // A reader that opens the book again in the same turn (React runs an
+  // effect twice in development) mustn't get the reads it just stopped.
+  it("starts a read again that the reader leaving stopped", async () => {
+    const file = await RangeFile.open(URL);
+
+    void file.read(MB, 10_000).catch(() => undefined);
+    void file.read(2 * MB, 4).catch(() => undefined);
+    file.cancelPending();
+    const again = file.read(MB, 10_000);
+    const tinyAgain = file.read(2 * MB, 4);
+
+    expect(await again).toEqual(bytes.slice(MB, MB + 10_000));
+    expect(await tinyAgain).toEqual(bytes.slice(2 * MB, 2 * MB + 4));
   });
 
   it("stops the reads under way when the reader leaves", async () => {

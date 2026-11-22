@@ -635,18 +635,13 @@ describe("ReflowableReader", () => {
 
     it("says so when part of the book can't be fetched", async () => {
       vi.mocked(openRangeEPUB).mockResolvedValue({ sections: [] } as never);
-      const from = server();
-      const source = await readByPart(from);
+      const source = await readByPart(server());
       const { container } = renderReader();
       const view = container.querySelector("foliate-view")!;
       await vi.waitFor(() => expect(vi.mocked(view.open)).toHaveBeenCalled());
 
-      from.failFor(100);
-      const reading = source.read(500_000, 10_000).catch(() => undefined);
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(30_000);
-        await reading;
-      });
+      // foliate's load of a chapter failed, as rangeEpub reports it.
+      act(() => source.reportFailure(new TypeError("Failed to fetch")));
 
       expect(screen.getByText(/couldn't load/i)).toBeInTheDocument();
       // Not the browser's wording.

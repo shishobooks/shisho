@@ -63,7 +63,7 @@ describe("openRangeMOBI", () => {
         return `blob:${created.length}`;
       });
     try {
-      await Promise.all(book.sections.map((s) => s.load()));
+      await Promise.all(book.sections.map((s) => s.load!()));
     } finally {
       createObjectURL.mockRestore();
     }
@@ -130,7 +130,7 @@ describe("openRangeMOBI", () => {
       .spyOn(globalThis.URL, "createObjectURL")
       .mockReturnValue("blob:x");
     try {
-      await book.sections[0].load();
+      await book.sections[0].load!();
     } finally {
       createObjectURL.mockRestore();
     }

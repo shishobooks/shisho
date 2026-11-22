@@ -29,7 +29,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useReflowableBook } from "@/hooks/queries/reflowable";
+import {
+  useReflowableBook,
+  type ReflowableBook,
+} from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
@@ -364,6 +367,9 @@ export default function ReflowableReader({
   // buttons, which turn by side, swap labels.
   const [rtl, setRtl] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  // The book whose opening or reading failed. Retry opens it again, and
+  // until a new copy arrives this one isn't shown.
+  const [failedSource, setFailedSource] = useState<ReflowableBook | null>(null);
   // The last footnote stays after the popover closes, so it keeps its text
   // and colors while it fades out.
   const [footnote, setFootnote] = useState<OpenFootnote | null>(null);
@@ -520,6 +526,8 @@ export default function ReflowableReader({
       if (cancelled) return;
       const asError = err instanceof Error ? err : new Error(String(err));
       console.error("ReflowableReader: foliate open() failed", err);
+      if (source instanceof RangeFile) source.cancelPending();
+      setFailedSource(source);
       setLoadError(asError);
     });
 
@@ -548,12 +556,11 @@ export default function ReflowableReader({
 
   // A book read by part can't go on once a read fails for good: the server's
   // copy changed, so the parts still to come would be from another file, or
-  // the server can't be reached. Retry opens it again, and until the new
-  // copy arrives this one isn't shown.
-  const [failedSource, setFailedSource] = useState<RangeFile | null>(null);
+  // a chapter couldn't be fetched.
   useEffect(() => {
     if (!(source instanceof RangeFile)) return;
     return source.onFailed((err) => {
+      source.cancelPending();
       setFailedSource(source);
       setBookReady(false);
       setLoadError(err);
