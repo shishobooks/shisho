@@ -1,0 +1,64 @@
+# Search the library with the server unreachable (#914): the app searches
+# its own copy of the catalog, by title, author, and person.
+appId: ${APP_ID}
+name: Search the library offline
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- extendedWaitUntil:
+    visible: The Harness Novel
+    timeout: 30000
+
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: library.grid
+    timeout: 15000
+
+- tapOn: Search
+- tapOn: Books, series, people
+# An author's name finds their Book.
+- inputText: Ada
+- extendedWaitUntil:
+    visible:
+      id: search.book
+      text: .*The Harness Novel.*
+    timeout: 10000
+# A word from a title, by its start.
+- eraseText: 10
+- inputText: Lighth
+- extendedWaitUntil:
+    visible:
+      id: search.book
+      text: .*Quiet Lighthouse.*
+    timeout: 10000
+- assertNotVisible: The Harness Novel
+# A person.
+- eraseText: 10
+- inputText: Ann Auth
+- extendedWaitUntil:
+    visible:
+      id: search.person
+      text: .*Ann Author.*
+    timeout: 10000
+- tapOn:
+    id: search.person
+- extendedWaitUntil:
+    visible: Harbor Lights
+    timeout: 10000
+- assertVisible: Quiet Lighthouse
+
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}

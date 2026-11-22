@@ -196,6 +196,12 @@ func (s *server) seed(ctx context.Context, library, password string) error {
 	}); err != nil {
 		return err
 	}
+	// The viewer role, with access to the harness's Library.
+	if err := post("/api/users", map[string]any{
+		"username": readerUsername, "password": readerPassword, "role_id": 2, "library_ids": []int{1},
+	}); err != nil {
+		return err
+	}
 
 	deadline := time.Now().Add(2 * time.Minute)
 	for time.Now().Before(deadline) {

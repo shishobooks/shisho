@@ -14,6 +14,8 @@ struct BookDetailView: View {
     @State private var listen: ListenProgress??
     @State private var tint: Color?
     @State private var scrolled = false
+    @State private var standing: BookStanding?
+    @State private var showingFullDescription = false
 
     private var summary: BookSummary {
         book??.summary ?? initial
@@ -68,6 +70,9 @@ struct BookDetailView: View {
         .observing(model.session?.store, id: bookID, into: $book) { [bookID] db in
             try CatalogStore.book(db, id: bookID)
         }
+        .observing(model.session?.store, id: bookID, into: $standing) { [bookID] db in
+            try CatalogStore.standing(db, bookID: bookID)
+        }
         .observing(model.session?.store, id: bookID, into: $listen) { [bookID, deviceID = model.session?.account.deviceID ?? ""] db in
             try CatalogStore.listenProgress(db, bookID: bookID, ownDeviceID: deviceID)
         }
@@ -100,15 +105,20 @@ struct BookDetailView: View {
             .padding(.top, 8)
 
             if let detail = book ?? nil, let series = detail.series.first {
-                HStack(spacing: 8) {
-                    if let number = series.number {
-                        SeriesNumberBadge(number: number, end: series.numberEnd)
+                NavigationLink(value: Route.resource(.series, id: series.seriesID, name: series.name)) {
+                    HStack(spacing: 8) {
+                        if let number = series.number {
+                            SeriesNumberBadge(number: number, end: series.numberEnd)
+                        }
+                        Text(series.name)
+                            .font(.geist(.callout, weight: .semibold))
+                            .foregroundStyle(Theme.foreground)
                     }
-                    Text(series.name)
-                        .font(.geist(.callout, weight: .semibold))
                 }
+                .buttonStyle(.plain)
                 .padding(.top, 22)
                 .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("book.detail.series")
             }
 
             Text(summary.title)
@@ -140,6 +150,20 @@ struct BookDetailView: View {
 
     private func details(_ book: BookDetail) -> some View {
         VStack(alignment: .leading, spacing: 0) {
+            if let description = book.description, !description.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(PlainText.from(description))
+                        .font(.geist(.subheadline))
+                        .lineLimit(showingFullDescription ? nil : 5)
+                        .accessibilityIdentifier("book.detail.description")
+                    Button(showingFullDescription ? String(localized: "Show less") : String(localized: "Show more")) {
+                        withAnimation(.easeInOut(duration: 0.25)) { showingFullDescription.toggle() }
+                    }
+                    .font(.geist(.subheadline, weight: .semibold))
+                    .accessibilityIdentifier("book.detail.description.more")
+                }
+                .padding(.top, 28)
+            }
             let rows = infoRows(book)
             if !rows.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
@@ -189,14 +213,41 @@ struct BookDetailView: View {
 
     private func infoRows(_ book: BookDetail) -> [InfoRow] {
         var rows: [InfoRow] = []
+        if let status = standing?.status {
+            rows.append(InfoRow(label: String(localized: "STATUS"), value: AnyView(
+                Text(ReadingStatusLabel.text(status)).font(.geist(.subheadline, weight: .medium))
+                    .accessibilityIdentifier("book.detail.status")
+            )))
+        }
+        if let rating = standing?.rating {
+            rows.append(InfoRow(label: String(localized: "RATING"), value: AnyView(RatingStars(units: rating))))
+        }
         if !book.series.isEmpty {
-            let text = book.series.map(seriesLine).joined(separator: ", ")
-            rows.append(InfoRow(label: String(localized: "SERIES"), value: AnyView(Text(text).font(.geist(.subheadline)))))
+            rows.append(InfoRow(label: String(localized: "SERIES"), value: AnyView(LinkChips(items: book.series.map {
+                (Route.resource(.series, id: $0.seriesID, name: $0.name), seriesLine($0))
+            }, identifier: "book.detail.series.link"))))
+        }
+        let uncredited = book.authors.filter { $0.role == nil }
+        if !uncredited.isEmpty {
+            rows.append(InfoRow(label: String(localized: "AUTHORS"), value: AnyView(LinkChips(items: uncredited.map {
+                (Route.resource(.person, id: $0.personID, name: $0.name), $0.name)
+            }, identifier: "book.detail.author"))))
         }
         let credited = book.authors.filter { $0.role != nil }
         if !credited.isEmpty {
-            let text = credited.map { "\($0.name) (\(roleLabel($0.role ?? "")))" }.joined(separator: ", ")
-            rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(Text(text).font(.geist(.subheadline)))))
+            rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(LinkChips(items: credited.map {
+                (Route.resource(.person, id: $0.personID, name: $0.name), "\($0.name) (\(roleLabel($0.role ?? "")))")
+            }, identifier: "book.detail.creator"))))
+        }
+        if !book.genres.isEmpty {
+            rows.append(InfoRow(label: String(localized: "GENRES"), value: AnyView(LinkChips(items: book.genres.map {
+                (Route.resource(.genre, id: $0.id, name: $0.name), $0.name)
+            }, identifier: "book.detail.genre"))))
+        }
+        if !book.tags.isEmpty {
+            rows.append(InfoRow(label: String(localized: "TAGS"), value: AnyView(LinkChips(items: book.tags.map {
+                (Route.resource(.tag, id: $0.id, name: $0.name), $0.name)
+            }, identifier: "book.detail.tag"))))
         }
         if !book.summary.fileTypes.isEmpty {
             rows.append(InfoRow(label: String(localized: "FORMATS"), value: AnyView(
@@ -261,6 +312,19 @@ private struct FileCard: View {
                                 .foregroundStyle(Theme.mutedForeground)
                                 .lineLimit(2)
                         }
+                        if let publisher = file.publisher {
+                            Text("Published by \(publisher)")
+                                .font(.geist(.footnote))
+                                .foregroundStyle(Theme.mutedForeground)
+                                .lineLimit(1)
+                        }
+                        ForEach(file.identifiers, id: \.self) { identifier in
+                            Text("\(IdentifierLabel.text(identifier.type)) \(identifier.value)")
+                                .font(.geist(.caption))
+                                .foregroundStyle(Theme.mutedForeground)
+                                .textSelection(.enabled)
+                                .lineLimit(1)
+                        }
                     } else {
                         Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
                             .font(.geist(.footnote))
@@ -308,5 +372,134 @@ private struct FileCard: View {
             parts.append(String(localized: "Supplement"))
         }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Each Reading Status as the web app names it.
+enum ReadingStatusLabel {
+    static func text(_ status: String) -> String {
+        switch status {
+        case "currently_reading": String(localized: "Currently Reading")
+        case "paused": String(localized: "Paused")
+        case "to_read": String(localized: "To Read")
+        case "read": String(localized: "Read")
+        case "did_not_finish": String(localized: "Did Not Finish")
+        case "reference": String(localized: "Reference")
+        default: status.replacingOccurrences(of: "_", with: " ").capitalized
+        }
+    }
+}
+
+/// An identifier's type as the web app names it.
+enum IdentifierLabel {
+    static func text(_ type: String) -> String {
+        switch type {
+        case "isbn_10": "ISBN-10"
+        case "isbn_13": "ISBN-13"
+        case "asin": "ASIN"
+        case "uuid": "UUID"
+        case "goodreads": "Goodreads"
+        case "google": "Google"
+        default: type.replacingOccurrences(of: "_", with: " ").uppercased()
+        }
+    }
+}
+
+/// A Rating in stars, from quarter stars, read only here.
+struct RatingStars: View {
+    let units: Int
+
+    private var stars: Double { Double(units) / 4 }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(0..<5, id: \.self) { index in
+                let fill = min(1, max(0, stars - Double(index)))
+                Image(systemName: fill >= 0.75 ? "star.fill" : fill >= 0.25 ? "star.leadinghalf.filled" : "star")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.primary)
+            }
+            Text(stars.formatted(.number.precision(.fractionLength(0...2))))
+                .font(.geist(.subheadline))
+                .foregroundStyle(Theme.mutedForeground)
+                .padding(.leading, 4)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "Rated \(stars.formatted(.number.precision(.fractionLength(0...2)))) of 5 stars"))
+        .accessibilityIdentifier("book.detail.rating")
+    }
+}
+
+/// Links that wrap onto as many lines as they need, each opening its page.
+struct LinkChips: View {
+    let items: [(Route, String)]
+    let identifier: String
+
+    var body: some View {
+        FlowLayout(spacing: 6) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                NavigationLink(value: item.0) {
+                    Text(item.1)
+                        .font(.geist(.subheadline, weight: .medium))
+                        .foregroundStyle(Theme.foreground)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Theme.secondary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(identifier)
+            }
+        }
+    }
+}
+
+/// Lays its views out in rows, wrapping to the next as a line of text does.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1))
+        let width = rows.map(\.width).max() ?? 0
+        return CGSize(width: proposal.width ?? width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
+        }
+    }
+
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows: [Row] = []
+        var row = Row()
+        for index in subviews.indices {
+            var size = subviews[index].sizeThatFits(.unspecified)
+            size.width = min(size.width, width)
+            if !row.indices.isEmpty, row.width + spacing + size.width > width {
+                rows.append(row)
+                row = Row()
+            }
+            row.width += (row.indices.isEmpty ? 0 : spacing) + size.width
+            row.height = max(row.height, size.height)
+            row.indices.append(index)
+        }
+        if !row.indices.isEmpty {
+            rows.append(row)
+        }
+        return rows
     }
 }

@@ -10,6 +10,9 @@ struct SignInView: View {
     @State private var error: SignInError?
     @State private var failures = 0
     @FocusState private var focus: Field?
+    /// Signing in to another account, from the Account sheet: the screen
+    /// opens as a sheet that can be cancelled.
+    var addingAccount = false
 
     private enum Field: CaseIterable { case server, username, password }
 
@@ -23,7 +26,12 @@ struct SignInView: View {
                 brand
                     .padding(.top, 48)
 
-                if let account = model.signedOutAccount, error == nil {
+                if addingAccount {
+                    Text("Add another server or account. You can switch between them in Account.")
+                        .font(.geist(.subheadline))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .multilineTextAlignment(.center)
+                } else if let account = model.signedOutAccount, error == nil {
                     NoticeCard(
                         text: String(localized: "This device was signed out of \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString). Sign in again to keep syncing. Everything on this device is still here."),
                         systemImage: "person.crop.circle.badge.exclamationmark",
@@ -106,6 +114,14 @@ struct SignInView: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: error?.message)
         }
         .scrollDismissesKeyboard(.interactively)
+        .overlay(alignment: .topTrailing) {
+            if addingAccount {
+                Button("Cancel") { model.addingAccount = false }
+                    .font(.geist(.body, weight: .semibold))
+                    .padding(20)
+                    .accessibilityIdentifier("signin.cancel")
+            }
+        }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Button { moveFocus(by: -1) } label: { Image(systemName: "chevron.up") }

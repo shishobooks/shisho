@@ -7,7 +7,7 @@ struct RootView: View {
         @Bindable var model = model
         ZStack {
             if model.session != nil {
-                LibraryView()
+                MainTabs()
                     .transition(.opacity.combined(with: .scale(scale: 1.02)))
             } else {
                 SignInView()
@@ -18,6 +18,9 @@ struct RootView: View {
         .background(Theme.background)
         .sheet(isPresented: $model.showingPlayer) {
             NowPlayingView()
+        }
+        .sheet(isPresented: $model.addingAccount) {
+            SignInView(addingAccount: true)
         }
     }
 }

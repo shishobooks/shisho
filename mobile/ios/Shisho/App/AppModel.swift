@@ -63,8 +63,13 @@ final class AppModel {
     private(set) var player: AudioPlayer?
     /// Now Playing is open.
     var showingPlayer = false
-    /// The Library's navigation: the Book pages pushed on it.
-    var libraryPath: [BookSummary] = []
+    /// The tab showing, and each tab's navigation: the pages pushed on it.
+    var tab: AppTab = .library
+    var libraryPath: [Route] = []
+    var listsPath: [Route] = []
+    var searchPath: [Route] = []
+    /// The sign-in sheet for adding another account is open.
+    var addingAccount = false
     private let syncs = SyncRunner()
     var isSyncing: Bool { syncs.isRunning }
     /// False while the device has no network at all, as in airplane mode
@@ -85,7 +90,8 @@ final class AppModel {
         }
         Task { [weak self] in
             for await path in NWPathMonitor() {
-                self?.networkChanged(available: path.status != .unsatisfied)
+                self?.networkChanged(available: path.status != .unsatisfied,
+                                     wifi: path.usesInterfaceType(.wifi) && !path.isExpensive && !path.isConstrained)
             }
         }
         // Observers don't run for what init sets.
@@ -104,6 +110,8 @@ final class AppModel {
         player = nil
         showingPlayer = false
         libraryPath = []
+        listsPath = []
+        searchPath = []
         if let session {
             let player = AudioPlayer(session: session) { [weak self] in
                 Task { await self?.syncNow() }
@@ -130,12 +138,46 @@ final class AppModel {
         playingInBackground = false
     }
 
-    /// Closes Now Playing onto book's page, pushing it unless it's showing.
+    /// Closes Now Playing onto book's page in the tab showing, pushing it
+    /// unless it's showing.
     func showBook(_ book: BookSummary) {
         showingPlayer = false
-        if libraryPath.last?.id != book.id {
-            libraryPath.append(book)
+        let route = Route.book(book)
+        switch tab {
+        case .library where libraryPath.last != route: libraryPath.append(route)
+        case .lists where listsPath.last != route: listsPath.append(route)
+        case .search where searchPath.last != route: searchPath.append(route)
+        default: break
         }
+    }
+
+    // MARK: - Accounts
+
+    /// Every account this installation signed in to, the current one first.
+    var allAccounts: [Account] {
+        _ = session
+        let current = accounts.current?.id
+        return accounts.accounts.sorted { ($0.id == current ? 0 : 1) < ($1.id == current ? 0 : 1) }
+    }
+
+    /// Opens another account at once: each has its own database, so what
+    /// shows is that account's copy, and a sync brings it up to date. One
+    /// whose sign-in ended opens the sign-in screen for it.
+    func switchAccount(to id: String) {
+        guard id != session?.account.id, let account = accounts.accounts.first(where: { $0.id == id }) else { return }
+        syncs.stop()
+        syncStatus = .idle
+        accounts.save(account)
+        guard !account.signedOut, let credential = Keychain.credential(for: account.id),
+              let opened = try? openSession(account: account, credential: credential)
+        else {
+            signedOutAccount = account
+            session = nil
+            return
+        }
+        signedOutAccount = nil
+        session = opened
+        Task { await syncNow() }
     }
 
     /// Opens an audiobook File in the player and shows Now Playing.
@@ -231,6 +273,7 @@ final class AppModel {
             throw SignInError(message: String(localized: "The app couldn't open its storage on this device. \(error.localizedDescription)"))
         }
         signedOutAccount = nil
+        addingAccount = false
         await syncNow()
     }
 
@@ -247,6 +290,10 @@ final class AppModel {
         self.session = nil
         signedOutAccount = nil
         syncStatus = .idle
+        // Another account still signed in takes over.
+        if let next = accounts.accounts.first(where: { !$0.signedOut && $0.id != session.account.id && Keychain.credential(for: $0.id) != nil }) {
+            switchAccount(to: next.id)
+        }
         await session.client.signOut()
     }
 
@@ -333,6 +380,7 @@ final class AppModel {
             try await session.sync.run()
             guard isCurrent() else { return }
             syncStatus = .idle
+            prefetchCoversIfWanted(session)
         } catch {
             await Diagnostics.shared.log(.sync, "sync failed: \(Diagnostics.describe(error))")
             guard isCurrent() else { return }
@@ -370,9 +418,47 @@ final class AppModel {
         }
     }
 
+    // MARK: - Covers
+
+    /// Whether to download every cover on Wi-Fi, kept for each account. Off
+    /// until the user turns it on.
+    func prefetchesCovers(_ account: Account) -> Bool {
+        UserDefaults.standard.bool(forKey: "prefetchCovers.\(account.id)")
+    }
+
+    func setPrefetchesCovers(_ on: Bool) {
+        guard let session else { return }
+        UserDefaults.standard.set(on, forKey: "prefetchCovers.\(session.account.id)")
+        if on { prefetchCoversIfWanted(session) }
+    }
+
+    @ObservationIgnored private var onWiFi = false
+    @ObservationIgnored private var prefetching: Task<Void, Never>?
+
+    /// Downloads every cover the account's Library shows that isn't on the
+    /// device yet, at the grid's size, while on Wi-Fi, so browsing offline
+    /// shows them all.
+    private func prefetchCoversIfWanted(_ session: AccountSession) {
+        guard prefetchesCovers(session.account), onWiFi, prefetching == nil else { return }
+        let size = CoverCache.pixelSize(forWidth: 140, scale: UIScreen.main.scale)
+        prefetching = Task { [weak self] in
+            let versions = (try? session.store.coverVersions()) ?? []
+            for cover in versions {
+                guard !Task.isCancelled, self?.session === session, self?.onWiFi == true else { break }
+                _ = await session.covers.image(bookID: cover.bookID, version: cover.version, size: size)
+            }
+            self?.prefetching = nil
+        }
+    }
+
     /// Coming back online syncs; going offline says so without waiting for
     /// a request to fail.
-    private func networkChanged(available: Bool) {
+    private func networkChanged(available: Bool, wifi: Bool = false) {
+        onWiFi = wifi
+        if !wifi {
+            prefetching?.cancel()
+            prefetching = nil
+        }
         guard available != networkAvailable else { return }
         networkAvailable = available
         if available {
@@ -463,4 +549,19 @@ enum Messages {
         if case .appTooOld = error { return true }
         return false
     }
+}
+
+/// The app's tabs.
+enum AppTab: Hashable {
+    case library, lists, search
+}
+
+/// A page pushed on a tab's navigation.
+enum Route: Hashable {
+    case book(BookSummary)
+    /// Every Series, Person, Genre, or Tag of the Library picked.
+    case browse(ResourceKind)
+    /// One Series, Person, Genre, or Tag, and its Books.
+    case resource(ResourceKind, id: Int, name: String)
+    case list(id: Int, name: String)
 }

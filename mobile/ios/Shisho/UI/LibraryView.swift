@@ -38,6 +38,8 @@ struct LibraryView: View {
                                 .padding(.horizontal, GridLayout.margin)
                                 .padding(.top, 8)
                         }
+                        BrowseRow()
+                            .padding(.top, 12)
                         SyncBanner()
                             .padding(.horizontal, GridLayout.margin)
                             .padding(.top, 14)
@@ -51,7 +53,7 @@ struct LibraryView: View {
                             if books.isEmpty {
                                 emptyState
                             } else {
-                                grid(books, width: geometry.size.width)
+                                BookGrid(books: books, width: geometry.size.width)
                             }
                         }
                     }
@@ -69,19 +71,10 @@ struct LibraryView: View {
                     AccountButton { showingAccount = true }
                 }
             }
-            .navigationDestination(for: BookSummary.self) { book in
-                BookDetailView(bookID: book.id, initial: book)
-            }
+            .routeDestinations()
             .sheet(isPresented: $showingAccount) {
                 AccountSheet()
             }
-        }
-        // Outside the stack, so the mini player stays on every pushed screen.
-        // Each screen's scroll view leaves room for it (miniPlayerClearance).
-        .overlay(alignment: .bottom) {
-            MiniPlayer()
-                .frame(maxWidth: 680)
-                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
         }
         .tint(Theme.primary)
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
@@ -114,23 +107,6 @@ struct LibraryView: View {
         .padding(.horizontal, GridLayout.margin)
         .padding(.top, 20)
         .padding(.bottom, 14)
-    }
-
-    private func grid(_ books: [BookSummary], width: CGFloat) -> some View {
-        let layout = GridLayout(width: width, regular: sizeClass == .regular,
-                                accessibility: dynamicTypeSize.isAccessibilitySize)
-        let cellWidth = layout.cellWidth
-        let column = GridItem(.fixed(cellWidth), spacing: GridLayout.spacing, alignment: .top)
-        return LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
-            ForEach(books) { book in
-                NavigationLink(value: book) {
-                    BookCell(book: book, width: cellWidth)
-                }
-                .buttonStyle(PressableStyle())
-            }
-        }
-        .padding(.horizontal, GridLayout.margin)
-        .accessibilityIdentifier("library.grid")
     }
 
     private var emptyState: some View {
@@ -271,12 +247,15 @@ private struct AccountButton: View {
 struct BookCell: View {
     let book: BookSummary
     let width: CGFloat
+    /// The Book's Series Number, on a Series' page, inline with the title so
+    /// the title wraps under it, as the web gallery shows it.
+    var seriesNumber: (Double, Double?)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             CoverView(book: book, width: width)
                 .padding(.bottom, 4)
-            Text(book.title)
+            titleText
                 .font(.geist(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.foreground)
                 .lineLimit(2)
@@ -304,8 +283,20 @@ struct BookCell: View {
         .accessibilityIdentifier("book.cell")
     }
 
+    private var titleText: Text {
+        guard let (number, end) = seriesNumber else { return Text(book.title) }
+        var badge = AttributedString(" " + SeriesNumbers.format(number) + (end.map { "-" + SeriesNumbers.format($0) } ?? "") + " ")
+        badge.backgroundColor = Theme.primary
+        badge.foregroundColor = Theme.primaryForeground
+        badge.font = .geist(.caption, weight: .heavy)
+        return Text(badge) + Text(" ") + Text(book.title)
+    }
+
     private var accessibilityText: String {
         var text = book.title
+        if let (number, _) = seriesNumber {
+            text = String(localized: "Number \(SeriesNumbers.format(number)), \(text)")
+        }
         if !book.authors.isEmpty {
             text += ", " + String(localized: "by \(book.authors)")
         }
