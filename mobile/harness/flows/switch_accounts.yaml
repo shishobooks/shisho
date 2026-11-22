@@ -1,0 +1,67 @@
+# Sign into a second account and switch back and forth (#914). Each account
+# has its own copy of its library, so a switch shows it at once, even with
+# the server unreachable. The second account can't access the Library here,
+# so its library is empty.
+appId: ${APP_ID}
+name: Switch between accounts
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runScript:
+    file: scripts/reader_access.js
+    env:
+      CONTROL: ${CONTROL}
+      ACCESS: none
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- extendedWaitUntil:
+    visible: The Harness Novel
+    timeout: 30000
+
+# Add the second account.
+- tapOn:
+    id: account.button
+- tapOn:
+    id: account.add
+- runFlow:
+    file: subflows/sign_in.yaml
+    env:
+      USERNAME: ${READER_USERNAME}
+      PASSWORD: ${READER_PASSWORD}
+- extendedWaitUntil:
+    visible: No Books yet
+    timeout: 30000
+
+# Switching needs no server.
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+- tapOn:
+    id: account.button
+- tapOn:
+    id: account.switch.harness
+- extendedWaitUntil:
+    visible: The Harness Novel
+    timeout: 5000
+- tapOn:
+    id: account.button
+- tapOn:
+    id: account.switch.${READER_USERNAME}
+- extendedWaitUntil:
+    visible: No Books yet
+    timeout: 5000
+- assertNotVisible: The Harness Novel
+
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runScript:
+    file: scripts/reader_access.js
+    env:
+      CONTROL: ${CONTROL}
+      ACCESS: all

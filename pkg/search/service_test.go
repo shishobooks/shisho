@@ -7,6 +7,7 @@ import (
 
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/uptrace/bun"
 )
@@ -873,4 +874,41 @@ func TestRebuildAllIndexes_IncludesAliases(t *testing.T) {
 		Where("publishers_fts MATCH ?", `"S&S"`).Where("library_id = ?", library.ID).Scan(ctx, &pubCount)
 	require.NoError(t, err)
 	require.Equal(t, 1, pubCount, "RebuildAllIndexes should include publisher aliases")
+}
+
+// The web's search finds a Book by its identifier as typed, with or without
+// an ISBN's hyphens, through both the global search and the Books search.
+func TestSearch_FindsABookByItsIdentifier(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+	library := &models.Library{Name: "Test Library", CoverAspectRatio: "2:3"}
+	_, err := db.NewInsert().Model(library).Exec(ctx)
+	require.NoError(t, err)
+	book := &models.Book{
+		LibraryID: library.ID, Filepath: "/test/book", Title: "Test Book", TitleSource: "file",
+		SortTitle: "Test Book", SortTitleSource: "file", AuthorSource: "file",
+	}
+	_, err = db.NewInsert().Model(book).Exec(ctx)
+	require.NoError(t, err)
+	file := &models.File{
+		LibraryID: library.ID, BookID: book.ID, Filepath: "/test/book/test.epub",
+		FileType: models.FileTypeEPUB, FileRole: models.FileRoleMain, FilesizeBytes: 1000,
+	}
+	_, err = db.NewInsert().Model(file).Exec(ctx)
+	require.NoError(t, err)
+	_, err = db.NewInsert().Model(&models.FileIdentifier{FileID: file.ID, Type: "isbn_13", Value: "9781234567897", Source: "file"}).Exec(ctx)
+	require.NoError(t, err)
+
+	svc := NewService(db)
+	for _, query := range []string{"9781234567897", "978-1-234-56789-7", " 978 1234567897 "} {
+		global, err := svc.GlobalSearch(ctx, library.ID, query, GlobalSearchSections{})
+		require.NoError(t, err)
+		require.Len(t, global.Books, 1, query)
+		assert.Equal(t, book.ID, global.Books[0].ID, query)
+
+		books, _, err := svc.SearchBooks(ctx, library.ID, query, nil, 10, 0)
+		require.NoError(t, err)
+		require.Len(t, books, 1, query)
+	}
 }

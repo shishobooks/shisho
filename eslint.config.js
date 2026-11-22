@@ -244,6 +244,7 @@ export default tseslint.config(
         // Each flow's env, passed to its scripts.
         CONTROL: "readonly",
         TITLE: "readonly",
+        ACCESS: "readonly",
       },
     },
   },

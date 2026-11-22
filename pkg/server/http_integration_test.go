@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -111,4 +112,32 @@ func TestEventStreamFlushesWithoutGzip(t *testing.T) {
 	line, err = reader.ReadString('\n')
 	require.NoError(t, err)
 	assert.Equal(t, "data: {\"job_id\":42}\n", line)
+}
+
+// A client that connects and then takes a few seconds to send its request,
+// such as a phone or a loaded CI simulator, gets a response rather than a
+// reset. iOS doesn't retry a POST, so a dropped connection fails sign-in.
+func TestServerWaitsForSlowRequestHeaders(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+	cfg := config.NewForTest()
+	cfg.CacheDir = t.TempDir()
+	srv, err := New(cfg, tc.db, tc.worker, nil, nil, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+	ts := httptest.NewUnstartedServer(srv.Handler)
+	ts.Config = srv
+	ts.Start()
+	defer ts.Close()
+
+	conn, err := (&net.Dialer{}).DialContext(t.Context(), "tcp", ts.Listener.Addr().String())
+	require.NoError(t, err)
+	defer conn.Close()
+	time.Sleep(4 * time.Second)
+	require.NoError(t, conn.SetDeadline(time.Now().Add(5*time.Second)))
+	_, err = conn.Write([]byte("GET /health HTTP/1.1\r\nHost: shisho.test\r\nConnection: close\r\n\r\n"))
+	require.NoError(t, err)
+	res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err, "the server must not drop a connection whose headers arrive after 4 seconds")
+	defer res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
 }

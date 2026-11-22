@@ -40,6 +40,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import {
   Tooltip,
   TooltipContent,
@@ -66,6 +67,7 @@ import {
   getFilename,
 } from "@/utils/format";
 import { getReadingAction } from "@/utils/readingAction";
+import { formatProgress } from "@/utils/readingStatus";
 
 /**
  * Everything the File details dialog lists. A Share Link recipient sees the
@@ -140,6 +142,40 @@ const rowFacts = (file: File): string[] =>
     file.release_date ? formatYear(file.release_date) : null,
     formatFileSize(file.filesize_bytes),
   ].filter((fact): fact is string => fact !== null);
+
+/** How much of the file is left at progress: time for an audiobook, else pages. */
+const leftLabel = (file: File, progress: number): string | null => {
+  const rest = Math.max(0, 1 - progress);
+  if (file.audiobook_duration_seconds) {
+    return `${formatDuration(file.audiobook_duration_seconds * rest)} left`;
+  }
+  if (file.page_count) {
+    return `${formatPageCount(Math.round(file.page_count * rest))} left`;
+  }
+  return null;
+};
+
+/**
+ * How far through the file the reader is, under its facts on a phone: a thin
+ * bar, the percentage, and what's left, as the Shisho app's file row shows
+ * it. From sm up the ring beside the actions shows it instead.
+ */
+const FileProgress = ({ file, progress }: { file: File; progress: number }) => {
+  const percent = formatProgress(progress);
+  const left = progress < 1 ? leftLabel(file, progress) : null;
+  return (
+    <div className="mt-2 flex items-center gap-2 text-xs tabular-nums text-muted-foreground sm:hidden">
+      <Progress
+        aria-label={`${percent} through`}
+        className="h-1 max-w-48 flex-1"
+        value={Math.round(progress * 100)}
+      />
+      <span className="shrink-0">
+        {[percent, left].filter(Boolean).join(" · ")}
+      </span>
+    </div>
+  );
+};
 
 export interface BookFileRowProps {
   file: File;
@@ -290,15 +326,14 @@ const BookFileRow = ({
             ))}
           </p>
         )}
+        {progress != null && <FileProgress file={file} progress={progress} />}
       </div>
 
-      {/* On a phone the actions take their own line under the name, so the
-          name keeps the row's width. They sit at the right there too, so the
-          icons after the variable-width download button line up row to row. */}
-      <div className="flex shrink-0 items-center gap-1.5 max-sm:basis-full max-sm:justify-end">
-        {progress != null && (
-          <ProgressRing className="mr-1.5" progress={progress} />
-        )}
+      {/* On a phone the actions take their own line, so the name keeps the
+          row's width. The line starts under the name rather than the cover
+          (the cover slot and the gap: 56px + 12px), so no space is left
+          empty beneath the cover. */}
+      <div className="flex shrink-0 items-center gap-1.5 max-sm:basis-full max-sm:pl-[68px]">
         <FileDownloadControl
           bookTitle={bookTitle}
           deliveredFileType={deliveredFileType}
@@ -310,6 +345,12 @@ const BookFileRow = ({
           onDownloadAs={onDownloadAs}
           onDownloadOriginal={onDownloadOriginal}
         />
+        {/* Right before Read or Listen on a wide screen, so how far through
+            sits by the button that goes on from there; a phone has the bar.
+            The icons from Read on keep their places row to row. */}
+        {progress != null && (
+          <ProgressRing className="mx-1 max-sm:hidden" progress={progress} />
+        )}
         {readingAction && (
           <Tooltip>
             <TooltipTrigger asChild>

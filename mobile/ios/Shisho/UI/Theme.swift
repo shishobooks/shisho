@@ -17,11 +17,51 @@ enum Theme {
     static let border = Color("Border")
     static let input = Color("Input")
     static let destructive = Color("Destructive")
+    /// The web app's Rating stars, Tailwind's amber-400, the same in light
+    /// and dark.
+    static let rating = Color(red: 251 / 255, green: 191 / 255, blue: 36 / 255)
+    /// Tailwind's amber-500, which the web's Rating filter marks with.
+    static let ratingStrong = Color(red: 245 / 255, green: 158 / 255, blue: 11 / 255)
+    /// The web's chart colors (`--chart-1`, `--chart-2`, `--chart-5`), which
+    /// its filter sections and chips are marked with.
+    static let chart1 = Color("Chart1")
+    static let chart2 = Color("Chart2")
+    static let chart5 = Color("Chart5")
 
     /// Covers and inputs, as the web app rounds them.
     static let radius: CGFloat = 8
     /// Cards and sheets.
     static let cardRadius: CGFloat = 14
+}
+
+extension Theme {
+    /// Geist for what SwiftUI's font doesn't reach: navigation bar titles,
+    /// bar buttons such as Cancel and Done, and the search field. System
+    /// menus, alerts, and the keyboard stay as iOS draws them.
+    @MainActor static func applyUIKitFonts() {
+        func geist(_ size: CGFloat, _ weight: UIFont.Weight, _ style: UIFont.TextStyle) -> UIFont {
+            let descriptor = UIFontDescriptor(fontAttributes: [
+                .family: "Geist",
+                .traits: [UIFontDescriptor.TraitKey.weight: weight],
+            ])
+            return UIFontMetrics(forTextStyle: style).scaledFont(for: UIFont(descriptor: descriptor, size: size))
+        }
+        let bar = UINavigationBar.appearance()
+        bar.titleTextAttributes = [.font: geist(17, .semibold, .headline)]
+        bar.largeTitleTextAttributes = [.font: geist(34, .bold, .largeTitle)]
+        for state in [UIControl.State.normal, .highlighted, .disabled] {
+            UIBarButtonItem.appearance().setTitleTextAttributes([.font: geist(17, .regular, .body)], for: state)
+        }
+        UISearchTextField.appearance().font = geist(17, .regular, .body)
+    }
+}
+
+extension View {
+    /// Takes taps a little past its edges, so a control drawn smaller than
+    /// Apple's 44 points still has a 44-point target.
+    func hitArea(height: CGFloat) -> some View {
+        contentShape(Rectangle().inset(by: -max(0, (44 - height) / 2)))
+    }
 }
 
 extension Font {
@@ -271,6 +311,14 @@ extension NoticeCard where Action == EmptyView {
 // MARK: - Formatting
 
 enum FileTypes {
+    /// The order the web's filters list them in (`FILE_TYPE_OPTIONS`).
+    static let order = ["epub", "kepub", "azw3", "mobi", "m4b", "cbz", "pdf"]
+
+    /// Sorted as the web lists them, any it doesn't know last.
+    static func sorted(_ types: some Sequence<String>) -> [String] {
+        types.sorted { (order.firstIndex(of: $0) ?? order.count, $0) < (order.firstIndex(of: $1) ?? order.count, $1) }
+    }
+
     /// File Types this version knows; any other is shown as not supported
     /// (ADR 0021).
     static let known: [String: String] = [
@@ -286,8 +334,3 @@ enum FileTypes {
     }
 }
 
-enum SeriesNumbers {
-    static func format(_ number: Double) -> String {
-        number.formatted(.number.precision(.fractionLength(0...2)))
-    }
-}

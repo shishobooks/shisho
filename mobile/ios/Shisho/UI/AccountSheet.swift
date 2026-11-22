@@ -1,15 +1,15 @@
 import SwiftUI
 
 /// The signed-in account: which server, the versions on both sides, the
-/// last sync, and signing out. The account store already keeps several
-/// accounts, each in its own folder; this sheet is where switching between
-/// them goes.
+/// last sync, and signing out, with every other account on this device to
+/// switch to at once, each with its own copy of its library.
 struct AccountSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     @State private var confirmingSignOut = false
     @State private var showingDiagnostics = false
     @State private var syncState: SyncState?
+    @State private var prefetchCovers = false
 
     var body: some View {
         NavigationStack {
@@ -17,7 +17,9 @@ struct AccountSheet: View {
                 if let account = model.session?.account {
                     VStack(spacing: 20) {
                         identity(account)
+                        accountsCard(account)
                         detailsCard(account)
+                        coversCard
                         actions
                         Text("Signing out removes this device from your account on the server. The library on it stays until you sign in again.")
                             .font(.geist(.footnote))
@@ -43,7 +45,7 @@ struct AccountSheet: View {
             .sheet(isPresented: $showingDiagnostics) {
                 DiagnosticsSheet()
             }
-            .confirmationDialog("Sign out of \(model.session?.account.serverURL.host() ?? "this server")?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+            .confirmationDialog(signOutTitle, isPresented: $confirmingSignOut, titleVisibility: .visible) {
                 Button("Sign Out", role: .destructive) {
                     dismiss()
                     Task { await model.signOut() }
@@ -58,17 +60,99 @@ struct AccountSheet: View {
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $syncState) { db in
             try CatalogStore.syncState(db)
         }
+        .task(id: model.session?.account.id) {
+            if let account = model.session?.account {
+                prefetchCovers = model.prefetchesCovers(account)
+            }
+        }
+    }
+
+    /// Every account on this device: tapping one opens its library at once,
+    /// from its own copy, and syncs it.
+    private func accountsCard(_ current: Account) -> some View {
+        VStack(spacing: 0) {
+            ForEach(model.allAccounts) { account in
+                Button {
+                    guard account.id != current.id else { return }
+                    dismiss()
+                    model.switchAccount(to: account.id)
+                } label: {
+                    HStack(spacing: 12) {
+                        AccountAvatar(account: account, size: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(account.username)
+                                .font(.geist(.subheadline, weight: .semibold))
+                                .foregroundStyle(Theme.foreground)
+                            Text(account.signedOut
+                                 ? String(localized: "\(account.serverURL.host() ?? account.serverURL.absoluteString) · Signed out")
+                                 : account.serverURL.host() ?? account.serverURL.absoluteString)
+                                .font(.geist(.footnote))
+                                .foregroundStyle(Theme.mutedForeground)
+                                .lineLimit(1)
+                        }
+                        Spacer()
+                        if account.id == current.id {
+                            Image(systemName: "checkmark")
+                                .font(.geist(.subheadline, weight: .semibold))
+                                .foregroundStyle(Theme.primary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 56)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(account.id == current.id ? .isSelected : [])
+                .accessibilityHint(account.id == current.id ? "" : String(localized: "Switches to this account"))
+                .accessibilityIdentifier("account.switch.\(account.username)")
+                Divider().overlay(Theme.border)
+            }
+            Button {
+                dismiss()
+                model.addingAccount = true
+            } label: {
+                Label("Add Server", systemImage: "plus")
+                    .font(.geist(.subheadline, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 48)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.primary)
+            .accessibilityIdentifier("account.add")
+        }
+        .cardStyle()
+    }
+
+    /// Covers download as they're first shown; this downloads all of them
+    /// on Wi-Fi, for browsing offline.
+    private var coversCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle("Download all covers on Wi-Fi", isOn: $prefetchCovers)
+                .font(.geist(.subheadline))
+                .tint(Theme.primary)
+                .accessibilityIdentifier("account.prefetchCovers")
+                .onChange(of: prefetchCovers) { _, on in model.setPrefetchesCovers(on) }
+            Text("Every cover in your Libraries shows offline. Otherwise covers download as you browse.")
+                .font(.geist(.footnote))
+                .foregroundStyle(Theme.mutedForeground)
+        }
+        .padding(16)
+        .cardStyle()
+    }
+
+    /// Names the account as well as its server, since several accounts can
+    /// be on one server.
+    private var signOutTitle: String {
+        guard let account = model.session?.account else { return String(localized: "Sign out?") }
+        return String(localized: "Sign out \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString)?")
     }
 
     private func identity(_ account: Account) -> some View {
         VStack(spacing: 10) {
-            Text(String(account.username.prefix(1).uppercased()))
-                .font(.geist(size: 30, relativeTo: .title, weight: .semibold))
-                .foregroundStyle(Theme.primary)
-                .frame(width: 68, height: 68)
-                .background(Theme.primary.opacity(0.12), in: Circle())
-                .overlay(Circle().strokeBorder(Theme.primary.opacity(0.25)))
-                .accessibilityHidden(true)
+            AccountAvatar(account: account, size: 68)
             Text(account.username)
                 .font(.geist(.title3, weight: .bold))
             Text(account.serverURL.host() ?? account.serverURL.absoluteString)
@@ -210,5 +294,37 @@ struct DiagnosticsSheet: View {
         }
         .tint(Theme.primary)
         .presentationDragIndicator(.visible)
+    }
+}
+
+/// An account's initial in a circle of its own color, so accounts whose
+/// usernames start alike still look different. The color comes from the
+/// account's id on this device, so it stays the same across launches.
+struct AccountAvatar: View {
+    let account: Account
+    let size: CGFloat
+    /// In the toolbar, where iOS 26 already sets the button in a circle.
+    var inToolbar = false
+
+    private var color: Color {
+        let hue = Double(account.id.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF } % 360) / 360
+        return Color(hue: hue, saturation: 0.55, brightness: 0.72)
+    }
+
+    var body: some View {
+        let initial = Text(String(account.username.prefix(1).uppercased()))
+            .font(.geist(size: size * 0.44, relativeTo: .title, weight: .semibold))
+            .foregroundStyle(color)
+        Group {
+            if #available(iOS 26, *), inToolbar {
+                initial
+            } else {
+                initial
+                    .frame(width: size, height: size)
+                    .background(color.opacity(0.14), in: Circle())
+                    .overlay(Circle().strokeBorder(color.opacity(0.3)))
+            }
+        }
+        .accessibilityHidden(true)
     }
 }

@@ -6,6 +6,8 @@ import SwiftUI
 struct MiniPlayer: View {
     @Environment(AppModel.self) private var model
     @State private var tint: Color?
+    /// How far the bar has been dragged down.
+    @State private var drag: CGFloat = 0
 
     var body: some View {
         if let player = model.player, let file = player.file {
@@ -67,7 +69,35 @@ struct MiniPlayer: View {
         // It docks over every screen, so it grows only so far with the text
         // size; Now Playing shows everything in it at full size.
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        // Paused, it swipes down out of the way, as docked players do; playing,
+        // it only gives a little and springs back.
+        .offset(y: drag)
+        .opacity(1 - Double(min(1, max(0, drag) / 120)) * 0.6)
+        // Ahead of the buttons, so a swipe that starts on one never also
+        // opens the player; a tap doesn't move far enough to start it.
+        .highPriorityGesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { value in
+                    let down = max(0, value.translation.height)
+                    drag = player.isPlaying ? down * 0.2 : down
+                }
+                .onEnded { value in
+                    if !player.isPlaying, value.translation.height > 50 || value.predictedEndTranslation.height > 120 {
+                        withAnimation(.easeOut(duration: 0.2)) { drag = 160 }
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(200))
+                            player.dismiss()
+                            drag = 0
+                        }
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { drag = 0 }
+                    }
+                }
+        )
         .accessibilityElement(children: .contain)
+        .accessibilityAction(named: Text("Dismiss")) {
+            if !player.isPlaying { player.dismiss() }
+        }
         .accessibilityIdentifier("miniplayer")
     }
 
@@ -120,8 +150,9 @@ private struct MiniPlayerClearance: ViewModifier {
 
     func body(content: Content) -> some View {
         let showing = model.player?.file != nil
-        // The bar's height at the largest size it grows to, and its margin.
+        // The bar's height at the largest size it grows to, and its margin,
+        // over the tab bar.
         let room: CGFloat = dynamicTypeSize >= .xxLarge ? 96 : 80
-        content.contentMargins(.bottom, showing ? room : 0, for: .scrollContent)
+        content.contentMargins(.bottom, (showing ? room : 0) + AppTabBar.height, for: .scrollContent)
     }
 }

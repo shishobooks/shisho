@@ -1,9 +1,15 @@
 package shishoapp
 
 import (
+	"archive/zip"
 	"context"
+	"slices"
+	"strings"
+	"time"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
+	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -15,24 +21,45 @@ import (
 // reading each record as it is now in tx, the snapshot the entries came
 // from. A record the entry doesn't mark deleted always exists in that
 // snapshot, since its delete would have moved its entry.
-func buildEntries(ctx context.Context, tx bun.IDB, userID int, entries []*changefeed.Entry) ([]FeedEntry, error) {
-	var bookIDs, libraryIDs, positionFileIDs, readThroughIDs []int
+func buildEntries(ctx context.Context, tx bun.IDB, user *models.User, entries []*changefeed.Entry) ([]FeedEntry, error) {
+	userID := user.ID
+	ids := map[string][]int{}
 	for _, entry := range entries {
-		if entry.Deleted {
-			continue
-		}
-		switch entry.Kind {
-		case changefeed.KindBook:
-			bookIDs = append(bookIDs, entry.RecordID)
-		case changefeed.KindLibrary:
-			libraryIDs = append(libraryIDs, entry.RecordID)
-		case changefeed.KindReadingPosition:
-			positionFileIDs = append(positionFileIDs, entry.RecordID)
-		case changefeed.KindReadThrough:
-			readThroughIDs = append(readThroughIDs, entry.RecordID)
+		if !entry.Deleted {
+			ids[entry.Kind] = append(ids[entry.Kind], entry.RecordID)
 		}
 	}
+	bookIDs, libraryIDs := ids[changefeed.KindBook], ids[changefeed.KindLibrary]
+	positionFileIDs, readThroughIDs := ids[changefeed.KindReadingPosition], ids[changefeed.KindReadThrough]
 	books, err := loadBooks(ctx, tx, bookIDs)
+	if err != nil {
+		return nil, err
+	}
+	series, err := loadSeries(ctx, tx, ids[changefeed.KindSeries])
+	if err != nil {
+		return nil, err
+	}
+	persons, err := loadPersons(ctx, tx, ids[changefeed.KindPerson])
+	if err != nil {
+		return nil, err
+	}
+	genres, err := loadGenres(ctx, tx, ids[changefeed.KindGenre])
+	if err != nil {
+		return nil, err
+	}
+	tags, err := loadTags(ctx, tx, ids[changefeed.KindTag])
+	if err != nil {
+		return nil, err
+	}
+	publishers, err := loadPublishers(ctx, tx, ids[changefeed.KindPublisher])
+	if err != nil {
+		return nil, err
+	}
+	userBooks, err := loadUserBooks(ctx, tx, userID, ids[changefeed.KindUserBook])
+	if err != nil {
+		return nil, err
+	}
+	lists, err := loadLists(ctx, tx, user, ids[changefeed.KindList])
 	if err != nil {
 		return nil, err
 	}
@@ -56,33 +83,34 @@ func buildEntries(ctx context.Context, tx bun.IDB, userID int, entries []*change
 			item.LibraryID = *entry.LibraryID
 		}
 		if !entry.Deleted {
+			var ok bool
 			switch entry.Kind {
+			case changefeed.KindSeries:
+				item.Series, ok = series[entry.RecordID]
+			case changefeed.KindPerson:
+				item.Person, ok = persons[entry.RecordID]
+			case changefeed.KindGenre:
+				item.Genre, ok = genres[entry.RecordID]
+			case changefeed.KindTag:
+				item.Tag, ok = tags[entry.RecordID]
+			case changefeed.KindPublisher:
+				item.Publisher, ok = publishers[entry.RecordID]
+			case changefeed.KindUserBook:
+				item.UserBook, ok = userBooks[entry.RecordID]
+			case changefeed.KindList:
+				item.List, ok = lists[entry.RecordID]
 			case changefeed.KindBook:
-				book, ok := books[entry.RecordID]
-				if !ok {
-					continue
-				}
-				item.Book = book
+				item.Book, ok = books[entry.RecordID]
 			case changefeed.KindLibrary:
-				library, ok := libraries[entry.RecordID]
-				if !ok {
-					continue
-				}
-				item.Library = library
+				item.Library, ok = libraries[entry.RecordID]
 			case changefeed.KindReadingPosition:
-				position, ok := positions[entry.RecordID]
-				if !ok {
-					continue
-				}
-				item.ReadingPosition = position
+				item.ReadingPosition, ok = positions[entry.RecordID]
 			case changefeed.KindReadThrough:
-				readThrough, ok := readThroughs[entry.RecordID]
-				if !ok {
-					continue
-				}
-				item.ReadThrough = readThrough
+				item.ReadThrough, ok = readThroughs[entry.RecordID]
 			default:
 				// A kind this server doesn't build documents for yet.
+			}
+			if !ok {
 				continue
 			}
 		}
@@ -153,31 +181,57 @@ func loadBooks(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedBook, e
 		Relation("Files.Chapters", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.Order("ch.sort_order ASC", "ch.id ASC")
 		}).
+		Relation("Files.Publisher").
+		Relation("Files.Identifiers", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Order("fi.id ASC")
+		}).
+		Relation("BookGenres.Genre").
+		Relation("BookTags.Tag").
 		Where("b.id IN (?)", bun.List(ids)).
 		Scan(ctx)
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 	for _, book := range books {
-		out[book.ID] = bookDocument(book)
+		// Reading a CBZ's pages opens its archive, so a sync the app gave
+		// up on stops here.
+		if err := ctx.Err(); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		out[book.ID] = bookDocument(ctx, book)
 	}
 	return out, nil
 }
 
 // bookDocument is book as the app keeps it. The triggers move a Book's
 // entry when anything read here changes.
-func bookDocument(book *models.Book) *FeedBook {
+func bookDocument(ctx context.Context, book *models.Book) *FeedBook {
 	doc := &FeedBook{
-		ID:        book.ID,
-		LibraryID: book.LibraryID,
-		Title:     book.Title,
-		Subtitle:  book.Subtitle,
-		SortTitle: book.SortTitle,
-		CreatedAt: book.CreatedAt,
-		Authors:   []FeedAuthor{},
-		Series:    []FeedSeriesMembership{},
-		Files:     []FeedFile{},
+		ID:          book.ID,
+		LibraryID:   book.LibraryID,
+		Title:       book.Title,
+		Subtitle:    book.Subtitle,
+		SortTitle:   book.SortTitle,
+		Description: book.Description,
+		CreatedAt:   book.CreatedAt,
+		Authors:     []FeedAuthor{},
+		Series:      []FeedSeriesMembership{},
+		Genres:      []FeedGenreRef{},
+		Tags:        []FeedTagRef{},
+		Files:       []FeedFile{},
 	}
+	for _, bookGenre := range book.BookGenres {
+		if bookGenre.Genre != nil {
+			doc.Genres = append(doc.Genres, FeedGenreRef{GenreID: bookGenre.GenreID, Name: bookGenre.Genre.Name})
+		}
+	}
+	slices.SortFunc(doc.Genres, func(a, b FeedGenreRef) int { return compareNames(a.Name, b.Name) })
+	for _, bookTag := range book.BookTags {
+		if bookTag.Tag != nil {
+			doc.Tags = append(doc.Tags, FeedTagRef{TagID: bookTag.TagID, Name: bookTag.Tag.Name})
+		}
+	}
+	slices.SortFunc(doc.Tags, func(a, b FeedTagRef) int { return compareNames(a.Name, b.Name) })
 	for _, author := range book.Authors {
 		if author.Person == nil {
 			continue
@@ -212,7 +266,27 @@ func bookDocument(book *models.Book) *FeedBook {
 				PersonID: narrator.PersonID, Name: narrator.Person.Name, SortName: narrator.Person.SortName,
 			})
 		}
+		var publisher *FeedPublisherRef
+		if file.Publisher != nil {
+			publisher = &FeedPublisherRef{PublisherID: file.Publisher.ID, Name: file.Publisher.Name}
+		}
+		identifiers := []FeedIdentifier{}
+		for _, identifier := range file.Identifiers {
+			identifiers = append(identifiers, FeedIdentifier{Type: identifier.Type, Value: identifier.Value})
+		}
 		doc.Files = append(doc.Files, FeedFile{
+			Publisher:                publisher,
+			Identifiers:              identifiers,
+			AudiobookCodec:           file.AudiobookCodec,
+			AudiobookBitrateBps:      file.AudiobookBitrateBps,
+			Language:                 file.Language,
+			Abridged:                 file.Abridged,
+			URL:                      file.URL,
+			ReadingDirection:         file.ReadingDirection,
+			Filepath:                 file.Filepath,
+			FileModifiedAt:           utcPointer(file.FileModifiedAt),
+			CreatedAt:                file.CreatedAt.UTC(),
+			Pages:                    filePages(ctx, file),
 			CoverVersion:             fileCoverVersion(file),
 			Narrators:                narrators,
 			Chapters:                 chapterDocuments(file.Chapters),
@@ -308,6 +382,25 @@ func loadReadThroughs(ctx context.Context, tx bun.IDB, userID int, ids []int) (m
 			ID: rt.ID, BookID: rt.BookID, BeginDay: rt.BeginDay, EndDay: rt.EndDay, Outcome: rt.Outcome, Paused: rt.Paused,
 		}
 	}
+	// When each was last read, counted as reading.LastReadExpr counts it.
+	var lastRead []struct {
+		ReadThroughID int       `bun:"read_through_id"`
+		At            time.Time `bun:"at"`
+	}
+	err = tx.NewRaw(`SELECT rpu.read_through_id, MAX(rpu.occurred_at) AS at FROM reading_position_updates AS rpu
+		WHERE rpu.user_id = ? AND rpu.read_through_id IN (?) AND NOT rpu.opened
+		AND NOT EXISTS (SELECT 1 FROM files AS f WHERE f.id = rpu.file_id AND f.file_role = ?)
+		GROUP BY rpu.read_through_id`, userID, bun.List(ids), models.FileRoleSupplement).
+		Scan(ctx, &lastRead)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range lastRead {
+		if rt := out[row.ReadThroughID]; rt != nil {
+			at := row.At
+			rt.LastReadAt = &at
+		}
+	}
 	return out, nil
 }
 
@@ -318,4 +411,253 @@ func fileCoverVersion(file *models.File) string {
 		return ""
 	}
 	return covers.FileCacheKey(file)
+}
+
+// compareNames orders names as the web app lists them, ignoring case.
+func compareNames(a, b string) int {
+	if c := strings.Compare(strings.ToLower(a), strings.ToLower(b)); c != 0 {
+		return c
+	}
+	return strings.Compare(a, b)
+}
+
+// filePages is a CBZ's pages in the server's order (ADR 0025), or none for
+// any other File Type or a CBZ that can't be read.
+func filePages(ctx context.Context, file *models.File) []string {
+	pages := []string{}
+	if file.FileType != models.FileTypeCBZ {
+		return pages
+	}
+	archive, err := zip.OpenReader(file.Filepath)
+	if err != nil {
+		// The Book goes out without them; the app reads pages from the file
+		// it downloads, and gets them when the File next changes.
+		logger.FromContext(ctx).Warn("CBZ pages not read for the Shisho app", logger.Data{"file_id": file.ID, "error": err.Error()})
+		return pages
+	}
+	defer archive.Close()
+	for _, page := range cbz.PageImages(&archive.Reader) {
+		pages = append(pages, page.Name)
+	}
+	return pages
+}
+
+// aliasNames reads the aliases of the ids in table, keyed by parent id, in
+// the order they were added.
+func aliasNames(ctx context.Context, tx bun.IDB, table, parent string, ids []int) (map[int][]string, error) {
+	var rows []struct {
+		Parent int    `bun:"parent"`
+		Name   string `bun:"name"`
+	}
+	err := tx.NewSelect().Table(table).
+		ColumnExpr("? AS parent", bun.Ident(parent)).Column("name").
+		Where("? IN (?)", bun.Ident(parent), bun.List(ids)).
+		OrderExpr("id ASC").
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	out := map[int][]string{}
+	for _, id := range ids {
+		out[id] = []string{}
+	}
+	for _, row := range rows {
+		out[row.Parent] = append(out[row.Parent], row.Name)
+	}
+	return out, nil
+}
+
+func loadSeries(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedSeries, error) {
+	out := map[int]*FeedSeries{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []*models.Series
+	if err := tx.NewSelect().Model(&rows).Where("s.id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	aliases, err := aliasNames(ctx, tx, "series_aliases", "series_id", ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ID] = &FeedSeries{
+			ID: row.ID, LibraryID: row.LibraryID, Name: row.Name, SortName: row.SortName,
+			Description: row.Description, Aliases: aliases[row.ID],
+		}
+	}
+	return out, nil
+}
+
+func loadPersons(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedPerson, error) {
+	out := map[int]*FeedPerson{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []*models.Person
+	if err := tx.NewSelect().Model(&rows).Where("p.id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	aliases, err := aliasNames(ctx, tx, "person_aliases", "person_id", ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ID] = &FeedPerson{ID: row.ID, LibraryID: row.LibraryID, Name: row.Name, SortName: row.SortName, Aliases: aliases[row.ID]}
+	}
+	return out, nil
+}
+
+func loadGenres(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedGenre, error) {
+	out := map[int]*FeedGenre{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []*models.Genre
+	if err := tx.NewSelect().Model(&rows).Where("g.id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	aliases, err := aliasNames(ctx, tx, "genre_aliases", "genre_id", ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ID] = &FeedGenre{ID: row.ID, LibraryID: row.LibraryID, Name: row.Name, Aliases: aliases[row.ID]}
+	}
+	return out, nil
+}
+
+func loadTags(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedTag, error) {
+	out := map[int]*FeedTag{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []*models.Tag
+	if err := tx.NewSelect().Model(&rows).Where("t.id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	aliases, err := aliasNames(ctx, tx, "tag_aliases", "tag_id", ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ID] = &FeedTag{ID: row.ID, LibraryID: row.LibraryID, Name: row.Name, Aliases: aliases[row.ID]}
+	}
+	return out, nil
+}
+
+func loadPublishers(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedPublisher, error) {
+	out := map[int]*FeedPublisher{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []*models.Publisher
+	if err := tx.NewSelect().Model(&rows).Where("pub.id IN (?)", bun.List(ids)).Scan(ctx); err != nil {
+		return nil, errors.WithStack(err)
+	}
+	aliases, err := aliasNames(ctx, tx, "publisher_aliases", "publisher_id", ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.ID] = &FeedPublisher{ID: row.ID, LibraryID: row.LibraryID, Name: row.Name, ParentID: row.ParentID, Aliases: aliases[row.ID]}
+	}
+	return out, nil
+}
+
+// loadUserBooks reads userID's own records of the Books in bookIDs, by Book.
+func loadUserBooks(ctx context.Context, tx bun.IDB, userID int, bookIDs []int) (map[int]*FeedUserBook, error) {
+	out := map[int]*FeedUserBook{}
+	if len(bookIDs) == 0 {
+		return out, nil
+	}
+	var rows []*models.UserBook
+	err := tx.NewSelect().Model(&rows).
+		Where("ub.user_id = ?", userID).
+		Where("ub.book_id IN (?)", bun.List(bookIDs)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range rows {
+		out[row.BookID] = &FeedUserBook{BookID: row.BookID, Rating: row.Rating, ToReadPosition: row.ToReadPosition, Reference: row.Reference}
+	}
+	return out, nil
+}
+
+// loadLists reads the Lists among ids that user owns or that are shared
+// with them, with only the Books in Libraries they can access.
+func loadLists(ctx context.Context, tx bun.IDB, user *models.User, ids []int) (map[int]*FeedList, error) {
+	out := map[int]*FeedList{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var lists []*models.List
+	err := tx.NewSelect().Model(&lists).
+		Relation("User").
+		Relation("ListShares", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.Order("ls.id ASC")
+		}).
+		Relation("ListShares.User").
+		Relation("ListBooks", func(q *bun.SelectQuery) *bun.SelectQuery {
+			q = q.Join("JOIN books AS lbb ON lbb.id = lb.book_id").
+				OrderExpr("lb.sort_order IS NULL, lb.sort_order ASC, lb.added_at DESC, lb.id ASC")
+			if libraryIDs := user.GetAccessibleLibraryIDs(); libraryIDs != nil {
+				if len(libraryIDs) == 0 {
+					return q.Where("FALSE")
+				}
+				q = q.Where("lbb.library_id IN (?)", bun.List(libraryIDs))
+			}
+			return q
+		}).
+		Where("l.id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, list := range lists {
+		permission := ""
+		if list.UserID == user.ID {
+			permission = FeedListOwner
+		}
+		shares := []FeedListShare{}
+		for _, share := range list.ListShares {
+			if share.UserID == user.ID && permission == "" {
+				permission = share.Permission
+			}
+			entry := FeedListShare{User: AppUser{ID: share.UserID}, Permission: share.Permission}
+			if share.User != nil {
+				entry.User.Username = share.User.Username
+			}
+			shares = append(shares, entry)
+		}
+		if permission == "" {
+			continue
+		}
+		// Who else it's shared with is the owner's and managers' to see.
+		if permission != FeedListOwner && permission != FeedListManager {
+			shares = []FeedListShare{}
+		}
+		doc := &FeedList{
+			ID: list.ID, Name: list.Name, Description: list.Description, IsOrdered: list.IsOrdered,
+			DefaultSort: list.DefaultSort, Permission: permission, Books: []FeedListBook{}, Shares: shares,
+			Owner: AppUser{ID: list.UserID},
+		}
+		if list.User != nil {
+			doc.Owner.Username = list.User.Username
+		}
+		for _, listBook := range list.ListBooks {
+			doc.Books = append(doc.Books, FeedListBook{BookID: listBook.BookID, SortOrder: listBook.SortOrder, AddedAt: listBook.AddedAt.UTC()})
+		}
+		out[list.ID] = doc
+	}
+	return out, nil
+}
+
+func utcPointer(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	utc := t.UTC()
+	return &utc
 }

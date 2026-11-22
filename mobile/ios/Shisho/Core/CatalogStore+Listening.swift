@@ -160,9 +160,11 @@ extension CatalogStore {
                           arguments: [Shishoapp.JournalEventType.readingPosition.rawValue, fileID]) ?? false
     }
 
-    /// The Book's audiobook progress, or nil when it has no audiobook.
-    static func listenProgress(_ db: Database, bookID: Int, ownDeviceID: String) throws -> ListenProgress? {
-        guard let fileID = try audiobookFileID(db, bookID: bookID),
+    /// The Book's audiobook progress, or nil when it has no audiobook. With
+    /// fileID, the progress of that audiobook File, for its own page, which
+    /// needn't say which File it is.
+    static func listenProgress(_ db: Database, bookID: Int, fileID asked: Int? = nil, ownDeviceID: String) throws -> ListenProgress? {
+        guard let fileID = try asked ?? audiobookFileID(db, bookID: bookID),
               let file = try listeningFile(db, fileID: fileID)
         else { return nil }
         let choice = PlaceRules.open(local: try localPlace(db, fileID: fileID), server: try serverPlace(db, fileID: fileID),
@@ -173,7 +175,7 @@ extension CatalogStore {
             SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type = 'm4b' AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
         return ListenProgress(fileID: fileID, seconds: choice.start, duration: file.duration, chapters: file.chapters, underway: underway,
-                              fileName: file.displayName, narrators: file.narrators, audiobookCount: audiobooks)
+                              fileName: file.displayName, narrators: file.narrators, audiobookCount: asked == nil ? audiobooks : 1)
     }
 
     /// Titles for the Books and Files a diagnostics log names by id, keyed as

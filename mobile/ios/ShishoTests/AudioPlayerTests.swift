@@ -54,4 +54,31 @@ final class AudioPlayerTests: XCTestCase {
         try session.store.apply(page(#"{"entries":[{"kind":"book","id":1,"deleted":true}],"cursor":3}"#))
         try await wait("the player to close") { player.file == nil }
     }
+
+    /// Swiping the paused mini player away closes the File, and the next
+    /// launch doesn't open it again; a playing one stays.
+    func testDismissClosesAPausedFileForGood() throws {
+        player.open(fileID: 5, autoplay: false)
+        XCTAssertEqual(player.file?.fileID, 5)
+        player.dismiss()
+        XCTAssertNil(player.file)
+
+        let next = AudioPlayer(session: session) {}
+        next.restore()
+        XCTAssertNil(next.file, "not opened again at the next launch")
+        next.stop()
+    }
+
+    /// Opening a File that's gone leaves the one loaded alone, so a chapter
+    /// tap on a File a sync just removed can't stop or move another.
+    func testOpeningAMissingFileLeavesTheLoadedOne() throws {
+        player.open(fileID: 5, autoplay: false)
+        player.open(fileID: 999, autoplay: false)
+        XCTAssertEqual(player.file?.fileID, 5)
+
+        let next = AudioPlayer(session: session) {}
+        next.restore()
+        XCTAssertEqual(next.file?.fileID, 5, "still the one opened at the next launch")
+        next.stop()
+    }
 }

@@ -30,6 +30,20 @@ The app stays signed in until one of these happens:
 
 Changing your password doesn't sign the app out. A signed-out app asks you to sign in again and keeps what's on the device until you do.
 
+## Browsing and Searching Offline
+
+Everything in the libraries you can access is on the device: books with their descriptions, series, authors and narrators, genres, tags, and files, plus your [lists](./lists.md) and the lists shared with you. The **Library** tab browses it by series, people, genres, and tags, and the **Lists** tab shows your lists. **Filter** narrows the library by reading status, a range of ratings, file type, genres, tags, and language, as on the web, and **Sort** orders it by several fields, each ascending or descending. Sort starts from the sort you [saved for the library on the web](./gallery-sort.md); a sort you pick in the app stays on that device, and **reset to default** goes back to the saved one. Each book shows your [reading status](./reading-tracking.md#reading-status) and rating, which you change on the web, and tapping a file opens its page, as on the web, with its edition details, chapters, and where it sits on disk. Tapping an audiobook's chapter there plays from that chapter. At the bottom of a book, the **Series**, **Author**, and **Lists** tabs show the books around it, as on the web. A list shows who it's shared with to its owner and anyone who can manage it, as on the web.
+
+Search, from the magnifying glass at the top of the **Library** and **Lists** tabs, finds books by title, author, narrator, series, or an identifier such as an ISBN, and finds series, people, genres, and tags, including by their [aliases](./metadata.md#aliases-and-resource-merges). It searches the copy on the device, so it works in airplane mode, and it matches words and ranks results the way the web's search does. Unlike the web, it doesn't search the names of files and folders on the server.
+
+Edits on the web reach the app the next time it syncs. When an admin changes which libraries a user can access, or a list is shared or unshared, the app follows on its next sync: a library you lose leaves the device, and one you gain downloads in the background. A user whose role can no longer read books keeps nothing from the server on the device.
+
+Covers download as you browse. To have every cover on the device before going offline, turn on **Account > Download all covers on Wi-Fi**.
+
+## Accounts
+
+The app can be signed in to several servers, or several accounts on one server, at once. **Account > Add Server** signs in to another server, or as someone else on the same one, and tapping an account in that list switches to it. Each account keeps its own copy of its libraries, so switching shows it at once, even offline. Signing out of one account switches to another that's still signed in.
+
 ## Listening
 
 Books with an M4B audiobook have a **Listen** button that plays it from your server. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip 30 seconds. Headphone and car controls skip 30 seconds too; chapters change in the app. The chapters are the ones Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. Speed moves in steps of 0.1 and is kept for each audiobook file on that phone, since it usually suits the narrator; a new one starts at 1x. Tap the time left under the position bar to switch the bar between the chapter and the whole book.
@@ -50,7 +64,7 @@ The app calls these paths on your server. A reverse proxy has to pass them, as [
 
 | Path | Used for |
 |------|----------|
-| `/mobile/*` | Signing in, syncing the library and your listening, covers, and playing audiobooks |
+| `/mobile/*` | Signing in, syncing the library, your lists, and your listening, covers, and playing audiobooks |
 
 ## Local Network and Certificates
 

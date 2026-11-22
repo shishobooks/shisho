@@ -69,18 +69,35 @@ type FeedQuery struct {
 	Limit int `query:"limit" json:"limit,omitempty" validate:"omitempty,min=1,max=1000"`
 	// ExpiredThrough is the last page's ExpiredThrough, or 0 from the start.
 	ExpiredThrough int64 `query:"expired_through" json:"expired_through,omitempty" validate:"min=0"`
+	// LibraryID or ListID fetches one Library or List the user just gained
+	// whole, as Access says (ADR 0023): only its records, from its own
+	// cursor, starting at 0. One outside the user's reach is a 404.
+	LibraryID int `query:"library_id" json:"library_id,omitempty" validate:"min=0,excluded_with=ListID"`
+	ListID    int `query:"list_id" json:"list_id,omitempty" validate:"min=0"`
 }
 
 // The kinds of record the feed sends. An app ignores a kind it doesn't
 // know, and its cursor moves past it anyway (ADR 0023).
 const (
-	//tygo:emit export type FeedKind = typeof FeedKindBook | typeof FeedKindLibrary | typeof FeedKindReadingPosition | typeof FeedKindReadThrough;
-	FeedKindBook    = "book"
-	FeedKindLibrary = "library"
+	//tygo:emit export type FeedKind = typeof FeedKindBook | typeof FeedKindLibrary | typeof FeedKindSeries | typeof FeedKindPerson | typeof FeedKindGenre | typeof FeedKindTag | typeof FeedKindPublisher | typeof FeedKindBookLeft | typeof FeedKindReadingPosition | typeof FeedKindReadThrough | typeof FeedKindUserBook | typeof FeedKindList;
+	FeedKindBook      = "book"
+	FeedKindLibrary   = "library"
+	FeedKindSeries    = "series"
+	FeedKindPerson    = "person"
+	FeedKindGenre     = "genre"
+	FeedKindTag       = "tag"
+	FeedKindPublisher = "publisher"
+	// FeedKindBookLeft is always a deletion: the Book moved out of the
+	// Library the entry names. The app drops it unless it's since in
+	// another Library there.
+	FeedKindBookLeft = "book_left"
 	// The signed-in user's own records. A Reading Position's entry is
-	// keyed by its File's id.
+	// keyed by its File's id, and a user Book's by its Book's.
 	FeedKindReadingPosition = "reading_position"
 	FeedKindReadThrough     = "read_through"
+	FeedKindUserBook        = "user_book"
+	// A List the user owns or that's shared with them.
+	FeedKindList = "list"
 )
 
 // FeedResponse is one page of the catalog's changes (ADR 0023).
@@ -102,6 +119,23 @@ type FeedResponse struct {
 	// stale only if deletions expired after the app last saw it, so a
 	// download from the start can page past expired deletions it never had.
 	ExpiredThrough int64 `json:"expired_through"`
+	// Access is what the user can see now, answered outside the cursor
+	// (ADR 0023): the app drops a Library or List it has that isn't listed,
+	// and fetches one listed that it doesn't have whole, with FeedQuery's
+	// LibraryID or ListID, since its entries are behind the cursor.
+	Access FeedAccess `json:"access"`
+}
+
+// FeedAccess lists the Libraries and Lists the user can see, in id order.
+type FeedAccess struct {
+	LibraryIDs []int `json:"library_ids"`
+	ListIDs    []int `json:"list_ids"`
+	// BehindLibraryIDs are those of LibraryIDs with records at or before
+	// the cursor the page was asked for, which the feed won't send again. A
+	// Library the app gains needs fetching whole only when it's listed: one
+	// made since, say, arrives in the feed. A Library or List's whole fetch
+	// leaves it empty, so the app fetches whatever it gains then.
+	BehindLibraryIDs []int `json:"behind_library_ids"`
 }
 
 // FeedEntry is one record that changed. Exactly one of the record fields
@@ -117,8 +151,15 @@ type FeedEntry struct {
 	LibraryID       int                  `json:"library_id"`
 	Book            *FeedBook            `json:"book,omitempty"`
 	Library         *FeedLibrary         `json:"library,omitempty"`
+	Series          *FeedSeries          `json:"series,omitempty"`
+	Person          *FeedPerson          `json:"person,omitempty"`
+	Genre           *FeedGenre           `json:"genre,omitempty"`
+	Tag             *FeedTag             `json:"tag,omitempty"`
+	Publisher       *FeedPublisher       `json:"publisher,omitempty"`
 	ReadingPosition *FeedReadingPosition `json:"reading_position,omitempty"`
 	ReadThrough     *FeedReadThrough     `json:"read_through,omitempty"`
+	UserBook        *FeedUserBook        `json:"user_book,omitempty"`
+	List            *FeedList            `json:"list,omitempty"`
 }
 
 // FeedLibrary is a Library the user can access.
@@ -140,13 +181,19 @@ type FeedBook struct {
 	Title     string  `json:"title"`
 	Subtitle  *string `json:"subtitle"`
 	SortTitle string  `json:"sort_title"`
+	// Description is the Book's, as plain text or HTML, as the web app
+	// shows it.
+	Description *string `json:"description"`
 	// CreatedAt is when the Book was added, which the Library sorts by,
 	// newest first, as the web app does by default.
 	CreatedAt time.Time `json:"created_at"`
 	// Authors and Series are in the Book's order.
 	Authors []FeedAuthor           `json:"authors"`
 	Series  []FeedSeriesMembership `json:"series"`
-	Files   []FeedFile             `json:"files"`
+	// Genres and Tags are by name.
+	Genres []FeedGenreRef `json:"genres"`
+	Tags   []FeedTagRef   `json:"tags"`
+	Files  []FeedFile     `json:"files"`
 	// CoverVersion keys the Book's cover, so its URL can be cached as
 	// immutable. It's empty for a Book with no cover.
 	CoverVersion string `json:"cover_version"`
@@ -168,6 +215,31 @@ type FeedSeriesMembership struct {
 	Number    *float64 `json:"number"`
 	NumberEnd *float64 `json:"number_end"`
 	Unit      *string  `json:"unit" tstype:"SeriesNumberUnit"`
+}
+
+// FeedGenreRef is one of a Book's genres.
+type FeedGenreRef struct {
+	GenreID int    `json:"genre_id"`
+	Name    string `json:"name"`
+}
+
+// FeedTagRef is one of a Book's tags.
+type FeedTagRef struct {
+	TagID int    `json:"tag_id"`
+	Name  string `json:"name"`
+}
+
+// FeedPublisherRef is a File's publisher.
+type FeedPublisherRef struct {
+	PublisherID int    `json:"publisher_id"`
+	Name        string `json:"name"`
+}
+
+// FeedIdentifier is one of a File's identifiers, such as its ISBN, in the
+// form the server stores it.
+type FeedIdentifier struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
 // FeedFile is one of a Book's Files. An app that doesn't know its File Type
@@ -195,6 +267,29 @@ type FeedFile struct {
 	// instead of the file's own (ADR 0022), in order, each after its
 	// parent.
 	Chapters []FeedChapter `json:"chapters"`
+	// Publisher is the File's, or null.
+	Publisher   *FeedPublisherRef `json:"publisher"`
+	Identifiers []FeedIdentifier  `json:"identifiers"`
+	// The rest of what the web's file details show.
+	AudiobookCodec      *string `json:"audiobook_codec"`
+	AudiobookBitrateBps *int    `json:"audiobook_bitrate_bps"`
+	// Language is a BCP 47 tag, such as "en".
+	Language *string `json:"language"`
+	Abridged *bool   `json:"abridged"`
+	URL      *string `json:"url"`
+	// ReadingDirection is a Page-based File's, or null, which runs left to
+	// right.
+	ReadingDirection *string `json:"reading_direction" tstype:"ReadingDirection | null"`
+	// Filepath is where the server keeps the File, as the web shows it.
+	Filepath       string     `json:"filepath"`
+	FileModifiedAt *time.Time `json:"file_modified_at"`
+	// CreatedAt is when the File was added.
+	CreatedAt time.Time `json:"created_at"`
+	// Pages is a CBZ's pages, as the names of its archive entries in the
+	// order the server counts and sorts them (ADR 0025), so a page number
+	// means the same page everywhere. It's empty for every other File
+	// Type, and for a CBZ the server couldn't read.
+	Pages []string `json:"pages"`
 }
 
 // FeedNarrator is one of a File's narrators.
@@ -214,6 +309,111 @@ type FeedChapter struct {
 	StartTimestampMs *int64  `json:"start_timestamp_ms"`
 	StartPage        *int    `json:"start_page"`
 	Href             *string `json:"href"`
+}
+
+// FeedSeries is a Series in a Library the user can access. Its Books name
+// it in their Series memberships.
+type FeedSeries struct {
+	ID          int     `json:"id"`
+	LibraryID   int     `json:"library_id"`
+	Name        string  `json:"name"`
+	SortName    string  `json:"sort_name"`
+	Description *string `json:"description"`
+	// Aliases are other names it's found by, as search finds it on the web.
+	Aliases []string `json:"aliases"`
+}
+
+// FeedPerson is an author or narrator in a Library the user can access.
+type FeedPerson struct {
+	ID        int      `json:"id"`
+	LibraryID int      `json:"library_id"`
+	Name      string   `json:"name"`
+	SortName  string   `json:"sort_name"`
+	Aliases   []string `json:"aliases"`
+}
+
+// FeedGenre is a genre in a Library the user can access.
+type FeedGenre struct {
+	ID        int      `json:"id"`
+	LibraryID int      `json:"library_id"`
+	Name      string   `json:"name"`
+	Aliases   []string `json:"aliases"`
+}
+
+// FeedTag is a tag in a Library the user can access.
+type FeedTag struct {
+	ID        int      `json:"id"`
+	LibraryID int      `json:"library_id"`
+	Name      string   `json:"name"`
+	Aliases   []string `json:"aliases"`
+}
+
+// FeedPublisher is a publisher in a Library the user can access. ParentID
+// is the publisher it's an imprint of, or null.
+type FeedPublisher struct {
+	ID        int      `json:"id"`
+	LibraryID int      `json:"library_id"`
+	Name      string   `json:"name"`
+	ParentID  *int     `json:"parent_id"`
+	Aliases   []string `json:"aliases"`
+}
+
+// The user's standing with a List.
+const (
+	//tygo:emit export type FeedListPermission = typeof FeedListOwner | typeof FeedListViewer | typeof FeedListEditor | typeof FeedListManager;
+	FeedListOwner   = "owner"
+	FeedListViewer  = "viewer"
+	FeedListEditor  = "editor"
+	FeedListManager = "manager"
+)
+
+// FeedList is a List the user owns or that's shared with them.
+type FeedList struct {
+	ID          int     `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	// IsOrdered is a List whose Books are in the order its people chose.
+	IsOrdered   bool    `json:"is_ordered"`
+	DefaultSort string  `json:"default_sort" tstype:"ListSort"`
+	Owner       AppUser `json:"owner"`
+	// Permission is what the user may do with it: "owner", or the List
+	// Share's permission.
+	Permission string `json:"permission" tstype:"FeedListPermission"`
+	// Books are in the List's order: by SortOrder, then most recently
+	// added. A Book in a Library the user can't access is left out, so the
+	// app fetches its Lists again when its access to a Library changes.
+	Books []FeedListBook `json:"books"`
+	// Shares are who the List is shared with, as the web app shows them,
+	// for its owner and managers; empty for anyone else.
+	Shares []FeedListShare `json:"shares"`
+}
+
+// FeedListShare is one user a List is shared with, and what they may do.
+type FeedListShare struct {
+	User       AppUser `json:"user"`
+	Permission string  `json:"permission" tstype:"ListPermission"`
+}
+
+// FeedListBook is one of a List's Books.
+type FeedListBook struct {
+	BookID    int       `json:"book_id"`
+	SortOrder *int      `json:"sort_order"`
+	AddedAt   time.Time `json:"added_at"`
+}
+
+// FeedUserBook is the user's own record for a Book: their Rating and To
+// Read. Their Reading Status follows from it and their Read-throughs, as
+// the server derives it.
+type FeedUserBook struct {
+	BookID int `json:"book_id"`
+	// Rating is in quarter stars, 1 to 20, or null when unrated.
+	Rating *int `json:"rating"`
+	// ToReadPosition is the Book's place on To Read, or null when it isn't
+	// on it.
+	ToReadPosition *int `json:"to_read_position"`
+	// Reference is the user's choice to dip into the Book rather than read
+	// it through (ADR 0028).
+	Reference bool `json:"reference"`
 }
 
 // FeedReadingPosition is the user's place in a File, the newest any source
@@ -244,6 +444,10 @@ type FeedReadThrough struct {
 	EndDay   *string `json:"end_day"`
 	Outcome  string  `json:"outcome" tstype:"ReadThroughOutcome"`
 	Paused   bool    `json:"paused"`
+	// LastReadAt is its latest reading, as the web's Last read sort reads
+	// it (reading.LastReadExpr): no place a link opened, and no supplement.
+	// Null before any.
+	LastReadAt *time.Time `json:"last_read_at"`
 }
 
 // JournalPayload is a batch of the app's journal (ADR 0024): events made on

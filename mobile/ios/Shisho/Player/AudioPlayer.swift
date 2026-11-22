@@ -135,15 +135,19 @@ final class AudioPlayer {
             if autoplay { play() }
             return
         }
+        let store = session.store
+        let ownDevice = session.account.deviceID
+        // The File is found before the one playing is touched, so a File
+        // that's gone, such as one a sync just removed, leaves it playing.
+        guard let loaded = try? store.pool.read({ try CatalogStore.listeningFile($0, fileID: fileID) }) else {
+            if file == nil {
+                UserDefaults.standard.removeObject(forKey: lastFileKey)
+            }
+            return
+        }
         if file != nil {
             pause()
             teardownItem()
-        }
-        let store = session.store
-        let ownDevice = session.account.deviceID
-        guard let loaded = try? store.pool.read({ try CatalogStore.listeningFile($0, fileID: fileID) }) else {
-            UserDefaults.standard.removeObject(forKey: lastFileKey)
-            return
         }
         let places = try? store.pool.read { db in
             (local: try CatalogStore.localPlace(db, fileID: fileID), server: try CatalogStore.serverPlace(db, fileID: fileID))
@@ -566,6 +570,13 @@ final class AudioPlayer {
             if coverChanged { loadArtwork(updated) }
             updateNowPlaying()
         }
+    }
+
+    /// Puts a paused File away, as swiping the mini player down does: its
+    /// place is kept, and it isn't opened again at the next launch.
+    func dismiss() {
+        guard !isPlaying, file != nil else { return }
+        close()
     }
 
     /// Closes the File, keeping what was listened, as when it's no longer

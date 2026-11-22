@@ -1,0 +1,49 @@
+# Access changes are answered outside the cursor (ADR 0023, #914): taking
+# the second account's access to the Library away drops its Books from the
+# app, and giving it back brings them back.
+appId: ${APP_ID}
+name: A Book removed by an access change disappears
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runScript:
+    file: scripts/reader_access.js
+    env:
+      CONTROL: ${CONTROL}
+      ACCESS: all
+- launchApp:
+    clearState: true
+- runFlow:
+    file: subflows/sign_in.yaml
+    env:
+      USERNAME: ${READER_USERNAME}
+      PASSWORD: ${READER_PASSWORD}
+- extendedWaitUntil:
+    visible: The Harness Novel
+    timeout: 30000
+
+- runScript:
+    file: scripts/reader_access.js
+    env:
+      CONTROL: ${CONTROL}
+      ACCESS: none
+# Opening the app again syncs.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: No Books yet
+    timeout: 30000
+- assertNotVisible: The Harness Novel
+
+- runScript:
+    file: scripts/reader_access.js
+    env:
+      CONTROL: ${CONTROL}
+      ACCESS: all
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: The Harness Novel
+    timeout: 30000

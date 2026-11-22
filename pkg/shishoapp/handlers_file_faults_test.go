@@ -83,3 +83,17 @@ func assertServerFault(t *testing.T, rec interface {
 	assert.Empty(t, resp.Header.Get("Cache-Control"))
 	assert.Empty(t, resp.Header.Get("ETag"))
 }
+
+// A database that fails while a scoped fetch checks access is a server
+// fault, never the 404 for a Library out of reach.
+func TestFeed_ScopedFetchFaultsAreServerErrors(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Mine")
+	f.addUser()
+	credential := f.signIn()
+	f.exec(`DROP TABLE list_shares`)
+	for _, path := range []string{"/mobile/changes?cursor=0&library_id=1", "/mobile/changes?cursor=0&list_id=1"} {
+		assertServerFault(t, f.do(call{path: path, credential: credential}))
+	}
+}

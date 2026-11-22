@@ -75,8 +75,8 @@ func runServe(ctx context.Context) error {
 	if lan := devtool.LANAddress(); lan != "" {
 		fmt.Printf("LAN:      http://%s:%s (a phone on this network)\n", lan, srv.port)
 	}
-	fmt.Printf("Username: %s\nPassword: %s\nLog:      %s\nCtrl-C stops it and deletes its data.\n",
-		harnessUsername, password, filepath.Join(dir, "server.log"))
+	fmt.Printf("Username: %s\nPassword: %s\nReader:   %s / %s (a second account, a viewer)\nLog:      %s\nCtrl-C stops it and deletes its data.\n",
+		harnessUsername, password, readerUsername, readerPassword, filepath.Join(dir, "server.log"))
 	<-ctx.Done()
 	return nil
 }

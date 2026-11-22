@@ -7,7 +7,10 @@ struct RootView: View {
         @Bindable var model = model
         ZStack {
             if model.session != nil {
-                LibraryView()
+                MainTabs()
+                    // Another account's screens start fresh, never showing
+                    // the last one's rows while its own load.
+                    .id(model.session?.account.id)
                     .transition(.opacity.combined(with: .scale(scale: 1.02)))
             } else {
                 SignInView()
@@ -18,6 +21,22 @@ struct RootView: View {
         .background(Theme.background)
         .sheet(isPresented: $model.showingPlayer) {
             NowPlayingView()
+        }
+        .sheet(isPresented: $model.addingAccount) {
+            // A sheet of its own, with a bar to cancel from.
+            NavigationStack {
+                SignInView(addingAccount: true)
+                    .navigationTitle("Add Server")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { model.addingAccount = false }
+                                .accessibilityIdentifier("signin.cancel")
+                        }
+                    }
+            }
+            .tint(Theme.primary)
+            .presentationDragIndicator(.visible)
         }
     }
 }

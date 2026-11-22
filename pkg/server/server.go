@@ -312,9 +312,12 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	e.HTTPErrorHandler = errcodes.NewHandler().Handle
 
 	srv := &http.Server{
-		Addr:              net.JoinHostPort(cfg.ServerHost, strconv.Itoa(cfg.ServerPort)),
-		Handler:           e,
-		ReadHeaderTimeout: 3 * time.Second,
+		Addr:    net.JoinHostPort(cfg.ServerHost, strconv.Itoa(cfg.ServerPort)),
+		Handler: e,
+		// Long enough for a phone, or a loaded CI simulator, that connects and then
+		// takes a few seconds to send its request. At 3 seconds the server dropped
+		// the connection first, and iOS doesn't retry a POST, so sign-in failed.
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	return srv, nil

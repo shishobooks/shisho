@@ -1061,10 +1061,26 @@ describe("BookDetailBody file progress", () => {
     ],
   };
 
-  const ring = (name: string) =>
+  // Each row has the ring beside its actions on a wide screen and the bar
+  // under its facts on a narrow one; CSS shows one.
+  const bars = (name: string) =>
     within(
       screen.getByRole("link", { name }).closest(".border") as HTMLElement,
-    ).queryByRole("progressbar");
+    ).queryAllByRole("progressbar");
+  const ring = (name: string) =>
+    bars(name).find((el) => el.classList.contains("max-sm:hidden")) ?? null;
+
+  it("shows a ring by the actions on a wide screen and a bar under the facts on a narrow one", () => {
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({ book: twoFiles });
+
+    const [first, second] = bars("Ebook");
+    // The bar's line hides from sm up; the ring hides below it.
+    expect(first.closest(".sm\\:hidden")).not.toBeNull();
+    expect(second).toHaveClass("max-sm:hidden");
+    expect(first).toHaveAccessibleName("25% through");
+    expect(second).toHaveAccessibleName("25% through");
+  });
 
   it("shows each file's progress on its own row", () => {
     readingPositions.current = [
@@ -1076,6 +1092,32 @@ describe("BookDetailBody file progress", () => {
     expect(ring("Ebook")).toHaveAccessibleName("25% through");
     expect(ring("Ebook")).toHaveAttribute("aria-valuenow", "25");
     expect(ring("Audio")).toHaveAccessibleName("62% through");
+  });
+
+  it("says how much of each file is left beside its progress", () => {
+    readingPositions.current = [
+      { file_id: 1, percentage: 0.25 },
+      { file_id: 2, percentage: 0.5 },
+    ];
+    renderBody({
+      book: {
+        ...twoFiles,
+        files: [
+          { ...epub, id: 1, display_name: "Ebook", page_count: 200 } as File,
+          {
+            ...m4b,
+            id: 2,
+            display_name: "Audio",
+            audiobook_duration_seconds: 7200,
+          } as File,
+        ],
+      },
+    });
+
+    const row = (name: string) =>
+      screen.getByRole("link", { name }).closest(".border") as HTMLElement;
+    expect(row("Ebook")).toHaveTextContent("25% · 150 pages left");
+    expect(row("Audio")).toHaveTextContent("50% · 1h 0m left");
   });
 
   it.each([

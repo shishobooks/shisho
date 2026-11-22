@@ -7,18 +7,24 @@ struct LibraryView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @AppStorage("libraryID") private var storedLibraryID = 0
     @State private var books: [BookSummary]?
     @State private var libraries: [LibrarySummary]?
     /// How far the content has scrolled up, which shrinks the logo.
     @State private var scrolledBy: CGFloat = 0
-    @State private var showingAccount = false
     @State private var notes: [JournalNote]?
+    /// The sort saved on the web for the Library showing.
+    @State private var savedSort: String?
+    @State private var showingFilters = false
+    @State private var showingSort = false
 
     private var libraryID: Int? {
-        storedLibraryID == 0 ? nil : storedLibraryID
+        model.libraryID == 0 ? nil : model.libraryID
     }
 
+
+    private var sort: GallerySort {
+        GallerySort(saved: savedSort ?? "", device: model.sortSpec)
+    }
 
     private var libraryName: String {
         (libraries ?? []).first { $0.id == libraryID }?.name ?? String(localized: "All Libraries")
@@ -30,14 +36,21 @@ struct LibraryView: View {
             // The width comes from outside the scroll view, so a grid laid
             // out for a wider screen can't hold it wide after a rotation.
             GeometryReader { geometry in
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ScrollTopMarker(space: "library")
-                        if let libraries, libraries.count > 1 {
-                            LibraryPicker(libraries: libraries, selection: $storedLibraryID, name: libraryName)
-                                .padding(.horizontal, GridLayout.margin)
-                                .padding(.top, 8)
+                            .id(ScrollTop.anchor)
+                        // The Library picked, as the prototype has it under
+                        // the title, and the ways into it besides the grid.
+                        FlowLayout(spacing: 8) {
+                            if let libraries, libraries.count > 1 {
+                                LibraryPicker(libraries: libraries, selection: $model.libraryID, name: libraryName)
+                            }
+                            BrowseButtons()
                         }
+                        .padding(.horizontal, GridLayout.margin)
+                        .padding(.top, 8)
                         SyncBanner()
                             .padding(.horizontal, GridLayout.margin)
                             .padding(.top, 14)
@@ -48,10 +61,19 @@ struct LibraryView: View {
                         }
                         if let books {
                             sectionHeader(count: books.count)
-                            if books.isEmpty {
+                            if books.isEmpty, !model.filter.isEmpty {
+                                VStack(spacing: 14) {
+                                    EmptyNotice(title: String(localized: "No Books match these filters"),
+                                                message: String(localized: "Change or clear the filters to see more."),
+                                                systemImage: "line.3.horizontal.decrease")
+                                    Button("Clear Filters") { model.filter = LibraryFilter() }
+                                        .buttonStyle(SmallOutlineStyle())
+                                        .accessibilityIdentifier("library.filters.clear")
+                                }
+                            } else if books.isEmpty {
                                 emptyState
                             } else {
-                                grid(books, width: geometry.size.width)
+                                BookGrid(books: books, width: geometry.size.width)
                             }
                         }
                     }
@@ -59,78 +81,74 @@ struct LibraryView: View {
                 }
                 .onScrolledDistanceChange(space: "library") { scrolledBy = $0 }
                 .miniPlayerClearance()
+                .onChange(of: model.scrollToTop[.library]) { _, _ in
+                    withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
+                }
+                }
             }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 LogoToolbarItem(scrolledBy: scrolledBy)
-                ToolbarItem(placement: .topBarTrailing) {
-                    AccountButton { showingAccount = true }
-                }
+                RootToolbar()
             }
-            .navigationDestination(for: BookSummary.self) { book in
-                BookDetailView(bookID: book.id, initial: book)
-            }
-            .sheet(isPresented: $showingAccount) {
-                AccountSheet()
-            }
-        }
-        // Outside the stack, so the mini player stays on every pushed screen.
-        // Each screen's scroll view leaves room for it (miniPlayerClearance).
-        .overlay(alignment: .bottom) {
-            MiniPlayer()
-                .frame(maxWidth: 680)
-                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
+            .routeDestinations()
         }
         .tint(Theme.primary)
+        .gallerySheets(showingFilters: $showingFilters, showingSort: $showingSort, sort: sort)
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
             try CatalogStore.journalNotes(db)
         }
-        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(storedLibraryID)", into: $books) { [libraryID] db in
-            try CatalogStore.books(db, libraryID: libraryID)
+        .observing(model.session?.store, id: BooksQuery(account: model.session?.account.id ?? "", libraryID: model.libraryID,
+                                                         filter: model.filter, sort: model.sortSpec),
+                   into: $books) { [libraryID, filter = model.filter, sort = model.sortSpec] db in
+            try CatalogStore.books(db, libraryID: libraryID, filter: filter, sort: sort)
+        }
+        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(model.libraryID)", into: $savedSort) {
+            [libraryID] db in
+            try CatalogStore.savedSort(db, libraryID: libraryID)
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $libraries) { db in
             try CatalogStore.libraries(db)
         }
         .onChange(of: libraries) { _, libraries in
             if let libraries, libraryID != nil, !libraries.contains(where: { $0.id == libraryID }) {
-                storedLibraryID = 0
+                model.libraryID = 0
             }
         }
     }
 
+    /// The grid's heading, its count, and its Filters and Sort, side by
+    /// side when they fit and stacked when they don't.
     private func sectionHeader(count: Int) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        let heading = HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Library")
-                .font(.geist(.title2, weight: .semibold))
+                .font(.geist(.title3, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
-            Spacer()
             Text("^[\(count) book](inflect: true)")
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.mutedForeground)
                 .contentTransition(.numericText())
         }
+        return VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center) {
+                    heading
+                    Spacer(minLength: 8)
+                    GalleryControls(sort: sort, showingFilters: $showingFilters, showingSort: $showingSort)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    heading
+                    GalleryControls(sort: sort, showingFilters: $showingFilters, showingSort: $showingSort)
+                }
+            }
+            ActiveFilterChips()
+            SortedByChips(sort: sort)
+        }
         .padding(.horizontal, GridLayout.margin)
         .padding(.top, 20)
         .padding(.bottom, 14)
-    }
-
-    private func grid(_ books: [BookSummary], width: CGFloat) -> some View {
-        let layout = GridLayout(width: width, regular: sizeClass == .regular,
-                                accessibility: dynamicTypeSize.isAccessibilitySize)
-        let cellWidth = layout.cellWidth
-        let column = GridItem(.fixed(cellWidth), spacing: GridLayout.spacing, alignment: .top)
-        return LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
-            ForEach(books) { book in
-                NavigationLink(value: book) {
-                    BookCell(book: book, width: cellWidth)
-                }
-                .buttonStyle(PressableStyle())
-            }
-        }
-        .padding(.horizontal, GridLayout.margin)
-        .accessibilityIdentifier("library.grid")
     }
 
     private var emptyState: some View {
@@ -198,21 +216,17 @@ private struct LibraryPicker: View {
                 }
             }
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "books.vertical")
-                    .foregroundStyle(Theme.mutedForeground)
+                    .accessibilityHidden(true)
                 Text(name)
-                    .foregroundStyle(Theme.foreground)
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.geist(.caption, weight: .semibold))
+                    .font(.geist(.caption2, weight: .semibold))
                     .foregroundStyle(Theme.mutedForeground)
             }
-            .font(.geist(.subheadline, weight: .medium))
-            .padding(.horizontal, 14)
-            .frame(minHeight: 40)
-            .cardStyle(radius: 10)
         }
+        .buttonStyle(SmallOutlineStyle())
         .accessibilityLabel("Library: \(name)")
         .accessibilityIdentifier("library.picker")
     }
@@ -244,23 +258,14 @@ private struct LogoToolbarItem: ToolbarContent {
 }
 
 /// The signed-in account, top right, as the user's initial.
-private struct AccountButton: View {
+struct AccountButton: View {
     @Environment(AppModel.self) private var model
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            let initial = Text(String(model.session?.account.username.prefix(1).uppercased() ?? "?"))
-                .font(.geist(.subheadline, weight: .semibold))
-                .foregroundStyle(Theme.primary)
-            if #available(iOS 26, *) {
-                // The toolbar already sets the button in a glass circle.
-                initial
-            } else {
-                initial
-                    .frame(width: 34, height: 34)
-                    .background(Theme.primary.opacity(0.12), in: Circle())
-                    .overlay(Circle().strokeBorder(Theme.primary.opacity(0.25)))
+            if let account = model.session?.account {
+                AccountAvatar(account: account, size: 34, inToolbar: true)
             }
         }
         .accessibilityLabel("Account")
@@ -269,17 +274,41 @@ private struct AccountButton: View {
 }
 
 struct BookCell: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let book: BookSummary
     let width: CGFloat
+    /// The Book's Series Number, on a Series' page, inline with the title so
+    /// the title wraps under it, as the web gallery shows it.
+    var seriesNumber: (Double, Double?)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // The user's Reading Status as a ribbon from the cover's top, their
+            // Rating on its corner, and how far through a Book being read
+            // is, as the web gallery shows them.
             CoverView(book: book, width: width)
-                .padding(.bottom, 4)
-            Text(book.title)
+                .overlay(alignment: .topLeading) {
+                    if let status = book.status {
+                        ReadingStatusRibbon(status: status, progress: book.progress)
+                            .padding(.leading, 6)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if let rating = book.rating {
+                        CoverRatingBadge(units: rating)
+                            .padding(4)
+                    }
+                }
+                .padding(.bottom, book.progress == nil ? 4 : 0)
+            if let progress = book.progress {
+                ProgressBar(value: progress)
+                    .padding(.vertical, 2)
+            }
+            titleText
                 .font(.geist(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.foreground)
-                .lineLimit(2)
+                // Larger text fits fewer words on a line, so it gets more lines.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 2)
                 .multilineTextAlignment(.leading)
                 .accessibilityIdentifier("book.title")
             if !book.authors.isEmpty {
@@ -304,10 +333,35 @@ struct BookCell: View {
         .accessibilityIdentifier("book.cell")
     }
 
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The title, after its Series Number's badge on a Series' page. The
+    /// badge is drawn into the text as an image, so the title wraps under
+    /// it rather than beside it.
+    private var titleText: Text {
+        guard let (number, end) = seriesNumber,
+              let badge = BadgeImages.image(number: number, end: end, scale: displayScale, size: dynamicTypeSize, scheme: colorScheme)
+        else { return Text(book.title) }
+        return Text(Image(uiImage: badge)).baselineOffset(-3) + Text(verbatim: " ") + Text(book.title)
+    }
+
     private var accessibilityText: String {
         var text = book.title
+        if let (number, _) = seriesNumber {
+            text = String(localized: "Number \(SeriesNumbers.format(number)), \(text)")
+        }
         if !book.authors.isEmpty {
             text += ", " + String(localized: "by \(book.authors)")
+        }
+        if let status = book.status {
+            text += ", " + ReadingStatusLabel.text(status)
+            if status == "currently_reading", let progress = book.progress {
+                text += ", " + String(localized: "\(Percent.text(progress)) through")
+            }
+        }
+        if let rating = book.rating {
+            text += ", " + String(localized: "Rated \(Ratings.text(rating)) of 5 stars")
         }
         return text
     }
@@ -375,4 +429,35 @@ struct JournalNotesBanner: View {
         }
         .accessibilityIdentifier("journal.notes")
     }
+}
+
+/// Series Number badges drawn as images, for setting inline in text.
+@MainActor
+enum BadgeImages {
+    private static var cache: [String: UIImage] = [:]
+
+    /// scheme picks the badge's colors, which differ in dark mode, since an
+    /// image renders outside the view's environment.
+    static func image(number: Double, end: Double?, scale: CGFloat, size: DynamicTypeSize, scheme: ColorScheme) -> UIImage? {
+        let key = "\(number)-\(end.map { "\($0)" } ?? "")-\(scale)-\(size)-\(scheme)"
+        if let image = cache[key] {
+            return image
+        }
+        let renderer = ImageRenderer(content: SeriesNumberBadge(number: number, end: end)
+            .environment(\.dynamicTypeSize, size)
+            .environment(\.colorScheme, scheme))
+        renderer.scale = scale
+        let image = renderer.uiImage
+        cache[key] = image
+        return image
+    }
+}
+
+/// What the Library grid reads, for observing it again when any of it
+/// changes.
+private struct BooksQuery: Equatable {
+    let account: String
+    let libraryID: Int
+    let filter: LibraryFilter
+    let sort: String?
 }

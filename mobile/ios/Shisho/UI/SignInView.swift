@@ -10,6 +10,9 @@ struct SignInView: View {
     @State private var error: SignInError?
     @State private var failures = 0
     @FocusState private var focus: Field?
+    /// Signing in to another account, from the Account sheet: the screen
+    /// opens as a sheet that can be cancelled.
+    var addingAccount = false
 
     private enum Field: CaseIterable { case server, username, password }
 
@@ -20,10 +23,18 @@ struct SignInView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
-                brand
-                    .padding(.top, 48)
+                if !addingAccount {
+                    brand
+                        .padding(.top, 48)
+                }
 
-                if let account = model.signedOutAccount, error == nil {
+                if addingAccount {
+                    Text("Sign in to another server, or as someone else on this one. Switch between them in Account.")
+                        .font(.geist(.subheadline))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 16)
+                } else if let account = model.signedOutAccount, error == nil {
                     NoticeCard(
                         text: String(localized: "This device was signed out of \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString). Sign in again to keep syncing. Everything on this device is still here."),
                         systemImage: "person.crop.circle.badge.exclamationmark",

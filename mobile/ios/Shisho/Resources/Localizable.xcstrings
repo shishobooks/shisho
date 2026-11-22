@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    " by " : {
+
+    },
     "%@ #%@" : {
 
     },
@@ -13,6 +16,19 @@
           }
         }
       }
+    },
+    "%@ %@, remove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@, remove"
+          }
+        }
+      }
+    },
+    "%@ in your Libraries appear here." : {
+
     },
     "%@ left at %@" : {
       "localizations" : {
@@ -54,6 +70,38 @@
         }
       }
     },
+    "%@ stars" : {
+
+    },
+    "%@ through" : {
+
+    },
+    "%@ to %@ stars" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ to %2$@ stars"
+          }
+        }
+      }
+    },
+    "%@ · %@ left" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@ left"
+          }
+        }
+      }
+    },
+    "%@ · Signed out" : {
+
+    },
+    "%@+ stars" : {
+
+    },
     "%@, %@" : {
       "localizations" : {
         "en" : {
@@ -64,6 +112,22 @@
         }
       }
     },
+    "%@, %@ through" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@ through"
+          }
+        }
+      }
+    },
+    "%@, ascending" : {
+
+    },
+    "%@, descending" : {
+
+    },
     "%lld changes made on this device couldn't be saved on the server. The last: %@" : {
       "localizations" : {
         "en" : {
@@ -73,6 +137,19 @@
           }
         }
       }
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "%lld selected" : {
+
     },
     "%lldh %lldm" : {
       "localizations" : {
@@ -87,34 +164,112 @@
     "%lldm" : {
 
     },
+    "+%lld more" : {
+
+    },
     "-%@" : {
+
+    },
+    "1 star" : {
 
     },
     "A change made on this device couldn't be saved on the server: %@" : {
 
     },
+    "Abridged" : {
+
+    },
     "Account" : {
+
+    },
+    "Add Server" : {
+
+    },
+    "Add genres…" : {
+
+    },
+    "Add tags…" : {
+
+    },
+    "Added" : {
+
+    },
+    "All Languages" : {
 
     },
     "All Libraries" : {
 
     },
+    "Also known as %@" : {
+
+    },
+    "Any" : {
+
+    },
+    "Any file type" : {
+
+    },
+    "Any rating" : {
+
+    },
+    "Any status" : {
+
+    },
     "App version" : {
+
+    },
+    "Author" : {
+
+    },
+    "Authors, narrators, and other contributors" : {
 
     },
     "Back 30 Seconds" : {
 
     },
+    "Bitrate" : {
+
+    },
     "Book remaining %@" : {
+
+    },
+    "Books" : {
+
+    },
+    "Books Authored" : {
+
+    },
+    "Books Narrated" : {
+
+    },
+    "Books added to this List appear here." : {
+
+    },
+    "Books in Series" : {
 
     },
     "Books in the Libraries you can access appear here." : {
 
     },
-    "By %@" : {
+    "Books, series, people" : {
 
     },
-    "CREATORS" : {
+    "Browse book series in your library" : {
+
+    },
+    "Browse genres in your library" : {
+
+    },
+    "Browse tags in your library" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Ch. %@" : {
+
+    },
+    "Change or clear the filters to see more." : {
 
     },
     "Chapter %lld" : {
@@ -123,13 +278,52 @@
     "Chapter remaining %@" : {
 
     },
+    "Chapters" : {
+
+    },
+    "Clear Filters" : {
+
+    },
+    "Clear all" : {
+
+    },
+    "Clear all filters" : {
+
+    },
     "Close Player" : {
+
+    },
+    "Codec" : {
+
+    },
+    "Colorist" : {
 
     },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
 
     },
+    "Cover Artist" : {
+
+    },
+    "Currently Reading" : {
+
+    },
+    "Date added" : {
+
+    },
+    "Date finished" : {
+
+    },
+    "Date released" : {
+
+    },
     "Diagnostics" : {
+
+    },
+    "Did Not Finish" : {
+
+    },
+    "Differs from the saved sort" : {
 
     },
     "Dismiss" : {
@@ -138,7 +332,16 @@
     "Done" : {
 
     },
+    "Download all covers on Wi-Fi" : {
+
+    },
     "Downloading your library…" : {
+
+    },
+    "Duration" : {
+
+    },
+    "Editor" : {
 
     },
     "Elapsed %@" : {
@@ -147,19 +350,52 @@
     "Enter your Shisho server's address." : {
 
     },
-    "Export Diagnostics" : {
+    "Every cover in your Libraries shows offline. Otherwise covers download as you browse." : {
 
     },
-    "FORMATS" : {
+    "Export Diagnostics" : {
 
     },
     "Faster" : {
 
     },
+    "File" : {
+
+    },
+    "File type" : {
+
+    },
+    "Filter" : {
+
+    },
+    "Filtering by" : {
+
+    },
+    "Filters" : {
+
+    },
+    "Filters are on" : {
+
+    },
+    "Find Books by title, author, narrator, series, or ISBN, and find series, people, genres, and tags. It works offline." : {
+
+    },
     "Finished" : {
 
     },
+    "Folder" : {
+
+    },
+    "Format" : {
+
+    },
     "Forward 30 Seconds" : {
+
+    },
+    "From " : {
+
+    },
+    "Genres" : {
 
     },
     "Go There" : {
@@ -168,10 +404,28 @@
     "Go to %@" : {
 
     },
+    "Highest rating" : {
+
+    },
     "Include titles" : {
 
     },
+    "Inker" : {
+
+    },
+    "Language" : {
+
+    },
+    "Last read" : {
+
+    },
     "Last synced" : {
+
+    },
+    "Letterer" : {
+
+    },
+    "Level %lld" : {
 
     },
     "Library" : {
@@ -202,13 +456,34 @@
     "Listening" : {
 
     },
+    "Lists" : {
+
+    },
+    "Lists you make on the web, and Lists shared with you, appear here." : {
+
+    },
     "Loading" : {
+
+    },
+    "Lowest rating" : {
 
     },
     "Makes the bar span the chapter" : {
 
     },
     "Makes the bar span the whole book" : {
+
+    },
+    "Modified" : {
+
+    },
+    "Move down" : {
+
+    },
+    "Move up" : {
+
+    },
+    "Narrated by " : {
 
     },
     "Narrated by %@" : {
@@ -223,13 +498,37 @@
     "Next field" : {
 
     },
+    "No" : {
+
+    },
+    "No Books" : {
+
+    },
+    "No Books match these filters" : {
+
+    },
     "No Books yet" : {
+
+    },
+    "No Lists yet" : {
 
     },
     "No chapters" : {
 
     },
+    "No genres found." : {
+
+    },
+    "No status" : {
+
+    },
+    "No tags found." : {
+
+    },
     "Not supported in this version of the app" : {
+
+    },
+    "Nothing here yet" : {
 
     },
     "Nothing is playing" : {
@@ -237,6 +536,16 @@
     },
     "Number %@" : {
 
+    },
+    "Number %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Number %1$@, %2$@"
+          }
+        }
+      }
     },
     "Numbers %@ to %@" : {
       "localizations" : {
@@ -251,10 +560,31 @@
     "Offline. Showing what's on this device." : {
 
     },
+    "On disk" : {
+
+    },
+    "Open %@" : {
+
+    },
     "Open Settings" : {
 
     },
+    "Opens the File's page" : {
+
+    },
     "Opens the player" : {
+
+    },
+    "Organize your books into custom collections" : {
+
+    },
+    "Page %lld" : {
+
+    },
+    "Page count" : {
+
+    },
+    "Pages" : {
 
     },
     "Password" : {
@@ -263,10 +593,22 @@
     "Pause" : {
 
     },
+    "Paused" : {
+
+    },
+    "Penciller" : {
+
+    },
+    "People" : {
+
+    },
     "Plain HTTP only works for servers on your local network. Use the server's https:// address." : {
 
     },
     "Play" : {
+
+    },
+    "Plays from this chapter" : {
 
     },
     "Position in book" : {
@@ -281,10 +623,67 @@
     "Previous field" : {
 
     },
+    "Published" : {
+
+    },
+    "Publisher" : {
+
+    },
+    "Rated %@ of 5 stars" : {
+
+    },
+    "Rating" : {
+
+    },
+    "Read" : {
+
+    },
+    "Reading Direction" : {
+
+    },
+    "Reading status" : {
+
+    },
+    "Reference" : {
+
+    },
+    "Released" : {
+
+    },
+    "Remove %@" : {
+
+    },
+    "Remove %@ sort level" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Reset to the saved sort" : {
+
+    },
     "Resume listening" : {
 
     },
-    "SERIES" : {
+    "Right to left" : {
+
+    },
+    "Search" : {
+
+    },
+    "Search %@" : {
+
+    },
+    "Search genres…" : {
+
+    },
+    "Search tags…" : {
+
+    },
+    "Search your Libraries" : {
+
+    },
+    "Series" : {
 
     },
     "Server" : {
@@ -302,10 +701,22 @@
     "Share" : {
 
     },
+    "Shared by %@" : {
+
+    },
+    "Shared with %@" : {
+
+    },
     "Shisho" : {
 
     },
     "Shisho isn't allowed on your local network, where this server is. Turn on Local Network for Shisho in Settings." : {
+
+    },
+    "Show less" : {
+
+    },
+    "Show more" : {
 
     },
     "Sign In" : {
@@ -314,7 +725,20 @@
     "Sign Out" : {
 
     },
-    "Sign out of %@?" : {
+    "Sign in to another server, or as someone else on this one. Switch between them in Account." : {
+
+    },
+    "Sign out %@ on %@?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sign out %1$@ on %2$@?"
+          }
+        }
+      }
+    },
+    "Sign out?" : {
 
     },
     "Signing in" : {
@@ -323,10 +747,25 @@
     "Signing out removes this device from your account on the server. The library on it stays until you sign in again." : {
 
     },
+    "Size" : {
+
+    },
     "Slower" : {
 
     },
     "Something in front of your Shisho server, such as an authentication proxy, turned the app away. Its owner can let the app through; Shisho's documentation on the Shisho app explains how." : {
+
+    },
+    "Sort" : {
+
+    },
+    "Sort by…" : {
+
+    },
+    "Sort level %lld field" : {
+
+    },
+    "Sorted by:" : {
 
     },
     "Speed" : {
@@ -341,7 +780,16 @@
     "Supplement" : {
 
     },
+    "Supplement to " : {
+
+    },
+    "Switches to this account" : {
+
+    },
     "Sync Now" : {
+
+    },
+    "Tags" : {
 
     },
     "That doesn't look like a server address. Try something like https://shisho.example.com." : {
@@ -359,10 +807,25 @@
     "The server sends the app to another server (%@), which it doesn't follow with your sign-in. Sign in with that address instead." : {
 
     },
+    "Then by %@" : {
+
+    },
+    "Then by…" : {
+
+    },
     "This Book isn't in your Libraries anymore" : {
 
     },
+    "This File isn't in your Libraries anymore" : {
+
+    },
+    "This List isn't available anymore" : {
+
+    },
     "This audiobook couldn't be played. Check your connection to the server and try again." : {
+
+    },
+    "This book" : {
 
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
@@ -372,6 +835,9 @@
 
     },
     "This is a Shisho demo server. The Shisho app doesn't connect to demo servers; sign in to your own Shisho server instead." : {
+
+    },
+    "This isn't in your Libraries anymore" : {
 
     },
     "This server runs Shisho %@, which is too old for this version of the app (%@). Ask the server's owner to update Shisho." : {
@@ -390,6 +856,27 @@
     "This version of the app (%@) is too old for this server, which runs Shisho %@. Update the Shisho app to keep syncing." : {
 
     },
+    "Title" : {
+
+    },
+    "To Read" : {
+
+    },
+    "Toggles the direction" : {
+
+    },
+    "Translator" : {
+
+    },
+    "URL" : {
+
+    },
+    "Unknown" : {
+
+    },
+    "Up to %@ stars" : {
+
+    },
     "Update the app" : {
 
     },
@@ -399,7 +886,16 @@
     "Username" : {
 
     },
+    "Vol. %@" : {
+
+    },
+    "Writer" : {
+
+    },
     "Wrong username or password." : {
+
+    },
+    "Yes" : {
 
     },
     "You listened up to %@ on another device." : {
@@ -420,7 +916,19 @@
     "^[%lld book](inflect: true)" : {
 
     },
+    "^[%lld book](inflect: true) authored" : {
+
+    },
+    "^[%lld chapter](inflect: true)" : {
+
+    },
     "^[%lld file](inflect: true)" : {
+
+    },
+    "^[%lld file](inflect: true) narrated" : {
+
+    },
+    "^[%lld page](inflect: true)" : {
 
     },
     "a newer release" : {
@@ -429,13 +937,43 @@
     "an older release" : {
 
     },
+    "ascending" : {
+
+    },
     "by " : {
 
     },
     "by %@" : {
 
     },
+    "can edit" : {
+
+    },
+    "can manage" : {
+
+    },
+    "can view" : {
+
+    },
+    "clear all" : {
+
+    },
+    "descending" : {
+
+    },
+    "editor" : {
+
+    },
     "https://shisho.example.com" : {
+
+    },
+    "manager" : {
+
+    },
+    "reset to default" : {
+
+    },
+    "viewer" : {
 
     }
   },

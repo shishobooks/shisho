@@ -104,6 +104,8 @@ func runIOS(ctx context.Context, args []string) error {
 		"-e", "SERVER="+srv.URL,
 		"-e", "USERNAME="+harnessUsername,
 		"-e", "PASSWORD="+harnessPassword,
+		"-e", "READER_USERNAME="+readerUsername,
+		"-e", "READER_PASSWORD="+readerPassword,
 		"-e", "CONTROL="+control.URL,
 		flows)
 	maestro.Stdout, maestro.Stderr = os.Stdout, os.Stderr
@@ -155,6 +157,15 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		mu.Lock()
 		onlineAt = time.Now()
 		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// The second account loses, or gets back, access to the harness's
+	// Library, as an admin would change it on the web.
+	mux.HandleFunc("POST /reader-access", func(w http.ResponseWriter, r *http.Request) {
+		if err := setReaderAccess(r.Context(), filepath.Join(srv.dir, "data.sqlite"), r.URL.Query().Get("access") != "none"); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 	// What the server holds of the harness user's listening to the Book
