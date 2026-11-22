@@ -252,4 +252,34 @@ final class CatalogBrowseTests: XCTestCase {
         try store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [1, 2, 3], listIds: [], behindLibraryIds: [1, 3]), fromFeed: true)
         XCTAssertEqual(try store.pendingAccess().libraries.map(\.id), [3])
     }
+
+    /// The grid names each creator once, and for a comic only its writers
+    /// and pencillers, as the web gallery does.
+    func testTheGridNamesCreatorsAsTheWebDoes() throws {
+        let comic = """
+        {"kind":"book","id":7,"library_id":1,"book":{"id":7,"library_id":1,"title":"Saga","sort_title":"Saga","created_at":"2026-01-01T00:00:00Z",
+         "authors":[{"person_id":1,"name":"Fujita","sort_name":"Fujita","role":"writer"},{"person_id":1,"name":"Fujita","sort_name":"Fujita","role":"penciller"},
+           {"person_id":2,"name":"AndWorld Design","sort_name":"AndWorld Design","role":"letterer"},{"person_id":3,"name":"Phil","sort_name":"Phil","role":"cover_artist"}],
+         "files":[{"id":70,"file_type":"cbz","file_role":"main","size_bytes":10}],"cover_version":""}}
+        """
+        try store.apply(page(#"{"entries":[\#(library(1, "Comics")),\#(comic)],"cursor":2}"#))
+        XCTAssertEqual(try store.books(libraryID: nil).first?.authors, "Fujita")
+    }
+
+    func testFiltersAndReadingOnSummaries() throws {
+        try catalog()
+        try store.apply(page(#"{"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"rating":16,"to_read_position":1,"reference":false}},{"kind":"read_through","id":5,"read_through":{"id":5,"book_id":2,"outcome":"underway","paused":false}},{"kind":"reading_position","id":20,"reading_position":{"file_id":20,"percentage":0.4,"occurred_at":"2026-01-01T00:00:00Z","source":"web_reader"}}],"cursor":10}"#))
+        let all = try store.books(libraryID: nil)
+        XCTAssertEqual(all.first { $0.id == 1 }?.status, "to_read")
+        XCTAssertEqual(all.first { $0.id == 1 }?.rating, 16)
+        XCTAssertEqual(all.first { $0.id == 2 }?.status, "currently_reading")
+        XCTAssertEqual(all.first { $0.id == 2 }?.progress, 0.4)
+        let filtered = { (filter: LibraryFilter) in try self.store.pool.read { try CatalogStore.books($0, libraryID: nil, filter: filter) }.map(\.id) }
+        XCTAssertEqual(try filtered(LibraryFilter(statuses: ["to_read"])), [1])
+        XCTAssertEqual(try filtered(LibraryFilter(minRating: 12)), [1])
+        XCTAssertEqual(try filtered(LibraryFilter(genres: ["science fiction"])).sorted(), [1, 2], "by name, ignoring case")
+        XCTAssertEqual(try filtered(LibraryFilter(fileTypes: ["m4b"])), [])
+        let sorted = try store.pool.read { try CatalogStore.books($0, libraryID: nil, sort: "title:desc") }.map(\.title)
+        XCTAssertEqual(sorted, ["Dune Messiah", "Dune"])
+    }
 }

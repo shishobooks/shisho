@@ -12,6 +12,12 @@ struct BookSummary: Identifiable, Hashable, Sendable {
     let coverAspectRatio: String
     /// The File Types of its main Files, in their order, each once.
     let fileTypes: [String]
+    /// The user's Reading Status by the server's name, their Rating in
+    /// quarter stars, and how far through a Read-through underway is, from 0
+    /// to 1, for the cover's bookmark, Rating badge, and progress bar.
+    var status: String?
+    var rating: Int?
+    var progress: Double?
 }
 
 /// A Book as its detail screen shows it.
@@ -56,8 +62,23 @@ struct BookDetail: Hashable, Sendable {
         var durationSeconds: Double?
         var narratorIDs: [Int] = []
         var publisher: String?
+        var publisherID: Int?
         var identifiers: [Identifier] = []
         var pageCount: Int?
+        var releaseDate: Date?
+        var codec: String?
+        var bitrate: Int?
+        var language: String?
+        var abridged: Bool?
+        var url: String?
+        var readingDirection: String?
+        var filepath = ""
+        var modifiedAt: Date?
+        var addedAt: Date?
+        var chapterCount = 0
+        /// How far through the File the user is, from 0 to 1: this device's
+        /// place when it has one, or the server's.
+        var progress: Double?
     }
 
     let summary: BookSummary
@@ -455,7 +476,7 @@ final class CatalogStore: Sendable {
                 description = excluded.description, generation = excluded.generation
             """,
             arguments: [book.id, book.libraryId, book.title, book.subtitle, book.sortTitle,
-                        book.authors.map(\.name).joined(separator: ", "), book.coverVersion,
+                        CatalogStore.galleryAuthors(book), book.coverVersion,
                         CatalogStore.timestamp(book.createdAt) ?? 0, book.description, generation]
         )
         for table in ["book_authors", "book_series", "book_files"] {
@@ -554,24 +575,34 @@ final class CatalogStore: Sendable {
     /// The Books of libraryID, or of every Library, in the user's saved sort
     /// for it, as the web app shows them. Every Library together sorts by
     /// the sort they share, as a single Library does, or newest first.
-    static func books(_ db: Database, libraryID: Int?) throws -> [BookSummary] {
+    /// filter narrows them as the web gallery's filters do, and sort, in the
+    /// sort parameter form, replaces the saved sort when it's set.
+    static func books(_ db: Database, libraryID: Int?, filter: LibraryFilter = LibraryFilter(), sort: String? = nil) throws -> [BookSummary] {
         var sql = """
         SELECT b.id, b.library_id, b.title, b.authors, b.cover_version,
-            COALESCE(l.cover_aspect_ratio, 'book') AS aspect
+            COALESCE(l.cover_aspect_ratio, 'book') AS aspect, \(readingColumns)
         FROM books b
         LEFT JOIN libraries l ON l.id = b.library_id
         """
-        var arguments: StatementArguments = []
+        var conditions: [String] = []
+        var values: [any DatabaseValueConvertible] = []
         var spec = ""
         if let libraryID {
-            sql += " WHERE b.library_id = ?"
-            arguments = [libraryID]
+            conditions.append("b.library_id = ?")
+            values.append(libraryID)
             spec = try String.fetchOne(db, sql: "SELECT sort_spec FROM libraries WHERE id = ?", arguments: [libraryID]) ?? ""
         } else {
             let specs = try String.fetchAll(db, sql: "SELECT DISTINCT sort_spec FROM libraries")
             spec = specs.count == 1 ? specs[0] : ""
         }
-        sql += " ORDER BY " + LibrarySort.orderBy(spec)
+        let filtered = condition(filter)
+        conditions += filtered.sql
+        values += filtered.arguments
+        if !conditions.isEmpty {
+            sql += " WHERE " + conditions.joined(separator: " AND ")
+        }
+        let arguments = StatementArguments(values.map { Optional($0) })
+        sql += " ORDER BY " + LibrarySort.orderBy(sort ?? spec)
         let rows = try Row.fetchAll(db, sql: sql, arguments: arguments)
         let fileTypes = try mainFileTypes(db, libraryID: libraryID)
         return rows.map { summary($0, fileTypes: fileTypes[$0["id"]] ?? []) }
@@ -580,7 +611,7 @@ final class CatalogStore: Sendable {
     static func book(_ db: Database, id: Int) throws -> BookDetail? {
         guard let row = try Row.fetchOne(db, sql: """
             SELECT b.id, b.library_id, b.title, b.authors, b.cover_version, b.subtitle, b.description,
-                COALESCE(l.cover_aspect_ratio, 'book') AS aspect
+                COALESCE(l.cover_aspect_ratio, 'book') AS aspect, \(readingColumns)
             FROM books b
             LEFT JOIN libraries l ON l.id = b.library_id
             WHERE b.id = ?
@@ -600,7 +631,11 @@ final class CatalogStore: Sendable {
         }
         let files = try Row.fetchAll(db, sql: """
             SELECT id, file_type, file_role, size_bytes, display_name, cover_version, narrators, duration_seconds,
-                publisher, identifiers, page_count,
+                publisher, publisher_id, identifiers, page_count, release_date, codec, bitrate, language, abridged, url,
+                reading_direction, filepath, file_modified_at, created_at,
+                (SELECT COUNT(*) FROM book_file_chapters WHERE file_id = book_files.id) AS chapter_count,
+                COALESCE((SELECT percentage FROM local_positions WHERE file_id = book_files.id),
+                    (SELECT percentage FROM reading_positions WHERE file_id = book_files.id)) AS progress,
                 (SELECT json_group_array(person_id) FROM (SELECT person_id FROM book_narrators WHERE file_id = book_files.id ORDER BY position)) AS narrator_ids
             FROM book_files WHERE book_id = ? ORDER BY position
             """, arguments: [id]).map {
@@ -611,8 +646,14 @@ final class CatalogStore: Sendable {
             return BookDetail.File(id: $0["id"], fileType: $0["file_type"], fileRole: $0["file_role"], sizeBytes: $0["size_bytes"],
                                    displayName: $0["display_name"], coverVersion: $0["cover_version"],
                                    narrators: CatalogStore.names($0["narrators"]), durationSeconds: $0["duration_seconds"],
-                                   narratorIDs: narratorIDs, publisher: $0["publisher"], identifiers: identifiers,
-                                   pageCount: $0["page_count"])
+                                   narratorIDs: narratorIDs, publisher: $0["publisher"], publisherID: $0["publisher_id"],
+                                   identifiers: identifiers, pageCount: $0["page_count"],
+                                   releaseDate: ($0["release_date"] as Double?).map(Date.init(timeIntervalSince1970:)),
+                                   codec: $0["codec"], bitrate: $0["bitrate"], language: $0["language"], abridged: $0["abridged"],
+                                   url: $0["url"], readingDirection: $0["reading_direction"], filepath: $0["filepath"],
+                                   modifiedAt: ($0["file_modified_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
+                                   addedAt: ($0["created_at"] as Double?).map(Date.init(timeIntervalSince1970:)),
+                                   chapterCount: $0["chapter_count"], progress: $0["progress"])
         }
         let fileTypes = orderedUnique(files.filter { $0.fileRole != "supplement" }.map(\.fileType))
         let published = try Double.fetchOne(db, sql: """
@@ -651,7 +692,8 @@ final class CatalogStore: Sendable {
 
     private static func summary(_ row: Row, fileTypes: [String]) -> BookSummary {
         BookSummary(id: row["id"], libraryID: row["library_id"], title: row["title"], authors: row["authors"],
-                    coverVersion: row["cover_version"], coverAspectRatio: row["aspect"], fileTypes: fileTypes)
+                    coverVersion: row["cover_version"], coverAspectRatio: row["aspect"], fileTypes: fileTypes,
+                    status: row["status"], rating: row["rating"], progress: row["progress"])
     }
 
     // Conveniences for code that reads once rather than observing.

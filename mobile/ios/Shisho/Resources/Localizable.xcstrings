@@ -57,7 +57,13 @@
         }
       }
     },
+    "%@ through" : {
+
+    },
     "%@ · Signed out" : {
+
+    },
+    "%@+ stars" : {
 
     },
     "%@, %@" : {
@@ -66,6 +72,16 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%@, %@ through" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@ through"
           }
         }
       }
@@ -99,13 +115,16 @@
     "A change made on this device couldn't be saved on the server: %@" : {
 
     },
+    "Abridged" : {
+
+    },
     "Account" : {
 
     },
-    "Add Account" : {
+    "Add Server" : {
 
     },
-    "Add another server or account. You can switch between them in Account." : {
+    "Added" : {
 
     },
     "All Libraries" : {
@@ -114,7 +133,19 @@
     "Also known as %@" : {
 
     },
+    "Any" : {
+
+    },
     "App version" : {
+
+    },
+    "Ascending" : {
+
+    },
+    "Audio" : {
+
+    },
+    "Author" : {
 
     },
     "Authors, narrators, and other contributors" : {
@@ -156,13 +187,10 @@
     "Browse tags in your library" : {
 
     },
-    "By %@" : {
-
-    },
-    "CREATORS" : {
-
-    },
     "Cancel" : {
+
+    },
+    "Change or clear the filters to see more." : {
 
     },
     "Chapter %lld" : {
@@ -171,19 +199,49 @@
     "Chapter remaining %@" : {
 
     },
+    "Chapters" : {
+
+    },
+    "Clear" : {
+
+    },
+    "Clear Filters" : {
+
+    },
     "Close Player" : {
+
+    },
+    "Colorist" : {
 
     },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
 
     },
+    "Cover Artist" : {
+
+    },
     "Currently Reading" : {
+
+    },
+    "Date added" : {
+
+    },
+    "Date finished" : {
+
+    },
+    "Descending" : {
+
+    },
+    "Details of %@" : {
 
     },
     "Diagnostics" : {
 
     },
     "Did Not Finish" : {
+
+    },
+    "Direction" : {
 
     },
     "Dismiss" : {
@@ -196,6 +254,12 @@
 
     },
     "Downloading your library…" : {
+
+    },
+    "Duration" : {
+
+    },
+    "Editor" : {
 
     },
     "Elapsed %@" : {
@@ -213,10 +277,25 @@
     "Faster" : {
 
     },
+    "File" : {
+
+    },
+    "File type" : {
+
+    },
+    "Filters" : {
+
+    },
+    "Filters, %lld on" : {
+
+    },
     "Find Books by title, author, narrator, series, or ISBN, and find series, people, genres, and tags. It works offline." : {
 
     },
     "Finished" : {
+
+    },
+    "Format" : {
 
     },
     "Forward 30 Seconds" : {
@@ -237,7 +316,16 @@
     "Include titles" : {
 
     },
+    "Inker" : {
+
+    },
+    "Language" : {
+
+    },
     "Last synced" : {
+
+    },
+    "Letterer" : {
 
     },
     "Library" : {
@@ -283,7 +371,10 @@
     "Makes the bar span the whole book" : {
 
     },
-    "Narrated by" : {
+    "Modified" : {
+
+    },
+    "Narrated by " : {
 
     },
     "Narrated by %@" : {
@@ -298,7 +389,13 @@
     "Next field" : {
 
     },
+    "No" : {
+
+    },
     "No Books" : {
+
+    },
+    "No Books match these filters" : {
 
     },
     "No Books yet" : {
@@ -308,6 +405,9 @@
 
     },
     "No chapters" : {
+
+    },
+    "No status" : {
 
     },
     "Not supported in this version of the app" : {
@@ -360,13 +460,25 @@
     "PUBLISHED" : {
 
     },
+    "Page count" : {
+
+    },
+    "Pages" : {
+
+    },
     "Password" : {
+
+    },
+    "Path" : {
 
     },
     "Pause" : {
 
     },
     "Paused" : {
+
+    },
+    "Penciller" : {
 
     },
     "People" : {
@@ -390,22 +502,43 @@
     "Previous field" : {
 
     },
-    "Published by %@" : {
+    "Publisher" : {
 
     },
     "Rated %@ of 5 stars" : {
 
     },
+    "Rating" : {
+
+    },
     "Read" : {
+
+    },
+    "Reading Direction" : {
+
+    },
+    "Reading status" : {
 
     },
     "Reference" : {
 
     },
+    "Release date" : {
+
+    },
+    "Released" : {
+
+    },
     "Resume listening" : {
 
     },
+    "Right to left" : {
+
+    },
     "SERIES" : {
+
+    },
+    "Saved sort" : {
 
     },
     "Search" : {
@@ -459,6 +592,9 @@
     "Sign Out" : {
 
     },
+    "Sign in to another server, or as someone else on this one. Switch between them in Account." : {
+
+    },
     "Sign out %@ on %@?" : {
       "localizations" : {
         "en" : {
@@ -478,10 +614,16 @@
     "Signing out removes this device from your account on the server. The library on it stays until you sign in again." : {
 
     },
+    "Size" : {
+
+    },
     "Slower" : {
 
     },
     "Something in front of your Shisho server, such as an authentication proxy, turned the app away. Its owner can let the app through; Shisho's documentation on the Shisho app explains how." : {
+
+    },
+    "Sort" : {
 
     },
     "Speed" : {
@@ -515,6 +657,9 @@
 
     },
     "The app couldn't save your sign-in on this device. Try again." : {
+
+    },
+    "The order you saved for this Library on the web." : {
 
     },
     "The server kept asking to download the library again. Try syncing later." : {
@@ -560,7 +705,19 @@
     "This version of the app (%@) is too old for this server, which runs Shisho %@. Update the Shisho app to keep syncing." : {
 
     },
+    "Title" : {
+
+    },
     "To Read" : {
+
+    },
+    "Translator" : {
+
+    },
+    "URL" : {
+
+    },
+    "Unknown" : {
 
     },
     "Update the app" : {
@@ -572,7 +729,13 @@
     "Username" : {
 
     },
+    "Writer" : {
+
+    },
     "Wrong username or password." : {
+
+    },
+    "Yes" : {
 
     },
     "You listened up to %@ on another device." : {
@@ -603,6 +766,9 @@
 
     },
     "^[%lld file](inflect: true) narrated" : {
+
+    },
+    "^[%lld page](inflect: true)" : {
 
     },
     "a newer release" : {

@@ -32,7 +32,7 @@ Changing your password doesn't sign the app out. A signed-out app asks you to si
 
 ## Browsing and Searching Offline
 
-Everything in the libraries you can access is on the device: books with their descriptions, series, authors and narrators, genres, tags, and files, plus your [lists](./lists.md) and the lists shared with you. The **Library** tab browses it by series, people, genres, and tags, and the **Lists** tab shows your lists. Each book shows your [reading status](./reading-tracking.md#reading-status) and rating, which you change on the web. A list shows who it's shared with to its owner and anyone who can manage it, as on the web.
+Everything in the libraries you can access is on the device: books with their descriptions, series, authors and narrators, genres, tags, and files, plus your [lists](./lists.md) and the lists shared with you. The **Library** tab browses it by series, people, genres, and tags, and the **Lists** tab shows your lists. **Filters** narrow the library by reading status, rating, file type, genre, tag, and language, and **Sort** orders it by one field. Until you pick one, the app uses the sort you [saved for the library on the web](./gallery-sort.md); a sort you pick in the app stays on that device. Each book shows your [reading status](./reading-tracking.md#reading-status) and rating, which you change on the web, and each file's **info** button shows its details, as on the web. A list shows who it's shared with to its owner and anyone who can manage it, as on the web.
 
 Search, from the magnifying glass at the top of the **Library** and **Lists** tabs, finds books by title, author, narrator, series, or an identifier such as an ISBN, and finds series, people, genres, and tags, including by their [aliases](./metadata.md#aliases-and-resource-merges). It searches the copy on the device, so it works in airplane mode, and it matches words and ranks results the way the web's search does. Unlike the web, it doesn't search the names of files and folders on the server.
 
@@ -42,7 +42,7 @@ Covers download as you browse. To have every cover on the device before going of
 
 ## Accounts
 
-The app can be signed in to several servers, or several accounts on one server, at once. **Account > Add Account** signs in to another, and tapping an account in that list switches to it. Each account keeps its own copy of its libraries, so switching shows it at once, even offline. Signing out of one account switches to another that's still signed in.
+The app can be signed in to several servers, or several accounts on one server, at once. **Account > Add Server** signs in to another server, or as someone else on the same one, and tapping an account in that list switches to it. Each account keeps its own copy of its libraries, so switching shows it at once, even offline. Signing out of one account switches to another that's still signed in.
 
 ## Listening
 

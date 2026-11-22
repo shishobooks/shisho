@@ -7,21 +7,90 @@ struct MainTabs: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        @Bindable var model = model
-        TabView(selection: $model.tab) {
-            LibraryView()
-                .withMiniPlayer()
-                .tabItem { Label("Library", systemImage: "books.vertical").accessibilityIdentifier("tab.library") }
-                .tag(AppTab.library)
-            ListsView()
-                .withMiniPlayer()
-                .tabItem { Label("Lists", systemImage: "list.bullet").accessibilityIdentifier("tab.lists") }
-                .tag(AppTab.lists)
+        // Both tabs stay alive, each with its navigation, and the
+        // prototype's tab bar sits under them rather than the system's
+        // floating one.
+        ZStack {
+            tab(.library) { LibraryView() }
+            tab(.lists) { ListsView() }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            AppTabBar()
         }
         .tint(Theme.primary)
-        .sheet(isPresented: $model.showingAccount) {
+        .sheet(isPresented: Binding(get: { model.showingAccount }, set: { model.showingAccount = $0 })) {
             AccountSheet()
         }
+    }
+
+    private func tab(_ tab: AppTab, @ViewBuilder content: () -> some View) -> some View {
+        let showing = model.tab == tab
+        return content()
+            .withMiniPlayer()
+            .opacity(showing ? 1 : 0)
+            .allowsHitTesting(showing)
+            .accessibilityHidden(!showing)
+    }
+}
+
+/// The tab bar of the prototype's native structure (variant E): across the
+/// bottom, the page's color blurred behind a hairline, each tab's icon over
+/// its name, the one showing in the primary color. Tapping the one showing
+/// goes back to its first screen, as a native tab bar does.
+struct AppTabBar: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        HStack(spacing: 0) {
+            item(.library, String(localized: "Library"), systemImage: "books.vertical", identifier: "tab.library")
+            item(.lists, String(localized: "Lists"), systemImage: "list.bullet", identifier: "tab.lists")
+        }
+        .padding(.top, 7)
+        .padding(.bottom, 2)
+        .frame(maxWidth: .infinity)
+        .background {
+            Theme.background.opacity(0.85)
+                .background(.ultraThinMaterial)
+                .ignoresSafeArea(edges: .bottom)
+        }
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.border).frame(height: 1)
+        }
+    }
+
+    private func item(_ tab: AppTab, _ title: String, systemImage: String, identifier: String) -> some View {
+        let selected = model.tab == tab
+        return Button {
+            if selected {
+                model.popToRoot(tab)
+            } else {
+                model.tab = tab
+            }
+        } label: {
+            VStack(spacing: 3) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 21, weight: .regular))
+                    .frame(height: 26)
+                Text(title)
+                    .font(.geist(size: 10.5, relativeTo: .caption2, weight: .medium))
+            }
+            .foregroundStyle(selected ? Theme.primary : Theme.mutedForeground)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(TabPressStyle())
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+/// The prototype's tab press: the icon gives a little under the finger.
+private struct TabPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.92 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: configuration.isPressed)
     }
 }
 

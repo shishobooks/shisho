@@ -1,0 +1,283 @@
+import SwiftUI
+
+/// A Reading Status as the web app colors and marks it
+/// (`ReadingStatusBookmark` and `ReadingStatusIcon`).
+enum StatusStyle {
+    static func color(_ status: String) -> Color {
+        switch status {
+        case "currently_reading": Color(red: 124 / 255, green: 58 / 255, blue: 237 / 255) // violet-600
+        case "paused": Color(red: 245 / 255, green: 158 / 255, blue: 11 / 255) // amber-500
+        case "to_read": Color(red: 14 / 255, green: 165 / 255, blue: 233 / 255) // sky-500
+        case "read": Color(red: 5 / 255, green: 150 / 255, blue: 105 / 255) // emerald-600
+        case "did_not_finish": Color(red: 225 / 255, green: 29 / 255, blue: 72 / 255) // rose-600
+        case "reference": Color(red: 13 / 255, green: 148 / 255, blue: 136 / 255) // teal-600
+        default: Theme.mutedForeground
+        }
+    }
+
+    static func symbol(_ status: String?) -> String {
+        switch status {
+        case "paused": "pause.fill"
+        case "to_read": "clock"
+        case "read": "checkmark"
+        case "did_not_finish": "xmark"
+        case "reference": "books.vertical"
+        default: "book"
+        }
+    }
+}
+
+/// The ribbon bookmark hanging from a cover's top edge, colored and marked
+/// by Reading Status, or showing how far through a Book being read is, as
+/// the web app's gallery has it.
+struct ReadingStatusRibbon: View {
+    let status: String
+    var progress: Double?
+    var scale: CGFloat = 1
+
+    private var percent: String? {
+        guard status == "currently_reading", let progress else { return nil }
+        return Percent.text(progress)
+    }
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            RibbonShape()
+                .fill(StatusStyle.color(status))
+            if let percent {
+                Text(verbatim: percent)
+                    .font(.system(size: 9 * scale, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .padding(.top, 6 * scale)
+            } else {
+                Image(systemName: StatusStyle.symbol(status))
+                    .font(.system(size: 11 * scale, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .padding(.top, 6 * scale)
+            }
+        }
+        .frame(width: (percent == nil ? 24 : 30) * scale, height: 32 * scale)
+        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(percent.map { String(localized: "\(ReadingStatusLabel.text(status)), \($0) through") }
+            ?? ReadingStatusLabel.text(status))
+    }
+}
+
+private struct RibbonShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.minY + rect.height * 0.78))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// A Rating on a cover's bottom corner, as the web gallery's badge shows it.
+struct CoverRatingBadge: View {
+    let units: Int
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(Theme.rating)
+            Text(verbatim: Ratings.text(units))
+                .font(.geist(size: 10, relativeTo: .caption2, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(Theme.foreground)
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 1)
+        .background(Theme.secondary, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "Rated \(Ratings.text(units)) of 5 stars"))
+    }
+}
+
+/// How far through a Book or File the user is, as a thin bar.
+struct ProgressBar: View {
+    let value: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.primary.opacity(0.2))
+                Capsule().fill(Theme.primary)
+                    .frame(width: geometry.size.width * min(1, max(0, value)))
+            }
+        }
+        .frame(height: 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "\(Percent.text(value)) through"))
+    }
+}
+
+/// How far through a File the user is, as the web's file row ring shows it.
+struct ProgressRing: View {
+    let value: Double
+    var size: CGFloat = 32
+
+    var body: some View {
+        ZStack {
+            Circle().stroke(Theme.primary.opacity(0.18), lineWidth: 3)
+            Circle()
+                .trim(from: 0, to: min(1, max(0, value)))
+                .stroke(Theme.primary, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+            Text(verbatim: Percent.text(value))
+                .font(.system(size: size * 0.28, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(Theme.foreground)
+        }
+        .frame(width: size, height: size)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(localized: "\(Percent.text(value)) through"))
+    }
+}
+
+/// The web app's number formats.
+enum Percent {
+    static func text(_ value: Double) -> String {
+        "\(Int((min(1, max(0, value)) * 100).rounded()))%"
+    }
+}
+
+enum Ratings {
+    /// Stars from quarter-star units, as "4.25".
+    static func text(_ units: Int) -> String {
+        (Double(units) / 4).formatted(.number.precision(.fractionLength(0...2)))
+    }
+}
+
+enum FileFacts {
+    /// A length as the web shows it: "6h 43m", "12m", or "<1m".
+    static func duration(_ seconds: Double) -> String {
+        if seconds > 0, seconds < 60 { return "<1m" }
+        let hours = Int(seconds) / 3600
+        let minutes = (Int(seconds) % 3600) / 60
+        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+    }
+
+    static func bitrate(_ bitsPerSecond: Int) -> String {
+        "\(Int((Double(bitsPerSecond) / 1000).rounded())) kbps"
+    }
+
+    /// The year a date falls in, read in UTC as the web does.
+    static func year(_ date: Date) -> String {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
+        return String(calendar.component(.year, from: date))
+    }
+
+    static func pages(_ count: Int) -> String {
+        String(AttributedString(localized: "^[\(count) page](inflect: true)").characters)
+    }
+
+    static func size(_ bytes: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
+    }
+}
+
+/// Text cut to a few lines with a Show more button, which shows only when
+/// the text doesn't fit.
+struct ExpandableText: View {
+    let text: String
+    var lineLimit = 5
+    let identifier: String
+
+    @State private var expanded = false
+    @State private var fullHeight: CGFloat = 0
+    @State private var shownHeight: CGFloat = 0
+
+    private var truncated: Bool { fullHeight > shownHeight + 1 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(text)
+                .lineLimit(expanded ? nil : lineLimit)
+                .background(GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { shownHeight = geometry.size.height }
+                        .onChange(of: geometry.size.height) { _, height in shownHeight = height }
+                })
+                // The whole text, measured but not shown.
+                .background(alignment: .top) {
+                    Text(text)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .background(GeometryReader { geometry in
+                            Color.clear
+                                .onAppear { fullHeight = geometry.size.height }
+                                .onChange(of: geometry.size.height) { _, height in fullHeight = height }
+                        })
+                        .accessibilityHidden(true)
+                }
+                .accessibilityIdentifier(identifier)
+            if expanded || truncated {
+                ShowMoreButton(expanded: $expanded, identifier: "\(identifier).more")
+            }
+        }
+    }
+}
+
+/// Text whose names link to their pages, wrapping as running text does, as
+/// the web app's bylines and lists of links do. Each link is a URL the
+/// environment's openURL turns into a Route.
+enum LinkedText {
+    /// The scheme of the URLs that stand for Routes in running text.
+    static let scheme = "shisho-route"
+
+    static func url(_ route: Route) -> URL? {
+        switch route {
+        case .resource(let kind, let id, let name):
+            var components = URLComponents()
+            components.scheme = scheme
+            components.host = kind.rawValue
+            components.path = "/\(id)"
+            components.queryItems = [URLQueryItem(name: "name", value: name)]
+            return components.url
+        default:
+            return nil
+        }
+    }
+
+    static func route(_ url: URL) -> Route? {
+        guard url.scheme == scheme, let host = url.host(), let kind = ResourceKind(rawValue: host),
+              let id = Int(url.lastPathComponent) else { return nil }
+        let name = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "name" }?.value ?? ""
+        return .resource(kind, id: id, name: name)
+    }
+
+    /// One linked name, underlined as the web's text links are.
+    static func link(_ text: String, to route: Route) -> AttributedString {
+        var name = AttributedString(text)
+        name.link = url(route)
+        name.underlineStyle = .single
+        name.foregroundColor = Theme.foreground
+        return name
+    }
+
+    /// Muted text between the links.
+    static func muted(_ text: String) -> AttributedString {
+        var part = AttributedString(text)
+        part.foregroundColor = Theme.mutedForeground
+        return part
+    }
+}
+
+extension View {
+    /// Opens the Routes LinkedText's links stand for on the tab showing.
+    func opensRouteLinks(_ model: AppModel) -> some View {
+        environment(\.openURL, OpenURLAction { url in
+            guard let route = LinkedText.route(url) else { return .systemAction }
+            model.push(route)
+            return .handled
+        })
+    }
+}

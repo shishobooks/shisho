@@ -51,7 +51,16 @@ struct LibraryView: View {
                         }
                         if let books {
                             sectionHeader(count: books.count)
-                            if books.isEmpty {
+                            if books.isEmpty, !model.filter.isEmpty {
+                                VStack(spacing: 14) {
+                                    EmptyNotice(title: String(localized: "No Books match these filters"),
+                                                message: String(localized: "Change or clear the filters to see more."),
+                                                systemImage: "line.3.horizontal.decrease")
+                                    Button("Clear Filters") { model.filter = LibraryFilter() }
+                                        .buttonStyle(SmallOutlineStyle())
+                                        .accessibilityIdentifier("library.filters.clear")
+                                }
+                            } else if books.isEmpty {
                                 emptyState
                             } else {
                                 BookGrid(books: books, width: geometry.size.width)
@@ -76,8 +85,10 @@ struct LibraryView: View {
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
             try CatalogStore.journalNotes(db)
         }
-        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(model.libraryID)", into: $books) { [libraryID] db in
-            try CatalogStore.books(db, libraryID: libraryID)
+        .observing(model.session?.store, id: BooksQuery(account: model.session?.account.id ?? "", libraryID: model.libraryID,
+                                                         filter: model.filter, sort: model.sortSpec),
+                   into: $books) { [libraryID, filter = model.filter, sort = model.sortSpec] db in
+            try CatalogStore.books(db, libraryID: libraryID, filter: filter, sort: sort)
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $libraries) { db in
             try CatalogStore.libraries(db)
@@ -89,16 +100,28 @@ struct LibraryView: View {
         }
     }
 
+    /// The grid's heading, its count, and its Filters and Sort, side by
+    /// side when they fit and stacked when they don't.
     private func sectionHeader(count: Int) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        let heading = HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text("Library")
                 .font(.geist(.title3, weight: .semibold))
                 .accessibilityAddTraits(.isHeader)
-            Spacer()
             Text("^[\(count) book](inflect: true)")
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.mutedForeground)
                 .contentTransition(.numericText())
+        }
+        return ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center) {
+                heading
+                Spacer(minLength: 8)
+                GalleryControls()
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                heading
+                GalleryControls()
+            }
         }
         .padding(.horizontal, GridLayout.margin)
         .padding(.top, 20)
@@ -237,8 +260,27 @@ struct BookCell: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // The user's Reading Status as a ribbon from the cover's top, their
+            // Rating on its corner, and how far through a Book being read
+            // is, as the web gallery shows them.
             CoverView(book: book, width: width)
-                .padding(.bottom, 4)
+                .overlay(alignment: .topLeading) {
+                    if let status = book.status {
+                        ReadingStatusRibbon(status: status, progress: book.progress)
+                            .padding(.leading, 6)
+                    }
+                }
+                .overlay(alignment: .bottomLeading) {
+                    if let rating = book.rating {
+                        CoverRatingBadge(units: rating)
+                            .padding(4)
+                    }
+                }
+                .padding(.bottom, book.progress == nil ? 4 : 0)
+            if let progress = book.progress {
+                ProgressBar(value: progress)
+                    .padding(.vertical, 2)
+            }
             titleText
                 .font(.geist(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.foreground)
@@ -269,13 +311,14 @@ struct BookCell: View {
     }
 
     @Environment(\.displayScale) private var displayScale
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The title, after its Series Number's badge on a Series' page. The
     /// badge is drawn into the text as an image, so the title wraps under
     /// it rather than beside it.
     private var titleText: Text {
         guard let (number, end) = seriesNumber,
-              let badge = BadgeImages.image(number: number, end: end, scale: displayScale, size: dynamicTypeSize)
+              let badge = BadgeImages.image(number: number, end: end, scale: displayScale, size: dynamicTypeSize, scheme: colorScheme)
         else { return Text(book.title) }
         return Text(Image(uiImage: badge)).baselineOffset(-3) + Text(verbatim: " ") + Text(book.title)
     }
@@ -287,6 +330,15 @@ struct BookCell: View {
         }
         if !book.authors.isEmpty {
             text += ", " + String(localized: "by \(book.authors)")
+        }
+        if let status = book.status {
+            text += ", " + ReadingStatusLabel.text(status)
+            if status == "currently_reading", let progress = book.progress {
+                text += ", " + String(localized: "\(Percent.text(progress)) through")
+            }
+        }
+        if let rating = book.rating {
+            text += ", " + String(localized: "Rated \(Ratings.text(rating)) of 5 stars")
         }
         return text
     }
@@ -361,15 +413,28 @@ struct JournalNotesBanner: View {
 enum BadgeImages {
     private static var cache: [String: UIImage] = [:]
 
-    static func image(number: Double, end: Double?, scale: CGFloat, size: DynamicTypeSize) -> UIImage? {
-        let key = "\(number)-\(end.map { "\($0)" } ?? "")-\(scale)-\(size)"
+    /// scheme picks the badge's colors, which differ in dark mode, since an
+    /// image renders outside the view's environment.
+    static func image(number: Double, end: Double?, scale: CGFloat, size: DynamicTypeSize, scheme: ColorScheme) -> UIImage? {
+        let key = "\(number)-\(end.map { "\($0)" } ?? "")-\(scale)-\(size)-\(scheme)"
         if let image = cache[key] {
             return image
         }
-        let renderer = ImageRenderer(content: SeriesNumberBadge(number: number, end: end).environment(\.dynamicTypeSize, size))
+        let renderer = ImageRenderer(content: SeriesNumberBadge(number: number, end: end)
+            .environment(\.dynamicTypeSize, size)
+            .environment(\.colorScheme, scheme))
         renderer.scale = scale
         let image = renderer.uiImage
         cache[key] = image
         return image
     }
+}
+
+/// What the Library grid reads, for observing it again when any of it
+/// changes.
+private struct BooksQuery: Equatable {
+    let account: String
+    let libraryID: Int
+    let filter: LibraryFilter
+    let sort: String?
 }

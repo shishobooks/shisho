@@ -140,7 +140,6 @@ struct ResourceView: View {
     @State private var books: [BookSummary]?
     @State private var narrated: [BookSummary]?
     @State private var numbers: SeriesNumberMap?
-    @State private var showingFullDescription = false
 
     private var name: String { (detail ?? nil)?.name ?? initialName }
 
@@ -202,11 +201,8 @@ struct ResourceView: View {
                 }
                 .accessibilityElement(children: .combine)
                 if let description = detail.description, !description.isEmpty {
-                    Text(PlainText.from(description))
+                    ExpandableText(text: PlainText.from(description), lineLimit: 4, identifier: "resource.description")
                         .font(.geist(.subheadline))
-                        .lineLimit(showingFullDescription ? nil : 4)
-                        .accessibilityIdentifier("resource.description")
-                    ShowMoreButton(expanded: $showingFullDescription, identifier: "resource.description.more")
                 }
                 if !detail.aliases.isEmpty {
                     Text("Also known as \(detail.aliases.joined(separator: ", "))")
@@ -271,6 +267,7 @@ struct ShowMoreButton: View {
             withAnimation(.easeInOut(duration: 0.25)) { expanded.toggle() }
         }
         .font(.geist(.subheadline, weight: .semibold))
+        .foregroundStyle(Theme.primary)
         .accessibilityIdentifier(identifier)
     }
 }

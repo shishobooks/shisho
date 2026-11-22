@@ -110,6 +110,16 @@ extension CatalogStore {
             // JSON arrays: [{"type","value"}], and a CBZ's page names.
             t.add(column: "identifiers", .text).notNull().defaults(to: "[]")
             t.add(column: "pages", .text).notNull().defaults(to: "[]")
+            // What the file details sheet shows, as the web's does.
+            t.add(column: "codec", .text)
+            t.add(column: "bitrate", .integer)
+            t.add(column: "language", .text)
+            t.add(column: "abridged", .boolean)
+            t.add(column: "url", .text)
+            t.add(column: "reading_direction", .text)
+            t.add(column: "filepath", .text).notNull().defaults(to: "")
+            t.add(column: "file_modified_at", .double)
+            t.add(column: "created_at", .double)
         }
         // False until a download from the start records what the user could
         // access when it began; access changes after are answered from then.
@@ -315,8 +325,14 @@ extension CatalogStore {
         for file in book.files {
             let identifiers = file.identifiers.map { ["type": $0.type, "value": $0.value] }
             let identifiersJSON = (try? String(data: JSONEncoder().encode(identifiers), encoding: .utf8)) ?? "[]"
-            try db.execute(sql: "UPDATE book_files SET publisher_id = ?, publisher = ?, identifiers = ?, pages = ? WHERE id = ?",
-                           arguments: [file.publisher?.publisherId, file.publisher?.name, identifiersJSON, namesJSON(file.pages), file.id])
+            try db.execute(sql: """
+                UPDATE book_files SET publisher_id = ?, publisher = ?, identifiers = ?, pages = ?, codec = ?, bitrate = ?,
+                    language = ?, abridged = ?, url = ?, reading_direction = ?, filepath = ?, file_modified_at = ?, created_at = ?
+                WHERE id = ?
+                """, arguments: [file.publisher?.publisherId, file.publisher?.name, identifiersJSON, namesJSON(file.pages),
+                                 file.audiobookCodec, file.audiobookBitrateBps, file.language, file.abridged, file.url,
+                                 file.readingDirection?.rawValue, file.filepath, file.fileModifiedAt.flatMap(timestamp),
+                                 timestamp(file.createdAt), file.id])
             try db.execute(sql: "DELETE FROM book_narrators WHERE file_id = ?", arguments: [file.id])
             for (position, narrator) in file.narrators.enumerated() {
                 try db.execute(sql: "INSERT INTO book_narrators (file_id, position, book_id, person_id, name) VALUES (?, ?, ?, ?, ?)",
@@ -844,7 +860,7 @@ extension CatalogStore {
     /// The columns a BookSummary reads, for `books b`.
     static let summarySQL = """
         SELECT b.id, b.library_id, b.title, b.authors, b.cover_version,
-            COALESCE(l.cover_aspect_ratio, 'book') AS aspect
+            COALESCE(l.cover_aspect_ratio, 'book') AS aspect, \(readingColumns)
         FROM books b
         LEFT JOIN libraries l ON l.id = b.library_id
         """
@@ -864,7 +880,8 @@ extension CatalogStore {
         }
         return rows.map {
             BookSummary(id: $0["id"], libraryID: $0["library_id"], title: $0["title"], authors: $0["authors"],
-                        coverVersion: $0["cover_version"], coverAspectRatio: $0["aspect"], fileTypes: fileTypes[$0["id"]] ?? [])
+                        coverVersion: $0["cover_version"], coverAspectRatio: $0["aspect"], fileTypes: fileTypes[$0["id"]] ?? [],
+                        status: $0["status"], rating: $0["rating"], progress: $0["progress"])
         }
     }
 

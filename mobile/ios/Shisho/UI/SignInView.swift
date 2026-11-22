@@ -23,14 +23,17 @@ struct SignInView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 28) {
-                brand
-                    .padding(.top, 48)
+                if !addingAccount {
+                    brand
+                        .padding(.top, 48)
+                }
 
                 if addingAccount {
-                    Text("Add another server or account. You can switch between them in Account.")
+                    Text("Sign in to another server, or as someone else on this one. Switch between them in Account.")
                         .font(.geist(.subheadline))
                         .foregroundStyle(Theme.mutedForeground)
                         .multilineTextAlignment(.center)
+                        .padding(.top, 16)
                 } else if let account = model.signedOutAccount, error == nil {
                     NoticeCard(
                         text: String(localized: "This device was signed out of \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString). Sign in again to keep syncing. Everything on this device is still here."),
@@ -114,14 +117,6 @@ struct SignInView: View {
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: error?.message)
         }
         .scrollDismissesKeyboard(.interactively)
-        .overlay(alignment: .topTrailing) {
-            if addingAccount {
-                Button("Cancel") { model.addingAccount = false }
-                    .font(.geist(.body, weight: .semibold))
-                    .padding(20)
-                    .accessibilityIdentifier("signin.cancel")
-            }
-        }
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Button { moveFocus(by: -1) } label: { Image(systemName: "chevron.up") }

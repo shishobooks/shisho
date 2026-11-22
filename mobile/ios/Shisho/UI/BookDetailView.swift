@@ -15,7 +15,6 @@ struct BookDetailView: View {
     @State private var tint: Color?
     @State private var scrolled = false
     @State private var standing: BookStanding?
-    @State private var showingFullDescription = false
 
     private var summary: BookSummary {
         book??.summary ?? initial
@@ -46,6 +45,7 @@ struct BookDetailView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable { await model.syncNow() }
+        .opensRouteLinks(model)
         .miniPlayerClearance()
         .onScrolledDistanceChange(space: "book") { distance in
             // The title shows in the bar once the cover has scrolled away.
@@ -102,6 +102,14 @@ struct BookDetailView: View {
                 guard !Task.isCancelled else { return }
                 tint = average?.color
             }
+            // The Reading Status ribbon, as on the grid and the prototype's
+            // Book page.
+            .overlay(alignment: .topLeading) {
+                if let status = standing?.status {
+                    ReadingStatusRibbon(status: status, progress: summary.progress, scale: 1.25)
+                        .padding(.leading, 10)
+                }
+            }
             .padding(.top, 8)
 
             if let detail = book ?? nil, let series = detail.series.first {
@@ -137,8 +145,17 @@ struct BookDetailView: View {
                     .padding(.top, 6)
             }
 
-            if !summary.authors.isEmpty {
-                AuthorsLink(authors: (book ?? nil)?.authors.filter { $0.role == nil } ?? [], names: summary.authors)
+            if let detail = book ?? nil, !detail.authors.isEmpty {
+                Text(Byline.text(detail.authors))
+                    .font(.geist(.callout))
+                    .multilineTextAlignment(.center)
+                    .tint(Theme.foreground)
+                    .padding(.top, 10)
+                    .accessibilityIdentifier("book.detail.authors")
+            } else if !summary.authors.isEmpty {
+                (Text("by ").foregroundStyle(Theme.mutedForeground) + Text(summary.authors))
+                    .font(.geist(.callout))
+                    .multilineTextAlignment(.center)
                     .padding(.top, 10)
             }
         }
@@ -192,16 +209,11 @@ struct BookDetailView: View {
             }
 
             if let description = book.description, !description.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(PlainText.from(description))
-                        .font(.geist(.subheadline))
-                        .foregroundStyle(Theme.foreground.opacity(0.85))
-                        .lineSpacing(3)
-                        .lineLimit(showingFullDescription ? nil : 5)
-                        .accessibilityIdentifier("book.detail.description")
-                    ShowMoreButton(expanded: $showingFullDescription, identifier: "book.detail.description.more")
-                }
-                .padding(.top, 22)
+                ExpandableText(text: PlainText.from(description), identifier: "book.detail.description")
+                    .font(.geist(.subheadline))
+                    .foregroundStyle(Theme.foreground.opacity(0.85))
+                    .lineSpacing(3)
+                    .padding(.top, 22)
             }
 
             if !book.files.isEmpty {
@@ -226,22 +238,18 @@ struct BookDetailView: View {
         let value: AnyView
     }
 
-    /// The details the prototype lists under labels: Series as links, each
-    /// creator with a role, genres and tags as badges, and when the Book was
-    /// published. Authors are linked under the title, and narrators on
-    /// their Files.
+    /// The details the prototype lists under labels: Series as links, genres
+    /// and tags as badges, and when the Book was published. Creators are
+    /// named with their roles under the title, and narrators on their Files.
     private func infoRows(_ book: BookDetail) -> [InfoRow] {
         var rows: [InfoRow] = []
         if !book.series.isEmpty {
-            rows.append(InfoRow(label: String(localized: "SERIES"), value: AnyView(TextLinks(items: book.series.map {
-                (Route.resource(.series, id: $0.seriesID, name: $0.name), seriesLine($0))
-            }, identifier: "book.detail.series.link"))))
-        }
-        let credited = book.authors.filter { $0.role != nil }
-        if !credited.isEmpty {
-            rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(TextLinks(items: credited.map {
-                (Route.resource(.person, id: $0.personID, name: $0.name), "\($0.name) (\(roleLabel($0.role ?? "")))")
-            }, identifier: "book.detail.creator"))))
+            rows.append(InfoRow(label: String(localized: "SERIES"), value: AnyView(
+                Text(Byline.links(book.series.map { (Route.resource(.series, id: $0.seriesID, name: $0.name), seriesLine($0)) }))
+                    .font(.geist(.subheadline))
+                    .tint(Theme.foreground)
+                    .accessibilityIdentifier("book.detail.series.link")
+            )))
         }
         if !book.genres.isEmpty {
             rows.append(InfoRow(label: String(localized: "GENRES"), value: AnyView(LinkChips(items: book.genres.map {
@@ -269,23 +277,24 @@ struct BookDetailView: View {
         return String(localized: "\(series.name) #\(SeriesNumbers.format(number))")
     }
 
-    private func roleLabel(_ role: String) -> String {
-        role.replacingOccurrences(of: "_", with: " ").capitalized
-    }
 }
 
-/// One of a Book's Files, as the web app's file card shows it.
+/// One of a Book's Files, as the web app's file row shows it: its cover,
+/// name, format, a quiet line of facts, its narrators, how far through it
+/// the user is, and Listen. The rest of what's known about it is in its
+/// details sheet, behind the info button, as the web keeps it in a dialog.
 private struct FileCard: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
     let file: BookDetail.File
     let book: BookSummary
+    @State private var showingDetails = false
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
+    private var name: String { file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName }
 
     /// Names the File and its narrators, since editions often share a name.
     private var listenLabel: String {
-        let name = file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName
         guard !file.narrators.isEmpty else { return String(localized: "Listen to \(name)") }
         return String(localized: "Listen to \(name), narrated by \(file.narrators.joined(separator: ", "))")
     }
@@ -296,47 +305,33 @@ private struct FileCard: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            HStack(alignment: .center, spacing: 14) {
+        // On a phone the actions take a line of their own under the File, as
+        // the web's file row does on a narrow screen, so its facts don't wrap.
+        let layout = sizeClass == .compact
+            ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 8))
+            : AnyLayout(HStackLayout(alignment: .center, spacing: 12))
+        layout {
+            HStack(alignment: .top, spacing: 12) {
                 CoverView(book: book, file: CoverFile(id: file.id, fileType: file.fileType, coverVersion: file.coverVersion), width: 46)
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 5) {
                     // Each File by its own label, as the web app's file list does;
                     // the Book's title would name every File the same.
-                    Text(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)
+                    Text(name)
                         .font(.geist(.subheadline, weight: .semibold))
                         .lineLimit(2)
                     if FileTypes.isKnown(file.fileType) {
-                        HStack(spacing: 8) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
                             FileTypeChip(fileType: file.fileType, outlined: true)
-                            Text(details)
+                            Text(facts)
                                 .font(.geist(.footnote))
                                 .foregroundStyle(Theme.mutedForeground)
                                 .monospacedDigit()
                         }
-                        if !file.narrators.isEmpty {
-                            // Each narrator links to their page, as the
-                            // prototype's file card does.
-                            FlowLayout(spacing: 4) {
-                                Text("Narrated by")
-                                    .foregroundStyle(Theme.mutedForeground)
-                                TextLinks(items: narrators, identifier: "book.detail.narrator")
-                            }
-                            .font(.geist(.footnote))
-                        }
-                        if let publisher = file.publisher {
-                            Text("Published by \(publisher)")
+                        if !narrators.isEmpty {
+                            Text(LinkedText.muted(String(localized: "Narrated by ")) + Byline.links(narrators))
                                 .font(.geist(.footnote))
-                                .foregroundStyle(Theme.mutedForeground)
-                                // At accessibility sizes it wraps rather than
-                                // cut a name off.
-                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                        }
-                        ForEach(file.identifiers, id: \.self) { identifier in
-                            Text(verbatim: "\(IdentifierLabel.text(identifier.type)) \(identifier.value)")
-                                .font(.geist(.caption))
-                                .foregroundStyle(Theme.mutedForeground)
-                                .textSelection(.enabled)
-                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                                .tint(Theme.foreground)
+                                .accessibilityIdentifier("book.detail.narrator")
                         }
                     } else {
                         Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
@@ -351,6 +346,21 @@ private struct FileCard: View {
                 ForEach(Array(narrators.enumerated()), id: \.offset) { _, narrator in
                     Button(String(localized: "Open \(narrator.1)")) { model.push(narrator.0) }
                 }
+            }
+            actions
+        }
+        .padding(12)
+        .cardStyle()
+        .accessibilityElement(children: .contain)
+        .sheet(isPresented: $showingDetails) {
+            FileDetailsSheet(file: file, name: name)
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 12) {
+            if let progress = file.progress, progress > 0 {
+                ProgressRing(value: progress)
             }
             if isAudiobook {
                 // Every audiobook File plays from here; the Listen button
@@ -373,23 +383,143 @@ private struct FileCard: View {
                 // Editions can share a name, so the File's id tells them apart.
                 .accessibilityIdentifier("file.listen.\(file.id)")
             }
+            Button { showingDetails = true } label: {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(Theme.mutedForeground)
+                    .frame(width: 32, height: 40)
+            }
+            .accessibilityLabel(String(localized: "Details of \(name)"))
+            .accessibilityIdentifier("file.details.\(file.id)")
         }
-        .padding(14)
-        .cardStyle()
-        .accessibilityElement(children: .contain)
     }
 
-    /// Its length for an audiobook, its size, and whether it's a supplement.
-    private var details: String {
+    /// The facts the web's row shows under the name: length, pages, an
+    /// audiobook's bitrate, year, and size, and whether it's a supplement.
+    private var facts: String {
         var parts: [String] = []
-        if isAudiobook, let seconds = file.durationSeconds, seconds > 0 {
-            parts.append(TimeLabels.left(seconds))
-        }
-        parts.append(ByteCountFormatter.string(fromByteCount: Int64(file.sizeBytes), countStyle: .file))
-        if file.fileRole == "supplement" {
-            parts.append(String(localized: "Supplement"))
-        }
+        if let seconds = file.durationSeconds, seconds > 0 { parts.append(FileFacts.duration(seconds)) }
+        if let pages = file.pageCount, pages > 0 { parts.append(FileFacts.pages(pages)) }
+        if let bitrate = file.bitrate, bitrate > 0 { parts.append(FileFacts.bitrate(bitrate)) }
+        if let released = file.releaseDate { parts.append(FileFacts.year(released)) }
+        parts.append(FileFacts.size(file.sizeBytes))
+        if file.fileRole == "supplement" { parts.append(String(localized: "Supplement")) }
         return parts.joined(separator: " · ")
+    }
+}
+
+/// Everything known about a File, as the web's file details dialog lists it.
+private struct FileDetailsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let file: BookDetail.File
+    let name: String
+
+    private struct Row: Identifiable {
+        let label: String
+        let value: String
+        var url: URL?
+        var id: String { label }
+    }
+
+    private var rows: [Row] {
+        var rows = [
+            Row(label: String(localized: "Format"), value: FileTypes.label(file.fileType)),
+            Row(label: String(localized: "Size"), value: FileFacts.size(file.sizeBytes)),
+        ]
+        if !file.filepath.isEmpty {
+            rows.append(Row(label: String(localized: "File"), value: (file.filepath as NSString).lastPathComponent))
+            rows.append(Row(label: String(localized: "Path"), value: file.filepath))
+        }
+        if let pages = file.pageCount, pages > 0 { rows.append(Row(label: String(localized: "Pages"), value: FileFacts.pages(pages))) }
+        if let seconds = file.durationSeconds, seconds > 0 {
+            rows.append(Row(label: String(localized: "Duration"), value: FileFacts.duration(seconds)))
+        }
+        let audio = [file.codec, file.bitrate.map(FileFacts.bitrate)].compactMap { $0 }
+        if !audio.isEmpty { rows.append(Row(label: String(localized: "Audio"), value: audio.joined(separator: " · "))) }
+        if file.chapterCount > 0 { rows.append(Row(label: String(localized: "Chapters"), value: String(file.chapterCount))) }
+        if let publisher = file.publisher { rows.append(Row(label: String(localized: "Publisher"), value: publisher)) }
+        if let released = file.releaseDate {
+            // A release date is a day, read in UTC as the web reads it.
+            var style = Date.FormatStyle(date: .abbreviated, time: .omitted)
+            style.timeZone = TimeZone(identifier: "UTC") ?? .current
+            rows.append(Row(label: String(localized: "Released"), value: released.formatted(style)))
+        }
+        if let language = file.language {
+            rows.append(Row(label: String(localized: "Language"), value: Locale.current.localizedString(forIdentifier: language) ?? language))
+        }
+        // Left to right is how nearly every book runs, so only right to left
+        // says something.
+        if file.readingDirection == "rtl" {
+            rows.append(Row(label: String(localized: "Reading Direction"), value: String(localized: "Right to left")))
+        }
+        // Audiobooks were often sold abridged, so an M4B always says which.
+        if file.fileType == "m4b" || file.abridged == true {
+            let value = file.abridged.map { $0 ? String(localized: "Yes") : String(localized: "No") } ?? String(localized: "Unknown")
+            rows.append(Row(label: String(localized: "Abridged"), value: value))
+        }
+        for identifier in file.identifiers {
+            rows.append(Row(label: IdentifierLabel.text(identifier.type), value: identifier.value))
+        }
+        if let link = file.url, let url = URL(string: link) {
+            rows.append(Row(label: String(localized: "URL"), value: url.host()?.replacingOccurrences(of: "www.", with: "") ?? link, url: url))
+        }
+        if let modified = file.modifiedAt {
+            rows.append(Row(label: String(localized: "Modified"), value: modified.formatted(date: .abbreviated, time: .shortened)))
+        }
+        if let added = file.addedAt {
+            rows.append(Row(label: String(localized: "Added"), value: added.formatted(date: .abbreviated, time: .shortened)))
+        }
+        return rows
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    let stacked = dynamicTypeSize.isAccessibilitySize
+                    let layout = stacked
+                        ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                        : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 12))
+                    ForEach(rows) { row in
+                        layout {
+                            Text(row.label.uppercased())
+                                .font(.geist(.caption, weight: .semibold))
+                                .tracking(0.8)
+                                .foregroundStyle(Theme.mutedForeground)
+                                .frame(width: stacked ? nil : 110, alignment: .leading)
+                            Group {
+                                if let url = row.url {
+                                    Link(row.value, destination: url)
+                                        .underline()
+                                        .foregroundStyle(Theme.foreground)
+                                } else {
+                                    Text(row.value)
+                                        .textSelection(.enabled)
+                                }
+                            }
+                            .font(.geist(.subheadline))
+                            if !stacked { Spacer(minLength: 0) }
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(20)
+            }
+            .background(Theme.background)
+            .navigationTitle(name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                        .accessibilityIdentifier("file.details.done")
+                }
+            }
+        }
+        .tint(Theme.primary)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .accessibilityIdentifier("file.details")
     }
 }
 
@@ -479,62 +609,62 @@ struct LinkChips: View {
     }
 }
 
-/// Links in running text, underlined as the web app's are, separated by
-/// commas and wrapping as text does.
-struct TextLinks: View {
-    let items: [(Route, String)]
-    let identifier: String
-
-    var body: some View {
-        FlowLayout(spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                NavigationLink(value: item.0) {
-                    Text(item.1)
-                        .underline(color: Theme.mutedForeground.opacity(0.5))
-                        .foregroundStyle(Theme.foreground)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(identifier)
-                if index < items.count - 1 {
-                    Text(verbatim: ", ")
-                        .foregroundStyle(Theme.mutedForeground)
-                        .accessibilityHidden(true)
-                }
+/// Names that link to their pages in running text: the Book's byline, as
+/// the web's Book page writes it ("by Fujita (Writer, Penciller),
+/// AndWorld Design (Letterer)"), and lists of Series or narrators.
+enum Byline {
+    /// Each creator once, with their roles, linked to their page.
+    static func text(_ authors: [BookDetail.Author]) -> AttributedString {
+        var order: [Int] = []
+        var names: [Int: String] = [:]
+        var roles: [Int: [String]] = [:]
+        for author in authors {
+            if names[author.personID] == nil {
+                order.append(author.personID)
+                names[author.personID] = author.name
+            }
+            if let role = author.role, !(roles[author.personID] ?? []).contains(role) {
+                roles[author.personID, default: []].append(role)
             }
         }
-        .font(.geist(.subheadline))
+        var text = LinkedText.muted(String(localized: "by "))
+        for (index, id) in order.enumerated() {
+            text += LinkedText.link(names[id] ?? "", to: .resource(.person, id: id, name: names[id] ?? ""))
+            if let personRoles = roles[id], !personRoles.isEmpty {
+                text += LinkedText.muted(" (" + personRoles.map(roleLabel).joined(separator: ", ") + ")")
+            }
+            if index < order.count - 1 {
+                text += LinkedText.muted(", ")
+            }
+        }
+        return text
     }
-}
 
-/// The Book's authors under its title, each linking to their page: one as a
-/// link, several as a menu of them.
-struct AuthorsLink: View {
-    @Environment(AppModel.self) private var model
-    let authors: [BookDetail.Author]
-    /// The names as the summary has them, until the full Book loads.
-    let names: String
-
-    var body: some View {
-        let label = (Text("by ").foregroundStyle(Theme.mutedForeground)
-            + Text(names).foregroundStyle(Theme.foreground).underline(color: Theme.mutedForeground.opacity(0.5)))
-            .font(.geist(.callout))
-            .multilineTextAlignment(.center)
-        Group {
-            if authors.count == 1, let author = authors.first {
-                NavigationLink(value: Route.resource(.person, id: author.personID, name: author.name)) { label }
-                    .buttonStyle(.plain)
-            } else if authors.count > 1 {
-                Menu {
-                    ForEach(authors, id: \.personID) { author in
-                        Button(author.name) { model.push(.resource(.person, id: author.personID, name: author.name)) }
-                    }
-                } label: { label }
-            } else {
-                label
+    /// Linked names separated by commas.
+    static func links(_ items: [(Route, String)]) -> AttributedString {
+        var text = AttributedString()
+        for (index, item) in items.enumerated() {
+            text += LinkedText.link(item.1, to: item.0)
+            if index < items.count - 1 {
+                text += LinkedText.muted(", ")
             }
         }
-        .accessibilityLabel(String(localized: "By \(names)"))
-        .accessibilityIdentifier("book.detail.authors")
+        return text
+    }
+
+    /// A creator's role as the web app names it.
+    static func roleLabel(_ role: String) -> String {
+        switch role {
+        case "writer": String(localized: "Writer")
+        case "penciller": String(localized: "Penciller")
+        case "inker": String(localized: "Inker")
+        case "colorist": String(localized: "Colorist")
+        case "letterer": String(localized: "Letterer")
+        case "cover_artist": String(localized: "Cover Artist")
+        case "editor": String(localized: "Editor")
+        case "translator": String(localized: "Translator")
+        default: role.replacingOccurrences(of: "_", with: " ").capitalized
+        }
     }
 }
 

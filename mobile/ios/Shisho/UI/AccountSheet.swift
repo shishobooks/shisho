@@ -112,7 +112,7 @@ struct AccountSheet: View {
                 dismiss()
                 model.addingAccount = true
             } label: {
-                Label("Add Account", systemImage: "plus")
+                Label("Add Server", systemImage: "plus")
                     .font(.geist(.subheadline, weight: .semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)

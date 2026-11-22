@@ -77,7 +77,28 @@ final class AppModel {
         didSet {
             guard let session, libraryID != oldValue else { return }
             UserDefaults.standard.set(libraryID, forKey: "libraryID.\(session.account.id)")
+            loadSort()
         }
+    }
+    /// What the Library grid is narrowed to, for the account showing.
+    var filter = LibraryFilter()
+    /// The order picked on this device for the Library showing, in the sort
+    /// parameter form, or nil for the one the user saved on the web. It's
+    /// kept for each account and Library.
+    var sortSpec: String? {
+        didSet {
+            guard let session else { return }
+            UserDefaults.standard.set(sortSpec, forKey: sortKey(session))
+        }
+    }
+
+    private func sortKey(_ session: AccountSession) -> String {
+        "sort.\(session.account.id).\(libraryID)"
+    }
+
+    private func loadSort() {
+        let spec = session.map { UserDefaults.standard.string(forKey: sortKey($0)) } ?? nil
+        if spec != sortSpec { sortSpec = spec }
     }
     private let syncs = SyncRunner()
     var isSyncing: Bool { syncs.isRunning }
@@ -124,6 +145,8 @@ final class AppModel {
         showingAccount = false
         stopPrefetching()
         libraryID = session.map { UserDefaults.standard.integer(forKey: "libraryID.\($0.account.id)") } ?? 0
+        filter = LibraryFilter()
+        loadSort()
         if let session {
             let player = AudioPlayer(session: session) { [weak self] in
                 Task { await self?.syncNow() }
@@ -159,6 +182,14 @@ final class AppModel {
         case .library where libraryPath.last != route: libraryPath.append(route)
         case .lists where listsPath.last != route: listsPath.append(route)
         default: break
+        }
+    }
+
+    /// Goes back to tab's first screen.
+    func popToRoot(_ tab: AppTab) {
+        switch tab {
+        case .library: libraryPath = []
+        case .lists: listsPath = []
         }
     }
 

@@ -23,7 +23,20 @@ struct RootView: View {
             NowPlayingView()
         }
         .sheet(isPresented: $model.addingAccount) {
-            SignInView(addingAccount: true)
+            // A sheet of its own, with a bar to cancel from.
+            NavigationStack {
+                SignInView(addingAccount: true)
+                    .navigationTitle("Add Server")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { model.addingAccount = false }
+                                .accessibilityIdentifier("signin.cancel")
+                        }
+                    }
+            }
+            .tint(Theme.primary)
+            .presentationDragIndicator(.visible)
         }
     }
 }
