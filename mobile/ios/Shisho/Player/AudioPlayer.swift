@@ -58,6 +58,11 @@ final class AudioPlayer {
     /// Where a seek under way is going: the position until it lands, so the
     /// bar doesn't flick back to where it was.
     @ObservationIgnored private var seekingTo: Double?
+    /// Counts seeks, so a seek's completion clears seekingTo only when no
+    /// later one replaced it, even one to the same place.
+    @ObservationIgnored private var seekCount = 0
+    /// The seek the last failure came after, so each seek's is logged.
+    @ObservationIgnored private var stoppedSeek = 0
     @ObservationIgnored private var sitting: ListeningSitting?
     @ObservationIgnored private var lastSave = Date.distantPast
     /// When the server's place was from that the player last knew of, at
@@ -624,12 +629,25 @@ final class AudioPlayer {
         position = target
         if ready, let player {
             seekingTo = target
+            seekCount += 1
+            // A seek is a new chance to decode, so a failure after it gets its
+            // own retry (retryAfterStop).
+            retriedStop = false
+            retriedAt = nil
             let generation = itemGeneration
+            let count = seekCount
             AudioPlayer.seek(player, to: target) { [weak self] in
                 Task { @MainActor in
                     guard let self, self.itemGeneration == generation else { return }
                     // A later seek supersedes this one, and clears its own.
-                    if self.seekingTo == target { self.seekingTo = nil }
+                    if self.seekCount == count {
+                        self.seekingTo = nil
+                        // Seeking while the stream had stopped plays from
+                        // the new place, as pausing and playing would.
+                        if self.isPlaying, self.player?.timeControlStatus == .paused {
+                            self.player?.playImmediately(atRate: Float(self.rate))
+                        }
+                    }
                     self.refreshPosition()
                     self.updateNowPlaying()
                 }
@@ -746,13 +764,18 @@ final class AudioPlayer {
     private func stoppedWithError(_ failure: String) {
         guard let file else { return }
         let now = Date()
-        // One failure is reported several times in a row; a new one starts
-        // after a quiet spell and gets its own retry.
-        if stoppedAt.map({ now.timeIntervalSince($0) > AudioPlayer.stopWindow }) ?? true {
+        // One failure is reported several times in a row. A new one starts
+        // after a quiet spell, or after a seek, which also gives it its own
+        // retry (move(to:)).
+        let quiet = stoppedAt.map { now.timeIntervalSince($0) > AudioPlayer.stopWindow } ?? true
+        if quiet {
             retriedStop = false
+        }
+        if quiet || stoppedSeek != seekCount {
             log("file \(file.fileID): stopped at \(Int(currentPosition())) s: \(failure)")
         }
         stoppedAt = now
+        stoppedSeek = seekCount
     }
 
     /// How long after a failure the player may play again on its own.
@@ -763,8 +786,8 @@ final class AudioPlayer {
     /// as a place decoding can start, but only some are; a seek that lands
     /// on another fails with "Cannot Decode" and AVPlayer pauses itself.
     /// Playing again from there decodes, as pausing and playing does by hand.
-    /// If it's still stopped a while later, the failure shows, rather than
-    /// loading forever.
+    /// If it's still stopped a while later, or stops again before another
+    /// seek, the failure shows, rather than loading forever.
     private func retryAfterStop(_ player: AVPlayer, at now: Date) {
         guard isPlaying, ready, pendingSeek == nil, seekingTo == nil, let file else { return }
         let stopped = player.timeControlStatus == .paused
@@ -777,7 +800,11 @@ final class AudioPlayer {
             }
             return
         }
-        guard stopped, !retriedStop, let stoppedAt, now.timeIntervalSince(stoppedAt) < AudioPlayer.stopWindow else { return }
+        guard stopped, let stoppedAt, now.timeIntervalSince(stoppedAt) < AudioPlayer.stopWindow else { return }
+        if retriedStop {
+            couldNotPlay("stopped again after playing again")
+            return
+        }
         retriedStop = true
         retriedAt = now
         log("file \(file.fileID): playing again at \(Int(currentPosition())) s after the stream stopped")

@@ -109,6 +109,7 @@ struct Scrubber: View {
     /// Where a drag began, and where the handle is now, in seconds.
     @State private var dragStart: Double?
     @State private var dragging: Double?
+    @GestureState private var touching = false
 
     private static let thumb: CGFloat = 20
     private static let track: CGFloat = 8
@@ -144,21 +145,34 @@ struct Scrubber: View {
                     .contentShape(Rectangle())
                     .gesture(
                         DragGesture(minimumDistance: 1, coordinateSpace: .named("scrubber"))
+                            .updating($touching) { _, touching, _ in touching = true }
                             .onChanged { drag in
-                                let start = dragStart ?? value
+                                // A new drag starts from the handle.
+                                let start = dragging == nil ? value : dragStart ?? value
                                 dragStart = start
                                 let place = min(length, max(0, start + Double(drag.translation.width / travel) * length))
                                 dragging = place
                                 onDrag(place)
                             }
-                            .onEnded { _ in
-                                let place = dragging ?? value
+                            .onEnded { drag in
+                                // Where the finger lifted, which a quick
+                                // release may not have reported to onChanged.
+                                let start = dragStart ?? value
+                                let place = min(length, max(0, start + Double(drag.translation.width / travel) * length))
                                 dragStart = nil
                                 dragging = nil
                                 onDrag(nil)
                                 onCommit(place)
                             }
                     )
+                    // A drag the system cancelled never ends: it lets go of
+                    // the handle without seeking. dragStart stays for an
+                    // onEnded that comes after this.
+                    .onChange(of: touching) { _, touching in
+                        guard !touching, dragging != nil else { return }
+                        dragging = nil
+                        onDrag(nil)
+                    }
                     .offset(x: x - (Scrubber.target - Scrubber.thumb) / 2)
             }
             .frame(width: width, height: geometry.size.height)

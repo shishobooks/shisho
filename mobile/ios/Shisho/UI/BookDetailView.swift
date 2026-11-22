@@ -228,6 +228,13 @@ private struct FileCard: View {
     let book: BookSummary
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
+
+    /// Names the File and its narrators, since editions often share a name.
+    private var listenLabel: String {
+        let name = file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName
+        guard !file.narrators.isEmpty else { return String(localized: "Listen to \(name)") }
+        return String(localized: "Listen to \(name), narrated by \(file.narrators.joined(separator: ", "))")
+    }
     private var playing: Bool { model.player?.file?.fileID == file.id && model.player?.isPlaying == true }
 
     var body: some View {
@@ -280,8 +287,9 @@ private struct FileCard: View {
                     .background(Theme.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 }
                 .buttonStyle(PlayerControlStyle())
-                .accessibilityLabel("Listen to \(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)")
-                .accessibilityIdentifier("file.listen")
+                .accessibilityLabel(listenLabel)
+                // Editions can share a name, so the File's id tells them apart.
+                .accessibilityIdentifier("file.listen.\(file.id)")
             }
         }
         .padding(14)

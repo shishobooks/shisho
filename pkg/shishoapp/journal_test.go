@@ -404,3 +404,31 @@ func TestJournal_ASittingsFirstSnapshotJoinsTheReadItStarts(t *testing.T) {
 	require.Equal(t, 1, f.count(`SELECT COUNT(*) FROM read_throughs WHERE outcome = 'underway'`))
 	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_sessions WHERE read_through_id IS NOT NULL`))
 }
+
+// Each batch from a device whose clock is off is corrected by its own
+// offset, which the network's delay varies, so a later snapshot can come
+// out ending earlier than the one before it. The time played still only
+// grows, so the later snapshot still extends the session.
+func TestJournal_ALaterSnapshotWinsWhenItsCorrectedEndComesOutEarlier(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.audiobook()
+	userID := f.addUser()
+	now := time.Now().UTC()
+	f.accountSince(userID, now.Add(-time.Hour))
+	credential := f.signIn()
+	device := now.Add(10 * time.Minute)
+	start := device.Add(-5 * time.Minute)
+
+	// The first batch took 20 seconds to arrive.
+	first := device.Add(-30 * time.Second)
+	f.journal(credential, device.Add(-20*time.Second),
+		event("p1", JournalEventReadingSession, first, sessionSoFar("sit-1", start, first, 60)))
+	second := first.Add(8 * time.Second)
+	f.journal(credential, device,
+		event("p2", JournalEventReadingSession, second, sessionSoFar("sit-1", start, second, 68)))
+
+	var duration int
+	require.NoError(t, f.db.QueryRowContext(f.ctx, `SELECT duration FROM reading_sessions`).Scan(&duration))
+	assert.Equal(t, 68, duration)
+}

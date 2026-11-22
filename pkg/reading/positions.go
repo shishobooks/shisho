@@ -509,9 +509,11 @@ func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, sourc
 
 // ExtendSession moves the end of userID's Reading Session sessionID to a
 // later snapshot of it, as a source that sends a session so far on every
-// pause does, keeping the Read-through it was placed on. A snapshot no later
-// than the session's end changes nothing. snapshot.Claim, when set, runs
-// first in the transaction.
+// pause does, keeping the Read-through it was placed on. A snapshot that
+// isn't newer changes nothing. Newer means more time played when the
+// snapshot says how much, since each batch from a device whose clock is off
+// is corrected by its own offset and a later snapshot can come out ending
+// earlier. snapshot.Claim, when set, runs first in the transaction.
 func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, snapshot SessionInput) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		if snapshot.Claim != nil {
@@ -527,14 +529,20 @@ func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, sn
 		if err != nil {
 			return errors.WithStack(err)
 		}
-		if !snapshot.EndedAt.After(stored.EndedAt) {
+		newer := snapshot.EndedAt.After(stored.EndedAt)
+		if snapshot.Duration != nil {
+			newer = *snapshot.Duration > stored.Duration
+		}
+		if !newer {
 			return nil
 		}
-		duration := int(snapshot.EndedAt.Sub(stored.StartedAt).Round(time.Second) / time.Second)
+		if snapshot.EndedAt.After(stored.EndedAt) {
+			stored.EndedAt = snapshot.EndedAt
+		}
+		duration := int(stored.EndedAt.Sub(stored.StartedAt).Round(time.Second) / time.Second)
 		if snapshot.Duration != nil && *snapshot.Duration < duration {
 			duration = *snapshot.Duration
 		}
-		stored.EndedAt = snapshot.EndedAt
 		stored.EndPercentage = snapshot.EndPercentage
 		stored.Duration = duration
 		_, err = tx.NewUpdate().Model(stored).Column("ended_at", "end_percentage", "duration").WherePK().Exec(ctx)

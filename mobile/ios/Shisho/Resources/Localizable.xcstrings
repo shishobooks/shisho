@@ -189,6 +189,16 @@
     "Listen to %@" : {
 
     },
+    "Listen to %@, narrated by %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Listen to %1$@, narrated by %2$@"
+          }
+        }
+      }
+    },
     "Listening" : {
 
     },

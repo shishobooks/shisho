@@ -22,4 +22,11 @@ final class StreamCookiesTests: XCTestCase {
         XCTAssertEqual(remote["shisho_app_credential"]?.isSecure, true)
         XCTAssertNotNil(cookies("http://localhost:3789")["shisho_app_credential"])
     }
+
+    /// The cookies go only with requests for Files, so a redirect elsewhere
+    /// on the same host doesn't carry the credential.
+    func testGoOnlyToTheServersFileRoutes() throws {
+        XCTAssertEqual(cookies("http://192.168.1.20:3789")["shisho_app_credential"]?.path, "/mobile/files/")
+        XCTAssertEqual(cookies("https://example.com/shisho")["shisho_app_credential"]?.path, "/shisho/mobile/files/")
+    }
 }

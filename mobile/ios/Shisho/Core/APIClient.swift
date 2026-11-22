@@ -186,8 +186,10 @@ final class APIClient: Sendable {
     /// The credential, protocol, and version as cookies, for the system
     /// player, which makes its own requests and takes cookies but no
     /// headers. The server takes the credential and protocol from cookies
-    /// on the stream route only.
+    /// on the stream route only, and they go only with requests for Files,
+    /// so a redirect elsewhere on the host doesn't carry the credential.
     var streamCookies: [HTTPCookie] {
+        let path = baseURL.appendingPathComponent("mobile/files").path + "/"
         let values = [
             ("shisho_app_credential", credential),
             ("shisho_app_protocol", String(Installation.appProtocol)),
@@ -197,7 +199,7 @@ final class APIClient: Sendable {
         return values.compactMap { name, value in
             guard let value else { return nil }
             var properties: [HTTPCookiePropertyKey: Any] = [
-                .name: name, .value: value, .path: "/", .originURL: baseURL,
+                .name: name, .value: value, .path: path, .originURL: baseURL,
             ]
             if baseURL.scheme == "https" {
                 properties[.secure] = "TRUE"

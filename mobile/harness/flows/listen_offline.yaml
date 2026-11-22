@@ -11,6 +11,11 @@ name: Listen offline and sync later
 - launchApp:
     clearState: true
 - runFlow: subflows/sign_in.yaml
+- runScript:
+    file: scripts/note_app_sessions.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
 - runFlow:
     file: subflows/listen_to.yaml
     env:
