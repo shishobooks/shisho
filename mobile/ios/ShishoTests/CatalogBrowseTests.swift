@@ -277,9 +277,43 @@ final class CatalogBrowseTests: XCTestCase {
         let filtered = { (filter: LibraryFilter) in try self.store.pool.read { try CatalogStore.books($0, libraryID: nil, filter: filter) }.map(\.id) }
         XCTAssertEqual(try filtered(LibraryFilter(statuses: ["to_read"])), [1])
         XCTAssertEqual(try filtered(LibraryFilter(minRating: 12)), [1])
+        XCTAssertEqual(try filtered(LibraryFilter(maxRating: 12)), [], "a range leaves out unrated Books")
+        XCTAssertEqual(try filtered(LibraryFilter(minRating: 16, maxRating: 16)), [1])
         XCTAssertEqual(try filtered(LibraryFilter(genres: ["science fiction"])).sorted(), [1, 2], "by name, ignoring case")
         XCTAssertEqual(try filtered(LibraryFilter(fileTypes: ["m4b"])), [])
         let sorted = try store.pool.read { try CatalogStore.books($0, libraryID: nil, sort: "title:desc") }.map(\.title)
         XCTAssertEqual(sorted, ["Dune Messiah", "Dune"])
+    }
+
+    func testTheSortSheetWorksOnLevelsAsTheWebDoes() {
+        XCTAssertEqual(LibrarySort.levels("title:asc,rating:desc,title:desc,bogus:asc,author"),
+                       [SortLevel(field: "title", descending: false), SortLevel(field: "rating", descending: true)])
+        XCTAssertEqual(LibrarySort.spec([SortLevel(field: "series", descending: false), SortLevel(field: "rating", descending: true)]),
+                       "series:asc,rating:desc")
+
+        let saved = GallerySort(saved: "title:asc", device: nil)
+        XCTAssertEqual(saved.levels, [SortLevel(field: "title", descending: false)])
+        XCTAssertFalse(saved.isDirty)
+        let builtIn = GallerySort(saved: "", device: nil)
+        XCTAssertEqual(builtIn.levels, LibrarySort.builtInDefault)
+
+        let picked = GallerySort(saved: "title:asc", device: "rating:desc")
+        XCTAssertEqual(picked.levels, [SortLevel(field: "rating", descending: true)])
+        XCTAssertTrue(picked.isDirty)
+        XCTAssertEqual(picked.deviceSpec(for: [SortLevel(field: "author", descending: false)]), "author:asc")
+        XCTAssertNil(picked.deviceSpec(for: [SortLevel(field: "title", descending: false)]), "the saved sort isn't kept as a pick")
+        XCTAssertNil(picked.deviceSpec(for: []), "no levels goes back to the saved sort")
+
+        XCTAssertTrue(LibrarySort.initiallyDescending("rating"))
+        XCTAssertFalse(LibrarySort.initiallyDescending("title"))
+    }
+
+    func testRatingRangeLabelsMatchTheWeb() {
+        XCTAssertEqual(Ratings.range(min: nil, max: nil), "Any rating")
+        XCTAssertEqual(Ratings.range(min: 14, max: nil), "3.5+ stars")
+        XCTAssertEqual(Ratings.range(min: nil, max: 8), "Up to 2 stars")
+        XCTAssertEqual(Ratings.range(min: 4, max: 13), "1 to 3.25 stars")
+        XCTAssertEqual(Ratings.range(min: 4, max: 4), "1 star")
+        XCTAssertEqual(Ratings.range(min: 16, max: 16), "4 stars")
     }
 }

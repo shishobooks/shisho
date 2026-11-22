@@ -20,6 +20,21 @@ enum Theme {
     /// The web app's Rating stars, Tailwind's amber-400, the same in light
     /// and dark.
     static let rating = Color(red: 251 / 255, green: 191 / 255, blue: 36 / 255)
+    /// Tailwind's amber-500, which the web's Rating filter marks with.
+    static let ratingStrong = Color(red: 245 / 255, green: 158 / 255, blue: 11 / 255)
+    /// The web's chart colors (`--chart-1`, `--chart-2`, `--chart-5`), which
+    /// its filter sections and chips are marked with.
+    static let chart1 = dynamic(light: 0xF54A00, dark: 0x1447E6)
+    static let chart2 = dynamic(light: 0x009689, dark: 0x00BC7D)
+    static let chart5 = dynamic(light: 0xFE9A00, dark: 0xFF2056)
+
+    private static func dynamic(light: UInt32, dark: UInt32) -> Color {
+        func color(_ hex: UInt32) -> UIColor {
+            UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                    blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+        }
+        return Color(UIColor { $0.userInterfaceStyle == .dark ? color(dark) : color(light) })
+    }
 
     /// Covers and inputs, as the web app rounds them.
     static let radius: CGFloat = 8

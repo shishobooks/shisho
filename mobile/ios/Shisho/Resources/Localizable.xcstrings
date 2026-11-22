@@ -14,6 +14,16 @@
         }
       }
     },
+    "%@ %@, remove" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@, remove"
+          }
+        }
+      }
+    },
     "%@ in your Libraries appear here." : {
 
     },
@@ -57,8 +67,21 @@
         }
       }
     },
+    "%@ stars" : {
+
+    },
     "%@ through" : {
 
+    },
+    "%@ to %@ stars" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ to %2$@ stars"
+          }
+        }
+      }
     },
     "%@ · Signed out" : {
 
@@ -86,6 +109,12 @@
         }
       }
     },
+    "%@, ascending" : {
+
+    },
+    "%@, descending" : {
+
+    },
     "%lld changes made on this device couldn't be saved on the server. The last: %@" : {
       "localizations" : {
         "en" : {
@@ -95,6 +124,9 @@
           }
         }
       }
+    },
+    "%lld selected" : {
+
     },
     "%lldh %lldm" : {
       "localizations" : {
@@ -112,6 +144,9 @@
     "-%@" : {
 
     },
+    "1 star" : {
+
+    },
     "A change made on this device couldn't be saved on the server: %@" : {
 
     },
@@ -124,7 +159,16 @@
     "Add Server" : {
 
     },
+    "Add genres…" : {
+
+    },
+    "Add tags…" : {
+
+    },
     "Added" : {
+
+    },
+    "All Languages" : {
 
     },
     "All Libraries" : {
@@ -136,10 +180,16 @@
     "Any" : {
 
     },
-    "App version" : {
+    "Any file type" : {
 
     },
-    "Ascending" : {
+    "Any rating" : {
+
+    },
+    "Any status" : {
+
+    },
+    "App version" : {
 
     },
     "Audio" : {
@@ -202,10 +252,13 @@
     "Chapters" : {
 
     },
-    "Clear" : {
+    "Clear Filters" : {
 
     },
-    "Clear Filters" : {
+    "Clear all" : {
+
+    },
+    "Clear all filters" : {
 
     },
     "Close Player" : {
@@ -229,7 +282,7 @@
     "Date finished" : {
 
     },
-    "Descending" : {
+    "Date released" : {
 
     },
     "Details of %@" : {
@@ -241,7 +294,7 @@
     "Did Not Finish" : {
 
     },
-    "Direction" : {
+    "Differs from the saved sort" : {
 
     },
     "Dismiss" : {
@@ -283,10 +336,16 @@
     "File type" : {
 
     },
+    "Filter" : {
+
+    },
+    "Filtering by" : {
+
+    },
     "Filters" : {
 
     },
-    "Filters, %lld on" : {
+    "Filters are on" : {
 
     },
     "Find Books by title, author, narrator, series, or ISBN, and find series, people, genres, and tags. It works offline." : {
@@ -311,6 +370,9 @@
 
     },
     "Go to %@" : {
+
+    },
+    "Highest rating" : {
 
     },
     "Include titles" : {
@@ -365,6 +427,9 @@
     "Loading" : {
 
     },
+    "Lowest rating" : {
+
+    },
     "Makes the bar span the chapter" : {
 
     },
@@ -407,7 +472,13 @@
     "No chapters" : {
 
     },
+    "No genres found." : {
+
+    },
     "No status" : {
+
+    },
+    "No tags found." : {
 
     },
     "Not supported in this version of the app" : {
@@ -523,10 +594,19 @@
     "Reference" : {
 
     },
-    "Release date" : {
+    "Released" : {
 
     },
-    "Released" : {
+    "Remove %@" : {
+
+    },
+    "Remove %@ sort level" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Reset to the saved sort" : {
 
     },
     "Resume listening" : {
@@ -538,13 +618,16 @@
     "SERIES" : {
 
     },
-    "Saved sort" : {
-
-    },
     "Search" : {
 
     },
     "Search %@" : {
+
+    },
+    "Search genres…" : {
+
+    },
+    "Search tags…" : {
 
     },
     "Search your Libraries" : {
@@ -626,6 +709,15 @@
     "Sort" : {
 
     },
+    "Sort by…" : {
+
+    },
+    "Sort level %lld field" : {
+
+    },
+    "Sorted by:" : {
+
+    },
     "Speed" : {
 
     },
@@ -659,13 +751,16 @@
     "The app couldn't save your sign-in on this device. Try again." : {
 
     },
-    "The order you saved for this Library on the web." : {
-
-    },
     "The server kept asking to download the library again. Try syncing later." : {
 
     },
     "The server sends the app to another server (%@), which it doesn't follow with your sign-in. Sign in with that address instead." : {
+
+    },
+    "Then by %@" : {
+
+    },
+    "Then by…" : {
 
     },
     "This Book isn't in your Libraries anymore" : {
@@ -711,6 +806,9 @@
     "To Read" : {
 
     },
+    "Toggles the direction" : {
+
+    },
     "Translator" : {
 
     },
@@ -718,6 +816,9 @@
 
     },
     "Unknown" : {
+
+    },
+    "Up to %@ stars" : {
 
     },
     "Update the app" : {
@@ -777,6 +878,9 @@
     "an older release" : {
 
     },
+    "ascending" : {
+
+    },
     "by " : {
 
     },
@@ -792,6 +896,12 @@
     "can view" : {
 
     },
+    "clear all" : {
+
+    },
+    "descending" : {
+
+    },
     "editor" : {
 
     },
@@ -799,6 +909,9 @@
 
     },
     "manager" : {
+
+    },
+    "reset to default" : {
 
     },
     "viewer" : {

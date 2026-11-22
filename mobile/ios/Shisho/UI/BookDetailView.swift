@@ -684,8 +684,10 @@ struct FlowLayout: Layout {
         for row in arrange(width: bounds.width, subviews: subviews) {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                var size = subviews[index].sizeThatFits(.unspecified)
+                size.width = min(size.width, bounds.width)
+                // Centered in the row, so a label lines up with chips.
+                subviews[index].place(at: CGPoint(x: x, y: y + (row.height - size.height) / 2), proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
             y += row.height + spacing

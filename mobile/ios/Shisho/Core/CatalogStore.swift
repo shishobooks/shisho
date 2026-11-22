@@ -586,15 +586,11 @@ final class CatalogStore: Sendable {
         """
         var conditions: [String] = []
         var values: [any DatabaseValueConvertible] = []
-        var spec = ""
         if let libraryID {
             conditions.append("b.library_id = ?")
             values.append(libraryID)
-            spec = try String.fetchOne(db, sql: "SELECT sort_spec FROM libraries WHERE id = ?", arguments: [libraryID]) ?? ""
-        } else {
-            let specs = try String.fetchAll(db, sql: "SELECT DISTINCT sort_spec FROM libraries")
-            spec = specs.count == 1 ? specs[0] : ""
         }
+        let spec = try savedSort(db, libraryID: libraryID)
         let filtered = condition(filter)
         conditions += filtered.sql
         values += filtered.arguments

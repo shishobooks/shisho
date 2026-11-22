@@ -14,7 +14,9 @@ struct MainTabs: View {
             tab(.library) { LibraryView() }
             tab(.lists) { ListsView() }
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // Over the screens, which leave room for it at the end of their
+        // scrolling (miniPlayerClearance), as the prototype's bar is.
+        .overlay(alignment: .bottom) {
             AppTabBar()
         }
         .tint(Theme.primary)
@@ -39,6 +41,8 @@ struct MainTabs: View {
 /// goes back to its first screen, as a native tab bar does.
 struct AppTabBar: View {
     @Environment(AppModel.self) private var model
+    /// Its height above the bottom safe area, which screens leave clear.
+    static let height: CGFloat = 53
 
     var body: some View {
         HStack(spacing: 0) {
@@ -62,7 +66,8 @@ struct AppTabBar: View {
         let selected = model.tab == tab
         return Button {
             if selected {
-                model.popToRoot(tab)
+                // Back to the first screen, or, on it, back to its top.
+                model.reselect(tab)
             } else {
                 model.tab = tab
             }
@@ -148,6 +153,7 @@ private struct MiniPlayerOverlay: ViewModifier {
         content.overlay(alignment: .bottom) {
             MiniPlayer()
                 .frame(maxWidth: 680)
+                .padding(.bottom, AppTabBar.height)
                 .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
         }
     }
@@ -256,10 +262,10 @@ struct CountBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.geist(.caption, weight: .medium))
+            .font(.geist(.footnote, weight: .medium))
             .foregroundStyle(Theme.foreground)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
             .background(Theme.secondary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
@@ -364,4 +370,10 @@ struct SeriesCard: View {
         .accessibilityLabel(item.name + ", " + Counts.books(item.bookCount))
         .accessibilityAddTraits(.isButton)
     }
+}
+
+/// The id of the view a tab's first screen scrolls back to when its tab is
+/// tapped again.
+enum ScrollTop {
+    static let anchor = "scroll.top"
 }

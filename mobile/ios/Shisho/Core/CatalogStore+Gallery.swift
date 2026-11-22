@@ -8,28 +8,31 @@ struct LibraryFilter: Hashable, Sendable {
     /// Reading Statuses by the server's names, with "none" for a Book
     /// without one.
     var statuses: Set<String> = []
-    /// The least Rating, in quarter stars.
+    /// The Rating range, in quarter stars, as the web's slider sets it;
+    /// either end nil leaves it open. With neither, unrated Books count too.
     var minRating: Int?
+    var maxRating: Int?
     var fileTypes: Set<String> = []
     var genres: Set<String> = []
     var tags: Set<String> = []
-    /// BCP 47 tags, as the Files have them.
-    var languages: Set<String> = []
+    /// A BCP 47 tag, as the Files have it, or nil for every language.
+    var language: String?
 
     var isEmpty: Bool { self == LibraryFilter() }
+}
 
-    /// How many kinds of filter are set, for the Filters button's count.
-    var count: Int {
-        [!statuses.isEmpty, minRating != nil, !fileTypes.isEmpty, !genres.isEmpty, !tags.isEmpty, !languages.isEmpty]
-            .filter { $0 }.count
-    }
+/// A genre or tag the filters offer, with how many Books have it.
+struct FilterOption: Hashable, Sendable, Identifiable {
+    let name: String
+    let count: Int
+    var id: String { name }
 }
 
 /// The choices the filters offer for a Library, from what its Books have.
 struct FilterOptions: Hashable, Sendable {
     var fileTypes: [String] = []
-    var genres: [String] = []
-    var tags: [String] = []
+    var genres: [FilterOption] = []
+    var tags: [FilterOption] = []
     var languages: [String] = []
 }
 
@@ -78,6 +81,10 @@ extension CatalogStore {
             sql.append("(SELECT rating FROM user_books WHERE book_id = b.id) >= ?")
             arguments.append(minRating)
         }
+        if let maxRating = filter.maxRating {
+            sql.append("(SELECT rating FROM user_books WHERE book_id = b.id) <= ?")
+            arguments.append(maxRating)
+        }
         if !filter.fileTypes.isEmpty {
             sql.append("EXISTS (SELECT 1 FROM book_files WHERE book_id = b.id AND file_type IN (\(marks(filter.fileTypes.count))))")
             arguments += filter.fileTypes.sorted()
@@ -90,9 +97,9 @@ extension CatalogStore {
             sql.append("EXISTS (SELECT 1 FROM book_tags WHERE book_id = b.id AND name COLLATE NOCASE IN (\(marks(filter.tags.count))))")
             arguments += filter.tags.sorted()
         }
-        if !filter.languages.isEmpty {
-            sql.append("EXISTS (SELECT 1 FROM book_files WHERE book_id = b.id AND language IN (\(marks(filter.languages.count))))")
-            arguments += filter.languages.sorted()
+        if let language = filter.language {
+            sql.append("EXISTS (SELECT 1 FROM book_files WHERE book_id = b.id AND language = ?)")
+            arguments.append(language)
         }
         return (sql, arguments)
     }
@@ -101,11 +108,30 @@ extension CatalogStore {
         let books = libraryID.map { "SELECT id FROM books WHERE library_id = \($0)" } ?? "SELECT id FROM books"
         return FilterOptions(
             fileTypes: try String.fetchAll(db, sql: "SELECT DISTINCT file_type FROM book_files WHERE book_id IN (\(books)) ORDER BY file_type"),
-            genres: try String.fetchAll(db, sql: "SELECT DISTINCT name FROM book_genres WHERE book_id IN (\(books)) ORDER BY name COLLATE NOCASE"),
-            tags: try String.fetchAll(db, sql: "SELECT DISTINCT name FROM book_tags WHERE book_id IN (\(books)) ORDER BY name COLLATE NOCASE"),
+            genres: try counted("book_genres", books: books, in: db),
+            tags: try counted("book_tags", books: books, in: db),
             languages: try String.fetchAll(db, sql: """
                 SELECT DISTINCT language FROM book_files WHERE language IS NOT NULL AND book_id IN (\(books)) ORDER BY language
                 """)
         )
+    }
+
+    /// The names in a Book join table with how many Books have each, most
+    /// first, as the web's pickers list them.
+    private static func counted(_ table: String, books: String, in db: Database) throws -> [FilterOption] {
+        try Row.fetchAll(db, sql: """
+            SELECT name, COUNT(DISTINCT book_id) AS count FROM \(table) WHERE book_id IN (\(books))
+            GROUP BY name COLLATE NOCASE ORDER BY count DESC, name COLLATE NOCASE
+            """).map { FilterOption(name: $0["name"], count: $0["count"]) }
+    }
+
+    /// The sort the user saved on the web for libraryID, or that every
+    /// Library shares, in the sort parameter form; empty is newest first.
+    static func savedSort(_ db: Database, libraryID: Int?) throws -> String {
+        if let libraryID {
+            return try String.fetchOne(db, sql: "SELECT sort_spec FROM libraries WHERE id = ?", arguments: [libraryID]) ?? ""
+        }
+        let specs = try String.fetchAll(db, sql: "SELECT DISTINCT sort_spec FROM libraries")
+        return specs.count == 1 ? specs[0] : ""
     }
 }

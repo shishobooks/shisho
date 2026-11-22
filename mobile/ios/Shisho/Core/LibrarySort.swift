@@ -91,3 +91,89 @@ enum LibrarySort {
         """
     }
 }
+
+/// One field of a sort and its direction, as the web's sort sheet has them.
+struct SortLevel: Hashable, Sendable {
+    var field: String
+    var descending: Bool
+}
+
+extension LibrarySort {
+    /// The fields the sort sheet offers, in the web's order. The web's Last
+    /// read needs reading history the device doesn't keep.
+    static let fields = [
+        "title", "author", "series", "date_added", "date_released",
+        "page_count", "duration", "reading_status", "rating", "date_finished",
+    ]
+    /// As many levels as `pkg/sortspec` takes.
+    static let maxLevels = 10
+    /// The order of a Library with no sort saved on the web.
+    static let builtInDefault = [SortLevel(field: "date_added", descending: true)]
+
+    static func label(_ field: String) -> String {
+        switch field {
+        case "title": String(localized: "Title")
+        case "author": String(localized: "Author")
+        case "series": String(localized: "Series")
+        case "date_added": String(localized: "Date added")
+        case "date_released": String(localized: "Date released")
+        case "page_count": String(localized: "Page count")
+        case "duration": String(localized: "Duration")
+        case "reading_status": String(localized: "Reading status")
+        case "rating": String(localized: "Rating")
+        case "date_finished": String(localized: "Date finished")
+        default: field
+        }
+    }
+
+    /// A newly added level puts the best rated and most recently finished
+    /// first, as on the web.
+    static func initiallyDescending(_ field: String) -> Bool {
+        field == "rating" || field == "date_finished"
+    }
+
+    /// The levels of a spec in the sort parameter form, leaving out any it
+    /// can't use and any field already named.
+    static func levels(_ spec: String) -> [SortLevel] {
+        var levels: [SortLevel] = []
+        for level in spec.split(separator: ",") {
+            let parts = level.split(separator: ":")
+            guard parts.count == 2, fields.contains(String(parts[0])), parts[1] == "asc" || parts[1] == "desc",
+                  !levels.contains(where: { $0.field == parts[0] }) else { continue }
+            levels.append(SortLevel(field: String(parts[0]), descending: parts[1] == "desc"))
+        }
+        return Array(levels.prefix(maxLevels))
+    }
+
+    static func spec(_ levels: [SortLevel]) -> String {
+        levels.map { "\($0.field):\($0.descending ? "desc" : "asc")" }.joined(separator: ",")
+    }
+}
+
+/// The Library's sort as the web gallery works it out: the sort picked on
+/// this device wins, then the one saved on the web, then newest first.
+struct GallerySort: Equatable {
+    /// The sort saved on the web, in the sort parameter form.
+    let saved: String
+    /// The sort picked on this device, or nil for the saved one.
+    let device: String?
+
+    var defaultLevels: [SortLevel] {
+        let saved = LibrarySort.levels(saved)
+        return saved.isEmpty ? LibrarySort.builtInDefault : saved
+    }
+
+    var levels: [SortLevel] {
+        let picked = device.map(LibrarySort.levels) ?? []
+        return picked.isEmpty ? defaultLevels : picked
+    }
+
+    /// Whether the order differs from the saved one, as the web's dot says.
+    var isDirty: Bool { levels != defaultLevels }
+
+    /// What to keep as this device's pick for levels: nil when they're the
+    /// saved sort, or empty, which goes back to it, as the web's URL does.
+    func deviceSpec(for levels: [SortLevel]) -> String? {
+        levels.isEmpty || levels == defaultLevels ? nil : LibrarySort.spec(levels)
+    }
+}

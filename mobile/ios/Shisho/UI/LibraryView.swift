@@ -12,11 +12,17 @@ struct LibraryView: View {
     /// How far the content has scrolled up, which shrinks the logo.
     @State private var scrolledBy: CGFloat = 0
     @State private var notes: [JournalNote]?
+    /// The sort saved on the web for the Library showing.
+    @State private var savedSort: String?
 
     private var libraryID: Int? {
         model.libraryID == 0 ? nil : model.libraryID
     }
 
+
+    private var sort: GallerySort {
+        GallerySort(saved: savedSort ?? "", device: model.sortSpec)
+    }
 
     private var libraryName: String {
         (libraries ?? []).first { $0.id == libraryID }?.name ?? String(localized: "All Libraries")
@@ -28,9 +34,11 @@ struct LibraryView: View {
             // The width comes from outside the scroll view, so a grid laid
             // out for a wider screen can't hold it wide after a rotation.
             GeometryReader { geometry in
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         ScrollTopMarker(space: "library")
+                            .id(ScrollTop.anchor)
                         // The Library picked, as the prototype has it under
                         // the title, and the ways into it besides the grid.
                         FlowLayout(spacing: 8) {
@@ -71,6 +79,10 @@ struct LibraryView: View {
                 }
                 .onScrolledDistanceChange(space: "library") { scrolledBy = $0 }
                 .miniPlayerClearance()
+                .onChange(of: model.scrollToTop[.library]) { _, _ in
+                    withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
+                }
+                }
             }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
@@ -89,6 +101,10 @@ struct LibraryView: View {
                                                          filter: model.filter, sort: model.sortSpec),
                    into: $books) { [libraryID, filter = model.filter, sort = model.sortSpec] db in
             try CatalogStore.books(db, libraryID: libraryID, filter: filter, sort: sort)
+        }
+        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(model.libraryID)", into: $savedSort) {
+            [libraryID] db in
+            try CatalogStore.savedSort(db, libraryID: libraryID)
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $libraries) { db in
             try CatalogStore.libraries(db)
@@ -112,16 +128,20 @@ struct LibraryView: View {
                 .foregroundStyle(Theme.mutedForeground)
                 .contentTransition(.numericText())
         }
-        return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center) {
-                heading
-                Spacer(minLength: 8)
-                GalleryControls()
+        return VStack(alignment: .leading, spacing: 12) {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center) {
+                    heading
+                    Spacer(minLength: 8)
+                    GalleryControls(sort: sort)
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    heading
+                    GalleryControls(sort: sort)
+                }
             }
-            VStack(alignment: .leading, spacing: 10) {
-                heading
-                GalleryControls()
-            }
+            ActiveFilterChips()
+            SortedByChips(sort: sort)
         }
         .padding(.horizontal, GridLayout.margin)
         .padding(.top, 20)

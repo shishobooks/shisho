@@ -568,6 +568,13 @@ final class AudioPlayer {
         }
     }
 
+    /// Puts a paused File away, as swiping the mini player down does: its
+    /// place is kept, and it isn't opened again at the next launch.
+    func dismiss() {
+        guard !isPlaying, file != nil else { return }
+        close()
+    }
+
     /// Closes the File, keeping what was listened, as when it's no longer
     /// in the user's Libraries.
     private func close() {

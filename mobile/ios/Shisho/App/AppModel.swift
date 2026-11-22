@@ -193,6 +193,24 @@ final class AppModel {
         }
     }
 
+    /// Asks a tab's first screen to scroll to its top; each ask is a new
+    /// number, which the screen watches.
+    private(set) var scrollToTop: [AppTab: Int] = [:]
+
+    /// The tab showing, tapped again: back to its first screen, or on it,
+    /// back to its top, as a native tab bar does.
+    func reselect(_ tab: AppTab) {
+        let atRoot = switch tab {
+        case .library: libraryPath.isEmpty
+        case .lists: listsPath.isEmpty
+        }
+        if atRoot {
+            scrollToTop[tab, default: 0] += 1
+        } else {
+            popToRoot(tab)
+        }
+    }
+
     /// Opens route on the tab showing.
     func push(_ route: Route) {
         switch tab {

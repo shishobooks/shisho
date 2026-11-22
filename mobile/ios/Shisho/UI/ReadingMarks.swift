@@ -148,13 +148,6 @@ enum Percent {
     }
 }
 
-enum Ratings {
-    /// Stars from quarter-star units, as "4.25".
-    static func text(_ units: Int) -> String {
-        (Double(units) / 4).formatted(.number.precision(.fractionLength(0...2)))
-    }
-}
-
 enum FileFacts {
     /// A length as the web shows it: "6h 43m", "12m", or "<1m".
     static func duration(_ seconds: Double) -> String {

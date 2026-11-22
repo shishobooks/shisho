@@ -9,6 +9,7 @@ struct ListsView: View {
     var body: some View {
         @Bindable var model = model
         NavigationStack(path: $model.listsPath) {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Organize your books into custom collections")
@@ -16,6 +17,7 @@ struct ListsView: View {
                         .foregroundStyle(Theme.mutedForeground)
                         .padding(.horizontal, GridLayout.margin)
                         .padding(.bottom, 16)
+                        .id(ScrollTop.anchor)
                     if let lists {
                         if lists.isEmpty {
                             EmptyNotice(title: String(localized: "No Lists yet"),
@@ -40,6 +42,10 @@ struct ListsView: View {
                 .frame(maxWidth: .infinity)
             }
             .miniPlayerClearance()
+            .onChange(of: model.scrollToTop[.lists]) { _, _ in
+                withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
+            }
+            }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
             .navigationTitle("Lists")
