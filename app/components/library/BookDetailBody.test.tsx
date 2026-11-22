@@ -1078,6 +1078,32 @@ describe("BookDetailBody file progress", () => {
     expect(ring("Audio")).toHaveAccessibleName("62% through");
   });
 
+  it("says how much of each file is left beside its progress", () => {
+    readingPositions.current = [
+      { file_id: 1, percentage: 0.25 },
+      { file_id: 2, percentage: 0.5 },
+    ];
+    renderBody({
+      book: {
+        ...twoFiles,
+        files: [
+          { ...epub, id: 1, display_name: "Ebook", page_count: 200 } as File,
+          {
+            ...m4b,
+            id: 2,
+            display_name: "Audio",
+            audiobook_duration_seconds: 7200,
+          } as File,
+        ],
+      },
+    });
+
+    const row = (name: string) =>
+      screen.getByRole("link", { name }).closest(".border") as HTMLElement;
+    expect(row("Ebook")).toHaveTextContent("25% · 150 pages left");
+    expect(row("Audio")).toHaveTextContent("50% · 1h 0m left");
+  });
+
   it.each([
     [0, "0% through"],
     [0.004, "0% through"],
