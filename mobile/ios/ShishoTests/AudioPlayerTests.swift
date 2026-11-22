@@ -2,14 +2,17 @@ import ShishoAPI
 import XCTest
 @testable import Shisho
 
-/// The player against a server that never answers, so every stream fails.
+/// The player against a server that isn't there, so every stream fails. It's
+/// a missing folder rather than a closed port, which fails at once without
+/// depending on the network, where a firewall can leave a connection hanging.
 @MainActor
 final class AudioPlayerTests: XCTestCase {
     private var session: AccountSession!
     private var player: AudioPlayer!
 
     override func setUp() async throws {
-        let account = Account(id: "test-\(UUID().uuidString)", serverURL: URL(string: "http://127.0.0.1:9")!, username: "u", userID: 1,
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("no-server-\(UUID().uuidString)", isDirectory: true)
+        let account = Account(id: "test-\(UUID().uuidString)", serverURL: missing, username: "u", userID: 1,
                               deviceID: "me", serverVersion: "dev", thumbnailRenderKey: "", capabilities: [], signedOut: false)
         session = try AccountSession(account: account, credential: "credential") { _ in }
         try session.store.startOverIfNeeded()
