@@ -297,11 +297,12 @@ type JournalPositionPayload struct {
 // JournalSessionPayload is a Reading Session, timed on the device with the
 // web reader's rules, on the device's clock: a finished one, or one so far.
 type JournalSessionPayload struct {
-	// SessionID names the sitting the session is of, unique to the
-	// installation. The app sends the session so far on every pause under
-	// it, and the server keeps one session for it, extended by each later
-	// snapshot. A session the user deleted stays deleted. Without it, each
-	// event is a session of its own.
+	// SessionID is the device's own id for the session, unique to the
+	// installation; the server's id for it is a different number. The app
+	// sends the session so far on every pause under it, and the server
+	// keeps one session for it, extended by each later snapshot. A session
+	// the user deleted stays deleted. Without it, each event is a session of
+	// its own.
 	SessionID       string    `json:"session_id,omitempty" validate:"omitempty,max=64"`
 	FileID          int       `json:"file_id" validate:"required,min=1"`
 	StartedAt       time.Time `json:"started_at" validate:"required"`

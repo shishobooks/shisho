@@ -420,12 +420,20 @@ func isRealProgress(u PositionUpdate, underway *models.ReadThrough) bool {
 	}
 }
 
+// sittingSlack widens what claimSitting takes. A device whose clock is off
+// has each batch corrected by its own offset, which the network's delay
+// varies, so a sitting's first session can land a little before its start
+// as a later batch reports it. Another sitting can't start this close: one
+// ends after a pause of five minutes.
+const sittingSlack = time.Minute
+
 // claimSitting puts what u's sitting already recorded, before it knew it would
 // start a Read-through, on rtID, so its first seconds count toward the read.
 func claimSitting(ctx context.Context, tx bun.Tx, u PositionUpdate, rtID int, since time.Time) error {
 	if u.ListeningSince == nil {
 		return nil
 	}
+	since = since.Add(-sittingSlack)
 	_, err := tx.NewUpdate().
 		Model((*models.ReadingPositionUpdate)(nil)).
 		Set("read_through_id = ?", rtID).
@@ -502,14 +510,12 @@ func (svc *Service) RecordSession(ctx context.Context, userID, fileID int, sourc
 // ExtendSession moves the end of userID's Reading Session sessionID to a
 // later snapshot of it, as a source that sends a session so far on every
 // pause does, keeping the Read-through it was placed on. A snapshot no later
-// than the session's end changes nothing. claim, when set, runs first in
-// the transaction. It reports whether the session changed.
-func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, snapshot SessionInput,
-	claim func(ctx context.Context, tx bun.Tx) error) (bool, error) {
-	changed := false
-	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		if claim != nil {
-			if err := claim(ctx, tx); err != nil {
+// than the session's end changes nothing. snapshot.Claim, when set, runs
+// first in the transaction.
+func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, snapshot SessionInput) error {
+	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		if snapshot.Claim != nil {
+			if err := snapshot.Claim(ctx, tx); err != nil {
 				return err
 			}
 		}
@@ -532,10 +538,8 @@ func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, sn
 		stored.EndPercentage = snapshot.EndPercentage
 		stored.Duration = duration
 		_, err = tx.NewUpdate().Model(stored).Column("ended_at", "end_percentage", "duration").WherePK().Exec(ctx)
-		changed = err == nil
 		return errors.WithStack(err)
 	})
-	return changed, err
 }
 
 // recordSession records session, if there is one, on rt, the Read-through

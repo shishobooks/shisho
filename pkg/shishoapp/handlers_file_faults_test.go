@@ -11,7 +11,8 @@ import (
 )
 
 // A cover that exists but can't be opened, and a database that fails, are
-// server faults: a 500 with a JSON body and no image headers.
+// server faults: a 500 with a JSON body and no image headers. That holds
+// for a Book's cover and for a File's own.
 func TestCover_FaultsAreServerErrors(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -24,17 +25,22 @@ func TestCover_FaultsAreServerErrors(t *testing.T) {
 		filepath.Join(dir, "a.epub"))
 	f.addUser()
 	credential := f.signIn()
+	paths := []string{"/mobile/books/1/cover?v=1-1", "/mobile/files/1/cover?v=1-1"}
 
 	// Permission bits don't restrict root, so only the database fault runs
 	// there.
 	if os.Geteuid() != 0 {
 		require.NoError(t, os.Chmod(cover, 0o000))
 		t.Cleanup(func() { _ = os.Chmod(cover, 0o600) })
-		assertServerFault(t, f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential}))
+		for _, path := range paths {
+			assertServerFault(t, f.do(call{path: path, credential: credential}))
+		}
 	}
 
 	f.exec(`DROP TABLE files`)
-	assertServerFault(t, f.do(call{path: "/mobile/books/1/cover?v=1-1", credential: credential}))
+	for _, path := range paths {
+		assertServerFault(t, f.do(call{path: path, credential: credential}))
+	}
 }
 
 // The same for Original File downloads and streams: an unreadable file and

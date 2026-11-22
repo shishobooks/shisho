@@ -373,3 +373,34 @@ func TestJournal_SnapshotsOfOneSittingUpdateOneSession(t *testing.T) {
 	assert.Equal(t, []string{"p3:accepted"}, results(resp))
 	assert.Zero(t, f.count(`SELECT COUNT(*) FROM reading_sessions`))
 }
+
+// A device whose clock is off has each batch corrected by its own offset,
+// which the network's delay varies. The session sent at a pause before the
+// sitting started a Read-through still goes on that read when the batch that
+// starts it is corrected by a slightly different offset.
+func TestJournal_ASittingsFirstSnapshotJoinsTheReadItStarts(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.audiobook()
+	userID := f.addUser()
+	now := time.Now().UTC()
+	f.accountSince(userID, now.Add(-time.Hour))
+	credential := f.signIn()
+	behind := 3 * time.Hour
+	start := now.Add(-behind).Add(-10 * time.Minute)
+
+	// Three seconds, then a pause: the session so far, and no read yet.
+	f.journal(credential, now.Add(-behind),
+		event("s1", JournalEventReadingSession, start.Add(3*time.Second), sessionSoFar("sit-1", start, start.Add(3*time.Second), 3)))
+	assert.Zero(t, f.count(`SELECT COUNT(*) FROM read_throughs`))
+
+	// Playing on starts the read. This batch took two seconds longer to
+	// arrive, so its offset comes out two seconds larger.
+	started := position(5, 60, 0.1)
+	started["listened_seconds"] = 60
+	started["listening_since"] = start.Format(time.RFC3339Nano)
+	f.journal(credential, now.Add(-behind).Add(-2*time.Second),
+		event("p1", JournalEventReadingPosition, start.Add(time.Minute), started))
+	require.Equal(t, 1, f.count(`SELECT COUNT(*) FROM read_throughs WHERE outcome = 'underway'`))
+	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_sessions WHERE read_through_id IS NOT NULL`))
+}

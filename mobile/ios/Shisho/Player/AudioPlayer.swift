@@ -84,6 +84,8 @@ final class AudioPlayer {
     /// stayed ready, and whether play was tried again since.
     @ObservationIgnored private var stoppedAt: Date?
     @ObservationIgnored private var retriedStop = false
+    /// When the player played again after a failure, until it plays.
+    @ObservationIgnored private var retriedAt: Date?
 
     init(session: AccountSession, requestSync: @escaping @MainActor () -> Void) {
         self.session = session
@@ -215,15 +217,21 @@ final class AudioPlayer {
                 }
             }
         case .failed:
-            isPlaying = false
-            isBuffering = false
-            error = String(localized: "This audiobook couldn't be played. Check your connection to the server and try again.")
-            log("file \(file?.fileID ?? 0): couldn't play: \(failure ?? "unknown error")")
-            stopSitting(at: Date())
-            updateNowPlaying()
+            couldNotPlay(failure ?? "unknown error")
         default:
             break
         }
+    }
+
+    /// Shows that the stream failed. Playing again builds a new one from
+    /// where it was.
+    private func couldNotPlay(_ failure: String) {
+        isPlaying = false
+        isBuffering = false
+        error = String(localized: "This audiobook couldn't be played. Check your connection to the server and try again.")
+        log("file \(file?.fileID ?? 0): couldn't play: \(failure)")
+        stopSitting(at: Date())
+        updateNowPlaying()
     }
 
     // MARK: - Controls
@@ -266,6 +274,7 @@ final class AudioPlayer {
     func pause() {
         guard file != nil else { return }
         player?.pause()
+        retriedAt = nil
         let wasPlaying = isPlaying
         isPlaying = false
         isBuffering = false
@@ -339,12 +348,7 @@ final class AudioPlayer {
 
     /// Stops playing and forgets the File, recording what was listened.
     func stop() {
-        if isPlaying { pause() }
-        stopSitting(at: Date())
-        teardownItem()
-        file = nil
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        unload()
         let center = MPRemoteCommandCenter.shared()
         for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.skipForwardCommand,
                         center.skipBackwardCommand, center.nextTrackCommand, center.previousTrackCommand,
@@ -560,12 +564,20 @@ final class AudioPlayer {
     /// Closes the File, keeping what was listened, as when it's no longer
     /// in the user's Libraries.
     private func close() {
+        unload()
+        UserDefaults.standard.removeObject(forKey: lastFileKey)
+    }
+
+    /// Lets go of the File: records what was listened, stops the stream and
+    /// following the catalog, and clears the lock screen.
+    private func unload() {
         if isPlaying { pause() }
         stopSitting(at: Date())
         teardownItem()
+        placeWatch?.cancel()
+        fileWatch?.cancel()
         file = nil
         offer = nil
-        UserDefaults.standard.removeObject(forKey: lastFileKey)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         MPNowPlayingInfoCenter.default().playbackState = .stopped
     }
@@ -682,10 +694,11 @@ final class AudioPlayer {
         waitingLogged = false
         stoppedAt = nil
         retriedStop = false
+        retriedAt = nil
         statusObservation?.invalidate()
         statusObservation = nil
-        placeWatch?.cancel()
-        fileWatch?.cancel()
+        // The catalog and place watches belong to the File, not the stream:
+        // a stream tried again keeps them, and open() replaces them.
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         player = nil
@@ -750,11 +763,23 @@ final class AudioPlayer {
     /// as a place decoding can start, but only some are; a seek that lands
     /// on another fails with "Cannot Decode" and AVPlayer pauses itself.
     /// Playing again from there decodes, as pausing and playing does by hand.
+    /// If it's still stopped a while later, the failure shows, rather than
+    /// loading forever.
     private func retryAfterStop(_ player: AVPlayer, at now: Date) {
-        guard isPlaying, ready, !retriedStop, pendingSeek == nil, seekingTo == nil,
-              let stoppedAt, now.timeIntervalSince(stoppedAt) < AudioPlayer.stopWindow,
-              player.timeControlStatus == .paused, let file else { return }
+        guard isPlaying, ready, pendingSeek == nil, seekingTo == nil, let file else { return }
+        let stopped = player.timeControlStatus == .paused
+        if let retriedAt {
+            if !stopped {
+                self.retriedAt = nil
+            } else if now.timeIntervalSince(retriedAt) >= AudioPlayer.stopWindow {
+                self.retriedAt = nil
+                couldNotPlay("still stopped after playing again")
+            }
+            return
+        }
+        guard stopped, !retriedStop, let stoppedAt, now.timeIntervalSince(stoppedAt) < AudioPlayer.stopWindow else { return }
         retriedStop = true
+        retriedAt = now
         log("file \(file.fileID): playing again at \(Int(currentPosition())) s after the stream stopped")
         player.playImmediately(atRate: Float(rate))
     }

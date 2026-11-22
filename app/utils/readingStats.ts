@@ -53,8 +53,9 @@ export const ratingRows = (ratings: ReadingStatsRatingCount[]): CountRow[] =>
     }));
 
 // What each reading source is called. Shisho's own are named as Shisho's,
-// apart from third-party devices and readers. The web app and the Shisho
-// app each have a reader and a player, named apart (PLAYER_LABELS).
+// apart from third-party devices and readers. The web app has a reader and
+// a player, named apart (PLAYER_LABELS), and so will the Shisho app once it
+// has a reader; until then its time is all from its player.
 const SOURCE_LABELS: Record<ReadingSource, string> = {
   web_reader: "Shisho web reader",
   kobo: "Kobo",

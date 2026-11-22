@@ -42,10 +42,6 @@ final class CoverCache: Sendable {
 
     /// The cover if it's in memory: what a view can show at once, without
     /// waiting for the disk.
-    func memoryImage(bookID: Int, version: String, size: Int) -> UIImage? {
-        memoryImage(.book(bookID), version: version, size: size)
-    }
-
     func memoryImage(_ owner: Owner, version: String, size: Int) -> UIImage? {
         memory[fileName(owner, version: version, size: size)]
     }

@@ -51,10 +51,10 @@ func requestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			return err
 		}
 		c.Set("id", id.String())
-		clientVersion := clientVersion(c.Request())
+		version := clientVersion(c.Request())
 		log := logger.NewWithLevel(c.Request().Header.Get("X-Log-Level")).ID(id.String()).Root(logger.Data{
 			"method": c.Request().Method, "path": loggedPath(c),
-			"route": c.Path(), "client_version": clientVersion,
+			"route": c.Path(), "client_version": version,
 		})
 		c.SetRequest(c.Request().WithContext(log.WithContext(c.Request().Context())))
 		if err := next(c); err != nil {

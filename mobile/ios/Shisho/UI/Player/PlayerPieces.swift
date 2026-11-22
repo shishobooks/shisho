@@ -129,6 +129,8 @@ struct Scrubber: View {
                 Capsule()
                     .fill(Theme.primary)
                     .frame(width: min(width, x + Scrubber.thumb / 2), height: Scrubber.track)
+                // White in both appearances, as the system slider's handle
+                // is, ringed in the brand color.
                 Circle()
                     .fill(Color.white)
                     .overlay(Circle().strokeBorder(Theme.primary, lineWidth: 2))

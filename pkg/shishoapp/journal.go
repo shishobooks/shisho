@@ -369,8 +369,9 @@ func (h *handler) applyPosition(ctx context.Context, user *models.User, device *
 	return eventOutcome{}, err
 }
 
-// journalSession links one sitting's snapshots to the Reading Session they
-// update; ReadingSessionID is nil once the user deleted it.
+// journalSession links the snapshots sent under the device's id for a
+// session to the Reading Session they update; ReadingSessionID is nil once
+// the user deleted it.
 type journalSession struct {
 	bun.BaseModel `bun:"table:app_journal_sessions,alias:ajs"`
 
@@ -384,9 +385,9 @@ type journalSession struct {
 // applySession records a Reading Session at the time it happened,
 // on the Read-through underway then (ADR 0016).
 //
-// A snapshot of a sitting, named by SessionID, updates the session the
-// sitting's first snapshot made, and a session the user deleted stays
-// deleted: the latest instant wins, and a delete wins (ADR 0024).
+// A snapshot named by SessionID updates the session its first snapshot
+// made, when it ends later, and a session the user deleted stays deleted
+// (ADR 0024).
 func (h *handler) applySession(ctx context.Context, user *models.User, device *devices.Device, installation string,
 	clock deviceClock, p JournalSessionPayload, claim claimFunc) (eventOutcome, error) {
 	if p.EndedAt.Before(p.StartedAt) {
@@ -424,8 +425,7 @@ func (h *handler) applySession(ctx context.Context, user *models.User, device *d
 			// Deleted: the snapshot is taken in and changes nothing.
 			return eventOutcome{}, errors.WithStack(h.db.RunInTx(ctx, nil, claim))
 		case err == nil:
-			_, err = h.reading.ExtendSession(ctx, user.ID, *link.ReadingSessionID, input, claim)
-			return eventOutcome{}, err
+			return eventOutcome{}, h.reading.ExtendSession(ctx, user.ID, *link.ReadingSessionID, input)
 		case !errors.Is(err, sql.ErrNoRows):
 			return eventOutcome{}, errors.WithStack(err)
 		}

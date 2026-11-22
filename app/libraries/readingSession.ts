@@ -10,8 +10,8 @@ export const READING_IDLE_MS = 5 * 60 * 1000;
 const MIN_PAGE_MS = 5 * 1000;
 const MAX_PAGE_MS = 2 * 60 * 1000;
 
-// A sitting's minute of listening has long been decided by this age, and the
-// server refuses one older (maxSessionLength in pkg/reading/handlers.go).
+// A sitting's first seconds of listening have long been decided by this age,
+// and the server refuses one older (maxSessionLength in pkg/reading/handlers.go).
 const MAX_SITTING_MS = 24 * 60 * 60 * 1000;
 
 // Why a session ended. "close" is the page unloading, so whoever delivers

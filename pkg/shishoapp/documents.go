@@ -2,7 +2,6 @@ package shishoapp
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/changefeed"
@@ -312,11 +311,11 @@ func loadReadThroughs(ctx context.Context, tx bun.IDB, userID int, ids []int) (m
 	return out, nil
 }
 
-// fileCoverVersion keys file's own cover as covers.CacheKey keys a Book's,
-// or is empty when the File has no cover.
+// fileCoverVersion keys file's own cover, or is empty when the File has no
+// cover.
 func fileCoverVersion(file *models.File) string {
 	if file.CoverImageFilename == nil || *file.CoverImageFilename == "" {
 		return ""
 	}
-	return fmt.Sprintf("%d-%d", file.ID, file.UpdatedAt.Unix())
+	return covers.FileCacheKey(file)
 }
