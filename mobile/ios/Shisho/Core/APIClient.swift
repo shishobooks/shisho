@@ -189,7 +189,9 @@ final class APIClient: Sendable {
     /// on the stream route only, and they go only with requests for Files,
     /// so a redirect elsewhere on the host doesn't carry the credential.
     var streamCookies: [HTTPCookie] {
-        let path = baseURL.appendingPathComponent("mobile/files").path + "/"
+        // As the stream's URL spells it, so a path with spaces still matches.
+        let files = baseURL.appendingPathComponent("mobile/files")
+        let path = (URLComponents(url: files, resolvingAgainstBaseURL: false)?.percentEncodedPath ?? files.path) + "/"
         let values = [
             ("shisho_app_credential", credential),
             ("shisho_app_protocol", String(Installation.appProtocol)),

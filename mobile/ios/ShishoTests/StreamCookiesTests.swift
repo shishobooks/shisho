@@ -28,5 +28,13 @@ final class StreamCookiesTests: XCTestCase {
     func testGoOnlyToTheServersFileRoutes() throws {
         XCTAssertEqual(cookies("http://192.168.1.20:3789")["shisho_app_credential"]?.path, "/mobile/files/")
         XCTAssertEqual(cookies("https://example.com/shisho")["shisho_app_credential"]?.path, "/shisho/mobile/files/")
+        XCTAssertEqual(cookies("https://example.com/shisho/")["shisho_app_credential"]?.path, "/shisho/mobile/files/")
+
+        // A server under a path with a space: the cookie goes with its
+        // streams as the system sends them.
+        let client = APIClient(baseURL: URL(string: "https://example.com/my%20books")!, credential: "secret-credential")
+        let storage = HTTPCookieStorage.sharedCookieStorage(forGroupContainerIdentifier: UUID().uuidString)
+        storage.setCookies(client.streamCookies, for: client.streamURL(fileID: 3), mainDocumentURL: nil)
+        XCTAssertEqual(storage.cookies(for: client.streamURL(fileID: 3))?.map(\.name).contains("shisho_app_credential"), true)
     }
 }

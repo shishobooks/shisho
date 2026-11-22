@@ -539,7 +539,10 @@ func (svc *Service) ExtendSession(ctx context.Context, userID, sessionID int, sn
 		if snapshot.EndedAt.After(stored.EndedAt) {
 			stored.EndedAt = snapshot.EndedAt
 		}
-		duration := int(stored.EndedAt.Sub(stored.StartedAt).Round(time.Second) / time.Second)
+		// Time played fits within the session's span, or the snapshot's own,
+		// whose times one batch's correction keeps consistent.
+		span := max(stored.EndedAt.Sub(stored.StartedAt), snapshot.EndedAt.Sub(snapshot.StartedAt))
+		duration := int(span.Round(time.Second) / time.Second)
 		if snapshot.Duration != nil && *snapshot.Duration < duration {
 			duration = *snapshot.Duration
 		}

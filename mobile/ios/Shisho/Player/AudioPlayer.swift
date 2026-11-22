@@ -400,8 +400,10 @@ final class AudioPlayer {
         guard let player else { return }
         refreshPosition()
         let now = Date()
+        // Before the rest, which a failure it reports must not see as
+        // playing.
+        retryAfterStop(player, at: now)
         if isPlaying {
-            retryAfterStop(player, at: now)
             let buffering = player.timeControlStatus != .playing
             noteWaiting(buffering, player: player, at: now)
             if buffering != isBuffering {
@@ -792,11 +794,13 @@ final class AudioPlayer {
         guard isPlaying, ready, pendingSeek == nil, seekingTo == nil, let file else { return }
         let stopped = player.timeControlStatus == .paused
         if let retriedAt {
-            if !stopped {
+            // Waiting for audio after playing again counts as not playing
+            // yet, so a retry that never gets going still shows the error.
+            if player.timeControlStatus == .playing {
                 self.retriedAt = nil
             } else if now.timeIntervalSince(retriedAt) >= AudioPlayer.stopWindow {
                 self.retriedAt = nil
-                couldNotPlay("still stopped after playing again")
+                couldNotPlay("still not playing after playing again")
             }
             return
         }

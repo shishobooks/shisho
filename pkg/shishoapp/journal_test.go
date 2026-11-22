@@ -432,3 +432,29 @@ func TestJournal_ALaterSnapshotWinsWhenItsCorrectedEndComesOutEarlier(t *testing
 	require.NoError(t, f.db.QueryRowContext(f.ctx, `SELECT duration FROM reading_sessions`).Scan(&duration))
 	assert.Equal(t, 68, duration)
 }
+
+// When a device's clock is near the correction threshold, one batch can be
+// corrected and the next not, so the later snapshot's corrected times come
+// out minutes earlier. Its own span still bounds its time, not the earlier
+// snapshot's.
+func TestJournal_ASnapshotIsBoundedByItsOwnSpan(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.audiobook()
+	userID := f.addUser()
+	now := time.Now().UTC()
+	f.accountSince(userID, now.Add(-time.Hour))
+	credential := f.signIn()
+	corrected := now.Add(-clockTolerance - time.Second)
+	start := corrected.Add(-time.Minute)
+
+	f.journal(credential, corrected,
+		event("p1", JournalEventReadingSession, start.Add(30*time.Second), sessionSoFar("sit-1", start, start.Add(30*time.Second), 30)))
+	uncorrected := now.Add(-clockTolerance + time.Second)
+	f.journal(credential, uncorrected,
+		event("p2", JournalEventReadingSession, start.Add(40*time.Second), sessionSoFar("sit-1", start, start.Add(40*time.Second), 40)))
+
+	var duration int
+	require.NoError(t, f.db.QueryRowContext(f.ctx, `SELECT duration FROM reading_sessions`).Scan(&duration))
+	assert.Equal(t, 40, duration)
+}
