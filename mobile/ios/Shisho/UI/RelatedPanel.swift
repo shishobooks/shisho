@@ -214,7 +214,7 @@ private struct RelatedLine: View {
                 row
             }
             .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
+            .accessibilityLabel([meta, line.book.title].compactMap { $0 }.joined(separator: ", "))
             .accessibilityIdentifier("book.related.book")
         }
     }

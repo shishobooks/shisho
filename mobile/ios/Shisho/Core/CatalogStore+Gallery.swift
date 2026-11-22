@@ -123,6 +123,14 @@ extension CatalogStore {
         )
     }
 
+    /// A name as SQLite's NOCASE compares it: ASCII letters folded, nothing
+    /// else.
+    static func nocase(_ name: String) -> String {
+        String(String.UnicodeScalarView(name.unicodeScalars.map { scalar in
+            ("A"..."Z").contains(scalar) ? Unicode.Scalar(scalar.value + 32) ?? scalar : scalar
+        }))
+    }
+
     /// The languages to offer from the tags the Files have, as the web's
     /// filter groups them: none for a single tag; a bare tag ("en") takes in
     /// its variants ("en-US"), and without one each variant is its own; in

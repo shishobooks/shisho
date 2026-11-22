@@ -444,6 +444,10 @@ type FeedReadThrough struct {
 	EndDay   *string `json:"end_day"`
 	Outcome  string  `json:"outcome" tstype:"ReadThroughOutcome"`
 	Paused   bool    `json:"paused"`
+	// LastReadAt is its latest reading, as the web's Last read sort reads
+	// it (reading.LastReadExpr): no place a link opened, and no supplement.
+	// Null before any.
+	LastReadAt *time.Time `json:"last_read_at"`
 }
 
 // JournalPayload is a batch of the app's journal (ADR 0024): events made on

@@ -104,6 +104,11 @@ extension CatalogStore {
         try db.alter(table: "books") { t in
             t.add(column: "description", .text)
         }
+        // When the Read-through was last read, as the server's Last read sort
+        // counts it, for the same sort here.
+        try db.alter(table: "read_throughs") { t in
+            t.add(column: "last_read_at", .double)
+        }
         try db.alter(table: "book_files") { t in
             t.add(column: "publisher_id", .integer)
             t.add(column: "publisher", .text)
@@ -988,7 +993,7 @@ extension CatalogStore {
             for number in try Row.fetchAll(db, sql: """
                 SELECT bs.book_id, bs.number, bs.number_end, bs.unit,
                     EXISTS (SELECT 1 FROM book_files f WHERE f.book_id = bs.book_id AND f.file_type = 'cbz') AS comic
-                FROM book_series bs WHERE bs.series_id = ? AND bs.number IS NOT NULL
+                FROM book_series bs WHERE bs.series_id = ? AND bs.number IS NOT NULL AND bs.book_id IN (\(idList(books)))
                 """, arguments: [seriesID]) {
                 labels[number["book_id"]] = SeriesNumbers.label(number["number"], end: number["number_end"],
                                                                 unit: number["unit"], comic: number["comic"])
@@ -1018,8 +1023,8 @@ extension CatalogStore {
                 var years: [Int: String] = [:]
                 for row in try Row.fetchAll(db, sql: """
                     SELECT book_id, MAX(release_date) AS released FROM book_files
-                    WHERE book_id IN (SELECT book_id FROM book_authors WHERE person_id = ?) AND release_date IS NOT NULL GROUP BY book_id
-                    """, arguments: [personID]) {
+                    WHERE book_id IN (\(idList(books))) AND release_date IS NOT NULL GROUP BY book_id
+                    """) {
                     years[row["book_id"]] = FileFacts.year(Date(timeIntervalSince1970: row["released"]))
                 }
                 related.author = BookRelated.Group(title: author["name"], link: .person(id: personID, name: author["name"]),
@@ -1055,8 +1060,9 @@ extension CatalogStore {
                      ORDER BY lb.sort_order IS NULL, lb.sort_order, lb.added_at DESC, lb.position
                      LIMIT \(limit)
                     """, arguments: [listID]))
-                for place in try Row.fetchAll(db, sql: "SELECT book_id, sort_order FROM list_books WHERE list_id = ? AND sort_order IS NOT NULL",
-                                              arguments: [listID]) {
+                for place in try Row.fetchAll(db, sql: """
+                    SELECT book_id, sort_order FROM list_books WHERE list_id = ? AND sort_order IS NOT NULL AND book_id IN (\(idList(books)))
+                    """, arguments: [listID]) {
                     places[place["book_id"]] = "#\(place["sort_order"] as Int)"
                 }
             } else {
@@ -1066,5 +1072,11 @@ extension CatalogStore {
                                                    lines: books.map { BookRelated.Line(book: $0, meta: places[$0.id]) }))
         }
         return related
+    }
+
+    /// The ids of books as a list for an IN clause; ids are integers, so
+    /// they go in as they are.
+    private static func idList(_ books: [BookSummary]) -> String {
+        books.isEmpty ? "NULL" : books.map { String($0.id) }.joined(separator: ", ")
     }
 }

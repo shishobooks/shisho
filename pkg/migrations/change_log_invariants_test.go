@@ -64,7 +64,9 @@ var feedTables = map[string][]string{
 	// The user's own records.
 	"reading_positions": {"INSERT", "UPDATE", "DELETE"},
 	"read_throughs":     {"INSERT", "UPDATE", "DELETE"},
-	"user_books":        {"INSERT", "UPDATE", "DELETE"},
+	// A Read-through's document carries when it was last read.
+	"reading_position_updates": {"INSERT", "UPDATE", "DELETE"},
+	"user_books":               {"INSERT", "UPDATE", "DELETE"},
 }
 
 const (
@@ -196,6 +198,20 @@ var columnsNotCompared = map[string]string{
 	"list_shares.created_at":        reasonBookkeep,
 	"list_shares.shared_by_user_id": "who shared the List, which only the web app shows",
 
+	"reading_position_updates.id":               reasonPrimaryKey,
+	"reading_position_updates.created_at":       reasonBookkeep,
+	"reading_position_updates.user_id":          "an update never moves between users",
+	"reading_position_updates.cfi":              reasonLastReadOnly,
+	"reading_position_updates.xpointer":         reasonLastReadOnly,
+	"reading_position_updates.page":             reasonLastReadOnly,
+	"reading_position_updates.seconds":          reasonLastReadOnly,
+	"reading_position_updates.kobo_span":        reasonLastReadOnly,
+	"reading_position_updates.percentage":       reasonLastReadOnly,
+	"reading_position_updates.source":           reasonLastReadOnly,
+	"reading_position_updates.at_end":           reasonLastReadOnly,
+	"reading_position_updates.auto_finished":    reasonLastReadOnly,
+	"reading_position_updates.source_device_id": reasonLastReadOnly,
+
 	"user_books.created_at":        reasonBookkeep,
 	"user_books.updated_at":        reasonBookkeep,
 	"user_books.rating_updated_at": "orders late Ratings on the server, which the app doesn't read",
@@ -216,7 +232,9 @@ const (
 	reasonDevices  = "Device and sync state for other Device types"
 	reasonAccounts = "accounts and access, answered outside the cursor"
 	reasonUserNext = "a user's own records, which the feed doesn't carry yet"
-	reasonFTS      = "a search index the server rebuilds from the catalog"
+	// reasonLastReadOnly: a Read-through takes only when its updates were.
+	reasonLastReadOnly = "a Read-through's document takes only when its updates were"
+	reasonFTS          = "a search index the server rebuilds from the catalog"
 )
 
 // tablesNotInFeed are the tables without change log triggers, each with why.
@@ -264,7 +282,6 @@ var tablesNotInFeed = map[string]string{
 	"user_delivery_rules":           "Delivery Rules, which the Shisho app doesn't follow",
 	"user_settings":                 "web display settings",
 	"bookmarks":                     reasonUserNext,
-	"reading_position_updates":      reasonUserNext,
 	"reading_sessions":              reasonUserNext,
 	"books_fts":                     reasonFTS,
 	"genres_fts":                    reasonFTS,

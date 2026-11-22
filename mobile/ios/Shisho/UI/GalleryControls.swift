@@ -513,9 +513,10 @@ private struct NamePicker: View {
 
     var body: some View {
         List(shown) { option in
-            // Ignoring case, as the filter matches names, so a pick spelled
-            // differently in another Library still shows as on.
-            let picked = selected.filter { $0.caseInsensitiveCompare(option.name) == .orderedSame }
+            // Ignoring case as the filter's SQLite NOCASE does, for ASCII
+            // letters only, so a pick spelled differently in another Library
+            // still shows as on, and "Épique" stays apart from "épique".
+            let picked = selected.filter { CatalogStore.nocase($0) == CatalogStore.nocase(option.name) }
             let on = !picked.isEmpty
             Button {
                 if on { selected.subtract(picked) } else { selected.insert(option.name) }

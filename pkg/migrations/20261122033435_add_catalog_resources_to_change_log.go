@@ -58,6 +58,14 @@ func init() {
 			INSERT INTO change_log_entries (kind, record_id, user_id, deleted, changed_at)
 			SELECT 'list', id, user_id, FALSE, %[2]s FROM lists WHERE id IN (%[1]s);`, ids, now)
 	}
+	// moveReadThroughs moves the entries of the Read-throughs whose ids the
+	// expressions list, each under its user, skipping any that no longer
+	// exist or are null.
+	moveReadThroughs := func(ids string) string {
+		return fmt.Sprintf(`DELETE FROM change_log_entries WHERE kind = 'read_through' AND record_id IN (SELECT id FROM read_throughs WHERE id IN (%[1]s));
+			INSERT INTO change_log_entries (kind, record_id, user_id, deleted, changed_at)
+			SELECT 'read_through', id, user_id, FALSE, %[2]s FROM read_throughs WHERE id IN (%[1]s);`, ids, now)
+	}
 	differs := func(columns ...string) string {
 		terms := make([]string, len(columns))
 		for i, column := range columns {
@@ -172,6 +180,16 @@ func init() {
 		trigger("user_books_delete", "DELETE", "user_books", "",
 			recordOwn("user_book", "OLD.book_id", "OLD.user_id", true)),
 
+		// A Read-through's document carries when it was last read, from its
+		// position updates, so an update moves it.
+		trigger("reading_position_updates_insert", "INSERT", "reading_position_updates", "NEW.read_through_id IS NOT NULL",
+			moveReadThroughs("NEW.read_through_id")),
+		trigger("reading_position_updates_update", "UPDATE", "reading_position_updates",
+			differs("read_through_id", "file_id", "occurred_at", "opened"),
+			moveReadThroughs("OLD.read_through_id, NEW.read_through_id")),
+		trigger("reading_position_updates_delete", "DELETE", "reading_position_updates", "OLD.read_through_id IS NOT NULL",
+			moveReadThroughs("OLD.read_through_id")),
+
 		// Everything there is now has an entry, and every Book moves for what
 		// its document gained, so an installation that already synced gets
 		// them too.
@@ -190,6 +208,7 @@ func init() {
 		`INSERT INTO change_log_entries (kind, record_id, user_id, deleted, changed_at)
 			SELECT 'user_book', book_id, user_id, FALSE, CURRENT_TIMESTAMP FROM user_books ORDER BY user_id, book_id`,
 		moveBooks("SELECT id FROM books"),
+		moveReadThroughs("SELECT id FROM read_throughs"),
 	)
 
 	up := func(ctx context.Context, db *bun.DB) error {

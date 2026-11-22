@@ -191,3 +191,30 @@ func TestFeed_FileCarriesItsCoverAndNarrators(t *testing.T) {
 		assert.Equal(t, []string{"book:1"}, books, write)
 	}
 }
+
+// A Read-through carries when its Book was last read, as the web's Last read
+// sort reads it: its latest update, leaving out a place a link opened and a
+// supplement. A new update moves the Read-through, so the time arrives.
+func TestFeed_ReadThroughCarriesWhenItWasLastRead(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Audio")
+	f.addBook(1, 1, "Dune")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (5, 1, 1, '/dune.m4b', 'm4b', 1)`)
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, file_role, filesize_bytes) VALUES (6, 1, 1, '/extra.pdf', 'pdf', 'supplement', 1)`)
+	userID := f.addUser()
+	credential := f.signIn()
+	f.exec(`INSERT INTO read_throughs (id, user_id, book_id, outcome, begin_day, paused) VALUES (3, ?, 1, 'underway', '2026-05-01', FALSE)`, userID)
+	cursor := f.changes(credential, 0, 0).Cursor
+
+	update := `INSERT INTO reading_position_updates (user_id, file_id, read_through_id, seconds, page, percentage, source, occurred_at, opened)
+		VALUES (?, ?, 3, ?, ?, 0.2, 'web_reader', ?, ?)`
+	f.exec(update, userID, 5, 60, nil, "2026-05-02 10:00:00", false)
+	f.exec(update, userID, 5, 90, nil, "2026-05-04 10:00:00", true)
+	f.exec(update, userID, 6, nil, 2, "2026-05-05 10:00:00", false)
+
+	resp := f.changes(credential, cursor, 0)
+	require.Equal(t, []string{"read_through:3"}, summary(resp))
+	require.NotNil(t, resp.Entries[0].ReadThrough.LastReadAt)
+	assert.Equal(t, time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC), resp.Entries[0].ReadThrough.LastReadAt.UTC())
+}

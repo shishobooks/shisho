@@ -135,15 +135,19 @@ final class AudioPlayer {
             if autoplay { play() }
             return
         }
+        let store = session.store
+        let ownDevice = session.account.deviceID
+        // The File is found before the one playing is touched, so a File
+        // that's gone, such as one a sync just removed, leaves it playing.
+        guard let loaded = try? store.pool.read({ try CatalogStore.listeningFile($0, fileID: fileID) }) else {
+            if file == nil {
+                UserDefaults.standard.removeObject(forKey: lastFileKey)
+            }
+            return
+        }
         if file != nil {
             pause()
             teardownItem()
-        }
-        let store = session.store
-        let ownDevice = session.account.deviceID
-        guard let loaded = try? store.pool.read({ try CatalogStore.listeningFile($0, fileID: fileID) }) else {
-            UserDefaults.standard.removeObject(forKey: lastFileKey)
-            return
         }
         let places = try? store.pool.read { db in
             (local: try CatalogStore.localPlace(db, fileID: fileID), server: try CatalogStore.serverPlace(db, fileID: fileID))

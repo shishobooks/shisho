@@ -397,14 +397,15 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(FileProgressText.text(0.02, durationSeconds: 241, pageCount: nil), "2% · 4m left", "rounded as the Listen card rounds")
     }
 
+    /// By the server's time for each Read-through underway, not the latest
+    /// place, which a link can set without any reading.
     func testLastReadSortsBooksBeingReadByTheirLatestPlace() throws {
         try catalog()
         try store.apply(page(#"""
             {"entries":[
-             {"kind":"read_through","id":5,"read_through":{"id":5,"book_id":1,"outcome":"underway","paused":false}},
-             {"kind":"read_through","id":6,"read_through":{"id":6,"book_id":2,"outcome":"underway","paused":false}},
-             {"kind":"reading_position","id":10,"reading_position":{"file_id":10,"percentage":0.4,"occurred_at":"2026-01-01T00:00:00Z","source":"web_reader"}},
-             {"kind":"reading_position","id":20,"reading_position":{"file_id":20,"percentage":0.1,"occurred_at":"2026-02-01T00:00:00Z","source":"web_reader"}}
+             {"kind":"read_through","id":5,"read_through":{"id":5,"book_id":1,"outcome":"underway","paused":false,"last_read_at":"2026-01-01T00:00:00Z"}},
+             {"kind":"read_through","id":6,"read_through":{"id":6,"book_id":2,"outcome":"underway","paused":false,"last_read_at":"2026-02-01T00:00:00Z"}},
+             {"kind":"reading_position","id":10,"reading_position":{"file_id":10,"percentage":0.4,"occurred_at":"2026-03-01T00:00:00Z","source":"web_reader"}}
             ],"cursor":10}
             """#))
         let titles = { (sort: String) in try self.store.pool.read { try CatalogStore.books($0, libraryID: nil, sort: sort) }.map(\.title) }
@@ -461,5 +462,10 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(detail.filepath, "/books/a.m4b")
         XCTAssertNotNil(detail.modifiedAt)
         XCTAssertNotNil(detail.addedAt)
+    }
+
+    func testNamesFoldCaseAsSQLiteDoes() {
+        XCTAssertEqual(CatalogStore.nocase("Sci-Fi"), CatalogStore.nocase("sci-fi"))
+        XCTAssertNotEqual(CatalogStore.nocase("Épique"), CatalogStore.nocase("épique"), "NOCASE folds ASCII only")
     }
 }

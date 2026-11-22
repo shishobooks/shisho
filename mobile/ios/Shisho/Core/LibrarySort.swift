@@ -62,15 +62,10 @@ enum LibrarySort {
         case "date_finished":
             return nullsLast("(SELECT MAX(end_day) FROM read_throughs WHERE book_id = b.id AND outcome = 'finished')", direction)
         case "last_read":
-            // The latest synced place on any of the Book's own Files while
-            // a Read-through is underway, as the server's `LastReadExpr`
-            // reads its updates; a supplement doesn't count. The player's
-            // unsynced saves are left out, as `readingColumns` explains.
-            return nullsLast("""
-                (SELECT MAX(p.occurred_at) FROM book_files f JOIN reading_positions p ON p.file_id = f.id
-                 WHERE f.book_id = b.id AND f.file_role != 'supplement'
-                   AND EXISTS (SELECT 1 FROM read_throughs WHERE book_id = b.id AND outcome = 'underway'))
-                """, direction)
+            // When the Read-through underway was last read, which the server
+            // works out as its `LastReadExpr` does, since the device can't
+            // tell a place a link opened from reading.
+            return nullsLast("(SELECT MAX(last_read_at) FROM read_throughs WHERE book_id = b.id AND outcome = 'underway')", direction)
         default:
             return []
         }

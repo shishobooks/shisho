@@ -449,13 +449,15 @@ final class CatalogStore: Sendable {
             } else if let readThrough = entry.readThrough {
                 try db.execute(
                     sql: """
-                    INSERT INTO read_throughs (id, book_id, begin_day, end_day, outcome, paused, generation) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO read_throughs (id, book_id, begin_day, end_day, outcome, paused, last_read_at, generation)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, begin_day = excluded.begin_day,
                         end_day = excluded.end_day, outcome = excluded.outcome, paused = excluded.paused,
-                        generation = excluded.generation
+                        last_read_at = excluded.last_read_at, generation = excluded.generation
                     """,
                     arguments: [readThrough.id, readThrough.bookId, readThrough.beginDay, readThrough.endDay,
-                                readThrough.outcome.rawValue, readThrough.paused, generation]
+                                readThrough.outcome.rawValue, readThrough.paused,
+                                readThrough.lastReadAt.flatMap(CatalogStore.timestamp), generation]
                 )
             }
         default:

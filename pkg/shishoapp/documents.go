@@ -382,6 +382,25 @@ func loadReadThroughs(ctx context.Context, tx bun.IDB, userID int, ids []int) (m
 			ID: rt.ID, BookID: rt.BookID, BeginDay: rt.BeginDay, EndDay: rt.EndDay, Outcome: rt.Outcome, Paused: rt.Paused,
 		}
 	}
+	// When each was last read, counted as reading.LastReadExpr counts it.
+	var lastRead []struct {
+		ReadThroughID int       `bun:"read_through_id"`
+		At            time.Time `bun:"at"`
+	}
+	err = tx.NewRaw(`SELECT rpu.read_through_id, MAX(rpu.occurred_at) AS at FROM reading_position_updates AS rpu
+		WHERE rpu.user_id = ? AND rpu.read_through_id IN (?) AND NOT rpu.opened
+		AND NOT EXISTS (SELECT 1 FROM files AS f WHERE f.id = rpu.file_id AND f.file_role = ?)
+		GROUP BY rpu.read_through_id`, userID, bun.List(ids), models.FileRoleSupplement).
+		Scan(ctx, &lastRead)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range lastRead {
+		if rt := out[row.ReadThroughID]; rt != nil {
+			at := row.At
+			rt.LastReadAt = &at
+		}
+	}
 	return out, nil
 }
 
