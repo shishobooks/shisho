@@ -50,13 +50,16 @@ struct AppTabBar: View {
         .padding(.top, 7)
         .padding(.bottom, 2)
         .frame(maxWidth: .infinity)
+        // The bar and its hairline run edge to edge, under the home
+        // indicator and, in landscape, past the side safe areas, while the
+        // tabs stay inside them.
         .background {
             Theme.background.opacity(0.85)
                 .background(.ultraThinMaterial)
-                .ignoresSafeArea(edges: .bottom)
-        }
-        .overlay(alignment: .top) {
-            Rectangle().fill(Theme.border).frame(height: 1)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Theme.border).frame(height: 1)
+                }
+                .ignoresSafeArea(edges: [.bottom, .horizontal])
         }
         // A fixed size, as the system's tab bar keeps, so it always fits the
         // room screens leave for it; at accessibility sizes a long press

@@ -15,6 +15,18 @@ The Shisho app for iPhone and iPad (`ios/`), and one suite of Maestro flows (`ha
 - **Strings go in the String Catalog** (`ios/Shisho/Resources/Localizable.xcstrings`). Command-line builds don't update it; run `mise ios:strings` after adding or removing strings.
 - **The look comes from the web app**: its colors, from `app/index.css`, are in the asset catalog, and its typeface, Geist, is bundled. Use `Theme` and `Font.geist`, never system colors for brand surfaces.
 
+## Accessibility
+
+Each screen has to work with VoiceOver, at accessibility text sizes, and on iPad. These are the traps agents have hit:
+
+- **VoiceOver doesn't run in the Simulator.** Check what it would read in the accessibility tree (the device tools' `snapshot`). For a wider sweep, run Apple's `performAccessibilityAudit` from a throwaway UI-test target. Its contrast findings flag ordinary dark-on-light Geist text, so judge them against the web's colors instead of fixing each one. Say what you couldn't hear, so the user tries it on a phone.
+- **A screen hidden with opacity is still read.** VoiceOver reaches into hidden screens kept alive that way, even with `accessibilityHidden`, once they hold a `NavigationStack`. Keep tabs alive in a `TabView` with its bar hidden, as `MainTabs` does.
+- **Don't wrap a `Button` in a combined or ignored accessibility element.** It becomes a button inside a button, which VoiceOver and the harness can't press reliably. Label the button itself and add `.isSelected` when it's on.
+- **Fixed sizes clip at large text.** Size text with `Font.geist` relative to a text style, size row heights with `@ScaledMetric`, and use `minHeight` rather than `height`. Check new screens at `accessibility-extra-large` (the device tools' `settings text-size`), which breaks layouts that look fine at default size. Things meant to stay a fixed size, like the tab bar, cap their size and offer the Large Content Viewer.
+- **Every gesture needs another way in.** Drag to reorder, swipe to dismiss, and sliders need `accessibilityActions` or `accessibilityAdjustableAction`.
+- **Tap targets are at least 44 points**, even when the drawn control is smaller.
+- **Text uppercased for looks is read letter by letter.** Give it an `accessibilityLabel` in normal case. Decorative chevrons and icons beside a label are `accessibilityHidden`, and a picker announces its current choice as its `accessibilityValue`.
+
 ## Building
 
 The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` lists them. The Xcode project is generated from `ios/project.yml` by XcodeGen and isn't committed; edit `project.yml`, never the project.

@@ -11,3 +11,4 @@ CONTEXT-MAP.md       # domain.md: read it "if it exists"
 X.permissions.test.tsx  # app/AGENTS.md: placeholder file name
 ios/ShishoAPI/Sources/ShishoAPI/Generated/  # mobile/AGENTS.md: gitignored output of mise tygo
 android/api/src/main/kotlin/generated/  # mobile/AGENTS.md: gitignored output of mise tygo
+performAccessibilityAudit  # mobile/AGENTS.md: XCTest API for a throwaway audit target
