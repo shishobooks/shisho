@@ -304,6 +304,10 @@ final class AppModel {
         // sign-in meanwhile must not be undone when it comes.
         syncs.stop()
         Keychain.removeCredential(for: session.account.id)
+        // The account stays in the list, with its data, marked signed out.
+        var account = session.account
+        account.signedOut = true
+        accounts.save(account, makeCurrent: false)
         accounts.leaveCurrent()
         self.session = nil
         signedOutAccount = nil
