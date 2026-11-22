@@ -42,11 +42,15 @@ import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
-import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import {
+  requestErrorMessage,
+  ShishoAPIError,
+  toastRequestError,
+} from "@/libraries/api";
 import type { FoliateEPUB } from "@/libraries/foliate/epub.js";
 import type { FoliateMOBI } from "@/libraries/foliate/mobi.js";
 import { openRangeEPUB } from "@/libraries/rangeEpub";
-import { RangeFile } from "@/libraries/rangeFile";
+import { BuildTimeoutError, RangeFile } from "@/libraries/rangeFile";
 import { openRangeMOBI } from "@/libraries/rangeMobi";
 import {
   chapterMarks as findChapterMarks,
@@ -209,6 +213,15 @@ function LocationButton({
     </Tooltip>
   );
 }
+
+// What the error screen says for a failure while opening or reading the
+// book. A request's failure reads through requestErrorMessage. The reader's
+// own say what went wrong: the server's copy changed, the build never
+// finished, or foliate couldn't make sense of the file.
+const loadErrorMessage = (err: Error) =>
+  err instanceof ShishoAPIError || err instanceof TypeError
+    ? requestErrorMessage(err, "Failed to load book")
+    : err.message;
 
 // The File Types this reader opens that are zips, which foliate reads as
 // EPUBs; the others are MOBI and AZW3.
@@ -524,15 +537,29 @@ export default function ReflowableReader({
       } catch {
         // no-op
       }
+      // close() leaves the parsed book, whose photos foliate holds until
+      // it's destroyed, and a book read by part has reads still under way.
+      (
+        view as HTMLElement & { book?: { destroy?: () => void } }
+      ).book?.destroy?.();
+      if (source instanceof RangeFile) source.cancelPending();
     };
   }, [source, fileType, positionSettled, opened, resetLocations]);
 
-  // A book read by part can't go on once the server's copy changes: the
-  // parts still to come would be from another file.
+  // A book read by part can't go on once a read fails for good: the server's
+  // copy changed, so the parts still to come would be from another file, or
+  // the server can't be reached. Retry opens it again, and until the new
+  // copy arrives this one isn't shown.
+  const [failedSource, setFailedSource] = useState<RangeFile | null>(null);
   useEffect(() => {
     if (!(source instanceof RangeFile)) return;
-    return source.onChanged(setLoadError);
+    return source.onFailed((err) => {
+      setFailedSource(source);
+      setBookReady(false);
+      setLoadError(err);
+    });
   }, [source]);
+  const sourceFailed = source !== undefined && source === failedSource;
 
   // A device that can hold the whole book downloads it once the first page
   // is up, after which jumps read it locally. Until then, and on a phone,
@@ -1096,13 +1123,14 @@ export default function ReflowableReader({
     [fraction],
   );
 
-  // A failed background refetch keeps an open book on screen.
-  if ((error && !source) || loadError) {
-    // foliate's loadError is client-side and says what went wrong in the
-    // reader; a request error reads through requestErrorMessage.
+  // A failed background refetch keeps an open book on screen, but not one
+  // whose reads failed.
+  if ((error && (!source || sourceFailed)) || loadError) {
     const message = loadError
-      ? loadError.message
-      : requestErrorMessage(error, "Failed to load book");
+      ? loadErrorMessage(loadError)
+      : error instanceof BuildTimeoutError
+        ? error.message
+        : requestErrorMessage(error, "Failed to load book");
     return (
       <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" />
@@ -1230,7 +1258,7 @@ export default function ReflowableReader({
             : "flex-1",
         )}
       >
-        {(isLoading || !source || !bookReady) && (
+        {(isLoading || !source || sourceFailed || !bookReady) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background z-20">
             <LoadingSpinner />
             <p className="text-sm text-muted-foreground">Preparing book…</p>

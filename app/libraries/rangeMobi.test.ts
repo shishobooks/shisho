@@ -137,4 +137,46 @@ describe("openRangeMOBI", () => {
 
     expect(peak).toBeGreaterThanOrEqual(3);
   });
+
+  // foliate keeps the text it has read from each end of the book and adds
+  // each record to it as it arrives. Read by part, records can arrive out of
+  // order.
+  it("keeps the text in order when sections load at once", async () => {
+    const paragraph = (section: number, n: number) =>
+      `<p>Section ${section}, paragraph ${n}.</p>`;
+    const sections = [0, 1, 2, 3].map((section) => ({
+      title: `Section ${section}`,
+      body: Array.from({ length: 3000 }, (_, n) => paragraph(section, n)).join(
+        "",
+      ),
+    }));
+    server = createRangeServer(kf8Book({ title: "Long Book", sections }));
+    let calls = 0;
+    fetchSpy.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        // Later requests answer first.
+        const delay = Math.max(0, 300 - 10 * calls++);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return server.fetch(input, init);
+      },
+    );
+    const book = await openRangeMOBI(await RangeFile.open(URL));
+
+    const docs = await Promise.all([
+      // Both from the end of the text.
+      book.sections[3].createDocument(),
+      book.sections[2].createDocument(),
+    ]);
+
+    expect(docs[0].body.textContent).toBe(
+      Array.from({ length: 3000 }, (_, n) => `Section 3, paragraph ${n}.`).join(
+        "",
+      ),
+    );
+    expect(docs[1].body.textContent).toBe(
+      Array.from({ length: 3000 }, (_, n) => `Section 2, paragraph ${n}.`).join(
+        "",
+      ),
+    );
+  });
 });

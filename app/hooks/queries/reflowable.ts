@@ -39,60 +39,41 @@ export const useReflowableBook = (
     staleTime: Infinity,
     gcTime: 0,
     queryFn: async ({ signal }) => {
-      // A whole book can be more than a phone's browser tab can hold (a
-      // cookbook's photos run to hundreds of MB), so it's read by part.
+      // Only Shisho refusing the Generated File falls back to the original:
+      // no generator for the type, or a failed build. A proxy's error page
+      // or a dropped connection would fail the original's too. Demo Mode
+      // denies the original, so its rejection would only hide why the
+      // Generated File failed.
+      const refused = (error: unknown) =>
+        !signal.aborted &&
+        !demoMode &&
+        error instanceof ShishoAPIError &&
+        error.code !== undefined;
       try {
-        return await openByPart(fileId, signal, demoMode);
+        return await openBook(fileDownloadUrl(fileId), signal);
       } catch (error) {
-        // A server or proxy that ignores Range sends the file whole.
-        if (!(error instanceof RangeNotSupportedError)) throw error;
+        if (!refused(error)) throw error;
       }
-      return downloadWhole(fileId, signal, demoMode);
+      return openBook(fileOriginalDownloadUrl(fileId), signal);
     },
   });
 };
 
-const openByPart = async (
-  fileId: number,
+// A whole book can be more than a phone's browser tab can hold (a cookbook's
+// photos run to hundreds of MB), so it's read by part. A server or proxy
+// that ignores Range sends the file whole.
+const openBook = async (
+  url: string,
   signal: AbortSignal,
-  demoMode: boolean,
-): Promise<RangeFile> => {
+): Promise<ReflowableBook> => {
   try {
-    return await RangeFile.open(fileDownloadUrl(fileId), { signal });
+    return await RangeFile.open(url, { signal });
   } catch (error) {
-    // Only the server's refusal to build the Generated File falls back: no
-    // generator for the type, or a failed build. A dropped connection would
-    // drop the original's too. Demo Mode denies the original, so its
-    // rejection would only hide why the Generated File failed.
-    if (signal.aborted || demoMode || !(error instanceof ShishoAPIError)) {
-      throw error;
-    }
-    return RangeFile.open(fileOriginalDownloadUrl(fileId), { signal });
+    if (!(error instanceof RangeNotSupportedError)) throw error;
   }
-};
-
-const downloadWhole = async (
-  fileId: number,
-  signal: AbortSignal,
-  demoMode: boolean,
-): Promise<Blob> => {
-  try {
-    // checkStatus rejects with the API's error; the body is a file
-    // otherwise, so only a failure goes through it.
-    const response = await fetch(fileDownloadUrl(fileId), { signal });
-    if (!response.ok) await API.checkStatus(response);
-    // A build that fails partway cuts the connection, so the body
-    // rejects here rather than arriving truncated.
-    return await response.blob();
-  } catch (error) {
-    if (signal.aborted || demoMode) throw error;
-    // Read the file as it sits on disk, as Download unmodified file would,
-    // whatever kept the Generated File from arriving: no generator for
-    // the type, a failed build, or a cut connection.
-    const original = await fetch(fileOriginalDownloadUrl(fileId), {
-      signal,
-    });
-    if (!original.ok) await API.checkStatus(original);
-    return original.blob();
-  }
+  // checkStatus rejects with the API's error; the body is a file otherwise,
+  // so only a failure goes through it.
+  const response = await fetch(url, { signal });
+  if (!response.ok) await API.checkStatus(response);
+  return response.blob();
 };

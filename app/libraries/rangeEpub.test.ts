@@ -43,12 +43,13 @@ const cookbook = () =>
     <item id="pie2" href="images/pie2.jpg" media-type="image/jpeg"/>
     <item id="pie3" href="images/pie3.jpg" media-type="image/jpeg"/>
     <item id="tarts" href="text/tarts.xhtml" media-type="application/xhtml+xml"/>
+    <item id="galettes" href="text/galettes.xhtml" media-type="application/xhtml+xml"/>
     <item id="style" href="css/style.css" media-type="text/css"/>
     <item id="font1" href="fonts/a.otf" media-type="font/otf"/>
     <item id="font2" href="fonts/b.otf" media-type="font/otf"/>
     <item id="font3" href="fonts/c.otf" media-type="font/otf"/>
   </manifest>
-  <spine><itemref idref="intro"/><itemref idref="cake"/><itemref idref="pies"/><itemref idref="tarts"/></spine>
+  <spine><itemref idref="intro"/><itemref idref="cake"/><itemref idref="pies"/><itemref idref="tarts"/><itemref idref="galettes"/></spine>
 </package>`,
     ],
     ["OEBPS/intro.xhtml", chapter("Introduction", "<p>Bake often.</p>")],
@@ -69,6 +70,18 @@ const cookbook = () =>
     ["OEBPS/images/pie 1.jpg", new Uint8Array(PIE_SIZE).fill(1)],
     ["OEBPS/images/pie2.jpg", new Uint8Array(PIE_SIZE).fill(2)],
     ["OEBPS/images/pie3.jpg", new Uint8Array(PIE_SIZE).fill(3)],
+    [
+      "OEBPS/text/galettes.xhtml",
+      chapter(
+        "Galettes",
+        '<img src="../images/pie%201.jpg" alt=""/>' +
+          `<div style="background-image: url('../images/pie2.jpg')"></div>` +
+          '<div class="crust"></div>',
+      ).replace(
+        "<title>Galettes</title>",
+        "<title>Galettes</title><style>.crust { background: url(../images/pie3.jpg); }</style>",
+      ),
+    ],
     [
       "OEBPS/text/tarts.xhtml",
       chapter("Tarts", "<p>Press in crust.</p>").replace(
@@ -107,7 +120,7 @@ describe("openRangeEPUB", () => {
     const book = await openRangeEPUB(await RangeFile.open(URL));
 
     expect(book.metadata.title).toBe("Dessert Book");
-    expect(book.sections).toHaveLength(4);
+    expect(book.sections).toHaveLength(5);
     const doc = await book.sections[0].createDocument();
     expect(doc.body.textContent).toContain("Bake often.");
     expect(server.bytesSent()).toBeLessThan(PHOTO_SIZE / 4);
@@ -188,5 +201,12 @@ describe("openRangeEPUB", () => {
     expect(server.requests.length - requests).toBe(1);
     // Not much past the photo's end into the next entry.
     expect(server.bytesSent() - sent).toBeLessThan(PHOTO_SIZE * 1.05);
+  });
+
+  it("fetches photos named in a chapter's own styles with the rest", async () => {
+    const { peak, requests } = await loadChapter(4);
+
+    expect(peak).toBeGreaterThanOrEqual(3);
+    expect(requests).toBeLessThanOrEqual(4);
   });
 });

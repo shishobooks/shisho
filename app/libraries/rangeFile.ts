@@ -1,4 +1,4 @@
-import { API } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 
 // A file on the server read a part at a time with HTTP Range requests, so a
 // reader never holds a whole book in memory. A browser tab on a phone is
@@ -7,9 +7,11 @@ import { API } from "@/libraries/api";
 // pages on screen.
 //
 // The download routes answer Range once the file is on disk. A Generated
-// File still being built streams whole with no Accept-Ranges, so open()
-// drops that answer and asks again until the build lands (it keeps running
-// without the request, ADR 0010).
+// File still being built streams whole with neither Accept-Ranges nor
+// Last-Modified (httputil.ServeStream), so open() drops that answer and asks
+// again until the build lands (it keeps running without the request, ADR
+// 0010). A finished file always has Last-Modified, so a 200 with it is a
+// server or proxy ignoring Range.
 
 // What open() asks for: the end of the file, where a zip keeps its index.
 const OPEN_TAIL = 64 * 1024;
@@ -20,13 +22,17 @@ const MAX_FETCH = 4 * 1024 * 1024;
 // The most one read fetches for a caller that names where its run of reads
 // ends, such as a zip entry; past it, reads grow as above.
 const MAX_THROUGH = 16 * 1024 * 1024;
-// How much of the file stays in memory once read.
+// How much of the file stays in memory once read. A part fetched for one
+// read, or one run of reads, is dropped as soon as they have it.
 const CACHE_LIMIT = 32 * 1024 * 1024;
+// Requests at once. Each holds its part in memory until it lands, so a
+// chapter of fifty photos asked for together arrives a few at a time; it's
+// also what a browser allows a server over HTTP/1.1.
+const MAX_REQUESTS = 6;
 const BUILD_POLL_FIRST = 250;
 const BUILD_POLL_MAX = 2000;
-// A proxy that strips both Range and Accept-Ranges looks like a build that
-// never ends; after this long the caller downloads the file whole instead.
-const BUILD_WAIT_LIMIT = 2 * 60 * 1000;
+// A build still running after this long is reported rather than waited on.
+const BUILD_WAIT_LIMIT = 10 * 60 * 1000;
 // Reads this small that start at once go out together, as one request for
 // many ranges: foliate's MOBI reader reads four bytes of every resource
 // record to find two of them, hundreds of reads across the whole file.
@@ -34,14 +40,19 @@ const TINY_READ = 64;
 // Ranges per request, which keeps the Range header well under the 8 KB a
 // proxy such as nginx allows a header line.
 const MAX_RANGES = 64;
-const READ_RETRIES = 2;
-const READ_RETRY_DELAY = 500;
+const RETRIES = 2;
+const RETRY_DELAY = 500;
+// Statuses that come and go: a proxy whose upstream restarted, a busy server.
+const RETRY_STATUSES = new Set([408, 429, 502, 503, 504]);
 
-/** The server answered a Range request with the whole file. */
+/** The server answered a Range request for url with the whole file. */
 export class RangeNotSupportedError extends Error {
-  constructor() {
+  readonly url: string;
+
+  constructor(url: string) {
     super("The server doesn't support reading part of a file.");
     this.name = "RangeNotSupportedError";
+    this.url = url;
   }
 }
 
@@ -55,12 +66,45 @@ export class BookChangedError extends Error {
   }
 }
 
+/** The server was still building the file after BUILD_WAIT_LIMIT. */
+export class BuildTimeoutError extends Error {
+  constructor() {
+    super(
+      "This book is taking a long time to prepare. Try again in a few minutes.",
+    );
+    this.name = "BuildTimeoutError";
+  }
+}
+
+// An answer that's worth asking for again: cut short, or framed wrongly.
+class BrokenAnswerError extends TypeError {
+  constructor(message: string) {
+    super(message);
+    this.name = "BrokenAnswerError";
+  }
+}
+
 interface Segment {
   start: number;
   end: number;
   data: Promise<Uint8Array>;
   settled: boolean;
+  // Fetched for one read or one run of reads, and dropped once read to its
+  // end, rather than kept for reads nearby.
+  run: boolean;
 }
+
+// By name: an abort's DOMException can come from another realm.
+const isAbort = (error: unknown) =>
+  (error as { name?: unknown } | null)?.name === "AbortError";
+
+const isRetryable = (error: unknown) =>
+  (error instanceof TypeError && !isAbort(error)) ||
+  (error instanceof ShishoAPIError && RETRY_STATUSES.has(error.status));
+
+// The version of the file a response holds, as If-Range takes it.
+const validatorOf = (response: Response) =>
+  response.headers.get("ETag") ?? response.headers.get("Last-Modified");
 
 const parseContentRange = (
   header: string | null,
@@ -74,6 +118,7 @@ const parseContentRange = (
   };
 };
 
+const CRLF = new Uint8Array([13, 10]);
 const CRLFCRLF = new Uint8Array([13, 10, 13, 10]);
 
 const indexOf = (haystack: Uint8Array, needle: Uint8Array, from: number) => {
@@ -86,6 +131,9 @@ const indexOf = (haystack: Uint8Array, needle: Uint8Array, from: number) => {
   return -1;
 };
 
+const startsWith = (haystack: Uint8Array, needle: Uint8Array, at: number) =>
+  indexOf(haystack.subarray(at, at + needle.length), needle, 0) === 0;
+
 interface Part {
   start: number;
   total: number;
@@ -93,32 +141,43 @@ interface Part {
 }
 
 // The parts of a multipart/byteranges body, each with the range it holds.
+// Each part's data must end where the next delimiter starts, so a part cut
+// short throws rather than handing back the framing as data.
 const parseByteRanges = (body: Uint8Array, boundary: string): Part[] => {
   const delimiter = new TextEncoder().encode(`--${boundary}`);
   const decoder = new TextDecoder();
   const parts: Part[] = [];
   let at = indexOf(body, delimiter, 0);
-  while (at !== -1) {
+  if (at === -1) throw new BrokenAnswerError("No multipart delimiter.");
+  for (;;) {
     const pos = at + delimiter.length;
     // "--" closes the body.
-    if (body[pos] === 45 && body[pos + 1] === 45) break;
+    if (body[pos] === 45 && body[pos + 1] === 45) return parts;
     const headerEnd = indexOf(body, CRLFCRLF, pos);
-    if (headerEnd === -1) break;
-    const headers = decoder.decode(body.subarray(pos, headerEnd));
-    const range = parseContentRange(
-      /content-range:\s*([^\r\n]*)/i.exec(headers)?.[1] ?? null,
-    );
-    if (!range) break;
+    const range =
+      headerEnd === -1
+        ? null
+        : parseContentRange(
+            /content-range:\s*([^\r\n]*)/i.exec(
+              decoder.decode(body.subarray(pos, headerEnd)),
+            )?.[1] ?? null,
+          );
+    if (!range) throw new BrokenAnswerError("A multipart part has no range.");
     const dataStart = headerEnd + CRLFCRLF.length;
     const dataEnd = dataStart + range.end - range.start;
+    if (
+      !startsWith(body, CRLF, dataEnd) ||
+      !startsWith(body, delimiter, dataEnd + CRLF.length)
+    ) {
+      throw new BrokenAnswerError("A multipart part was cut short.");
+    }
     parts.push({
       start: range.start,
       total: range.total,
       data: body.subarray(dataStart, dataEnd),
     });
-    at = indexOf(body, delimiter, dataEnd);
+    at = dataEnd + CRLF.length;
   }
-  return parts;
 };
 
 interface TinyRead {
@@ -169,6 +228,20 @@ const fetchDroppable = async (
   }
 };
 
+const withRetries = async <T>(
+  attempt: () => Promise<T>,
+  signal: AbortSignal,
+): Promise<T> => {
+  for (let tries = 0; ; tries++) {
+    try {
+      return await attempt();
+    } catch (error) {
+      if (!isRetryable(error) || tries >= RETRIES) throw error;
+    }
+    await sleep(RETRY_DELAY * 2 ** tries, signal);
+  }
+};
+
 export class RangeFile {
   readonly url: string;
   readonly size: number;
@@ -178,7 +251,7 @@ export class RangeFile {
   #segments: Segment[] = [];
   #cached = 0;
   #changed: BookChangedError | null = null;
-  #listeners = new Set<(error: BookChangedError) => void>();
+  #listeners = new Set<(error: Error) => void>();
   // The whole file, once downloadWhole() has it: reads come from here.
   #whole: Blob | null = null;
   #downloading: Promise<boolean> | null = null;
@@ -186,6 +259,11 @@ export class RangeFile {
   // a request for several ranges with them.
   #tinyReads: TinyRead[] | null = null;
   #multiRange = true;
+  // Requests going and waiting to go (MAX_REQUESTS).
+  #requests = 0;
+  #queued: Array<() => void> = [];
+  // Stops the reads of an opening the reader has left (cancelPending).
+  #cancel = new AbortController();
 
   private constructor(
     url: string,
@@ -196,7 +274,7 @@ export class RangeFile {
     this.url = url;
     this.size = size;
     this.#validator = validator;
-    this.#keep(tail.start, tail.start + tail.data.length, tail.data);
+    this.#keep(tail.start, tail.start + tail.data.length, tail.data, false);
   }
 
   /**
@@ -223,24 +301,23 @@ export class RangeFile {
           );
           if (!range) {
             drop();
-            throw new RangeNotSupportedError();
+            throw new RangeNotSupportedError(url);
           }
           const data = new Uint8Array(await response.arrayBuffer());
-          const validator =
-            response.headers.get("ETag") ??
-            response.headers.get("Last-Modified");
-          return new RangeFile(url, range.total, validator, {
+          return new RangeFile(url, range.total, validatorOf(response), {
             start: range.start,
             data,
           });
         }
         if (!response.ok) await API.checkStatus(response);
         drop();
-        if (
-          response.headers.has("Accept-Ranges") ||
-          Date.now() - started > BUILD_WAIT_LIMIT
-        ) {
-          throw new RangeNotSupportedError();
+        // A finished file sent whole: Range was ignored, or stripped on
+        // the way.
+        if (response.headers.has("Accept-Ranges") || validatorOf(response)) {
+          throw new RangeNotSupportedError(url);
+        }
+        if (Date.now() - started > BUILD_WAIT_LIMIT) {
+          throw new BuildTimeoutError();
         }
       } finally {
         done();
@@ -276,14 +353,12 @@ export class RangeFile {
         signal,
       );
       try {
-        const validator =
-          response.headers.get("ETag") ?? response.headers.get("Last-Modified");
         // A file being rebuilt streams without Accept-Ranges, and a rebuilt
         // one has a new validator: neither is the copy opened.
         if (
           response.status !== 200 ||
           !response.headers.has("Accept-Ranges") ||
-          validator !== this.#validator
+          validatorOf(response) !== this.#validator
         ) {
           drop();
           return false;
@@ -304,10 +379,24 @@ export class RangeFile {
     }
   }
 
-  /** Calls listener once if the file on the server stops matching. */
-  onChanged(listener: (error: BookChangedError) => void): () => void {
+  /**
+   * Calls listener when a read fails for good: the copy on the server
+   * changed (BookChangedError), or the server stayed unreachable. A read
+   * stopped by cancelPending() isn't a failure.
+   */
+  onFailed(listener: (error: Error) => void): () => void {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
+  }
+
+  /**
+   * Stops the reads under way, for a reader that closed the book or opened
+   * it again: their requests and the waits between tries end, and they
+   * reject as aborted. Later reads go ahead.
+   */
+  cancelPending() {
+    this.#cancel.abort();
+    this.#cancel = new AbortController();
   }
 
   /**
@@ -346,7 +435,18 @@ export class RangeFile {
     } else {
       segment = this.#fetch(offset, end, through);
     }
-    const data = await segment.data;
+    let data: Uint8Array;
+    try {
+      data = await segment.data;
+    } catch (error) {
+      if (!isAbort(error)) {
+        for (const listener of this.#listeners) listener(error as Error);
+      }
+      throw error;
+    }
+    // A part fetched for this read, or read to its end by the last read of
+    // its run, has nothing left to give.
+    if (segment.run && end >= segment.end) this.#drop(segment);
     // A copy: zip.js may hand the array to a stream that keeps it.
     return data.slice(offset - segment.start, end - segment.start);
   }
@@ -354,77 +454,109 @@ export class RangeFile {
   #fetch(offset: number, end: number, through?: number): Segment {
     // A read that picks up where an earlier one stopped is reading through
     // a large entry 64 KB at a time, so each fetch doubles until it's big.
+    // foliate reads a MOBI's text from its end too, a record at a time
+    // backward, so a read that ends where an earlier one started grows the
+    // same way toward the start of the file.
     const before = this.#segments.find(
       (s) => s.start < offset && s.end >= offset,
     );
-    let ahead = before
-      ? Math.min(
-          MAX_FETCH,
-          Math.max(MIN_FETCH, (before.end - before.start) * 2),
-        )
-      : MIN_FETCH;
+    const after = this.#segments.find((s) => s.start === end);
+    const grow = (from: Segment | undefined) =>
+      from
+        ? Math.min(MAX_FETCH, Math.max(MIN_FETCH, (from.end - from.start) * 2))
+        : MIN_FETCH;
     // A caller that names where its run ends, as a zip entry's reads do,
     // gets that run: the next entry is the next caller's, fetched alongside.
     if (through !== undefined) {
-      ahead = Math.max(MIN_FETCH, Math.min(through - offset, MAX_THROUGH));
+      const ahead = Math.max(
+        MIN_FETCH,
+        Math.min(through - offset, MAX_THROUGH),
+      );
+      const fetchEnd = Math.min(this.size, Math.max(end, offset + ahead));
+      return this.#request(offset, fetchEnd, true);
     }
-    const fetchEnd = Math.min(this.size, Math.max(end, offset + ahead));
+    if (after && !before) {
+      const fetchStart = Math.max(0, Math.min(offset, end - grow(after)));
+      return this.#request(fetchStart, end, fetchStart === offset);
+    }
+    const fetchEnd = Math.min(this.size, Math.max(end, offset + grow(before)));
+    return this.#request(offset, fetchEnd, fetchEnd === end);
+  }
+
+  #request(start: number, end: number, run: boolean): Segment {
     return this.#forgetIfFailed(
-      this.#keep(offset, fetchEnd, this.#fetchRange(offset, fetchEnd)),
+      this.#keep(start, end, this.#fetchRange(start, end), run),
     );
   }
 
   // Forgets a failed read, so reading the part again asks again.
   #forgetIfFailed(segment: Segment): Segment {
-    segment.data.catch(() => {
-      const at = this.#segments.indexOf(segment);
-      if (at !== -1) {
-        this.#segments.splice(at, 1);
-        this.#cached -= segment.end - segment.start;
-      }
-    });
+    segment.data.catch(() => this.#drop(segment));
     return segment;
+  }
+
+  #drop(segment: Segment) {
+    const at = this.#segments.indexOf(segment);
+    if (at !== -1) {
+      this.#segments.splice(at, 1);
+      this.#cached -= segment.end - segment.start;
+    }
   }
 
   // A tiny read joins the others started in the same turn, which go out
   // together once it ends.
   #tiny(offset: number, end: number): Segment {
-    if (!this.#multiRange) {
-      return this.#forgetIfFailed(
-        this.#keep(offset, end, this.#fetchRange(offset, end)),
-      );
-    }
+    if (!this.#multiRange) return this.#request(offset, end, true);
     let read!: TinyRead;
     const data = new Promise<Uint8Array>((resolve, reject) => {
       read = { start: offset, end, resolve, reject };
     });
     if (!this.#tinyReads) {
       this.#tinyReads = [];
-      queueMicrotask(() => this.#sendTinyReads());
+      // The reads belong to the opening under way now, even if the reader
+      // leaves before they go out.
+      const signal = this.#cancel.signal;
+      queueMicrotask(() => this.#sendTinyReads(signal));
     }
     this.#tinyReads.push(read);
-    return this.#forgetIfFailed(this.#keep(offset, end, data));
+    return this.#forgetIfFailed(this.#keep(offset, end, data, true));
   }
 
-  #sendTinyReads() {
+  #sendTinyReads(signal: AbortSignal) {
     const reads = (this.#tinyReads ?? []).sort((a, b) => a.start - b.start);
     this.#tinyReads = null;
     for (let i = 0; i < reads.length; i += MAX_RANGES) {
       const group = reads.slice(i, i + MAX_RANGES);
-      this.#fetchRanges(group).then(
-        (parts) => {
+      // A request for several ranges that keeps failing leaves each to be
+      // asked for on its own, unless the copy changed or the reader left.
+      const parts =
+        group.length > 1 && this.#multiRange
+          ? withRetries(() => this.#fetchParts(group, signal), signal).catch(
+              (error: unknown) => {
+                if (isAbort(error) || error instanceof BookChangedError) {
+                  throw error;
+                }
+                return [];
+              },
+            )
+          : Promise.resolve([]);
+      parts.then(
+        (found) => {
           for (const read of group) {
-            const part = parts.find(
+            const part = found.find(
               (p) =>
                 p.start <= read.start && p.start + p.data.length >= read.end,
             );
-            if (part) {
-              read.resolve(
-                part.data.slice(read.start - part.start, read.end - part.start),
-              );
-            } else {
-              read.reject(new TypeError("The server left out a range."));
-            }
+            // A part the answer left out is asked for on its own.
+            const data = part
+              ? Promise.resolve(
+                  part.data.slice(
+                    read.start - part.start,
+                    read.end - part.start,
+                  ),
+                )
+              : this.#fetchRange(read.start, read.end, signal);
+            data.then(read.resolve, read.reject);
           }
         },
         (error: unknown) => {
@@ -434,78 +566,65 @@ export class RangeFile {
     }
   }
 
-  async #fetchRanges(reads: TinyRead[]): Promise<Part[]> {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.#fetchRangesOnce(reads);
-      } catch (error) {
-        const network = error instanceof TypeError;
-        if (!network || attempt >= READ_RETRIES) throw error;
-      }
-      await sleep(READ_RETRY_DELAY * 2 ** attempt);
-    }
-  }
-
-  async #fetchRangesOnce(reads: TinyRead[]): Promise<Part[]> {
-    if (!this.#multiRange || reads.length === 1) {
-      return Promise.all(
-        reads.map(async ({ start, end }) => ({
-          start,
-          total: this.size,
-          data: await this.#fetchRange(start, end),
-        })),
-      );
-    }
+  // One request for several ranges. Resolves the parts the server sent,
+  // which may be none.
+  async #fetchParts(reads: TinyRead[], signal: AbortSignal): Promise<Part[]> {
     const headers: Record<string, string> = {
       Range: `bytes=${reads.map(({ start, end }) => `${start}-${end - 1}`).join(",")}`,
     };
     if (this.#validator) headers["If-Range"] = this.#validator;
-    const { response, drop, done } = await fetchDroppable(this.url, headers);
-    try {
-      if (response.status === 206) {
-        const type = response.headers.get("Content-Type") ?? "";
-        const boundary = /boundary=("?)([^";]+)\1/i.exec(type)?.[2];
-        const body = new Uint8Array(await response.arrayBuffer());
-        // A server may answer with one range that holds them all.
-        const single = parseContentRange(response.headers.get("Content-Range"));
-        const parts = boundary
-          ? parseByteRanges(body, boundary)
-          : single
-            ? [{ start: single.start, total: single.total, data: body }]
-            : [];
-        if (parts.some((part) => part.total !== this.size)) {
-          throw this.#markChanged();
+    return this.#withSlot(signal, async () => {
+      const { response, drop, done } = await fetchDroppable(
+        this.url,
+        headers,
+        signal,
+      );
+      try {
+        if (response.status === 206) {
+          this.#checkCopy(response, drop);
+          const type = response.headers.get("Content-Type") ?? "";
+          const boundary = /boundary=("?)([^";]+)\1/i.exec(type)?.[2];
+          const body = new Uint8Array(await response.arrayBuffer());
+          // A server may answer with one range that holds them all.
+          const single = parseContentRange(
+            response.headers.get("Content-Range"),
+          );
+          const parts = boundary
+            ? parseByteRanges(body, boundary)
+            : single
+              ? [{ start: single.start, total: single.total, data: body }]
+              : [];
+          if (parts.some((part) => part.total !== this.size)) {
+            throw this.#markChanged();
+          }
+          return parts;
         }
-        return parts;
+        if (!response.ok) await API.checkStatus(response);
+        drop();
+        // The copy opened, sent whole: the server takes one range at a time.
+        if (validatorOf(response) === this.#validator) {
+          this.#multiRange = false;
+          return [];
+        }
+        throw this.#markChanged();
+      } finally {
+        done();
       }
-      if (!response.ok) await API.checkStatus(response);
-      drop();
-      const validator =
-        response.headers.get("ETag") ?? response.headers.get("Last-Modified");
-      // The copy opened, sent whole: the server takes one range at a time.
-      if (
-        response.headers.has("Accept-Ranges") &&
-        validator === this.#validator
-      ) {
-        this.#multiRange = false;
-        return this.#fetchRangesOnce(reads);
-      }
-      throw this.#markChanged();
-    } finally {
-      done();
-    }
+    });
   }
 
   #keep(
     start: number,
     end: number,
     data: Uint8Array | Promise<Uint8Array>,
+    run: boolean,
   ): Segment {
     const segment: Segment = {
       start,
       end,
       data: Promise.resolve(data),
       settled: !(data instanceof Promise),
+      run,
     };
     if (data instanceof Promise) {
       data.then(
@@ -528,32 +647,56 @@ export class RangeFile {
     return segment;
   }
 
-  async #fetchRange(start: number, end: number): Promise<Uint8Array> {
+  // Waits for one of MAX_REQUESTS to be free, then makes the request. A
+  // request that ends hands its place to the next one waiting.
+  async #withSlot<T>(signal: AbortSignal, request: () => Promise<T>) {
+    if (this.#requests >= MAX_REQUESTS) {
+      await new Promise<void>((resolve) => this.#queued.push(resolve));
+    } else {
+      this.#requests++;
+    }
+    try {
+      if (signal.aborted) throw signal.reason;
+      return await request();
+    } finally {
+      const next = this.#queued.shift();
+      if (next) next();
+      else this.#requests--;
+    }
+  }
+
+  #fetchRange(
+    start: number,
+    end: number,
+    signal = this.#cancel.signal,
+  ): Promise<Uint8Array> {
     const headers: Record<string, string> = {
       Range: `bytes=${start}-${end - 1}`,
     };
     if (this.#validator) headers["If-Range"] = this.#validator;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        return await this.#fetchOnce(headers, start, end);
-      } catch (error) {
-        // A dropped connection gets another try; the server's answer
-        // doesn't.
-        const network = error instanceof TypeError;
-        if (!network || attempt >= READ_RETRIES) throw error;
-      }
-      await sleep(READ_RETRY_DELAY * 2 ** attempt);
-    }
+    return withRetries(
+      () =>
+        this.#withSlot(signal, () =>
+          this.#fetchOnce(headers, start, end, signal),
+        ),
+      signal,
+    );
   }
 
   async #fetchOnce(
     headers: Record<string, string>,
     start: number,
     end: number,
+    signal: AbortSignal,
   ): Promise<Uint8Array> {
-    const { response, drop, done } = await fetchDroppable(this.url, headers);
+    const { response, drop, done } = await fetchDroppable(
+      this.url,
+      headers,
+      signal,
+    );
     try {
       if (response.status === 206) {
+        this.#checkCopy(response, drop);
         const range = parseContentRange(response.headers.get("Content-Range"));
         if (!range || range.start !== start || range.total !== this.size) {
           drop();
@@ -562,7 +705,7 @@ export class RangeFile {
         const data = new Uint8Array(await response.arrayBuffer());
         // Short, as a cut connection leaves it: worth another try.
         if (range.end < end || data.length !== range.end - start) {
-          throw new TypeError("The server sent part of the range.");
+          throw new BrokenAnswerError("The server sent part of the range.");
         }
         return data.subarray(0, end - start);
       }
@@ -576,11 +719,18 @@ export class RangeFile {
     }
   }
 
-  #markChanged(): BookChangedError {
-    if (!this.#changed) {
-      this.#changed = new BookChangedError();
-      for (const listener of this.#listeners) listener(this.#changed);
+  // A part from another copy, as a proxy that drops If-Range would send,
+  // says so in its validator.
+  #checkCopy(response: Response, drop: () => void) {
+    const validator = validatorOf(response);
+    if (validator && this.#validator && validator !== this.#validator) {
+      drop();
+      throw this.#markChanged();
     }
+  }
+
+  #markChanged(): BookChangedError {
+    this.#changed ??= new BookChangedError();
     return this.#changed;
   }
 }

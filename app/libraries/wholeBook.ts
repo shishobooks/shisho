@@ -13,11 +13,16 @@ export const canKeepWholeBook = (): boolean => {
     return false;
   }
   const nav = navigator as Navigator & {
-    userAgentData?: { mobile?: boolean };
+    userAgentData?: { mobile?: boolean; platform?: string };
     deviceMemory?: number;
   };
-  // Android phones and tablets; userAgentData is Chromium's.
-  if (nav.userAgentData?.mobile || /Android/i.test(nav.userAgent)) {
+  // Android phones and tablets; userAgentData is Chromium's, and still says
+  // Android when a tablet asks for desktop sites.
+  if (
+    nav.userAgentData?.mobile ||
+    nav.userAgentData?.platform === "Android" ||
+    /Android/i.test(nav.userAgent)
+  ) {
     return false;
   }
   // Chromium reports memory in GB, rounded down and capped at 8.

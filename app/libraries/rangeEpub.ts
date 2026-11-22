@@ -6,18 +6,20 @@ const LOCAL_HEADER_SIZE = 30;
 // How long a resource fetched ahead waits for foliate to ask for it. foliate
 // asks within moments of a chapter loading; one it never asks for, such as
 // a font its loader already holds for another chapter, is dropped after
-// this.
+// this, or when the next chapter loads.
 const PREFETCH_KEEP_MS = 30_000;
 const XLINK = "http://www.w3.org/1999/xlink";
 
-// The path in the book that ref, written in the document at base, names:
-// how foliate resolves it (resolveURL in epub.js), so the two agree.
+// The path in the book that ref, written in the document at base, names,
+// resolved as foliate resolves it (resolveURL in epub.js) so the two agree:
+// a ref with a #fragment names no file, and foliate loads nothing for it.
 const resolveHref = (ref: string, base: string): string | null => {
   const root = "https://invalid.invalid/";
   try {
     const url = new URL(ref, root + base);
     if (url.origin !== new URL(root).origin) return null;
-    return decodeURI(url.pathname.slice(1));
+    url.search = "";
+    return decodeURI(url.href.replace(root, ""));
   } catch {
     return null;
   }
@@ -43,7 +45,8 @@ const stylesheetHrefs = (css: string, base: string): string[] =>
     base,
   );
 
-// The resources a chapter's document points at that foliate loads with it.
+// The resources a chapter's document points at that foliate loads with it,
+// found with the selectors Loader.loadReplaced uses.
 const documentHrefs = (text: string, base: string): string[] => {
   let doc = new DOMParser().parseFromString(text, "application/xhtml+xml");
   if (doc.querySelector("parsererror")) {
@@ -58,17 +61,24 @@ const documentHrefs = (text: string, base: string): string[] => {
         "",
     );
   }
-  for (const el of doc.querySelectorAll("image")) {
-    refs.push(
-      el.getAttributeNS(XLINK, "href") ?? el.getAttribute("href") ?? "",
-    );
+  for (const el of doc.querySelectorAll("[*|href]:not([href])")) {
+    refs.push(el.getAttributeNS(XLINK, "href") ?? "");
   }
   for (const el of doc.querySelectorAll("[srcset]")) {
     for (const candidate of el.getAttribute("srcset")!.split(",")) {
       refs.push(candidate.trim().split(/\s+/)[0]);
     }
   }
-  return resolveAll(refs, base);
+  const inline = [
+    ...[...doc.querySelectorAll("style")].map((el) => el.textContent ?? ""),
+    ...[...doc.querySelectorAll("[style]")].map(
+      (el) => el.getAttribute("style") ?? "",
+    ),
+  ];
+  return [
+    ...resolveAll(refs, base),
+    ...inline.flatMap((css) => stylesheetHrefs(css, base)),
+  ];
 };
 
 /**
@@ -160,12 +170,14 @@ export const openRangeEPUB = async (file: RangeFile): Promise<FoliateEPUB> => {
     });
   };
   const loadBlob = (name: string, type?: string) => {
+    const entry = map.get(name);
+    if (!entry) return null;
+    const fetchNow = () => entry.getData(new BlobWriter(type));
     const early = prefetched.get(name);
-    if (early) {
-      prefetched.delete(name);
-      return early;
-    }
-    return map.get(name)?.getData(new BlobWriter(type)) ?? null;
+    if (!early) return fetchNow();
+    prefetched.delete(name);
+    // One fetched ahead that failed is asked for again, as foliate would.
+    return early.catch(fetchNow);
   };
   const getSize = (name: string) => map.get(name)?.uncompressedSize ?? 0;
   const book = await new EPUB({ loadText, loadBlob, getSize }).init();
@@ -187,6 +199,9 @@ export const openRangeEPUB = async (file: RangeFile): Promise<FoliateEPUB> => {
   for (const section of book.sections) {
     const load = section.load;
     section.load = async () => {
+      // What an earlier chapter fetched ahead and foliate never asked for
+      // isn't wanted now.
+      prefetched.clear();
       // Fetching ahead only speeds the load up; foliate's own asks still
       // fetch anything it missed.
       try {

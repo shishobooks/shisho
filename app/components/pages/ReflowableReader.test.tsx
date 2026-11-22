@@ -21,7 +21,7 @@ import {
 } from "@/hooks/queries/settings";
 import { READER_SETTINGS_KEY } from "@/hooks/useReaderSettings";
 import { POSITION_SAVE_DELAY_MS } from "@/hooks/useReadingProgress";
-import { API } from "@/libraries/api";
+import { API, ShishoAPIError } from "@/libraries/api";
 import { openRangeEPUB } from "@/libraries/rangeEpub";
 import { RangeFile } from "@/libraries/rangeFile";
 import { openRangeMOBI } from "@/libraries/rangeMobi";
@@ -569,6 +569,101 @@ describe("ReflowableReader", () => {
       expect(
         screen.getByText(/changed on the server while it was open/),
       ).toBeInTheDocument();
+    });
+
+    // Opens a book read by part, then changes it on the server and reads,
+    // which fails. Returns the query's refetch.
+    const openThenChange = async () => {
+      vi.mocked(openRangeEPUB).mockResolvedValue({ sections: [] } as never);
+      const from = server();
+      const source = await readByPart(from);
+      const refetch = vi.fn();
+      vi.mocked(useReflowableBook).mockReturnValue({
+        data: source,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isEnabled: true,
+        refetch,
+      } as never);
+      const rendered = renderReader();
+      const view = rendered.container.querySelector("foliate-view")!;
+      await vi.waitFor(() => expect(vi.mocked(view.open)).toHaveBeenCalled());
+      from.replace(new Uint8Array(10), "Mon, 23 Nov 2026 08:00:00 GMT");
+      await act(() => source.read(1000, 10).catch(() => undefined));
+      return { source, refetch, ...rendered };
+    };
+
+    it("shows the book preparing after Retry until the new copy opens", async () => {
+      const { refetch } = await openThenChange();
+
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      expect(refetch).toHaveBeenCalled();
+      expect(screen.queryByText(/couldn't load/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/preparing book/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    });
+
+    it("shows why the new copy didn't load after Retry", async () => {
+      const { source, rerender } = await openThenChange();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      // The refetch fails, and the query keeps the copy that changed.
+      vi.mocked(useReflowableBook).mockReturnValue({
+        data: source,
+        isLoading: false,
+        isError: true,
+        error: new ShishoAPIError("File not found", "not_found", 404),
+        isEnabled: true,
+        refetch: vi.fn(),
+      } as never);
+      rerender(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter>
+            <ReflowableReader
+              bookTitle="Test Book"
+              file={{ id: 7, book_id: 3, file_type: "epub" } as never}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getByText(/couldn't load/i)).toBeInTheDocument();
+      expect(screen.getByText("File not found")).toBeInTheDocument();
+    });
+
+    it("says so when part of the book can't be fetched", async () => {
+      vi.mocked(openRangeEPUB).mockResolvedValue({ sections: [] } as never);
+      const from = server();
+      const source = await readByPart(from);
+      const { container } = renderReader();
+      const view = container.querySelector("foliate-view")!;
+      await vi.waitFor(() => expect(vi.mocked(view.open)).toHaveBeenCalled());
+
+      from.failFor(100);
+      const reading = source.read(500_000, 10_000).catch(() => undefined);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+        await reading;
+      });
+
+      expect(screen.getByText(/couldn't load/i)).toBeInTheDocument();
+      // Not the browser's wording.
+      expect(screen.getByText("Failed to load book")).toBeInTheDocument();
+    });
+
+    it("stops the book's reads when the reader closes", async () => {
+      vi.mocked(openRangeEPUB).mockResolvedValue({ sections: [] } as never);
+      const source = await readByPart(server());
+      const cancelPending = vi.spyOn(source, "cancelPending");
+      const { container, unmount } = renderReader();
+      const view = container.querySelector("foliate-view")!;
+      await vi.waitFor(() => expect(vi.mocked(view.open)).toHaveBeenCalled());
+
+      unmount();
+
+      expect(cancelPending).toHaveBeenCalled();
     });
   });
 

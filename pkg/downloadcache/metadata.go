@@ -90,7 +90,14 @@ func WriteMetadata(cacheDir string, meta *CacheMetadata) error {
 	return nil
 }
 
-// UpdateLastAccessed updates the last accessed time for a cached file.
+// lastAccessedInterval is how stale a cached file's last access gets before
+// a hit records a new one. The web reader reads a book a part at a time, so
+// one chapter is dozens of hits at once, and each record rewrites the
+// metadata file; cleanup's least-recently-used order needs no finer time.
+const lastAccessedInterval = time.Minute
+
+// UpdateLastAccessed updates the last accessed time for a cached file,
+// unless it was recorded within lastAccessedInterval.
 func UpdateLastAccessed(cacheDir string, fileID int, fileType string) error {
 	meta, err := ReadMetadata(cacheDir, fileID, fileType)
 	if err != nil {
@@ -98,6 +105,9 @@ func UpdateLastAccessed(cacheDir string, fileID int, fileType string) error {
 	}
 	if meta == nil {
 		return errors.New("cache metadata not found")
+	}
+	if time.Since(meta.LastAccessedAt) < lastAccessedInterval {
+		return nil
 	}
 
 	meta.LastAccessedAt = time.Now()

@@ -66,7 +66,7 @@ describe("vendored mobi.js patches", () => {
     expect(source).toContain("new Blob([newData], { type: newType })");
   });
 
-  // Read a part at a time from the server, each of these is a request.
+  // When the book is read by part, each of these is a request.
   it("loads a KF8 section's resources at once", () => {
     expect(source).toMatch(
       /const replaceSeries = async[\s\S]*?await Promise\.all\(matches\.map/,
@@ -74,6 +74,10 @@ describe("vendored mobi.js patches", () => {
     expect(source).toMatch(
       /async loadResource\(str\) \{[\s\S]*?this\.#loading\.set\(str/,
     );
+  });
+
+  it("reads KF8 text one call at a time", () => {
+    expect(source).toMatch(/#rawQueue = Promise\.resolve\(\)/);
   });
 
   it("reads every KF8 resource record's magic at once", () => {

@@ -935,13 +935,13 @@ const getFragmentSelector = str => {
     return `[${attr}="${CSS.escape(value)}"]`
 }
 
-// replace asynchronously and sequentially
-// Shisho patch: upstream awaits each match before starting the next. The
+// replace asynchronously
+// Shisho patch: upstream awaits each match before starting the next. When the
 // web reader reads a large book a part at a time from the server
-// (app/libraries/rangeFile.ts), where each resource is a request, and a
-// cookbook chapter names dozens of photos, so they load at once. Only
-// KF8.replaceResources uses this, and KF8.loadResource loads a resource
-// named twice once.
+// (app/libraries/rangeFile.ts), each resource is a request, and a cookbook
+// chapter names dozens of photos, so they load at once. Only
+// KF8.replaceResources uses this; KF8.loadResource loads a resource named
+// twice once, and KF8.loadRaw reads text one call at a time.
 const replaceSeries = async (str, regex, f) => {
     const matches = []
     str.replace(regex, (...args) => (matches.push(args), null))
@@ -1081,9 +1081,10 @@ class KF8 {
     }
     // is this really the only way of getting to RESC, PAGE, etc.?
     // Shisho patch: upstream reads each record's magic after the one before.
-    // Read a part at a time from the server (app/libraries/rangeFile.ts),
-    // that's hundreds of requests in a row before a book with many photos
-    // opens; started at once, they go out together.
+    // When the book is read a part at a time from the server
+    // (app/libraries/rangeFile.ts), that's hundreds of requests in a row
+    // before a book with many photos opens; started at once, they go out
+    // together.
     async getResourcesByMagic(keys) {
         const results = {}
         const start = this.mobi.headers.kf8.resourceStart
@@ -1148,10 +1149,21 @@ class KF8 {
         const regex = new RegExp(kindleResourceRegex, 'g')
         return replaceSeries(str, regex, this.loadResource.bind(this))
     }
+    // Shisho patch: loadRaw below claims a record before it arrives and adds
+    // each to the text it keeps in the order they arrive, so two at once
+    // (two stylesheets in a section, now that replaceSeries loads them
+    // together, or a search beside a page turn) can scramble it when records
+    // come from the server out of order. One at a time keeps them in order.
+    #rawQueue = Promise.resolve()
+    loadRaw(start, end) {
+        const load = this.#rawQueue.then(() => this.#loadRaw(start, end))
+        this.#rawQueue = load.catch(() => {})
+        return load
+    }
     // NOTE: there doesn't seem to be a way to access text randomly?
     // how to know the decompressed size of the records without decompressing?
     // 4096 is just the maximum size
-    async loadRaw(start, end) {
+    async #loadRaw(start, end) {
         // here we load either from the front or back until we have reached the
         // required offsets; at worst you'd have to load half the book at once
         const distanceHead = end - this.#rawHead.length

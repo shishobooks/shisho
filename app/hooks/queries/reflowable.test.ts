@@ -119,6 +119,19 @@ describe("useReflowableBook", () => {
     expect(result.current.error?.status).toBe(404);
   });
 
+  it("doesn't load the original for a proxy's error page", async () => {
+    fetchSpy.mockImplementation(
+      async () => new Response("<html>Bad gateway</html>", { status: 502 }),
+    );
+
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("reports a proxy's error page by its status", async () => {
     fetchSpy.mockImplementation(
       async () =>
@@ -264,12 +277,12 @@ describe("useReflowableBook from a server that ignores Range", () => {
     expect(await (result.current.data as Blob).text()).toBe("book-bytes");
   });
 
-  it("loads the original file when the Generated File's download fails", async () => {
+  it("downloads the original whole when the server refuses the Generated File", async () => {
     fetchSpy.mockImplementation(
       async (url: RequestInfo | URL, init?: RequestInit) => {
         if (url !== DOWNLOAD) return whole("original-bytes");
         if (asksForPart(init)) return whole("generated-bytes");
-        throw new TypeError("Failed to fetch");
+        return apiError(422, "invalid_state", "Failed partway");
       },
     );
 
@@ -281,7 +294,9 @@ describe("useReflowableBook from a server that ignores Range", () => {
     expect(await (result.current.data as Blob).text()).toBe("original-bytes");
   });
 
-  it("loads the original file when the Generated File arrives truncated", async () => {
+  // The file is whole on the server by then, so a cut is the connection,
+  // which would cut the original too.
+  it("reports a download that's cut off rather than loading the original", async () => {
     fetchSpy.mockImplementation(
       async (url: RequestInfo | URL, init?: RequestInit) => {
         if (url !== DOWNLOAD) return whole("original-bytes");
@@ -300,13 +315,9 @@ describe("useReflowableBook from a server that ignores Range", () => {
     const { result } = renderHook(() => useReflowableBook(42), {
       wrapper,
     });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isError).toBe(true));
 
-    expect(fetchSpy).toHaveBeenLastCalledWith(
-      ORIGINAL,
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(await (result.current.data as Blob).text()).toBe("original-bytes");
+    expect(fetchSpy).not.toHaveBeenCalledWith(ORIGINAL, expect.anything());
   });
 
   it("does not fall back in Demo Mode, which denies the original", async () => {

@@ -20,9 +20,11 @@ export interface RangeServer {
   replace: (bytes: Uint8Array, lastModified: string) => void;
   // The next `count` requests reject as a dropped connection does.
   failFor: (count: number) => void;
-  // Answer a request for several ranges with the whole file, as a server
-  // that supports only one range at a time may.
-  singleRangeOnly: () => void;
+  // How a request for several ranges is answered: in full (as Go's
+  // http.ServeContent does), with the whole file (a server that takes one
+  // range at a time), with only the first part (a proxy that drops the
+  // rest), or with the last part cut short.
+  multiRange: (mode: "full" | "whole" | "first" | "cut") => void;
 }
 
 export const createRangeServer = (
@@ -34,7 +36,7 @@ export const createRangeServer = (
   let building = 0;
   let failing = 0;
   let sent = 0;
-  let multiRange = true;
+  let multiRange: "full" | "whole" | "first" | "cut" = "full";
   const requests: RangeServerRequest[] = [];
 
   const whole = (acceptRanges: boolean) =>
@@ -63,8 +65,8 @@ export const createRangeServer = (
     failFor: (count) => {
       failing = count;
     },
-    singleRangeOnly: () => {
-      multiRange = false;
+    multiRange: (mode) => {
+      multiRange = mode;
     },
     replace: (next, nextModified) => {
       bytes = next;
@@ -119,25 +121,28 @@ export const createRangeServer = (
           ];
         });
       if (ranges.length > 1) {
-        if (!multiRange) {
+        if (multiRange === "whole") {
           return new Response(bytes.slice(), {
             status: 200,
             headers: { "Accept-Ranges": "bytes", "Last-Modified": modified },
           });
         }
-        // multipart/byteranges, laid out as Go's http.ServeContent writes it.
+        // multipart/byteranges, laid out as Go's mime/multipart writes it
+        // for http.ServeContent: the first delimiter starts the body.
         const boundary = "3d6b6a416f9b5";
         const encoder = new TextEncoder();
         const parts: Uint8Array[] = [];
-        for (const [start, end] of ranges) {
+        const sending = multiRange === "first" ? ranges.slice(0, 1) : ranges;
+        sending.forEach(([start, end], i) => {
+          const cut = multiRange === "cut" && i === sending.length - 1;
           parts.push(
             encoder.encode(
-              `\r\n--${boundary}\r\nContent-Range: bytes ${start}-${end}/${bytes.length}\r\nContent-Type: application/octet-stream\r\n\r\n`,
+              `${i ? "\r\n" : ""}--${boundary}\r\nContent-Range: bytes ${start}-${end}/${bytes.length}\r\nContent-Type: application/octet-stream\r\n\r\n`,
             ),
-            bytes.slice(start, end + 1),
+            bytes.slice(start, cut ? end - 1 : end + 1),
           );
           sent += end + 1 - start;
-        }
+        });
         parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
         const body = new Uint8Array(
           parts.reduce((sum, part) => sum + part.length, 0),

@@ -14,11 +14,13 @@ const device = ({
   iOS = false,
   deviceMemory,
   mobile,
+  platform,
 }: {
   userAgent?: string;
   iOS?: boolean;
   deviceMemory?: number;
   mobile?: boolean;
+  platform?: string;
 }) => {
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue(userAgent);
   vi.stubGlobal("CSS", {
@@ -29,7 +31,7 @@ const device = ({
     configurable: true,
   });
   Object.defineProperty(navigator, "userAgentData", {
-    value: mobile === undefined ? undefined : { mobile },
+    value: mobile === undefined ? undefined : { mobile, platform },
     configurable: true,
   });
 };
@@ -80,6 +82,13 @@ describe("canKeepWholeBook", () => {
 
   it("doesn't where Chromium says the device is mobile", () => {
     device({ deviceMemory: 8, mobile: true });
+    expect(canKeepWholeBook()).toBe(false);
+  });
+
+  // Chrome on an Android tablet asking for desktop sites drops "Android"
+  // from its user agent and says it isn't mobile.
+  it("doesn't on an Android tablet asking for desktop sites", () => {
+    device({ deviceMemory: 8, mobile: false, platform: "Android" });
     expect(canKeepWholeBook()).toBe(false);
   });
 

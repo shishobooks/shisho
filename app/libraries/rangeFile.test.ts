@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ShishoAPIError } from "@/libraries/api";
 import {
   BookChangedError,
+  BuildTimeoutError,
   RangeFile,
   RangeNotSupportedError,
 } from "@/libraries/rangeFile";
@@ -153,6 +154,46 @@ describe("RangeFile", () => {
     expect(server.requests).toHaveLength(4);
   });
 
+  // A cookbook built on a slow disk can take minutes; downloading it whole
+  // instead is what crashed a phone.
+  it("waits out a slow build without downloading the book whole", async () => {
+    server.buildFor(1000);
+
+    let opened: RangeFile | undefined;
+    const opening = RangeFile.open(URL).then((file) => (opened = file));
+    await vi.advanceTimersByTimeAsync(3 * 60 * 1000);
+    expect(opened).toBeUndefined();
+    server.buildFor(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    await opening;
+
+    expect(opened?.size).toBe(10 * MB);
+    expect(server.requests.every((r) => r.range !== null)).toBe(true);
+  });
+
+  it("reports a build that never finishes", async () => {
+    server.buildFor(100_000);
+
+    const opening = RangeFile.open(URL);
+    const settled = expect(opening).rejects.toBeInstanceOf(BuildTimeoutError);
+    await vi.advanceTimersByTimeAsync(11 * 60 * 1000);
+    await settled;
+  });
+
+  it("reports Range stripped by a proxy that keeps Last-Modified", async () => {
+    fetchSpy.mockImplementation(
+      async () =>
+        new Response(new Uint8Array(100), {
+          status: 200,
+          headers: { "Last-Modified": "Sun, 22 Nov 2026 19:36:13 GMT" },
+        }),
+    );
+
+    await expect(RangeFile.open(URL)).rejects.toBeInstanceOf(
+      RangeNotSupportedError,
+    );
+  });
+
   it("stops waiting when the reader closes", async () => {
     server.buildFor(1000);
     const controller = new AbortController();
@@ -207,12 +248,26 @@ describe("RangeFile", () => {
   it("reports a book that changed on the server while it was open", async () => {
     const file = await RangeFile.open(URL);
     const changed = vi.fn();
-    file.onChanged(changed);
+    file.onFailed(changed);
 
     server.replace(fileOf(11 * MB), "Sun, 22 Nov 2026 20:00:00 GMT");
 
     await expect(file.read(MB, 10)).rejects.toBeInstanceOf(BookChangedError);
     expect(changed).toHaveBeenCalledWith(expect.any(BookChangedError));
+  });
+
+  it("reports a part from another copy, as a proxy dropping If-Range sends", async () => {
+    const file = await RangeFile.open(URL);
+    server.replace(fileOf(10 * MB), "Sun, 22 Nov 2026 20:00:00 GMT");
+    fetchSpy.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const headers = new Headers(init?.headers);
+        headers.delete("If-Range");
+        return server.fetch(input, { ...init, headers });
+      },
+    );
+
+    await expect(file.read(MB, 10)).rejects.toBeInstanceOf(BookChangedError);
   });
 
   it("reports a book being rebuilt while it was open as changed", async () => {
@@ -269,12 +324,33 @@ describe("RangeFile", () => {
 
     it("asks one at a time of a server that sends one range at a time", async () => {
       const file = await RangeFile.open(URL);
-      server.singleRangeOnly();
+      server.multiRange("whole");
 
       const some = starts.slice(0, 5);
       const read = await Promise.all(some.map((at) => file.read(at, 4)));
 
       expect(read).toEqual(some.map((at) => bytes.slice(at, at + 4)));
+    });
+
+    it("asks for the parts an answer left out on their own", async () => {
+      const file = await RangeFile.open(URL);
+      server.multiRange("first");
+
+      const some = starts.slice(0, 5);
+      const read = await Promise.all(some.map((at) => file.read(at, 4)));
+
+      expect(read).toEqual(some.map((at) => bytes.slice(at, at + 4)));
+    });
+
+    it("doesn't take a part cut short for the bytes asked for", async () => {
+      const file = await RangeFile.open(URL);
+      server.multiRange("cut");
+
+      const some = starts.slice(0, 5);
+      const reading = Promise.all(some.map((at) => file.read(at, 4)));
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(await reading).toEqual(some.map((at) => bytes.slice(at, at + 4)));
     });
 
     it("tries a dropped request again", async () => {
@@ -343,6 +419,102 @@ describe("RangeFile", () => {
       );
       expect(await file.downloadWhole()).toBe(true);
     });
+  });
+
+  it("tries a read again when a proxy's upstream is away", async () => {
+    const file = await RangeFile.open(URL);
+    let refused = 0;
+    fetchSpy.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (refused++ === 0) {
+          return new Response("<html>Bad gateway</html>", { status: 502 });
+        }
+        return server.fetch(input, init);
+      },
+    );
+
+    const reading = file.read(MB, 10);
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await reading).toEqual(bytes.slice(MB, MB + 10));
+  });
+
+  it("tells its listeners about a read that fails for good", async () => {
+    const file = await RangeFile.open(URL);
+    const failed = vi.fn();
+    file.onFailed(failed);
+    server.failFor(100);
+
+    const reading = file.read(MB, 10);
+    const settled = expect(reading).rejects.toBeInstanceOf(TypeError);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settled;
+
+    expect(failed).toHaveBeenCalledWith(expect.any(TypeError));
+  });
+
+  it("stops the reads under way when the reader leaves", async () => {
+    const file = await RangeFile.open(URL);
+    const failed = vi.fn();
+    file.onFailed(failed);
+    server.failFor(100);
+    const reading = file.read(MB, 10);
+    const settled = expect(reading).rejects.toThrow();
+
+    file.cancelPending();
+    await settled;
+    const asked = server.requests.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(server.requests).toHaveLength(asked);
+    expect(failed).not.toHaveBeenCalled();
+    server.failFor(0);
+    expect(await file.read(MB, 10)).toEqual(bytes.slice(MB, MB + 10));
+  });
+
+  it("has a few requests out at once, however many reads wait", async () => {
+    const file = await RangeFile.open(URL);
+    let inFlight = 0;
+    let peak = 0;
+    fetchSpy.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        inFlight--;
+        return server.fetch(input, init);
+      },
+    );
+
+    // Forty photos of a chapter, asked for together.
+    await Promise.all(
+      Array.from({ length: 40 }, (_, i) =>
+        file.read(i * 200_000, 100_000, i * 200_000 + 150_000),
+      ),
+    );
+
+    expect(peak).toBeLessThanOrEqual(6);
+  });
+
+  it("lets go of a part once the read it was fetched for has it", async () => {
+    const file = await RangeFile.open(URL);
+
+    // A record of a MOBI, read whole.
+    await file.read(MB, 3 * MB);
+    await file.read(MB, 3 * MB);
+
+    expect(server.requests).toHaveLength(3);
+  });
+
+  it("reads backward through the file in a few requests", async () => {
+    const file = await RangeFile.open(URL);
+
+    // foliate reads a MOBI's text a record at a time from its end.
+    for (let at = 6 * MB - 4096; at >= 3 * MB; at -= 4096) {
+      expect(await file.read(at, 4096)).toEqual(bytes.slice(at, at + 4096));
+    }
+
+    expect(server.requests.length).toBeLessThanOrEqual(10);
   });
 
   it("reads a part again after a failed read of it", async () => {
