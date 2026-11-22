@@ -119,7 +119,7 @@ struct ListDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if case .some(.none) = list {
-                        ContentUnavailableView(String(localized: "This List isn't shared with you anymore"), systemImage: "list.bullet.rectangle")
+                        ContentUnavailableView(String(localized: "This List isn't available anymore"), systemImage: "list.bullet.rectangle")
                             .padding(.top, 80)
                     } else {
                         if let description = (list ?? nil)?.description, !description.isEmpty {
@@ -128,6 +128,15 @@ struct ListDetailView: View {
                                 .foregroundStyle(Theme.mutedForeground)
                                 .padding(.horizontal, GridLayout.margin)
                                 .padding(.top, 8)
+                        }
+                        if let shares = (list ?? nil)?.shares, !shares.isEmpty {
+                            Label(String(localized: "Shared with \(shares.map { "\($0.username) (\(SharePermission.text($0.permission)))" }.joined(separator: ", "))"),
+                                  systemImage: "person.2")
+                                .font(.geist(.footnote))
+                                .foregroundStyle(Theme.mutedForeground)
+                                .padding(.horizontal, GridLayout.margin)
+                                .padding(.top, 8)
+                                .accessibilityIdentifier("list.shares")
                         }
                         if let books {
                             SectionHeading(title: String(localized: "Books"), count: String(localized: "^[\(books.count) book](inflect: true)"))
@@ -153,6 +162,18 @@ struct ListDetailView: View {
         }
         .observing(model.session?.store, id: listID, into: $books) { [listID] db in
             try CatalogStore.listBooks(db, listID: listID)
+        }
+    }
+}
+
+/// What a List Share allows, as the web app names it.
+enum SharePermission {
+    static func text(_ permission: String) -> String {
+        switch permission {
+        case "viewer": String(localized: "can view")
+        case "editor": String(localized: "can edit")
+        case "manager": String(localized: "can manage")
+        default: permission
         }
     }
 }

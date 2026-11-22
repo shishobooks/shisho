@@ -85,9 +85,6 @@ final class APIClient: Sendable {
         _ = try? await data("mobile/device", method: "DELETE")
     }
 
-    /// The changes after cursor. expiredThrough is the last page's, so the
-    /// server can tell a cursor that missed expired deletions from one that
-    /// was downloading from the start when they expired.
     /// One page of the feed, and what the user can access now, when the
     /// server says (ADR 0023).
     struct FeedPage: Sendable {
@@ -95,6 +92,9 @@ final class APIClient: Sendable {
         let access: Shishoapp.FeedAccess?
     }
 
+    /// The changes after cursor. expiredThrough is the last page's, so the
+    /// server can tell a cursor that missed expired deletions from one that
+    /// was downloading from the start when they expired.
     func changes(cursor: Int, expiredThrough: Int, limit: Int = 500) async throws -> FeedPage {
         let body = try await data("mobile/changes", query: [
             URLQueryItem(name: "cursor", value: String(cursor)),
@@ -167,8 +167,8 @@ final class APIClient: Sendable {
 
             let access: Access
         }
-        guard let shape = try? JSONDecoder().decode(Shape.self, from: data) else { return nil }
-        return Shishoapp.FeedAccess(libraryIds: shape.access.libraryIds, listIds: shape.access.listIds)
+        guard (try? JSONDecoder().decode(Shape.self, from: data)) != nil else { return nil }
+        return try? makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: data).access
     }
 
     /// A sign-in, which always names its credential, Device, and user.

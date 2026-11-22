@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -22,6 +23,13 @@ import (
 const (
 	// defaultFeedLimit is the page size when the app names none.
 	defaultFeedLimit = 500
+	// feedBudget is how long a page's documents may take to build before
+	// the page ends early, well inside the app's 30-second request timeout.
+	// Opening every CBZ of a large comics Library on a slow disk can take
+	// longer, and a page that always timed out would never move the sync on.
+	feedBudget = 10 * time.Second
+	// feedChunk is how many entries are built between checks of the budget.
+	feedChunk = 100
 )
 
 // Options configures the Device surface.
@@ -43,6 +51,10 @@ type handler struct {
 	reading  *reading.Service
 	contract *Contract
 	opts     Options
+	// feedBudget and feedChunk replace the package's defaults in tests; a
+	// negative budget ends every page after its first chunk.
+	feedBudget time.Duration
+	feedChunk  int
 }
 
 func (h *handler) info(c echo.Context) ServerInfo {
@@ -165,11 +177,14 @@ func (h *handler) changes(c echo.Context) error {
 
 	var resp FeedResponse
 	err = h.feed.Read(ctx, func(ctx context.Context, tx bun.Tx) error {
+		access, err := h.feed.Access(ctx, tx, user)
+		if err != nil {
+			return err
+		}
 		var page *changefeed.Page
-		var err error
 		if query.LibraryID > 0 || query.ListID > 0 {
 			scope := changefeed.Scope{LibraryID: query.LibraryID, ListID: query.ListID}
-			page, err = h.feed.ScopedPage(ctx, tx, user, scope, query.Cursor, limit)
+			page, err = h.feed.ScopedPage(ctx, tx, access, scope, query.Cursor, limit)
 		} else {
 			page, err = h.feed.Page(ctx, tx, user, query.Cursor, query.ExpiredThrough, limit)
 		}
@@ -182,13 +197,13 @@ func (h *handler) changes(c echo.Context) error {
 		if err != nil {
 			return err
 		}
-		entries, err := buildEntries(ctx, tx, user, page.Entries)
+		entries, built, err := h.buildWithin(ctx, tx, user, page.Entries)
 		if err != nil {
 			return err
 		}
-		access, err := h.feed.Access(ctx, tx, user)
-		if err != nil {
-			return err
+		if built < len(page.Entries) {
+			page.Cursor = page.Entries[built-1].Seq
+			page.HasMore = true
 		}
 		resp = FeedResponse{
 			Entries: entries, Cursor: page.Cursor, HasMore: page.HasMore,
@@ -237,4 +252,30 @@ func (h *handler) cover(c echo.Context) error {
 		cacheControl = covers.CacheControlImmutable
 	}
 	return covers.ServeBookCover(c, book.Files, aspect, cacheControl, "Cover", h.opts.Thumbnails)
+}
+
+// buildWithin builds the documents of entries a chunk at a time, stopping
+// after the chunk that runs past the budget. It returns how many entries it
+// built, always at least the first chunk, so every page moves the cursor.
+func (h *handler) buildWithin(ctx context.Context, tx bun.IDB, user *models.User, entries []*changefeed.Entry) ([]FeedEntry, int, error) {
+	budget, chunk := feedBudget, feedChunk
+	if h.feedBudget != 0 {
+		budget = h.feedBudget
+	}
+	if h.feedChunk > 0 {
+		chunk = h.feedChunk
+	}
+	start := time.Now()
+	out := make([]FeedEntry, 0, len(entries))
+	for i := 0; i < len(entries); i += chunk {
+		if i > 0 && time.Since(start) > budget {
+			return out, i, nil
+		}
+		part, err := buildEntries(ctx, tx, user, entries[i:min(i+chunk, len(entries))])
+		if err != nil {
+			return nil, 0, err
+		}
+		out = append(out, part...)
+	}
+	return out, len(entries), nil
 }

@@ -202,14 +202,11 @@ type Scope struct {
 var ErrOutOfReach = errors.New("out of reach")
 
 // ScopedPage returns up to limit entries after cursor of the Library or
-// List scope names, with ErrOutOfReach when the user can't see it. Call it
-// inside Read. It leaves out deletions, which a fetch from nothing has no
-// use for, and the user's own records, which the feed itself carries.
-func (s *Service) ScopedPage(ctx context.Context, tx bun.IDB, user *models.User, scope Scope, cursor int64, limit int) (*Page, error) {
-	access, err := s.Access(ctx, tx, user)
-	if err != nil {
-		return nil, err
-	}
+// List scope names, with ErrOutOfReach when access, the user's from Access,
+// doesn't include it. Call it inside Read. It leaves out deletions, which a
+// fetch from nothing has no use for, and the user's own records, which the
+// feed itself carries.
+func (s *Service) ScopedPage(ctx context.Context, tx bun.IDB, access *Access, scope Scope, cursor int64, limit int) (*Page, error) {
 	entries := []*Entry{}
 	q := tx.NewSelect().Model(&entries).
 		Where("cle.seq > ?", cursor).

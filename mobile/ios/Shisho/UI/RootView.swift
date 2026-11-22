@@ -8,6 +8,9 @@ struct RootView: View {
         ZStack {
             if model.session != nil {
                 MainTabs()
+                    // Another account's screens start fresh, never showing
+                    // the last one's rows while its own load.
+                    .id(model.session?.account.id)
                     .transition(.opacity.combined(with: .scale(scale: 1.02)))
             } else {
                 SignInView()

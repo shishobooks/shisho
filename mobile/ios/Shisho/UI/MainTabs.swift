@@ -10,15 +10,15 @@ struct MainTabs: View {
         TabView(selection: $model.tab) {
             LibraryView()
                 .withMiniPlayer()
-                .tabItem { Label("Library", systemImage: "books.vertical") }
+                .tabItem { Label("Library", systemImage: "books.vertical").accessibilityIdentifier("tab.library") }
                 .tag(AppTab.library)
             ListsView()
                 .withMiniPlayer()
-                .tabItem { Label("Lists", systemImage: "list.bullet.rectangle") }
+                .tabItem { Label("Lists", systemImage: "list.bullet.rectangle").accessibilityIdentifier("tab.lists") }
                 .tag(AppTab.lists)
             SearchView()
                 .withMiniPlayer()
-                .tabItem { Label("Search", systemImage: "magnifyingglass") }
+                .tabItem { Label("Search", systemImage: "magnifyingglass").accessibilityIdentifier("tab.search") }
                 .tag(AppTab.search)
         }
         .tint(Theme.primary)

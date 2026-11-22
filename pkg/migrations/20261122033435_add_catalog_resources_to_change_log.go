@@ -23,7 +23,10 @@ func init() {
 	// from the access each page lists, since its List Shares are gone.
 	//
 	// A Book moved to another Library leaves a book_left deletion in the
-	// Library it left, so a user who can't access the new one drops it.
+	// Library it left, so a user who can't access the new one drops it. Each
+	// Library a Book left keeps its own, so a Book moved twice between an
+	// installation's syncs still leaves the first: the unique index takes in
+	// the Library for book_left.
 	const now = `CURRENT_TIMESTAMP`
 
 	// record moves kind's entry for id, which belongs to library.
@@ -93,7 +96,11 @@ func init() {
 		}
 	}
 
-	var statements []string
+	statements := []string{
+		`DROP INDEX ux_change_log_entries_kind_record_id_user_id`,
+		`CREATE UNIQUE INDEX ux_change_log_entries_record ON change_log_entries
+			(kind, record_id, IFNULL(user_id, 0), CASE WHEN kind = 'book_left' THEN library_id ELSE 0 END)`,
+	}
 	statements = append(statements, resource("series", "series", "series_aliases", "series_id", "name", "sort_name", "description")...)
 	statements = append(statements, resource("person", "persons", "person_aliases", "person_id", "name", "sort_name")...)
 	statements = append(statements, resource("genre", "genres", "genre_aliases", "genre_id", "name")...)
@@ -124,7 +131,9 @@ func init() {
 			differs("title", "subtitle", "sort_title", "created_at", "library_id", "description"),
 			record("book", "NEW.id", "NEW.library_id", false)),
 		trigger("books_update_library", "UPDATE", "books", differs("library_id"),
-			record("book_left", "OLD.id", "OLD.library_id", true)),
+			fmt.Sprintf(`DELETE FROM change_log_entries WHERE kind = 'book_left' AND record_id = OLD.id AND library_id = OLD.library_id;
+				INSERT INTO change_log_entries (kind, record_id, library_id, deleted, changed_at)
+				VALUES ('book_left', OLD.id, OLD.library_id, TRUE, %s);`, now)),
 		`DROP TRIGGER change_log_files_update`,
 		trigger("files_update", "UPDATE", "files",
 			differs("book_id", "file_type", "file_role", "filesize_bytes", "name", "name_source", "filepath",
@@ -216,6 +225,8 @@ func init() {
 						"cover_image_filename", "is_preferred_cover", "updated_at"),
 					moveBooks("OLD.book_id, NEW.book_id")),
 				`DELETE FROM change_log_entries WHERE kind IN ('series', 'person', 'genre', 'tag', 'publisher', 'list', 'user_book', 'book_left')`,
+				`DROP INDEX IF EXISTS ux_change_log_entries_record`,
+				`CREATE UNIQUE INDEX ux_change_log_entries_kind_record_id_user_id ON change_log_entries (kind, record_id, IFNULL(user_id, 0))`,
 			} {
 				if _, err := tx.ExecContext(ctx, statement); err != nil {
 					return errors.WithStack(err)

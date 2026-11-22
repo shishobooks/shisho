@@ -325,7 +325,7 @@ final class CatalogStore: Sendable {
     /// ownDeviceID is this installation's Device, so another device's place
     /// arriving while this one has moves to send is kept as an offer.
     /// access is what the page said the user can access, or nil from a
-    /// server that doesn't say: a download from the start that ends with it
+    /// server that doesn't say: the first page of a download from the start
     /// records it.
     @discardableResult
     func apply(_ page: Shishoapp.FeedResponse, after cursor: Int? = nil, ownDeviceID: String = "",
@@ -336,6 +336,12 @@ final class CatalogStore: Sendable {
                 return false
             }
             let generation = state.generation
+            // The first page of a download from the start records the access
+            // it began with.
+            let accessKnown = try Bool.fetchOne(db, sql: "SELECT access_known FROM sync_state WHERE id = 1") ?? false
+            if state.cursor == 0, !accessKnown, let access {
+                try CatalogStore.setAccess(access, in: db)
+            }
             var touched = Touched()
             for entry in page.entries {
                 try CatalogStore.applyEntry(entry, generation: generation, ownDeviceID: ownDeviceID, touched: &touched, in: db)
@@ -358,11 +364,7 @@ final class CatalogStore: Sendable {
                         AND file_id NOT IN (SELECT file_id FROM journal WHERE type = 'reading_position' AND held_for IS NULL AND file_id IS NOT NULL)
                     """)
                 try db.execute(sql: "UPDATE sync_state SET starting_over = 0 WHERE id = 1")
-                try CatalogStore.rebuildSearch(in: db)
-            }
-            let accessKnown = try Bool.fetchOne(db, sql: "SELECT access_known FROM sync_state WHERE id = 1") ?? false
-            if !page.hasMore, !accessKnown, let access {
-                try CatalogStore.setAccess(access, in: db)
+                try CatalogStore.pruneSearch(in: db)
             }
             return true
         }
@@ -376,6 +378,9 @@ final class CatalogStore: Sendable {
         switch entry.kind {
         case .book:
             touched.books.insert(entry.id)
+            // The Series it leaves keep its title in their search rows until
+            // they're written again.
+            try touched.series.formUnion(Int.fetchAll(db, sql: "SELECT series_id FROM book_series WHERE book_id = ?", arguments: [entry.id]))
             if entry.deleted {
                 try db.execute(sql: "DELETE FROM books WHERE id = ?", arguments: [entry.id])
                 try db.execute(sql: "DELETE FROM books_fts WHERE rowid = ?", arguments: [entry.id])
@@ -426,7 +431,7 @@ final class CatalogStore: Sendable {
                 )
             }
         default:
-            _ = try CatalogStore.applyCatalogEntry(entry, generation: generation, touched: &touched, in: db)
+            try CatalogStore.applyCatalogEntry(entry, generation: generation, touched: &touched, in: db)
         }
     }
 

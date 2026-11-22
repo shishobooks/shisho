@@ -72,7 +72,7 @@ type FeedQuery struct {
 	// LibraryID or ListID fetches one Library or List the user just gained
 	// whole, as Access says (ADR 0023): only its records, from its own
 	// cursor, starting at 0. One outside the user's reach is a 404.
-	LibraryID int `query:"library_id" json:"library_id,omitempty" validate:"min=0"`
+	LibraryID int `query:"library_id" json:"library_id,omitempty" validate:"min=0,excluded_with=ListID"`
 	ListID    int `query:"list_id" json:"list_id,omitempty" validate:"min=0"`
 }
 
@@ -359,8 +359,18 @@ type FeedList struct {
 	// Share's permission.
 	Permission string `json:"permission" tstype:"FeedListPermission"`
 	// Books are in the List's order: by SortOrder, then most recently
-	// added. A Book in a Library the user can't access is left out.
+	// added. A Book in a Library the user can't access is left out, so the
+	// app fetches its Lists again when its access to a Library changes.
 	Books []FeedListBook `json:"books"`
+	// Shares are who the List is shared with, as the web app shows them,
+	// for its owner and managers; empty for anyone else.
+	Shares []FeedListShare `json:"shares"`
+}
+
+// FeedListShare is one user a List is shared with, and what they may do.
+type FeedListShare struct {
+	User       AppUser `json:"user"`
+	Permission string  `json:"permission" tstype:"ListPermission"`
 }
 
 // FeedListBook is one of a List's Books.

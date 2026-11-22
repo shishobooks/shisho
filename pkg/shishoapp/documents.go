@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/robinjoseph08/golib/logger"
 	"github.com/shishobooks/shisho/pkg/cbz"
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/covers"
@@ -191,14 +192,19 @@ func loadBooks(ctx context.Context, tx bun.IDB, ids []int) (map[int]*FeedBook, e
 		return nil, errors.WithStack(err)
 	}
 	for _, book := range books {
-		out[book.ID] = bookDocument(book)
+		// Reading a CBZ's pages opens its archive, so a sync the app gave
+		// up on stops here.
+		if err := ctx.Err(); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		out[book.ID] = bookDocument(ctx, book)
 	}
 	return out, nil
 }
 
 // bookDocument is book as the app keeps it. The triggers move a Book's
 // entry when anything read here changes.
-func bookDocument(book *models.Book) *FeedBook {
+func bookDocument(ctx context.Context, book *models.Book) *FeedBook {
 	doc := &FeedBook{
 		ID:          book.ID,
 		LibraryID:   book.LibraryID,
@@ -270,7 +276,7 @@ func bookDocument(book *models.Book) *FeedBook {
 		doc.Files = append(doc.Files, FeedFile{
 			Publisher:                publisher,
 			Identifiers:              identifiers,
-			Pages:                    filePages(file),
+			Pages:                    filePages(ctx, file),
 			CoverVersion:             fileCoverVersion(file),
 			Narrators:                narrators,
 			Chapters:                 chapterDocuments(file.Chapters),
@@ -388,13 +394,16 @@ func compareNames(a, b string) int {
 
 // filePages is a CBZ's pages in the server's order (ADR 0025), or none for
 // any other File Type or a CBZ that can't be read.
-func filePages(file *models.File) []string {
+func filePages(ctx context.Context, file *models.File) []string {
 	pages := []string{}
 	if file.FileType != models.FileTypeCBZ {
 		return pages
 	}
 	archive, err := zip.OpenReader(file.Filepath)
 	if err != nil {
+		// The Book goes out without them; the app reads pages from the file
+		// it downloads, and gets them when the File next changes.
+		logger.FromContext(ctx).Warn("CBZ pages not read for the Shisho app", logger.Data{"file_id": file.ID, "error": err.Error()})
 		return pages
 	}
 	defer archive.Close()
@@ -558,8 +567,9 @@ func loadLists(ctx context.Context, tx bun.IDB, user *models.User, ids []int) (m
 	err := tx.NewSelect().Model(&lists).
 		Relation("User").
 		Relation("ListShares", func(q *bun.SelectQuery) *bun.SelectQuery {
-			return q.Where("ls.user_id = ?", user.ID)
+			return q.Order("ls.id ASC")
 		}).
+		Relation("ListShares.User").
 		Relation("ListBooks", func(q *bun.SelectQuery) *bun.SelectQuery {
 			q = q.Join("JOIN books AS lbb ON lbb.id = lb.book_id").
 				OrderExpr("lb.sort_order IS NULL, lb.sort_order ASC, lb.added_at DESC, lb.id ASC")
@@ -577,16 +587,31 @@ func loadLists(ctx context.Context, tx bun.IDB, user *models.User, ids []int) (m
 		return nil, errors.WithStack(err)
 	}
 	for _, list := range lists {
-		permission := FeedListOwner
-		if list.UserID != user.ID {
-			if len(list.ListShares) == 0 {
-				continue
+		permission := ""
+		if list.UserID == user.ID {
+			permission = FeedListOwner
+		}
+		shares := []FeedListShare{}
+		for _, share := range list.ListShares {
+			if share.UserID == user.ID && permission == "" {
+				permission = share.Permission
 			}
-			permission = list.ListShares[0].Permission
+			entry := FeedListShare{User: AppUser{ID: share.UserID}, Permission: share.Permission}
+			if share.User != nil {
+				entry.User.Username = share.User.Username
+			}
+			shares = append(shares, entry)
+		}
+		if permission == "" {
+			continue
+		}
+		// Who else it's shared with is the owner's and managers' to see.
+		if permission != FeedListOwner && permission != FeedListManager {
+			shares = []FeedListShare{}
 		}
 		doc := &FeedList{
 			ID: list.ID, Name: list.Name, Description: list.Description, IsOrdered: list.IsOrdered,
-			DefaultSort: list.DefaultSort, Permission: permission, Books: []FeedListBook{},
+			DefaultSort: list.DefaultSort, Permission: permission, Books: []FeedListBook{}, Shares: shares,
 			Owner: AppUser{ID: list.UserID},
 		}
 		if list.User != nil {

@@ -70,6 +70,14 @@ final class AppModel {
     var searchPath: [Route] = []
     /// The sign-in sheet for adding another account is open.
     var addingAccount = false
+    /// The Library picked in the Library, kept for each account, or 0 for
+    /// every Library.
+    var libraryID = 0 {
+        didSet {
+            guard let session, libraryID != oldValue else { return }
+            UserDefaults.standard.set(libraryID, forKey: "libraryID.\(session.account.id)")
+        }
+    }
     private let syncs = SyncRunner()
     var isSyncing: Bool { syncs.isRunning }
     /// False while the device has no network at all, as in airplane mode
@@ -112,6 +120,8 @@ final class AppModel {
         libraryPath = []
         listsPath = []
         searchPath = []
+        stopPrefetching()
+        libraryID = session.map { UserDefaults.standard.integer(forKey: "libraryID.\($0.account.id)") } ?? 0
         if let session {
             let player = AudioPlayer(session: session) { [weak self] in
                 Task { await self?.syncNow() }
@@ -155,6 +165,9 @@ final class AppModel {
 
     /// Every account this installation signed in to, the current one first.
     var allAccounts: [Account] {
+        // The account store isn't observable; reading session makes this
+        // update whenever the account showing changes, which is when the
+        // list does.
         _ = session
         let current = accounts.current?.id
         return accounts.accounts.sorted { ($0.id == current ? 0 : 1) < ($1.id == current ? 0 : 1) }
@@ -268,6 +281,10 @@ final class AppModel {
             if known != nil {
                 try opened.store.startOverIfNeeded(serverSaidSo: true)
             }
+            // A sync of the account showing until now must not land on this
+            // one, nor sign it out.
+            syncs.stop()
+            syncStatus = .idle
             session = opened
         } catch {
             throw SignInError(message: String(localized: "The app couldn't open its storage on this device. \(error.localizedDescription)"))
@@ -297,9 +314,10 @@ final class AppModel {
         await session.client.signOut()
     }
 
-    /// The server ended the sign-in. Its data stays, waiting for the same
-    /// user to sign in again.
-    private func handleSignedOut() {
+    /// The server ended the sign-in of session's account. Its data stays,
+    /// waiting for the same user to sign in again.
+    private func handleSignedOut(_ ended: AccountSession) {
+        guard ended === session else { return }
         syncs.stop()
         guard var account = session?.account else { return }
         account.signedOut = true
@@ -397,7 +415,12 @@ final class AppModel {
         }
         switch error {
         case .signedOut:
-            handleSignedOut()
+            handleSignedOut(session)
+        case .noAccess:
+            // The user's role can't read Books anymore: nothing in the copy
+            // is theirs to see. The journal stays, to send if that changes.
+            try? session.store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [], listIds: []), force: true)
+            syncStatus = .failed(Messages.signIn(error))
         case .unreachable:
             syncStatus = .offline
         case .localNetworkDenied:
@@ -429,11 +452,24 @@ final class AppModel {
     func setPrefetchesCovers(_ on: Bool) {
         guard let session else { return }
         UserDefaults.standard.set(on, forKey: "prefetchCovers.\(session.account.id)")
-        if on { prefetchCoversIfWanted(session) }
+        if on {
+            prefetchCoversIfWanted(session)
+        } else {
+            stopPrefetching()
+        }
     }
 
     @ObservationIgnored private var onWiFi = false
     @ObservationIgnored private var prefetching: Task<Void, Never>?
+    /// Which prefetch is current, so one that ends late doesn't clear a newer
+    /// one's handle.
+    @ObservationIgnored private var prefetchRun = 0
+
+    private func stopPrefetching() {
+        prefetching?.cancel()
+        prefetching = nil
+        prefetchRun += 1
+    }
 
     /// Downloads every cover the account's Library shows that isn't on the
     /// device yet, at the grid's size, while on Wi-Fi, so browsing offline
@@ -441,23 +477,29 @@ final class AppModel {
     private func prefetchCoversIfWanted(_ session: AccountSession) {
         guard prefetchesCovers(session.account), onWiFi, prefetching == nil else { return }
         let size = CoverCache.pixelSize(forWidth: 140, scale: UIScreen.main.scale)
+        prefetchRun += 1
+        let run = prefetchRun
         prefetching = Task { [weak self] in
             let versions = (try? session.store.coverVersions()) ?? []
             for cover in versions {
                 guard !Task.isCancelled, self?.session === session, self?.onWiFi == true else { break }
                 _ = await session.covers.image(bookID: cover.bookID, version: cover.version, size: size)
             }
-            self?.prefetching = nil
+            if self?.prefetchRun == run {
+                self?.prefetching = nil
+            }
         }
     }
 
     /// Coming back online syncs; going offline says so without waiting for
     /// a request to fail.
     private func networkChanged(available: Bool, wifi: Bool = false) {
+        let wasOnWiFi = onWiFi
         onWiFi = wifi
         if !wifi {
-            prefetching?.cancel()
-            prefetching = nil
+            stopPrefetching()
+        } else if !wasOnWiFi, let session {
+            prefetchCoversIfWanted(session)
         }
         guard available != networkAvailable else { return }
         networkAvailable = available

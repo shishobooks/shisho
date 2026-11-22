@@ -139,7 +139,7 @@ struct AccountSheet: View {
                 .tint(Theme.primary)
                 .accessibilityIdentifier("account.prefetchCovers")
                 .onChange(of: prefetchCovers) { _, on in model.setPrefetchesCovers(on) }
-            Text("Every cover in your libraries shows offline. Otherwise covers download as you browse.")
+            Text("Every cover in your Libraries shows offline. Otherwise covers download as you browse.")
                 .font(.geist(.footnote))
                 .foregroundStyle(Theme.mutedForeground)
         }

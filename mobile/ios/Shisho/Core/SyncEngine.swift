@@ -93,9 +93,13 @@ final class SyncEngine: Sendable {
             guard try store.apply(page, after: state.cursor, ownDeviceID: deviceID, access: fetched.access) else {
                 return
             }
+            // Every page's access counts: a Library lost and gained again
+            // between two pages had its records skipped meanwhile.
+            if let access = fetched.access {
+                try store.reconcileAccess(access)
+            }
             if !page.hasMore {
-                if let access = fetched.access {
-                    try store.reconcileAccess(access)
+                if fetched.access != nil {
                     try await fetchGained()
                 }
                 return

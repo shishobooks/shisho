@@ -5,7 +5,6 @@ import SwiftUI
 /// server's own way of matching and ranking (`CatalogStore.search`).
 struct SearchView: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("libraryID") private var storedLibraryID = 0
     @State private var text = ""
     @State private var results = SearchResults()
 
@@ -49,7 +48,7 @@ struct SearchView: View {
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
             .routeDestinations()
-            .task(id: "\(model.session?.account.id ?? "")|\(storedLibraryID)|\(text)") {
+            .task(id: "\(model.session?.account.id ?? "")|\(model.libraryID)|\(text)") {
                 await search()
             }
         }
@@ -65,7 +64,7 @@ struct SearchView: View {
                             Label(item.name, systemImage: kind.systemImage)
                                 .font(.geist(.body))
                             Spacer()
-                            Text("\(item.bookCount)")
+                            Text(verbatim: "\(item.bookCount)")
                                 .font(.geist(.subheadline))
                                 .foregroundStyle(Theme.mutedForeground)
                         }
@@ -78,7 +77,8 @@ struct SearchView: View {
     }
 
     /// Runs the search a moment after typing stops, and again whenever a
-    /// sync changes what it read.
+    /// sync changes what it read. It observes the store itself rather than
+    /// through observing(...), which has no pause to wait out typing.
     private func search() async {
         let query = text
         guard let store = model.session?.store, CatalogStore.searchQuery(query) != nil else {
@@ -87,7 +87,7 @@ struct SearchView: View {
         }
         try? await Task.sleep(for: .milliseconds(150))
         guard !Task.isCancelled else { return }
-        let libraryID = storedLibraryID == 0 ? nil : storedLibraryID
+        let libraryID = model.libraryID == 0 ? nil : model.libraryID
         let observation = ValueObservation.tracking { db in
             try CatalogStore.search(db, text: query, libraryID: libraryID)
         }.removeDuplicates()

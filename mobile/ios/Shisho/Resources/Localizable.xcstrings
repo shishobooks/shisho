@@ -1,9 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    " " : {
-
-    },
     "%@ #%@" : {
 
     },
@@ -13,16 +10,6 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$@ #%2$@-%3$@"
-          }
-        }
-      }
-    },
-    "%@ %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ %2$@"
           }
         }
       }
@@ -102,9 +89,6 @@
           }
         }
       }
-    },
-    "%lld" : {
-
     },
     "%lld changes made on this device couldn't be saved on the server. The last: %@" : {
       "localizations" : {
@@ -222,7 +206,7 @@
     "Enter your Shisho server's address." : {
 
     },
-    "Every cover in your libraries shows offline. Otherwise covers download as you browse." : {
+    "Every cover in your Libraries shows offline. Otherwise covers download as you browse." : {
 
     },
     "Export Diagnostics" : {
@@ -308,6 +292,9 @@
 
     },
     "My Lists" : {
+
+    },
+    "NARRATORS" : {
 
     },
     "Narrated" : {
@@ -456,6 +443,9 @@
     "Share" : {
 
     },
+    "Shared with %@" : {
+
+    },
     "Shared with Me" : {
 
     },
@@ -534,7 +524,7 @@
     "This Book isn't in your Libraries anymore" : {
 
     },
-    "This List isn't shared with you anymore" : {
+    "This List isn't available anymore" : {
 
     },
     "This audiobook couldn't be played. Check your connection to the server and try again." : {
@@ -614,6 +604,15 @@
 
     },
     "by %@" : {
+
+    },
+    "can edit" : {
+
+    },
+    "can manage" : {
+
+    },
+    "can view" : {
 
     },
     "https://shisho.example.com" : {

@@ -156,11 +156,7 @@ struct BookDetailView: View {
                         .font(.geist(.subheadline))
                         .lineLimit(showingFullDescription ? nil : 5)
                         .accessibilityIdentifier("book.detail.description")
-                    Button(showingFullDescription ? String(localized: "Show less") : String(localized: "Show more")) {
-                        withAnimation(.easeInOut(duration: 0.25)) { showingFullDescription.toggle() }
-                    }
-                    .font(.geist(.subheadline, weight: .semibold))
-                    .accessibilityIdentifier("book.detail.description.more")
+                    ShowMoreButton(expanded: $showingFullDescription, identifier: "book.detail.description.more")
                 }
                 .padding(.top, 28)
             }
@@ -238,6 +234,19 @@ struct BookDetailView: View {
             rows.append(InfoRow(label: String(localized: "CREATORS"), value: AnyView(LinkChips(items: credited.map {
                 (Route.resource(.person, id: $0.personID, name: $0.name), "\($0.name) (\(roleLabel($0.role ?? "")))")
             }, identifier: "book.detail.creator"))))
+        }
+        // Each narrator once, across the Book's Files, as the web app's
+        // Book page lists them.
+        var narrators: [(Int, String)] = []
+        for file in book.files {
+            for (id, name) in zip(file.narratorIDs, file.narrators) where !narrators.contains(where: { $0.0 == id }) {
+                narrators.append((id, name))
+            }
+        }
+        if !narrators.isEmpty {
+            rows.append(InfoRow(label: String(localized: "NARRATORS"), value: AnyView(LinkChips(items: narrators.map {
+                (Route.resource(.person, id: $0.0, name: $0.1), $0.1)
+            }, identifier: "book.detail.narrator"))))
         }
         if !book.genres.isEmpty {
             rows.append(InfoRow(label: String(localized: "GENRES"), value: AnyView(LinkChips(items: book.genres.map {
@@ -319,7 +328,7 @@ private struct FileCard: View {
                                 .lineLimit(1)
                         }
                         ForEach(file.identifiers, id: \.self) { identifier in
-                            Text("\(IdentifierLabel.text(identifier.type)) \(identifier.value)")
+                            Text(verbatim: "\(IdentifierLabel.text(identifier.type)) \(identifier.value)")
                                 .font(.geist(.caption))
                                 .foregroundStyle(Theme.mutedForeground)
                                 .textSelection(.enabled)

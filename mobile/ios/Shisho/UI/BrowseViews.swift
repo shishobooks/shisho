@@ -52,7 +52,6 @@ struct BrowseRow: View {
 /// with how many Books name each, filtered as the user types.
 struct ResourceListView: View {
     @Environment(AppModel.self) private var model
-    @AppStorage("libraryID") private var storedLibraryID = 0
     let kind: ResourceKind
 
     @State private var items: [ResourceSummary]?
@@ -74,7 +73,7 @@ struct ResourceListView: View {
                             .font(.geist(.body))
                             .foregroundStyle(Theme.foreground)
                         Spacer()
-                        Text("\(item.bookCount)")
+                        Text(verbatim: "\(item.bookCount)")
                             .font(.geist(.subheadline))
                             .foregroundStyle(Theme.mutedForeground)
                             .monospacedDigit()
@@ -100,7 +99,7 @@ struct ResourceListView: View {
         .navigationBarTitleDisplayMode(.large)
         .miniPlayerClearance()
         .refreshable { await model.syncNow() }
-        .observing(model.session?.store, id: "\(kind)-\(storedLibraryID)", into: $items) { [kind, libraryID = storedLibraryID == 0 ? nil : storedLibraryID] db in
+        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(kind)-\(model.libraryID)", into: $items) { [kind, libraryID = model.libraryID == 0 ? nil : model.libraryID] db in
             try CatalogStore.resources(db, kind: kind, libraryID: libraryID)
         }
     }
@@ -179,8 +178,8 @@ struct ResourceView: View {
                     Text(PlainText.from(description))
                         .font(.geist(.subheadline))
                         .lineLimit(showingFullDescription ? nil : 4)
-                        .onTapGesture { withAnimation { showingFullDescription.toggle() } }
                         .accessibilityIdentifier("resource.description")
+                    ShowMoreButton(expanded: $showingFullDescription, identifier: "resource.description.more")
                 }
                 if !detail.aliases.isEmpty {
                     Text("Also known as \(detail.aliases.joined(separator: ", "))")
@@ -219,5 +218,19 @@ enum PlainText {
             plain = plain.replacingOccurrences(of: entity, with: character)
         }
         return plain.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+/// Expands or collapses a long description.
+struct ShowMoreButton: View {
+    @Binding var expanded: Bool
+    let identifier: String
+
+    var body: some View {
+        Button(expanded ? String(localized: "Show less") : String(localized: "Show more")) {
+            withAnimation(.easeInOut(duration: 0.25)) { expanded.toggle() }
+        }
+        .font(.geist(.subheadline, weight: .semibold))
+        .accessibilityIdentifier(identifier)
     }
 }

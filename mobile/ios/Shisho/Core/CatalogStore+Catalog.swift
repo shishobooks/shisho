@@ -25,7 +25,7 @@ enum ResourceKind: String, CaseIterable, Hashable, Sendable {
     }
 }
 
-/// A Series, Person, Genre, Tag, or Publisher's own page.
+/// A Series, Person, Genre, or Tag's own page.
 struct ResourceDetail: Hashable, Sendable {
     let kind: ResourceKind
     let id: Int
@@ -45,6 +45,15 @@ struct ListSummary: Identifiable, Hashable, Sendable {
     let bookCount: Int
     /// The first Books' covers, in the List's order.
     let covers: [BookSummary]
+    /// Who it's shared with, for its owner and managers.
+    var shares: [ListShare] = []
+}
+
+/// Someone a List is shared with.
+struct ListShare: Hashable, Codable, Sendable {
+    let userID: Int
+    let username: String
+    let permission: String
 }
 
 /// The user's own standing with a Book: their Reading Status and Rating.
@@ -80,7 +89,7 @@ struct Touched {
 extension CatalogStore {
     // MARK: - Schema
 
-    /// The whole catalog (#914): Series, Persons, Genres, Tags, Publishers,
+    /// The whole catalog: Series, Persons, Genres, Tags, Publishers,
     /// Lists, and the user's record for each Book, what Books and Files
     /// gained with them, what the user can access, and the search index.
     static func migrateFullCatalog(_ db: Database) throws {
@@ -94,9 +103,8 @@ extension CatalogStore {
             t.add(column: "identifiers", .text).notNull().defaults(to: "[]")
             t.add(column: "pages", .text).notNull().defaults(to: "[]")
         }
-        // False while the copy is made from the start: the download that
-        // finishes it says what the user can access, rather than gaining
-        // every Library one by one.
+        // False until a download from the start records what the user could
+        // access when it began; access changes after are answered from then.
         try db.alter(table: "sync_state") { t in
             t.add(column: "access_known", .boolean).notNull().defaults(to: false)
         }
@@ -141,6 +149,9 @@ extension CatalogStore {
             t.column("owner_id", .integer).notNull()
             t.column("owner_name", .text).notNull()
             t.column("permission", .text).notNull()
+            // JSON: [{"user_id","username","permission"}], for its owner and
+            // managers.
+            t.column("shares", .text).notNull().defaults(to: "[]")
             t.column("generation", .integer).notNull()
         }
         try db.create(table: "list_books") { t in
@@ -186,9 +197,8 @@ extension CatalogStore {
 
     // MARK: - Applying
 
-    /// Applies one entry of the kinds this file adds. Returns false for a
-    /// kind it doesn't handle.
-    static func applyCatalogEntry(_ entry: Shishoapp.FeedEntry, generation: Int, touched: inout Touched, in db: Database) throws -> Bool {
+    /// Applies one entry of the kinds this file adds; others are skipped.
+    static func applyCatalogEntry(_ entry: Shishoapp.FeedEntry, generation: Int, touched: inout Touched, in db: Database) throws {
         switch entry.kind {
         case .series:
             try applyResource("series", entry: entry, generation: generation, in: db,
@@ -236,9 +246,8 @@ extension CatalogStore {
                 try upsert(list, generation: generation, in: db)
             }
         default:
-            return false
+            return
         }
-        return true
     }
 
     /// Upserts or deletes one resource row; values are id, library_id, name,
@@ -260,14 +269,17 @@ extension CatalogStore {
     }
 
     private static func upsert(_ list: Shishoapp.FeedList, generation: Int, in db: Database) throws {
+        let shares = list.shares.map { ListShare(userID: $0.user.id, username: $0.user.username, permission: $0.permission.rawValue) }
+        let sharesJSON = (try? String(data: JSONEncoder().encode(shares), encoding: .utf8)) ?? "[]"
         try db.execute(sql: """
-            INSERT INTO lists (id, name, description, is_ordered, default_sort, owner_id, owner_name, permission, generation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO lists (id, name, description, is_ordered, default_sort, owner_id, owner_name, permission, shares, generation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET name = excluded.name, description = excluded.description,
                 is_ordered = excluded.is_ordered, default_sort = excluded.default_sort, owner_id = excluded.owner_id,
-                owner_name = excluded.owner_name, permission = excluded.permission, generation = excluded.generation
+                owner_name = excluded.owner_name, permission = excluded.permission, shares = excluded.shares,
+                generation = excluded.generation
             """, arguments: [list.id, list.name, list.description, list.isOrdered, list.defaultSort.rawValue, list.owner.id,
-                             list.owner.username, list.permission.rawValue, generation])
+                             list.owner.username, list.permission.rawValue, sharesJSON, generation])
         try db.execute(sql: "DELETE FROM list_books WHERE list_id = ?", arguments: [list.id])
         for (position, book) in list.books.enumerated() {
             try db.execute(sql: "INSERT INTO list_books (list_id, position, book_id, sort_order, added_at) VALUES (?, ?, ?, ?, ?)",
@@ -360,19 +372,13 @@ extension CatalogStore {
         }
     }
 
-    /// Rebuilds the whole search index, after a download from the start
-    /// dropped what it didn't send.
-    static func rebuildSearch(in db: Database) throws {
-        for index in ["books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts"] {
-            try db.execute(sql: "DELETE FROM \(index)")
+    /// Drops the search rows of records a download from the start dropped.
+    /// Each page indexed what it brought, so nothing else needs writing.
+    static func pruneSearch(in db: Database) throws {
+        for (index, table) in [("books_fts", "books"), ("series_fts", "series"), ("persons_fts", "persons"),
+                               ("genres_fts", "genres"), ("tags_fts", "tags")] {
+            try db.execute(sql: "DELETE FROM \(index) WHERE rowid NOT IN (SELECT id FROM \(table))")
         }
-        var all = Touched()
-        all.books = Set(try Int.fetchAll(db, sql: "SELECT id FROM books"))
-        all.series = Set(try Int.fetchAll(db, sql: "SELECT id FROM series"))
-        all.persons = Set(try Int.fetchAll(db, sql: "SELECT id FROM persons"))
-        all.genres = Set(try Int.fetchAll(db, sql: "SELECT id FROM genres"))
-        all.tags = Set(try Int.fetchAll(db, sql: "SELECT id FROM tags"))
-        try reindex(all, in: db)
     }
 
     /// Deletes the rows of ids from an index, then inserts them again from
@@ -388,38 +394,44 @@ extension CatalogStore {
 
     /// Brings what's on the device in line with what the user can access
     /// now (ADR 0023): a Library or List they lost goes, and one they gained
-    /// is marked to fetch whole. A copy being made from the start takes the
-    /// access as it is, since that download brings everything.
-    func reconcileAccess(_ access: Shishoapp.FeedAccess) throws {
+    /// is marked to fetch whole. A Library gained or lost changes which of
+    /// its Books each List holds for the user, so every List is fetched
+    /// again too. Until a download from the start has recorded the access
+    /// it began with, there's nothing to compare against. force applies it
+    /// even then, as when the server refuses the user every Book.
+    func reconcileAccess(_ access: Shishoapp.FeedAccess, force: Bool = false) throws {
         try pool.write { db in
             let known = try Bool.fetchOne(db, sql: "SELECT access_known FROM sync_state WHERE id = 1") ?? false
-            let startingOver = try CatalogStore.syncState(db).startingOver
-            if !known || startingOver {
-                // The download from the start is still running; it finishes
-                // by setting the access.
-                return
-            }
+            guard known || force else { return }
             let libraries = Set(access.libraryIds)
             let had = Set(try Int.fetchAll(db, sql: "SELECT library_id FROM library_access"))
+                .union(try Int.fetchAll(db, sql: "SELECT id FROM libraries"))
             for lost in had.subtracting(libraries) {
                 try CatalogStore.dropLibrary(lost, in: db)
             }
-            for gained in libraries.subtracting(had) {
-                try db.execute(sql: "INSERT INTO library_access (library_id, cursor, complete) VALUES (?, 0, 0)", arguments: [gained])
+            let gained = libraries.subtracting(had)
+            for id in gained {
+                try db.execute(sql: "INSERT OR REPLACE INTO library_access (library_id, cursor, complete) VALUES (?, 0, 0)", arguments: [id])
             }
             let lists = Set(access.listIds)
             let hadLists = Set(try Int.fetchAll(db, sql: "SELECT list_id FROM list_access"))
+                .union(try Int.fetchAll(db, sql: "SELECT id FROM lists"))
             for lost in hadLists.subtracting(lists) {
                 try CatalogStore.dropList(lost, in: db)
             }
-            for gained in lists.subtracting(hadLists) {
-                try db.execute(sql: "INSERT INTO list_access (list_id, complete) VALUES (?, 0)", arguments: [gained])
+            if !gained.isEmpty || !had.subtracting(libraries).isEmpty {
+                try db.execute(sql: "UPDATE list_access SET complete = 0")
+            }
+            for id in lists.subtracting(hadLists) {
+                try db.execute(sql: "INSERT OR REPLACE INTO list_access (list_id, complete) VALUES (?, 0)", arguments: [id])
             }
         }
     }
 
-    /// Records the access a finished download from the start was made with:
-    /// it brought every Library and List listed, and dropped the rest.
+    /// Records the access a download from the start began with, on its first
+    /// page: it brings every Library and List listed. One gained or lost
+    /// while it runs is answered when it ends (reconcileAccess), since a
+    /// Library gained midway has records behind the cursor.
     static func setAccess(_ access: Shishoapp.FeedAccess, in db: Database) throws {
         try db.execute(sql: "DELETE FROM library_access")
         try db.execute(sql: "DELETE FROM list_access")
@@ -429,10 +441,14 @@ extension CatalogStore {
         for id in access.listIds {
             try db.execute(sql: "INSERT INTO list_access (list_id, complete) VALUES (?, 1)", arguments: [id])
         }
-        // A Library the download didn't reach is one the user can't see.
-        let keep = access.libraryIds.map(String.init).joined(separator: ",")
-        for id in try Int.fetchAll(db, sql: "SELECT id FROM libraries WHERE id NOT IN (\(keep.isEmpty ? "NULL" : keep))") {
+        // What the copy holds that the user can't access goes now.
+        let keep = Set(access.libraryIds)
+        for id in try Int.fetchAll(db, sql: "SELECT id FROM libraries") where !keep.contains(id) {
             try dropLibrary(id, in: db)
+        }
+        let keepLists = Set(access.listIds)
+        for id in try Int.fetchAll(db, sql: "SELECT id FROM lists") where !keepLists.contains(id) {
+            try dropList(id, in: db)
         }
         try db.execute(sql: "UPDATE sync_state SET access_known = 1 WHERE id = 1")
     }
@@ -524,7 +540,7 @@ extension CatalogStore {
 
     /// The Series, Persons, Genres, or Tags of libraryID, or of every
     /// Library, by sort name, each with how many Books name it.
-    static func resources(_ db: Database, kind: ResourceKind, libraryID: Int?) throws -> [ResourceSummary] {
+    static func resources(_ db: Database, kind: ResourceKind, libraryID: Int?, ids: [Int]? = nil) throws -> [ResourceSummary] {
         let count: String
         switch kind {
         case .series: count = "(SELECT COUNT(DISTINCT book_id) FROM book_series WHERE series_id = r.id)"
@@ -534,9 +550,16 @@ extension CatalogStore {
         }
         var sql = "SELECT r.id, r.name, \(count) AS book_count FROM \(kind.table) r"
         var arguments: StatementArguments = []
+        var conditions: [String] = []
         if let libraryID {
-            sql += " WHERE r.library_id = ?"
+            conditions.append("r.library_id = ?")
             arguments = [libraryID]
+        }
+        if let ids {
+            conditions.append("r.id IN (\(ids.isEmpty ? "NULL" : ids.map(String.init).joined(separator: ",")))")
+        }
+        if !conditions.isEmpty {
+            sql += " WHERE " + conditions.joined(separator: " AND ")
         }
         sql += " ORDER BY r.sort_name COLLATE NOCASE, r.id"
         return try Row.fetchAll(db, sql: sql, arguments: arguments)
@@ -591,14 +614,16 @@ extension CatalogStore {
 
     static func lists(_ db: Database) throws -> [ListSummary] {
         try Row.fetchAll(db, sql: """
-            SELECT l.id, l.name, l.description, l.permission, l.owner_name,
+            SELECT l.id, l.name, l.description, l.permission, l.owner_name, l.shares,
                 (SELECT COUNT(*) FROM list_books lb JOIN books b ON b.id = lb.book_id WHERE lb.list_id = l.id) AS book_count
             FROM lists l ORDER BY l.permission != 'owner', l.name COLLATE NOCASE, l.id
             """).map { row in
             let id: Int = row["id"]
             let covers = try listBooks(db, listID: id, limit: 3)
+            let shares = ((row["shares"] as String?)?.data(using: .utf8))
+                .flatMap { try? JSONDecoder().decode([ListShare].self, from: $0) } ?? []
             return ListSummary(id: id, name: row["name"], description: row["description"], permission: row["permission"],
-                               ownerName: row["owner_name"], bookCount: row["book_count"], covers: covers)
+                               ownerName: row["owner_name"], bookCount: row["book_count"], covers: covers, shares: shares)
         }
     }
 
@@ -659,7 +684,11 @@ extension CatalogStore {
         let library = libraryID.map { " AND f.library_id = \($0)" } ?? ""
 
         var bookIDs: [Int] = []
-        let candidates = identifierForms(text)
+        // An identifier is one word, or an ISBN typed with spaces, so other
+        // searches skip the scan of every File's identifiers.
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        let oneWord = !trimmed.contains(" ") || trimmed.allSatisfy { $0.isNumber || " -xX".contains($0) }
+        let candidates = oneWord ? identifierForms(text) : []
         if !candidates.isEmpty {
             let marks = candidates.map { _ in "?" }.joined(separator: ",")
             bookIDs = try Int.fetchAll(db, sql: """
@@ -683,7 +712,7 @@ extension CatalogStore {
             let ids = try Int.fetchAll(db, sql: "SELECT f.\(idColumn) FROM \(fts) f WHERE \(fts) MATCH ?\(library) ORDER BY f.rank LIMIT 20",
                                        arguments: [query])
             guard !ids.isEmpty else { return [] }
-            let all = Dictionary(uniqueKeysWithValues: try resources(db, kind: kind, libraryID: libraryID).map { ($0.id, $0) })
+            let all = Dictionary(uniqueKeysWithValues: try resources(db, kind: kind, libraryID: libraryID, ids: ids).map { ($0.id, $0) })
             return ids.compactMap { all[$0] }
         }
         results.series = try resource(.series, "series_fts", "series_id")

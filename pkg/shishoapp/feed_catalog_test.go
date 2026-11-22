@@ -384,3 +384,81 @@ func (f *fixture) changesIn(credential, query string, limit int) FeedResponse {
 	require.NoError(f.t, decodeJSON(rec, &resp))
 	return resp
 }
+
+// Each Library a Book left keeps its own departure, so a Book moved twice
+// between syncs still leaves the first Library's copies.
+func TestFeed_BookMovedTwiceLeavesBothLibraries(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "First")
+	f.addLibrary(2, "Second")
+	f.addLibrary(3, "Third")
+	f.addBook(1, 1, "Dune")
+	f.addUser(1)
+	credential := f.signIn()
+
+	cursor := f.changes(credential, 0, 0).Cursor
+	f.exec(`UPDATE books SET library_id = 2 WHERE id = 1`)
+	f.exec(`UPDATE books SET library_id = 3 WHERE id = 1`)
+	resp := f.changes(credential, cursor, 0)
+	require.Equal(t, []string{"book_left:1-"}, summary(resp))
+	assert.Equal(t, 1, resp.Entries[0].LibraryID)
+}
+
+// A List's owner and its managers see who it's shared with, as on the web;
+// anyone else it's shared with sees only their own permission.
+func TestFeed_ListSharesReachThoseWhoManageThem(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	userID := f.addUser()
+	other := f.addOtherUser()
+	f.exec(`INSERT INTO lists (id, user_id, name, default_sort) VALUES (1, ?, 'Mine', 'added_at_desc'), (2, ?, 'Theirs', 'added_at_desc'), (3, ?, 'Managed', 'added_at_desc')`, userID, other, other)
+	f.exec(`INSERT INTO list_shares (list_id, user_id, permission) VALUES (1, ?, 'viewer'), (2, ?, 'editor'), (3, ?, 'manager')`, other, userID, userID)
+	credential := f.signIn()
+
+	resp := f.changes(credential, 0, 0)
+	mine := entryOf(resp, FeedKindList, 1)
+	require.NotNil(t, mine)
+	assert.Equal(t, []FeedListShare{{User: AppUser{ID: other, Username: "other"}, Permission: "viewer"}}, mine.List.Shares)
+	theirs := entryOf(resp, FeedKindList, 2)
+	require.NotNil(t, theirs)
+	assert.Equal(t, []FeedListShare{}, theirs.List.Shares)
+	managed := entryOf(resp, FeedKindList, 3)
+	require.NotNil(t, managed)
+	assert.Equal(t, []FeedListShare{{User: AppUser{ID: userID, Username: "reader"}, Permission: "manager"}}, managed.List.Shares)
+}
+
+func TestFeed_ScopedFetchNamesOneScope(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Mine")
+	f.addUser()
+	credential := f.signIn()
+	rec := f.do(call{path: "/mobile/changes?cursor=0&library_id=1&list_id=1", credential: credential})
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+}
+
+// A page whose documents take too long to build, as a Library of CBZs on a
+// slow disk can, ends early and goes on from there, rather than outlast
+// the app's request.
+func TestFeed_SlowPageEndsEarly(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.h.feedChunk = 2
+	f.h.feedBudget = -1
+	f.addLibrary(1, "Fiction")
+	for id := 1; id <= 4; id++ {
+		f.addBook(id, 1, fmt.Sprintf("Book %d", id))
+	}
+	f.addUser()
+	credential := f.signIn()
+
+	first := f.changes(credential, 0, 0)
+	assert.Equal(t, []string{"library:1", "book:1"}, summary(first))
+	assert.True(t, first.HasMore)
+	second := f.changes(credential, first.Cursor, 0)
+	assert.Equal(t, []string{"book:2", "book:3"}, summary(second))
+	third := f.changes(credential, second.Cursor, 0)
+	assert.Equal(t, []string{"book:4"}, summary(third))
+	assert.False(t, third.HasMore)
+}

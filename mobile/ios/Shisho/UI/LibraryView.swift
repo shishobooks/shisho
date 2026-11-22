@@ -7,7 +7,6 @@ struct LibraryView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    @AppStorage("libraryID") private var storedLibraryID = 0
     @State private var books: [BookSummary]?
     @State private var libraries: [LibrarySummary]?
     /// How far the content has scrolled up, which shrinks the logo.
@@ -16,7 +15,7 @@ struct LibraryView: View {
     @State private var notes: [JournalNote]?
 
     private var libraryID: Int? {
-        storedLibraryID == 0 ? nil : storedLibraryID
+        model.libraryID == 0 ? nil : model.libraryID
     }
 
 
@@ -34,7 +33,7 @@ struct LibraryView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ScrollTopMarker(space: "library")
                         if let libraries, libraries.count > 1 {
-                            LibraryPicker(libraries: libraries, selection: $storedLibraryID, name: libraryName)
+                            LibraryPicker(libraries: libraries, selection: $model.libraryID, name: libraryName)
                                 .padding(.horizontal, GridLayout.margin)
                                 .padding(.top, 8)
                         }
@@ -80,7 +79,7 @@ struct LibraryView: View {
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
             try CatalogStore.journalNotes(db)
         }
-        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(storedLibraryID)", into: $books) { [libraryID] db in
+        .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(model.libraryID)", into: $books) { [libraryID] db in
             try CatalogStore.books(db, libraryID: libraryID)
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $libraries) { db in
@@ -88,7 +87,7 @@ struct LibraryView: View {
         }
         .onChange(of: libraries) { _, libraries in
             if let libraries, libraryID != nil, !libraries.contains(where: { $0.id == libraryID }) {
-                storedLibraryID = 0
+                model.libraryID = 0
             }
         }
     }
@@ -289,7 +288,7 @@ struct BookCell: View {
         badge.backgroundColor = Theme.primary
         badge.foregroundColor = Theme.primaryForeground
         badge.font = .geist(.caption, weight: .heavy)
-        return Text(badge) + Text(" ") + Text(book.title)
+        return Text(badge) + Text(verbatim: " ") + Text(book.title)
     }
 
     private var accessibilityText: String {

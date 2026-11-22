@@ -177,4 +177,44 @@ final class CatalogBrowseTests: XCTestCase {
         }
         XCTAssertEqual(sorted, [2, 1])
     }
+
+    /// A Library gained while a download from the start runs has records
+    /// behind its cursor, so it's fetched whole once the download ends.
+    func testAccessGainedDuringADownloadIsFetched() throws {
+        let start = Shishoapp.FeedAccess(libraryIds: [1], listIds: [])
+        let later = Shishoapp.FeedAccess(libraryIds: [1, 2], listIds: [])
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction"))],"cursor":5,"has_more":true}"#), after: 0, access: start)
+        try store.reconcileAccess(start)
+        try store.apply(page(#"{"entries":[\#(book(1, "Dune"))],"cursor":9}"#), after: 5, access: later)
+        try store.reconcileAccess(later)
+        XCTAssertEqual(try store.pendingAccess().libraries.map(\.id), [2])
+    }
+
+    /// A role that can't read Books anymore leaves nothing on the device.
+    func testLosingEveryLibraryDropsTheCatalog() throws {
+        try catalog()
+        try store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [], listIds: []), force: true)
+        XCTAssertEqual(try store.books(libraryID: nil), [])
+        XCTAssertEqual(try store.libraries(), [])
+    }
+
+    /// A List holds only the Books the user can access, so a Library gained
+    /// or lost fetches every List again.
+    func testALibraryAccessChangeFetchesListsAgain() throws {
+        try catalog(access: Shishoapp.FeedAccess(libraryIds: [1], listIds: [7]))
+        XCTAssertEqual(try store.pendingAccess().lists, [])
+        try store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [1, 2], listIds: [7]))
+        XCTAssertEqual(try store.pendingAccess().lists, [7])
+    }
+
+    /// A Book that leaves a Series leaves the Series' search row too.
+    func testSeriesSearchForgetsABookThatLeft() throws {
+        try catalog()
+        let alone = """
+        {"kind":"book","id":2,"library_id":1,"book":{"id":2,"library_id":1,"title":"Dune Messiah","sort_title":"Dune Messiah",
+         "created_at":"2026-01-01T00:00:00Z","authors":[],"series":[],"files":[],"cover_version":""}}
+        """
+        try store.apply(page(#"{"entries":[\#(alone)],"cursor":10}"#))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.search($0, text: "Messiah", libraryID: nil) }.series, [])
+    }
 }
