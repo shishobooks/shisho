@@ -76,7 +76,8 @@ final class SyncEngine: Sendable {
         var restarts = 0
         while true {
             let state = try store.syncState()
-            let page = try await client.changes(cursor: state.cursor, expiredThrough: state.expiredThrough)
+            let fetched = try await client.changes(cursor: state.cursor, expiredThrough: state.expiredThrough)
+            let page = fetched.response
             if page.startOver {
                 restarts += 1
                 // A server that keeps answering "start over" can't be synced
@@ -89,12 +90,48 @@ final class SyncEngine: Sendable {
             }
             // Another sync moved the copy on while this one waited, so this
             // one's answer is stale.
-            guard try store.apply(page, after: state.cursor, ownDeviceID: deviceID) else {
+            guard try store.apply(page, after: state.cursor, ownDeviceID: deviceID, access: fetched.access) else {
                 return
             }
             if !page.hasMore {
+                if let access = fetched.access {
+                    try store.reconcileAccess(access)
+                    try await fetchGained()
+                }
                 return
             }
+        }
+    }
+
+    /// Fetches each Library and List the user gained whole, since their
+    /// records are behind the cursor (ADR 0023). A fetch cut short goes on
+    /// from where it got to next time.
+    private func fetchGained() async throws {
+        let pending = try store.pendingAccess()
+        for library in pending.libraries {
+            var cursor = library.cursor
+            while true {
+                let page: Shishoapp.FeedResponse
+                do {
+                    page = try await client.scopedChanges(libraryID: library.id, cursor: cursor)
+                } catch APIError.server(let status, _) where status == 404 {
+                    // Lost again since; the next page's access drops it.
+                    break
+                }
+                try store.applyScoped(page, libraryID: library.id, ownDeviceID: deviceID)
+                await Diagnostics.shared.log(.sync, "fetched \(page.entries.count) records of a Library gained")
+                guard page.hasMore else { break }
+                cursor = page.cursor
+            }
+        }
+        for listID in pending.lists {
+            let page: Shishoapp.FeedResponse
+            do {
+                page = try await client.scopedChanges(listID: listID, cursor: 0)
+            } catch APIError.server(let status, _) where status == 404 {
+                continue
+            }
+            try store.applyScoped(page, listID: listID, ownDeviceID: deviceID)
         }
     }
 }

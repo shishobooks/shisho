@@ -2,9 +2,10 @@
 /// the same expressions the server sorts with (`pkg/sortspec/sql.go`), so a
 /// Library reads the same on the web and on the device. Change both together.
 ///
-/// Levels on the reader's own reading data aren't in the device's copy yet,
-/// so they're skipped, as are fields this version doesn't know. With no
-/// level left, it's the web app's default: newest first.
+/// Levels on the reader's own reading data read the device's copy of it.
+/// Last read isn't in the copy yet, so it's skipped, as are fields this
+/// version doesn't know. With no level left, it's the web app's default:
+/// newest first.
 enum LibrarySort {
     /// An ORDER BY for `books b` in the device's copy, ending with the
     /// Book's id so ties always come out the same.
@@ -53,9 +54,26 @@ enum LibrarySort {
             return nullsLast(newestFile("page_count"), direction)
         case "duration":
             return nullsLast(newestFile("duration_seconds"), direction)
+        case "reading_status":
+            // The rank is never NULL.
+            return ["\(statusRank("b.id")) \(direction)"]
+        case "rating":
+            return nullsLast("(SELECT rating FROM user_books WHERE book_id = b.id)", direction)
+        case "date_finished":
+            return nullsLast("(SELECT MAX(end_day) FROM read_throughs WHERE book_id = b.id AND outcome = 'finished')", direction)
         default:
             return []
         }
+    }
+
+    /// The Reading Status of the Book in bookColumn ranked for sorting, as
+    /// `reading.StatusRankExpr` ranks it: Currently Reading 1 through
+    /// Reference 6, and none 7.
+    static func statusRank(_ bookColumn: String) -> String {
+        """
+        (CASE \(CatalogStore.statusExpression(bookColumn)) WHEN 'currently_reading' THEN 1 WHEN 'paused' THEN 2 WHEN 'to_read' THEN 3
+            WHEN 'read' THEN 4 WHEN 'did_not_finish' THEN 5 WHEN 'reference' THEN 6 ELSE 7 END)
+        """
     }
 
     /// Missing values last in either direction, as SQLite has no NULLS LAST.

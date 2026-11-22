@@ -88,12 +88,33 @@ final class APIClient: Sendable {
     /// The changes after cursor. expiredThrough is the last page's, so the
     /// server can tell a cursor that missed expired deletions from one that
     /// was downloading from the start when they expired.
-    func changes(cursor: Int, expiredThrough: Int, limit: Int = 500) async throws -> Shishoapp.FeedResponse {
-        try APIClient.feedPage(await data("mobile/changes", query: [
+    /// One page of the feed, and what the user can access now, when the
+    /// server says (ADR 0023).
+    struct FeedPage: Sendable {
+        let response: Shishoapp.FeedResponse
+        let access: Shishoapp.FeedAccess?
+    }
+
+    func changes(cursor: Int, expiredThrough: Int, limit: Int = 500) async throws -> FeedPage {
+        let body = try await data("mobile/changes", query: [
             URLQueryItem(name: "cursor", value: String(cursor)),
             URLQueryItem(name: "expired_through", value: String(expiredThrough)),
             URLQueryItem(name: "limit", value: String(limit)),
-        ]))
+        ])
+        return FeedPage(response: try APIClient.feedPage(body), access: APIClient.feedAccess(body))
+    }
+
+    /// One page of a Library's or List's whole fetch, for one the user just
+    /// gained access to.
+    func scopedChanges(libraryID: Int? = nil, listID: Int? = nil, cursor: Int, limit: Int = 500) async throws -> Shishoapp.FeedResponse {
+        var query = [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit))]
+        if let libraryID {
+            query.append(URLQueryItem(name: "library_id", value: String(libraryID)))
+        }
+        if let listID {
+            query.append(URLQueryItem(name: "list_id", value: String(listID)))
+        }
+        return try APIClient.feedPage(await data("mobile/changes", query: query))
     }
 
     // The API types decode leniently (ADR 0020), so any JSON decodes as
@@ -126,6 +147,28 @@ final class APIClient: Sendable {
               let page = try? makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: data)
         else { throw APIError.serverPredatesApp }
         return page
+    }
+
+    /// What a feed page says the user can access, or nil when it doesn't
+    /// say. A page decodes leniently, so without this a server from before
+    /// access was sent would read as access to nothing, and the app would
+    /// drop every Library.
+    static func feedAccess(_ data: Data) -> Shishoapp.FeedAccess? {
+        struct Shape: Decodable {
+            struct Access: Decodable {
+                let libraryIds: [Int]
+                let listIds: [Int]
+
+                enum CodingKeys: String, CodingKey {
+                    case libraryIds = "library_ids"
+                    case listIds = "list_ids"
+                }
+            }
+
+            let access: Access
+        }
+        guard let shape = try? JSONDecoder().decode(Shape.self, from: data) else { return nil }
+        return Shishoapp.FeedAccess(libraryIds: shape.access.libraryIds, listIds: shape.access.listIds)
     }
 
     /// A sign-in, which always names its credential, Device, and user.
