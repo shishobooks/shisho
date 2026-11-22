@@ -16,8 +16,9 @@ const (
 	readerPassword = "harness-reader-password"
 )
 
-// setReaderAccess gives the reader access to every Library, or to none,
-// writing the server's database as the web app's user editor would.
+// setReaderAccess gives the reader access to the harness's first Library,
+// as it's seeded, or to none, writing the server's database as the web
+// app's user editor would.
 func setReaderAccess(ctx context.Context, path string, access bool) error {
 	connector, err := sqliteconn.NewConnector("file:"+path, "PRAGMA busy_timeout = 5000", "PRAGMA foreign_keys = ON")
 	if err != nil {
@@ -35,7 +36,7 @@ func setReaderAccess(ctx context.Context, path string, access bool) error {
 	}
 	if access {
 		_, err := tx.ExecContext(ctx, `INSERT INTO user_library_access (user_id, library_id)
-			SELECT u.id, l.id FROM users u, libraries l WHERE u.username = ?`, readerUsername)
+			SELECT u.id, l.id FROM users u, libraries l WHERE u.username = ? AND l.name = 'Harness Library'`, readerUsername)
 		if err != nil {
 			return errors.WithStack(err)
 		}

@@ -238,4 +238,12 @@ final class CatalogBrowseTests: XCTestCase {
         try store.apply(page(#"{"entries":[{"kind":"book_left","id":2,"deleted":true,"library_id":1}],"cursor":10}"#))
         XCTAssertEqual(try store.pool.read { try CatalogStore.search($0, text: "Messiah", libraryID: nil) }.series, [])
     }
+
+    /// A Library gained that has nothing behind the feed's cursor, such as
+    /// one just made, arrives in the feed, so it isn't fetched whole too.
+    func testALibraryNotBehindTheCursorIsntFetchedAgain() throws {
+        try catalog()
+        try store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [1, 2, 3], listIds: [], behindLibraryIds: [1, 3]), fromFeed: true)
+        XCTAssertEqual(try store.pendingAccess().libraries.map(\.id), [3])
+    }
 }

@@ -80,16 +80,6 @@
         }
       }
     },
-    "%@, ^[%lld book](inflect: true)" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, ^[%2$lld book](inflect: true)"
-          }
-        }
-      }
-    },
     "%lld changes made on this device couldn't be saved on the server. The last: %@" : {
       "localizations" : {
         "en" : {
@@ -467,7 +457,17 @@
     "Sign Out" : {
 
     },
-    "Sign out of %@?" : {
+    "Sign out %@ on %@?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sign out %1$@ on %2$@?"
+          }
+        }
+      }
+    },
+    "Sign out?" : {
 
     },
     "Signing in" : {

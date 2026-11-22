@@ -196,7 +196,13 @@ func (s *server) seed(ctx context.Context, library, password string) error {
 	}); err != nil {
 		return err
 	}
-	// The viewer role, with access to the harness's Library.
+	if err := post("/api/libraries", map[string]any{
+		"name": "Harness Annex", "cover_aspect_ratio": "book", "library_paths": []string{annexDir(library)},
+		"organize_file_structure": false,
+	}); err != nil {
+		return err
+	}
+	// The viewer role, with access to the harness's first Library only.
 	if err := post("/api/users", map[string]any{
 		"username": readerUsername, "password": readerPassword, "role_id": 2, "library_ids": []int{1},
 	}); err != nil {
@@ -215,7 +221,7 @@ func (s *server) seed(ctx context.Context, library, password string) error {
 		}
 		err = json.NewDecoder(resp.Body).Decode(&page)
 		resp.Body.Close()
-		if err == nil && page.Total >= len(fixtures) {
+		if err == nil && page.Total >= len(fixtures)+len(annexFixtures) {
 			return nil
 		}
 		select {
@@ -224,5 +230,5 @@ func (s *server) seed(ctx context.Context, library, password string) error {
 		case <-time.After(500 * time.Millisecond):
 		}
 	}
-	return errors.Errorf("the scan didn't find all %d fixtures in time; see server.log", len(fixtures))
+	return errors.Errorf("the scan didn't find all %d fixtures in time; see server.log", len(fixtures)+len(annexFixtures))
 }

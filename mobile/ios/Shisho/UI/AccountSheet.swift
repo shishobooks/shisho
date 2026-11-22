@@ -45,7 +45,7 @@ struct AccountSheet: View {
             .sheet(isPresented: $showingDiagnostics) {
                 DiagnosticsSheet()
             }
-            .confirmationDialog("Sign out of \(model.session?.account.serverURL.host() ?? "this server")?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+            .confirmationDialog(signOutTitle, isPresented: $confirmingSignOut, titleVisibility: .visible) {
                 Button("Sign Out", role: .destructive) {
                     dismiss()
                     Task { await model.signOut() }
@@ -78,11 +78,7 @@ struct AccountSheet: View {
                     model.switchAccount(to: account.id)
                 } label: {
                     HStack(spacing: 12) {
-                        Text(String(account.username.prefix(1).uppercased()))
-                            .font(.geist(.subheadline, weight: .semibold))
-                            .foregroundStyle(Theme.primary)
-                            .frame(width: 32, height: 32)
-                            .background(Theme.primary.opacity(0.12), in: Circle())
+                        AccountAvatar(account: account, size: 32)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(account.username)
                                 .font(.geist(.subheadline, weight: .semibold))
@@ -147,15 +143,16 @@ struct AccountSheet: View {
         .cardStyle()
     }
 
+    /// Names the account as well as its server, since several accounts can
+    /// be on one server.
+    private var signOutTitle: String {
+        guard let account = model.session?.account else { return String(localized: "Sign out?") }
+        return String(localized: "Sign out \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString)?")
+    }
+
     private func identity(_ account: Account) -> some View {
         VStack(spacing: 10) {
-            Text(String(account.username.prefix(1).uppercased()))
-                .font(.geist(size: 30, relativeTo: .title, weight: .semibold))
-                .foregroundStyle(Theme.primary)
-                .frame(width: 68, height: 68)
-                .background(Theme.primary.opacity(0.12), in: Circle())
-                .overlay(Circle().strokeBorder(Theme.primary.opacity(0.25)))
-                .accessibilityHidden(true)
+            AccountAvatar(account: account, size: 68)
             Text(account.username)
                 .font(.geist(.title3, weight: .bold))
             Text(account.serverURL.host() ?? account.serverURL.absoluteString)
@@ -297,5 +294,37 @@ struct DiagnosticsSheet: View {
         }
         .tint(Theme.primary)
         .presentationDragIndicator(.visible)
+    }
+}
+
+/// An account's initial in a circle of its own color, so accounts whose
+/// usernames start alike still look different. The color comes from the
+/// account's id on this device, so it stays the same across launches.
+struct AccountAvatar: View {
+    let account: Account
+    let size: CGFloat
+    /// In the toolbar, where iOS 26 already sets the button in a circle.
+    var inToolbar = false
+
+    private var color: Color {
+        let hue = Double(account.id.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF } % 360) / 360
+        return Color(hue: hue, saturation: 0.55, brightness: 0.72)
+    }
+
+    var body: some View {
+        let initial = Text(String(account.username.prefix(1).uppercased()))
+            .font(.geist(size: size * 0.44, relativeTo: .title, weight: .semibold))
+            .foregroundStyle(color)
+        Group {
+            if #available(iOS 26, *), inToolbar {
+                initial
+            } else {
+                initial
+                    .frame(width: size, height: size)
+                    .background(color.opacity(0.14), in: Circle())
+                    .overlay(Circle().strokeBorder(color.opacity(0.3)))
+            }
+        }
+        .accessibilityHidden(true)
     }
 }

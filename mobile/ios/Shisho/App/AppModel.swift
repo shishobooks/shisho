@@ -99,7 +99,8 @@ final class AppModel {
         Task { [weak self] in
             for await path in NWPathMonitor() {
                 self?.networkChanged(available: path.status != .unsatisfied,
-                                     wifi: path.usesInterfaceType(.wifi) && !path.isExpensive && !path.isConstrained)
+                                     wifi: (path.usesInterfaceType(.wifi) || path.usesInterfaceType(.wiredEthernet))
+                                         && !path.isExpensive && !path.isConstrained)
             }
         }
         // Observers don't run for what init sets.

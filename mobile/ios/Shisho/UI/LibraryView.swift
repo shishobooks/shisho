@@ -225,17 +225,8 @@ private struct AccountButton: View {
 
     var body: some View {
         Button(action: action) {
-            let initial = Text(String(model.session?.account.username.prefix(1).uppercased() ?? "?"))
-                .font(.geist(.subheadline, weight: .semibold))
-                .foregroundStyle(Theme.primary)
-            if #available(iOS 26, *) {
-                // The toolbar already sets the button in a glass circle.
-                initial
-            } else {
-                initial
-                    .frame(width: 34, height: 34)
-                    .background(Theme.primary.opacity(0.12), in: Circle())
-                    .overlay(Circle().strokeBorder(Theme.primary.opacity(0.25)))
+            if let account = model.session?.account {
+                AccountAvatar(account: account, size: 34, inToolbar: true)
             }
         }
         .accessibilityLabel("Account")
@@ -244,6 +235,7 @@ private struct AccountButton: View {
 }
 
 struct BookCell: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let book: BookSummary
     let width: CGFloat
     /// The Book's Series Number, on a Series' page, inline with the title so
@@ -257,7 +249,8 @@ struct BookCell: View {
             titleText
                 .font(.geist(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.foreground)
-                .lineLimit(2)
+                // Larger text fits fewer words on a line, so it gets more lines.
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 5 : 2)
                 .multilineTextAlignment(.leading)
                 .accessibilityIdentifier("book.title")
             if !book.authors.isEmpty {

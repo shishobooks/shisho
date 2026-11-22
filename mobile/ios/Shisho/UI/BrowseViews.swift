@@ -79,7 +79,7 @@ struct ResourceListView: View {
                             .monospacedDigit()
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(String(localized: "\(item.name), ^[\(item.bookCount) book](inflect: true)"))
+                    .accessibilityLabel(item.name + ", " + Counts.books(item.bookCount))
                 }
                 .listRowBackground(Theme.card)
                 .accessibilityIdentifier("browse.item")
@@ -134,15 +134,15 @@ struct ResourceView: View {
                         if let books {
                             if kind == .person {
                                 if !books.isEmpty {
-                                    SectionHeading(title: String(localized: "Books"), count: String(localized: "^[\(books.count) book](inflect: true)"))
+                                    SectionHeading(title: String(localized: "Books"), count: Counts.books(books.count))
                                     BookGrid(books: books, width: geometry.size.width, identifier: "resource.grid")
                                 }
                                 if let narrated, !narrated.isEmpty {
-                                    SectionHeading(title: String(localized: "Narrated"), count: String(localized: "^[\(narrated.count) book](inflect: true)"))
+                                    SectionHeading(title: String(localized: "Narrated"), count: Counts.books(narrated.count))
                                     BookGrid(books: narrated, width: geometry.size.width, identifier: "resource.narrated")
                                 }
                             } else {
-                                SectionHeading(title: String(localized: "Books"), count: String(localized: "^[\(books.count) book](inflect: true)"))
+                                SectionHeading(title: String(localized: "Books"), count: Counts.books(books.count))
                                 BookGrid(books: books, width: geometry.size.width, badges: numbers?.values ?? [:], identifier: "resource.grid")
                             }
                         }

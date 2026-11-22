@@ -99,7 +99,7 @@ private struct ListRow: View {
     }
 
     private var subtitle: String {
-        let count = String(localized: "^[\(list.bookCount) book](inflect: true)")
+        let count = Counts.books(list.bookCount)
         guard list.permission != "owner" else { return count }
         return String(localized: "\(count) · by \(list.ownerName)")
     }
@@ -139,7 +139,7 @@ struct ListDetailView: View {
                                 .accessibilityIdentifier("list.shares")
                         }
                         if let books {
-                            SectionHeading(title: String(localized: "Books"), count: String(localized: "^[\(books.count) book](inflect: true)"))
+                            SectionHeading(title: String(localized: "Books"), count: Counts.books(books.count))
                             if books.isEmpty {
                                 EmptyNotice(title: String(localized: "No Books"), message: String(localized: "Books added to this List appear here."),
                                             systemImage: "book.closed")

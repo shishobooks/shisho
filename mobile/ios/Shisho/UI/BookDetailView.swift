@@ -284,6 +284,7 @@ struct BookDetailView: View {
 /// One of a Book's Files, as the web app's file card shows it.
 private struct FileCard: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let file: BookDetail.File
     let book: BookSummary
 
@@ -325,14 +326,16 @@ private struct FileCard: View {
                             Text("Published by \(publisher)")
                                 .font(.geist(.footnote))
                                 .foregroundStyle(Theme.mutedForeground)
-                                .lineLimit(1)
+                                // At accessibility sizes it wraps rather than
+                                // cut a name off.
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         }
                         ForEach(file.identifiers, id: \.self) { identifier in
                             Text(verbatim: "\(IdentifierLabel.text(identifier.type)) \(identifier.value)")
                                 .font(.geist(.caption))
                                 .foregroundStyle(Theme.mutedForeground)
                                 .textSelection(.enabled)
-                                .lineLimit(1)
+                                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                         }
                     } else {
                         Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
