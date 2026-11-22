@@ -35,6 +35,10 @@ final class SyncEngine: Sendable {
         var feedError: Error?
         do {
             try await pullFeed()
+        } catch let error as APIError where error == .noAccess || error == .signedOut {
+            // The server refused the account itself; the journal would be
+            // refused too, and a failure sending it mustn't hide why.
+            throw error
         } catch {
             feedError = error
         }
@@ -90,6 +94,7 @@ final class SyncEngine: Sendable {
             }
             // Another sync moved the copy on while this one waited, so this
             // one's answer is stale.
+            try Task.checkCancellation()
             guard try store.apply(page, after: state.cursor, ownDeviceID: deviceID, access: fetched.access) else {
                 return
             }
@@ -110,32 +115,49 @@ final class SyncEngine: Sendable {
     /// Fetches each Library and List the user gained whole, since their
     /// records are behind the cursor (ADR 0023). A fetch cut short goes on
     /// from where it got to next time.
+    ///
+    /// Each answer says what the user can access too, so a change seen
+    /// meanwhile, such as a Library lost and gained again while a List was
+    /// fetched, queues what it affects for another round.
     private func fetchGained() async throws {
-        let pending = try store.pendingAccess()
-        for library in pending.libraries {
-            var cursor = library.cursor
-            while true {
-                let page: Shishoapp.FeedResponse
-                do {
-                    page = try await client.scopedChanges(libraryID: library.id, cursor: cursor)
-                } catch APIError.server(let status, _) where status == 404 {
-                    // Lost again since; the next page's access drops it.
-                    break
+        for _ in 0..<3 {
+            let pending = try store.pendingAccess()
+            guard !pending.libraries.isEmpty || !pending.lists.isEmpty else { return }
+            for library in pending.libraries {
+                var cursor = library.cursor
+                while true {
+                    let fetched: APIClient.FeedPage
+                    do {
+                        fetched = try await client.scopedChanges(libraryID: library.id, cursor: cursor)
+                    } catch APIError.server(let status, _) where status == 404 {
+                        // Lost again since; the next page's access drops it.
+                        break
+                    }
+                    // A sync stopped meanwhile, as by switching accounts,
+                    // writes nothing.
+                    try Task.checkCancellation()
+                    try store.applyScoped(fetched.response, libraryID: library.id, ownDeviceID: deviceID)
+                    if let access = fetched.access {
+                        try store.reconcileAccess(access)
+                    }
+                    await Diagnostics.shared.log(.sync, "fetched \(fetched.response.entries.count) records of a Library gained")
+                    guard fetched.response.hasMore else { break }
+                    cursor = fetched.response.cursor
                 }
-                try store.applyScoped(page, libraryID: library.id, ownDeviceID: deviceID)
-                await Diagnostics.shared.log(.sync, "fetched \(page.entries.count) records of a Library gained")
-                guard page.hasMore else { break }
-                cursor = page.cursor
             }
-        }
-        for listID in pending.lists {
-            let page: Shishoapp.FeedResponse
-            do {
-                page = try await client.scopedChanges(listID: listID, cursor: 0)
-            } catch APIError.server(let status, _) where status == 404 {
-                continue
+            for listID in pending.lists {
+                let fetched: APIClient.FeedPage
+                do {
+                    fetched = try await client.scopedChanges(listID: listID, cursor: 0)
+                } catch APIError.server(let status, _) where status == 404 {
+                    continue
+                }
+                try Task.checkCancellation()
+                try store.applyScoped(fetched.response, listID: listID, ownDeviceID: deviceID)
+                if let access = fetched.access {
+                    try store.reconcileAccess(access)
+                }
             }
-            try store.applyScoped(page, listID: listID, ownDeviceID: deviceID)
         }
     }
 }

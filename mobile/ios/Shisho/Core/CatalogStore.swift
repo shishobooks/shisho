@@ -351,6 +351,12 @@ final class CatalogStore: Sendable {
                            arguments: [page.cursor, page.expiredThrough, Date()])
             let finishing = try CatalogStore.syncState(db).startingOver
             if !page.hasMore, finishing {
+                // The Series of Books going now keep their titles in their
+                // search rows until written again.
+                var dropped = Touched()
+                dropped.series = Set(try Int.fetchAll(db, sql: """
+                    SELECT DISTINCT bs.series_id FROM book_series bs JOIN books b ON b.id = bs.book_id WHERE b.generation < ?
+                    """, arguments: [generation]))
                 try db.execute(sql: "DELETE FROM books WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM libraries WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM reading_positions WHERE generation < ?", arguments: [generation])
@@ -365,6 +371,7 @@ final class CatalogStore: Sendable {
                     """)
                 try db.execute(sql: "UPDATE sync_state SET starting_over = 0 WHERE id = 1")
                 try CatalogStore.pruneSearch(in: db)
+                try CatalogStore.reindex(dropped, in: db)
             }
             return true
         }

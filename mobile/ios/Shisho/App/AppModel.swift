@@ -464,6 +464,9 @@ final class AppModel {
     /// Which prefetch is current, so one that ends late doesn't clear a newer
     /// one's handle.
     @ObservationIgnored private var prefetchRun = 0
+    /// A sync finished while a prefetch ran, perhaps bringing Books its list
+    /// of covers predates: it goes over them again when it ends.
+    @ObservationIgnored private var prefetchAgain = false
 
     private func stopPrefetching() {
         prefetching?.cancel()
@@ -475,7 +478,12 @@ final class AppModel {
     /// device yet, at the grid's size, while on Wi-Fi, so browsing offline
     /// shows them all.
     private func prefetchCoversIfWanted(_ session: AccountSession) {
-        guard prefetchesCovers(session.account), onWiFi, prefetching == nil else { return }
+        guard prefetchesCovers(session.account), onWiFi else { return }
+        guard prefetching == nil else {
+            prefetchAgain = true
+            return
+        }
+        prefetchAgain = false
         let size = CoverCache.pixelSize(forWidth: 140, scale: UIScreen.main.scale)
         prefetchRun += 1
         let run = prefetchRun
@@ -485,8 +493,10 @@ final class AppModel {
                 guard !Task.isCancelled, self?.session === session, self?.onWiFi == true else { break }
                 _ = await session.covers.image(bookID: cover.bookID, version: cover.version, size: size)
             }
-            if self?.prefetchRun == run {
-                self?.prefetching = nil
+            guard let self, prefetchRun == run else { return }
+            prefetching = nil
+            if prefetchAgain, !Task.isCancelled {
+                prefetchCoversIfWanted(session)
             }
         }
     }

@@ -228,6 +228,9 @@ extension CatalogStore {
             // The Book moved out of this Library; one that has since arrived
             // in another Library stays.
             touched.books.insert(entry.id)
+            try touched.series.formUnion(Int.fetchAll(db, sql: """
+                SELECT series_id FROM book_series bs JOIN books b ON b.id = bs.book_id WHERE b.id = ? AND b.library_id = ?
+                """, arguments: [entry.id, entry.libraryId]))
             try db.execute(sql: "DELETE FROM books WHERE id = ? AND library_id = ?", arguments: [entry.id, entry.libraryId])
         case .userBook:
             if entry.deleted {
@@ -403,26 +406,37 @@ extension CatalogStore {
         try pool.write { db in
             let known = try Bool.fetchOne(db, sql: "SELECT access_known FROM sync_state WHERE id = 1") ?? false
             guard known || force else { return }
+            if force, access.libraryIds.isEmpty, access.listIds.isEmpty {
+                // Nothing is the user's to see: everything from the catalog
+                // goes, even rows whose Library hasn't arrived yet.
+                try CatalogStore.dropCatalog(in: db)
+                return
+            }
+            // A gain is measured against the access recorded, never the rows
+            // on hand: a Library renamed just after it was granted arrives in
+            // the feed with its Books still behind the cursor. Rows on hand
+            // only say what else a loss has to drop.
             let libraries = Set(access.libraryIds)
-            let had = Set(try Int.fetchAll(db, sql: "SELECT library_id FROM library_access"))
-                .union(try Int.fetchAll(db, sql: "SELECT id FROM libraries"))
-            for lost in had.subtracting(libraries) {
+            let recorded = Set(try Int.fetchAll(db, sql: "SELECT library_id FROM library_access"))
+            let had = recorded.union(try Int.fetchAll(db, sql: "SELECT id FROM libraries"))
+            let lostLibraries = had.subtracting(libraries)
+            for lost in lostLibraries {
                 try CatalogStore.dropLibrary(lost, in: db)
             }
-            let gained = libraries.subtracting(had)
+            let gained = libraries.subtracting(recorded)
             for id in gained {
                 try db.execute(sql: "INSERT OR REPLACE INTO library_access (library_id, cursor, complete) VALUES (?, 0, 0)", arguments: [id])
             }
             let lists = Set(access.listIds)
-            let hadLists = Set(try Int.fetchAll(db, sql: "SELECT list_id FROM list_access"))
-                .union(try Int.fetchAll(db, sql: "SELECT id FROM lists"))
+            let recordedLists = Set(try Int.fetchAll(db, sql: "SELECT list_id FROM list_access"))
+            let hadLists = recordedLists.union(try Int.fetchAll(db, sql: "SELECT id FROM lists"))
             for lost in hadLists.subtracting(lists) {
                 try CatalogStore.dropList(lost, in: db)
             }
-            if !gained.isEmpty || !had.subtracting(libraries).isEmpty {
+            if !gained.isEmpty || !lostLibraries.isEmpty {
                 try db.execute(sql: "UPDATE list_access SET complete = 0")
             }
-            for id in lists.subtracting(hadLists) {
+            for id in lists.subtracting(recordedLists) {
                 try db.execute(sql: "INSERT OR REPLACE INTO list_access (list_id, complete) VALUES (?, 0)", arguments: [id])
             }
         }
@@ -499,6 +513,15 @@ extension CatalogStore {
         }
         try db.execute(sql: "DELETE FROM libraries WHERE id = ?", arguments: [id])
         try db.execute(sql: "DELETE FROM library_access WHERE library_id = ?", arguments: [id])
+    }
+
+    /// Forgets the whole catalog, keeping the journal and this device's own
+    /// places, for when the user can't read Books at all.
+    static func dropCatalog(in db: Database) throws {
+        for table in ["books", "libraries", "series", "persons", "genres", "tags", "publishers", "lists", "user_books",
+                      "library_access", "list_access", "books_fts", "series_fts", "persons_fts", "genres_fts", "tags_fts"] {
+            try db.execute(sql: "DELETE FROM \(table)")
+        }
     }
 
     /// Forgets a List deleted, or no longer shared with the user.
@@ -686,7 +709,10 @@ extension CatalogStore {
         var bookIDs: [Int] = []
         // An identifier is one word, or an ISBN typed with spaces, so other
         // searches skip the scan of every File's identifiers.
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        var trimmed = text.trimmingCharacters(in: .whitespaces)
+        for prefix in ["ISBN:", "ISBN"] where trimmed.uppercased().hasPrefix(prefix) {
+            trimmed = String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
         let oneWord = !trimmed.contains(" ") || trimmed.allSatisfy { $0.isNumber || " -xX".contains($0) }
         let candidates = oneWord ? identifierForms(text) : []
         if !candidates.isEmpty {

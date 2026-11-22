@@ -187,7 +187,7 @@ packages:
   - path: "github.com/shishobooks/shisho/pkg/shishoapp"
     output_path: "app/types/generated/shishoapp.ts"
     frontmatter: |
-      import { AuthorRole, CoverAspectRatio, FileRole, FileType, ReadThroughOutcome, ReadingSource, SeriesNumberUnit } from "@/types";
+      import { AuthorRole, CoverAspectRatio, FileRole, FileType, ListPermission, ListSort, ReadThroughOutcome, ReadingSource, SeriesNumberUnit } from "@/types";
     include_files:
       - types.go
   - path: "github.com/shishobooks/shisho/pkg/reading"

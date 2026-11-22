@@ -106,7 +106,7 @@ final class APIClient: Sendable {
 
     /// One page of a Library's or List's whole fetch, for one the user just
     /// gained access to.
-    func scopedChanges(libraryID: Int? = nil, listID: Int? = nil, cursor: Int, limit: Int = 500) async throws -> Shishoapp.FeedResponse {
+    func scopedChanges(libraryID: Int? = nil, listID: Int? = nil, cursor: Int, limit: Int = 500) async throws -> FeedPage {
         var query = [URLQueryItem(name: "cursor", value: String(cursor)), URLQueryItem(name: "limit", value: String(limit))]
         if let libraryID {
             query.append(URLQueryItem(name: "library_id", value: String(libraryID)))
@@ -114,7 +114,8 @@ final class APIClient: Sendable {
         if let listID {
             query.append(URLQueryItem(name: "list_id", value: String(listID)))
         }
-        return try APIClient.feedPage(await data("mobile/changes", query: query))
+        let body = try await data("mobile/changes", query: query)
+        return FeedPage(response: try APIClient.feedPage(body), access: APIClient.feedAccess(body))
     }
 
     // The API types decode leniently (ADR 0020), so any JSON decodes as

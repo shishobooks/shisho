@@ -217,4 +217,25 @@ final class CatalogBrowseTests: XCTestCase {
         try store.apply(page(#"{"entries":[\#(alone)],"cursor":10}"#))
         XCTAssertEqual(try store.pool.read { try CatalogStore.search($0, text: "Messiah", libraryID: nil) }.series, [])
     }
+
+    /// A Library granted and renamed at once arrives in the feed before its
+    /// Books, which are behind the cursor: it still counts as gained.
+    func testALibraryThatArrivedIsStillGained() throws {
+        try catalog()
+        try store.apply(page(#"{"entries":[\#(library(2, "Renamed"))],"cursor":10}"#))
+        try store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [1, 2], listIds: []))
+        XCTAssertEqual(try store.pendingAccess().libraries.map(\.id), [2])
+    }
+
+    func testAnISBNWithItsPrefixFindsTheBook() throws {
+        try catalog()
+        XCTAssertEqual(try store.pool.read { try CatalogStore.search($0, text: "ISBN: 978 0441013592", libraryID: nil) }.books.map(\.id), [2])
+    }
+
+    /// A Book that left its Library leaves its Series' search row.
+    func testABookThatLeftLeavesItsSeriesSearch() throws {
+        try catalog()
+        try store.apply(page(#"{"entries":[{"kind":"book_left","id":2,"deleted":true,"library_id":1}],"cursor":10}"#))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.search($0, text: "Messiah", libraryID: nil) }.series, [])
+    }
 }

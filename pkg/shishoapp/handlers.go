@@ -28,8 +28,10 @@ const (
 	// Opening every CBZ of a large comics Library on a slow disk can take
 	// longer, and a page that always timed out would never move the sync on.
 	feedBudget = 10 * time.Second
-	// feedChunk is how many entries are built between checks of the budget.
-	feedChunk = 100
+	// feedChunk is how many entries are built between checks of the budget,
+	// small enough that a first chunk of CBZs read from a slow disk still
+	// ends well inside the app's timeout.
+	feedChunk = 25
 )
 
 // Options configures the Device surface.
