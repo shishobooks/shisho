@@ -263,7 +263,7 @@ describe("BookReadingControls", () => {
     expect(request).toHaveBeenCalledWith(
       "POST",
       "/reading/books/7/reference",
-      null,
+      { read_through_id: null },
       null,
     );
     expect(
@@ -275,7 +275,7 @@ describe("BookReadingControls", () => {
     ["currently_reading", "Currently Reading"],
     ["paused", "Paused"],
   ])(
-    "confirms marking a %s book Reference, since its read is deleted",
+    "confirms marking a %s book Reference, since its Read-through is deleted",
     async (status, label) => {
       const underway = readThrough({
         id: 12,
@@ -292,7 +292,7 @@ describe("BookReadingControls", () => {
       expect(request).not.toHaveBeenCalledWith(
         "POST",
         "/reading/books/7/reference",
-        null,
+        expect.anything(),
         null,
       );
 
@@ -313,7 +313,7 @@ describe("BookReadingControls", () => {
       expect(request).toHaveBeenCalledWith(
         "POST",
         "/reading/books/7/reference",
-        null,
+        { read_through_id: 12 },
         null,
       );
       expect(
@@ -323,6 +323,22 @@ describe("BookReadingControls", () => {
       ).toBeInTheDocument();
     },
   );
+
+  it("reloads the book when the server refuses a stale Mark as Reference", async () => {
+    const request = renderControls(reading({ status: "read" }));
+    await openStatusMenu("Read");
+    const gets = () =>
+      request.mock.calls.filter(
+        ([method, path]) => method === "GET" && path === "/reading/books/7",
+      ).length;
+    const before = gets();
+    request.mockRejectedValueOnce(new Error("started since"));
+    await user().click(
+      screen.getByRole("menuitem", { name: "Mark as Reference" }),
+    );
+
+    await waitFor(() => expect(gets()).toBeGreaterThan(before));
+  });
 
   it("removes a book from Reference", async () => {
     const request = renderControls(reading({ status: "reference" }));

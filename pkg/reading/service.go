@@ -638,7 +638,19 @@ func (svc *Service) EndReadThrough(ctx context.Context, rt *models.ReadThrough, 
 		return ErrReadThroughEnded
 	}
 	if rt.BookID != nil {
-		return svc.End(ctx, rt.UserID, *rt.BookID, outcome, today)
+		return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+			// rt may have ended or been deleted since it was loaded, as marking
+			// its Book Reference does, so end it only if it's still the one
+			// underway.
+			underway, err := retrieveUnderway(ctx, tx, rt.UserID, *rt.BookID)
+			if err != nil {
+				return err
+			}
+			if underway == nil || underway.ID != rt.ID {
+				return ErrReadThroughEnded
+			}
+			return end(ctx, tx, rt.UserID, *rt.BookID, outcome, today, svc.now())
+		})
 	}
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		endDay, err := manualEndDay(ctx, tx, rt, today)

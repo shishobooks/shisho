@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { API, ShishoAPIError } from "@/libraries/api";
 import { writeDemoSettings } from "@/libraries/demoSettings";
 import {
+  MarkReferencePayload,
   PageFlowPaginated,
   PageFlowScrolled,
   type BookReadingResponse,
@@ -458,11 +459,16 @@ export const useDeleteReadThrough = () => {
 interface SetReferenceVariables {
   bookId: number;
   reference: boolean;
+  // For marking: the Read-through underway the user confirmed deleting, or
+  // null when they saw none. The server refuses when another is underway.
+  readThroughId?: number | null;
 }
 
 // Marks a Book Reference, or removes the mark. Marking it turns a
 // Read-through underway into plain Reading Sessions, which Reading History
-// and Stats show, so onReadingChanged refetches them.
+// and Stats show, so onReadingChanged refetches them. A refusal, as when a
+// device started the Book since, reloads its record so the status menu
+// shows what's there now.
 export const useSetReference = () => {
   const queryClient = useQueryClient();
   return useMutation<
@@ -470,15 +476,29 @@ export const useSetReference = () => {
     ShishoAPIError,
     SetReferenceVariables
   >({
-    mutationFn: ({ bookId, reference }) => {
+    mutationFn: ({ bookId, reference, readThroughId = null }) => {
+      if (!reference) {
+        return API.request(
+          "DELETE",
+          `/reading/books/${bookId}/reference`,
+          null,
+          null,
+        );
+      }
+      const payload: MarkReferencePayload = { read_through_id: readThroughId };
       return API.request(
-        reference ? "POST" : "DELETE",
+        "POST",
         `/reading/books/${bookId}/reference`,
-        null,
+        payload,
         null,
       );
     },
     onSuccess: (data) => onReadingChanged(queryClient, data),
+    onError: (_error, { bookId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QueryKey.BookReading, bookId],
+      });
+    },
   });
 };
 
@@ -532,6 +552,9 @@ export const useBulkReadingChange = () => {
       queryClient.invalidateQueries({
         queryKey: [ServerStatsQueryKey.ServerStats],
       });
+      // Taking Books off To Read or ending Read-throughs can untick Getting
+      // Started's personal steps.
+      invalidateGettingStarted(queryClient);
     },
   });
 };

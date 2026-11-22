@@ -489,19 +489,13 @@ func insertSession(ctx context.Context, tx bun.Tx, userID, fileID int, source st
 	if err != nil {
 		return 0, err
 	}
-	// A Reference Book's sessions are lookups, which belong to no
-	// Read-through (ADR 0028), even one an update during them was part of.
-	reference, err := isReference(ctx, tx, userID, file.BookID)
-	if err != nil {
-		return 0, err
-	}
 	var sessionReadThrough *int
 	if rt != nil && coversDay(rt, day) {
 		sessionReadThrough = &rt.ID
 	}
 	// An update sent during the session, such as the one it came with, says
 	// which read it was part of, even when that read began after midnight.
-	if sessionReadThrough == nil && !reference {
+	if sessionReadThrough == nil {
 		var ranDuring int
 		err := tx.NewSelect().
 			Model((*models.ReadingPositionUpdate)(nil)).

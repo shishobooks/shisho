@@ -67,7 +67,7 @@ func TestListHandler_FiltersByReadingStatus(t *testing.T) {
 	reference := seedBook(t, db, lib, "Reference", "Reference", now.Add(-7*time.Hour))
 
 	seedReading(t, db, reader.ID, current.ID, nil, [2]string{"start", "2026-01-01"})
-	require.NoError(t, reading.NewService(db).MarkReference(context.Background(), reader.ID, reference.ID))
+	require.NoError(t, reading.NewService(db).MarkReference(context.Background(), reader.ID, reference.ID, nil))
 	seedReading(t, db, reader.ID, paused.ID, nil, [2]string{"start", "2026-01-01"}, [2]string{"pause", ""})
 	require.NoError(t, reading.NewService(db).AddToRead(context.Background(), reader.ID, queued.ID))
 	seedReading(t, db, reader.ID, read.ID, nil, [2]string{"finish", "2026-02-01"})
@@ -345,7 +345,7 @@ func TestListHandler_SortsByReadingStatus(t *testing.T) {
 	require.NoError(t, reading.NewService(db).AddToRead(context.Background(), reader.ID, queued.ID))
 	seedReading(t, db, reader.ID, read.ID, nil, [2]string{"finish", "2026-02-01"})
 	seedReading(t, db, reader.ID, dnf.ID, nil, [2]string{"start", "2026-01-01"}, [2]string{"abandon", "2026-02-01"})
-	require.NoError(t, reading.NewService(db).MarkReference(context.Background(), reader.ID, reference.ID))
+	require.NoError(t, reading.NewService(db).MarkReference(context.Background(), reader.ID, reference.ID, nil))
 	// Another user's reading doesn't sort the reader's listing.
 	seedReading(t, db, other.ID, untouched.ID, nil, [2]string{"start", "2026-01-01"})
 

@@ -160,7 +160,7 @@ Once history has been sent, **Send reading history again** under the server send
 For each book the server [recognizes](#which-books-sync), history sends:
 
 - **Reading time:** every page KOReader's statistics timed, as reading sessions on the days they happened, however long ago, as [the e-reader's clock](#the-e-readers-clock) dated them.
-- **Statuses:** for a book with no Read-through in Shisho, its status in KOReader makes one, beginning on the day of its first reading session in Shisho, or on the day KOReader recorded the status when that's earlier or the book has no sessions.
+- **Statuses:** for a book with no Read-through in Shisho, its status in KOReader makes one, beginning on the day of its first reading session in Shisho, or on the day KOReader recorded the status when that's earlier or the book has no sessions. A [Reference](./reading-tracking.md#reference-books) book gets none.
 - **Ratings:** a book with no Rating in Shisho takes its stars from KOReader.
 
 | In KOReader | Read-through made in Shisho                                      |

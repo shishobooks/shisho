@@ -170,6 +170,7 @@ var refusedTransitions = []refusal{
 	{ErrReadThroughEnded, "This Read-through has already ended."},
 	{ErrAlreadyReference, "This book is already Reference."},
 	{ErrNotReference, "This book isn't Reference."},
+	{ErrUnderwayChanged, "This book was started or finished since you looked. Check its status and try again."},
 	{ErrUndoOnReference, "This finish can't be undone because the book is Reference now."},
 }
 
@@ -363,8 +364,7 @@ func (h *handler) bulkRemoveReference(c echo.Context) error {
 	return h.bulkReferenceChange(c, h.readingService.BulkRemoveReference)
 }
 
-// referenceChange marks the :id Book Reference or removes the mark.
-func (h *handler) referenceChange(c echo.Context, run func(ctx context.Context, userID, bookID int) error) error {
+func (h *handler) markReference(c echo.Context) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {
 		return err
@@ -373,18 +373,29 @@ func (h *handler) referenceChange(c echo.Context, run func(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if err := run(c.Request().Context(), user.ID, bookID); err != nil {
+	params := MarkReferencePayload{}
+	if err := c.Bind(&params); err != nil {
+		return errors.WithStack(err)
+	}
+	if err := h.readingService.MarkReference(c.Request().Context(), user.ID, bookID, params.ReadThroughID); err != nil {
 		return transitionError(err)
 	}
 	return h.respond(c, user, bookID)
 }
 
-func (h *handler) markReference(c echo.Context) error {
-	return h.referenceChange(c, h.readingService.MarkReference)
-}
-
 func (h *handler) removeReference(c echo.Context) error {
-	return h.referenceChange(c, h.readingService.RemoveReference)
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	bookID, err := h.requireBook(c)
+	if err != nil {
+		return err
+	}
+	if err := h.readingService.RemoveReference(c.Request().Context(), user.ID, bookID); err != nil {
+		return transitionError(err)
+	}
+	return h.respond(c, user, bookID)
 }
 
 func (h *handler) setPaused(c echo.Context, paused bool) error {

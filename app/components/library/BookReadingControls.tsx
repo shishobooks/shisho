@@ -129,7 +129,11 @@ const BookReadingControls = ({ bookId }: BookReadingControlsProps) => {
 
   const handleReference = async (reference: boolean) => {
     try {
-      await referenceMutation.mutateAsync({ bookId, reference });
+      await referenceMutation.mutateAsync({
+        bookId,
+        reference,
+        readThroughId: underway?.id ?? null,
+      });
       setConfirmingReference(false);
     } catch (error) {
       toastRequestError(

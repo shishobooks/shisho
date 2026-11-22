@@ -215,8 +215,23 @@ func TestReferenceRoutes_DatabaseFailureIs500(t *testing.T) {
 
 			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, "/books/bulk/reference", BulkReferencePayload{BookIDs: []int{book.ID}}).Code)
 			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, "/books/bulk/remove-reference", BulkReferencePayload{BookIDs: []int{book.ID}}).Code)
-			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, fmt.Sprintf("/books/%d/reference", book.ID), nil).Code)
+			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, fmt.Sprintf("/books/%d/reference", book.ID), MarkReferencePayload{}).Code)
 			assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodDelete, fmt.Sprintf("/books/%d/reference", book.ID), nil).Code)
 		})
 	}
+}
+
+// Undo's refusal for a Reference Book is a 422 only when the mark could be
+// read: a failed lookup is a 500.
+func TestUndoFinish_ReferenceLookupFailureIs500(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	user := createUser(t, db, "reader", 2)
+	api := newReadingAPI(t, db, user)
+	book := createBook(t, db, "Dune")
+	rt := seedReadThrough(t, db, user, book, "", "2026-03-01", models.ReadThroughOutcomeFinished)
+	_, err := db.Exec("DROP TABLE user_books")
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, fmt.Sprintf("/read-throughs/%d/undo-finish", rt.ID), nil).Code)
 }

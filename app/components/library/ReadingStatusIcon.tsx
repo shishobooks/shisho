@@ -8,7 +8,6 @@ import {
   type LucideIcon,
   type LucideProps,
 } from "lucide-react";
-import { createElement } from "react";
 
 import type { ReadingStatus } from "@/types";
 
@@ -29,7 +28,9 @@ interface ReadingStatusIconProps extends LucideProps {
 
 // The icon that marks a Reading Status wherever it shows, on a cover's
 // bookmark and on the status button alike.
-const ReadingStatusIcon = ({ status, ...props }: ReadingStatusIconProps) =>
-  createElement(status ? ICONS[status] : BookOpen, props);
+const ReadingStatusIcon = ({ status, ...props }: ReadingStatusIconProps) => {
+  const Icon = status ? ICONS[status] : BookOpen;
+  return <Icon {...props} />;
+};
 
 export default ReadingStatusIcon;

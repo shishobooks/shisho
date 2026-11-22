@@ -15,7 +15,8 @@ func TestKoboReadingState_ReferenceGoesAsReadyToReadWithItsBookmark(t *testing.T
 	t.Parallel()
 	f := newReadingStateFixture(t)
 	f.put(koboState{status: "Reading", at: time.Now().Add(-time.Hour), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 8})
-	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.bookA.ID))
+	underway := f.bookReading().ReadThroughs[0]
+	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.bookA.ID, &underway.ID))
 
 	states := f.changedStates()
 
@@ -32,7 +33,7 @@ func TestKoboReadingState_ReferenceGoesAsReadyToReadWithItsBookmark(t *testing.T
 func TestKoboReadingState_ReferenceIgnoresReportedStatuses(t *testing.T) {
 	t.Parallel()
 	f := newReadingStateFixture(t)
-	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.bookA.ID))
+	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.bookA.ID, nil))
 	start := time.Now().Add(-time.Hour).Truncate(time.Second)
 
 	f.put(koboState{status: "Reading", at: start, minutes: minutes(5), source: "OEBPS/text/one.xhtml", span: "kobo.2.1", progress: 10})

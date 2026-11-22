@@ -91,7 +91,7 @@ Run `mise check:quiet` once when the work is done, before pushing or opening a P
 
 ## User-facing copy
 
-**Never use "read" or "reading" as a noun for a record**, in the app, plugin strings, server messages, and `website/docs/`: "this read is deleted" and "the reading held for it" read as confusing. Name the record with its term from `CONTEXT.md`: Read-through, Reading Session, reading time, reading history, or a status or Rating. The verb and activity senses are fine ("Last read 5 days ago", "Mark as read", "No reading on this day").
+**Never use "read" or "reading" as a noun for a record**, in the app, plugin strings, server messages, and `website/docs/`: "this read is deleted" and "the reading held for it" read as confusing. Name the record by its `CONTEXT.md` term, such as Read-through or Reading Session, or say plainly what it is, such as reading history or a status. The verb and activity senses are fine ("Last read 5 days ago", "Mark as read", "No reading on this day").
 
 ## Tool versions
 

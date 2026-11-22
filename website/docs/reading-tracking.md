@@ -61,7 +61,7 @@ While a book is **Reference**:
 - Only your own choices in Shisho change its status. [KOReader](./koreader.md#statuses-and-ratings) and a [Kobo](./kobo-sync.md#reading-progress) can't, though their reading time and place still come through.
 - You can still rate it.
 
-To stop treating a book as Reference, choose another status. **Mark as read**, **Add to To Read**, and **Start reading** (**Read again** on a book you read before) each clear it, and starting sends the book's files back to the start, as it always does. **Remove from Reference** clears it and records nothing: the book shows **Read** or **Did Not Finish** again if you read it before, or no status if you never did, and a book you never read starts a Read-through the next time you turn past its first page.
+To stop treating a book as Reference, choose another status. **Mark as read**, **Add to To Read**, and **Start reading** (**Read again** on a book you read before) each clear it, and starting sends the book's main files back to the start, as it always does. **Remove from Reference** clears it and records nothing: the book shows **Read** or **Did Not Finish** again if you read it before, or no status if you never did, and a book you never read starts a Read-through the next time you turn past its first page.
 
 ## Reading on Devices
 

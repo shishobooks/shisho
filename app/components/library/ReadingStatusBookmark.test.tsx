@@ -47,7 +47,7 @@ describe("ReadingStatusBookmark", () => {
       "data-status",
       "reference",
     );
-    expect(container.querySelector("svg")).not.toBeNull();
+    expect(container.querySelector("svg.lucide-library")).not.toBeNull();
   });
 
   it("keeps a read book's check mark, not a percentage", () => {

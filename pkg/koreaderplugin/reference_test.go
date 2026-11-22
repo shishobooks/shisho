@@ -13,7 +13,7 @@ func TestReference_PullSendsNoStatus(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
 	require.NoError(t, f.reading.End(f.ctx, f.user.ID, f.file.BookID, models.ReadThroughOutcomeFinished, day(f.day1)))
-	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.file.BookID))
+	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.file.BookID, nil))
 
 	state := f.state(0, syncHash)
 
@@ -27,7 +27,7 @@ func TestReference_IncomingStatusesDontChangeIt(t *testing.T) {
 		t.Run(status, func(t *testing.T) {
 			t.Parallel()
 			f := newSyncFixture(t)
-			require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.file.BookID))
+			require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.file.BookID, nil))
 			now := time.Now()
 
 			f.upload(UploadPayload{
@@ -45,7 +45,7 @@ func TestReference_IncomingStatusesDontChangeIt(t *testing.T) {
 func TestReference_BackfillDoesntChangeIt(t *testing.T) {
 	t.Parallel()
 	f := newSyncFixture(t)
-	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.file.BookID))
+	require.NoError(t, f.reading.MarkReference(f.ctx, f.user.ID, f.file.BookID, nil))
 	start := f.day1.AddDate(-1, 0, 0)
 
 	f.backfill(UploadPayload{Pages: pages(syncHash, 1, 10, start)})

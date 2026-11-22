@@ -19,12 +19,15 @@ beforeAll(() => {
 const mockExitSelectionMode = vi.fn();
 const mockClearSelection = vi.fn();
 const selection = vi.hoisted(() => ({ ids: [1, 2, 3] }));
+// Whether the selected books' query still shows the previous selection's.
+const booksQuery = vi.hoisted(() => ({ placeholder: false }));
 
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
 
 beforeEach(() => {
   setAuth({ permissions: ["books:read", "books:write"] });
   selection.ids = [1, 2, 3];
+  booksQuery.placeholder = false;
 });
 
 vi.mock("@/hooks/useBulkSelection", () => ({
@@ -100,7 +103,11 @@ const mockUseBooks = vi.hoisted(() => vi.fn());
 vi.mock("@/hooks/queries/books", () => ({
   useBooks: (...args: unknown[]) => {
     mockUseBooks(...args);
-    return { data: { items: mockBooks, total: 3 }, isLoading: false };
+    return {
+      data: { items: mockBooks, total: 3 },
+      isLoading: false,
+      isPlaceholderData: booksQuery.placeholder,
+    };
   },
   useDeleteBooks: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
@@ -474,7 +481,7 @@ describe("SelectionToolbar reading status actions", () => {
     success.mockRestore();
   });
 
-  it("confirms marking not started, naming how many reads it deletes", async () => {
+  it("confirms marking not started, naming how many Read-throughs it deletes", async () => {
     const user = createUser();
     const success = vi.spyOn(toast, "success");
     mockBulkReadingMutateAsync.mockResolvedValueOnce({
@@ -528,7 +535,7 @@ describe("SelectionToolbar reading status actions", () => {
     info.mockRestore();
   });
 
-  it("confirms marking Reference, naming how many reads it deletes", async () => {
+  it("confirms marking Reference, naming how many Read-throughs it deletes", async () => {
     const user = createUser();
     const success = vi.spyOn(toast, "success");
     mockBulkReadingMutateAsync.mockResolvedValueOnce({
@@ -589,7 +596,24 @@ describe("SelectionToolbar reading status actions", () => {
 
     expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "The current Read-through of each selected book is deleted from your reading history",
+      "Any Read-through underway on the selected books is deleted from your reading history",
+    );
+  });
+
+  it("confirms marking Reference while the selection's books are still loading", async () => {
+    const user = createUser();
+    // Book 3 isn't being read, but these may be the previous selection's
+    // books, shown while the new selection's load.
+    selection.ids = [3];
+    booksQuery.placeholder = true;
+    render(wrap(<SelectionToolbar />));
+
+    await user.click(screen.getByRole("button", { name: "Reading" }));
+    await user.click(screen.getByRole("button", { name: "Mark as Reference" }));
+
+    expect(mockBulkReadingMutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Any Read-through underway on the selected books is deleted",
     );
   });
 
@@ -640,7 +664,7 @@ describe("SelectionToolbar reading status actions", () => {
     );
 
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "The Read-through underway on each selected book is deleted",
+      "Any Read-through underway on the selected books is deleted",
     );
   });
 

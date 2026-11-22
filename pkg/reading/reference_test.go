@@ -16,9 +16,22 @@ import (
 	"github.com/uptrace/bun"
 )
 
+// markReference marks bookID Reference as the status menu does, confirming
+// the Read-through underway, if any.
 func (a *readingAPI) markReference(bookID int) BookReadingResponse {
 	a.t.Helper()
-	return a.ok(http.MethodPost, fmt.Sprintf("/books/%d/reference", bookID), nil)
+	return a.ok(http.MethodPost, fmt.Sprintf("/books/%d/reference", bookID), MarkReferencePayload{ReadThroughID: a.underwayID(bookID)})
+}
+
+// underwayID is the id of the Read-through underway on bookID, or nil.
+func (a *readingAPI) underwayID(bookID int) *int {
+	a.t.Helper()
+	for _, rt := range a.get(bookID).ReadThroughs {
+		if rt.Outcome == models.ReadThroughOutcomeUnderway {
+			return &rt.ID
+		}
+	}
+	return nil
 }
 
 func (a *readingAPI) removeReference(bookID int) BookReadingResponse {
@@ -65,7 +78,9 @@ func (f *positionsFixture) readFor(minutes int) {
 
 func (f *positionsFixture) markReference() {
 	f.t.Helper()
-	require.NoError(f.t, f.svc.MarkReference(f.ctx, f.user.ID, f.book.ID))
+	underway, err := retrieveUnderway(f.ctx, f.db, f.user.ID, f.book.ID)
+	require.NoError(f.t, err)
+	require.NoError(f.t, f.svc.MarkReference(f.ctx, f.user.ID, f.book.ID, readThroughID(underway)))
 }
 
 func (f *positionsFixture) onToRead() bool {
@@ -110,6 +125,38 @@ func TestMarkReference_TurnsTheReadThroughUnderwayIntoPlainSessions(t *testing.T
 			assert.Zero(t, stats.Totals.Finished)
 		})
 	}
+}
+
+func TestMarkReference_RefusesWhenTheReadThroughUnderwayIsntTheConfirmedOne(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	// The user saw nothing underway, but a device started a Read-through since.
+	f.readFor(5)
+
+	err := f.svc.MarkReference(f.ctx, f.user.ID, f.book.ID, nil)
+
+	require.ErrorIs(t, err, ErrUnderwayChanged)
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+	require.Len(t, f.readThroughs(), 1, "nothing is deleted unconfirmed")
+
+	// A Read-through the user confirmed that has ended since refuses too.
+	stale := f.readThroughs()[0].ID
+	require.NoError(t, f.svc.End(f.ctx, f.user.ID, f.book.ID, models.ReadThroughOutcomeFinished, "2026-10-15"))
+	require.ErrorIs(t, f.svc.MarkReference(f.ctx, f.user.ID, f.book.ID, &stale), ErrUnderwayChanged)
+	assert.Equal(t, models.ReadingStatusRead, f.status())
+}
+
+func TestMarkReference_AStaleConfirmationIsA422(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	api := newReadingAPI(t, db, createUser(t, db, "reader", 2))
+	book := createBook(t, db, "Cookbook")
+	api.mustTransition(book.ID, "start", "2026-10-01")
+
+	rec := api.do(http.MethodPost, fmt.Sprintf("/books/%d/reference", book.ID), MarkReferencePayload{})
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, status(api.get(book.ID)))
 }
 
 func TestMarkReference_TakesTheBookOffToRead(t *testing.T) {
@@ -191,7 +238,7 @@ func TestMarkReference_RefusesABookAlreadyReference(t *testing.T) {
 	book := createBook(t, db, "Cookbook")
 	api.markReference(book.ID)
 
-	rec := api.do(http.MethodPost, fmt.Sprintf("/books/%d/reference", book.ID), nil)
+	rec := api.do(http.MethodPost, fmt.Sprintf("/books/%d/reference", book.ID), MarkReferencePayload{})
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 }
 
@@ -284,7 +331,7 @@ func TestReference_EveryExplicitChoiceStampsTheInstant(t *testing.T) {
 	t.Parallel()
 	type choice func(f *positionsFixture) error
 	start := func(f *positionsFixture) error { return f.svc.Start(f.ctx, f.user.ID, f.book.ID, "2026-10-15") }
-	mark := func(f *positionsFixture) error { return f.svc.MarkReference(f.ctx, f.user.ID, f.book.ID) }
+	mark := func(f *positionsFixture) error { return f.svc.MarkReference(f.ctx, f.user.ID, f.book.ID, nil) }
 	bulk := func(run func(context.Context, int, []int) (BulkReadingResponse, error)) choice {
 		return func(f *positionsFixture) error {
 			_, err := run(f.ctx, f.user.ID, []int{f.book.ID})
@@ -446,7 +493,9 @@ func TestReference_RemovingItLeavesAnEarlierAutomaticFinishStanding(t *testing.T
 	require.ErrorIs(t, f.svc.UndoAutoFinish(f.ctx, rt), ErrNotAutoFinished)
 }
 
-func TestReference_LookupSessionsStayOffAnEarlierFinish(t *testing.T) {
+// Late and same-day sessions are placed by day as in any finished Book (ADR
+// 0028): Reference adds no rule of its own for them.
+func TestReference_ALookupOnTheDayOfAFinishJoinsIt(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
 	// Finished earlier today, then marked Reference.
@@ -463,8 +512,7 @@ func TestReference_LookupSessionsStayOffAnEarlierFinish(t *testing.T) {
 	err = f.db.NewSelect().TableExpr("reading_sessions").ColumnExpr("COUNT(*)").
 		Where("read_through_id IS NOT NULL").Scan(f.ctx, &attached)
 	require.NoError(t, err)
-	assert.Zero(t, attached, "a lookup in a Reference Book belongs to no Read-through")
-	assert.Equal(t, 1, f.count("reading_sessions"))
+	assert.Equal(t, 1, attached, "placed by day, as in a finished Book")
 }
 
 func TestReference_AFinishFromAFileMovedOutStaysFinished(t *testing.T) {
@@ -508,7 +556,7 @@ func TestReference_AStaleDeleteOfTheReadUnderwayChangesNothing(t *testing.T) {
 	assert.NotNil(t, f.position(f.file), "the place stays")
 }
 
-func TestReference_ALateSessionSpanningAnEarlierFinishStaysDetached(t *testing.T) {
+func TestReference_ALateSessionFromAnEarlierFinishJoinsIt(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)
 	start := f.clock.now
@@ -526,7 +574,7 @@ func TestReference_ALateSessionSpanningAnEarlierFinishStaysDetached(t *testing.T
 	err = f.db.NewSelect().TableExpr("reading_sessions").ColumnExpr("COUNT(*)").
 		Where("read_through_id IS NOT NULL").Scan(f.ctx, &attached)
 	require.NoError(t, err)
-	assert.Zero(t, attached)
+	assert.Equal(t, 1, attached, "the session ran during that Read-through")
 }
 
 func TestReference_UndoIsRefusedAfterAMergeIntoAReferenceBook(t *testing.T) {
@@ -539,7 +587,7 @@ func TestReference_UndoIsRefusedAfterAMergeIntoAReferenceBook(t *testing.T) {
 	stale, err := f.svc.RetrieveReadThrough(f.ctx, f.user.ID, *finish.FinishedReadThroughID)
 	require.NoError(t, err)
 	target := createBook(t, f.db, "Target")
-	require.NoError(t, f.svc.MarkReference(f.ctx, f.user.ID, target.ID))
+	require.NoError(t, f.svc.MarkReference(f.ctx, f.user.ID, target.ID, nil))
 	err = f.db.RunInTx(f.ctx, nil, func(ctx context.Context, tx bun.Tx) error {
 		if err := MergeBooks(ctx, tx, f.book.ID, target.ID); err != nil {
 			return err
@@ -553,6 +601,20 @@ func TestReference_UndoIsRefusedAfterAMergeIntoAReferenceBook(t *testing.T) {
 	underway, err := retrieveUnderway(f.ctx, f.db, f.user.ID, target.ID)
 	require.NoError(t, err)
 	assert.Nil(t, underway)
+}
+
+func TestReference_EndingAStaleReadThroughFromReadingHistoryChangesNothing(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.readFor(5)
+	stale := f.readThroughs()[0]
+	f.markReference()
+
+	err := f.svc.EndReadThrough(f.ctx, stale, models.ReadThroughOutcomeFinished, "2026-10-15")
+
+	require.ErrorIs(t, err, ErrReadThroughEnded)
+	assert.Equal(t, models.ReadingStatusReference, f.status())
+	assert.Empty(t, f.readThroughs(), "no finish is recorded in its place")
 }
 
 func TestReference_DeviceStatusesAndHistoryNeverChangeIt(t *testing.T) {

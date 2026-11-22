@@ -16,6 +16,11 @@ var (
 	// which the handlers render as 422 invalid_state.
 	ErrAlreadyReference = errors.New("the book is already reference")
 	ErrNotReference     = errors.New("the book is not reference")
+	// ErrUnderwayChanged is returned for marking Reference when the
+	// Read-through underway isn't the one the user confirmed deleting, such as
+	// one a device started since, which the handlers render as 422
+	// invalid_state.
+	ErrUnderwayChanged = errors.New("the read-through underway changed")
 	// ErrUndoOnReference is returned for undoing an automatic finish of a
 	// Book marked Reference since: Reference is the later choice.
 	ErrUndoOnReference = errors.New("the book is reference")
@@ -28,8 +33,10 @@ var (
 // detached as a lookup's are, and it's deleted, leaving the Reading Positions
 // where they are. The Book leaves To Read. Earlier ended Read-throughs stay
 // as history, and no automatic finish of one can be undone any more, even
-// after Remove from Reference.
-func (svc *Service) MarkReference(ctx context.Context, userID, bookID int) error {
+// after Remove from Reference. confirmedID is the Read-through underway the
+// user confirmed deleting, nil for none; it refuses with ErrUnderwayChanged
+// when that isn't the one underway.
+func (svc *Service) MarkReference(ctx context.Context, userID, bookID int, confirmedID *int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		reference, err := isReference(ctx, tx, userID, bookID)
 		if err != nil {
@@ -38,8 +45,23 @@ func (svc *Service) MarkReference(ctx context.Context, userID, bookID int) error
 		if reference {
 			return ErrAlreadyReference
 		}
+		underway, err := retrieveUnderway(ctx, tx, userID, bookID)
+		if err != nil {
+			return err
+		}
+		if !equalID(readThroughID(underway), confirmedID) {
+			return ErrUnderwayChanged
+		}
 		return markReference(ctx, tx, userID, bookID, svc.now())
 	})
+}
+
+// equalID reports whether a and b are both nil or the same id.
+func equalID(a, b *int) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
 }
 
 // markReference is MarkReference inside the caller's transaction, for a Book
