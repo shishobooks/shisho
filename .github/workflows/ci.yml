@@ -521,11 +521,17 @@ jobs:
           hit: ${{ steps.setup.outputs.simulator-hit }}
 
   app-ios-flows:
-    name: iOS flows
+    # EXPERIMENT (#965 follow-up): the flows twice, with and without apsd
+    # disabled in the simulator, each sampling the runner's CPU by process.
+    name: iOS flows (quiet ${{ matrix.quiet }})
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        quiet: ["off", "on"]
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -553,7 +559,13 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install ffmpeg
+      - name: Sample the runner's CPU
+        run: |
+          mkdir -p "$RUNNER_TEMP/harness"
+          nohup top -l 0 -s 10 -n 25 -o cpu -stats pid,command,cpu > "$RUNNER_TEMP/harness/cpu.log" 2>&1 &
       - name: Run the Maestro flows
+        env:
+          SHISHO_HARNESS_QUIET: ${{ matrix.quiet == 'on' && '1' || '' }}
         run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
       - uses: ./.github/actions/save-ios-simulator
         with:
@@ -565,7 +577,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: harness-output
+          name: harness-output-quiet-${{ matrix.quiet }}
           path: ${{ runner.temp }}/harness
           if-no-files-found: ignore
           retention-days: 7

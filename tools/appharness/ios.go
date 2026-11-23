@@ -87,6 +87,9 @@ func runIOS(ctx context.Context, args []string) error {
 		return err
 	}
 	defer sim.Release()
+	if os.Getenv("SHISHO_HARNESS_QUIET") != "" {
+		quietSimulator(ctx, sim.UDID)
+	}
 	if _, err := simctl(ctx, "install", sim.UDID, appPath); err != nil {
 		return err
 	}
@@ -211,4 +214,19 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 
 func (c *control) Close() {
 	_ = c.listener.Close()
+}
+
+// quietSimulator stops simulator services the flows don't use that keep the
+// CPU busy. EXPERIMENT: on CI, apsd reconnects to Apple's push service
+// several times a second, the most lines in the simulator's log by far.
+func quietSimulator(ctx context.Context, udid string) {
+	for _, args := range [][]string{
+		{"spawn", udid, "launchctl", "disable", "system/com.apple.apsd"},
+		{"spawn", udid, "launchctl", "bootout", "system/com.apple.apsd"},
+	} {
+		if _, err := simctl(ctx, args...); err != nil {
+			fmt.Fprintln(os.Stderr, "appharness: quiet the simulator:", err)
+		}
+	}
+	fmt.Fprintln(os.Stderr, "appharness: stopped apsd in the simulator")
 }
