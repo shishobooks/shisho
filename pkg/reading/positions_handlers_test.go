@@ -261,6 +261,23 @@ func TestPositionRoutes_DatabaseFailureIs500(t *testing.T) {
 	path := fmt.Sprintf("/files/%d/position", f.file.ID)
 	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodGet, path, nil).Code)
 	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, path, map[string]any{"cfi": "epubcfi(/6/4!/4/2)", "percentage": 0.5}).Code)
+	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodDelete, path, nil).Code)
+}
+
+// A failure partway through a clear keeps the place: the position's delete
+// rolls back with it.
+func TestPositionRoutes_AFailedClearKeepsThePosition(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	api := newReadingAPI(t, f.db, f.user)
+
+	_, err := f.db.Exec("DROP TABLE reading_position_updates")
+	require.NoError(t, err)
+	rec := api.do(http.MethodDelete, fmt.Sprintf("/files/%d/position", f.file.ID), nil)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+	assert.NotNil(t, f.position(f.file))
 }
 
 func TestPositionRoutes_ASessionWithoutAPositionRecordsOnlyTheSession(t *testing.T) {
@@ -337,4 +354,49 @@ func TestPositionRoutes_KOReadersPositionComesAsACFI(t *testing.T) {
 	assert.Equal(t, "epubcfi(/6/4!/4/2/4/1:67)", *got.Position.CFI)
 	assert.Nil(t, got.Position.XPointer)
 	assert.Equal(t, models.ReadingSourceKOReader, got.Position.Source)
+}
+
+func TestPositionRoutes_ClearRemovesOnlyThatFilesPosition(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.4, false)
+	f.listenFor(audio, 900, 60)
+	otherUser := createUser(t, f.db, "other", 2)
+	_, err := f.svc.UpdatePosition(f.ctx, PositionUpdate{
+		UserID: otherUser.ID, FileID: f.file.ID, Source: models.ReadingSourceWebReader,
+		Locator: models.ReadingLocator{CFI: new("epubcfi(/6/8!/4/2)")}, Percentage: 0.1,
+	})
+	require.NoError(t, err)
+	updates := f.count("reading_position_updates")
+	api := newReadingAPI(t, f.db, f.user)
+
+	resp := api.ok(http.MethodDelete, fmt.Sprintf("/files/%d/position", f.file.ID), nil)
+
+	assert.Equal(t, f.book.ID, resp.BookID)
+	require.Len(t, resp.Positions, 1)
+	assert.Equal(t, audio.ID, resp.Positions[0].FileID)
+	// The Read-through and the update log are history, not the place.
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, status(resp))
+	assert.Equal(t, updates, f.count("reading_position_updates"))
+	assert.Nil(t, f.position(f.file))
+	theirs, err := f.svc.RetrievePosition(f.ctx, otherUser.ID, f.file.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, theirs)
+
+	// Clearing a File with no position is a no-op, not an error.
+	again := api.ok(http.MethodDelete, fmt.Sprintf("/files/%d/position", f.file.ID), nil)
+	assert.Len(t, again.Positions, 1)
+}
+
+func TestPositionRoutes_ClearChecksFileAccess(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	other := createBook(t, f.db, "Elsewhere")
+	otherFile := createFile(t, f, other)
+	f.user.LibraryAccess = []*models.UserLibraryAccess{{UserID: f.user.ID, LibraryID: &f.book.LibraryID}}
+	api := newReadingAPI(t, f.db, f.user)
+
+	assert.Equal(t, http.StatusNotFound, api.do(http.MethodDelete, "/files/9999/position", nil).Code)
+	assert.Equal(t, http.StatusForbidden, api.do(http.MethodDelete, fmt.Sprintf("/files/%d/position", otherFile.ID), nil).Code)
 }

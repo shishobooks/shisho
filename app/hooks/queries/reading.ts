@@ -639,6 +639,24 @@ export const useFilePosition = (
   });
 };
 
+// Clears the signed-in user's Reading Position in a File, so its reader
+// opens at the start. The Book's progress drops with it, so its record and
+// cards refetch like any other reading write.
+export const useClearFilePosition = () => {
+  const queryClient = useQueryClient();
+  return useMutation<BookReadingResponse, ShishoAPIError, number>({
+    mutationFn: (fileId) => {
+      return API.request(
+        "DELETE",
+        `/reading/files/${fileId}/position`,
+        null,
+        null,
+      );
+    },
+    onSuccess: (data) => onReadingChanged(queryClient, data),
+  });
+};
+
 // Saves where the reader is in a File. Readers send it as they read, so it
 // isn't a mutation hook; keepalive is for a save as the page closes.
 export const saveFilePosition = (

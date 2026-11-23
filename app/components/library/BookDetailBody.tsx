@@ -22,6 +22,7 @@ import BookReadingBookmark from "@/components/library/BookReadingBookmark";
 import BookReadingControls from "@/components/library/BookReadingControls";
 import BookRelatedPanel from "@/components/library/BookRelatedPanel";
 import BookReviewBadge from "@/components/library/BookReviewBadge";
+import ClearPositionDialog from "@/components/library/ClearPositionDialog";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import DetailsDialog from "@/components/library/DetailsDialog";
 import DownloadErrorDialog from "@/components/library/DownloadErrorDialog";
@@ -188,6 +189,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
   const [moveFileId, setMoveFileId] = useState<number | null>(null);
   const [deletingFileId, setDeletingFileId] = useState<number | null>(null);
   const [fileToDelete, setFileToDelete] = useState<File | null>(null);
+  const [fileToClear, setFileToClear] = useState<File | null>(null);
   const [showIdentifyDialog, setShowIdentifyDialog] = useState(false);
 
   const coverUrl = shareLink
@@ -434,6 +436,7 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
         key={file.id}
         libraryId={libraryId}
         onCancelDownload={downloads.cancel}
+        onClearPosition={() => setFileToClear(file)}
         onDeleteFile={() => setFileToDelete(file)}
         onDownload={() =>
           deliveredFileType && downloads.download(file, deliveredFileType)
@@ -671,6 +674,14 @@ const BookDetailBody = ({ book, library, shareLink }: BookDetailBodyProps) => {
           open={shareDialogOpen}
           requireExpiration={sharingSettings?.require_expiration ?? false}
           sharingEnabled={sharingEnabled}
+        />
+      )}
+
+      {fileToClear && (
+        <ClearPositionDialog
+          file={fileToClear}
+          onOpenChange={(open) => !open && setFileToClear(null)}
+          open={!!fileToClear}
         />
       )}
 

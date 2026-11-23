@@ -155,6 +155,9 @@ vi.mock("@/hooks/queries/delivery", () => ({
 const readingPositions = vi.hoisted(() => ({
   current: [] as Array<{ file_id: number; percentage: number }>,
 }));
+const clearing = vi.hoisted(() => ({
+  position: undefined as undefined | ((fileId: number) => Promise<unknown>),
+}));
 
 // BookReadingControls.test.tsx drives the reading controls through the API.
 vi.mock("@/hooks/queries/reading", () => ({
@@ -183,6 +186,10 @@ vi.mock("@/hooks/queries/reading", () => ({
   useSetReference: idle,
   useUpdateReadThrough: idle,
   useDeleteReadThrough: idle,
+  useClearFilePosition: () => ({
+    ...idle(),
+    ...(clearing.position ? { mutateAsync: clearing.position } : {}),
+  }),
 }));
 vi.mock("@/hooks/queries/plugins", () => ({
   usePluginIdentifierTypes: () => ({ data: [] }),
@@ -1051,6 +1058,7 @@ describe("BookDetailBody Share button", () => {
 describe("BookDetailBody file progress", () => {
   afterEach(() => {
     readingPositions.current = [];
+    clearing.position = undefined;
   });
 
   const twoFiles = {
@@ -1136,6 +1144,94 @@ describe("BookDetailBody file progress", () => {
     renderBody({ book: twoFiles, shareLink });
 
     expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  // The menu's items and separators in order, as text and "---".
+  const fileMenu = async (index = 0) => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.click(
+      screen.getAllByRole("button", { name: "File actions" })[index],
+    );
+    return Array.from(screen.getByRole("menu").children).map((el) =>
+      el.getAttribute("role") === "separator" ? "---" : el.textContent,
+    );
+  };
+
+  it("offers Clear saved position in its own section above Delete file", async () => {
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({ book: twoFiles });
+
+    expect(await fileMenu()).toEqual([
+      "File details",
+      "---",
+      "Rescan file",
+      "Move to another book",
+      "---",
+      "Clear saved position",
+      "---",
+      "Delete file",
+    ]);
+  });
+
+  it("offers Clear saved position to a role without Books Write", async () => {
+    setAuth({ permissions: ["books:read"] });
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({ book: twoFiles });
+
+    expect(await fileMenu()).toEqual([
+      "File details",
+      "---",
+      "Clear saved position",
+    ]);
+  });
+
+  it("offers Clear saved position disabled in Demo Mode, saying why", async () => {
+    setAuth({ permissions: ["books:read"], demoMode: true });
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({ book: twoFiles });
+
+    await fileMenu();
+    const item = screen.getByRole("menuitem", {
+      name: /Clear saved position/,
+    });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("This action is unavailable in the demo.");
+  });
+
+  it("offers no Clear saved position on a file with no position", async () => {
+    readingPositions.current = [{ file_id: 2, percentage: 0.62 }];
+    renderBody({ book: twoFiles });
+
+    expect(await fileMenu(0)).not.toContain("Clear saved position");
+  });
+
+  it("clears a file's saved position after confirming", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const success = vi.spyOn(toast, "success");
+    clearing.position = vi.fn().mockResolvedValue({});
+    readingPositions.current = [
+      { file_id: 1, percentage: 0.25 },
+      { file_id: 2, percentage: 0.62 },
+    ];
+    renderBody({ book: twoFiles });
+
+    await user.click(
+      screen.getAllByRole("button", { name: "File actions" })[1],
+    );
+    await user.click(
+      screen.getByRole("menuitem", { name: "Clear saved position" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Clear saved position?",
+    });
+    expect(dialog).toHaveTextContent("Audio will open at the start.");
+    await user.click(within(dialog).getByRole("button", { name: "Clear" }));
+
+    expect(clearing.position).toHaveBeenCalledWith(2);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(success).toHaveBeenCalledWith("Saved position cleared");
   });
 
   it("shows no progress on a file with no position", () => {

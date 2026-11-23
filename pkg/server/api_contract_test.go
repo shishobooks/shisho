@@ -252,6 +252,11 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 			status: http.StatusNotFound, code: "not_found", message: "File not found.",
 		},
 		{
+			name:   "clearing the position of a file that does not exist",
+			method: http.MethodDelete, path: "/api/reading/files/999999/position",
+			status: http.StatusNotFound, code: "not_found", message: "File not found.",
+		},
+		{
 			name:   "undoing a finish no position update made",
 			method: http.MethodPost, path: fmt.Sprintf("/api/reading/read-throughs/%d/undo-finish", underway.ReadThroughs[0].ID),
 			status: http.StatusUnprocessableEntity, code: "invalid_state", message: "This finish can't be undone.",

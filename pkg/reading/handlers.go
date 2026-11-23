@@ -890,6 +890,27 @@ func (h *handler) updatePosition(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, result))
 }
 
+// clearPosition deletes the caller's Reading Position in a File, so it
+// starts over, and responds with the Book's reading record.
+func (h *handler) clearPosition(c echo.Context) error {
+	user, err := auth.RequireUser(c)
+	if err != nil {
+		return err
+	}
+	fileID, err := h.requireFile(c)
+	if err != nil {
+		return err
+	}
+	bookID, err := h.readingService.ClearPosition(c.Request().Context(), user.ID, fileID)
+	if errors.Is(err, ErrFileNotFound) {
+		return errcodes.NotFound("File")
+	}
+	if err != nil {
+		return err
+	}
+	return h.respond(c, user, bookID)
+}
+
 // undoFinish undoes a finish a position update made, for Undo on the
 // reader's finish toast.
 func (h *handler) undoFinish(c echo.Context) error {

@@ -16,6 +16,7 @@ import {
   fileEditionRows,
   fileIdentifierRows,
 } from "@/components/files/fileFacts";
+import { ClearPositionMenuItem } from "@/components/library/ClearPositionDialog";
 import CoverImage from "@/components/library/CoverImage";
 import DetailsDialog, {
   type DetailRow,
@@ -206,6 +207,8 @@ export interface BookFileRowProps {
   isSupplement?: boolean;
   // How far through this File the reader is, from 0 to 1.
   progress?: number;
+  /** Clears the reader's saved position; offered only when there is one. */
+  onClearPosition?: () => void;
   onMoveFile?: () => void;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
@@ -236,6 +239,7 @@ const BookFileRow = ({
   isResyncing,
   isSupplement = false,
   progress,
+  onClearPosition,
   onMoveFile,
   onDeleteFile,
   isDeletingFile,
@@ -423,6 +427,20 @@ const BookFileRow = ({
                     Move to another book
                   </DropdownMenuItem>
                 )}
+              </>
+            )}
+            {/* The reader's own data, so it needs no write permission. */}
+            {progress != null && onClearPosition && (
+              <>
+                <DropdownMenuSeparator />
+                <ClearPositionMenuItem
+                  iconClassName="h-4 w-4 mr-2"
+                  onSelect={onClearPosition}
+                />
+              </>
+            )}
+            {canWriteBooks && (
+              <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
