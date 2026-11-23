@@ -16,7 +16,7 @@ struct PlayerToolbar: View {
             Spacer(minLength: 4)
             if player.bookmarksAvailable {
                 Button(action: addBookmark) {
-                    ToolLabel(symbol: "bookmark", caption: Text("Bookmark"))
+                    ToolLabel(icon: .bookmarkPlus, caption: Text("Bookmark"))
                 }
                 .accessibilityLabel("Add Bookmark")
                 .accessibilityHint("Bookmarks where playback is")
@@ -24,7 +24,7 @@ struct PlayerToolbar: View {
                 Spacer(minLength: 4)
             }
             Button(action: showChapters) {
-                ToolLabel(symbol: "list.bullet", caption: Text("Chapters"))
+                ToolLabel(icon: .listMusic, caption: Text("Chapters"))
             }
             .disabled(player.file?.chapters.isEmpty ?? true)
             .accessibilityLabel("Chapters")
@@ -43,7 +43,7 @@ struct PlayerToolbar: View {
         VStack(spacing: 5) {
             HStack(spacing: 0) {
                 Button { player.setRate(player.rate - PlaybackSpeed.step) } label: {
-                    Image(systemName: "minus").font(.system(size: 13, weight: .semibold)).frame(width: 32, height: 30).hitArea(height: 30)
+                    Icon(.minus, size: 15).frame(width: 32, height: 30).hitArea(height: 30)
                 }
                 .disabled(player.rate <= PlaybackSpeed.range.lowerBound)
                 .accessibilityLabel("Slower")
@@ -60,7 +60,7 @@ struct PlayerToolbar: View {
                     .accessibilityLabel("Speed \(PlaybackSpeed.label(player.rate))")
                     .accessibilityIdentifier("player.speed")
                 Button { player.setRate(player.rate + PlaybackSpeed.step) } label: {
-                    Image(systemName: "plus").font(.system(size: 13, weight: .semibold)).frame(width: 32, height: 30).hitArea(height: 30)
+                    Icon(.plus, size: 15).frame(width: 32, height: 30).hitArea(height: 30)
                 }
                 .disabled(player.rate >= PlaybackSpeed.range.upperBound)
                 .accessibilityLabel("Faster")
@@ -83,7 +83,7 @@ struct PlayerToolbar: View {
         Menu {
             if player.sleepTimer != .off {
                 Button(role: .destructive) { player.setSleepTimer(.off) } label: {
-                    Label("Turn Off Timer", systemImage: "xmark")
+                    Label("Turn Off Timer", menuIcon: .x)
                 }
                 .accessibilityIdentifier("sleep.off")
             }
@@ -96,7 +96,7 @@ struct PlayerToolbar: View {
             Button("End of Chapter") { player.setSleepTimer(.endOfChapter) }
                 .accessibilityIdentifier("sleep.endOfChapter")
         } label: {
-            ToolLabel(symbol: player.sleepTimer == .off ? "moon" : "moon.fill", caption: sleepCaption, active: player.sleepTimer != .off)
+            ToolLabel(icon: player.sleepTimer == .off ? .moon : .moonFill, caption: sleepCaption, active: player.sleepTimer != .off)
         }
         .accessibilityLabel(sleepLabel)
         .accessibilityIdentifier("player.sleep")
@@ -124,17 +124,14 @@ struct PlayerToolbar: View {
 /// A tool's icon over its name, in variant E's muted ink, or the brand color
 /// while it's on.
 private struct ToolLabel: View {
-    let symbol: String
+    let icon: Lucide
     let caption: Text
     var active = false
 
     var body: some View {
         VStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 19, weight: .regular))
-                .contentTransition(.symbolEffect(.replace))
+            Icon(icon, size: 22, relativeTo: .caption2)
                 .frame(width: 36, height: 30)
-                .accessibilityHidden(true)
             caption
                 .font(.geist(size: 11, relativeTo: .caption2, weight: .medium))
                 .monospacedDigit()
@@ -156,7 +153,7 @@ struct PlayerMenu: View {
         Menu {
             if player.bookmarksAvailable {
                 Button(action: showBookmarks) {
-                    Label("Bookmarks", systemImage: "bookmark")
+                    Label("Bookmarks", menuIcon: .bookmark)
                 }
                 .accessibilityIdentifier("player.bookmarks")
                 Divider()
@@ -166,7 +163,7 @@ struct PlayerMenu: View {
                     Text("\(Int(seconds)) Seconds").tag(seconds)
                 }
             } label: {
-                Label("Skip Back", systemImage: "gobackward")
+                Label("Skip Back", menuIcon: .rotateCcw)
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("settings.skipBack")
@@ -175,16 +172,16 @@ struct PlayerMenu: View {
                     Text("\(Int(seconds)) Seconds").tag(seconds)
                 }
             } label: {
-                Label("Skip Forward", systemImage: "goforward")
+                Label("Skip Forward", menuIcon: .rotateCw)
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("settings.skipForward")
             Toggle(isOn: Binding(get: { player.smartRewind }, set: { player.setSmartRewind($0) })) {
-                Label("Rewind After a Pause", systemImage: "clock.arrow.circlepath")
+                Label("Rewind After a Pause", menuIcon: .clockArrowUp)
             }
             .accessibilityIdentifier("settings.smartRewind")
         } label: {
-            RoundIcon("ellipsis")
+            RoundIcon(.ellipsis)
         }
         .accessibilityLabel("More")
         .accessibilityIdentifier("player.more")
@@ -448,12 +445,12 @@ struct PlayerListSheet: View {
             .accessibilityHint("Goes to this moment")
             .accessibilityIdentifier("bookmarks.row")
             Button { edit(bookmark) } label: {
-                Image(systemName: "pencil").font(.system(size: 15, weight: .medium)).frame(width: 44, height: 44).contentShape(Rectangle())
+                Icon(.pencil, size: 17).frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("Edit note for bookmark at \(time)")
             .accessibilityIdentifier("bookmarks.editNote")
             Button { player.deleteBookmark(bookmark) } label: {
-                Image(systemName: "trash").font(.system(size: 15, weight: .medium)).frame(width: 44, height: 44).contentShape(Rectangle())
+                Icon(.trash, size: 17).frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("Delete bookmark at \(time)")
             .accessibilityIdentifier("bookmarks.delete")
@@ -463,8 +460,8 @@ struct PlayerListSheet: View {
         .padding(8)
         .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Theme.border))
         .contextMenu {
-            Button { edit(bookmark) } label: { Label("Edit Note", systemImage: "pencil") }
-            Button(role: .destructive) { player.deleteBookmark(bookmark) } label: { Label("Delete", systemImage: "trash") }
+            Button { edit(bookmark) } label: { Label("Edit Note", menuIcon: .pencil) }
+            Button(role: .destructive) { player.deleteBookmark(bookmark) } label: { Label("Delete", menuIcon: .trash) }
         }
     }
 

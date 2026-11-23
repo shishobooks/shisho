@@ -1,8 +1,7 @@
 import XCTest
 @testable import Shisho
 
-/// The full player's rules (#916): smart rewind, the sleep timer, and skip
-/// lengths.
+/// The full player's rules (#916): smart rewind and the sleep timer.
 final class PlayerRulesTests: XCTestCase {
     /// A short pause picks up where it stopped; a longer one goes back a
     /// little, more the longer it was.
@@ -54,13 +53,5 @@ final class PlayerRulesTests: XCTestCase {
         // In the last chapter, or without chapters, it's the end of the File.
         XCTAssertEqual(SleepTimerRules.chapterEnd(after: 7, chapters: chapters, duration: 9), 9)
         XCTAssertEqual(SleepTimerRules.chapterEnd(after: 7, chapters: [], duration: 9), 9)
-    }
-
-    /// Skip lengths are the ones the system has icons for.
-    func testSkipLengthsHaveIcons() {
-        for seconds in PlayerSettings.skipLengths {
-            XCTAssertNotNil(UIImage(systemName: SkipIcon.symbol(forward: true, seconds: seconds)), "\(seconds)")
-            XCTAssertNotNil(UIImage(systemName: SkipIcon.symbol(forward: false, seconds: seconds)), "\(seconds)")
-        }
     }
 }

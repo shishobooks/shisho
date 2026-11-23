@@ -66,8 +66,7 @@ struct ListenCard: View {
             if playing {
                 PlayingIndicator(playing: true, height: 14)
             } else {
-                Image(systemName: finished ? "arrow.counterclockwise" : "headphones")
-                    .font(.system(size: 20, weight: .semibold))
+                Icon(finished ? .rotateCcw : .headphones, size: 22)
             }
         }
         .frame(width: 24)

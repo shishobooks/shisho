@@ -48,8 +48,8 @@ struct AppTabBar: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            item(.library, String(localized: "Library"), systemImage: "books.vertical", identifier: "tab.library")
-            item(.lists, String(localized: "Lists"), systemImage: "list.bullet", identifier: "tab.lists")
+            item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
+            item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
         }
         .padding(.top, 7)
         .padding(.bottom, 2)
@@ -71,7 +71,7 @@ struct AppTabBar: View {
         .dynamicTypeSize(.large)
     }
 
-    private func item(_ tab: AppTab, _ title: String, systemImage: String, identifier: String) -> some View {
+    private func item(_ tab: AppTab, _ title: String, icon: Lucide, identifier: String) -> some View {
         let selected = model.tab == tab
         return Button {
             if selected {
@@ -82,8 +82,7 @@ struct AppTabBar: View {
             }
         } label: {
             VStack(spacing: 3) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 21, weight: .regular))
+                Icon(icon, size: 24, relativeTo: .caption2)
                     .frame(height: 26)
                 Text(title)
                     .font(.geist(size: 10.5, relativeTo: .caption2, weight: .medium))
@@ -94,7 +93,7 @@ struct AppTabBar: View {
         }
         .buttonStyle(TabPressStyle())
         .accessibilityShowsLargeContentViewer {
-            Label(title, systemImage: systemImage)
+            Label(verbatim: title, menuIcon: icon)
         }
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
@@ -119,8 +118,7 @@ struct RootToolbar: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             NavigationLink(value: Route.search) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .medium))
+                Icon(.search, size: 20)
                     .foregroundStyle(Theme.foreground)
             }
             .accessibilityLabel("Search")
@@ -245,15 +243,13 @@ struct SectionHeading: View {
 struct EmptyNotice: View {
     let title: String
     let message: String
-    let systemImage: String
+    let icon: Lucide
 
     var body: some View {
         VStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.system(size: 36, weight: .light))
+            Icon(icon, size: 40, relativeTo: .largeTitle)
                 .foregroundStyle(Theme.primary)
                 .padding(.bottom, 4)
-                .accessibilityHidden(true)
             Text(title)
                 .font(.geist(.headline, weight: .semibold))
             Text(message)

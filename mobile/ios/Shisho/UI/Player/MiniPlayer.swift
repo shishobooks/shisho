@@ -26,16 +26,14 @@ struct MiniPlayer: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("miniplayer.open")
             Button { player.togglePlay() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .contentTransition(.symbolEffect(.replace))
+                Icon(player.isPlaying ? .pauseFill : .playFill, size: 22)
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(PlayerControlStyle())
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
             .accessibilityIdentifier("miniplayer.playPause")
             Button { player.skipForward() } label: {
-                SkipIcon(forward: true, seconds: player.forwardInterval, size: 22).frame(width: 40, height: 40)
+                SkipIcon(forward: true, seconds: player.forwardInterval, size: 26).frame(width: 40, height: 40)
             }
             .buttonStyle(PlayerControlStyle())
             .accessibilityLabel("Forward \(Int(player.forwardInterval)) Seconds")

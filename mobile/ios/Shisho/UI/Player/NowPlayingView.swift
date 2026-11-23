@@ -31,7 +31,7 @@ struct NowPlayingView: View {
                 content(player, file)
                     .overlay(alignment: .top) { toast(player) }
             } else {
-                ContentUnavailableView("Nothing is playing", systemImage: "headphones")
+                EmptyState("Nothing is playing", icon: .headphones)
             }
         }
         .background(alignment: .top) { backdrop }
@@ -98,7 +98,7 @@ struct NowPlayingView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             if let error = player.error {
-                NoticeCard(text: error, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive)
+                NoticeCard(text: error, icon: .triangleAlert, tint: Theme.destructive)
                     .padding(.top, 12)
                     .accessibilityIdentifier("player.error")
             }
@@ -154,7 +154,7 @@ struct NowPlayingView: View {
             .accessibilityIdentifier("player.book")
             HStack(spacing: 8) {
                 Button { dismiss() } label: {
-                    RoundIcon("chevron.down")
+                    RoundIcon(.chevronDown, size: 22)
                 }
                 .accessibilityLabel("Close Player")
                 .accessibilityIdentifier("player.close")
@@ -227,10 +227,8 @@ struct NowPlayingView: View {
                         .lineLimit(1)
                         .accessibilityIdentifier("player.chapter")
                     if !file.chapters.isEmpty {
-                        Image(systemName: "chevron.down")
-                            .font(.geist(size: 11, relativeTo: .footnote, weight: .semibold))
+                        Icon(.chevronDown, size: 14, relativeTo: .footnote)
                             .opacity(0.6)
-                            .accessibilityHidden(true)
                     }
                     if player.isBuffering {
                         ProgressView()
@@ -324,23 +322,21 @@ struct NowPlayingView: View {
     private func transport(_ player: AudioPlayer) -> some View {
         HStack {
             Button { player.previousChapter() } label: {
-                Image(systemName: "backward.end")
-                    .font(.system(size: 22, weight: .regular))
-                    .frame(width: 48, height: 48)
+                Icon(.skipBack, size: 24).frame(width: 48, height: 48)
             }
             .accessibilityLabel("Previous Chapter")
             .accessibilityIdentifier("player.prevChapter")
             Spacer()
             Button { player.skipBack() } label: {
-                SkipIcon(forward: false, seconds: player.backInterval, size: 30).frame(width: 48, height: 48)
+                SkipIcon(forward: false, seconds: player.backInterval, size: 34).frame(width: 48, height: 48)
             }
             .accessibilityLabel("Back \(Int(player.backInterval)) Seconds")
             .accessibilityIdentifier("player.skipBack")
             Spacer()
             Button { player.togglePlay() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 28, weight: .bold))
-                    .contentTransition(.symbolEffect(.replace))
+                Icon(player.isPlaying ? .pauseFill : .playFill, size: 30)
+                    // The triangle's weight sits left of its box's center.
+                    .offset(x: player.isPlaying ? 0 : 2)
                     .foregroundStyle(Theme.primaryForeground)
                     .frame(width: 72, height: 72)
                     .background(Theme.primary, in: Circle())
@@ -350,15 +346,13 @@ struct NowPlayingView: View {
             .accessibilityIdentifier("player.playPause")
             Spacer()
             Button { player.skipForward() } label: {
-                SkipIcon(forward: true, seconds: player.forwardInterval, size: 30).frame(width: 48, height: 48)
+                SkipIcon(forward: true, seconds: player.forwardInterval, size: 34).frame(width: 48, height: 48)
             }
             .accessibilityLabel("Forward \(Int(player.forwardInterval)) Seconds")
             .accessibilityIdentifier("player.skipForward")
             Spacer()
             Button { player.nextChapter() } label: {
-                Image(systemName: "forward.end")
-                    .font(.system(size: 22, weight: .regular))
-                    .frame(width: 48, height: 48)
+                Icon(.skipForward, size: 24).frame(width: 48, height: 48)
             }
             .accessibilityLabel("Next Chapter")
             .accessibilityIdentifier("player.nextChapter")
@@ -432,15 +426,16 @@ struct NowPlayingView: View {
 
 /// An icon in the round, translucent button variant E's player header uses.
 struct RoundIcon: View {
-    let symbol: String
+    let name: Lucide
+    var size: CGFloat = 20
 
-    init(_ symbol: String) {
-        self.symbol = symbol
+    init(_ name: Lucide, size: CGFloat = 20) {
+        self.name = name
+        self.size = size
     }
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 17, weight: .semibold))
+        Icon(name, size: size)
             .foregroundStyle(Theme.foreground)
             .frame(width: 40, height: 40)
             .background(Theme.background.opacity(0.4), in: Circle())

@@ -429,7 +429,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["*.js", "eslint-rules/*.js"],
+    files: ["*.js", "eslint-rules/*.js", "mobile/ios/scripts/*.mjs"],
     ignores: ["app/**", "website/**"],
     languageOptions: {
       globals: globals.node,

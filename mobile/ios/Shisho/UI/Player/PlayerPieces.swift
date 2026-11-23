@@ -24,27 +24,6 @@ struct PlayingIndicator: View {
     }
 }
 
-/// The skip buttons' icon: an arrow around the seconds it skips, the
-/// listener's setting.
-struct SkipIcon: View {
-    let forward: Bool
-    let seconds: Double
-    var size: CGFloat = 30
-
-    /// The system's icon for a skip, which exists for each of
-    /// `PlayerSettings.skipLengths`.
-    nonisolated static func symbol(forward: Bool, seconds: Double) -> String {
-        "\(forward ? "goforward" : "gobackward").\(Int(seconds))"
-    }
-
-    var body: some View {
-        Image(systemName: SkipIcon.symbol(forward: forward, seconds: seconds))
-            .font(.system(size: size, weight: .regular))
-            .contentTransition(.symbolEffect(.replace))
-            .accessibilityHidden(true)
-    }
-}
-
 /// A round control in the player that gives under the finger.
 struct PlayerControlStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -70,10 +49,8 @@ struct PlaceOfferBanner: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.geist(.body, weight: .semibold))
+            Icon(.refresh, size: 18)
                 .foregroundStyle(Theme.primary)
-                .accessibilityHidden(true)
             Text(message)
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.foreground)
@@ -84,8 +61,7 @@ struct PlaceOfferBanner: View {
                 .foregroundStyle(Theme.primary)
                 .accessibilityIdentifier("player.offer.accept")
             Button(action: dismiss) {
-                Image(systemName: "xmark")
-                    .font(.geist(.footnote, weight: .semibold))
+                Icon(.x, size: 16, relativeTo: .footnote)
                     .foregroundStyle(Theme.mutedForeground)
                     .frame(width: 28, height: 28)
             }

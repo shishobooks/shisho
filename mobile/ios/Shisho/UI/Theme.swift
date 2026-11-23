@@ -242,7 +242,7 @@ struct OutlineButtonStyle: ButtonStyle {
 /// A labeled text field in the web app's input style, with an icon.
 struct LabeledInput<Field: View>: View {
     let label: LocalizedStringKey
-    let systemImage: String
+    let icon: Lucide
     var focused = false
     @ViewBuilder let field: () -> Field
 
@@ -252,10 +252,9 @@ struct LabeledInput<Field: View>: View {
                 .font(.geist(.subheadline, weight: .medium))
                 .foregroundStyle(Theme.foreground)
             HStack(spacing: 10) {
-                Image(systemName: systemImage)
+                Icon(icon, size: 18)
                     .foregroundStyle(focused ? Theme.primary : Theme.mutedForeground)
                     .frame(width: 20)
-                    .accessibilityHidden(true)
                 field()
                     .font(.geist(.body))
             }
@@ -274,16 +273,15 @@ struct LabeledInput<Field: View>: View {
 /// A notice above content: an icon, text, and an optional action.
 struct NoticeCard<Action: View>: View {
     let text: String
-    let systemImage: String
+    let icon: Lucide
     var tint: Color = Theme.mutedForeground
     @ViewBuilder var action: () -> Action
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.geist(.body, weight: .semibold))
+            Icon(icon, size: 19)
                 .foregroundStyle(tint)
-                .accessibilityHidden(true)
+                .padding(.top, 1)
             VStack(alignment: .leading, spacing: 8) {
                 Text(text)
                     .font(.geist(.subheadline))
@@ -303,7 +301,7 @@ struct NoticeCard<Action: View>: View {
 struct UpdateAppLink: View {
     var body: some View {
         Link(destination: Installation.updateURL) {
-            Label("Update the app", systemImage: "arrow.up.forward")
+            Label("Update the app", icon: .arrowUpRight)
                 .font(.geist(.subheadline, weight: .semibold))
         }
         .accessibilityIdentifier("update.link")
@@ -314,7 +312,7 @@ struct UpdateAppLink: View {
 struct SettingsLink: View {
     var body: some View {
         Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
-            Label("Open Settings", systemImage: "arrow.up.forward")
+            Label("Open Settings", icon: .arrowUpRight)
                 .font(.geist(.subheadline, weight: .semibold))
         }
         .accessibilityIdentifier("settings.link")
@@ -322,8 +320,8 @@ struct SettingsLink: View {
 }
 
 extension NoticeCard where Action == EmptyView {
-    init(text: String, systemImage: String, tint: Color = Theme.mutedForeground) {
-        self.init(text: text, systemImage: systemImage, tint: tint) { EmptyView() }
+    init(text: String, icon: Lucide, tint: Color = Theme.mutedForeground) {
+        self.init(text: text, icon: icon, tint: tint) { EmptyView() }
     }
 }
 

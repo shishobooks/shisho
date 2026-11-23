@@ -65,7 +65,7 @@ struct LibraryView: View {
                                 VStack(spacing: 14) {
                                     EmptyNotice(title: String(localized: "No Books match these filters"),
                                                 message: String(localized: "Change or clear the filters to see more."),
-                                                systemImage: "line.3.horizontal.decrease")
+                                                icon: .listFilter)
                                     Button("Clear Filters") { model.filter = LibraryFilter() }
                                         .buttonStyle(SmallOutlineStyle())
                                         .accessibilityIdentifier("library.filters.clear")
@@ -160,8 +160,7 @@ struct LibraryView: View {
                     .font(.geist(.subheadline))
                     .foregroundStyle(Theme.mutedForeground)
             } else {
-                Image(systemName: "books.vertical")
-                    .font(.system(size: 40, weight: .light))
+                Icon(.library, size: 44, relativeTo: .largeTitle)
                     .foregroundStyle(Theme.primary)
                     .padding(.bottom, 4)
                 Text("No Books yet")
@@ -210,19 +209,17 @@ private struct LibraryPicker: View {
     var body: some View {
         Menu {
             Picker("Library", selection: $selection) {
-                Label("All Libraries", systemImage: "square.stack").tag(0)
+                Label("All Libraries", menuIcon: .layers).tag(0)
                 ForEach(libraries) { library in
                     Text(library.name).tag(library.id)
                 }
             }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: "books.vertical")
-                    .accessibilityHidden(true)
+                Icon(.library, size: 17, relativeTo: .subheadline)
                 Text(name)
                     .lineLimit(1)
-                Image(systemName: "chevron.down")
-                    .font(.geist(.caption2, weight: .semibold))
+                Icon(.chevronDown, size: 13, relativeTo: .caption2)
                     .foregroundStyle(Theme.mutedForeground)
             }
         }
@@ -387,19 +384,19 @@ struct SyncBanner: View {
             case .idle:
                 EmptyView()
             case .offline:
-                NoticeCard(text: String(localized: "Offline. Showing what's on this device."), systemImage: "wifi.slash")
+                NoticeCard(text: String(localized: "Offline. Showing what's on this device."), icon: .wifiOff)
             case .localNetworkDenied:
-                NoticeCard(text: Messages.localNetworkDenied, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive) {
+                NoticeCard(text: Messages.localNetworkDenied, icon: .triangleAlert, tint: Theme.destructive) {
                     SettingsLink()
                 }
             case .versionGap(let message, let appTooOld):
-                NoticeCard(text: message, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive) {
+                NoticeCard(text: message, icon: .triangleAlert, tint: Theme.destructive) {
                     if appTooOld {
                         UpdateAppLink()
                     }
                 }
             case .failed(let message):
-                NoticeCard(text: message, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive)
+                NoticeCard(text: message, icon: .triangleAlert, tint: Theme.destructive)
             }
         }
         .transition(.move(edge: .top).combined(with: .opacity))
@@ -420,7 +417,7 @@ struct JournalNotesBanner: View {
             text: notes.count == 1
                 ? String(localized: "A change made on this device couldn't be saved on the server: \(notes[0].reason)")
                 : String(localized: "\(notes.count) changes made on this device couldn't be saved on the server. The last: \(notes[notes.count - 1].reason)"),
-            systemImage: "exclamationmark.bubble",
+            icon: .messageCircleWarning,
             tint: Theme.destructive
         ) {
             Button("Dismiss", action: dismiss)

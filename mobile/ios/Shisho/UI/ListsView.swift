@@ -22,7 +22,7 @@ struct ListsView: View {
                         if lists.isEmpty {
                             EmptyNotice(title: String(localized: "No Lists yet"),
                                         message: String(localized: "Lists you make on the web, and Lists shared with you, appear here."),
-                                        systemImage: "list.bullet")
+                                        icon: .list)
                                 .accessibilityIdentifier("lists.empty")
                         }
                         LazyVStack(spacing: 8) {
@@ -115,7 +115,7 @@ struct ListDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if case .some(.none) = list {
-                        ContentUnavailableView(String(localized: "This List isn't available anymore"), systemImage: "list.bullet.rectangle")
+                        EmptyState("This List isn't available anymore", icon: .listX)
                             .padding(.top, 80)
                     } else {
                         if let description = (list ?? nil)?.description, !description.isEmpty {
@@ -126,8 +126,8 @@ struct ListDetailView: View {
                                 .padding(.top, 8)
                         }
                         if let shares = (list ?? nil)?.shares, !shares.isEmpty {
-                            Label(String(localized: "Shared with \(shares.map { "\($0.username) (\(SharePermission.text($0.permission)))" }.joined(separator: ", "))"),
-                                  systemImage: "person.2")
+                            Label(verbatim: String(localized: "Shared with \(shares.map { "\($0.username) (\(SharePermission.text($0.permission)))" }.joined(separator: ", "))"),
+                                  icon: .users, size: 14, relativeTo: .footnote)
                                 .font(.geist(.footnote))
                                 .foregroundStyle(Theme.mutedForeground)
                                 .padding(.horizontal, GridLayout.margin)
@@ -138,7 +138,7 @@ struct ListDetailView: View {
                             SectionHeading(title: String(localized: "Books"), count: Counts.books(books.count))
                             if books.isEmpty {
                                 EmptyNotice(title: String(localized: "No Books"), message: String(localized: "Books added to this List appear here."),
-                                            systemImage: "book.closed")
+                                            icon: .book)
                             } else {
                                 BookGrid(books: books, width: geometry.size.width, identifier: "list.grid")
                             }

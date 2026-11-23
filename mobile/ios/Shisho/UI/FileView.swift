@@ -28,7 +28,7 @@ struct FileView: View {
                 if let detail = book ?? nil, let file {
                     content(detail, file)
                 } else if book != nil {
-                    ContentUnavailableView("This File isn't in your Libraries anymore", systemImage: "doc")
+                    EmptyState("This File isn't in your Libraries anymore", icon: .fileX)
                         .padding(.top, 80)
                 }
             }
@@ -382,8 +382,7 @@ private struct ChapterRow: View {
             Button { model.listen(fileID: file.id, from: start) } label: {
                 HStack(alignment: .center, spacing: 10) {
                     title
-                    Image(systemName: "play")
-                        .font(.system(size: 12, weight: .semibold))
+                    Icon(.play, size: 14, relativeTo: .footnote)
                         .foregroundStyle(Theme.mutedForeground)
                     Text(verbatim: TimeLabels.clock(start))
                         .font(.geistMono(.footnote))

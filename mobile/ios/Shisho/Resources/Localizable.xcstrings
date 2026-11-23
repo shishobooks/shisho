@@ -320,6 +320,9 @@
     "Chapters" : {
 
     },
+    "Check the spelling or try a new search." : {
+
+    },
     "Clear Filters" : {
 
     },
@@ -574,6 +577,9 @@
 
     },
     "No Lists yet" : {
+
+    },
+    "No Results for “%@”" : {
 
     },
     "No bookmarks yet. Use Bookmark under the player to mark where you are." : {

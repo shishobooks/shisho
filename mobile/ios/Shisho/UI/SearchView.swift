@@ -42,9 +42,10 @@ struct SearchView: View {
             if text.trimmingCharacters(in: .whitespaces).isEmpty {
                 EmptyNotice(title: String(localized: "Search your Libraries"),
                             message: String(localized: "Find Books by title, author, narrator, series, or ISBN, and find series, people, genres, and tags. It works offline."),
-                            systemImage: "magnifyingglass")
+                            icon: .search)
             } else if results.isEmpty {
-                ContentUnavailableView.search(text: text)
+                EmptyState(verbatim: String(localized: "No Results for “\(text)”"), icon: .search,
+                           description: Text("Check the spelling or try a new search."))
                     .accessibilityIdentifier("search.none")
             }
         }

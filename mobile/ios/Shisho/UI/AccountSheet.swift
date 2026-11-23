@@ -92,8 +92,7 @@ struct AccountSheet: View {
                         }
                         Spacer()
                         if account.id == current.id {
-                            Image(systemName: "checkmark")
-                                .font(.geist(.subheadline, weight: .semibold))
+                            Icon(.check, size: 18, relativeTo: .subheadline)
                                 .foregroundStyle(Theme.primary)
                         }
                     }
@@ -112,7 +111,7 @@ struct AccountSheet: View {
                 dismiss()
                 model.addingAccount = true
             } label: {
-                Label("Add Server", systemImage: "plus")
+                Label("Add Server", icon: .plus, size: 17)
                     .font(.geist(.subheadline, weight: .semibold))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
@@ -211,7 +210,7 @@ struct AccountSheet: View {
             Button {
                 Task { await model.syncNow() }
             } label: {
-                Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                Label("Sync Now", icon: .refresh)
             }
             .buttonStyle(OutlineButtonStyle())
             .disabled(model.isSyncing)
@@ -220,7 +219,7 @@ struct AccountSheet: View {
             Button {
                 showingDiagnostics = true
             } label: {
-                Label("Export Diagnostics", systemImage: "doc.text.magnifyingglass")
+                Label("Export Diagnostics", icon: .fileSearch)
             }
             .buttonStyle(OutlineButtonStyle())
             .accessibilityIdentifier("account.diagnostics")
@@ -228,7 +227,7 @@ struct AccountSheet: View {
             Button(role: .destructive) {
                 confirmingSignOut = true
             } label: {
-                Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                Label("Sign Out", icon: .logOut)
             }
             .buttonStyle(OutlineButtonStyle(role: .destructive))
             .accessibilityIdentifier("account.signOut")
@@ -279,7 +278,7 @@ struct DiagnosticsSheet: View {
                 ToolbarItem(placement: .primaryAction) {
                     if let file {
                         ShareLink(item: file) {
-                            Label("Share", systemImage: "square.and.arrow.up")
+                            Label("Share", menuIcon: .share)
                         }
                         .accessibilityIdentifier("diagnostics.share")
                     }

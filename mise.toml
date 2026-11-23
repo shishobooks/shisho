@@ -304,6 +304,10 @@ run = "xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug 
 description = "Make the harness's base simulator, booted once, if it doesn't exist yet: the tests and flows clone it"
 run = "go run ./tools/appharness base"
 
+[tasks."ios:icons"]
+description = "Write the Lucide icons the iOS app uses into its asset catalog, from the web app's lucide-react"
+run = "node mobile/ios/scripts/lucide-icons.mjs"
+
 [tasks."ios:strings"]
 description = "Update the iOS app's String Catalog from the strings in its code, which command-line builds leave alone"
 depends = ["ios:build"]

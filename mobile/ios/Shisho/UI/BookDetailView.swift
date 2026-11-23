@@ -29,7 +29,7 @@ struct BookDetailView: View {
             VStack(spacing: 0) {
                 ScrollTopMarker(space: "book")
                 if case .some(.none) = book {
-                    ContentUnavailableView("This Book isn't in your Libraries anymore", systemImage: "book.closed")
+                    EmptyState("This Book isn't in your Libraries anymore", icon: .book)
                         .padding(.top, 80)
                 } else {
                     hero
@@ -185,7 +185,7 @@ struct BookDetailView: View {
             if let standing, standing.status != nil || standing.rating != nil {
                 HStack {
                     if let status = standing.status {
-                        Label(ReadingStatusLabel.text(status), systemImage: StatusStyle.symbol(status))
+                        Label(verbatim: ReadingStatusLabel.text(status), icon: StatusStyle.icon(status), size: 14, relativeTo: .footnote)
                             .font(.geist(.footnote, weight: .medium))
                             .padding(.horizontal, 12)
                             .frame(minHeight: 34)
@@ -409,7 +409,7 @@ private struct FileCard: View {
                                 .padding(.top, 3)
                         }
                     } else {
-                        Label("Not supported in this version of the app", systemImage: "exclamationmark.circle")
+                        Label("Not supported in this version of the app", icon: .circleAlert, size: 14, relativeTo: .footnote)
                             .font(.geist(.footnote))
                             .foregroundStyle(Theme.mutedForeground)
                     }
@@ -444,8 +444,7 @@ private struct FileCard: View {
                         if playing {
                             PlayingIndicator(playing: true, height: 14)
                         } else {
-                            Image(systemName: "headphones")
-                                .font(.system(size: 16, weight: .semibold))
+                            Icon(.headphones, size: 18)
                         }
                     }
                     .foregroundStyle(Theme.primary)
@@ -514,9 +513,14 @@ struct RatingStars: View {
         HStack(spacing: 2) {
             ForEach(0..<5, id: \.self) { index in
                 let fill = min(1, max(0, stars - Double(index)))
-                Image(systemName: fill >= 0.75 ? "star.fill" : fill >= 0.25 ? "star.leadinghalf.filled" : "star")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.rating)
+                // As the web draws a rating: filled, half filled, or empty.
+                ZStack {
+                    Icon(fill >= 0.75 ? .starFill : .star, size: 17, relativeTo: .subheadline)
+                    if fill >= 0.25, fill < 0.75 {
+                        Icon(.starHalfFill, size: 17, relativeTo: .subheadline)
+                    }
+                }
+                .foregroundStyle(Theme.rating)
             }
             Text(stars.formatted(.number.precision(.fractionLength(0...2))))
                 .font(.geist(.subheadline))
