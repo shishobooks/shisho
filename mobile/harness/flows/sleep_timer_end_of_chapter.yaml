@@ -1,5 +1,7 @@
 # A sleep timer set to the end of the chapter stops playback there, ready
-# to play the next chapter from its start (#916).
+# to play the next chapter from its start (#916). It plays the last 30
+# seconds of Harbor Lights' first chapter, so a stall on CI can't carry
+# playback past the next boundary before the timer sees this one.
 appId: ${APP_ID}
 name: Sleep at the end of the chapter
 ---
@@ -13,28 +15,39 @@ name: Sleep at the end of the chapter
 - runFlow:
     file: subflows/listen_to.yaml
     env:
-      TITLE: Quiet Lighthouse
+      TITLE: Harbor Lights
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
-# Paused before going on, so the timer starts from the first chapter.
+# Paused before going on, so the places below are where they're checked.
 - extendedWaitUntil:
     visible:
       id: player.playPause
       text: Play
     timeout: 30000
-# From the start of the first chapter, which is three seconds long.
+# 30 seconds before the first chapter ends: the second's start, skipped back.
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.chapters
 - tapOn:
     id: chapters.row
-    text: Chapter 1.*
-- assertVisible:
-    id: player.chapter
-    text: Chapter 1
+    text: The Lights.*
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: The Lights
+    timeout: 30000
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.skipBack
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: The Harbor
+    timeout: 30000
 
 - runFlow:
     file: subflows/tap_player.yaml
@@ -45,31 +58,26 @@ name: Sleep at the end of the chapter
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
+# The timer stops playback at the boundary, about 30 seconds on.
 - extendedWaitUntil:
     visible:
       id: player.playPause
       text: Play
-    timeout: 30000
+    timeout: 90000
 - assertVisible:
     id: player.chapter
-    text: Chapter 2
+    text: The Lights
 - assertVisible:
     id: player.position
     text: .*0:00
 
-# Playing again goes on from the next chapter, to the end, where the other
-# flows expect to find this File.
+# Playing again goes on into the next chapter.
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
 - extendedWaitUntil:
     visible:
-      id: player.chapter
-      text: Chapter 3
-    timeout: 30000
-- extendedWaitUntil:
-    visible:
       id: player.playPause
-      text: Play
+      text: Pause
     timeout: 30000

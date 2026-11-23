@@ -201,7 +201,7 @@ enum AudioChapters {
     /// number when it has none. Never its number beside its title, which can
     /// disagree with it, as "2. Chapter 1" after an introduction.
     static func name(of index: Int, in chapters: [AudioChapter]) -> String {
-        let title = chapters[index].title.trimmingCharacters(in: .whitespaces)
+        let title = chapters[index].title.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? String(localized: "Chapter \(index + 1)") : title
     }
 

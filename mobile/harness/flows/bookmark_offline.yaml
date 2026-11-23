@@ -50,6 +50,9 @@ name: Bookmark offline and sync later
 - tapOn:
     id: bookmarks.editNote
 # The note's field is in an alert, found by what it says.
+- extendedWaitUntil:
+    visible: Edit Note
+    timeout: 30000
 - tapOn: Note
 - inputText: Made offline
 - tapOn: Save

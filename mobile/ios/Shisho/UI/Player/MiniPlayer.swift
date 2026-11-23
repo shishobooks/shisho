@@ -67,6 +67,7 @@ struct MiniPlayer: View {
         // It docks over every screen, so it grows only so far with the text
         // size; Now Playing shows everything in it at full size.
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityShowsLargeContentViewer()
         // Paused, it swipes down out of the way, as docked players do; playing,
         // it only gives a little and springs back.
         .offset(y: drag)

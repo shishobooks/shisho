@@ -59,8 +59,10 @@ final class PlayerRulesTests: XCTestCase {
     /// wherever the player names it: never "2. Chapter 1" after an
     /// introduction, and never a blank.
     func testAChapterIsNamedByItsTitleOrNumber() {
-        let chapters = [AudioChapter(title: "Introduction", start: 0), AudioChapter(title: "  ", start: 60)]
+        let chapters = [AudioChapter(title: "Introduction", start: 0), AudioChapter(title: "  ", start: 60),
+                        AudioChapter(title: "\n", start: 120)]
         XCTAssertEqual(AudioChapters.name(of: 0, in: chapters), "Introduction")
         XCTAssertEqual(AudioChapters.name(of: 1, in: chapters), "Chapter 2")
+        XCTAssertEqual(AudioChapters.name(of: 2, in: chapters), "Chapter 3")
     }
 }

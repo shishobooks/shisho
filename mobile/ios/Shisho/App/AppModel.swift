@@ -232,7 +232,7 @@ final class AppModel {
     func showFromPlayer(_ route: Route) {
         showingPlayer = false
         let path = tab == .library ? libraryPath : listsPath
-        if path.last != route {
+        if path.last.map({ !$0.isSamePage(as: route) }) ?? true {
             push(route)
         }
     }
@@ -712,6 +712,18 @@ enum AppTab: Hashable {
 
 /// A page pushed on a tab's navigation.
 enum Route: Hashable {
+    /// Whether two routes open the same page: the same Book or resource by
+    /// id, though the copy a route holds, such as a Book's progress or a
+    /// Person's name, may have changed since.
+    func isSamePage(as other: Route) -> Bool {
+        switch (self, other) {
+        case let (.book(a), .book(b)): a.id == b.id
+        case let (.resource(kindA, idA, _), .resource(kindB, idB, _)): kindA == kindB && idA == idB
+        case let (.list(idA, _), .list(idB, _)): idA == idB
+        default: self == other
+        }
+    }
+
     case book(BookSummary)
     /// Every Series, Person, Genre, or Tag of the Library picked.
     case browse(ResourceKind)

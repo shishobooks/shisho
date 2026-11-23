@@ -357,7 +357,10 @@ struct PlayerListSheet: View {
 
     private func chapterRow(index: Int, chapter: AudioChapter, file: ListeningFile) -> some View {
         let playing = player.chapterIndex == index
-        let length = AudioChapters.end(of: index, in: file.chapters, duration: file.duration) - chapter.start
+        // Unknown for the last chapter of a File without a length.
+        let end = AudioChapters.end(of: index, in: file.chapters, duration: file.duration)
+        let length: String? = end > chapter.start ? FileFacts.duration(end - chapter.start) : nil
+        let name = AudioChapters.name(of: index, in: file.chapters)
         return Button {
             player.seek(to: chapter.start)
             dismiss()
@@ -374,14 +377,16 @@ struct PlayerListSheet: View {
                 }
                 .frame(width: 20, alignment: .leading)
                 .foregroundStyle(playing ? Theme.primary : Theme.mutedForeground)
-                Text(AudioChapters.name(of: index, in: file.chapters))
+                Text(name)
                     .font(.geist(.subheadline, weight: .medium))
                     .foregroundStyle(playing ? Theme.primary : Theme.foreground)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(FileFacts.duration(length))
-                    .font(.geist(.caption))
-                    .monospacedDigit()
-                    .foregroundStyle(playing ? Theme.primary : Theme.mutedForeground)
+                if let length {
+                    Text(length)
+                        .font(.geist(.caption))
+                        .monospacedDigit()
+                        .foregroundStyle(playing ? Theme.primary : Theme.mutedForeground)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
@@ -389,7 +394,7 @@ struct PlayerListSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(RowPressStyle())
-        .accessibilityLabel("\(AudioChapters.name(of: index, in: file.chapters)), \(FileFacts.duration(length))")
+        .accessibilityLabel(length.map { "\(name), \($0)" } ?? name)
         .accessibilityAddTraits(playing ? .isSelected : [])
         .accessibilityIdentifier("chapters.row")
     }

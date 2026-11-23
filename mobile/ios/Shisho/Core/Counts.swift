@@ -76,9 +76,10 @@ enum FileProgressText {
         let rest = 1 - clamped
         // To the second, as the Listen card says it, so the two agree.
         if let seconds = durationSeconds, seconds > 0 {
-            // To the millisecond first, so the fraction's rounding error
-            // can't take a second off.
-            let left = (seconds * rest * 1000).rounded() / 1000
+            // The fraction's rounding error can land a hair under a whole
+            // second; that's taken as the second, and a real fraction isn't.
+            let exact = seconds * rest
+            let left = abs(exact - exact.rounded()) < 0.000001 ? exact.rounded() : exact
             return String(localized: "\(percent) · \(TimeLabels.clock(left)) left")
         }
         if let pages = pageCount, pages > 0 {

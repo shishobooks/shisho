@@ -38,9 +38,16 @@ const iconNames = async () => {
   // The enum's body ends at the first closing brace in the first column.
   const body = /enum Lucide[^{]*\{([\s\S]*?)\n\}/.exec(source);
   if (!body) throw new Error("no `enum Lucide` in Icons.swift");
-  return [...body[1].matchAll(/^\s*case (\w+)(?:\s*=\s*"([^"]+)")?\s*$/gm)].map(
-    ([, name, raw]) => raw ?? name,
-  );
+  // Each case on a line of its own, perhaps with a comment; any other
+  // case line is refused rather than skipped, so no icon goes unchecked.
+  const names = [];
+  for (const line of body[1].split("\n")) {
+    if (!/^\s*case\b/.test(line)) continue;
+    const match = /^\s*case (\w+)(?:\s*=\s*"([^"]+)")?\s*(?:\/\/.*)?$/.exec(line);
+    if (!match) throw new Error(`can't read \`${line.trim()}\` in Icons.swift; give each case a line of its own`);
+    names.push(match[2] ?? match[1]);
+  }
+  return names;
 };
 
 const escape = (value) =>

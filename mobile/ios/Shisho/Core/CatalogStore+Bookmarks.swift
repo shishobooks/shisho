@@ -129,7 +129,16 @@ extension CatalogStore {
         let existing = try bookmark.localId.map {
             try String.fetchOne(db, sql: "SELECT id FROM bookmarks WHERE local_id = ?", arguments: [$0])
         } ?? String.fetchOne(db, sql: "SELECT id FROM bookmarks WHERE server_id = ? AND local_id IS NULL", arguments: [bookmark.id])
-        // A Bookmark here that had the id before is another one.
+        // A Bookmark here that had the id before is another one. One made on
+        // the web is gone from the server, and its changes waiting here name
+        // it by that id, so they would change this one: they go with it. One
+        // made in the app keeps its changes, which name it by its own id.
+        try db.execute(sql: """
+            DELETE FROM journal WHERE bookmark_id IN (
+                SELECT id FROM bookmarks WHERE server_id = ? AND id IS NOT ? AND local_id IS NULL)
+            """, arguments: [bookmark.id, existing])
+        try db.execute(sql: "DELETE FROM bookmarks WHERE server_id = ? AND id IS NOT ? AND local_id IS NULL",
+                       arguments: [bookmark.id, existing])
         try db.execute(sql: "UPDATE bookmarks SET server_id = NULL WHERE server_id = ? AND id IS NOT ?", arguments: [bookmark.id, existing])
         guard let id = existing else {
             // The id it was made under, or one from the server's. A row from

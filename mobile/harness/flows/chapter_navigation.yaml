@@ -33,9 +33,11 @@ name: Navigate by chapter
 - tapOn:
     id: chapters.row
     text: The Lights.*
-- assertVisible:
-    id: player.chapter
-    text: The Lights
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: The Lights
+    timeout: 30000
 - assertVisible:
     id: player.position
     text: .*0:00
@@ -45,13 +47,17 @@ name: Navigate by chapter
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.prevChapter
-- assertVisible:
-    id: player.chapter
-    text: The Harbor
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: The Harbor
+    timeout: 30000
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.nextChapter
-- assertVisible:
-    id: player.chapter
-    text: The Lights
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: The Lights
+    timeout: 30000

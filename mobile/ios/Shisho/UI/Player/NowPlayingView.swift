@@ -198,8 +198,9 @@ struct NowPlayingView: View {
                 Text(byline)
                     .font(.geist(.subheadline))
                     .foregroundStyle(Theme.foreground.opacity(0.7))
-                    // Two lines, so a long byline can't hide a name's link.
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
+                    // However long, so no name's link is cut off; the page
+                    // scrolls when it doesn't fit.
+                    .fixedSize(horizontal: false, vertical: true)
                     // A name goes to its Person's page, under the player.
                     .environment(\.openURL, OpenURLAction { url in
                         guard let route = LinkedText.route(url) else { return .systemAction }
@@ -220,13 +221,17 @@ struct NowPlayingView: View {
         var seen: Set<Int> = []
         let authors = file.authors.filter { seen.insert($0.personID).inserted }
             .map { (Route.resource(.person, id: $0.personID, name: $0.name), $0.name) }
-        let narrators = zip(file.narratorIDs, file.narrators).map { (Route.resource(.person, id: $0.0, name: $0.1), $0.1) }
         var parts: [AttributedString] = []
         if !authors.isEmpty {
             parts.append(Byline.links(authors))
         }
-        if !narrators.isEmpty {
-            parts.append(LinkedText.muted(String(localized: "Narrated by ")) + Byline.links(narrators))
+        if !file.narrators.isEmpty {
+            // Their Persons can be missing while a catalog downloads again,
+            // as after an app update: the names show without links then.
+            let narrators = file.narratorIDs.count == file.narrators.count
+                ? Byline.links(zip(file.narratorIDs, file.narrators).map { (Route.resource(.person, id: $0.0, name: $0.1), $0.1) })
+                : AttributedString(file.narrators.joined(separator: ", "))
+            parts.append(LinkedText.muted(String(localized: "Narrated by ")) + narrators)
         }
         guard var text = parts.first else { return nil }
         for part in parts.dropFirst() {
@@ -380,7 +385,10 @@ struct NowPlayingView: View {
         .buttonStyle(PlayerControlStyle())
         .foregroundStyle(Theme.foreground)
         .padding(.top, 2)
+        // The controls keep their size; at accessibility sizes a long press
+        // shows each large.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityShowsLargeContentViewer()
     }
 
     // MARK: - Tools

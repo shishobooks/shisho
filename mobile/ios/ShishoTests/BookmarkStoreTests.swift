@@ -258,4 +258,17 @@ final class BookmarkStoreTests: XCTestCase {
         XCTAssertEqual(file.narrators, ["Ned Narrator", "Nia Voice"])
         XCTAssertEqual(file.narratorIDs, [8, 9])
     }
+
+    /// A web Bookmark deleted here, and then, after a restore, its server
+    /// id given to another Bookmark: the delete waiting to go named it by
+    /// that id, so it would delete the other one. It's dropped, with the
+    /// Bookmark, which the server no longer has.
+    func testADeleteByAServerIDReusedAfterARestoreIsDropped() throws {
+        try store.apply(feedBookmark(42, seconds: 10, note: "web", cursor: 3))
+        try store.deleteBookmark("server-42", at: now)
+        XCTAssertEqual(try journal().map(\.0), ["bookmark_delete"])
+        try store.apply(feedBookmark(42, seconds: 99, note: "other phone", localID: "other-phone-uuid", cursor: 4))
+        XCTAssertEqual(try journal().count, 0)
+        XCTAssertEqual(try bookmarks().map(\.note), ["other phone"])
+    }
 }
