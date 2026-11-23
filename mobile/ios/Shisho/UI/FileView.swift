@@ -265,9 +265,9 @@ struct FileView: View {
         if let bitrate = file.bitrate, bitrate > 0 { rows.append(.init(String(localized: "Bitrate"), FileFacts.bitrate(bitrate))) }
         if !file.filepath.isEmpty {
             let path = file.filepath as NSString
-            rows.append(.init(String(localized: "File"), path.lastPathComponent))
+            rows.append(.init(String(localized: "File"), path.lastPathComponent, monospaced: true))
             let folder = path.deletingLastPathComponent
-            rows.append(.init(String(localized: "Folder"), folder.isEmpty ? "/" : folder, muted: true))
+            rows.append(.init(String(localized: "Folder"), folder.isEmpty ? "/" : folder, monospaced: true, muted: true))
         }
         if let modified = file.modifiedAt {
             rows.append(.init(String(localized: "Modified"), modified.formatted(date: .abbreviated, time: .shortened)))
@@ -360,7 +360,7 @@ struct LabelRows: View {
                                 .textSelection(.enabled)
                         }
                     }
-                    .font(row.monospaced ? .system(.subheadline, design: .monospaced) : .geist(.subheadline))
+                    .font(row.monospaced ? .geistMono(.subheadline) : .geist(.subheadline))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .accessibilityElement(children: .combine)
@@ -386,7 +386,7 @@ private struct ChapterRow: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.mutedForeground)
                     Text(verbatim: TimeLabels.clock(start))
-                        .font(.system(.footnote, design: .monospaced))
+                        .font(.geistMono(.footnote))
                         .foregroundStyle(Theme.mutedForeground)
                 }
                 .padding(.horizontal, 14)

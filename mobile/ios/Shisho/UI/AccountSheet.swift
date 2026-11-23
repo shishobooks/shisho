@@ -258,7 +258,7 @@ struct DiagnosticsSheet: View {
                     .foregroundStyle(Theme.mutedForeground)
                 ScrollView {
                     Text(text ?? "")
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.geistMono(.caption))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)

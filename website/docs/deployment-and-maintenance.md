@@ -164,7 +164,7 @@ Responses include `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosnif
 
 ## Outbound Connections
 
-Core local library management does not require sending your library to a hosted Shisho service. By default, Shisho asks GitHub whether a newer release is out; [`update_check_enabled`](./configuration.md#application) describes when it asks and what it sends, and turns it off. Features you explicitly use can also make outbound connections, including plugin repository access, plugin installation and updates, metadata or cover providers configured through plugins, Audible chapter lookup, and Kobo integration. Plugins can implement their own network behavior, so review a plugin and its configuration before enabling it.
+Core local library management does not require sending your library to a hosted Shisho service. The web app's scripts, styles, and fonts all come from your Shisho server, so browsers can load it on a network without internet access. By default, Shisho asks GitHub whether a newer release is out; [`update_check_enabled`](./configuration.md#application) describes when it asks and what it sends, and turns it off. Features you explicitly use can also make outbound connections, including plugin repository access, plugin installation and updates, metadata or cover providers configured through plugins, Audible chapter lookup, and Kobo integration. Plugins can implement their own network behavior, so review a plugin and its configuration before enabling it.
 
 ## Maintain Server Caches
 

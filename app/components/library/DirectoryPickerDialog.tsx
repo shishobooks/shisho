@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import MonoValue from "@/components/common/MonoValue";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Button } from "@/components/ui/button";
@@ -383,7 +384,8 @@ const DirectoryPickerDialog = ({
           {/* Selected paths summary */}
           {selectedPaths.size > 0 && (
             <div className="text-sm text-muted-foreground truncate">
-              Selected: {Array.from(selectedPaths).join(", ")}
+              Selected:{" "}
+              <MonoValue>{Array.from(selectedPaths).join(", ")}</MonoValue>
             </div>
           )}
         </DialogBody>

@@ -11,6 +11,7 @@ import {
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
+import MonoValue from "@/components/common/MonoValue";
 import {
   fileEditionRows,
   fileIdentifierRows,
@@ -90,8 +91,11 @@ const fileDetailRows = (
     { label: "Size", value: formatFileSize(file.filesize_bytes) },
   ];
   if (!isShareLink && file.filepath) {
-    rows.push({ label: "File", value: getFilename(file.filepath) });
-    rows.push({ label: "Path", value: file.filepath });
+    rows.push({
+      label: "File",
+      value: <MonoValue>{getFilename(file.filepath)}</MonoValue>,
+    });
+    rows.push({ label: "Path", value: <MonoValue>{file.filepath}</MonoValue> });
   }
   if (file.page_count) {
     rows.push({ label: "Pages", value: formatPageCount(file.page_count) });

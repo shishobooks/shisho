@@ -1,3 +1,14 @@
+/* The same self-hosted fonts as the app (app/index.css explains the stacks),
+   but Japanese is the only CJK family: these pages hold no Chinese or Korean
+   text, and each family's declarations add to every page's stylesheet. */
+@import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist/wght-italic.css";
+@import "@fontsource-variable/geist-mono";
+@import "@fontsource-variable/geist-mono/wght-italic.css";
+@import "@fontsource-variable/noto-sans";
+@import "@fontsource-variable/noto-sans/wght-italic.css";
+@import "@fontsource-variable/noto-sans-jp";
+
 :root {
   color-scheme: dark;
   --radius: 0.875rem;
@@ -16,9 +27,12 @@
   --ring: oklch(0.8 0.15 280);
   --shisho-violet-300: oklch(0.811 0.111 293.571);
   --ifm-font-family-base:
-    "Geist", "Noto Sans", "Noto Sans Japanese", ui-sans-serif, system-ui,
-    sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol",
-    "Noto Color Emoji";
+    "Geist Variable", "Noto Sans Variable", "Noto Sans JP Variable",
+    ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", "Noto Color Emoji";
+  --ifm-font-family-monospace:
+    "Geist Mono Variable", "Noto Sans Variable", "Noto Sans JP Variable",
+    ui-monospace, monospace;
   --ifm-heading-font-family: var(--ifm-font-family-base);
   --ifm-font-weight-bold: 700;
   --ifm-line-height-base: 1.6;
@@ -230,8 +244,7 @@ h3 {
   align-items: center;
   color: var(--foreground);
   display: inline-flex;
-  font-family:
-    "Noto Sans", "Noto Sans Japanese", ui-sans-serif, system-ui, sans-serif;
+  font-family: "Noto Sans Variable", "Noto Sans JP Variable", sans-serif;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -686,33 +699,6 @@ h3 {
   border-radius: 4px;
   font-size: 0.85em;
   padding: 0.15em 0.4em;
-}
-
-.docs-home__quickstart-code {
-  background: oklch(0.16 0.012 293);
-  border: 1px solid oklch(1 0 0 / 10%);
-  border-radius: var(--radius);
-  box-shadow:
-    0 1px 0 oklch(1 0 0 / 7%) inset,
-    0 16px 60px oklch(0 0 0 / 35%),
-    0 8px 40px color-mix(in oklab, var(--shisho-violet-300) 12%, transparent);
-  font-family: "Geist Mono", ui-monospace, monospace;
-  font-size: 0.8125rem;
-  line-height: 1.7;
-  overflow-x: auto;
-  padding: 1.5rem;
-}
-
-.docs-home__quickstart-code .qs-comment {
-  color: var(--muted-foreground);
-}
-
-.docs-home__quickstart-code .qs-key {
-  color: var(--ifm-color-primary-lighter);
-}
-
-.docs-home__quickstart-code .qs-string {
-  color: oklch(0.78 0.12 150);
 }
 
 /* ---- HOMEPAGE: CTA ---- */
