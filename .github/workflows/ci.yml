@@ -521,10 +521,10 @@ jobs:
           hit: ${{ steps.setup.outputs.simulator-hit }}
 
   app-ios-flows:
-    # The flows split across three jobs (`ios -shard`, balanced in
+    # The flows split across two jobs (`ios -shard`, balanced in
     # tools/appharness/shard.go): one runner takes 25 to 35 minutes for all
     # of them.
-    name: iOS flows (shard ${{ matrix.shard }}/3)
+    name: iOS flows (shard ${{ matrix.shard }}/2)
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
@@ -532,7 +532,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -561,7 +561,7 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install ffmpeg
       - name: Run the Maestro flows
-        run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/3
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/2
       - uses: ./.github/actions/save-ios-simulator
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
