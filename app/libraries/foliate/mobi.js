@@ -935,12 +935,17 @@ const getFragmentSelector = str => {
     return `[${attr}="${CSS.escape(value)}"]`
 }
 
-// replace asynchronously and sequentially
+// replace asynchronously
+// Shisho patch: upstream awaits each match before starting the next. When the
+// web reader reads a large book a part at a time from the server
+// (app/libraries/rangeFile.ts), each resource is a request, and a cookbook
+// chapter names dozens of photos, so they load at once. Only
+// KF8.replaceResources uses this; KF8.loadResource loads a resource named
+// twice once, and KF8.loadRaw reads text one call at a time.
 const replaceSeries = async (str, regex, f) => {
     const matches = []
     str.replace(regex, (...args) => (matches.push(args), null))
-    const results = []
-    for (const args of matches) results.push(await f(...args))
+    const results = await Promise.all(matches.map(args => f(...args)))
     return str.replace(regex, () => results.shift())
 }
 
@@ -970,6 +975,8 @@ class KF8 {
     #lastLoadedTail = -1
     #type = MIME.XHTML
     #inlineMap = new Map()
+    // Shisho patch: resources loading, for replaceSeries's concurrent loads.
+    #loading = new Map()
     constructor(mobi) {
         this.mobi = mobi
     }
@@ -1073,17 +1080,23 @@ class KF8 {
         return this
     }
     // is this really the only way of getting to RESC, PAGE, etc.?
+    // Shisho patch: upstream reads each record's magic after the one before.
+    // When the book is read a part at a time from the server
+    // (app/libraries/rangeFile.ts), that's hundreds of requests in a row
+    // before a book with many photos opens; started at once, they go out
+    // together.
     async getResourcesByMagic(keys) {
         const results = {}
         const start = this.mobi.headers.kf8.resourceStart
         const end = this.mobi.pdb.numRecords
-        for (let i = start; i < end; i++) {
-            try {
-                const magic = await this.mobi.loadMagic(i)
-                const match = keys.find(key => key === magic)
-                if (match) results[match] = i
-            } catch {}
-        }
+        const magics = await Promise.all(
+            Array.from({ length: Math.max(0, end - start) }, (_, i) =>
+                Promise.resolve().then(() => this.mobi.loadMagic(start + i))
+                    .catch(() => null)))
+        magics.forEach((magic, i) => {
+            const match = keys.find(key => key === magic)
+            if (match) results[match] = start + i
+        })
         return results
     }
     async getGuide() {
@@ -1120,6 +1133,12 @@ class KF8 {
     }
     async loadResource(str) {
         if (this.#cache.has(str)) return this.#cache.get(str)
+        // Shisho patch: a resource named twice in a section loads once.
+        if (!this.#loading.has(str)) this.#loading.set(str,
+            this.#loadResource(str).finally(() => this.#loading.delete(str)))
+        return this.#loading.get(str)
+    }
+    async #loadResource(str) {
         const [blob, inline] = await this.loadResourceBlob(str)
         const url = inline ? str : URL.createObjectURL(blob)
         if (inline) this.#inlineMap.set(url, inline)
@@ -1130,10 +1149,21 @@ class KF8 {
         const regex = new RegExp(kindleResourceRegex, 'g')
         return replaceSeries(str, regex, this.loadResource.bind(this))
     }
+    // Shisho patch: loadRaw below claims a record before it arrives and adds
+    // each to the text it keeps in the order they arrive, so two at once
+    // (two stylesheets in a section, now that replaceSeries loads them
+    // together, or a search beside a page turn) can scramble it when records
+    // come from the server out of order. One at a time keeps them in order.
+    #rawQueue = Promise.resolve()
+    loadRaw(start, end) {
+        const load = this.#rawQueue.then(() => this.#loadRaw(start, end))
+        this.#rawQueue = load.catch(() => {})
+        return load
+    }
     // NOTE: there doesn't seem to be a way to access text randomly?
     // how to know the decompressed size of the records without decompressing?
     // 4096 is just the maximum size
-    async loadRaw(start, end) {
+    async #loadRaw(start, end) {
         // here we load either from the front or back until we have reached the
         // required offsets; at worst you'd have to load half the book at once
         const distanceHead = end - this.#rawHead.length

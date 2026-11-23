@@ -39,7 +39,7 @@ Some of the other files (e.g. `fb2.js`, `progress.js`, `tts.js`) are not importe
 
 ## Local patches
 
-`fixed-layout.js`, `mobi.js`, `paginator.js`, `search.js`, and `view.js` carry changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the patched `mobi.js` helper and fails when the patch or its call site is missing, `app/libraries/foliate-search.test.ts` fails when the `search.js` patch is missing, and `app/libraries/foliate-paginator.test.ts` fails when the paginator's `settled()` is.
+`fixed-layout.js`, `mobi.js`, `paginator.js`, `search.js`, and `view.js` carry changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the `mobi.js` patches and fails when one or its call site is missing, `app/libraries/foliate-search.test.ts` fails when the `search.js` patch is missing, and `app/libraries/foliate-paginator.test.ts` fails when the paginator's `settled()` is.
 
 ## To update
 
@@ -66,3 +66,4 @@ Some of the other files (e.g. `fb2.js`, `progress.js`, `tts.js`) are not importe
    find app/libraries/foliate -type f -not -name README.md -not -name LICENSE | sort
    ```
 8. Reapply the local patches, then run `mise check:quiet` and test with several real EPUB, MOBI, and AZW3 files in the reader, since foliate-js's API occasionally shifts.
+9. Recheck the code that opens a book read by part, which uses foliate's internals rather than `view.js`'s API, against the new snapshot. `app/libraries/rangeEpub.ts` builds the loader `makeZipLoader` builds, subclasses zip.js's `BlobReader`, reads zip entries' `offset`, `rawFilename`, and `rawExtraField`, and copies `epub.js`'s `resolveURL`, the `shouldReplace` types, and the selectors and `url()` pattern `Loader.loadReplaced` and `replaceCSS` use. `app/libraries/rangeMobi.ts` opens a book as `makeBook` does, with `MOBI` and `unzlibSync`. `app/types/foliate-epub.d.ts` and `app/types/foliate-mobi.d.ts` declare what both use. A change there can break opening outright or quietly stop a chapter's photos loading at once; `app/libraries/rangeEpub.test.ts` and `app/libraries/rangeMobi.test.ts` catch most of it.

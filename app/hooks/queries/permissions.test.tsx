@@ -181,7 +181,7 @@ const QUERY_HOOKS: Record<string, HookCase> = {
   usePublisher: requires("books:read", [1, on]),
   usePublisherFiles: requires("books:read", [1, {}, on]),
   // reflowable
-  useReflowableBlob: requires("books:read", [1, on]),
+  useReflowableBook: requires("books:read", [1, on]),
   // review
   useReviewCriteria: requires(anyOf("books:read", "config:read"), []),
   // search

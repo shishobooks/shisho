@@ -43,7 +43,7 @@ export const useResyncFile = () => {
         queryKey: [ChaptersQueryKey.FileChapters, fileId],
       });
       queryClient.invalidateQueries({
-        queryKey: [ReflowableQueryKey.ReflowableBlob, fileId],
+        queryKey: [ReflowableQueryKey.ReflowableBook, fileId],
       });
     },
   });
@@ -75,7 +75,7 @@ export const useResyncBook = () => {
         queryKey: [ChaptersQueryKey.FileChapters],
       });
       queryClient.invalidateQueries({
-        queryKey: [ReflowableQueryKey.ReflowableBlob],
+        queryKey: [ReflowableQueryKey.ReflowableBook],
       });
     },
   });

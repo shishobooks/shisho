@@ -66,7 +66,7 @@ export const useUpdateFileChapters = (fileId: number) => {
       // The reader's book is the generated download, whose table of contents
       // carries the chapters.
       queryClient.invalidateQueries({
-        queryKey: [ReflowableQueryKey.ReflowableBlob, fileId],
+        queryKey: [ReflowableQueryKey.ReflowableBook, fileId],
       });
     },
   });

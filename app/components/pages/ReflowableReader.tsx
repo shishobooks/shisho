@@ -29,7 +29,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useReflowableBlob } from "@/hooks/queries/reflowable";
+import {
+  useReflowableBook,
+  type ReflowableBook,
+} from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
   useUserSettings,
@@ -42,7 +45,16 @@ import { useReaderSettings } from "@/hooks/useReaderSettings";
 import { useReadingProgress } from "@/hooks/useReadingProgress";
 import { useSavedPosition } from "@/hooks/useSavedPosition";
 import { createSwipeHandlers, isZoomed } from "@/hooks/useSwipeTurn";
-import { requestErrorMessage, toastRequestError } from "@/libraries/api";
+import {
+  requestErrorMessage,
+  ShishoAPIError,
+  toastRequestError,
+} from "@/libraries/api";
+import type { FoliateEPUB } from "@/libraries/foliate/epub.js";
+import type { FoliateMOBI } from "@/libraries/foliate/mobi.js";
+import { openRangeEPUB } from "@/libraries/rangeEpub";
+import { BuildTimeoutError, RangeFile } from "@/libraries/rangeFile";
+import { openRangeMOBI } from "@/libraries/rangeMobi";
 import {
   chapterMarks as findChapterMarks,
   type ChapterMark,
@@ -59,7 +71,14 @@ import {
 } from "@/libraries/readerSettings";
 import { ACTIVITY_EVENTS } from "@/libraries/readingSession";
 import { cn } from "@/libraries/utils";
-import type { File, ReadingPosition, UserSettingsPayload } from "@/types";
+import { canKeepWholeBook } from "@/libraries/wholeBook";
+import {
+  FileTypeEPUB,
+  FileTypeKePub,
+  type File,
+  type ReadingPosition,
+  type UserSettingsPayload,
+} from "@/types";
 import { fileTitle } from "@/utils/format";
 import {
   readerAtEnd,
@@ -198,6 +217,19 @@ function LocationButton({
   );
 }
 
+// What the error screen says for a failure while opening or reading the
+// book. A request's failure reads through requestErrorMessage. The reader's
+// own say what went wrong: the server's copy changed, the build never
+// finished, or foliate couldn't make sense of the file.
+const loadErrorMessage = (err: Error) =>
+  err instanceof ShishoAPIError || err instanceof TypeError
+    ? requestErrorMessage(err, "Failed to load book")
+    : err.message;
+
+// The File Types this reader opens that are zips, which foliate reads as
+// EPUBs; the others are MOBI and AZW3.
+const ZIPPED_TYPES = new Set<string>([FileTypeEPUB, FileTypeKePub]);
+
 export default function ReflowableReader({
   file,
   bookTitle,
@@ -206,12 +238,12 @@ export default function ReflowableReader({
   usePageTitle(title ? `Reading: ${title}` : "Reader");
 
   const {
-    data: blob,
+    data: source,
     isLoading,
     error,
     isEnabled,
     refetch,
-  } = useReflowableBlob(file.id);
+  } = useReflowableBook(file.id);
   const fileType = file.file_type;
 
   const { data: settings, isLoading: settingsLoading } = useUserSettings();
@@ -334,6 +366,9 @@ export default function ReflowableReader({
   // buttons, which turn by side, swap labels.
   const [rtl, setRtl] = useState(false);
   const [loadError, setLoadError] = useState<Error | null>(null);
+  // The book whose opening or reading failed. Retry opens it again, and
+  // until a new copy arrives this one isn't shown.
+  const [failedSource, setFailedSource] = useState<ReflowableBook | null>(null);
   // The last footnote stays after the popover closes, so it keeps its text
   // and colors while it fades out.
   const [footnote, setFootnote] = useState<OpenFootnote | null>(null);
@@ -356,13 +391,13 @@ export default function ReflowableReader({
     footnote &&
     footnoteStyle(readerSettings, noteFontFace, footnote.bookFontFamily);
 
-  // Load the blob into foliate once both it and the saved location are
+  // Load the book into foliate once both it and the saved location are
   // available.
   useEffect(() => {
-    if (!blob || !positionSettled) return;
+    if (!source || !positionSettled) return;
     const view = viewRef.current as
       | (HTMLElement & {
-          open?: (book: Blob | File) => Promise<void>;
+          open?: (book: Blob | FoliateEPUB | FoliateMOBI) => Promise<void>;
           book?: {
             toc?: Array<{ label: string; href: string; subitems?: unknown[] }>;
             dir?: string;
@@ -395,17 +430,27 @@ export default function ReflowableReader({
     setRtl(false);
     setLoadError(null);
 
-    // Hardcoded name. foliate doesn't surface the synthetic File's name
-    // anywhere user-visible — using bookTitle would just cause the effect
-    // to re-fire when useBook resolves (undefined → real value), launching
-    // a second overlapping open() on the same element. foliate picks EPUB or
-    // MOBI from the bytes, so the name and type are only labels.
-    const bookFile = new globalThis.File([blob], `book.${fileType}`, {
-      type: blob.type,
-    });
-
     (async () => {
-      await view.open!(bookFile);
+      // A book read by part is parsed here, and foliate opens the parsed
+      // book; a whole file foliate parses itself.
+      let book: Blob | FoliateEPUB | FoliateMOBI;
+      if (source instanceof RangeFile) {
+        book = ZIPPED_TYPES.has(fileType)
+          ? await openRangeEPUB(source)
+          : await openRangeMOBI(source);
+        if (cancelled) return;
+      } else {
+        // Hardcoded name. foliate doesn't surface the synthetic File's name
+        // anywhere user-visible, and using bookTitle would just cause the
+        // effect to re-fire when useBook resolves (undefined → real value),
+        // launching a second overlapping open() on the same element. foliate
+        // picks EPUB or MOBI from the bytes, so the name and type are only
+        // labels.
+        book = new globalThis.File([source], `book.${fileType}`, {
+          type: source.type,
+        });
+      }
+      await view.open!(book);
       if (cancelled) return;
       setToc(flattenToc(view.book?.toc));
       setRtl(view.book?.dir === "rtl");
@@ -480,6 +525,8 @@ export default function ReflowableReader({
       if (cancelled) return;
       const asError = err instanceof Error ? err : new Error(String(err));
       console.error("ReflowableReader: foliate open() failed", err);
+      if (source instanceof RangeFile) source.cancelPending();
+      setFailedSource(source);
       setLoadError(asError);
     });
 
@@ -497,8 +544,40 @@ export default function ReflowableReader({
       } catch {
         // no-op
       }
+      // close() leaves the parsed book, whose photos foliate holds until
+      // it's destroyed, and a book read by part has reads still under way.
+      (
+        view as HTMLElement & { book?: { destroy?: () => void } }
+      ).book?.destroy?.();
+      if (source instanceof RangeFile) source.cancelPending();
     };
-  }, [blob, fileType, positionSettled, opened, resetLocations]);
+  }, [source, fileType, positionSettled, opened, resetLocations]);
+
+  // A book read by part can't go on once a read fails for good: the server's
+  // copy changed, so the parts still to come would be from another file, or
+  // a chapter couldn't be fetched.
+  useEffect(() => {
+    if (!(source instanceof RangeFile)) return;
+    return source.onFailed((err) => {
+      source.cancelPending();
+      setFailedSource(source);
+      setBookReady(false);
+      setLoadError(err);
+    });
+  }, [source]);
+  const sourceFailed = source !== undefined && source === failedSource;
+
+  // A device that can hold the whole book downloads it once the first page
+  // is up, after which jumps read it locally. Until then, and on a phone,
+  // reading goes on by part.
+  useEffect(() => {
+    if (!bookReady || !(source instanceof RangeFile) || !canKeepWholeBook()) {
+      return;
+    }
+    const controller = new AbortController();
+    void source.downloadWhole({ signal: controller.signal });
+    return () => controller.abort();
+  }, [bookReady, source]);
 
   const goPrev = useCallback(() => {
     const view = viewRef.current as
@@ -1050,13 +1129,14 @@ export default function ReflowableReader({
     [fraction],
   );
 
-  // A failed background refetch keeps an open book on screen.
-  if ((error && !blob) || loadError) {
-    // foliate's loadError is client-side and says what went wrong in the
-    // reader; a request error reads through requestErrorMessage.
+  // A failed background refetch keeps an open book on screen, but not one
+  // whose reads failed.
+  if ((error && (!source || sourceFailed)) || loadError) {
     const message = loadError
-      ? loadError.message
-      : requestErrorMessage(error, "Failed to load book");
+      ? loadErrorMessage(loadError)
+      : error instanceof BuildTimeoutError
+        ? error.message
+        : requestErrorMessage(error, "Failed to load book");
     return (
       <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col items-center justify-center gap-4 p-4 text-center">
         <AlertCircle className="h-8 w-8 text-destructive" />
@@ -1184,7 +1264,7 @@ export default function ReflowableReader({
             : "flex-1",
         )}
       >
-        {(isLoading || !blob || !bookReady) && (
+        {(isLoading || !source || sourceFailed || !bookReady) && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background z-20">
             <LoadingSpinner />
             <p className="text-sm text-muted-foreground">Preparing book…</p>

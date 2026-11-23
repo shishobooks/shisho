@@ -29,7 +29,7 @@ describe("useUpdateFileChapters", () => {
     });
     client.setQueryData([QueryKey.FileChapters, 7], []);
     client.setQueryData(
-      [ReflowableQueryKey.ReflowableBlob, 7],
+      [ReflowableQueryKey.ReflowableBook, 7],
       new Blob(["epub"]),
     );
 
@@ -47,7 +47,7 @@ describe("useUpdateFileChapters", () => {
       ).toBe(true);
       // The generated EPUB carries the chapters as its table of contents.
       expect(
-        client.getQueryState([ReflowableQueryKey.ReflowableBlob, 7])
+        client.getQueryState([ReflowableQueryKey.ReflowableBook, 7])
           ?.isInvalidated,
       ).toBe(true);
     });

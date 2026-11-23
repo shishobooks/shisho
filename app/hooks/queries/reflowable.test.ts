@@ -9,9 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ShishoAPIError } from "@/libraries/api";
 import { queryClient } from "@/libraries/query-client";
+import { BuildTimeoutError, RangeFile } from "@/libraries/rangeFile";
 import { ALL_PERMISSIONS, setAuth } from "@/testing/auth";
+import { createRangeServer } from "@/testing/rangeServer";
 
-import { useReflowableBlob } from "./reflowable";
+import { useReflowableBook, type ReflowableBook } from "./reflowable";
 
 // Query hooks check the role's permissions; this test grants them all.
 vi.mock("@/hooks/useAuth", () => import("@/testing/auth"));
@@ -25,7 +27,14 @@ const wrapper = ({ children }: { children: React.ReactNode }) => {
   return React.createElement(QueryClientProvider, { client }, children);
 };
 
-describe("useReflowableBlob", () => {
+const DOWNLOAD = "/api/books/files/42/download";
+const ORIGINAL = "/api/books/files/42/download/original";
+const book = new Uint8Array(4 * 1024 * 1024).fill(7);
+
+const apiError = (status: number, code: string, message: string) =>
+  Response.json({ error: { code, message } }, { status });
+
+describe("useReflowableBook", () => {
   let fetchSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -36,40 +45,109 @@ describe("useReflowableBlob", () => {
     fetchSpy.mockRestore();
   });
 
-  it("fetches the EPUB from the download endpoint and resolves to a Blob", async () => {
-    const blob = new Blob(["epub-bytes"], { type: "application/epub+zip" });
-    fetchSpy.mockResolvedValue(
-      new Response(blob, {
-        status: 200,
-        headers: { "Content-Type": "application/epub+zip" },
-      }),
-    );
+  it("reads the Generated File by part rather than downloading it whole", async () => {
+    const server = createRangeServer(book);
+    fetchSpy.mockImplementation(server.fetch);
 
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(fetchSpy).toHaveBeenCalledWith(
-      "/api/books/files/42/download",
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(result.current.data).toBeInstanceOf(Blob);
+    expect(result.current.data).toBeInstanceOf(RangeFile);
+    expect((result.current.data as RangeFile).size).toBe(book.length);
+    expect(server.requests[0].url).toBe(DOWNLOAD);
+    expect(server.bytesSent()).toBeLessThan(book.length / 4);
   });
 
-  it("surfaces the API's error when the original fails too", async () => {
+  it.each([
+    [
+      422,
+      "invalid_state",
+      "Generated downloads are not supported for mobi files",
+    ],
+    [500, "internal", "Internal server error"],
+  ])(
+    "reads the original by part when the server answers %i for the Generated File",
+    async (status, code, message) => {
+      const original = createRangeServer(book);
+      fetchSpy.mockImplementation(
+        async (url: RequestInfo | URL, init?: RequestInit) =>
+          url === DOWNLOAD
+            ? apiError(status, code, message)
+            : original.fetch(url, init),
+      );
+
+      const { result } = renderHook(() => useReflowableBook(42), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toBeInstanceOf(RangeFile);
+      expect((result.current.data as RangeFile).url).toBe(ORIGINAL);
+    },
+  );
+
+  it.each([
+    [401, "unauthorized", "Not signed in"],
+    [404, "not_found", "File not found"],
+  ])(
+    "doesn't load the original for a %i, which the original would get too",
+    async (status, code, message) => {
+      fetchSpy.mockImplementation(async () => apiError(status, code, message));
+
+      const { result } = renderHook(() => useReflowableBook(42), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(result.current.error?.status).toBe(status);
+    },
+  );
+
+  it("surfaces the API's error", async () => {
     fetchSpy.mockImplementation(async () =>
-      Response.json(
-        { error: { code: "not_found", message: "File not found" } },
-        { status: 404 },
-      ),
+      apiError(404, "not_found", "File not found"),
     );
 
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.error).toBeInstanceOf(ShishoAPIError);
     expect(result.current.error?.status).toBe(404);
     expect(result.current.error?.code).toBe("not_found");
     expect(result.current.error?.message).toBe("File not found");
+  });
+
+  it("surfaces the original's error, not the Generated File's", async () => {
+    fetchSpy.mockImplementation(async (url: RequestInfo | URL) =>
+      url === DOWNLOAD
+        ? apiError(422, "invalid_state", "Not supported")
+        : apiError(404, "not_found", "File not found"),
+    );
+
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error?.status).toBe(404);
+  });
+
+  it("doesn't load the original for a proxy's error page", async () => {
+    fetchSpy.mockImplementation(
+      async () => new Response("<html>Bad gateway</html>", { status: 502 }),
+    );
+
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("reports a proxy's error page by its status", async () => {
@@ -81,7 +159,9 @@ describe("useReflowableBlob", () => {
         }),
     );
 
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
     await waitFor(() => expect(result.current.isError).toBe(true));
 
     expect(result.current.error?.message).toBe(
@@ -89,92 +169,52 @@ describe("useReflowableBlob", () => {
     );
   });
 
-  it("loads the original file when no generated download is available", async () => {
-    fetchSpy.mockImplementation(async (url: RequestInfo | URL) =>
-      url === "/api/books/files/42/download"
-        ? Response.json(
-            {
-              error: {
-                code: "invalid_state",
-                message: "Generated downloads are not supported for mobi files",
-              },
-            },
-            { status: 422 },
-          )
-        : new Response("mobi-bytes", { status: 200 }),
-    );
+  it("reports a build that outlasted the wait without waiting again", async () => {
+    const open = vi
+      .spyOn(RangeFile, "open")
+      .mockRejectedValue(new BuildTimeoutError());
+    // The app's defaults, which retry a failed query.
+    const client = new QueryClient({
+      defaultOptions: queryClient.getDefaultOptions(),
+    });
+    const appWrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client }, children);
+    try {
+      const { result } = renderHook(() => useReflowableBook(42), {
+        wrapper: appWrapper,
+      });
+      await waitFor(() => expect(result.current.isError).toBe(true));
 
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(fetchSpy).toHaveBeenLastCalledWith(
-      "/api/books/files/42/download/original",
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(await result.current.data?.text()).toBe("mobi-bytes");
+      expect(open).toHaveBeenCalledTimes(1);
+    } finally {
+      open.mockRestore();
+      client.clear();
+    }
   });
 
-  it("surfaces an error from the original file too", async () => {
-    fetchSpy.mockImplementation(async (url: RequestInfo | URL) =>
-      url === "/api/books/files/42/download"
-        ? Response.json(
-            { error: { code: "invalid_state", message: "Not supported" } },
-            { status: 422 },
-          )
-        : Response.json(
-            { error: { code: "not_found", message: "File not found" } },
-            { status: 404 },
-          ),
-    );
-
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
-    await waitFor(() => expect(result.current.isError).toBe(true));
-
-    expect(result.current.error?.status).toBe(404);
-  });
-
-  it("loads the original file when the generated file cannot be built", async () => {
-    fetchSpy.mockImplementation(async (url: RequestInfo | URL) =>
-      url === "/api/books/files/42/download"
-        ? Response.json(
-            { error: { code: "internal", message: "Internal server error" } },
-            { status: 500 },
-          )
-        : new Response("original-bytes", { status: 200 }),
-    );
-
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
-    expect(await result.current.data?.text()).toBe("original-bytes");
-  });
-
-  it("loads the original file when the generated file's fetch fails", async () => {
-    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
-      if (url === "/api/books/files/42/download") {
-        throw new TypeError("Failed to fetch");
-      }
-      return new Response("original-bytes", { status: 200 });
+  it("doesn't download the original when the connection drops", async () => {
+    fetchSpy.mockImplementation(async () => {
+      throw new TypeError("Failed to fetch");
     });
 
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
 
-    expect(await result.current.data?.text()).toBe("original-bytes");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("does not fall back in Demo Mode, which denies the original", async () => {
     setAuth({ permissions: ALL_PERMISSIONS, demoMode: true });
     try {
       fetchSpy.mockImplementation(async () =>
-        Response.json(
-          { error: { code: "internal", message: "Internal server error" } },
-          { status: 500 },
-        ),
+        apiError(500, "internal", "Internal server error"),
       );
 
-      const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+      const { result } = renderHook(() => useReflowableBook(42), {
+        wrapper,
+      });
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -184,41 +224,17 @@ describe("useReflowableBlob", () => {
     }
   });
 
-  it("loads the original file when the generated file arrives truncated", async () => {
-    fetchSpy.mockImplementation(async (url: RequestInfo | URL) => {
-      if (url !== "/api/books/files/42/download") {
-        return new Response("original-bytes", { status: 200 });
-      }
-      // A body that errors partway, as a cut connection does.
-      const body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode("first bytes"));
-          controller.error(new TypeError("network error"));
-        },
-      });
-      return new Response(body, { status: 200 });
-    });
-
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(fetchSpy).toHaveBeenLastCalledWith(
-      "/api/books/files/42/download/original",
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(await result.current.data?.text()).toBe("original-bytes");
-  });
-
   it("keeps the book it loaded when the window regains focus", async () => {
-    fetchSpy.mockImplementation(
-      async () => new Response("epub-bytes", { status: 200 }),
-    );
-    const { result } = renderHook(() => useReflowableBlob(42), { wrapper });
+    fetchSpy.mockImplementation(createRangeServer(book).fetch);
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     const loaded = result.current.data;
+    const asked = fetchSpy.mock.calls.length;
 
     // Long after the book opened, the reader switches away and back. A new
-    // Blob would make the reader close the book and open it again.
+    // book would make the reader close the book and open it again.
     vi.setSystemTime(Date.now() + 60 * 60 * 1000);
     try {
       act(() => {
@@ -227,7 +243,7 @@ describe("useReflowableBlob", () => {
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(asked);
       expect(result.current.isFetching).toBe(false);
       expect(result.current.data).toBe(loaded);
     } finally {
@@ -236,9 +252,7 @@ describe("useReflowableBlob", () => {
   });
 
   it("hands a reopened reader one book, not a cached one and then a fresh one", async () => {
-    fetchSpy.mockImplementation(
-      async () => new Response("epub-bytes", { status: 200 }),
-    );
+    fetchSpy.mockImplementation(createRangeServer(book).fetch);
     // The app's defaults, which refetch every query a reader mounts.
     const client = new QueryClient({
       defaultOptions: queryClient.getDefaultOptions(),
@@ -246,7 +260,7 @@ describe("useReflowableBlob", () => {
     const appWrapper = ({ children }: { children: React.ReactNode }) =>
       React.createElement(QueryClientProvider, { client }, children);
     try {
-      const first = renderHook(() => useReflowableBlob(42), {
+      const first = renderHook(() => useReflowableBook(42), {
         wrapper: appWrapper,
       });
       await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
@@ -254,11 +268,11 @@ describe("useReflowableBlob", () => {
       // Reopening comes later, by navigation, after the cache has collected.
       await new Promise((resolve) => setTimeout(resolve, 0));
 
-      // Each Blob the reader is handed opens the book again.
-      const handed = new Set<Blob>();
+      // Each book the reader is handed opens it again.
+      const handed = new Set<ReflowableBook>();
       const second = renderHook(
         () => {
-          const query = useReflowableBlob(42);
+          const query = useReflowableBook(42);
           if (query.data) handed.add(query.data);
           return query;
         },
@@ -270,6 +284,102 @@ describe("useReflowableBlob", () => {
       expect(handed.size).toBe(1);
     } finally {
       client.clear();
+    }
+  });
+});
+
+// A server or proxy that answers Range with the whole file sends the reader
+// to download the book whole, as it did before reading by part.
+describe("useReflowableBook from a server that ignores Range", () => {
+  let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    fetchSpy = vi.spyOn(globalThis, "fetch");
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  const whole = (body: BodyInit) =>
+    new Response(body, { status: 200, headers: { "Accept-Ranges": "bytes" } });
+  const asksForPart = (init?: RequestInit) =>
+    new Headers(init?.headers).has("Range");
+
+  it("downloads the book whole", async () => {
+    fetchSpy.mockImplementation(async () => whole("book-bytes"));
+
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toBeInstanceOf(Blob);
+    expect(await (result.current.data as Blob).text()).toBe("book-bytes");
+  });
+
+  it("downloads the original whole when the server refuses the Generated File", async () => {
+    fetchSpy.mockImplementation(
+      async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (url !== DOWNLOAD) return whole("original-bytes");
+        if (asksForPart(init)) return whole("generated-bytes");
+        return apiError(422, "invalid_state", "Failed partway");
+      },
+    );
+
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(await (result.current.data as Blob).text()).toBe("original-bytes");
+  });
+
+  // The file is whole on the server by then, so a cut is the connection,
+  // which would cut the original too.
+  it("reports a download that's cut off rather than loading the original", async () => {
+    fetchSpy.mockImplementation(
+      async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (url !== DOWNLOAD) return whole("original-bytes");
+        if (asksForPart(init)) return whole("generated-bytes");
+        // A body that errors partway, as a cut connection does.
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("first bytes"));
+            controller.error(new TypeError("network error"));
+          },
+        });
+        return whole(body);
+      },
+    );
+
+    const { result } = renderHook(() => useReflowableBook(42), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(fetchSpy).not.toHaveBeenCalledWith(ORIGINAL, expect.anything());
+  });
+
+  it("does not fall back in Demo Mode, which denies the original", async () => {
+    setAuth({ permissions: ALL_PERMISSIONS, demoMode: true });
+    try {
+      fetchSpy.mockImplementation(
+        async (_url: RequestInfo | URL, init?: RequestInit) =>
+          asksForPart(init)
+            ? whole("generated-bytes")
+            : apiError(500, "internal", "Internal server error"),
+      );
+
+      const { result } = renderHook(() => useReflowableBook(42), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(result.current.error?.status).toBe(500);
+      expect(fetchSpy).not.toHaveBeenCalledWith(ORIGINAL, expect.anything());
+    } finally {
+      setAuth({ permissions: ALL_PERMISSIONS });
     }
   });
 });
