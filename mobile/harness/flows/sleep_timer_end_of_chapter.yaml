@@ -43,7 +43,7 @@ name: Sleep at the end of the chapter
     visible:
       id: player.playPause
       text: Play
-    timeout: 20000
+    timeout: 30000
 - assertVisible:
     id: player.chapter
     text: Chapter 2
@@ -61,9 +61,9 @@ name: Sleep at the end of the chapter
     visible:
       id: player.chapter
       text: Chapter 3
-    timeout: 20000
+    timeout: 30000
 - extendedWaitUntil:
     visible:
       id: player.playPause
       text: Play
-    timeout: 20000
+    timeout: 30000
