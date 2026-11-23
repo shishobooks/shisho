@@ -521,9 +521,9 @@ jobs:
           hit: ${{ steps.setup.outputs.simulator-hit }}
 
   app-ios-flows:
-    # EXPERIMENT (#965 follow-up): the flows twice, with and without apsd
-    # disabled in the simulator, each sampling the runner's CPU by process.
-    name: iOS flows (quiet ${{ matrix.quiet }})
+    # EXPERIMENT (#965 follow-up): the flows split across parallel jobs,
+    # each sampling the runner's CPU by process.
+    name: iOS flows (shard ${{ matrix.shard }}/3)
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
@@ -531,7 +531,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        quiet: ["off", "on"]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -564,9 +564,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/harness"
           nohup top -l 0 -s 10 -n 25 -o cpu -stats pid,command,cpu > "$RUNNER_TEMP/harness/cpu.log" 2>&1 &
       - name: Run the Maestro flows
-        env:
-          SHISHO_HARNESS_QUIET: ${{ matrix.quiet == 'on' && '1' || '' }}
-        run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/3
       - uses: ./.github/actions/save-ios-simulator
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
@@ -577,7 +575,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: harness-output-quiet-${{ matrix.quiet }}
+          name: harness-output-shard-${{ matrix.shard }}
           path: ${{ runner.temp }}/harness
           if-no-files-found: ignore
           retention-days: 7
