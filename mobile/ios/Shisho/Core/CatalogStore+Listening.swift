@@ -47,6 +47,8 @@ struct ListenProgress: Equatable, Sendable {
     var fileName = ""
     var narrators: [String] = []
     var audiobookCount = 1
+    /// How big the File is, said before it's been listened to.
+    var sizeBytes = 0
 
     var fraction: Double { duration > 0 ? min(1, max(0, seconds / duration)) : 0 }
 }
@@ -205,8 +207,10 @@ extension CatalogStore {
         let audiobooks = try Int.fetchOne(db, sql: """
             SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type = 'm4b' AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
+        let size = try Int.fetchOne(db, sql: "SELECT size_bytes FROM book_files WHERE id = ?", arguments: [fileID]) ?? 0
         return ListenProgress(fileID: fileID, seconds: choice.start, duration: file.duration, chapters: file.chapters, underway: underway,
-                              fileName: file.displayName, narrators: file.narrators, audiobookCount: asked == nil ? audiobooks : 1)
+                              fileName: file.displayName, narrators: file.narrators, audiobookCount: asked == nil ? audiobooks : 1,
+                              sizeBytes: size)
     }
 
     /// Titles for the Books and Files a diagnostics log names by id, keyed as

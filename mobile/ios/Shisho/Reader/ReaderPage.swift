@@ -130,6 +130,8 @@ struct PageLocation: Decodable, Equatable, Sendable {
     /// The links on the page, in the WebView's points: x, y, width,
     /// height, and the id the script knows the link by.
     var links: [[Double]]?
+    /// The images big enough to open on their own, as links are given.
+    var images: [[Double]]?
 
     var base: [Int]? {
         guard let index, let page, let pages else { return nil }
@@ -297,6 +299,15 @@ final class ReaderPage: NSObject, WKNavigationDelegate {
     func clearSelection() {
         hasSelection = false
         call("R.clearSelection()")
+    }
+
+    /// The image under point (in the WebView's points), from the boxes the
+    /// page last reported.
+    func image(at point: CGPoint) -> Int? {
+        for box in location.images ?? [] where box.count == 5 {
+            if CGRect(x: box[0], y: box[1], width: box[2], height: box[3]).contains(point) { return Int(box[4]) }
+        }
+        return nil
     }
 
     /// The link nearest to point (in the WebView's points) within slop, from

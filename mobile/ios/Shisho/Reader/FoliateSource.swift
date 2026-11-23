@@ -42,8 +42,10 @@ protocol FoliateSourceDelegate: AnyObject {
     /// A page turn is starting, which hides the controls.
     func foliateTurning()
     func foliateToggleChrome()
-    /// Scrolled, a sideways swipe asked for the next or previous chapter.
-    func foliateSkipChapter(_ direction: TurnDirection)
+    /// An image to show on its own, as a data URL.
+    func foliateImage(_ dataURL: String)
+    /// A link inside the book was tapped: the reader jumps there.
+    func foliateFollowLink(_ href: String)
 }
 
 /// foliate as the pager's page source for Reflowable Files (ADR 0026).
@@ -111,10 +113,14 @@ final class FoliateSource: PagerSource {
     /// How the page opens the book a part at a time: as a zip (EPUB,
     /// KePub) or as MOBI records (MOBI, AZW3), and how big it is.
     private let bookFormat: String
+    private let language: String?
     private let bookSize: Int
 
     /// pages are booted pages from ReaderPagePool.
-    init(bookFile: URL, fileType: String, settings: ReaderSettings, pages: ReaderPagePool.Pages) {
+    /// language is the File's, as Shisho has it, for the page's lang and
+    /// direction.
+    init(bookFile: URL, fileType: String, settings: ReaderSettings, pages: ReaderPagePool.Pages, language: String? = nil) {
+        self.language = language
         handler = pages.handler
         handler.bookFile = bookFile
         bookFormat = ["mobi", "azw3"].contains(fileType) ? "mobi" : "zip"
@@ -169,7 +175,7 @@ final class FoliateSource: PagerSource {
     private func openNeighbors() {
         let start = lastCFI.map(ReaderTarget.cfi) ?? openStart
         for (page, direction, token) in neighborTokens where state(page).token == token {
-            page.call("R.open(\(openArguments(start: start, neighbor: paginated ? direction.rawValue : 0, token: token, idle: !paginated)))")
+            page.call("R.open(\(openArguments(start: start, neighbor: direction.rawValue, token: token)))")
         }
         neighborTokens = []
     }
@@ -178,7 +184,8 @@ final class FoliateSource: PagerSource {
         "{url: \(javaScriptLiteral(ReaderSchemeHandler.bookURL)), size: \(bookSize), format: \(javaScriptLiteral(bookFormat)), "
             + "start: \(start?.script ?? "null"), "
             + "fallback: \(fallback.map { String($0) } ?? "null"), settings: \(settings.script), "
-            + "neighborDir: \(neighbor), token: \(token), idle: \(idle)}"
+            + "neighborDir: \(neighbor), token: \(token), idle: \(idle), "
+            + "language: \(language.map(javaScriptLiteral) ?? "null")}"
     }
 
     /// WebKit ended a page's content process, as under memory pressure: it
@@ -207,7 +214,7 @@ final class FoliateSource: PagerSource {
         } else {
             let token = startFlight(page)
             pager.neighbor(direction(of: page), is: .pending)
-            page.call("R.open(\(openArguments(start: start, neighbor: paginated ? direction(of: page).rawValue : 0, token: token, idle: !paginated)))")
+            page.call("R.open(\(openArguments(start: start, neighbor: direction(of: page).rawValue, token: token)))")
         }
     }
 
@@ -223,10 +230,13 @@ final class FoliateSource: PagerSource {
         pager.reset()
         current.call("R.goTo(\(target.script), \(fallbackScript))")
         navigating = true
-        guard paginated else { return }
-        for page in [forward, back] {
-            let token = startFlight(page)
-            page.call("R.jump(\(target.script), \(direction(of: page).rawValue), \(token), \(fallbackScript))")
+        // Scrolled, the neighbors follow once the page lands: they're the
+        // sections beside it, not the pages.
+        if paginated {
+            for page in [forward, back] {
+                let token = startFlight(page)
+                page.call("R.jump(\(target.script), \(direction(of: page).rawValue), \(token), \(fallbackScript))")
+            }
         }
         // In case the jump doesn't move the page.
         navigationTimeout?.cancel()
@@ -332,7 +342,7 @@ final class FoliateSource: PagerSource {
                 // it stop queueing.
                 // Charged to the place the sync was sent from, which the
                 // current page may have moved off since.
-                let base = state(page).syncedFrom ?? current.location.base
+                let base = state(page).syncedFrom ?? currentBase
                 let failures = state(page).failedBase == base ? state(page).failures + 1 : 1
                 update(page) { $0 = PageState(failedBase: base, failures: failures) }
                 if failures >= 2 {
@@ -410,7 +420,9 @@ final class FoliateSource: PagerSource {
             delegate?.foliateNote(paragraphs: message.paragraphs ?? [], at: rect, href: message.href ?? "",
                                   font: NoteFont.resolve(message.fontFamily ?? ""), lineHeight: message.lineHeight)
         case "link":
-            if let href = message.href { jump(to: .href(href)) }
+            if let href = message.href { delegate?.foliateFollowLink(href) }
+        case "image":
+            if let data = message.message { delegate?.foliateImage(data) }
         case "external":
             if let href = message.href, let url = URL(string: href), ["http", "https", "mailto"].contains(url.scheme?.lowercased()) {
                 delegate?.foliateExternalLink(url)
@@ -432,7 +444,7 @@ final class FoliateSource: PagerSource {
     /// current page really is, and sends it again when it isn't, as when the
     /// current page re-laid out after its fonts loaded.
     private func reconcile() {
-        guard opened, paginated, !navigating, let base = current.location.base else { return }
+        guard opened, !navigating, let base = currentBase else { return }
         for page in [forward, back] {
             let state = state(page)
             if state.inFlight { continue }
@@ -446,7 +458,7 @@ final class FoliateSource: PagerSource {
 
     /// Sends a neighbor to the page next to the current one.
     private func sync(_ page: ReaderPage) {
-        guard let base = current.location.base else { return }
+        guard let base = currentBase else { return }
         let token = startFlight(page)
         update(page) { $0.base = nil; $0.syncedFrom = base }
         pager.neighbor(direction(of: page), is: .pending)
@@ -471,7 +483,7 @@ final class FoliateSource: PagerSource {
         }
         if old.hasSelection { old.clearSelection() }
         // The old page is one page from the new one: it's where it was.
-        update(old) { $0 = PageState(base: self.current.location.base) }
+        update(old) { $0 = PageState(base: self.currentBase) }
         lastCFI = current.location.cfi ?? lastCFI
         delegate?.foliateMoved(current.location)
         current.call("R.preloadNotes()")
@@ -493,7 +505,14 @@ final class FoliateSource: PagerSource {
             return true
         }
         let width = current.webView.bounds.width
-        let slop = PagerZones.linkSlop(at: width > 0 ? point.x / width : 0.5)
+        let fraction = width > 0 ? point.x / width : 0.5
+        let slop = PagerZones.linkSlop(at: fraction)
+        // An image opens on its own from the middle of the page; the edges
+        // still turn, so a page that's all photo can.
+        if resting, current.link(near: point, slop: slop) == nil, slop > 0, let image = current.image(at: point) {
+            current.call("R.openImage(\(image))")
+            return true
+        }
         guard resting, let id = current.link(near: point, slop: slop) else { return false }
         current.call("R.activateLink(\(id), \(point.x), \(point.y))")
         return true
@@ -514,13 +533,12 @@ final class FoliateSource: PagerSource {
         delegate?.foliateToggleChrome()
     }
 
-    func pagerSwipe(_ direction: TurnDirection) {
-        delegate?.foliateSkipChapter(direction)
-    }
-
-    /// The next or previous section, for a book with no chapters to go to.
-    func skipSection(_ direction: TurnDirection) {
-        current.call("R.skipSection(\(direction.rawValue))")
+    /// Where the neighbors are laid out from: the current page's section,
+    /// page, and page count, or scrolled, its section alone, so scrolling
+    /// within a section doesn't move them.
+    private var currentBase: [Int]? {
+        if paginated { return current.location.base }
+        return current.location.index.map { [$0, 0, 0] }
     }
 
     func pagerWaiting(_ waiting: Bool) {

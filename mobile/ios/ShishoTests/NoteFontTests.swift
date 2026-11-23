@@ -26,4 +26,15 @@ final class NoteFontTests: XCTestCase {
         XCTAssertEqual(NoteFont.resolve("", installed: installed), .family("Times New Roman"))
         XCTAssertEqual(NoteFont.resolve(#""Embedded Only""#, installed: installed), .family("Times New Roman"))
     }
+
+    /// A note's lines are as far apart as the page's: at the reader's 1.45,
+    /// a few points more than the font's own spacing; none when the book
+    /// gives no line height.
+    func testANotesLineSpacingFollowsThePage() {
+        let font = NoteFont.family("Times New Roman")
+        let spacing = font.lineSpacing(for: 1.45, relativeTo: .callout, base: 16)
+        XCTAssertGreaterThan(spacing, 3)
+        XCTAssertLessThan(spacing, 9)
+        XCTAssertEqual(font.lineSpacing(for: nil, relativeTo: .callout, base: 16), 0)
+    }
 }

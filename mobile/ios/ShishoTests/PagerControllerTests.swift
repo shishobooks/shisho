@@ -47,7 +47,6 @@ final class PagerControllerTests: XCTestCase {
         func pagerWillTurn() {}
         func pagerSawInput() {}
         func pagerToggleChrome() {}
-        func pagerSwipe(_ direction: TurnDirection) {}
         func pagerWaiting(_ waiting: Bool) { waits.append(waiting) }
     }
 

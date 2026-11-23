@@ -14,6 +14,12 @@ struct ContentsEntry: Identifiable, Equatable {
     var position: Double?
 }
 
+/// An image from the book, shown on its own to zoom into.
+struct OpenImage: Identifiable, Equatable {
+    let id = UUID()
+    let image: UIImage
+}
+
 /// A footnote shown in a popover beside its reference.
 struct OpenNote: Identifiable, Equatable {
     let id = UUID()
@@ -63,6 +69,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     /// showing is found by halving rather than by reading every entry.
     @ObservationIgnored private var starts: [(position: Double, index: Int)] = []
     private(set) var note: OpenNote?
+    /// An image open on its own, to zoom into.
+    var image: OpenImage?
     /// A page turn has waited a moment for its page to be laid out, as
     /// while the book is still opening: shown, so the page doesn't look
     /// frozen.
@@ -95,6 +103,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     @ObservationIgnored private var shownChapters: [ReaderChapter]
     /// Asks the app to close the reader, as when the File is gone.
     @ObservationIgnored private let onGone: @MainActor () -> Void
+    /// The contents are Shisho's chapters rather than the book's own.
+    @ObservationIgnored private var chaptersFromShisho = false
     /// The reader closed, so a load still running stops where it is.
     @ObservationIgnored private var closed = false
 
@@ -223,10 +233,14 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         case .fraction(let fraction): .fraction(fraction)
         case nil: nil
         }
-        let source = FoliateSource(bookFile: bookFile, fileType: file.fileType, settings: settings, pages: ReaderPagePool.shared.take())
+        let source = FoliateSource(bookFile: bookFile, fileType: file.fileType, settings: settings, pages: ReaderPagePool.shared.take(),
+                                    language: file.language)
         source.delegate = self
         self.source = source
-        source.open(at: start, fallback: fallback, chapters: file.usesShishoChapters ? shownChapters : nil)
+        // An EPUB with no chapters in Shisho, as when the scan couldn't read
+        // its navigation, uses the book's own table of contents.
+        chaptersFromShisho = file.usesShishoChapters && !shownChapters.isEmpty
+        source.open(at: start, fallback: fallback, chapters: chaptersFromShisho ? shownChapters : nil)
         logMemory("opened")
         watch()
     }
@@ -241,11 +255,57 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
 
     func go(to entry: ContentsEntry) {
         guard let target = entry.target else { return }
+        recordJump()
         source?.jump(to: target)
+    }
+
+    // MARK: - Back and forward
+
+    /// The places jumps left from (LocationHistory).
+    private(set) var history = LocationHistory()
+
+    /// Notes where the reader is before a jump, so they can come back.
+    private func recordJump() {
+        guard let cfi = location?.cfi else { return }
+        history.recordJump(from: cfi)
+    }
+
+    /// Back to where the reader was before the last jump.
+    func goBack() {
+        guard let cfi = location?.cfi, let target = history.back(from: cfi) else { return }
+        source?.jump(to: .cfi(target))
+    }
+
+    /// Forward to where the reader was when they went back.
+    func goForward() {
+        guard let cfi = location?.cfi, let target = history.forward(from: cfi) else { return }
+        source?.jump(to: .cfi(target))
+    }
+
+    func foliateImage(_ dataURL: String) {
+        Task { [weak self] in
+            let image = await Task.detached(priority: .userInitiated) { ReaderModel.decodeImage(dataURL) }.value
+            guard let self, !self.closed, let image else { return }
+            self.image = OpenImage(image: image)
+        }
+    }
+
+    nonisolated private static func decodeImage(_ dataURL: String) -> UIImage? {
+        guard let comma = dataURL.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...]))
+        else { return nil }
+        // Decoded here, off the main thread, rather than as it first draws.
+        return UIImage(data: data)?.preparingForDisplay()
+    }
+
+    func foliateFollowLink(_ href: String) {
+        recordJump()
+        source?.jump(to: .href(href))
     }
 
     /// Goes to fraction of the way through, from the scrubber.
     func go(toFraction value: Double) {
+        recordJump()
         source?.jump(to: .fraction(value))
     }
 
@@ -256,6 +316,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     func goToNote() {
         guard let note else { return }
         self.note = nil
+        recordJump()
         source?.jump(to: .href(note.href))
     }
 
@@ -267,6 +328,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         guard let offer else { return }
         self.offer = nil
         resolveOffer()
+        recordJump()
         source?.jump(to: offer.cfi.map(ReaderTarget.cfi) ?? .fraction(offer.percentage), fallback: offer.percentage)
     }
 
@@ -360,7 +422,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     }
 
     private func chaptersChanged(_ chapters: [ReaderChapter]) {
-        guard file.usesShishoChapters, chapters != shownChapters else { return }
+        guard chaptersFromShisho, chapters != shownChapters else { return }
         shownChapters = chapters
         contents = ReaderModel.entries(chapters)
         source?.updateChapters(chapters)
@@ -369,7 +431,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     // MARK: - FoliateSourceDelegate
 
     func foliateOpened(toc: [PageMessage.TocItem]) {
-        if !file.usesShishoChapters {
+        if !chaptersFromShisho {
             contents = toc.enumerated().map { index, item in
                 ContentsEntry(id: index, title: item.label, depth: item.depth, target: nil, position: nil)
             }
@@ -465,25 +527,6 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         // move them out from under the reader's focus.
         guard !UIAccessibility.isVoiceOverRunning else { return }
         chromeVisible = false
-    }
-
-    /// The next chapter's start, or the previous chapter's, from the
-    /// contents; by section in a book whose contents can't be placed.
-    func foliateSkipChapter(_ direction: TurnDirection) {
-        let here = start(atOrBefore: pageStart ?? fraction)
-        let place = here.map { starts[$0].position } ?? -1
-        let candidates: [Int] = direction == .forward
-            ? Array(((here ?? -1) + 1)..<starts.count)
-            : Array(stride(from: (here ?? 0) - 1, through: 0, by: -1))
-        for k in candidates {
-            let entry = contents[starts[k].index]
-            let further = direction == .forward ? starts[k].position > place + 0.0001 : starts[k].position < place - 0.0001
-            if further, entry.target != nil {
-                go(to: entry)
-                return
-            }
-        }
-        if starts.isEmpty { source?.skipSection(direction) }
     }
 
     /// Keeps the chapter and pages left for the Book's page, which can't

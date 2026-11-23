@@ -50,6 +50,7 @@ enum Lucide: String, CaseIterable {
     case playFill = "play-fill"
     case plus
     case refresh = "refresh-cw"
+    case redo2 = "redo-2"
     case rotateCcw = "rotate-ccw"
     case rotateCw = "rotate-cw"
     case search
@@ -66,6 +67,7 @@ enum Lucide: String, CaseIterable {
     case tags
     case trash = "trash-2"
     case triangleAlert = "triangle-alert"
+    case undo2 = "undo-2"
     case user
     case userX = "user-x"
     case users

@@ -31,7 +31,10 @@ struct ReadCard: View {
 
     private var detail: String? {
         if finished { return String(localized: "Finished") }
-        guard started, let pages = progress.pagesLeft else { return nil }
+        // Before it's been read, how big it is: its length isn't known
+        // without the book.
+        if !started { return progress.sizeBytes > 0 ? FileFacts.size(progress.sizeBytes) : nil }
+        guard let pages = progress.pagesLeft else { return nil }
         return String(AttributedString(localized: "^[\(pages) page](inflect: true) left").characters)
     }
 

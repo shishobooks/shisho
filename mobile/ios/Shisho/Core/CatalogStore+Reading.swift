@@ -22,6 +22,9 @@ struct ReadingFile: Equatable, Identifiable, Sendable {
     let sizeBytes: Int
     /// Shisho's chapters, nested under their parents, in order (ADR 0022).
     let chapters: [ReaderChapter]
+    /// The File's language as Shisho normalized it, which a book's own
+    /// metadata may give in a form the reader can't use.
+    var language: String?
 
     /// Shisho's chapters are the table of contents for an EPUB. MOBI and
     /// AZW3 use the table of contents inside the file until Shisho's stored
@@ -41,6 +44,9 @@ struct ReadProgress: Equatable, Sendable {
     /// while that's still the place shown.
     var chapter: String?
     var pagesLeft: Int?
+    /// How big the File is, said before it's been read: nothing else about
+    /// its length is known without the book.
+    var sizeBytes = 0
 }
 
 extension CatalogStore {
@@ -57,12 +63,12 @@ extension CatalogStore {
 
     static func readingFile(_ db: Database, fileID: Int) throws -> ReadingFile? {
         guard let row = try Row.fetchOne(db, sql: """
-                SELECT book_id, file_type, display_name, size_bytes FROM book_files WHERE id = ? AND file_type IN (\(reflowableList))
+                SELECT book_id, file_type, display_name, size_bytes, language FROM book_files WHERE id = ? AND file_type IN (\(reflowableList))
                 """, arguments: [fileID]),
               let book = try CatalogStore.book(db, id: row["book_id"])
         else { return nil }
         return ReadingFile(fileID: fileID, book: book.summary, fileType: row["file_type"], displayName: row["display_name"],
-                           sizeBytes: row["size_bytes"], chapters: try readerChapters(db, fileID: fileID))
+                           sizeBytes: row["size_bytes"], chapters: try readerChapters(db, fileID: fileID), language: row["language"])
     }
 
     /// The File's chapters, each nested one deeper than its parent. The feed
@@ -111,9 +117,9 @@ extension CatalogStore {
         let ebooks = try Int.fetchOne(db, sql: """
             SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type IN (\(reflowableList)) AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
-        let name = try String.fetchOne(db, sql: "SELECT display_name FROM book_files WHERE id = ?", arguments: [fileID]) ?? ""
-        var progress = ReadProgress(fileID: fileID, percentage: min(1, max(0, percentage)), underway: underway, fileName: name,
-                                    ebookCount: ebooks)
+        let file = try Row.fetchOne(db, sql: "SELECT display_name, size_bytes FROM book_files WHERE id = ?", arguments: [fileID])
+        var progress = ReadProgress(fileID: fileID, percentage: min(1, max(0, percentage)), underway: underway,
+                                    fileName: file?["display_name"] ?? "", ebookCount: ebooks, sizeBytes: file?["size_bytes"] ?? 0)
         if let place = try Row.fetchOne(db, sql: "SELECT chapter, pages_left, percentage FROM reader_places WHERE file_id = ?",
                                         arguments: [fileID]),
            abs((place["percentage"] as Double) - progress.percentage) < 0.005 {

@@ -45,3 +45,12 @@ name: Jump to a chapter from the table of contents
       id: reader.progress
       text: "Chapter Three.*"
     timeout: 30000
+# Back returns to where the jump left from.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.back
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter One.*"
+    timeout: 30000

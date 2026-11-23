@@ -13,6 +13,8 @@
 // (app/utils/readerEnd.ts). A change there changes these too.
 import "../foliate/view.js";
 
+import { cleanPackage } from "./package.js";
+
 const post = (msg) =>
   window.webkit?.messageHandlers?.bridge?.postMessage(JSON.stringify(msg));
 const view = document.getElementById("view");
@@ -261,6 +263,7 @@ const location = () => {
     // Reading time counts per screen, as on the web.
     screen: `${index}:${page}`,
     links: linkRects(),
+    images: imageRects(),
   };
 };
 
@@ -453,7 +456,7 @@ const activate = async (a) => {
         // And its line height, as a multiple of the text's size; "normal"
         // gives none.
         const style = a.ownerDocument.defaultView?.getComputedStyle(
-          a.parentElement ?? a,
+          a.closest("p, li, blockquote, dd, td, div") ?? a.parentElement ?? a,
         );
         const fontFamily = style?.fontFamily ?? "";
         const lineHeight =
@@ -497,6 +500,84 @@ const nearestLink = (x, y, radius) => {
     }
   }
   return best;
+};
+
+// MARK: - Images
+
+// The images on the page big enough to open on their own, as photos and
+// maps are, rather than an icon in a line of text: their boxes, as link
+// boxes are reported, so native hit-tests a tap without a round trip.
+const MIN_IMAGE = 60;
+let imageElements = [];
+const imagesIn = (doc) => [
+  ...doc.querySelectorAll("img"),
+  ...doc.getElementsByTagNameNS("http://www.w3.org/2000/svg", "image"),
+];
+const imageRects = () => {
+  imageElements = [];
+  if (isScrolled()) return [];
+  const out = [];
+  for (const { doc } of view.renderer?.getContents?.() ?? []) {
+    const frame = doc?.defaultView?.frameElement;
+    if (!frame) continue;
+    const fr = frame.getBoundingClientRect();
+    const scale = frame.offsetWidth > 0 ? fr.width / frame.offsetWidth : 1;
+    for (const img of imagesIn(doc)) {
+      const r = img.getBoundingClientRect();
+      const x = fr.left + r.left * scale;
+      const width = r.width * scale;
+      const height = r.height * scale;
+      if (width < MIN_IMAGE || height < MIN_IMAGE) continue;
+      if (x + width < 0 || x > innerWidth) continue;
+      const id = imageElements.push(img) - 1;
+      out.push([
+        Math.round(x),
+        Math.round(fr.top + r.top * scale),
+        Math.round(width),
+        Math.round(height),
+        id,
+      ]);
+    }
+  }
+  return out;
+};
+
+// The image under a point scrolled, where taps come through the page.
+const imageAt = (x, y) => {
+  const doc = currentDoc();
+  const fr = doc?.defaultView?.frameElement?.getBoundingClientRect();
+  if (!fr) return null;
+  for (const img of imagesIn(doc)) {
+    const r = img.getBoundingClientRect();
+    if (r.width < MIN_IMAGE || r.height < MIN_IMAGE) continue;
+    const left = fr.left + r.left;
+    const top = fr.top + r.top;
+    if (x >= left && x <= left + r.width && y >= top && y <= top + r.height)
+      return img;
+  }
+  return null;
+};
+
+// Sends an image's bytes to native to show on its own, zoomable.
+const openImage = async (img) => {
+  try {
+    const src =
+      img.currentSrc ||
+      img.src ||
+      img.getAttribute("href") ||
+      img.getAttributeNS("http://www.w3.org/1999/xlink", "href");
+    if (!src) return;
+    const blob = await (await fetch(src)).blob();
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    post({ type: "image", message: data });
+  } catch (err) {
+    post({ type: "log", message: "image failed: " + err });
+  }
 };
 
 // MARK: - Touches
@@ -734,7 +815,33 @@ const stepFixed = async (base, dir) => {
   return currentIndex() !== base.index;
 };
 
+// Scrolled, a neighbor is the next or previous section from its top, so a
+// sideways drag brings in the chapter beside, as a turn brings in a page.
+// Its base is the section alone: scrolling within it moves nothing.
+const stepSection = async (index, dir, token) => {
+  const sections = view.book.sections;
+  let next = null;
+  for (let i = index + dir; i >= 0 && i < sections.length; i += dir)
+    if (sections[i].linear !== "no") {
+      next = i;
+      break;
+    }
+  if (next != null) {
+    await view.renderer.goTo({ index: next });
+    await settle();
+  }
+  post({
+    type: "synced",
+    token,
+    base: [index, 0, 0],
+    edge: next == null,
+    loc: location(),
+  });
+};
+
 const step = async (base, dir, token) => {
+  if (base && isScrolled() && !view.isFixedLayout)
+    return stepSection(base.index, dir, token);
   const b = base ? [base.index, base.page, base.pages] : null;
   let target = null;
   if (base && view.isFixedLayout) {
@@ -761,9 +868,7 @@ const step = async (base, dir, token) => {
 // links as its navigation document wrote them, relative to that document,
 // as foliate's own table of contents resolves them.
 const ROOT = "https://invalid.invalid/";
-const fromNavigation = (href) => {
-  const base =
-    view.book.resources?.navPath ?? view.book.resources?.ncxPath ?? "";
+const fromNavigation = (href, base) => {
   try {
     const url = new URL(href, ROOT + base);
     url.search = "";
@@ -799,14 +904,47 @@ const sharesBefore = (doc, targets) => {
 
 // Where each chapter goes and starts along the book, as the web reader
 // places its chapter marks.
+// The navigation document Shisho's chapter links are written relative to:
+// the scan reads the nav, or the NCX when it can't, so the base is the one
+// that resolves more of a few of them.
+const navigationBase = async (chapters) => {
+  const bases = [
+    ...new Set(
+      [view.book.resources?.navPath, view.book.resources?.ncxPath].filter(
+        Boolean,
+      ),
+    ),
+  ];
+  if (bases.length < 2) return bases[0] ?? "";
+  const sample = chapters.filter((c) => c.href).slice(0, 12);
+  let best = bases[0];
+  let bestCount = -1;
+  for (const base of bases) {
+    let count = 0;
+    for (const { href } of sample) {
+      try {
+        const resolved = await view.book.resolveHref(
+          fromNavigation(href, base),
+        );
+        if (resolved && resolved.index >= 0) count += 1;
+      } catch {
+        // Not in this book.
+      }
+    }
+    if (count > bestCount) [best, bestCount] = [base, count];
+  }
+  return best;
+};
+
 const contents = async (chapters, relative) => {
   const fractions = view.getSectionFractions();
+  const base = relative ? await navigationBase(chapters) : "";
   const entries = [];
   const inSections = new Map();
   for (const [i, { href }] of chapters.entries()) {
     entries.push({ target: null, position: null });
     if (!href) continue;
-    const target = relative ? fromNavigation(href) : href;
+    const target = relative ? fromNavigation(href, base) : href;
     const resolved = await view.book.resolveHref(target);
     if (!resolved || resolved.index < 0) continue;
     entries[i].target = target;
@@ -949,7 +1087,14 @@ window.R = {
       return true;
     }
     const a = nearestLink(x, y, 24);
-    if (!a) return false;
+    if (!a) {
+      // Scrolled, an image opens on its own from the middle of the page.
+      const img =
+        x > innerWidth / 3 && x < (innerWidth * 2) / 3 && imageAt(x, y);
+      if (!img) return false;
+      openImage(img);
+      return true;
+    }
     activate(a);
     return true;
   },
@@ -957,16 +1102,9 @@ window.R = {
     chapterHrefs = hrefs;
     chapterTargets = null;
   },
-  // The next or previous section, for a sideways swipe in a book with no
-  // chapters to go to.
-  skipSection(dir) {
-    navigation = navigation.then(async () => {
-      try {
-        await view.renderer?.[dir > 0 ? "nextSection" : "prevSection"]?.();
-      } catch (err) {
-        post({ type: "log", message: "section skip failed: " + err });
-      }
-    });
+  openImage(id) {
+    const img = imageElements[id];
+    if (img) openImage(img);
   },
   clearSelection() {
     currentDoc()?.getSelection()?.removeAllRanges();
@@ -1086,7 +1224,14 @@ const openEPUB = async (file) => {
   const reader = new ZipReader(new RangeReader());
   const entries = await reader.getEntries();
   const map = new Map(entries.map((entry) => [entry.filename, entry]));
-  const loadText = (name) => map.get(name)?.getData(new TextWriter()) ?? null;
+  // The package as Shisho's generated copy would have it, near enough:
+  // see package.js.
+  const loadText = async (name) => {
+    const text = (await map.get(name)?.getData(new TextWriter())) ?? null;
+    return text && name.toLowerCase().endsWith(".opf")
+      ? cleanPackage(text)
+      : text;
+  };
   const loadBlob = (name, type) =>
     map.get(name)?.getData(new BlobWriter(type)) ?? null;
   const getSize = (name) => map.get(name)?.uncompressedSize ?? 0;
@@ -1113,11 +1258,14 @@ const open = async ({
   neighborDir,
   token,
   idle,
+  language,
 }) => {
   const file = localFile(url, size);
-  await view.open(
-    format === "mobi" ? await openMOBI(file) : await openEPUB(file),
-  );
+  const book = format === "mobi" ? await openMOBI(file) : await openEPUB(file);
+  // Shisho's normalized language, for the page's lang and direction: a
+  // book's own can be a form foliate can't use, as en_US or English.
+  if (language && book.metadata) book.metadata.language = language;
+  await view.open(book);
   applyStyles(s);
   post({
     type: "opened",

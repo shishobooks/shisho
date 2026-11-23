@@ -64,6 +64,10 @@ struct ReaderView: View {
                     }
                 }
             }
+            if let image = model.image {
+                ImageViewer(image: image.image) { model.image = nil }
+                    .transition(.opacity)
+            }
             // A card of the app's own rather than a system popover, whose
             // corners and arrow it can't shape, over everything dimmed so
             // the note stands out.
@@ -76,6 +80,7 @@ struct ReaderView: View {
         .animation(.easeOut(duration: 0.2), value: model.offer)
         .animation(.easeOut(duration: 0.15), value: model.turnWaiting)
         .animation(.easeOut(duration: 0.15), value: model.note)
+        .animation(.easeOut(duration: 0.15), value: model.image)
         // Hidden while reading, bars or not: the page under it may be in a
         // theme the app's appearance doesn't show on, and showing it with
         // the bars would resize the pages on iPhones whose status bar takes
@@ -300,6 +305,21 @@ private struct ReaderBottomBar: View {
         model.placeLabel(percent: percentShown, pagesLeft: pagesLeftLabel)
     }
 
+    private func historyButton(_ icon: Lucide, label: LocalizedStringKey, enabled: Bool, identifier: String,
+                               action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Icon(icon, size: 18)
+                .frame(width: 36, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.foreground.opacity(enabled ? 0.85 : 0.3))
+        .disabled(!enabled)
+        .accessibilityLabel(Text(label))
+        .accessibilityShowsLargeContentViewer()
+        .accessibilityIdentifier(identifier)
+    }
+
     /// While the scrubber rests.
     private var pagesLeftLabel: AttributedString? {
         scrubbing == nil ? model.pagesLeftLabel(inBook: pagesLeftInBook) : nil
@@ -307,13 +327,23 @@ private struct ReaderBottomBar: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
-                scrubbing = nil
-                model.go(toFraction: value)
-            }, step: 0.01, marks: model.marks)
-            .accessibilityLabel(Text("Place in the book"))
-            .accessibilityValue(Text(percentShown))
-            .accessibilityIdentifier("reader.scrubber")
+            // Back and forward through jumps either side of the bar, as the
+            // web reader has them: always there, and disabled when there's
+            // nowhere to go, so they're where the reader looks after paging
+            // around a jump.
+            HStack(spacing: 2) {
+                historyButton(.undo2, label: "Back to previous location", enabled: model.history.canGoBack,
+                              identifier: "reader.back", action: model.goBack)
+                Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
+                    scrubbing = nil
+                    model.go(toFraction: value)
+                }, step: 0.01, marks: model.marks)
+                .accessibilityLabel(Text("Place in the book"))
+                .accessibilityValue(Text(percentShown))
+                .accessibilityIdentifier("reader.scrubber")
+                historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
+                              identifier: "reader.forward", action: model.goForward)
+            }
             HStack(spacing: 6) {
                 Text(model.chapterTitle ?? "")
                     .lineLimit(1)
@@ -349,6 +379,118 @@ private struct ReaderBottomBar: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .background(ReaderView.barBackground.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Theme.border.frame(height: 1) }
+    }
+}
+
+/// An image from the book on its own, over everything, to pinch or
+/// double-tap into; closing goes back to the page.
+private struct ImageViewer: View {
+    let image: UIImage
+    let close: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Color.black.ignoresSafeArea()
+            ZoomingImage(image: image)
+                .ignoresSafeArea()
+                .accessibilityLabel(Text("Image"))
+                .accessibilityAddTraits(.isImage)
+            Button(action: close) {
+                Icon(.x, size: 20)
+                    .foregroundStyle(.white)
+                    .frame(width: 36, height: 36)
+                    .background(.white.opacity(0.18), in: Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.trailing, 12)
+            .accessibilityLabel(Text("Close"))
+            .accessibilityIdentifier("reader.image.close")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
+        .accessibilityAction(.escape, close)
+        .accessibilityIdentifier("reader.image")
+    }
+}
+
+/// A scroll view that fits the image and zooms it, by pinch or double-tap.
+private struct ZoomingImage: UIViewRepresentable {
+    let image: UIImage
+
+    func makeUIView(context: Context) -> ZoomView { ZoomView(image: image) }
+    func updateUIView(_ view: ZoomView, context: Context) {}
+
+    final class ZoomView: UIScrollView, UIScrollViewDelegate {
+        private let imageView: UIImageView
+
+        init(image: UIImage) {
+            imageView = UIImageView(image: image)
+            super.init(frame: .zero)
+            delegate = self
+            showsVerticalScrollIndicator = false
+            showsHorizontalScrollIndicator = false
+            contentInsetAdjustmentBehavior = .never
+            imageView.contentMode = .scaleAspectFit
+            // A book's transparent images are drawn for a white page, as the
+            // reader's dark themes put white behind them too.
+            imageView.backgroundColor = .white
+            addSubview(imageView)
+            let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
+            doubleTap.numberOfTapsRequired = 2
+            addGestureRecognizer(doubleTap)
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        /// The size the image was last fitted to: fitting again only when it
+        /// changes, as on rotation, since setting the zoom lays out again.
+        private var fittedTo: CGSize = .zero
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard bounds.size != fittedTo, bounds.width > 0, let size = imageView.image?.size, size.width > 0 else {
+                center()
+                return
+            }
+            fittedTo = bounds.size
+            // Back to no zoom before the frame is set: a frame set under a
+            // zoom's transform is undone by it.
+            minimumZoomScale = 1
+            maximumZoomScale = 1
+            zoomScale = 1
+            imageView.frame = CGRect(origin: .zero, size: size)
+            contentSize = size
+            let fit = min(bounds.width / size.width, bounds.height / size.height)
+            maximumZoomScale = max(fit * 4, 1)
+            minimumZoomScale = fit
+            zoomScale = fit
+            center()
+        }
+
+        /// Keeps a smaller image in the middle.
+        private func center() {
+            let x = max(0, (bounds.width - contentSize.width) / 2)
+            let y = max(0, (bounds.height - contentSize.height) / 2)
+            contentInset = UIEdgeInsets(top: y, left: x, bottom: y, right: x)
+        }
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? { imageView }
+
+        func scrollViewDidZoom(_ scrollView: UIScrollView) { center() }
+
+        @objc private func doubleTapped(_ recognizer: UITapGestureRecognizer) {
+            if zoomScale > minimumZoomScale * 1.01 {
+                setZoomScale(minimumZoomScale, animated: true)
+            } else {
+                let point = recognizer.location(in: imageView)
+                let scale = min(maximumZoomScale, minimumZoomScale * 2.5)
+                let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
+                zoom(to: CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2, width: size.width, height: size.height),
+                     animated: true)
+            }
+        }
     }
 }
 

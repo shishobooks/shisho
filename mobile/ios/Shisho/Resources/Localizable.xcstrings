@@ -235,6 +235,9 @@
     "Back %lld Seconds" : {
 
     },
+    "Back to previous location" : {
+
+    },
     "Bitrate" : {
 
     },
@@ -460,6 +463,9 @@
     "Forward %lld Seconds" : {
 
     },
+    "Forward to next location" : {
+
+    },
     "From " : {
 
     },
@@ -479,6 +485,9 @@
 
     },
     "Highest rating" : {
+
+    },
+    "Image" : {
 
     },
     "Include titles" : {
