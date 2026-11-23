@@ -208,6 +208,27 @@ test.describe("Reflowable reader", () => {
     });
   });
 
+  test("the System theme follows the app's light or dark mode", async ({
+    page,
+  }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await login(page);
+    // The app follows the OS, and the reader (on System, its default)
+    // follows the app.
+    await page.evaluate(() => localStorage.setItem("ui-theme", "system"));
+    await setDisplaySettings(page, { layout: "paginated" });
+    await openReader(page, epubBookId);
+    const frame = await bookFrame(page, "Test chapter.");
+    const background = () =>
+      frame.evaluate(
+        () => getComputedStyle(document.documentElement).backgroundColor,
+      );
+    await expect.poll(background).toBe("rgb(255, 255, 255)");
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect.poll(background).toBe("rgb(26, 26, 26)");
+  });
+
   test("justification leaves text the book centers alone", async ({ page }) => {
     await login(page);
     await setDisplaySettings(page, { layout: "paginated" });

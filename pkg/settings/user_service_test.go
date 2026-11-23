@@ -19,7 +19,7 @@ func TestGetUserSettings_ReturnsReflowableDefaults(t *testing.T) {
 	settings, err := svc.GetUserSettings(context.Background(), user.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 100, settings.ReflowableFontSize)
-	assert.Equal(t, models.ReflowableThemeLight, settings.ReflowableTheme)
+	assert.Equal(t, models.ReflowableThemeSystem, settings.ReflowableTheme)
 	assert.Equal(t, models.ReflowableFlowPaginated, settings.ReflowableFlow)
 }
 
@@ -95,4 +95,37 @@ func TestUpdateUserSettings_PartialUpdateDoesNotClobber(t *testing.T) {
 	assert.Equal(t, 130, updated.ReflowableFontSize)
 	assert.Equal(t, models.ReflowableThemeSepia, updated.ReflowableTheme)
 	assert.Equal(t, models.ReflowableFlowScrolled, updated.ReflowableFlow)
+}
+
+// A user with no settings row who saves some other setting gets System, not
+// Light: the row starts from the defaults.
+func TestUpdateUserSettings_NewRowDefaultsReflowableThemeToSystem(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	user := createTestUser(t, db, "carol")
+	svc := NewService(db)
+
+	zone := "America/Chicago"
+	_, err := svc.UpdateUserSettings(context.Background(), user.ID, UserSettingsUpdate{TimeZone: &zone})
+	require.NoError(t, err)
+
+	reloaded, err := svc.GetUserSettings(context.Background(), user.ID)
+	require.NoError(t, err)
+	assert.Equal(t, models.ReflowableThemeSystem, reloaded.ReflowableTheme)
+}
+
+// A theme the user chose stays when they save another setting.
+func TestUpdateUserSettings_KeepsAChosenLightTheme(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	user := createTestUser(t, db, "dana")
+	svc := NewService(db)
+
+	theme := models.ReflowableThemeLight
+	_, err := svc.UpdateUserSettings(context.Background(), user.ID, UserSettingsUpdate{ReflowableTheme: &theme})
+	require.NoError(t, err)
+	zone := "America/Chicago"
+	updated, err := svc.UpdateUserSettings(context.Background(), user.ID, UserSettingsUpdate{TimeZone: &zone})
+	require.NoError(t, err)
+	assert.Equal(t, models.ReflowableThemeLight, updated.ReflowableTheme)
 }

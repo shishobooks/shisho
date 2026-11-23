@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_READER_SETTINGS,
   footnoteStyle,
+  pageSettingsFor,
   readerCSS,
   readerLayout,
   readerSettingsFrom,
@@ -106,11 +107,94 @@ describe("readerSettingsFrom", () => {
   it("ignores stored text that isn't JSON", () => {
     expect(readerSettingsFrom("{not json")).toEqual(DEFAULT_READER_SETTINGS);
   });
+
+  it("uses the System theme until one is chosen", () => {
+    expect(readerSettingsFrom(null).theme).toBe("system");
+    expect(readerSettingsFrom(JSON.stringify({ size: 18 })).theme).toBe(
+      "system",
+    );
+  });
+
+  it("keeps a stored System theme", () => {
+    expect(
+      readerSettingsFrom(JSON.stringify({ theme: "system" }), {
+        viewer_reflowable_theme: "sepia",
+      }).theme,
+    ).toBe("system");
+  });
+
+  it("keeps an account's chosen Light theme", () => {
+    expect(
+      readerSettingsFrom(null, { viewer_reflowable_theme: "light" }).theme,
+    ).toBe("light");
+  });
+});
+
+describe("pageSettingsFor", () => {
+  it.each([
+    ["light", "light"],
+    ["dark", "dark"],
+  ] as const)(
+    "draws the System theme as %s when the app is %s",
+    (appearance, theme) => {
+      expect(
+        pageSettingsFor(
+          { ...DEFAULT_READER_SETTINGS, theme: "system" },
+          appearance,
+        ).theme,
+      ).toBe(theme);
+    },
+  );
+
+  it.each(["light", "sepia", "dark", "black"] as const)(
+    "keeps the %s theme whatever the app's appearance",
+    (theme) => {
+      for (const appearance of ["light", "dark"] as const) {
+        expect(
+          pageSettingsFor({ ...DEFAULT_READER_SETTINGS, theme }, appearance)
+            .theme,
+        ).toBe(theme);
+      }
+    },
+  );
+
+  it("draws the System page exactly as the Light or Dark one", () => {
+    for (const appearance of ["light", "dark"] as const) {
+      expect(
+        readerCSS(
+          pageSettingsFor(
+            { ...DEFAULT_READER_SETTINGS, theme: "system" },
+            appearance,
+          ),
+        ),
+      ).toBe(
+        readerCSS(
+          pageSettingsFor(
+            { ...DEFAULT_READER_SETTINGS, theme: appearance },
+            appearance,
+          ),
+        ),
+      );
+    }
+  });
+
+  it("colors a System footnote as the Dark one in a dark app", () => {
+    const note = (theme: "system" | "dark") =>
+      footnoteStyle(
+        pageSettingsFor({ ...DEFAULT_READER_SETTINGS, theme }, "dark"),
+        undefined,
+        "serif",
+      );
+    expect(note("system")).toEqual(note("dark"));
+  });
 });
 
 describe("readerCSS", () => {
   const css = (overrides = {}, fontFace?: Parameters<typeof readerCSS>[1]) =>
-    readerCSS({ ...DEFAULT_READER_SETTINGS, ...overrides }, fontFace);
+    readerCSS(
+      pageSettingsFor({ ...DEFAULT_READER_SETTINGS, ...overrides }, "light"),
+      fontFace,
+    );
 
   it("sets the line spacing", () => {
     expect(css({ lineSpacing: 1.75 })).toContain(
@@ -317,7 +401,7 @@ describe("footnoteStyle", () => {
     fontFace?: Parameters<typeof footnoteStyle>[1],
   ) =>
     footnoteStyle(
-      { ...DEFAULT_READER_SETTINGS, ...overrides },
+      pageSettingsFor({ ...DEFAULT_READER_SETTINGS, ...overrides }, "light"),
       fontFace,
       "Georgia, serif",
     );

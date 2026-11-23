@@ -59,7 +59,7 @@ Use the **Settings** button inside the reader to change how books look:
 | **Line spacing** | 1.00 to 2.50 times the font size, in steps of 0.05, from compact to relaxed |
 | **Margins** | 1% to 15% of the page's width on each side, in steps of 1%, from narrow to wide. When two pages show side by side, the same space separates them. |
 | **Justify text** | On justifies and hyphenates paragraphs; off aligns them to the start of the line. Text the book centers or aligns right, such as scene breaks, keeps its alignment either way. |
-| **Theme** | **Light**, **Sepia**, **Dark**, or **Black**. Light keeps the book's own text and background colors; the others replace them. In Dark and Black, images get a white background so transparent images stay visible. |
+| **Theme** | **System** (the default for new accounts), **Light**, **Sepia**, **Dark**, or **Black**. System matches Shisho's own appearance, set under **Preferences > Appearance**: it looks exactly like Light while Shisho is light and like Dark while Shisho is dark, and switches as soon as that changes. Light keeps the book's own text and background colors; the others replace them. In Dark and Black, images get a white background so transparent images stay visible. |
 | **Layout** | **Paginated** or **Scrolled** |
 | **Pages** | **Auto** shows two pages side by side when the reader is wider than it is tall and has room for both. **One** always shows a single page, which stops widening at about 720 px so lines stay a comfortable length. Applies only to **Paginated**. |
 

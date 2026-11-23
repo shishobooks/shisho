@@ -4,9 +4,9 @@ import XCTest
 /// The reader's theme follows the app's appearance until the user picks
 /// one (#919).
 final class ReaderSettingsTests: XCTestCase {
-    func testAutoMatchesTheAppsAppearance() {
+    func testSystemMatchesTheAppsAppearance() {
         var settings = ReaderSettings()
-        XCTAssertEqual(settings.themeChoice, .auto)
+        XCTAssertEqual(settings.themeChoice, .system)
         settings.appDark = false
         XCTAssertEqual(settings.theme, .light)
         settings.appDark = true
@@ -39,7 +39,7 @@ final class ReaderSettingsTests: XCTestCase {
 
         defaults.set(Data(#"{"theme":"sepia","layout":"scrolled"}"#.utf8), forKey: "reader.settings")
         let older = ReaderSettings.load(defaults)
-        XCTAssertEqual(older.themeChoice, .auto)
+        XCTAssertEqual(older.themeChoice, .system)
         XCTAssertEqual(older.layout, .scrolled)
     }
 }

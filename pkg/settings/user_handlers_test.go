@@ -100,7 +100,7 @@ func TestUpdateUserSettings_EmptyBodyIsNoop(t *testing.T) {
 	assert.Equal(t, 3, resp.PreloadCount)
 	assert.Equal(t, models.FitModeHeight, resp.FitMode)
 	assert.Equal(t, 100, resp.ReflowableFontSize)
-	assert.Equal(t, models.ReflowableThemeLight, resp.ReflowableTheme)
+	assert.Equal(t, models.ReflowableThemeSystem, resp.ReflowableTheme)
 	assert.Equal(t, models.ReflowableFlowPaginated, resp.ReflowableFlow)
 }
 
@@ -198,4 +198,56 @@ func TestGetUserSettings_DefaultsToMediumGallerySize(t *testing.T) {
 	var resp UserSettingsResponse
 	require.NoError(t, json.NewDecoder(strings.NewReader(rec.Body.String())).Decode(&resp))
 	assert.Equal(t, models.GallerySizeMedium, resp.GallerySize)
+}
+
+func TestUpdateUserSettings_AcceptsEveryReflowableTheme(t *testing.T) {
+	t.Parallel()
+	for _, theme := range []string{
+		models.ReflowableThemeSystem,
+		models.ReflowableThemeLight,
+		models.ReflowableThemeSepia,
+		models.ReflowableThemeDark,
+		models.ReflowableThemeBlack,
+	} {
+		t.Run(theme, func(t *testing.T) {
+			t.Parallel()
+			db := testdb.New(t)
+			user := createTestUser(t, db, "reader")
+
+			e := newTestEcho(t)
+			h := &handler{settingsService: NewService(db)}
+
+			body := `{"viewer_reflowable_theme": "` + theme + `"}`
+			req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			auth.SetUser(c, user)
+
+			require.NoError(t, h.updateUserSettings(c))
+			var resp UserSettingsResponse
+			require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+			assert.Equal(t, theme, resp.ReflowableTheme)
+		})
+	}
+}
+
+func TestUpdateUserSettings_RejectsUnknownReflowableTheme(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	user := createTestUser(t, db, "frank")
+
+	e := newTestEcho(t)
+	h := &handler{settingsService: NewService(db)}
+
+	req := httptest.NewRequest(http.MethodPut, "/settings/user", strings.NewReader(`{"viewer_reflowable_theme": "purple"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	auth.SetUser(c, user)
+
+	err := h.updateUserSettings(c)
+	require.Error(t, err)
+	// The message names every theme the readers offer.
+	assert.Contains(t, err.Error(), "viewer_reflowable_theme must be 'system', 'light', 'sepia', 'dark', or 'black'")
 }

@@ -13,9 +13,9 @@ struct ReaderSettings: Codable, Equatable, Sendable {
         case light, sepia, dark, black
     }
 
-    /// The theme the user picked, or Auto to follow the app.
+    /// The theme the user picked, or System to follow the app.
     enum ThemeChoice: String, Codable, CaseIterable, Sendable {
-        case auto, light, sepia, dark, black
+        case system, light, sepia, dark, black
 
         var theme: Theme? { Theme(rawValue: rawValue) }
     }
@@ -24,7 +24,7 @@ struct ReaderSettings: Codable, Equatable, Sendable {
         case paginated, scrolled
     }
 
-    var themeChoice = ThemeChoice.auto
+    var themeChoice = ThemeChoice.system
     var layout = Layout.paginated
     /// The app is in Dark Mode. Not a setting: the reader sets it from the
     /// screen, and it isn't kept.
@@ -47,7 +47,7 @@ struct ReaderSettings: Codable, Equatable, Sendable {
     /// build, takes its default without losing the others.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        themeChoice = (try? container.decodeIfPresent(ThemeChoice.self, forKey: .themeChoice)) ?? .auto
+        themeChoice = (try? container.decodeIfPresent(ThemeChoice.self, forKey: .themeChoice)) ?? .system
         layout = (try? container.decodeIfPresent(Layout.self, forKey: .layout)) ?? .paginated
     }
 
@@ -92,7 +92,7 @@ extension ReaderSettings.Theme {
 extension ReaderSettings.ThemeChoice {
     var label: LocalizedStringResource {
         switch self {
-        case .auto: "Auto"
+        case .system: "System"
         case .light: "Light"
         case .sepia: "Sepia"
         case .dark: "Dark"

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useTheme } from "@/components/contexts/Theme/context";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ProgressMarks from "@/components/library/ProgressMarks";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
@@ -65,6 +66,7 @@ import { footnoteText, isFootnoteReference } from "@/libraries/readerFootnotes";
 import {
   footnoteStyle,
   IMPORTED_FONT_PREFIX,
+  pageSettingsFor,
   readerCSS,
   readerLayout,
   recordBookAlignment,
@@ -253,6 +255,13 @@ export default function ReflowableReader({
   // Display settings are kept in this browser; only auto-hide is saved to
   // the account, since the other readers share it.
   const [readerSettings, updateReaderSettings] = useReaderSettings(settings);
+  // What the page is drawn with: System follows the app's light or dark mode
+  // as it changes.
+  const { resolvedTheme } = useTheme();
+  const pageSettings = useMemo(
+    () => pageSettingsFor(readerSettings, resolvedTheme),
+    [readerSettings, resolvedTheme],
+  );
   const flow = readerSettings.layout;
   const hideChrome = settings?.viewer_hide_chrome ?? false;
 
@@ -389,7 +398,7 @@ export default function ReflowableReader({
   // An open footnote is part of the book, so it looks like the page.
   const noteStyle =
     footnote &&
-    footnoteStyle(readerSettings, noteFontFace, footnote.bookFontFamily);
+    footnoteStyle(pageSettings, noteFontFace, footnote.bookFontFamily);
 
   // Load the book into foliate once both it and the saved location are
   // available.
@@ -1055,8 +1064,8 @@ export default function ReflowableReader({
     const renderer = view?.renderer;
     if (!renderer) return;
 
-    renderer.setStyles?.(readerCSS(readerSettings, fontFace));
-    const layout = readerLayout(readerSettings);
+    renderer.setStyles?.(readerCSS(pageSettings, fontFace));
+    const layout = readerLayout(pageSettings);
     // Setting an attribute lays the book out again even when it's unchanged.
     const set = (name: string, value: string) => {
       if (renderer.getAttribute?.(name) !== value) {
@@ -1088,7 +1097,7 @@ export default function ReflowableReader({
     return () => {
       stale = true;
     };
-  }, [bookReady, fontPending, readerSettings, fontFace]);
+  }, [bookReady, fontPending, pageSettings, fontFace]);
 
   // The menu value for the current location. Entries are keyed by place in
   // the menu, since a book can list one href twice. foliate reports a heading

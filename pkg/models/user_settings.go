@@ -13,10 +13,14 @@ const (
 )
 
 const (
-	//tygo:emit export type ReflowableTheme = typeof ReflowableThemeLight | typeof ReflowableThemeDark | typeof ReflowableThemeSepia;
-	ReflowableThemeLight = "light"
-	ReflowableThemeDark  = "dark"
-	ReflowableThemeSepia = "sepia"
+	//tygo:emit export type ReflowableTheme = typeof ReflowableThemeSystem | typeof ReflowableThemeLight | typeof ReflowableThemeSepia | typeof ReflowableThemeDark | typeof ReflowableThemeBlack;
+	// ReflowableThemeSystem draws the page Light or Dark to match the app's
+	// own appearance, following it as it changes.
+	ReflowableThemeSystem = "system"
+	ReflowableThemeLight  = "light"
+	ReflowableThemeSepia  = "sepia"
+	ReflowableThemeDark   = "dark"
+	ReflowableThemeBlack  = "black"
 )
 
 const (
@@ -61,9 +65,12 @@ func DefaultUserSettings() *UserSettings {
 		ViewerPreloadCount: 3,
 		ViewerFitMode:      FitModeHeight,
 		ReflowableFontSize: 100,
-		ReflowableTheme:    ReflowableThemeLight,
-		ReflowableFlow:     ReflowableFlowPaginated,
-		GallerySize:        GallerySizeMedium,
-		ViewerHideChrome:   false,
+		// Not the column's DEFAULT 'light', which dates from before System:
+		// every row is inserted from these values, and a stored 'light' can't
+		// be told from one never chosen, so it stays.
+		ReflowableTheme:  ReflowableThemeSystem,
+		ReflowableFlow:   ReflowableFlowPaginated,
+		GallerySize:      GallerySizeMedium,
+		ViewerHideChrome: false,
 	}
 }
