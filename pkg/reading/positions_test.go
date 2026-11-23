@@ -318,6 +318,27 @@ func TestUpdatePosition_AnotherUpdateAtTheEndKeepsTheRevertWindowOpen(t *testing
 	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
 }
 
+// Clearing the place right after an automatic finish is starting over, not
+// going back, so reading from the start in the same reader keeps the finish.
+func TestUpdatePosition_ClearingThePlaceKeepsAnAutomaticFinish(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	f.clock.advance(time.Minute)
+	f.read(f.file, "epubcfi(/6/40!/4/2)", 1, true)
+	require.Equal(t, models.ReadingStatusRead, f.status())
+
+	f.clock.advance(time.Minute)
+	_, err := f.svc.ClearPosition(f.ctx, f.user.ID, f.file.ID)
+	require.NoError(t, err)
+	f.clock.advance(time.Minute)
+	result := f.read(f.file, "epubcfi(/6/4!/4/2)", 0.05, false)
+
+	assert.False(t, result.Reverted)
+	assert.Equal(t, models.ReadingStatusRead, f.status())
+	assert.Len(t, f.readThroughs(), 1)
+}
+
 func TestUpdatePosition_GoingBackAfterTheWindowKeepsTheFinish(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)

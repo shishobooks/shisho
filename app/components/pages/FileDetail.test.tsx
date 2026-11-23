@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ChaptersActionState } from "@/components/files/FileChaptersEditor";
@@ -41,6 +42,25 @@ vi.mock("@/hooks/queries/plugins", () => ({
 vi.mock("@/hooks/queries/review", () => ({
   useReviewCriteria: () => ({ data: { book_fields: [], audio_fields: [] } }),
 }));
+// The user's Reading Positions in the book, and the clear that a test can
+// watch.
+const reading = vi.hoisted(() => ({
+  positions: [] as Array<{ file_id: number; percentage: number }>,
+  clear: undefined as undefined | ((fileId: number) => Promise<unknown>),
+}));
+vi.mock("@/hooks/queries/reading", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/hooks/queries/reading")
+  >("@/hooks/queries/reading");
+  return {
+    ...actual,
+    useBookReading: () => ({ data: { positions: reading.positions } }),
+    useClearFilePosition: () => ({
+      mutateAsync: reading.clear ?? vi.fn(),
+      isPending: false,
+    }),
+  };
+});
 vi.mock("@/hooks/queries/chapters", () => ({
   useFileChapters: () => ({ data: chapters.list }),
 }));
@@ -140,6 +160,8 @@ const user = () => userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 beforeEach(() => {
   setAuth({ permissions: ["books:read", "books:write", "people:read"] });
   chapters.list = [];
+  reading.positions = [];
+  reading.clear = undefined;
 });
 
 describe("FileDetail header", () => {
@@ -226,6 +248,86 @@ describe("FileDetail actions", () => {
     ]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
+  });
+});
+
+describe("FileDetail saved position", () => {
+  // The menu's items and separators in order, as text and "---".
+  const fileMenu = async () => {
+    await user().click(screen.getByRole("button", { name: "File actions" }));
+    return Array.from(screen.getByRole("menu").children).map((el) =>
+      el.getAttribute("role") === "separator" ? "---" : el.textContent,
+    );
+  };
+
+  it("shows how far through the file is right before Read", () => {
+    reading.positions = [
+      { file_id: 41, percentage: 0.8 },
+      { file_id: 42, percentage: 0.25 },
+    ];
+    renderPage();
+
+    const ring = screen.getByRole("progressbar", { name: "25% through" });
+    const read = screen.getByRole("link", { name: "Read" });
+    expect(ring.nextElementSibling).toBe(read);
+  });
+
+  it("shows no progress for a file with no saved position", () => {
+    reading.positions = [{ file_id: 41, percentage: 0.8 }];
+    renderPage();
+
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+  });
+
+  it("offers Clear saved position in its own section above Delete file", async () => {
+    reading.positions = [{ file_id: 42, percentage: 0.25 }];
+    renderPage();
+
+    expect(await fileMenu()).toEqual([
+      "Rescan file",
+      "Move to another book",
+      "---",
+      "Clear saved position",
+      "---",
+      "Delete file",
+    ]);
+  });
+
+  it("offers no Clear saved position without a saved position", async () => {
+    renderPage();
+
+    expect(await fileMenu()).not.toContain("Clear saved position");
+  });
+
+  it("gives a read-only role a menu with only Clear saved position", async () => {
+    setAuth({ permissions: ["books:read"] });
+    reading.positions = [{ file_id: 42, percentage: 0.25 }];
+    renderPage();
+
+    expect(await fileMenu()).toEqual(["Clear saved position"]);
+  });
+
+  it("clears the saved position after confirming", async () => {
+    const success = vi.spyOn(toast, "success");
+    reading.clear = vi.fn().mockResolvedValue({});
+    reading.positions = [{ file_id: 42, percentage: 0.25 }];
+    renderPage();
+
+    await user().click(screen.getByRole("button", { name: "File actions" }));
+    await user().click(
+      screen.getByRole("menuitem", { name: "Clear saved position" }),
+    );
+    const dialog = screen.getByRole("dialog", {
+      name: "Clear saved position?",
+    });
+    expect(dialog).toHaveTextContent("Book will open at the start.");
+    await user().click(within(dialog).getByRole("button", { name: "Clear" }));
+
+    expect(reading.clear).toHaveBeenCalledWith(42);
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    expect(success).toHaveBeenCalledWith("Saved position cleared");
   });
 });
 

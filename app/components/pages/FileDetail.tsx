@@ -5,6 +5,7 @@ import {
   MoveRight,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,6 +24,7 @@ import {
 import FilePageGrid from "@/components/files/FilePageGrid";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import BookReviewBadge from "@/components/library/BookReviewBadge";
+import ClearPositionDialog from "@/components/library/ClearPositionDialog";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import DownloadErrorDialog from "@/components/library/DownloadErrorDialog";
 import FileDownloadControl from "@/components/library/FileDownloadControl";
@@ -32,6 +34,7 @@ import LibraryBreadcrumbs from "@/components/library/LibraryBreadcrumbs";
 import LibraryLayout from "@/components/library/LibraryLayout";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import { MoveFilesDialog } from "@/components/library/MoveFilesDialog";
+import ProgressRing from "@/components/library/ProgressRing";
 import QueryError from "@/components/library/QueryError";
 import { RescanDialog } from "@/components/library/RescanDialog";
 import { Button } from "@/components/ui/button";
@@ -47,6 +50,7 @@ import { useBook, useDeleteFile, useResyncFile } from "@/hooks/queries/books";
 import { useDeliveryRules } from "@/hooks/queries/delivery";
 import { useUserLibrary } from "@/hooks/queries/libraries";
 import { usePluginIdentifierTypes } from "@/hooks/queries/plugins";
+import { useBookReading } from "@/hooks/queries/reading";
 import { useCan } from "@/hooks/useCan";
 import { useFileDownload } from "@/hooks/useFileDownload";
 import { useLeaveDeletedBook } from "@/hooks/useLeaveDeletedBook";
@@ -96,12 +100,18 @@ const FileDetail = () => {
   const downloads = useFileDownload();
   const resyncFileMutation = useResyncFile();
   const deleteFileMutation = useDeleteFile();
+  // The user's Reading Positions come with the book's reading record, which
+  // the book page shares, so clearing one here clears it there too.
+  const { data: readingRecord } = useBookReading(
+    bookId ? parseInt(bookId) : undefined,
+  );
 
   const [editFileOpen, setEditFileOpen] = useState(false);
   const [editBookOpen, setEditBookOpen] = useState(false);
   const [rescanOpen, setRescanOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [clearPositionOpen, setClearPositionOpen] = useState(false);
   const [chaptersState, setChaptersState] =
     useState<ChaptersActionState>(NO_CHANGES);
   // The page had Details and Chapters tabs. An old link to either lands
@@ -163,6 +173,7 @@ const FileDetail = () => {
   const isMain = file.file_role === FileRoleMain;
   const files = book.files ?? [];
   const readingAction = getReadingAction(file.file_type);
+  const position = readingRecord?.positions.find((p) => p.file_id === file.id);
   const deliveredFileType = deliveryRulesQuery.isPending
     ? undefined
     : defaultDeliveredFileType(file, deliveryRulesQuery.data?.rules);
@@ -206,6 +217,8 @@ const FileDetail = () => {
 
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
+      {/* Right before Read or Listen, as on the book page's file rows. */}
+      {position && <ProgressRing progress={position.percentage} />}
       {readingAction && (
         <Button asChild size="sm">
           <Link to={`${bookUrl}/files/${file.id}/read`}>
@@ -232,51 +245,70 @@ const FileDetail = () => {
         onDownloadOriginal={() => downloads.downloadOriginal(file)}
       />
       {canWriteBooks && (
-        <>
-          <Button
-            aria-label="Edit"
-            onClick={() => setEditFileOpen(true)}
-            size="sm"
-            variant="outline"
+        <Button
+          aria-label="Edit"
+          onClick={() => setEditFileOpen(true)}
+          size="sm"
+          variant="outline"
+        >
+          <Pencil aria-hidden="true" className="h-4 w-4" />
+          <span className="hidden sm:inline">Edit</span>
+        </Button>
+      )}
+      {/* Clearing the saved position is the user's own data, so a role
+          without Books Write still gets the menu when there is one. */}
+      {(canWriteBooks || position) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button aria-label="File actions" size="icon-sm" variant="ghost">
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="start"
+            onCloseAutoFocus={(e) => e.preventDefault()}
           >
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-            <span className="hidden sm:inline">Edit</span>
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button aria-label="File actions" size="icon-sm" variant="ghost">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="start"
-              onCloseAutoFocus={(e) => e.preventDefault()}
-            >
-              <DropdownMenuItem
-                disabled={resyncFileMutation.isPending}
-                onSelect={() => setRescanOpen(true)}
-              >
-                <RefreshCw aria-hidden="true" className="h-4 w-4" />
-                Rescan file
-              </DropdownMenuItem>
-              {/* A supplement belongs with its book, as on the book page. */}
-              {isMain && library && (
-                <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
-                  <MoveRight aria-hidden="true" className="h-4 w-4" />
-                  Move to another book
+            {canWriteBooks && (
+              <>
+                <DropdownMenuItem
+                  disabled={resyncFileMutation.isPending}
+                  onSelect={() => setRescanOpen(true)}
+                >
+                  <RefreshCw aria-hidden="true" className="h-4 w-4" />
+                  Rescan file
                 </DropdownMenuItem>
-              )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onSelect={() => setDeleteOpen(true)}
-              >
-                <Trash2 aria-hidden="true" className="h-4 w-4" />
-                Delete file
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </>
+                {/* A supplement belongs with its book, as on the book page. */}
+                {isMain && library && (
+                  <DropdownMenuItem onSelect={() => setMoveOpen(true)}>
+                    <MoveRight aria-hidden="true" className="h-4 w-4" />
+                    Move to another book
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
+            {position && (
+              <>
+                {canWriteBooks && <DropdownMenuSeparator />}
+                <DropdownMenuItem onSelect={() => setClearPositionOpen(true)}>
+                  <RotateCcw aria-hidden="true" className="h-4 w-4" />
+                  Clear saved position
+                </DropdownMenuItem>
+              </>
+            )}
+            {canWriteBooks && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={() => setDeleteOpen(true)}
+                >
+                  <Trash2 aria-hidden="true" className="h-4 w-4" />
+                  Delete file
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );
@@ -360,6 +392,12 @@ const FileDetail = () => {
         onDiscard={proceedNavigation}
         onStay={cancelNavigation}
         open={showBlockerDialog}
+      />
+
+      <ClearPositionDialog
+        file={file}
+        onOpenChange={setClearPositionOpen}
+        open={clearPositionOpen}
       />
 
       {canWriteBooks && (

@@ -6,6 +6,7 @@ import {
   MoreHorizontal,
   Pencil,
   RefreshCw,
+  RotateCcw,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
@@ -206,6 +207,8 @@ export interface BookFileRowProps {
   isSupplement?: boolean;
   // How far through this File the reader is, from 0 to 1.
   progress?: number;
+  /** Clears the reader's saved position; offered only when there is one. */
+  onClearPosition?: () => void;
   onMoveFile?: () => void;
   onDeleteFile: () => void;
   isDeletingFile: boolean;
@@ -236,6 +239,7 @@ const BookFileRow = ({
   isResyncing,
   isSupplement = false,
   progress,
+  onClearPosition,
   onMoveFile,
   onDeleteFile,
   isDeletingFile,
@@ -423,6 +427,20 @@ const BookFileRow = ({
                     Move to another book
                   </DropdownMenuItem>
                 )}
+              </>
+            )}
+            {/* The reader's own data, so it needs no write permission. */}
+            {progress != null && onClearPosition && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={onClearPosition}>
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Clear saved position
+                </DropdownMenuItem>
+              </>
+            )}
+            {canWriteBooks && (
+              <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"

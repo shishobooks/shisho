@@ -100,13 +100,14 @@ Every reader keeps your place and your reading history current as you read or li
 
 ### Resuming Where You Left Off
 
-A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own, so listening to a book's audiobook doesn't move your page in its ebook. Each file on a book's page with a saved place shows how far through it you are, as a ring with the percentage. While you're reading a book, its bookmark shows your progress through the book in place of its icon: the furthest you've reached in any of its main files. Wherever books are listed, a bar sits under its cover showing the same progress.
+A book opens where you stopped reading it. Each file of a book keeps its own place, and each user has their own, so listening to a book's audiobook doesn't move your page in its ebook. Each file with a saved place shows how far through it you are, as a ring with the percentage, on the book's page and on the file's own page. While you're reading a book, its bookmark shows your progress through the book in place of its icon: the furthest you've reached in any of its main files. Wherever books are listed, a bar sits under its cover showing the same progress.
 
 - The ebook reader saves your place a few seconds after you turn pages, and right away when you switch to another tab or close the reader.
 - The comic and PDF reader saves each page you turn to. In the **Scrolled** flow, it saves every few seconds as you scroll, and right away when you switch to another tab or close the reader. A link to a page, such as a shared `?page=` link, a page thumbnail, or a chapter, opens that page and saves it as your place, but doesn't start or finish the book until you turn a page.
 - The audiobook player saves every 15 seconds while playing, and right away when you pause or seek.
 - Reading the same book in two browsers, the place you reached most recently wins, so opening the book on your laptop after reading on your phone continues from the phone's place.
 - **Read again**, or deleting the Read-through you're on from **Reading history**, sends every main file of the book back to the start.
+- To send one file back to the start, choose **Clear saved position** from its **...** menu, on the book's page or the file's own page. Your status and reading history stay as they are. A KOReader or Kobo that has the book keeps its own place, and sends it back to Shisho the next time it syncs that book.
 
 ### Starting and Finishing Automatically
 

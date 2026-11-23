@@ -874,6 +874,42 @@ func retrievePosition(ctx context.Context, db bun.IDB, userID, fileID int) (*mod
 	return position, nil
 }
 
+// ClearPosition deletes userID's Reading Position in fileID, so its readers
+// open at the start, and returns the File's Book. The Read-through and the
+// update log stay, as they do when a reset deletes positions; clearing a File
+// with no position does nothing. An automatic finish in the File stands from
+// then on: reading from the start after clearing is starting over, not going
+// back, so it mustn't undo the finish within RevertWindow.
+func (svc *Service) ClearPosition(ctx context.Context, userID, fileID int) (int, error) {
+	var bookID int
+	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrFileNotFound
+		}
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = tx.NewDelete().
+			Model((*models.ReadingPosition)(nil)).
+			Where("user_id = ? AND file_id = ?", userID, fileID).
+			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		_, err = tx.NewUpdate().
+			Model((*models.ReadingPositionUpdate)(nil)).
+			Set("auto_finished = FALSE").
+			Where("user_id = ? AND file_id = ? AND auto_finished", userID, fileID).
+			Exec(ctx)
+		return errors.WithStack(err)
+	})
+	if err != nil {
+		return 0, err
+	}
+	return bookID, nil
+}
+
 // resetPositions deletes userID's Reading Positions in bookID's main Files
 // except keepFileID (0 keeps none), so their readers open at the start. A
 // supplement's place has nothing to do with the Read-through, so it stays. The

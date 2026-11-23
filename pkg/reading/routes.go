@@ -47,4 +47,5 @@ func RegisterRoutes(g *echo.Group, db *bun.DB) {
 	g.POST("/read-throughs/:id/undo-finish", h.undoFinish)
 	g.GET("/files/:id/position", h.retrievePosition)
 	g.POST("/files/:id/position", h.updatePosition)
+	g.DELETE("/files/:id/position", h.clearPosition)
 }
