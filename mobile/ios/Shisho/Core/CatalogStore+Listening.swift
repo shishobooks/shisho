@@ -13,6 +13,11 @@ struct ListeningFile: Equatable, Sendable {
     /// The File's label among its Book's Files.
     var displayName = ""
     var narrators: [String] = []
+    /// The narrators' Persons, in the same order, so their names link to
+    /// their pages.
+    var narratorIDs: [Int] = []
+    /// The Book's authors, with their Persons, as its page lists them.
+    var authors: [BookDetail.Author] = []
     /// The Book's first Series and its place in it, which Now Playing's
     /// header names.
     var series: ListeningSeries?
@@ -88,6 +93,8 @@ extension CatalogStore {
         else { return nil }
         return ListeningFile(fileID: fileID, book: book.summary, coverVersion: row["cover_version"], displayName: row["display_name"],
                              narrators: names(row["narrators"]),
+                             narratorIDs: book.files.first { $0.id == fileID }?.narratorIDs ?? [],
+                             authors: book.authors,
                              series: book.series.first.map { ListeningSeries(name: $0.name, number: $0.number, numberEnd: $0.numberEnd) },
                              duration: row["duration_seconds"] ?? 0, chapters: try chapters(db, fileID: fileID))
     }

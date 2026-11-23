@@ -199,20 +199,43 @@ struct NowPlayingView: View {
                     .font(.geist(.subheadline))
                     .foregroundStyle(Theme.foreground.opacity(0.7))
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                    // A name goes to its Person's page, under the player.
+                    .environment(\.openURL, OpenURLAction { url in
+                        guard let route = LinkedText.route(url) else { return .systemAction }
+                        model.showFromPlayer(route)
+                        return .handled
+                    })
+                    .accessibilityIdentifier("player.byline")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 22)
     }
 
-    /// "Author · Narrated by Narrator", whichever there are.
-    private func byline(_ file: ListeningFile) -> String? {
-        var parts: [String] = []
-        if !file.book.authors.isEmpty { parts.append(file.book.authors) }
-        if !file.narrators.isEmpty {
-            parts.append(String(localized: "Narrated by \(file.narrators.joined(separator: ", "))"))
+    /// "Author · Narrated by Narrator", whichever there are, each name
+    /// linked to its Person's page as on the Book's page.
+    private func byline(_ file: ListeningFile) -> AttributedString? {
+        // Each Person once, though they may have several roles.
+        var seen: Set<Int> = []
+        let authors = file.authors.filter { seen.insert($0.personID).inserted }
+            .map { (Route.resource(.person, id: $0.personID, name: $0.name), $0.name) }
+        let narrators = zip(file.narratorIDs, file.narrators).map { (Route.resource(.person, id: $0.0, name: $0.1), $0.1) }
+        var parts: [AttributedString] = []
+        if !authors.isEmpty {
+            parts.append(Byline.links(authors))
+        } else if !file.book.authors.isEmpty {
+            parts.append(AttributedString(file.book.authors))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        if !narrators.isEmpty {
+            parts.append(LinkedText.muted(String(localized: "Narrated by ")) + Byline.links(narrators))
+        } else if !file.narrators.isEmpty {
+            parts.append(AttributedString(String(localized: "Narrated by \(file.narrators.joined(separator: ", "))")))
+        }
+        guard var text = parts.first else { return nil }
+        for part in parts.dropFirst() {
+            text += LinkedText.muted(" · ") + part
+        }
+        return text
     }
 
     // MARK: - Chapter and position

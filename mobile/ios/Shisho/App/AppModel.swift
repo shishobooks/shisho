@@ -234,6 +234,13 @@ final class AppModel {
     }
 
     /// Opens route on the tab showing.
+    /// Closes Now Playing onto route's page in the tab showing, as a link in
+    /// the player does.
+    func showFromPlayer(_ route: Route) {
+        showingPlayer = false
+        push(route)
+    }
+
     func push(_ route: Route) {
         switch tab {
         case .library: libraryPath.append(route)
