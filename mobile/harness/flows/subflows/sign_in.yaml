@@ -16,3 +16,10 @@ appId: ${APP_ID}
 # The harness's simulators disallow password AutoFill (tools/appharness), so
 # iOS never offers to save the password, which would cover the app and stall
 # Maestro.
+# Signed in once the sign-in screen goes. A CI runner short of CPU can take
+# most of a minute to check the password, so this waits well past the usual
+# 30 s.
+- extendedWaitUntil:
+    notVisible:
+      id: signin.server
+    timeout: 90000
