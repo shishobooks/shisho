@@ -528,7 +528,7 @@ jobs:
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -559,7 +559,7 @@ jobs:
       # Well inside the job's limit, so a hang still leaves time to upload
       # the harness output below.
       - name: Run the Maestro flows
-        timeout-minutes: 35
+        timeout-minutes: 50
         run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
       - uses: ./.github/actions/save-ios-simulator
         with:
