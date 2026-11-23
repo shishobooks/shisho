@@ -65,20 +65,51 @@ func simctl(ctx context.Context, args ...string) (string, error) {
 // iOS runtime when it doesn't exist yet. SHISHO_SIMULATOR_BASE names
 // another to clone instead.
 func baseSimulator(ctx context.Context) (string, error) {
+	var base string
+	err := withBase(ctx, func(udid string) error {
+		base = udid
+		return nil
+	})
+	return base, err
+}
+
+// cloneBase clones the base simulator as name, returning the base's UDID and
+// the clone's.
+func cloneBase(ctx context.Context, name string) (base, clone string, err error) {
+	err = withBase(ctx, func(udid string) error {
+		base = udid
+		clone, err = simctl(ctx, "clone", udid, name)
+		return err
+	})
+	return base, clone, err
+}
+
+// withBase calls use with the base simulator's UDID, under a lock that runs
+// in other worktrees take too, so none makes a second base or deletes an old
+// one while another is cloning it.
+func withBase(ctx context.Context, use func(udid string) error) error {
 	if named := os.Getenv("SHISHO_SIMULATOR_BASE"); named != "" {
-		return named, nil
+		return use(named)
 	}
-	// Runs in other worktrees, or on a Mac's two CI runners, mustn't both
-	// make a base, or delete one another is cloning.
 	dir, err := simulatorStateDir()
 	if err != nil {
-		return "", err
+		return err
 	}
 	unlock, err := waitForLock(ctx, filepath.Join(dir, "base.lock"))
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer unlock()
+	base, err := findOrMakeBase(ctx)
+	if err != nil {
+		return err
+	}
+	return use(base)
+}
+
+// findOrMakeBase deletes bases of older numbers, and returns the current
+// base's UDID, making it when there's none. Callers hold the base lock.
+func findOrMakeBase(ctx context.Context) (string, error) {
 	out, err := simctl(ctx, "list", "devices", "available", "-j")
 	if err != nil {
 		return "", err
@@ -207,12 +238,7 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 	if clone, ok := takePreparedClone(ctx); ok {
 		return clone, nil
 	}
-	base, err := baseSimulator(ctx)
-	if err != nil {
-		return nil, err
-	}
-	name := fmt.Sprintf("Shisho Harness %d", time.Now().UnixNano())
-	udid, err := simctl(ctx, "clone", base, name)
+	_, udid, err := cloneBase(ctx, fmt.Sprintf("Shisho Harness %d", time.Now().UnixNano()))
 	if err != nil {
 		return nil, err
 	}
@@ -243,20 +269,27 @@ func prepareClone(ctx context.Context) {
 	}
 }
 
+// bootPreparedClone boots a clone under a name of its own, and gives it the
+// prepared name only once it's ready, so the run never waits on one that
+// failed; a failed one is deleted.
 func bootPreparedClone(ctx context.Context) error {
-	base, err := baseSimulator(ctx)
-	if err != nil {
-		return err
-	}
-	udid, err := simctl(ctx, "clone", base, preparedCloneName)
+	_, udid, err := cloneBase(ctx, fmt.Sprintf("Shisho Harness Preparing %d", time.Now().UnixNano()))
 	if err != nil {
 		return err
 	}
 	if _, err := simctl(ctx, "boot", udid); err != nil {
+		removeSimulator(udid)
 		return err
 	}
-	_, err = simctl(ctx, "bootstatus", udid, "-b")
-	return err
+	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+		removeSimulator(udid)
+		return err
+	}
+	if _, err := simctl(ctx, "rename", udid, preparedCloneName); err != nil {
+		removeSimulator(udid)
+		return err
+	}
+	return nil
 }
 
 // takePreparedClone returns the clone prepareClone booted, if there's one,

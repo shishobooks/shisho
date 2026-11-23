@@ -252,11 +252,11 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 		if exists {
 			removeSimulator(state.UDID)
 		}
-		udid, err := simctl(ctx, "clone", base, paths.name)
+		cloned, udid, err := cloneBase(ctx, paths.name)
 		if err != nil {
 			return "", err
 		}
-		state = worktreeSimulatorState{UDID: udid, Base: base, Root: root}
+		state = worktreeSimulatorState{UDID: udid, Base: cloned, Root: root}
 		data, _ := json.Marshal(state)
 		if err := os.WriteFile(paths.state, data, 0o600); err != nil {
 			removeSimulator(udid)

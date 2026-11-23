@@ -84,15 +84,16 @@ func argument(args *yaml.Node, key string) *yaml.Node {
 // and one after the flow stopped the app doesn't stop it again.
 func TestFlowLaunchesSkipPermissionsAndASecondStop(t *testing.T) {
 	t.Parallel()
-	paths, err := filepath.Glob(filepath.Join(flowsDir, "*.yaml"))
-	require.NoError(t, err)
-	subflows, err := filepath.Glob(filepath.Join(flowsDir, "subflows", "*.yaml"))
-	require.NoError(t, err)
-	launches := 0
-	for _, path := range append(paths, subflows...) {
-		if filepath.Base(path) == "config.yaml" {
-			continue
+	var paths []string
+	for _, dir := range []string{flowsDir, filepath.Join(flowsDir, "subflows")} {
+		flows, err := topLevelFlows(dir)
+		require.NoError(t, err)
+		for _, flow := range flows {
+			paths = append(paths, filepath.Join(dir, flow))
 		}
+	}
+	launches := 0
+	for _, path := range paths {
 		stopped := false
 		for _, command := range flowCommands(t, path) {
 			name, args := commandName(command)
