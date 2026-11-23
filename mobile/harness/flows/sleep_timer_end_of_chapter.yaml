@@ -28,7 +28,7 @@ name: Sleep at the end of the chapter
     text: Chapter 1.*
 - assertVisible:
     id: player.chapter
-    text: "1. Chapter 1"
+    text: Chapter 1
 
 - runFlow:
     file: subflows/tap_player.yaml
@@ -46,7 +46,7 @@ name: Sleep at the end of the chapter
     timeout: 20000
 - assertVisible:
     id: player.chapter
-    text: "2. Chapter 2"
+    text: Chapter 2
 - assertVisible:
     id: player.position
     text: .*0:00
@@ -60,7 +60,7 @@ name: Sleep at the end of the chapter
 - extendedWaitUntil:
     visible:
       id: player.chapter
-      text: "3. Chapter 3"
+      text: Chapter 3
     timeout: 20000
 - extendedWaitUntil:
     visible:

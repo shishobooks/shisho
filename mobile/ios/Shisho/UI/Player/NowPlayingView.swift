@@ -135,12 +135,13 @@ struct NowPlayingView: View {
         ZStack {
             // Goes to the Book's page, under the player.
             Button { model.showBook(file.book) } label: {
+                // The number first, as the Book page and the Library show it.
                 HStack(spacing: 6) {
-                    Text(file.series?.name ?? file.book.title)
-                        .lineLimit(1)
                     if let number = file.series?.number {
                         SeriesNumberBadge(number: number, end: file.series?.numberEnd)
                     }
+                    Text(file.series?.name ?? file.book.title)
+                        .lineLimit(1)
                 }
                 .font(.geist(.footnote, weight: .semibold))
                 .foregroundStyle(Theme.foreground)
@@ -250,9 +251,13 @@ struct NowPlayingView: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
+    /// The chapter by its name, as the Listen bar names it, or by number
+    /// when it has none: a number beside a name can disagree with it, as
+    /// "2. Chapter 1" after an introduction.
     private func chapterLabel(_ player: AudioPlayer) -> String {
         guard let index = player.chapterIndex, let title = player.chapterTitle else { return String(localized: "No chapters") }
-        return "\(index + 1). \(title)"
+        let name = title.trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? String(localized: "Chapter \(index + 1)") : name
     }
 
     private func scrubber(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
@@ -340,7 +345,7 @@ struct NowPlayingView: View {
                     .foregroundStyle(Theme.primaryForeground)
                     .frame(width: 72, height: 72)
                     .background(Theme.primary, in: Circle())
-                    .shadow(color: Theme.primary.opacity(0.5), radius: 15, y: 14)
+                    .shadow(color: Theme.primary.opacity(0.45), radius: 16)
             }
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
             .accessibilityIdentifier("player.playPause")

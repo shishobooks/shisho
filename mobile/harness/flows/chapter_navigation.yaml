@@ -29,7 +29,7 @@ name: Navigate by chapter
     text: The Lights.*
 - assertVisible:
     id: player.chapter
-    text: "2. The Lights"
+    text: The Lights
 - assertVisible:
     id: player.position
     text: .*0:00
@@ -41,11 +41,11 @@ name: Navigate by chapter
       CONTROL_ID: player.prevChapter
 - assertVisible:
     id: player.chapter
-    text: "1. The Harbor"
+    text: The Harbor
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.nextChapter
 - assertVisible:
     id: player.chapter
-    text: "2. The Lights"
+    text: The Lights
