@@ -8,9 +8,7 @@ name: Bookmark offline and sync later
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp:
-    clearState: true
-- runFlow: subflows/sign_in.yaml
+- runFlow: subflows/launch_signed_in.yaml
 - runFlow:
     file: subflows/listen_to.yaml
     env:
@@ -73,21 +71,13 @@ name: Bookmark offline and sync later
     visible:
       id: miniplayer.open
     timeout: 30000
-# Checked in a retry, since the sync can take longer than one wait on a
-# loaded CI simulator.
-- retry:
-    maxRetries: 3
-    commands:
-      - extendedWaitUntil:
-          visible: __never__
-          timeout: 5000
-          optional: true
-      - runScript:
-          file: scripts/assert_bookmark.js
-          env:
-            CONTROL: ${CONTROL}
-            TITLE: Harbor Lights
-            NOTE: Made offline
-      - assertTrue:
-          condition: ${output.serverCheck == "ok"}
-          label: The server check passed
+# The script polls the server until the sync lands.
+- runScript:
+    file: scripts/assert_bookmark.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+      NOTE: Made offline
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed

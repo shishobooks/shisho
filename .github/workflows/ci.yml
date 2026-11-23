@@ -531,9 +531,24 @@ jobs:
       - uses: jdx/mise-action@v5
       - id: setup
         uses: ./.github/actions/setup-ios
+      # Keyed by the harness's own cache key, so a hit here is a hit there
+      # and the run needs no ffmpeg.
+      - name: Name the harness's fixtures
+        id: fixture-key
+        run: |
+          key=$(go run ./tools/appharness fixtures -key)
+          test -n "$key"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Restore the harness's fixtures
+        id: fixtures
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/shisho-appharness/fixtures
+          key: appharness-fixtures-${{ steps.fixture-key.outputs.key }}
       # The harness makes its M4B fixture with ffmpeg. Homebrew skips
       # updating itself first, which the runner image's Homebrew doesn't need.
       - name: Install ffmpeg
+        if: steps.fixtures.outputs.cache-hit != 'true'
         env:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"

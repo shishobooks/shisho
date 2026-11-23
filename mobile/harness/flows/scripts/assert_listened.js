@@ -1,26 +1,27 @@
 // After listening to the end, the server has the place at the end, a
 // Reading Session from the Shisho app attributed to the phone's Device, and
 // a finished Read-through.
-// It records "ok", or what's wrong, in output.serverCheck rather than
-// throwing: the flow checks that with assertTrue inside a retry, which
-// retries Maestro's own failures but not a script's error.
+// It polls the server until the check passes or 25 s pass, since the sync
+// can land late on a stalled CI simulator, and records "ok", or what's still
+// wrong, in output.serverCheck for the flow's assertTrue.
 
-output.serverCheck = "";
-try {
-  // What the server holds of listening to TITLE.
-  function serverReading() {
-    const response = http.get(
-      CONTROL + "/reading?title=" + encodeURIComponent(TITLE),
+// What the server holds of listening to TITLE, kept in last to log.
+let last;
+function serverReading() {
+  const response = http.get(
+    CONTROL + "/reading?title=" + encodeURIComponent(TITLE),
+  );
+  if (response.status !== 200) {
+    throw new Error(
+      "the harness could not read the server: " + response.status,
     );
-    if (response.status !== 200) {
-      throw new Error(
-        "the harness could not read the server: " + response.status,
-      );
-    }
-    return json(response.body);
   }
+  last = json(response.body);
+  return last;
+}
+
+function check() {
   const reading = serverReading();
-  console.log(JSON.stringify(reading));
   if (reading.seconds < 7) {
     throw new Error(
       "the server's place is " + reading.seconds + " s, not the end",
@@ -41,8 +42,18 @@ try {
       "the Read-through is " + JSON.stringify(reading.read_through),
     );
   }
-  output.serverCheck = "ok";
-} catch (e) {
-  output.serverCheck = String(e.message || e);
-  console.log("server check: " + output.serverCheck);
 }
+
+const deadline = Date.now() + 25000;
+for (;;) {
+  try {
+    check();
+    output.serverCheck = "ok";
+  } catch (e) {
+    output.serverCheck = String(e.message || e);
+  }
+  if (output.serverCheck === "ok" || Date.now() > deadline) break;
+  http.get(CONTROL + "/wait?ms=500");
+}
+console.log(JSON.stringify(last));
+console.log("server check: " + output.serverCheck);

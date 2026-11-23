@@ -1,7 +1,8 @@
 // The Bookmark the app made offline is on the server, with its note, placed
-// when it was made rather than when it synced. The verdict goes in
-// output.serverCheck, "ok" or why not, for the flow's retry to assert:
-// a script that throws fails the flow on its first try.
+// when it was made rather than when it synced.
+// It polls the server until the check passes or 25 s pass, since the sync
+// can land late on a stalled CI simulator, and records "ok", or what's still
+// wrong, in output.serverCheck for the flow's assertTrue.
 function get(path) {
   const response = http.get(CONTROL + path);
   if (response.status !== 200) {
@@ -11,11 +12,12 @@ function get(path) {
   }
   return json(response.body);
 }
-try {
+let last;
+function check() {
   const query = "?title=" + encodeURIComponent(TITLE);
   const bookmarks = get("/bookmarks" + query);
   const reading = get("/reading" + query);
-  console.log(JSON.stringify(bookmarks));
+  last = bookmarks;
   const made = bookmarks.filter((b) => b.note === NOTE);
   if (made.length !== 1) {
     throw new Error(
@@ -42,8 +44,18 @@ try {
         reading.offline_at,
     );
   }
-  output.serverCheck = "ok";
-} catch (e) {
-  output.serverCheck = String(e.message || e);
-  console.log("server check: " + output.serverCheck);
 }
+
+const deadline = Date.now() + 25000;
+for (;;) {
+  try {
+    check();
+    output.serverCheck = "ok";
+  } catch (e) {
+    output.serverCheck = String(e.message || e);
+  }
+  if (output.serverCheck === "ok" || Date.now() > deadline) break;
+  http.get(CONTROL + "/wait?ms=500");
+}
+console.log(JSON.stringify(last));
+console.log("server check: " + output.serverCheck);

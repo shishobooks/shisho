@@ -59,7 +59,7 @@ description = "Start API with hot reload via Air on a free port"
 run = "go run ./cmd/dev start air"
 
 [tasks."start:qa"]
-description = "Start a throwaway server with the web app and seeded test books, for QA in a browser or the Shisho app (needs ffmpeg)"
+description = "Start a throwaway server with the web app and seeded test books, for QA in a browser or the Shisho app (needs ffmpeg until its fixtures are cached)"
 depends = ["build"]
 run = "go run ./tools/appharness serve"
 
@@ -373,12 +373,12 @@ run = "swift test --scratch-path ../build/ShishoAPI"
 # Its dependencies run in parallel, so the base simulator's first boot
 # happens while the app builds.
 [tasks."ios:test"]
-description = "Run the iOS unit tests: the API types' decode tests, and the app's tests on a disposable simulator"
+description = "Run the iOS unit tests: the API types' decode tests, and the app's tests on this worktree's simulator"
 depends = ["ios:test:api", "ios:build", "ios:simulator"]
 run = "go run ./tools/appharness simulator -- sh -c 'cd mobile/ios && xcodebuild -project Shisho.xcodeproj -scheme Shisho -destination \"id=$SIMULATOR_UDID\" -derivedDataPath build/DerivedData CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet test-without-building'"
 
 [tasks."ios:harness"]
-description = "Run the Maestro flows against the iOS app on a disposable simulator and a seeded server (needs ffmpeg)"
+description = "Run the Maestro flows against the iOS app on this worktree's simulator and a seeded server (needs ffmpeg until its fixtures are cached)"
 depends = ["ios:build", "ios:simulator"]
 tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
 run = "go run ./tools/appharness ios"
@@ -403,6 +403,12 @@ run = [
 ]
 
 # === Other ===
+
+# What a worktree keeps outside its folder that's worth removing with it.
+# Shared caches stay, since other worktrees use them.
+[tasks.cleanup]
+description = "Delete this worktree's simulators, and those of worktrees already gone; run it before removing a worktree"
+run = "go run ./tools/appharness cleanup"
 
 [tasks.docker]
 description = "Build Docker image"

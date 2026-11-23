@@ -5,16 +5,22 @@
 //	go run ./tools/appharness ios [-app Shisho.app] [-flows dir] [-keep]
 //	go run ./tools/appharness serve
 //	go run ./tools/appharness base
-//	go run ./tools/appharness fixtures DIR
-//	go run ./tools/appharness simulator -- COMMAND...
+//	go run ./tools/appharness fixtures DIR | -key
+//	go run ./tools/appharness cleanup
+//	go run ./tools/appharness simulator [-app Shisho.app] -- COMMAND...
 //
-// `ios` builds and seeds a throwaway server, clones a base iOS simulator,
-// installs the app, runs every flow, and removes the clone and the server's
+// `ios` builds and seeds a throwaway server, installs the app on the
+// worktree's simulator for flows, runs every flow, and removes the server's
 // files afterwards. `serve` runs the same seeded server until interrupted,
 // for QA without touching real data (`mise start:qa`). `simulator` runs a
-// command against a disposable simulator clone, its UDID in SIMULATOR_UDID,
-// so several worktrees can run tests at once. Use the mise tasks (`mise ios:harness`, `mise ios:test`),
-// which build what these need first.
+// command against the worktree's simulator for tests, its UDID in
+// SIMULATOR_UDID. Each worktree's simulators are its own, cloned from a base
+// once and kept booted between runs (worktreesim.go), and the fixtures are
+// cached between runs (fixtures.go); SHISHO_HARNESS_FRESH=1 reuses neither.
+// `fixtures -key` prints the cache's key, and `cleanup` deletes the
+// worktree's simulators (`mise cleanup`).
+// Use the mise tasks (`mise ios:harness`, `mise ios:test`), which build what
+// these need first.
 package main
 
 import (
@@ -47,7 +53,24 @@ func main() {
 		if len(os.Args) != 3 {
 			usage()
 		}
-		err = writeFixtures(ctx, os.Args[2])
+		var root string
+		if root, err = os.Getwd(); err != nil {
+			break
+		}
+		if os.Args[2] == "-key" {
+			// What CI caches the fixtures by, so its cache matches ours.
+			var key string
+			if key, err = fixtureKey(root); err == nil {
+				fmt.Println(key)
+			}
+		} else {
+			err = writeFixtures(ctx, root, os.Args[2])
+		}
+	case "cleanup":
+		var root string
+		if root, err = os.Getwd(); err == nil {
+			err = runCleanup(ctx, root)
+		}
 	case "simulator":
 		err = runOnSimulator(ctx, os.Args[2:])
 	default:
@@ -61,7 +84,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | serve | base | fixtures DIR | simulator -- COMMAND...")
+	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | serve | base | fixtures DIR | fixtures -key | cleanup | simulator [-app Shisho.app] -- COMMAND...")
 	flag.PrintDefaults()
 	os.Exit(2)
 }

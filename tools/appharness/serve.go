@@ -51,7 +51,7 @@ func runServe(ctx context.Context) error {
 	defer os.RemoveAll(dir)
 
 	library := filepath.Join(dir, "library")
-	if err := writeFixtures(ctx, library); err != nil {
+	if err := writeFixtures(ctx, env.CurrentRoot, library); err != nil {
 		return errors.Wrap(err, "make fixtures")
 	}
 	// Every interface, so a phone on the same network can sign in too. Its

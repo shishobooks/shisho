@@ -13,10 +13,8 @@ name: A Book removed by an access change disappears
     env:
       CONTROL: ${CONTROL}
       ACCESS: all
-- launchApp:
-    clearState: true
 - runFlow:
-    file: subflows/sign_in.yaml
+    file: subflows/launch_signed_in.yaml
     env:
       USERNAME: ${READER_USERNAME}
       PASSWORD: ${READER_PASSWORD}

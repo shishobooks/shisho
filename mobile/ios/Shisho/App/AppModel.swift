@@ -139,6 +139,17 @@ final class AppModel {
         Task {
             await Diagnostics.shared.log(.app, "launched \(Installation.appVersion) on \(device), iOS \(UIDevice.current.systemVersion)")
         }
+        #if DEBUG
+        if session == nil, let harness = HarnessSignIn.launched {
+            Task { [weak self] in
+                do {
+                    try await self?.signIn(server: harness.server, username: harness.username, password: harness.password)
+                } catch {
+                    await Diagnostics.shared.log(.app, "the harness's sign-in failed: \(Diagnostics.describe(error))")
+                }
+            }
+        }
+        #endif
     }
 
     /// A new session gets its own player, which picks up where the last

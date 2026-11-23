@@ -35,7 +35,7 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 - **Simulator builds sign ad hoc with the team** (`CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=-`), as the tasks do. An unsigned build (`CODE_SIGNING_ALLOWED=NO`) can't write the Keychain, so it signs in and then forgets the sign-in on relaunch.
 - **Signing**: `ios/Config/Shisho.xcconfig` sets the maintainer's team and the bundle id. Someone else copies `Signing.local.xcconfig.example` to the gitignored `Signing.local.xcconfig`.
 - **QA against `mise start:qa`**, a throwaway server seeded with the harness's fixtures, never the dev database. It listens on the LAN too, so a phone can reach it.
-- **Simulators are cloned per run** by `tools/appharness`, from a base it makes once. Never boot or change the base, and don't run tests on a simulator you share with another worktree; use `mise ios:test`.
+- **The checks run on simulators of their own**, cloned by `tools/appharness` from a base it makes once: each worktree keeps one for `mise ios:test` and one for `mise ios:harness` (`tools/appharness/worktreesim.go`). Never boot or change the base, never QA on the worktree's own simulators (they're named `Shisho Worktree`, and the next run resets them), and don't run tests on a simulator you share with another worktree; use the mise tasks. `mise cleanup` deletes the worktree's simulators before the worktree goes.
 
 ## Checks
 
@@ -43,8 +43,16 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 
 - Generated types → `mise lint:apptypes`, then `mise ios:test` (decode tests on the host, app tests on a simulator) and `mise android:test`.
 - App code → `mise ios:test`, which builds the app first.
-- Anything a flow covers → `mise ios:harness`, which needs ffmpeg. `-- -keep` keeps the server log and Maestro's screenshots. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
+- Anything a flow covers → `mise ios:harness`, which needs ffmpeg to make its fixtures when they aren't cached. `-- -keep` keeps the server log and Maestro's screenshots. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
 - The too-old paths → start the server with `SHISHO_DEV_APP_PROTOCOLS` set to the range it should accept: a range above the app's protocol makes the app too old, and one below it makes the server too old for it.
+
+## Keeping runs fast
+
+Agents run these checks many times a ticket, so a few seconds in every flow add up to minutes.
+
+- **What's reused between runs**: the worktree's simulators, kept booted, each run removing the app and its Keychain first; and the harness's fixtures, cached under the user's cache folder and keyed by the files they're made from (`fixtureSources` in `tools/appharness/fixtures.go`), so neither needs clearing when something changes. `SHISHO_HARNESS_FRESH=1` reuses neither, for a run from a clean slate. CI clones a fresh simulator each run and caches the fixtures by the same key.
+- **Sign in with `subflows/launch_signed_in.yaml`**, which signs a debug build in as it launches, not with the sign-in screen, which costs each flow around 20 seconds of typing. Only flows about the sign-in screen itself use `subflows/sign_in.yaml`. The shortcut is `#if DEBUG` (`HarnessSignIn`), so release builds don't have it.
+- **Listen only as long as what the flow checks needs.** Listening is real time: Reading Sessions and the periodic saves of the place are timed by the clock, not the place, so playing faster doesn't shorten a flow that checks them. A flow that needs a place reached, not time listened, skips to it.
 
 ## Writing flows
 
@@ -52,6 +60,6 @@ CI's macOS simulators stall now and then: a view hierarchy read or the app's mai
 
 - **Never assert a state that lasts only a few seconds**, such as a short chapter or a narrow window of the playback position. Assert a state that stays put (the last chapter once playback stops), or an open-ended one ("at least 0:12", not "0:12 to 0:19"). To listen for a while from a place that varies, build the pattern from that place, as `scripts/note_online_pause.js` does.
 - **Wait for the UI with `extendedWaitUntil` and a timeout of at least 30 seconds.** A longer timeout costs nothing when the flow passes, and a 10 to 15 second one fails on a single stall.
-- **Check the server in a `retry`** around a wait, the script, and an `assertTrue` on what the script recorded, never after one fixed wait. `retry` only retries Maestro's own failures, so a script that throws fails the flow on its first try; the `assert_*.js` scripts record their verdict in `output.serverCheck` instead.
+- **Check the server with a script that polls it**, then an `assertTrue` on the verdict the script recorded in `output.serverCheck`, as the `assert_*.js` scripts do: each retries its check, waiting between tries on the harness's control endpoint (Maestro's scripts have no sleep), until it passes or its deadline, set to outlast a stall, passes. A check that can't change while it polls, such as what the app showed, runs once first. Never check after a fixed wait, which costs its whole length when the sync lands at once and fails when a stall outlasts it. Not in a `retry` either: Maestro caps it at three retries, and it only retries Maestro's own failures, so a script that throws fails the flow on its first try.
 - **Tap a screen that keeps changing**, such as a playing player, through `subflows/tap_player.yaml`. A plain `tapOn` waits for the screen to settle, and while the position ticks it waits out its whole timeout, which can be longer than the state being checked lasts.
 - **`centerElement` on something that can't reach the middle**, such as a title in the last row, keeps swiping before Maestro settles for it being visible. Give that `scrollUntilVisible` a generous timeout.

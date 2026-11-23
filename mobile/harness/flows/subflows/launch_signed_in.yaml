@@ -1,0 +1,16 @@
+# Launches the app with its state cleared, signed in to the harness account,
+# or to ${USERNAME} and ${PASSWORD} when the flow passes them. Not a flow of
+# its own.
+#
+# A debug build signs in as it launches when the launch arguments name an
+# account, through the same path as the sign-in screen, so a flow that isn't
+# about signing in doesn't spend time typing there. Flows about the sign-in
+# screen itself use sign_in.yaml instead.
+appId: ${APP_ID}
+---
+- launchApp:
+    clearState: true
+    arguments:
+      harnessServer: ${SERVER}
+      harnessUsername: ${USERNAME}
+      harnessPassword: ${PASSWORD}
