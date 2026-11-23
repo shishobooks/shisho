@@ -64,6 +64,10 @@ jobs:
     # Keep this N in sync with env.SHARD_TOTAL (env not available in name).
     name: Go Test (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       TZ: America/Chicago
       CI: "true"
