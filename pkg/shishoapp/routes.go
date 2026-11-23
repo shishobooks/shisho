@@ -3,6 +3,7 @@ package shishoapp
 import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/bookmarks"
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/events"
@@ -18,13 +19,14 @@ import (
 func RegisterRoutes(e *echo.Echo, db *bun.DB, authService *auth.Service, broker *events.Broker, opts Options) {
 	deviceService := devices.NewService(db)
 	h := &handler{
-		db:       db,
-		auth:     authService,
-		devices:  deviceService,
-		feed:     changefeed.NewService(db),
-		reading:  reading.NewService(db),
-		contract: opts.Contract,
-		opts:     opts,
+		db:        db,
+		auth:      authService,
+		devices:   deviceService,
+		feed:      changefeed.NewService(db),
+		reading:   reading.NewService(db),
+		bookmarks: bookmarks.NewService(db),
+		contract:  opts.Contract,
+		opts:      opts,
 	}
 	registerRoutes(e, h, devices.NewMiddleware(deviceService, broker))
 }

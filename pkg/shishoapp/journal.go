@@ -199,35 +199,57 @@ func (h *handler) takeEvent(ctx context.Context, c echo.Context, user *models.Us
 		}
 		return unreadable(err), nil
 	}
+	reject := func(problem *payloadProblem) JournalResult {
+		switch {
+		case problem.unknownField != "":
+			return notUnderstood(fmt.Sprintf("This server doesn't know the %s field %q.", ev.Type, problem.unknownField))
+		case problem.invalid != "":
+			return refuse(problem.invalid)
+		default:
+			return unreadable(problem.err)
+		}
+	}
 	var apply func(claim claimFunc) (eventOutcome, error)
 	switch ev.Type {
 	case JournalEventReadingPosition:
-		var p JournalPositionPayload
-		if field, err := decodeStrict(ev.Payload, &p); err != nil {
-			if field != "" {
-				return notUnderstood(fmt.Sprintf("This server doesn't know the %s field %q.", ev.Type, field)), nil
-			}
-			return unreadable(err), nil
-		}
-		if err := validate(c, &p); err != nil {
-			return refuse(err.Error()), nil
+		p, problem := decodePayload[JournalPositionPayload](c, ev)
+		if problem != nil {
+			return reject(problem), nil
 		}
 		apply = func(claim claimFunc) (eventOutcome, error) {
 			return h.applyPosition(ctx, user, device, clock, ev.At, p, claim)
 		}
 	case JournalEventReadingSession:
-		var p JournalSessionPayload
-		if field, err := decodeStrict(ev.Payload, &p); err != nil {
-			if field != "" {
-				return notUnderstood(fmt.Sprintf("This server doesn't know the %s field %q.", ev.Type, field)), nil
-			}
-			return unreadable(err), nil
-		}
-		if err := validate(c, &p); err != nil {
-			return refuse(err.Error()), nil
+		p, problem := decodePayload[JournalSessionPayload](c, ev)
+		if problem != nil {
+			return reject(problem), nil
 		}
 		apply = func(claim claimFunc) (eventOutcome, error) {
 			return h.applySession(ctx, user, device, installation, clock, p, claim)
+		}
+	case JournalEventBookmarkCreate:
+		p, problem := decodePayload[JournalBookmarkCreatePayload](c, ev)
+		if problem != nil {
+			return reject(problem), nil
+		}
+		apply = func(claim claimFunc) (eventOutcome, error) {
+			return h.applyBookmarkCreate(ctx, user, clock, ev.At, p, claim)
+		}
+	case JournalEventBookmarkNote:
+		p, problem := decodePayload[JournalBookmarkNotePayload](c, ev)
+		if problem != nil {
+			return reject(problem), nil
+		}
+		apply = func(claim claimFunc) (eventOutcome, error) {
+			return h.applyBookmarkNote(ctx, user, clock, ev.At, p, claim)
+		}
+	case JournalEventBookmarkDelete:
+		p, problem := decodePayload[JournalBookmarkRef](c, ev)
+		if problem != nil {
+			return reject(problem), nil
+		}
+		apply = func(claim claimFunc) (eventOutcome, error) {
+			return h.applyBookmarkDelete(ctx, user, clock, ev.At, p, claim)
 		}
 	default:
 		return notUnderstood(fmt.Sprintf("This server doesn't know the event type %q.", ev.Type)), nil
@@ -278,6 +300,30 @@ func (h *handler) takeEvent(ctx context.Context, c echo.Context, user *models.Us
 	}
 	result.Result = JournalAccepted
 	return result, nil
+}
+
+// payloadProblem is why an event's payload can't be taken in: a field this
+// server doesn't know, an invalid value, or a payload that isn't readable.
+type payloadProblem struct {
+	unknownField string
+	invalid      string
+	err          error
+}
+
+// decodePayload decodes ev's payload strictly and validates it as the binder
+// would.
+func decodePayload[T any](c echo.Context, ev JournalEvent) (T, *payloadProblem) {
+	var p T
+	if field, err := decodeStrict(ev.Payload, &p); err != nil {
+		if field != "" {
+			return p, &payloadProblem{unknownField: field}
+		}
+		return p, &payloadProblem{err: err}
+	}
+	if err := validate(c, &p); err != nil {
+		return p, &payloadProblem{invalid: err.Error()}
+	}
+	return p, nil
 }
 
 // claimFunc records an event as taken in, inside the transaction that

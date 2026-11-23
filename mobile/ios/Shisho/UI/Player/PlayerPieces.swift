@@ -24,14 +24,23 @@ struct PlayingIndicator: View {
     }
 }
 
-/// The skip buttons' icon: an arrow around the seconds it skips.
+/// The skip buttons' icon, as the web player draws it: Lucide's rotate arrow,
+/// back or forward, around the seconds it skips, the listener's setting. It
+/// stays one size, as the player's controls do.
 struct SkipIcon: View {
     let forward: Bool
+    let seconds: Double
     var size: CGFloat = 30
 
     var body: some View {
-        Image(systemName: forward ? "goforward.30" : "gobackward.30")
-            .font(.system(size: size, weight: .regular))
+        ZStack {
+            Icon(forward ? .rotateCw : .rotateCcw, size: size, relativeTo: nil)
+            Text(verbatim: "\(Int(seconds))")
+                .font(.custom(Theme.Fonts.geist, fixedSize: size * 0.3).weight(.bold))
+                .monospacedDigit()
+                .offset(y: size * 0.02)
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -60,10 +69,8 @@ struct PlaceOfferBanner: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "arrow.triangle.2.circlepath")
-                .font(.geist(.body, weight: .semibold))
+            Icon(.refresh, size: 18)
                 .foregroundStyle(Theme.primary)
-                .accessibilityHidden(true)
             Text(message)
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.foreground)
@@ -74,8 +81,7 @@ struct PlaceOfferBanner: View {
                 .foregroundStyle(Theme.primary)
                 .accessibilityIdentifier("player.offer.accept")
             Button(action: dismiss) {
-                Image(systemName: "xmark")
-                    .font(.geist(.footnote, weight: .semibold))
+                Icon(.x, size: 16, relativeTo: .footnote)
                     .foregroundStyle(Theme.mutedForeground)
                     .frame(width: 28, height: 28)
             }

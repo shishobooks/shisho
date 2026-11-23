@@ -13,14 +13,14 @@ struct GalleryControls: View {
     var body: some View {
         HStack(spacing: 8) {
             Button { showingFilters = true } label: {
-                Label("Filter", systemImage: "line.3.horizontal.decrease")
+                Label("Filter", icon: .listFilter, size: 15, relativeTo: .footnote)
             }
             .buttonStyle(SmallOutlineStyle())
             .overlay(alignment: .topTrailing) { if !model.filter.isEmpty { ChangedDot() } }
             .accessibilityValue(model.filter.isEmpty ? "" : String(localized: "Filters are on"))
             .accessibilityIdentifier("library.filters")
             Button { showingSort = true } label: {
-                Label("Sort", systemImage: "arrow.up.arrow.down")
+                Label("Sort", icon: .arrowDownUp, size: 15, relativeTo: .footnote)
             }
             .buttonStyle(SmallOutlineStyle())
             .overlay(alignment: .topTrailing) { if sort.isDirty { ChangedDot() } }
@@ -58,14 +58,14 @@ private struct ChangedDot: View {
 enum FilterKind {
     case readingStatus, rating, fileType, genre, tag, language
 
-    var symbol: String {
+    var icon: Lucide {
         switch self {
-        case .readingStatus: "book"
-        case .rating: "star"
-        case .fileType: "doc"
-        case .genre: "bookmark"
-        case .tag: "tag"
-        case .language: "globe"
+        case .readingStatus: .bookOpenCheck
+        case .rating: .star
+        case .fileType: .file
+        case .genre: .bookmark
+        case .tag: .tags
+        case .language: .languages
         }
     }
 
@@ -103,15 +103,13 @@ struct FilterChip: View {
     var body: some View {
         Button(action: remove) {
             HStack(spacing: 6) {
-                Image(systemName: kind.symbol)
-                    .font(.geist(size: 10, relativeTo: .footnote, weight: .semibold))
+                Icon(kind.icon, size: 12, relativeTo: .footnote)
                     .foregroundStyle(kind.color)
                 Text(label)
                     .font(.geist(.footnote, weight: .medium))
                     .foregroundStyle(Theme.foreground)
                     .lineLimit(1)
-                Image(systemName: "xmark")
-                    .font(.geist(size: 9, relativeTo: .footnote, weight: .bold))
+                Icon(.x, size: 11, relativeTo: .footnote)
                     .foregroundStyle(Theme.mutedForeground)
             }
             .padding(.horizontal, 9)
@@ -198,10 +196,8 @@ struct SortedByChips: View {
                         HStack(spacing: 4) {
                             Text(LibrarySort.label(level.field))
                                 .font(.geist(.footnote, weight: .medium))
-                            Image(systemName: level.descending ? "arrow.down" : "arrow.up")
-                                .font(.geist(size: 10, relativeTo: .footnote, weight: .semibold))
-                            Image(systemName: "xmark")
-                                .font(.geist(size: 9, relativeTo: .footnote, weight: .bold))
+                            Icon(level.descending ? .arrowDown : .arrowUp, size: 12, relativeTo: .footnote)
+                            Icon(.x, size: 11, relativeTo: .footnote)
                                 .foregroundStyle(Theme.mutedForeground)
                         }
                         .foregroundStyle(Theme.foreground)
@@ -272,8 +268,7 @@ private struct FilterSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: kind.symbol)
-                    .font(.geist(size: 11, relativeTo: .footnote, weight: .semibold))
+                Icon(kind.icon, size: 13, relativeTo: .footnote)
                     .foregroundStyle(kind.color)
                     .frame(width: 22, height: 22)
                     .background(kind.color.opacity(0.2), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
@@ -308,10 +303,8 @@ private struct TriggerLabel: View {
                 .foregroundStyle(placeholder ? Theme.mutedForeground : Theme.foreground)
                 .lineLimit(1)
             Spacer(minLength: 0)
-            Image(systemName: pushes ? "chevron.right" : "chevron.up.chevron.down")
-                .font(.geist(size: 11, relativeTo: .footnote, weight: .medium))
+            Icon(pushes ? .chevronRight : .chevronsUpDown, size: 13, relativeTo: .footnote)
                 .foregroundStyle(Theme.mutedForeground)
-                .accessibilityHidden(true)
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: 42)
@@ -522,8 +515,7 @@ private struct NamePicker: View {
                 if on { selected.subtract(picked) } else { selected.insert(option.name) }
             } label: {
                 HStack(spacing: 12) {
-                    Image(systemName: on ? "checkmark.square.fill" : "square")
-                        .font(.geist(size: 17, relativeTo: .body))
+                    Icon(on ? .squareCheck : .square, size: 20)
                         .foregroundStyle(on ? Theme.primary : Theme.mutedForeground)
                     Text(option.name)
                         .font(.geist(.body))
@@ -733,8 +725,7 @@ private struct SortSheet: View {
                                     apply(levels + [SortLevel(field: field, descending: LibrarySort.initiallyDescending(field))])
                                 } label: {
                                     HStack(spacing: 5) {
-                                        Image(systemName: "plus")
-                                            .font(.geist(size: 11, relativeTo: .footnote, weight: .semibold))
+                                        Icon(.plus, size: 13, relativeTo: .footnote)
                                         Text(LibrarySort.label(field))
                                     }
                                     .fixedSize()
@@ -794,8 +785,7 @@ private struct SortSheet: View {
                 next[index].descending.toggle()
                 apply(next)
             } label: {
-                Image(systemName: level.descending ? "arrow.down" : "arrow.up")
-                    .font(.geist(size: 15, relativeTo: .footnote, weight: .medium))
+                Icon(level.descending ? .arrowDown : .arrowUp, size: 17, relativeTo: .footnote)
                     .foregroundStyle(Theme.foreground)
                     .frame(minWidth: 44, minHeight: 44)
                     .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
@@ -813,8 +803,7 @@ private struct SortSheet: View {
                 next.remove(at: index)
                 apply(next)
             } label: {
-                Image(systemName: "xmark")
-                    .font(.geist(size: 13, relativeTo: .footnote, weight: .semibold))
+                Icon(.x, size: 15, relativeTo: .footnote)
                     .foregroundStyle(Theme.mutedForeground)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())

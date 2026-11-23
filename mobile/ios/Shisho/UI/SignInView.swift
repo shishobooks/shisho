@@ -37,14 +37,14 @@ struct SignInView: View {
                 } else if let account = model.signedOutAccount, error == nil {
                     NoticeCard(
                         text: String(localized: "This device was signed out of \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString). Sign in again to keep syncing. Everything on this device is still here."),
-                        systemImage: "person.crop.circle.badge.exclamationmark",
+                        icon: .userX,
                         tint: Theme.primary
                     )
                     .accessibilityIdentifier("signin.signedOut")
                 }
 
                 VStack(spacing: 16) {
-                    LabeledInput(label: "Server", systemImage: "server.rack", focused: focus == .server) {
+                    LabeledInput(label: "Server", icon: .server, focused: focus == .server) {
                         TextField("https://shisho.example.com", text: $server)
                             .textContentType(.URL)
                             .keyboardType(.URL)
@@ -56,7 +56,7 @@ struct SignInView: View {
                             .accessibilityLabel("Server address")
                             .accessibilityIdentifier("signin.server")
                     }
-                    LabeledInput(label: "Username", systemImage: "person", focused: focus == .username) {
+                    LabeledInput(label: "Username", icon: .user, focused: focus == .username) {
                         TextField("Username", text: $username)
                             .textContentType(.username)
                             .textInputAutocapitalization(.never)
@@ -66,7 +66,7 @@ struct SignInView: View {
                             .onSubmit { focus = .password }
                             .accessibilityIdentifier("signin.username")
                     }
-                    LabeledInput(label: "Password", systemImage: "lock", focused: focus == .password) {
+                    LabeledInput(label: "Password", icon: .lock, focused: focus == .password) {
                         SecureField("Password", text: $password)
                             .textContentType(.password)
                             .submitLabel(.go)
@@ -77,7 +77,7 @@ struct SignInView: View {
                 }
 
                 if let error {
-                    NoticeCard(text: error.message, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive) {
+                    NoticeCard(text: error.message, icon: .triangleAlert, tint: Theme.destructive) {
                         if error.offersUpdate {
                             UpdateAppLink()
                         }
@@ -119,11 +119,11 @@ struct SignInView: View {
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
-                Button { moveFocus(by: -1) } label: { Image(systemName: "chevron.up") }
+                Button { moveFocus(by: -1) } label: { Icon(.chevronUp, relativeTo: nil) }
                     .disabled(focus == Field.allCases.first)
                     .accessibilityLabel("Previous field")
                     .accessibilityIdentifier("keyboard.previous")
-                Button { moveFocus(by: 1) } label: { Image(systemName: "chevron.down") }
+                Button { moveFocus(by: 1) } label: { Icon(.chevronDown, relativeTo: nil) }
                     .disabled(focus == Field.allCases.last)
                     .accessibilityLabel("Next field")
                     .accessibilityIdentifier("keyboard.next")

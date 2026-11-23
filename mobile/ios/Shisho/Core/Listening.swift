@@ -197,6 +197,14 @@ enum AudioChapters {
         return found
     }
 
+    /// The chapter's name wherever the player shows it: its title, or its
+    /// number when it has none. Never its number beside its title, which can
+    /// disagree with it, as "2. Chapter 1" after an introduction.
+    static func name(of index: Int, in chapters: [AudioChapter]) -> String {
+        let title = chapters[index].title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? String(localized: "Chapter \(index + 1)") : title
+    }
+
     /// Where chapter index ends: the next one's start, or the end.
     static func end(of index: Int, in chapters: [AudioChapter], duration: Double) -> Double {
         index + 1 < chapters.count ? chapters[index + 1].start : duration
@@ -237,20 +245,11 @@ enum PlaybackSpeed {
 enum TimeLabels {
     /// "4:05", or "1:04:05" from an hour.
     static func clock(_ seconds: Double) -> String {
-        let total = Int(max(0, seconds).rounded(.down))
+        // Bounded, so a nonsense time from the server can't trap.
+        let total = Int(min(max(0, seconds.isFinite ? seconds : 0), 1e9).rounded(.down))
         if total >= 3600 {
             return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
         }
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-
-    /// "3h 51m" or "12m", as the web app writes a length.
-    static func left(_ seconds: Double) -> String {
-        let minutes = Int((max(0, seconds) / 60).rounded())
-        if minutes >= 60 {
-            return String(localized: "\(minutes / 60)h \(minutes % 60)m")
-        }
-        // Some time, but under a minute, would otherwise read as none.
-        return String(localized: "\(max(minutes, seconds > 0 ? 1 : 0))m")
     }
 }

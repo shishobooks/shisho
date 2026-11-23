@@ -11,12 +11,13 @@ extension ResourceKind {
         }
     }
 
-    var systemImage: String {
+    /// The web's navigation icon for it.
+    var icon: Lucide {
         switch self {
-        case .series: "square.stack.3d.up"
-        case .person: "person.2"
-        case .genre: "theatermasks"
-        case .tag: "tag"
+        case .series: .layers
+        case .person: .users
+        case .genre: .bookmark
+        case .tag: .tags
         }
     }
 
@@ -31,7 +32,7 @@ struct BrowseButtons: View {
     var body: some View {
         ForEach(ResourceKind.allCases, id: \.self) { kind in
             NavigationLink(value: Route.browse(kind)) {
-                Label(kind.title, systemImage: kind.systemImage)
+                Label(verbatim: kind.title, icon: kind.icon, size: 15, relativeTo: .footnote)
             }
             .buttonStyle(SmallOutlineStyle())
             .accessibilityIdentifier("browse.\(kind.identifier)")
@@ -79,7 +80,7 @@ struct ResourceListView: View {
                     if let items, items.isEmpty {
                         EmptyNotice(title: String(localized: "Nothing here yet"),
                                     message: String(localized: "\(kind.title) in your Libraries appear here."),
-                                    systemImage: kind.systemImage)
+                                    icon: kind.icon)
                     } else if kind == .series {
                         seriesGrid(width: geometry.size.width)
                     } else {
@@ -148,7 +149,7 @@ struct ResourceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if case .some(.none) = detail {
-                        ContentUnavailableView(String(localized: "This isn't in your Libraries anymore"), systemImage: kind.systemImage)
+                        EmptyNotice(title: String(localized: "This isn't in your Libraries anymore"), icon: kind.icon)
                             .padding(.top, 80)
                     } else {
                         header

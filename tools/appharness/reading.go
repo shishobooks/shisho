@@ -87,3 +87,40 @@ func readReading(ctx context.Context, path, title string) (*readingState, error)
 	}
 	return state, nil
 }
+
+// bookmark is one of the harness user's Bookmarks, as the flows check it.
+type bookmark struct {
+	Seconds float64 `json:"seconds"`
+	Note    string  `json:"note"`
+	// CreatedAt is when it was made, in seconds since 1970.
+	CreatedAt int64 `json:"created_at"`
+}
+
+// readBookmarks reads the Bookmarks in the Book titled title from the
+// server's database, read-only, in time order.
+func readBookmarks(ctx context.Context, path, title string) ([]bookmark, error) {
+	connector, err := sqliteconn.NewConnector("file:"+path+"?mode=ro", "PRAGMA busy_timeout = 5000")
+	if err != nil {
+		return nil, err
+	}
+	db := sql.OpenDB(connector)
+	defer db.Close()
+
+	rows, err := db.QueryContext(ctx, `
+		SELECT bm.seconds, COALESCE(bm.note, ''), CAST(strftime('%s', bm.created_at) AS INTEGER)
+		FROM bookmarks bm JOIN files f ON f.id = bm.file_id JOIN books b ON b.id = f.book_id
+		WHERE b.title = ? ORDER BY bm.seconds`, title)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	defer rows.Close()
+	out := []bookmark{}
+	for rows.Next() {
+		var b bookmark
+		if err := rows.Scan(&b.Seconds, &b.Note, &b.CreatedAt); err != nil {
+			return nil, errors.WithStack(err)
+		}
+		out = append(out, b)
+	}
+	return out, errors.WithStack(rows.Err())
+}

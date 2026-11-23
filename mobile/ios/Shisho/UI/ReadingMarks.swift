@@ -17,14 +17,14 @@ enum StatusStyle {
 
     /// The one icon each Reading Status has wherever it shows, on a cover's
     /// ribbon and beside its name, as the web's `ReadingStatusIcon`.
-    static func symbol(_ status: String?) -> String {
+    static func icon(_ status: String?) -> Lucide {
         switch status {
-        case "paused": "pause"
-        case "to_read": "clock"
-        case "read": "checkmark"
-        case "did_not_finish": "xmark"
-        case "reference": "books.vertical"
-        default: "book"
+        case "paused": .pause
+        case "to_read": .clock
+        case "read": .check
+        case "did_not_finish": .x
+        case "reference": .library
+        default: .bookOpen
         }
     }
 }
@@ -55,8 +55,7 @@ struct ReadingStatusRibbon: View {
                     .foregroundStyle(.white)
                     .padding(.top, 6 * scale)
             } else {
-                Image(systemName: StatusStyle.symbol(status))
-                    .font(.system(size: 11 * scale, weight: .heavy))
+                Icon(StatusStyle.icon(status), size: 13 * scale, relativeTo: nil)
                     .foregroundStyle(.white)
                     .padding(.top, 6 * scale)
             }
@@ -88,8 +87,7 @@ struct CoverRatingBadge: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            Image(systemName: "star.fill")
-                .font(.system(size: 8, weight: .bold))
+            Icon(.starFill, size: 10, relativeTo: nil)
                 .foregroundStyle(Theme.rating)
             Text(verbatim: Ratings.text(units))
                 .font(.geist(size: 10, relativeTo: .caption2, weight: .semibold))

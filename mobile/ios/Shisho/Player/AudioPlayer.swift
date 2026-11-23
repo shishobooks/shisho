@@ -2,6 +2,7 @@ import AVFoundation
 import GRDB
 import MediaPlayer
 import Observation
+import ShishoAPI
 import UIKit
 
 /// Plays one account's audiobooks, and keeps the user's place and time.
@@ -12,13 +13,11 @@ import UIKit
 /// by `ListeningRules`, and both go into the account's journal for the
 /// next sync (ADR 0024). The lock screen and Control Center show the
 /// chapter's real length and the playback rate, so progress moves faster at
-/// speed rather than the length shrinking.
+/// speed rather than the length shrinking. The sleep timer, smart rewind,
+/// and Bookmarks live here too, so they work with no screen open.
 @MainActor
 @Observable
 final class AudioPlayer {
-    /// How far the skip buttons go.
-    static let skipInterval: Double = 30
-
     private(set) var file: ListeningFile?
     /// Playback is wanted: playing, or about to once loaded.
     private(set) var isPlaying = false
@@ -31,14 +30,24 @@ final class AudioPlayer {
     private(set) var offer: ServerPlace?
     /// The cover, for the lock screen and the tint.
     private(set) var artwork: UIImage?
+    /// How far the skip buttons go, back and forward, in the app, on the
+    /// lock screen, and from headphones and the car.
+    private(set) var backInterval = PlayerSettings.skipBack
+    private(set) var forwardInterval = PlayerSettings.skipForward
+    /// Going back a little after a long pause.
+    private(set) var smartRewind = PlayerSettings.smartRewind
+    private(set) var sleepTimer: SleepTimer = .off
+    /// The server lists Bookmarks, so they can be made and synced.
+    private(set) var bookmarksAvailable = false
 
     var chapterIndex: Int? {
         file.flatMap { AudioChapters.index(at: position, in: $0.chapters) }
     }
 
+    /// The chapter playing, as `AudioChapters.name` names it.
     var chapterTitle: String? {
         guard let file, let index = chapterIndex else { return nil }
-        return file.chapters[index].title
+        return AudioChapters.name(of: index, in: file.chapters)
     }
 
     /// Where the current chapter starts and ends, or the whole File without
@@ -91,10 +100,22 @@ final class AudioPlayer {
     @ObservationIgnored private var retriedStop = false
     /// When the player played again after a failure, until it plays.
     @ObservationIgnored private var retriedAt: Date?
+    /// When the listener paused, for smart rewind; nil once they chose a
+    /// place since.
+    @ObservationIgnored private var pausedAt: Date?
+    /// When the last tick saw audio playing, so the sleep timer counts only
+    /// time played.
+    @ObservationIgnored private var lastPlayingTick: Date?
+    /// Where an end of chapter timer stops. It's set where the timer is set
+    /// and where the listener goes, but not by smart rewind, which can go
+    /// back over a chapter start without changing which chapter is playing.
+    @ObservationIgnored private var sleepTarget: Double?
+    @ObservationIgnored private let shake = ShakeDetector()
 
     init(session: AccountSession, requestSync: @escaping @MainActor () -> Void) {
         self.session = session
         self.requestSync = requestSync
+        bookmarksAvailable = AudioPlayer.listsBookmarks(session.capabilities.withLock { $0 })
         observeSystem()
         setUpRemoteCommands()
     }
@@ -162,6 +183,10 @@ final class AudioPlayer {
         artwork = nil
         rate = storedRate(fileID: fileID)
         position = min(choice.start, max(0, loaded.duration))
+        // Opening at this device's own place picks up after a pause as long
+        // as the time since it was saved.
+        pausedAt = places?.local.flatMap { abs($0.seconds - position) < 1 ? $0.updatedAt : nil }
+        retargetSleep()
         pendingSeek = position
         ready = false
         nowPlayingChapter = nil
@@ -238,6 +263,7 @@ final class AudioPlayer {
         isPlaying = false
         isBuffering = false
         error = String(localized: "This audiobook couldn't be played. Check your connection to the server and try again.")
+        watchForShakes()
         log("file \(file?.fileID ?? 0): couldn't play: \(failure)")
         stopSitting(at: Date())
         updateNowPlaying()
@@ -263,11 +289,21 @@ final class AudioPlayer {
         // Playing again at the end starts over.
         if file.duration > 0, currentPosition() >= file.duration - 0.5 {
             move(to: 0)
+            retargetSleep()
+        } else if smartRewind, let pausedAt {
+            let back = SmartRewind.seconds(afterPause: Date().timeIntervalSince(pausedAt))
+            if back > 0 {
+                log("file \(file.fileID): back \(Int(back)) s after a pause of \(Int(Date().timeIntervalSince(pausedAt))) s")
+                move(to: currentPosition() - back)
+            }
         }
+        pausedAt = nil
         let audio = AVAudioSession.sharedInstance()
         try? audio.setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
         try? audio.setActive(true)
         isPlaying = true
+        watchForShakes()
+        player?.volume = SleepTimerRules.volume(sleepTimer)
         if ready && pendingSeek == nil {
             player?.playImmediately(atRate: Float(rate))
         } else {
@@ -287,10 +323,12 @@ final class AudioPlayer {
         let wasPlaying = isPlaying
         isPlaying = false
         isBuffering = false
+        watchForShakes()
         if let player { noteWaiting(false, player: player, at: Date()) }
         refreshPosition()
         updateNowPlaying()
         guard wasPlaying else { return }
+        pausedAt = Date()
         // A sitting a stall already paused keeps when the stall began.
         if let current = sitting, current.isPlaying {
             sitting = ListeningRules.pause(current, at: Date(), percentage: percentage)
@@ -306,6 +344,31 @@ final class AudioPlayer {
         seek(to: currentPosition() + seconds)
     }
 
+    func skipBack() {
+        skip(by: -backInterval)
+    }
+
+    func skipForward() {
+        skip(by: forwardInterval)
+    }
+
+    func setBackInterval(_ seconds: Double) {
+        PlayerSettings.skipBack = seconds
+        backInterval = PlayerSettings.skipBack
+        applySkipIntervals()
+    }
+
+    func setForwardInterval(_ seconds: Double) {
+        PlayerSettings.skipForward = seconds
+        forwardInterval = PlayerSettings.skipForward
+        applySkipIntervals()
+    }
+
+    func setSmartRewind(_ on: Bool) {
+        PlayerSettings.smartRewind = on
+        smartRewind = on
+    }
+
     func nextChapter() {
         guard let file, let target = AudioChapters.nextTarget(from: currentPosition(), in: file.chapters) else { return }
         seek(to: target)
@@ -316,11 +379,14 @@ final class AudioPlayer {
         seek(to: AudioChapters.previousTarget(from: currentPosition(), in: file.chapters))
     }
 
-    /// Moves to seconds, and saves the place there.
+    /// Moves to seconds, and saves the place there. A place the listener
+    /// chose plays from exactly there, with no smart rewind.
     func seek(to seconds: Double) {
         guard let file else { return }
         log("file \(file.fileID): seek from \(Int(currentPosition())) s to \(Int(seconds)) s, \(isPlaying ? "playing" : "paused")")
         move(to: seconds)
+        pausedAt = nil
+        retargetSleep()
         savePosition()
     }
 
@@ -328,12 +394,144 @@ final class AudioPlayer {
         let clamped = PlaybackSpeed.clamp(value)
         rate = clamped
         if let file {
-            UserDefaults.standard.set(clamped, forKey: AudioPlayer.rateKey(accountID: session.account.id, fileID: file.fileID))
+            AudioPlayer.storeRate(clamped, accountID: session.account.id, fileID: file.fileID)
         }
         if isPlaying, ready {
             player?.rate = Float(clamped)
         }
         updateNowPlaying()
+    }
+
+    // MARK: - Sleep timer
+
+    /// Sets the sleep timer. A shake while it counts starts its length over.
+    func setSleepTimer(_ timer: SleepTimer) {
+        sleepTimer = timer
+        retargetSleep()
+        player?.volume = SleepTimerRules.volume(timer)
+        watchForShakes()
+        log("sleep timer \(AudioPlayer.describe(timer))")
+    }
+
+    /// Sets where an end of chapter timer stops, from where playback is.
+    private func retargetSleep() {
+        guard sleepTimer == .endOfChapter, let file else {
+            sleepTarget = nil
+            return
+        }
+        sleepTarget = SleepTimerRules.chapterEnd(after: currentPosition(), chapters: file.chapters, duration: file.duration)
+    }
+
+    /// A shake extends a counting timer while it plays; paused, nothing
+    /// counts, so the accelerometer rests.
+    private func watchForShakes() {
+        if case .counting = sleepTimer, isPlaying {
+            shake.start { [weak self] in self?.extendSleepTimer() }
+        } else {
+            shake.stop()
+        }
+    }
+
+    /// A shake starts the timer's length over, as long as it's counting.
+    func extendSleepTimer() {
+        guard case .counting = sleepTimer else { return }
+        sleepTimer = SleepTimerRules.extended(sleepTimer)
+        player?.volume = SleepTimerRules.volume(sleepTimer)
+        shake.confirm()
+        log("sleep timer extended by a shake")
+    }
+
+    /// Counts the timer down by what played since the last tick, and stops
+    /// playback when it runs out or the chapter it waits for ends.
+    private func runSleepTimer(playing: Bool, at now: Date) {
+        defer { lastPlayingTick = playing ? now : nil }
+        guard playing, let file else { return }
+        switch sleepTimer {
+        case .off:
+            return
+        case .counting:
+            // A tick that came late, as after the app was suspended, counts
+            // at most a few seconds.
+            let played = lastPlayingTick.map { min(3, now.timeIntervalSince($0)) } ?? 0
+            let (next, ranOut) = SleepTimerRules.played(sleepTimer, for: played)
+            sleepTimer = next
+            player?.volume = SleepTimerRules.volume(next)
+            if ranOut {
+                sleepTimerStopped()
+            }
+        case .endOfChapter:
+            guard let end = sleepTarget, currentPosition() >= end else { return }
+            sleepTimerStopped()
+            // Resuming plays the next chapter from its start.
+            if end < file.duration - 0.5 {
+                seek(to: end)
+            }
+        }
+    }
+
+    private func sleepTimerStopped() {
+        log("file \(file?.fileID ?? 0): sleep timer stopped playback at \(Int(currentPosition())) s")
+        sleepTimer = .off
+        shake.stop()
+        pause()
+        player?.volume = 1
+    }
+
+    private static func describe(_ timer: SleepTimer) -> String {
+        switch timer {
+        case .off: "off"
+        case let .counting(length, _): "set for \(Int(length / 60)) min"
+        case .endOfChapter: "set for the end of the chapter"
+        }
+    }
+
+    // MARK: - Bookmarks
+
+    private static func listsBookmarks(_ listed: [String]) -> Bool {
+        listed.contains(Shishoapp.Capability.bookmarks.rawValue)
+    }
+
+    /// Called with each capability list a response carries.
+    func capabilitiesChanged(_ listed: [String]) {
+        let available = AudioPlayer.listsBookmarks(listed)
+        if available != bookmarksAvailable {
+            bookmarksAvailable = available
+        }
+    }
+
+    /// Bookmarks the open File at seconds, or where playback is, and queues
+    /// it for the server. It returns the Bookmark, for a note added after.
+    @discardableResult
+    func addBookmark(note: String?, at seconds: Double? = nil) -> Bookmark? {
+        guard let file else { return nil }
+        let place = seconds ?? currentPosition()
+        defer { requestSync() }
+        do {
+            let bookmark = try session.store.addBookmark(fileID: file.fileID, seconds: place, note: note, at: Date())
+            log("file \(file.fileID): bookmark added at \(Int(place)) s")
+            return bookmark
+        } catch {
+            log("file \(file.fileID): couldn't add a bookmark: \(Diagnostics.describe(error))")
+            return nil
+        }
+    }
+
+    func editBookmark(_ bookmark: Bookmark, note: String) {
+        do {
+            try session.store.editBookmarkNote(bookmark.id, note: note, at: Date())
+        } catch {
+            log("file \(bookmark.fileID): couldn't edit a bookmark: \(Diagnostics.describe(error))")
+        }
+        requestSync()
+    }
+
+    func deleteBookmark(_ bookmark: Bookmark) {
+        do {
+            try session.store.deleteBookmark(bookmark.id, at: Date())
+        } catch {
+            log("file \(bookmark.fileID): couldn't delete a bookmark: \(Diagnostics.describe(error))")
+        }
+        requestSync()
     }
 
     /// Goes to the place offered from another device.
@@ -358,6 +556,7 @@ final class AudioPlayer {
     /// Stops playing and forgets the File, recording what was listened.
     func stop() {
         unload()
+        setSleepTimer(.off)
         let center = MPRemoteCommandCenter.shared()
         for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.skipForwardCommand,
                         center.skipBackwardCommand, center.nextTrackCommand, center.previousTrackCommand,
@@ -404,6 +603,7 @@ final class AudioPlayer {
         guard let player else { return }
         refreshPosition()
         let now = Date()
+        runSleepTimer(playing: isPlaying && player.timeControlStatus == .playing, at: now)
         // Before the rest, which a failure it reports must not see as
         // playing.
         retryAfterStop(player, at: now)
@@ -522,6 +722,11 @@ final class AudioPlayer {
         guard let file else { return }
         isPlaying = false
         isBuffering = false
+        watchForShakes()
+        pausedAt = nil
+        if sleepTimer != .off {
+            setSleepTimer(.off)
+        }
         position = file.duration
         if let current = sitting {
             sitting = ListeningRules.pause(current, at: Date(), percentage: 1)
@@ -632,6 +837,7 @@ final class AudioPlayer {
             offer = other
         } else if abs(choice.start - currentPosition()) > 1 {
             move(to: choice.start)
+            retargetSleep()
         }
     }
 
@@ -677,6 +883,10 @@ final class AudioPlayer {
     // audiobooks are often read by different people.
     private static func rateKey(accountID: String, fileID: Int) -> String {
         "player.speed.\(accountID).file.\(fileID)"
+    }
+
+    static func storeRate(_ rate: Double, accountID: String, fileID: Int) {
+        UserDefaults.standard.set(PlaybackSpeed.clamp(rate), forKey: rateKey(accountID: accountID, fileID: fileID))
     }
 
     /// The File's own speed on this installation; a new File starts at 1x.
@@ -857,22 +1067,28 @@ final class AudioPlayer {
         }
     }
 
+    /// The lock screen's and Control Center's skip buttons show the lengths.
+    private func applySkipIntervals() {
+        let center = MPRemoteCommandCenter.shared()
+        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: backInterval)]
+        center.skipForwardCommand.preferredIntervals = [NSNumber(value: forwardInterval)]
+    }
+
     private func setUpRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
-        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: AudioPlayer.skipInterval)]
-        center.skipForwardCommand.preferredIntervals = [NSNumber(value: AudioPlayer.skipInterval)]
+        applySkipIntervals()
         center.changePlaybackRateCommand.supportedPlaybackRates = [0.8, 1.0, 1.2, 1.5, 2.0].map { NSNumber(value: $0) }
         let commands: [(MPRemoteCommand, @MainActor (AudioPlayer, Double?) -> Void)] = [
             (center.playCommand, { player, _ in player.play() }),
             (center.pauseCommand, { player, _ in player.pause() }),
             (center.togglePlayPauseCommand, { player, _ in player.togglePlay() }),
-            (center.skipBackwardCommand, { player, _ in player.skip(by: -AudioPlayer.skipInterval) }),
-            (center.skipForwardCommand, { player, _ in player.skip(by: AudioPlayer.skipInterval) }),
+            (center.skipBackwardCommand, { player, _ in player.skipBack() }),
+            (center.skipForwardCommand, { player, _ in player.skipForward() }),
             // Headphones' double and triple click, and a car's track
             // buttons, skip as the lock screen does rather than change
             // chapter; chapters change in the app.
-            (center.nextTrackCommand, { player, _ in player.skip(by: AudioPlayer.skipInterval) }),
-            (center.previousTrackCommand, { player, _ in player.skip(by: -AudioPlayer.skipInterval) }),
+            (center.nextTrackCommand, { player, _ in player.skipForward() }),
+            (center.previousTrackCommand, { player, _ in player.skipBack() }),
             (center.changePlaybackPositionCommand, { player, time in
                 if let time { player.seek(to: player.chapterBounds.start + time) }
             }),

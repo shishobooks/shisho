@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
+	"github.com/shishobooks/shisho/pkg/bookmarks"
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/errcodes"
@@ -60,13 +61,14 @@ func newFixtureWith(t *testing.T, contract *Contract) *fixture {
 	require.NoError(t, err)
 	deviceService := devices.NewService(db)
 	h := &handler{
-		db:       db,
-		auth:     auth.NewService(db, "secret", time.Hour),
-		devices:  deviceService,
-		feed:     changefeed.NewService(db),
-		reading:  reading.NewService(db),
-		contract: contract,
-		opts:     Options{Contract: contract, ServerVersion: "v0.10.0"},
+		db:        db,
+		auth:      auth.NewService(db, "secret", time.Hour),
+		devices:   deviceService,
+		feed:      changefeed.NewService(db),
+		reading:   reading.NewService(db),
+		bookmarks: bookmarks.NewService(db),
+		contract:  contract,
+		opts:      Options{Contract: contract, ServerVersion: "v0.10.0"},
 	}
 	registerRoutes(e, h, devices.NewMiddleware(deviceService, nil))
 	return &fixture{t: t, ctx: context.Background(), db: db, e: e, h: h, password: string(hash)}
