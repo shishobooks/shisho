@@ -203,7 +203,11 @@ const getMetadata = opf => {
         if (!els) return null
         return Object.groupBy(els.map(parse), x => x.property)
     }
-    const dc = Object.fromEntries(Object.entries(Object.groupBy(els.dc, el => el.localName))
+    // Shisho patch: a package whose metadata has no Dublin Core elements, as
+    // one written with `dc="..."` rather than `xmlns:dc="..."`, has no
+    // els.dc, and upstream's groupBy throws on undefined, so the book won't
+    // open at all.
+    const dc = Object.fromEntries(Object.entries(Object.groupBy(els.dc ?? [], el => el.localName))
         .map(([name, els]) => [name, els.map(parse)]))
     const properties = getProperties() ?? {}
     const legacyMeta = Object.fromEntries(els.legacyMeta?.map(el =>
