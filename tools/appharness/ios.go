@@ -83,6 +83,9 @@ func runIOS(ctx context.Context, args []string) error {
 	if err := srv.seed(ctx, library, harnessPassword); err != nil {
 		return err
 	}
+	if err := cheapenPasswords(ctx, filepath.Join(dir, "data.sqlite")); err != nil {
+		return err
+	}
 
 	control, err := startControl(ctx, srv)
 	if err != nil {
