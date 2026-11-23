@@ -45,3 +45,13 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 - App code → `mise ios:test`, which builds the app first.
 - Anything a flow covers → `mise ios:harness`, which needs ffmpeg. `-- -keep` keeps the server log and Maestro's screenshots. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
 - The too-old paths → start the server with `SHISHO_DEV_APP_PROTOCOLS` set to the range it should accept: a range above the app's protocol makes the app too old, and one below it makes the server too old for it.
+
+## Writing flows
+
+CI's macOS simulators stall now and then: a view hierarchy read or the app's main thread can freeze for around 10 seconds, so a flow that passes locally can still fail there. When a flow fails on CI, read the timestamps in the Maestro logs of the `harness-output` artifact before treating the failure as an app bug. Write flows to tolerate those stalls:
+
+- **Never assert a state that lasts only a few seconds**, such as a short chapter or a narrow window of the playback position. Assert a state that stays put (the last chapter once playback stops), or an open-ended one ("at least 0:12", not "0:12 to 0:19"). To listen for a while from a place that varies, build the pattern from that place, as `scripts/note_online_pause.js` does.
+- **Wait for the UI with `extendedWaitUntil` and a timeout of at least 30 seconds.** A longer timeout costs nothing when the flow passes, and a 10 to 15 second one fails on a single stall.
+- **Check the server in a `retry`** around a wait, the script, and an `assertTrue` on what the script recorded, never after one fixed wait. `retry` only retries Maestro's own failures, so a script that throws fails the flow on its first try; the `assert_*.js` scripts record their verdict in `output.serverCheck` instead.
+- **Tap a screen that keeps changing**, such as a playing player, through `subflows/tap_player.yaml`. A plain `tapOn` waits for the screen to settle, and while the position ticks it waits out its whole timeout, which can be longer than the state being checked lasts.
+- **`centerElement` on something that can't reach the middle**, such as a title in the last row, keeps swiping before Maestro settles for it being visible. Give that `scrollUntilVisible` a generous timeout.

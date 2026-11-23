@@ -33,22 +33,34 @@ name: Listen offline and sync later
 - extendedWaitUntil:
     visible:
       id: player.position
-      text: ".*0:0[4-9]"
+      text: ".*0:(0[4-9]|[1-5][0-9])"
     timeout: 30000
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
-# The pause sends the session so far.
-- extendedWaitUntil:
-    visible: __never__
-    timeout: 4000
-    optional: true
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.onlinePaused = maestro.copiedText}
 - runScript:
-    file: scripts/assert_paused_session.js
-    env:
-      CONTROL: ${CONTROL}
-      TITLE: Harbor Lights
+    file: scripts/note_online_pause.js
+# The pause sends the session so far. Checked in a retry, since the sync can
+# take longer than one wait on a loaded CI simulator.
+- retry:
+    maxRetries: 3
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 4000
+          optional: true
+      - runScript:
+          file: scripts/assert_paused_session.js
+          env:
+            CONTROL: ${CONTROL}
+            TITLE: Harbor Lights
+      - assertTrue:
+          condition: ${output.serverCheck == "ok"}
+          label: The server check passed
 - runScript:
     file: scripts/go_offline.js
     env:
@@ -59,11 +71,12 @@ name: Listen offline and sync later
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
+# Until the place is well past where it paused online.
 - extendedWaitUntil:
     visible:
       id: player.position
-      text: ".*0:(1[8-9]|2[0-9])"
-    timeout: 40000
+      text: ${output.offlineTarget}
+    timeout: 60000
 - runFlow:
     file: subflows/tap_player.yaml
     env:
@@ -87,13 +100,21 @@ name: Listen offline and sync later
 - extendedWaitUntil:
     visible:
       id: miniplayer.open
-    timeout: 20000
-- extendedWaitUntil:
-    visible: __never__
-    timeout: 6000
-    optional: true
-- runScript:
-    file: scripts/assert_offline_session.js
-    env:
-      CONTROL: ${CONTROL}
-      TITLE: Harbor Lights
+    timeout: 30000
+# Checked in a retry, since the sync can take longer than one wait on a
+# loaded CI simulator.
+- retry:
+    maxRetries: 3
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 6000
+          optional: true
+      - runScript:
+          file: scripts/assert_offline_session.js
+          env:
+            CONTROL: ${CONTROL}
+            TITLE: Harbor Lights
+      - assertTrue:
+          condition: ${output.serverCheck == "ok"}
+          label: The server check passed

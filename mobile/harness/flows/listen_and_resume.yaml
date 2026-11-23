@@ -30,35 +30,44 @@ name: Listen, kill, and resume
 - extendedWaitUntil:
     visible:
       id: player.position
-      text: ".*0:1[2-9]"
+      text: ".*0:(1[2-9]|[2-5][0-9])"
     timeout: 40000
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.beforeKill = maestro.copiedText}
+- evalScript: ${output.seenAt = Date.now()}
 
 # Killed while playing: only the saves every five seconds kept the place.
 - stopApp
+- evalScript: ${output.killedAt = Date.now()}
 - launchApp
 - extendedWaitUntil:
     visible:
       id: miniplayer.open
-    timeout: 20000
+    timeout: 30000
 - tapOn:
     id: miniplayer.open
 - extendedWaitUntil:
     visible:
       id: player.position
-    timeout: 10000
+    timeout: 30000
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.afterRelaunch = maestro.copiedText}
-# Relaunching syncs what the last save kept.
-- extendedWaitUntil:
-    visible: __never__
-    timeout: 5000
-    optional: true
-- runScript:
-    file: scripts/assert_resumed.js
-    env:
-      CONTROL: ${CONTROL}
-      TITLE: Harbor Lights
+# Relaunching syncs what the last save kept. Checked in a retry, since the
+# sync can take longer than one wait on a loaded CI simulator.
+- retry:
+    maxRetries: 3
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 5000
+          optional: true
+      - runScript:
+          file: scripts/assert_resumed.js
+          env:
+            CONTROL: ${CONTROL}
+            TITLE: Harbor Lights
+      - assertTrue:
+          condition: ${output.serverCheck == "ok"}
+          label: The server check passed

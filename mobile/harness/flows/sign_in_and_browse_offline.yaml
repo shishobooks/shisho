@@ -16,7 +16,7 @@ name: Sign in and browse Books offline
     timeout: 30000
 - extendedWaitUntil:
     visible: The Harness Novel
-    timeout: 15000
+    timeout: 30000
 - assertVisible: Quiet Lighthouse
 
 # Book detail
@@ -43,7 +43,7 @@ name: Sign in and browse Books offline
 - extendedWaitUntil:
     visible:
       id: library.grid
-    timeout: 15000
+    timeout: 30000
 - assertVisible: The Harness Novel
 - assertVisible: Quiet Lighthouse
 - extendedWaitUntil:

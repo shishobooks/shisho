@@ -6,8 +6,13 @@ appId: ${APP_ID}
 - extendedWaitUntil:
     visible: ${TITLE}
     timeout: 30000
+# A Book in the last row can never reach the middle. Maestro then keeps
+# swiping to center it before it settles for the Book being visible, which
+# takes most of the default timeout, so one slow view hierarchy read fails the
+# flow.
 - scrollUntilVisible:
     element: ${TITLE}
     direction: DOWN
     centerElement: true
+    timeout: 60000
 - tapOn: ${TITLE}

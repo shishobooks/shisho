@@ -7,9 +7,12 @@ appId: ${APP_ID}
     element:
       id: book.listen
     direction: DOWN
-- tapOn:
-    id: book.listen
+# Playback starts on the tap, so it's tapped as a player control.
+- runFlow:
+    file: tap_player.yaml
+    env:
+      CONTROL_ID: book.listen
 - extendedWaitUntil:
     visible:
       id: player.chapter
-    timeout: 15000
+    timeout: 30000
