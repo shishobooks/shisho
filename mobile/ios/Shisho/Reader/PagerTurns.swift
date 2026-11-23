@@ -138,6 +138,14 @@ enum PagerZones {
         return .chrome
     }
 
+    /// How far from a link a tap at fraction of the page's width still
+    /// follows it. In the edge thirds, where a tap turns the page, only a
+    /// tap on the link does: a page of links, as a book's own contents, would
+    /// otherwise leave nowhere to turn.
+    static func linkSlop(at fraction: CGFloat) -> CGFloat {
+        fraction < 1.0 / 3 || fraction > 2.0 / 3 ? 0 : PagerController.linkSlop
+    }
+
     /// The page a drag brings in: a finger moving left brings in the page on
     /// the right.
     static func direction(dragX: CGFloat, rightToLeft: Bool) -> TurnDirection? {

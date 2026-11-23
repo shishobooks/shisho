@@ -45,7 +45,18 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     @ObservationIgnored private var pageStart: Double?
     /// The section showing and the page in it, for pages left.
     private var pageSection: PageLocation.SectionPlace?
-    private(set) var contents: [ContentsEntry] = []
+    /// Each section shown, by index: its pages and share of the book, for
+    /// estimating pages past the one showing.
+    @ObservationIgnored private var seenSections: [Int: (pages: Int, share: Double)] = [:]
+    private(set) var contents: [ContentsEntry] = [] {
+        didSet { indexStarts() }
+    }
+    /// Where the chapters start along the book, one per point the scrubber
+    /// can show: a table of contents can run to thousands of entries.
+    private(set) var marks: [Double] = []
+    /// The placed chapters' starts in order along the book, so the chapter
+    /// showing is found by halving rather than by reading every entry.
+    @ObservationIgnored private var starts: [(position: Double, index: Int)] = []
     private(set) var note: OpenNote?
     /// A page turn has waited a moment for its page to be laid out, as
     /// while the book is still opening: shown, so the page doesn't look
@@ -101,8 +112,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
 
     /// The table of contents' entry for the chapter the reader is in.
     var currentEntry: ContentsEntry? {
-        let place = pageStart ?? fraction
-        return contents.last { ($0.position ?? .infinity) <= place + 0.0001 }
+        start(atOrBefore: pageStart ?? fraction).map { contents[starts[$0].index] }
     }
 
     /// Pages left in the chapter and in the book, or nil scrolled. The
@@ -110,20 +120,66 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     var pagesLeft: (chapter: Int?, book: Int)? {
         guard let place = pageSection else { return nil }
         let section = PagesLeft.Section(from: place.from, to: place.to, page: place.page, pages: place.pages)
-        return (chapterEnd.map { PagesLeft.count(in: section, to: $0) }, PagesLeft.count(in: section, to: 1))
+        let rate = PagesLeft.pagesPerShare(Array(seenSections.values))
+        return (chapterEnd.map { PagesLeft.count(in: section, to: $0, pagesPerShare: rate) },
+                PagesLeft.count(in: section, to: 1, pagesPerShare: rate))
+    }
+
+    private func noteSection(_ location: PageLocation) {
+        guard let index = location.index, let section = location.section, section.to > section.from else { return }
+        seenSections[index] = (section.pages, section.to - section.from)
+    }
+
+    /// Where the reader is, as the bar and the readout both tell VoiceOver:
+    /// the chapter, pages left, and how far through.
+    func placeLabel(percent: String, pagesLeft: AttributedString?) -> String {
+        var parts = [chapterTitle, pagesLeft.map { String($0.characters) }].compactMap { $0 }
+        parts.append(percent)
+        return parts.joined(separator: " · ")
+    }
+
+    /// Pages left in the chapter, or the book, as the bar and readout say
+    /// it. Scrolled there are no pages, and the chapter's count waits for
+    /// the contents to place it.
+    func pagesLeftLabel(inBook: Bool) -> AttributedString? {
+        guard let left = pagesLeft else { return nil }
+        if inBook {
+            return left.book == 0
+                ? AttributedString(localized: "Last page in the book")
+                : AttributedString(localized: "^[\(left.book) page](inflect: true) left in the book")
+        }
+        guard let chapter = left.chapter else { return nil }
+        return chapter == 0
+            ? AttributedString(localized: "Last page in the chapter")
+            : AttributedString(localized: "^[\(chapter) page](inflect: true) left in the chapter")
     }
 
     /// Where the chapter showing ends: where the next one starts, or the
     /// end of the book.
     private var chapterEnd: Double? {
-        guard let current = currentEntry, let start = current.position else { return nil }
-        let later = contents.drop { $0.id != current.id }.dropFirst()
-        return later.compactMap(\.position).first { $0 > start + 0.0001 } ?? 1
+        // The start after the chapter's is the next one further on: every
+        // start at the chapter's own place sorts before it.
+        guard let current = start(atOrBefore: pageStart ?? fraction) else { return nil }
+        return current + 1 < starts.count ? starts[current + 1].position : 1
     }
 
-    /// Where the chapters start along the book, for the scrubber.
-    var marks: [Double] {
-        contents.compactMap(\.position)
+    private func indexStarts() {
+        starts = contents.enumerated()
+            .compactMap { index, entry in entry.position.map { (position: $0, index: index) } }
+            .sorted { ($0.position, $0.index) < ($1.position, $1.index) }
+        var seen = Set<Int>()
+        marks = starts.compactMap { seen.insert(Int(($0.position * 2000).rounded())).inserted ? $0.position : nil }
+    }
+
+    /// The last placed start at or before place, as an index into starts.
+    private func start(atOrBefore place: Double) -> Int? {
+        var low = 0
+        var high = starts.count
+        while low < high {
+            let middle = (low + high) / 2
+            if starts[middle].position <= place + 0.0001 { low = middle + 1 } else { high = middle }
+        }
+        return low > 0 ? low - 1 : nil
     }
 
     // MARK: - Opening
@@ -308,6 +364,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         fraction = location.fraction ?? 0
         pageStart = location.start
         pageSection = location.section
+        noteSection(location)
         // A page reopened after WebKit ended its process shows the place
         // again; the session goes on.
         guard phase != .reading else { return }
@@ -319,16 +376,20 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         self.location = location
         pageStart = location.start
         pageSection = location.section
+        noteSection(location)
         fraction = location.fraction ?? fraction
         tracker.moved(location)
     }
 
     func foliateContents(_ entries: [PageMessage.ContentsEntry]) {
         guard entries.count == contents.count else { return }
+        // Changed as a copy and set once, so the starts are indexed once.
+        var placed = contents
         for (index, entry) in entries.enumerated() {
-            contents[index].target = entry.target.map(ReaderTarget.href)
-            contents[index].position = entry.position
+            placed[index].target = entry.target.map(ReaderTarget.href)
+            placed[index].position = entry.position
         }
+        contents = placed
     }
 
     func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont) {

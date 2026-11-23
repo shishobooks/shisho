@@ -8,11 +8,9 @@ struct ReaderView: View {
     let model: ReaderModel
     @State private var showingContents = false
     @State private var showingSettings = false
-    /// The scrubber's place while it's being dragged.
-    @State private var scrubbing: Double?
-    /// The bar counts pages left in the book rather than the chapter, as
-    /// Now Playing counts time.
-    @AppStorage("reader.pagesLeftInBook") private var pagesLeftInBook = false
+    /// The readout counts pages left in the book rather than the chapter,
+    /// as the bar does.
+    @AppStorage(ReaderBottomBar.pagesLeftInBookKey) private var pagesLeftInBook = false
     /// The settings sheet's height, grown with the text in it.
     @ScaledMetric(relativeTo: .subheadline) private var settingsHeight: CGFloat = 250
     let close: () -> Void
@@ -33,10 +31,16 @@ struct ReaderView: View {
                     .id(ObjectIdentifier(source))
                     .padding(.top, 8)
                     .padding(.bottom, 28)
-                    .popover(item: noteBinding, attachmentAnchor: .rect(.rect(model.note?.rect.offsetBy(dx: 0, dy: 8) ?? .zero)),
-                             arrowEdge: .bottom) { note in
-                        NotePopover(note: note, theme: theme) { model.goToNote() }
-                            .presentationCompactAdaptation(.popover)
+                    // A card of the app's own rather than a system popover,
+                    // whose corners and arrow it can't shape, over the
+                    // page dimmed so the note stands out.
+                    .overlay {
+                        if let note = model.note {
+                            NoteOverlay(note: note, theme: theme, goToNote: model.goToNote, close: model.closeNote)
+                                .padding(.top, 8)
+                                .padding(.bottom, 28)
+                                .transition(.opacity)
+                        }
                     }
                     .accessibilityIdentifier("reader.page")
                     .opacity(model.phase == .reading ? 1 : 0)
@@ -61,7 +65,7 @@ struct ReaderView: View {
                 // book opens.
                 if model.phase == .reading {
                     if model.chromeVisible {
-                        bottomBar.transition(.move(edge: .bottom).combined(with: .opacity))
+                        ReaderBottomBar(model: model).transition(.move(edge: .bottom).combined(with: .opacity))
                     } else {
                         readout
                     }
@@ -71,9 +75,12 @@ struct ReaderView: View {
         .animation(.easeOut(duration: 0.18), value: model.chromeVisible)
         .animation(.easeOut(duration: 0.2), value: model.offer)
         .animation(.easeOut(duration: 0.15), value: model.turnWaiting)
-        // Hidden with the bars, since the page under it may be in a theme
-        // the app's appearance doesn't show on.
-        .statusBarHidden(!model.chromeVisible && model.phase == .reading)
+        .animation(.easeOut(duration: 0.15), value: model.note)
+        // Hidden while reading, bars or not: the page under it may be in a
+        // theme the app's appearance doesn't show on, and showing it with
+        // the bars would resize the pages on iPhones whose status bar takes
+        // its own room.
+        .statusBarHidden(model.phase == .reading)
         .task {
             model.settings.appDark = appScheme == .dark
             await model.load()
@@ -100,10 +107,6 @@ struct ReaderView: View {
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.background)
         }
-    }
-
-    private var noteBinding: Binding<OpenNote?> {
-        Binding(get: { model.note }, set: { if $0 == nil { model.closeNote() } })
     }
 
     // MARK: - Loading
@@ -157,8 +160,10 @@ struct ReaderView: View {
     /// The bars over the page take the app's look, in the reader theme's
     /// appearance: a native navigation bar with the web app's type and
     /// colors (variant E).
-    private var barBackground: some View {
-        Theme.background.opacity(0.92).background(.ultraThinMaterial)
+    /// Solid, not a blur: a blur over the live pages costs every frame
+    /// they or the bars move.
+    static var barBackground: some View {
+        Theme.background
     }
 
     private var topBar: some View {
@@ -219,36 +224,79 @@ struct ReaderView: View {
         // Past this the bar would cover the page; the buttons show large
         // on a long press instead.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .background(barBackground.ignoresSafeArea(edges: .top))
+        .background(ReaderView.barBackground.ignoresSafeArea(edges: .top))
         .overlay(alignment: .bottom) { Theme.border.frame(height: 1) }
     }
+
+    private var percentShown: String {
+        model.fraction.formatted(.percent.precision(.fractionLength(0)))
+    }
+
+    private var pagesLeftLabel: AttributedString? {
+        model.pagesLeftLabel(inBook: pagesLeftInBook)
+    }
+
+    /// Where the reader is, small under the page while the controls are
+    /// hidden.
+    private var readout: some View {
+        // The chapter gives way first, so the counts always show.
+        HStack(spacing: 4) {
+            if let chapter = model.chapterTitle {
+                Text(chapter)
+                    .lineLimit(1)
+                Text(verbatim: "·")
+            }
+            if let pagesLeft = pagesLeftLabel {
+                Text(pagesLeft)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Text(verbatim: "·")
+            }
+            Text(percentShown)
+                .layoutPriority(1)
+        }
+        .font(.geist(.caption2, weight: .medium))
+        .monospacedDigit()
+        .foregroundStyle(foreground.opacity(0.55))
+        .padding(.horizontal, 24)
+        .frame(maxWidth: .infinity, minHeight: 22)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(readoutLabel))
+        .accessibilityIdentifier("reader.progress")
+    }
+
+    private var readoutLabel: String {
+        model.placeLabel(percent: percentShown, pagesLeft: pagesLeftLabel)
+    }
+}
+
+/// The bar under the page: the scrubber, the chapter, pages left, and how
+/// far through. Its own view, so a drag on the scrubber redraws only it.
+private struct ReaderBottomBar: View {
+    static let pagesLeftInBookKey = "reader.pagesLeftInBook"
+
+    let model: ReaderModel
+    /// The scrubber's place while it's being dragged.
+    @State private var scrubbing: Double?
+    /// Counts pages left in the book rather than the chapter, as Now
+    /// Playing counts time.
+    @AppStorage(ReaderBottomBar.pagesLeftInBookKey) private var pagesLeftInBook = false
 
     private var percentShown: String {
         (scrubbing ?? model.fraction).formatted(.percent.precision(.fractionLength(0)))
     }
 
-    /// Where the reader is, as the controls and VoiceOver say it.
+    /// Where the reader is, as VoiceOver says it, and as the readout does.
     private var place: String {
-        model.chapterTitle.map { "\($0) · \(percentShown)" } ?? percentShown
+        model.placeLabel(percent: percentShown, pagesLeft: pagesLeftLabel)
     }
 
-    /// Pages left in the chapter, or the book, while the scrubber rests.
-    /// Scrolled there are no pages, and the chapter's count waits for the
-    /// contents to place it.
+    /// While the scrubber rests.
     private var pagesLeftLabel: AttributedString? {
-        guard scrubbing == nil, let left = model.pagesLeft else { return nil }
-        if pagesLeftInBook {
-            return left.book == 0
-                ? AttributedString(localized: "Last page in the book")
-                : AttributedString(localized: "^[\(left.book) page](inflect: true) left in the book")
-        }
-        guard let chapter = left.chapter else { return nil }
-        return chapter == 0
-            ? AttributedString(localized: "Last page in the chapter")
-            : AttributedString(localized: "^[\(chapter) page](inflect: true) left in the chapter")
+        scrubbing == nil ? model.pagesLeftLabel(inBook: pagesLeftInBook) : nil
     }
 
-    private var bottomBar: some View {
+    var body: some View {
         VStack(spacing: 4) {
             Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
                 scrubbing = nil
@@ -290,22 +338,8 @@ struct ReaderView: View {
         .padding(.top, 8)
         .padding(.bottom, 6)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .background(barBackground.ignoresSafeArea(edges: .bottom))
+        .background(ReaderView.barBackground.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Theme.border.frame(height: 1) }
-    }
-
-    /// Where the reader is, small under the page while the controls are
-    /// hidden.
-    private var readout: some View {
-        Text(place)
-            .font(.geist(.caption2, weight: .medium))
-            .monospacedDigit()
-            .foregroundStyle(foreground.opacity(0.55))
-            .lineLimit(1)
-            .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity, minHeight: 22)
-            .accessibilityLabel(Text(place))
-            .accessibilityIdentifier("reader.progress")
     }
 }
 
@@ -330,7 +364,7 @@ private struct ContentsSheet: View {
             header
             ScrollViewReader { scroller in
                 ScrollView {
-                    VStack(spacing: 0) {
+                    LazyVStack(spacing: 0) {
                         ForEach(model.contents) { entry in
                             if entry.id != model.contents.first?.id {
                                 Rectangle().fill(Theme.border).frame(height: 1)
@@ -485,9 +519,65 @@ private struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
     }
 }
 
-/// A footnote beside its reference, in the page's colors, with a way to
-/// the full note.
-private struct NotePopover: View {
+/// A footnote's card beside its reference, over the page dimmed a little,
+/// with an arrow to the reference. A tap outside closes it.
+private struct NoteOverlay: View {
+    let note: OpenNote
+    let theme: ReaderSettings.Theme
+    let goToNote: () -> Void
+    let close: () -> Void
+    @State private var cardSize: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = min(geometry.size.width - NotePlacement.margin * 2, 380)
+            let placement = NotePlacement(reference: note.rect, card: cardSize, in: geometry.size)
+            ZStack(alignment: .topLeading) {
+                Color.black.opacity(theme == .light || theme == .sepia ? 0.18 : 0.4)
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: close)
+                    .accessibilityHidden(true)
+                NoteCard(note: note, theme: theme, goToNote: goToNote)
+                    .frame(width: width)
+                    .background {
+                        NoteCardShape(arrowX: placement.arrowX, above: placement.above)
+                            .fill(Color(theme.background))
+                            .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
+                    }
+                    .onGeometryChange(for: CGSize.self, of: \.size) { cardSize = $0 }
+                    .offset(x: placement.origin.x, y: placement.origin.y)
+                    // Placed once its height is known.
+                    .opacity(cardSize == .zero ? 0 : 1)
+                    .accessibilityAddTraits(.isModal)
+                    .accessibilityAction(.escape, close)
+            }
+        }
+    }
+}
+
+/// The card with its arrow, on the edge toward the reference.
+private struct NoteCardShape: Shape {
+    let arrowX: CGFloat
+    let above: Bool
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path(roundedRect: rect, cornerRadius: NotePlacement.radius, style: .continuous)
+        let half = NotePlacement.arrowWidth / 2
+        let height = NotePlacement.arrowHeight
+        let edge = above ? rect.maxY : rect.minY
+        let tip = above ? edge + height : edge - height
+        // Overlaps the edge a point so no seam shows.
+        let base = above ? edge - 1 : edge + 1
+        path.move(to: CGPoint(x: rect.minX + arrowX - half, y: base))
+        path.addLine(to: CGPoint(x: rect.minX + arrowX, y: tip))
+        path.addLine(to: CGPoint(x: rect.minX + arrowX + half, y: base))
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// A footnote's text in the page's colors, with a way to the full note.
+private struct NoteCard: View {
     let note: OpenNote
     let theme: ReaderSettings.Theme
     let goToNote: () -> Void
@@ -510,15 +600,16 @@ private struct NotePopover: View {
             Button(action: goToNote) {
                 Label("Go to Note", icon: .arrowDownRight)
                     .font(.geist(.subheadline, weight: .semibold))
+                    .frame(minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
             }
             .foregroundStyle(Color(UIColor(hex: theme.colors.noteLink)))
             .accessibilityIdentifier("reader.note.go")
         }
         .foregroundStyle(Color(theme.foreground))
         .padding(16)
-        .frame(idealWidth: 320, maxWidth: 360, maxHeight: 320)
+        .frame(maxHeight: 320)
         .fixedSize(horizontal: false, vertical: true)
-        .background(Color(theme.background))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reader.note")
     }

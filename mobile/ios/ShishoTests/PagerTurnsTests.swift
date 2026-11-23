@@ -162,6 +162,15 @@ final class PagerTurnsTests: XCTestCase {
         XCTAssertEqual(PagerZones.tap(at: 0.9, rightToLeft: true), .turn(.back))
     }
 
+    /// In the edge thirds, where a tap turns the page, only a tap right on a
+    /// link follows it; in the middle a tap near one does, as links in text
+    /// are small.
+    func testATapNearALinkFollowsItOnlyInTheMiddle() {
+        XCTAssertEqual(PagerZones.linkSlop(at: 0.5), PagerController.linkSlop)
+        XCTAssertEqual(PagerZones.linkSlop(at: 0.1), 0)
+        XCTAssertEqual(PagerZones.linkSlop(at: 0.9), 0)
+    }
+
     /// A finger moving left brings in the page on the right: the next one,
     /// or the previous one in a right-to-left book.
     func testDragsFollowTheReadingDirection() {

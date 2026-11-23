@@ -157,13 +157,19 @@ struct Scrubber: View {
                 Capsule()
                     .fill(Theme.primary)
                     .frame(width: min(width, x + Scrubber.thumb / 2), height: Scrubber.track)
-                ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
-                    Capsule()
-                        .fill(Theme.foreground.opacity(0.3))
-                        .frame(width: 1.5, height: 12)
-                        .offset(x: Scrubber.thumb / 2 - 0.75 + travel * min(1, max(0, length > 0 ? mark / length : 0)))
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
+                // One drawing for every mark, rather than a view each: a
+                // book can have a hundred chapters.
+                if !marks.isEmpty {
+                    Canvas { context, size in
+                        for mark in marks {
+                            let centre = Scrubber.thumb / 2 + travel * min(1, max(0, length > 0 ? mark / length : 0))
+                            let tick = CGRect(x: centre - 0.75, y: (size.height - 12) / 2, width: 1.5, height: 12)
+                            context.fill(Capsule().path(in: tick), with: .color(Theme.foreground.opacity(0.3)))
+                        }
+                    }
+                    .frame(width: width, height: 12)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 }
                 // White in both appearances, as the system slider's handle
                 // is, ringed in the brand color.

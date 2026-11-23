@@ -29,17 +29,19 @@ final class ReaderPagePoolTests: XCTestCase {
         XCTAssertFalse(pool.isWarm)
     }
 
-    func testMemoryPressureLetsThePagesGo() {
+    func testMemoryPressureLetsThePagesGo() async throws {
         let pool = ReaderPagePool.shared
         pool.prewarm()
         NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(100))
         XCTAssertFalse(pool.isWarm)
     }
 
-    func testGoingToTheBackgroundLetsThePagesGo() {
+    func testGoingToTheBackgroundLetsThePagesGo() async throws {
         let pool = ReaderPagePool.shared
         pool.prewarm()
         NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(100))
         XCTAssertFalse(pool.isWarm)
     }
 }

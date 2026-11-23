@@ -18,13 +18,17 @@ final class ReaderPagePool {
     }
 
     private var ready: Pages?
-    private var observers: [NSObjectProtocol] = []
+    private var watches: [Task<Void, Never>] = []
 
     private init() {
-        let center = NotificationCenter.default
         for name in [UIApplication.didReceiveMemoryWarningNotification, UIApplication.didEnterBackgroundNotification] {
-            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated { ReaderPagePool.shared.drain() }
+            // Made here, so it listens from now rather than once the task
+            // starts.
+            let notifications = NotificationCenter.default.notifications(named: name)
+            watches.append(Task { [weak self] in
+                for await _ in notifications {
+                    self?.drain()
+                }
             })
         }
     }

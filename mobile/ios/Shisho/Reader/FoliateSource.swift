@@ -472,7 +472,9 @@ final class FoliateSource: PagerSource {
             }
             return true
         }
-        guard resting, let id = current.link(near: point, slop: PagerController.linkSlop) else { return false }
+        let width = current.webView.bounds.width
+        let slop = PagerZones.linkSlop(at: width > 0 ? point.x / width : 0.5)
+        guard resting, let id = current.link(near: point, slop: slop) else { return false }
         current.call("R.activateLink(\(id), \(point.x), \(point.y))")
         return true
     }

@@ -73,7 +73,7 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     private var touchDownAt: TimeInterval = 0
 
     /// How close to a link a tap goes to the link instead of turning.
-    static let linkSlop: CGFloat = 24
+    nonisolated static let linkSlop: CGFloat = 24
     /// A finger held this long before moving is WebKit's long press, which
     /// starts a selection rather than a turn. It's WebKit's own threshold,
     /// so any shorter hold still turns the page (the prototype refused

@@ -14,8 +14,10 @@ enum PagesLeft {
         let pages: Int
     }
 
-    /// Pages after the one showing, up to the one end falls on.
-    static func count(in section: Section, to end: Double) -> Int {
+    /// Pages after the one showing, up to the one end falls on. Past the
+    /// section, pagesPerShare is the rate measured over the sections seen,
+    /// or this section's own when there's none.
+    static func count(in section: Section, to end: Double, pagesPerShare: Double? = nil) -> Int {
         let pages = max(1, section.pages)
         let page = min(max(1, section.page), pages)
         let perPage = (section.to - section.from) / Double(pages)
@@ -23,10 +25,19 @@ enum PagesLeft {
         let leftHere = pages - page
         // Within a hair of the section's end is its end.
         if end >= section.to - perPage / 2 {
-            return leftHere + max(0, Int(((end - section.to) / perPage).rounded()))
+            let rate = pagesPerShare ?? 1 / perPage
+            return leftHere + max(0, Int(((end - section.to) * rate).rounded()))
         }
         let pageStart = section.from + Double(page - 1) * perPage
         let endPage = Int(((end - pageStart) / perPage).rounded(.up))
         return min(max(0, endPage - 1), leftHere)
+    }
+
+    /// Pages per share of the book over the sections seen, each weighed by
+    /// its share, so a short title page barely moves it.
+    static func pagesPerShare(_ sections: [(pages: Int, share: Double)]) -> Double? {
+        let share = sections.reduce(0) { $0 + $1.share }
+        guard share > 0 else { return nil }
+        return Double(sections.reduce(0) { $0 + $1.pages }) / share
     }
 }

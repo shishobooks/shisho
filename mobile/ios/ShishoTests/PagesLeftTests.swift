@@ -30,6 +30,20 @@ final class PagesLeftTests: XCTestCase {
         XCTAssertEqual(PagesLeft.count(in: place, to: 1), 77)
     }
 
+    /// Past the section, a rate measured over more of the book stands in
+    /// for this section's, which a short section skews.
+    func testAMeasuredRateEstimatesPastTheSection() {
+        XCTAssertEqual(PagesLeft.count(in: place, to: 1, pagesPerShare: 50), 42)
+    }
+
+    /// The rate weighs each section seen by its share of the book, so a
+    /// one-page title page barely moves it.
+    func testTheRateWeighsSectionsByTheirShare() {
+        let rate = PagesLeft.pagesPerShare([(pages: 1, share: 0.0005), (pages: 30, share: 0.03), (pages: 20, share: 0.02)])
+        XCTAssertEqual(rate ?? 0, 51 / 0.0505, accuracy: 0.001)
+        XCTAssertNil(PagesLeft.pagesPerShare([]))
+    }
+
     /// A fixed-layout book's sections are a page each.
     func testAFixedLayoutPageIsItsSection() {
         let spread = PagesLeft.Section(from: 0.5, to: 0.55, page: 1, pages: 1)
