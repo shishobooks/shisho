@@ -14,9 +14,7 @@ name: Switch between accounts
     env:
       CONTROL: ${CONTROL}
       ACCESS: none
-- launchApp:
-    clearState: true
-- runFlow: subflows/sign_in.yaml
+- runFlow: subflows/launch_signed_in.yaml
 - extendedWaitUntil:
     visible: The Harness Novel
     timeout: 30000

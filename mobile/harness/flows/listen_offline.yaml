@@ -8,9 +8,7 @@ name: Listen offline and sync later
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp:
-    clearState: true
-- runFlow: subflows/sign_in.yaml
+- runFlow: subflows/launch_signed_in.yaml
 - runScript:
     file: scripts/note_app_sessions.js
     env:
@@ -44,23 +42,16 @@ name: Listen offline and sync later
 - evalScript: ${output.onlinePaused = maestro.copiedText}
 - runScript:
     file: scripts/note_online_pause.js
-# The pause sends the session so far. Checked in a retry, since the sync can
-# take longer than one wait on a loaded CI simulator.
-- retry:
-    maxRetries: 3
-    commands:
-      - extendedWaitUntil:
-          visible: __never__
-          timeout: 4000
-          optional: true
-      - runScript:
-          file: scripts/assert_paused_session.js
-          env:
-            CONTROL: ${CONTROL}
-            TITLE: Harbor Lights
-      - assertTrue:
-          condition: ${output.serverCheck == "ok"}
-          label: The server check passed
+# The pause sends the session so far; the script polls the server until it
+# lands.
+- runScript:
+    file: scripts/assert_paused_session.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed
 - runScript:
     file: scripts/go_offline.js
     env:
@@ -101,20 +92,12 @@ name: Listen offline and sync later
     visible:
       id: miniplayer.open
     timeout: 30000
-# Checked in a retry, since the sync can take longer than one wait on a
-# loaded CI simulator.
-- retry:
-    maxRetries: 3
-    commands:
-      - extendedWaitUntil:
-          visible: __never__
-          timeout: 6000
-          optional: true
-      - runScript:
-          file: scripts/assert_offline_session.js
-          env:
-            CONTROL: ${CONTROL}
-            TITLE: Harbor Lights
-      - assertTrue:
-          condition: ${output.serverCheck == "ok"}
-          label: The server check passed
+# The script polls the server until the sync lands.
+- runScript:
+    file: scripts/assert_offline_session.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed

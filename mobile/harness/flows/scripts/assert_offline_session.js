@@ -2,37 +2,38 @@
 // not when it synced: the session ended before the server came back, and
 // the server counts the time listened offline. The server may add that time
 // to the session the pause sent, so it's counted across all of them.
-// It records "ok", or what's wrong, in output.serverCheck rather than
-// throwing: the flow checks that with assertTrue inside a retry, which
-// retries Maestro's own failures but not a script's error.
+// It polls the server until the check passes or 25 s pass, since the sync
+// can land late on a stalled CI simulator, and records "ok", or what's still
+// wrong, in output.serverCheck for the flow's assertTrue.
 
-output.serverCheck = "";
-try {
-  // Seconds in the last clock time ("0:12" or "1:02:03") of a label such as
-  // "Elapsed 0:12", which the player's position shows.
-  function seconds(label) {
-    const match = /(\d+:)?\d+:\d+(?!.*\d+:\d+)/.exec(String(label));
-    if (!match) throw new Error("no time in " + JSON.stringify(label));
-    const parts = match[0].split(":").map(Number);
-    return parts.length === 3
-      ? parts[0] * 3600 + parts[1] * 60 + parts[2]
-      : parts[0] * 60 + parts[1];
-  }
+// Seconds in the last clock time ("0:12" or "1:02:03") of a label such as
+// "Elapsed 0:12", which the player's position shows.
+function seconds(label) {
+  const match = /(\d+:)?\d+:\d+(?!.*\d+:\d+)/.exec(String(label));
+  if (!match) throw new Error("no time in " + JSON.stringify(label));
+  const parts = match[0].split(":").map(Number);
+  return parts.length === 3
+    ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+    : parts[0] * 60 + parts[1];
+}
 
-  // What the server holds of listening to TITLE.
-  function serverReading() {
-    const response = http.get(
-      CONTROL + "/reading?title=" + encodeURIComponent(TITLE),
+// What the server holds of listening to TITLE, kept in last to log.
+let last;
+function serverReading() {
+  const response = http.get(
+    CONTROL + "/reading?title=" + encodeURIComponent(TITLE),
+  );
+  if (response.status !== 200) {
+    throw new Error(
+      "the harness could not read the server: " + response.status,
     );
-    if (response.status !== 200) {
-      throw new Error(
-        "the harness could not read the server: " + response.status,
-      );
-    }
-    return json(response.body);
   }
+  last = json(response.body);
+  return last;
+}
+
+function check() {
   const reading = serverReading();
-  console.log(JSON.stringify(reading));
   const sessions = reading.sessions.filter((s) => s.source === "shisho_app");
   if (sessions.length === 0)
     throw new Error("the server has no session from the app");
@@ -79,8 +80,18 @@ try {
   if (reading.occurred_at > reading.online_at) {
     throw new Error("the place was placed when it synced");
   }
-  output.serverCheck = "ok";
-} catch (e) {
-  output.serverCheck = String(e.message || e);
-  console.log("server check: " + output.serverCheck);
 }
+
+const deadline = Date.now() + 25000;
+for (;;) {
+  try {
+    check();
+    output.serverCheck = "ok";
+  } catch (e) {
+    output.serverCheck = String(e.message || e);
+  }
+  if (output.serverCheck === "ok" || Date.now() > deadline) break;
+  http.get(CONTROL + "/wait?ms=500");
+}
+console.log(JSON.stringify(last));
+console.log("server check: " + output.serverCheck);

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +20,7 @@ import (
 
 func runIOS(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("ios", flag.ExitOnError)
-	app := flags.String("app", "mobile/ios/build/DerivedData/Build/Products/Debug-iphonesimulator/Shisho.app", "the app built for the simulator")
+	app := flags.String("app", defaultAppPath, "the app built for the simulator")
 	flowDir := flags.String("flows", "mobile/harness/flows", "folder of Maestro flows to run")
 	keep := flags.Bool("keep", false, "keep the run's folder (server log, database, Maestro output) for debugging")
 	out := flags.String("out", "", "make the run's folder here, and keep it")
@@ -34,16 +35,10 @@ func runIOS(ctx context.Context, args []string) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	if _, err := os.Stat(appPath); err != nil {
-		return errors.Errorf("no app at %s; build it first with `mise ios:build`", appPath)
-	}
-	// The bundle id the flows launch, which Signing.local.xcconfig may
-	// have changed.
-	bundleID, err := exec.CommandContext(ctx, "/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", filepath.Join(appPath, "Info.plist")).Output() //nolint:gosec // The app this run built.
+	appID, err := appBundleID(ctx, appPath)
 	if err != nil {
-		return errors.Wrap(err, "read the app's bundle id")
+		return err
 	}
-	appID := strings.TrimSpace(string(bundleID))
 	flows, err := filepath.Abs(*flowDir)
 	if err != nil {
 		return errors.WithStack(err)
@@ -69,7 +64,7 @@ func runIOS(ctx context.Context, args []string) error {
 	}
 
 	library := filepath.Join(dir, "library")
-	if err := writeFixtures(ctx, library); err != nil {
+	if err := writeFixtures(ctx, root, library); err != nil {
 		return errors.Wrap(err, "make fixtures")
 	}
 	srv, err := startServer(ctx, root, dir, "127.0.0.1", 0)
@@ -87,18 +82,18 @@ func runIOS(ctx context.Context, args []string) error {
 	}
 	defer control.Close()
 
-	clone, err := cloneSimulator(ctx)
+	sim, err := simulatorForRun(ctx, root, "flows", appID)
 	if err != nil {
 		return err
 	}
-	defer clone.Remove()
-	if _, err := simctl(ctx, "install", clone.UDID, appPath); err != nil {
+	defer sim.Release()
+	if _, err := simctl(ctx, "install", sim.UDID, appPath); err != nil {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "appharness: server %s, simulator %s\n", srv.URL, clone.UDID)
+	fmt.Fprintf(os.Stderr, "appharness: server %s, simulator %s\n", srv.URL, sim.UDID)
 	//nolint:gosec // The harness's own flags and paths.
-	maestro := exec.CommandContext(ctx, "maestro", "--device", clone.UDID, "test",
+	maestro := exec.CommandContext(ctx, "maestro", "--device", sim.UDID, "test",
 		"--debug-output", filepath.Join(dir, "maestro"),
 		"-e", "APP_ID="+appID,
 		"-e", "SERVER="+srv.URL,
@@ -109,12 +104,15 @@ func runIOS(ctx context.Context, args []string) error {
 		"-e", "CONTROL="+control.URL,
 		flows)
 	maestro.Stdout, maestro.Stderr = os.Stdout, os.Stderr
+	stopWithProcessGroup(maestro)
 	// Maestro installs and starts its driver on the simulator first, which
 	// takes minutes on a CI runner, far longer than Maestro's default.
 	if os.Getenv("MAESTRO_DRIVER_STARTUP_TIMEOUT") == "" {
 		maestro.Env = append(os.Environ(), "MAESTRO_DRIVER_STARTUP_TIMEOUT=600000")
 	}
-	if err := maestro.Run(); err != nil {
+	err = maestro.Run()
+	killProcessGroup(ctx, maestro)
+	if err != nil {
 		if !*keep {
 			fmt.Fprintln(os.Stderr, "appharness: a flow failed; run with -keep to keep the server log and Maestro's screenshots")
 		}
@@ -181,6 +179,20 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(state)
+	})
+	// Answers after ?ms= milliseconds, at most 5 s: Maestro's scripts have no
+	// sleep, so the assert_*.js scripts wait here between polls.
+	mux.HandleFunc("GET /wait", func(w http.ResponseWriter, r *http.Request) {
+		ms, err := strconv.Atoi(r.URL.Query().Get("ms"))
+		if err != nil || ms < 0 || ms > 5000 {
+			http.Error(w, "ms must be 0 to 5000", http.StatusBadRequest)
+			return
+		}
+		select {
+		case <-time.After(time.Duration(ms) * time.Millisecond):
+		case <-r.Context().Done():
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 	go func() { _ = http.Serve(listener, mux) }()
 	return &control{URL: "http://" + strings.TrimPrefix(listener.Addr().String(), "http://"), listener: listener}, nil

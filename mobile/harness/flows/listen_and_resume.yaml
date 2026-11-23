@@ -7,9 +7,7 @@ name: Listen, kill, and resume
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp:
-    clearState: true
-- runFlow: subflows/sign_in.yaml
+- runFlow: subflows/launch_signed_in.yaml
 - runFlow:
     file: subflows/listen_to.yaml
     env:
@@ -54,20 +52,13 @@ name: Listen, kill, and resume
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.afterRelaunch = maestro.copiedText}
-# Relaunching syncs what the last save kept. Checked in a retry, since the
-# sync can take longer than one wait on a loaded CI simulator.
-- retry:
-    maxRetries: 3
-    commands:
-      - extendedWaitUntil:
-          visible: __never__
-          timeout: 5000
-          optional: true
-      - runScript:
-          file: scripts/assert_resumed.js
-          env:
-            CONTROL: ${CONTROL}
-            TITLE: Harbor Lights
-      - assertTrue:
-          condition: ${output.serverCheck == "ok"}
-          label: The server check passed
+# Relaunching syncs what the last save kept; the script polls the server
+# until it lands.
+- runScript:
+    file: scripts/assert_resumed.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,16 +12,17 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
-// baseSimulatorName is the simulator every run clones. The harness makes it
-// once and boots it once, so iOS's first-boot setup is done in the base
-// rather than in every clone: a clone then boots in seconds instead of half a
-// minute here, and minutes on CI. Runs never boot it again, so a clone always
-// starts from the same device and runs in other worktrees never share one.
+// baseSimulatorName is the simulator every worktree's simulators, and every
+// disposable one, are cloned from. The harness makes it once and boots it
+// once, so iOS's first-boot setup is done in the base rather than in every
+// clone. Runs never boot it again, so a clone always starts from the same
+// device and runs in other worktrees never share one.
 //
 // The number changes when how the harness makes a base does; it deletes a
 // base of an older number and makes a new one. CI caches the base by this
@@ -219,28 +221,78 @@ func (c *simulatorClone) Remove() {
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	_, _ = simctl(ctx, "shutdown", c.UDID)
-	_, _ = simctl(ctx, "delete", c.UDID)
+	removeSimulator(c.UDID)
 }
 
-// runOnSimulator runs the command after "--" with a disposable simulator
-// clone's UDID in SIMULATOR_UDID.
+// runOnSimulator runs the command after "--" with a simulator's UDID in
+// SIMULATOR_UDID: the worktree's own for tests (worktreesim.go), with the app
+// at -app removed first, or a disposable clone (simulatorForRun).
 func runOnSimulator(ctx context.Context, args []string) error {
-	if len(args) > 0 && args[0] == "--" {
-		args = args[1:]
+	flags := flag.NewFlagSet("simulator", flag.ExitOnError)
+	app := flags.String("app", defaultAppPath, "the app whose data to remove before the command runs")
+	if err := flags.Parse(args); err != nil {
+		return err
 	}
+	args = flags.Args()
 	if len(args) == 0 {
 		return errors.New("simulator: name a command after --")
 	}
-	clone, err := cloneSimulator(ctx)
+	root, err := os.Getwd()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	bundleID, err := appBundleID(ctx, *app)
 	if err != nil {
 		return err
 	}
-	defer clone.Remove()
+	sim, err := simulatorForRun(ctx, root, "tests", bundleID)
+	if err != nil {
+		return err
+	}
+	defer sim.Release()
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // Runs the command it was given, like env or xargs.
-	cmd.Env = append(os.Environ(), "SIMULATOR_UDID="+clone.UDID)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return errors.WithStack(cmd.Run())
+	cmd.Env = append(os.Environ(), "SIMULATOR_UDID="+sim.UDID)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	stopWithProcessGroup(cmd)
+	err = cmd.Run()
+	killProcessGroup(ctx, cmd)
+	return errors.WithStack(err)
+}
+
+// stopWithProcessGroup runs cmd in its own process group and, when the run
+// is interrupted, stops the whole group: a test runner under `sh -c` or
+// Maestro's driver would otherwise outlive the run, and the lock it held on
+// the simulator, and the next run would reset the simulator under it.
+func stopWithProcessGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+	}
+	cmd.WaitDelay = 30 * time.Second
+}
+
+// killProcessGroup kills what's left of cmd's process group after an
+// interrupted run, before the run lets go of its simulator: WaitDelay kills
+// only cmd itself, and a process under it may have ignored SIGTERM.
+func killProcessGroup(ctx context.Context, cmd *exec.Cmd) {
+	if ctx.Err() != nil && cmd.Process != nil {
+		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+}
+
+// defaultAppPath is where `mise ios:build` puts the app for the simulator.
+const defaultAppPath = "mobile/ios/build/DerivedData/Build/Products/Debug-iphonesimulator/Shisho.app"
+
+// appBundleID reads the app's bundle id, which Signing.local.xcconfig may
+// have changed.
+func appBundleID(ctx context.Context, appPath string) (string, error) {
+	if _, err := os.Stat(appPath); err != nil {
+		return "", errors.Errorf("no app at %s; build it first with `mise ios:build`", appPath)
+	}
+	//nolint:gosec // The app this run built.
+	out, err := exec.CommandContext(ctx, "/usr/libexec/PlistBuddy", "-c", "Print :CFBundleIdentifier", filepath.Join(appPath, "Info.plist")).Output()
+	if err != nil {
+		return "", errors.Wrap(err, "read the app's bundle id")
+	}
+	return strings.TrimSpace(string(out)), nil
 }
