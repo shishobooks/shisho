@@ -44,8 +44,8 @@ struct SearchView: View {
                             message: String(localized: "Find Books by title, author, narrator, series, or ISBN, and find series, people, genres, and tags. It works offline."),
                             icon: .search)
             } else if results.isEmpty {
-                EmptyState(verbatim: String(localized: "No Results for “\(text)”"), icon: .search,
-                           description: Text("Check the spelling or try a new search."))
+                EmptyNotice(title: String(localized: "No Results for “\(text)”"),
+                            message: String(localized: "Check the spelling or try a new search."), icon: .search)
                     .accessibilityIdentifier("search.none")
             }
         }

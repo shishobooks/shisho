@@ -31,7 +31,7 @@ struct NowPlayingView: View {
                 content(player, file)
                     .overlay(alignment: .top) { toast(player) }
             } else {
-                EmptyState("Nothing is playing", icon: .headphones)
+                EmptyNotice(title: String(localized: "Nothing is playing"), icon: .headphones)
             }
         }
         .background(alignment: .top) { backdrop }
@@ -198,7 +198,8 @@ struct NowPlayingView: View {
                 Text(byline)
                     .font(.geist(.subheadline))
                     .foregroundStyle(Theme.foreground.opacity(0.7))
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
+                    // Two lines, so a long byline can't hide a name's link.
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 2)
                     // A name goes to its Person's page, under the player.
                     .environment(\.openURL, OpenURLAction { url in
                         guard let route = LinkedText.route(url) else { return .systemAction }
@@ -223,13 +224,9 @@ struct NowPlayingView: View {
         var parts: [AttributedString] = []
         if !authors.isEmpty {
             parts.append(Byline.links(authors))
-        } else if !file.book.authors.isEmpty {
-            parts.append(AttributedString(file.book.authors))
         }
         if !narrators.isEmpty {
             parts.append(LinkedText.muted(String(localized: "Narrated by ")) + Byline.links(narrators))
-        } else if !file.narrators.isEmpty {
-            parts.append(AttributedString(String(localized: "Narrated by \(file.narrators.joined(separator: ", "))")))
         }
         guard var text = parts.first else { return nil }
         for part in parts.dropFirst() {
@@ -274,13 +271,8 @@ struct NowPlayingView: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
-    /// The chapter by its name, as the Listen bar names it, or by number
-    /// when it has none: a number beside a name can disagree with it, as
-    /// "2. Chapter 1" after an introduction.
     private func chapterLabel(_ player: AudioPlayer) -> String {
-        guard let index = player.chapterIndex, let title = player.chapterTitle else { return String(localized: "No chapters") }
-        let name = title.trimmingCharacters(in: .whitespaces)
-        return name.isEmpty ? String(localized: "Chapter \(index + 1)") : name
+        player.chapterTitle ?? String(localized: "No chapters")
     }
 
     private func scrubber(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
@@ -350,7 +342,7 @@ struct NowPlayingView: View {
     private func transport(_ player: AudioPlayer) -> some View {
         HStack {
             Button { player.previousChapter() } label: {
-                Icon(.skipBack, size: 24).frame(width: 48, height: 48)
+                Icon(.skipBack, size: 24, relativeTo: nil).frame(width: 48, height: 48)
             }
             .accessibilityLabel("Previous Chapter")
             .accessibilityIdentifier("player.prevChapter")
@@ -362,7 +354,7 @@ struct NowPlayingView: View {
             .accessibilityIdentifier("player.skipBack")
             Spacer()
             Button { player.togglePlay() } label: {
-                Icon(player.isPlaying ? .pauseFill : .playFill, size: 30)
+                Icon(player.isPlaying ? .pauseFill : .playFill, size: 30, relativeTo: nil)
                     // The triangle's weight sits left of its box's center.
                     .offset(x: player.isPlaying ? 0 : 2)
                     .foregroundStyle(Theme.primaryForeground)
@@ -380,7 +372,7 @@ struct NowPlayingView: View {
             .accessibilityIdentifier("player.skipForward")
             Spacer()
             Button { player.nextChapter() } label: {
-                Icon(.skipForward, size: 24).frame(width: 48, height: 48)
+                Icon(.skipForward, size: 24, relativeTo: nil).frame(width: 48, height: 48)
             }
             .accessibilityLabel("Next Chapter")
             .accessibilityIdentifier("player.nextChapter")
@@ -463,7 +455,7 @@ struct RoundIcon: View {
     }
 
     var body: some View {
-        Icon(name, size: size)
+        Icon(name, size: size, relativeTo: nil)
             .foregroundStyle(Theme.foreground)
             .frame(width: 40, height: 40)
             .background(Theme.background.opacity(0.4), in: Circle())

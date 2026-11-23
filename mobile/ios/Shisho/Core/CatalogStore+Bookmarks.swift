@@ -132,10 +132,15 @@ extension CatalogStore {
         // A Bookmark here that had the id before is another one.
         try db.execute(sql: "UPDATE bookmarks SET server_id = NULL WHERE server_id = ? AND id IS NOT ?", arguments: [bookmark.id, existing])
         guard let id = existing else {
+            // The id it was made under, or one from the server's. A row from
+            // before a restore can hold that one, so a new one then.
+            var id = bookmark.localId ?? "server-\(bookmark.id)"
+            if try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM bookmarks WHERE id = ?)", arguments: [id]) ?? false {
+                id = "server-\(bookmark.id)-\(UUID().uuidString.lowercased())"
+            }
             try db.execute(sql: """
                 INSERT INTO bookmarks (id, server_id, local_id, file_id, seconds, note, created_at, generation) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, arguments: ["server-\(bookmark.id)", bookmark.id, bookmark.localId, bookmark.fileId, bookmark.seconds, bookmark.note,
-                                 createdAt, generation])
+                """, arguments: [id, bookmark.id, bookmark.localId, bookmark.fileId, bookmark.seconds, bookmark.note, createdAt, generation])
             return
         }
         try db.execute(sql: """
@@ -155,17 +160,19 @@ extension CatalogStore {
     }
 
     /// The server took in a Bookmark event: a deleted Bookmark is gone for
-    /// good, whether or not the feed ever brought its server id, and an
-    /// edited note shows until the feed says otherwise. The server sends a
-    /// Bookmark again when it kept a later note than the edit.
-    static func finishBookmarkChange(eventID: String, in db: Database) throws {
+    /// good, whether or not the feed ever brought its server id. A note just
+    /// taken in shows until the feed says otherwise; the server sends a
+    /// Bookmark again when it kept a later note than the edit. One taken in
+    /// before, a duplicate, isn't news: the feed has had the server's note
+    /// since, which may be a later edit.
+    static func finishBookmarkChange(eventID: String, duplicate: Bool, in db: Database) throws {
         guard let row = try Row.fetchOne(db, sql: "SELECT type, bookmark_id FROM journal WHERE event_id = ?", arguments: [eventID]),
               let id: String = row["bookmark_id"]
         else { return }
         switch Shishoapp.JournalEventType(rawValue: row["type"]) {
         case .bookmarkDelete:
             try db.execute(sql: "DELETE FROM bookmarks WHERE id = ?", arguments: [id])
-        case .bookmarkNote:
+        case .bookmarkNote where !duplicate:
             try db.execute(sql: "UPDATE bookmarks SET note = local_note WHERE id = ?", arguments: [id])
         default:
             break

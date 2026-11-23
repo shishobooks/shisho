@@ -160,7 +160,7 @@ struct LibraryView: View {
                     .font(.geist(.subheadline))
                     .foregroundStyle(Theme.mutedForeground)
             } else {
-                Icon(.library, size: 44, relativeTo: .largeTitle)
+                Icon(.library, size: 44, relativeTo: nil)
                     .foregroundStyle(Theme.primary)
                     .padding(.bottom, 4)
                 Text("No Books yet")

@@ -50,8 +50,7 @@ struct ListenCard: View {
     /// time left out of view.
     private var chapter: String? {
         guard !(finished && !playing), let index = AudioChapters.index(at: seconds, in: progress.chapters) else { return nil }
-        let title = progress.chapters[index].title.trimmingCharacters(in: .whitespaces)
-        return title.isEmpty ? String(localized: "Chapter \(index + 1)") : title
+        return AudioChapters.name(of: index, in: progress.chapters)
     }
 
     private var detail: String {
@@ -66,7 +65,7 @@ struct ListenCard: View {
             if playing {
                 PlayingIndicator(playing: true, height: 14)
             } else {
-                Icon(finished ? .rotateCcw : .headphones, size: 22)
+                Icon(finished ? .rotateCcw : .headphones, size: 22, relativeTo: nil)
             }
         }
         .frame(width: 24)

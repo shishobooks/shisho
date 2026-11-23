@@ -29,7 +29,7 @@ struct BookDetailView: View {
             VStack(spacing: 0) {
                 ScrollTopMarker(space: "book")
                 if case .some(.none) = book {
-                    EmptyState("This Book isn't in your Libraries anymore", icon: .book)
+                    EmptyNotice(title: String(localized: "This Book isn't in your Libraries anymore"), icon: .book)
                         .padding(.top, 80)
                 } else {
                     hero
@@ -444,7 +444,7 @@ private struct FileCard: View {
                         if playing {
                             PlayingIndicator(playing: true, height: 14)
                         } else {
-                            Icon(.headphones, size: 18)
+                            Icon(.headphones, size: 18, relativeTo: nil)
                         }
                     }
                     .foregroundStyle(Theme.primary)
@@ -515,9 +515,9 @@ struct RatingStars: View {
                 let fill = min(1, max(0, stars - Double(index)))
                 // As the web draws a rating: filled, half filled, or empty.
                 ZStack {
-                    Icon(fill >= 0.75 ? .starFill : .star, size: 17, relativeTo: .subheadline)
+                    Icon(fill >= 0.75 ? .starFill : .star, size: 17, relativeTo: nil)
                     if fill >= 0.25, fill < 0.75 {
-                        Icon(.starHalfFill, size: 17, relativeTo: .subheadline)
+                        Icon(.starHalfFill, size: 17, relativeTo: nil)
                     }
                 }
                 .foregroundStyle(Theme.rating)

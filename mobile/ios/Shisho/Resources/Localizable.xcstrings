@@ -157,19 +157,6 @@
     "%lld selected" : {
 
     },
-    "%lldh %lldm" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lldh %2$lldm"
-          }
-        }
-      }
-    },
-    "%lldm" : {
-
-    },
     "+%lld more" : {
 
     },
@@ -177,9 +164,6 @@
 
     },
     "1 star" : {
-
-    },
-    "<1m" : {
 
     },
     "A change made on this device couldn't be saved on the server: %@" : {

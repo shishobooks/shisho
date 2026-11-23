@@ -55,7 +55,7 @@ struct ReadingStatusRibbon: View {
                     .foregroundStyle(.white)
                     .padding(.top, 6 * scale)
             } else {
-                Icon(StatusStyle.icon(status), size: 13 * scale, relativeTo: .caption2)
+                Icon(StatusStyle.icon(status), size: 13 * scale, relativeTo: nil)
                     .foregroundStyle(.white)
                     .padding(.top, 6 * scale)
             }
@@ -87,7 +87,7 @@ struct CoverRatingBadge: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            Icon(.starFill, size: 10, relativeTo: .caption2)
+            Icon(.starFill, size: 10, relativeTo: nil)
                 .foregroundStyle(Theme.rating)
             Text(verbatim: Ratings.text(units))
                 .font(.geist(size: 10, relativeTo: .caption2, weight: .semibold))

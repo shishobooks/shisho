@@ -107,7 +107,8 @@ const (
 	FeedKindReadThrough     = "read_through"
 	FeedKindUserBook        = "user_book"
 	// A List the user owns or that's shared with them.
-	FeedKindList     = "list"
+	FeedKindList = "list"
+	// One of the user's Bookmarks.
 	FeedKindBookmark = "bookmark"
 )
 

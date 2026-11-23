@@ -149,7 +149,7 @@ struct ResourceView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if case .some(.none) = detail {
-                        EmptyState("This isn't in your Libraries anymore", icon: kind.icon)
+                        EmptyNotice(title: String(localized: "This isn't in your Libraries anymore"), icon: kind.icon)
                             .padding(.top, 80)
                     } else {
                         header

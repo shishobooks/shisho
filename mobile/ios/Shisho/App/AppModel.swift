@@ -184,13 +184,7 @@ final class AppModel {
     /// Closes Now Playing onto book's page in the tab showing, pushing it
     /// unless it's showing.
     func showBook(_ book: BookSummary) {
-        showingPlayer = false
-        let route = Route.book(book)
-        switch tab {
-        case .library where libraryPath.last != route: libraryPath.append(route)
-        case .lists where listsPath.last != route: listsPath.append(route)
-        default: break
-        }
+        showFromPlayer(.book(book))
     }
 
     /// Goes back to tab's first screen.
@@ -233,14 +227,17 @@ final class AppModel {
         }
     }
 
-    /// Opens route on the tab showing.
-    /// Closes Now Playing onto route's page in the tab showing, as a link in
-    /// the player does.
+    /// Closes Now Playing onto route's page in the tab showing, pushing it
+    /// unless it's the page under the player.
     func showFromPlayer(_ route: Route) {
         showingPlayer = false
-        push(route)
+        let path = tab == .library ? libraryPath : listsPath
+        if path.last != route {
+            push(route)
+        }
     }
 
+    /// Opens route on the tab showing.
     func push(_ route: Route) {
         switch tab {
         case .library: libraryPath.append(route)

@@ -165,13 +165,4 @@ final class AudioChaptersTests: XCTestCase {
         XCTAssertEqual(TimeLabels.clock(65), "1:05")
         XCTAssertEqual(TimeLabels.clock(21.9), "0:21")
     }
-
-    /// A File's length, to the minute as the web app writes it. Under a
-    /// minute it says so, rather than rounding up to a minute it isn't.
-    func testLengthsAreToTheMinute() {
-        XCTAssertEqual(TimeLabels.length(24 * 3600 + 32 * 60), "24h 32m")
-        XCTAssertEqual(TimeLabels.length(12 * 60), "12m")
-        XCTAssertEqual(TimeLabels.length(20), "<1m")
-        XCTAssertEqual(TimeLabels.length(0), "0m")
-    }
 }

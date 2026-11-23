@@ -92,7 +92,8 @@ extension CatalogStore {
               let book = try CatalogStore.book(db, id: row["book_id"])
         else { return nil }
         return ListeningFile(fileID: fileID, book: book.summary, coverVersion: row["cover_version"], displayName: row["display_name"],
-                             narrators: names(row["narrators"]),
+                             // Names and their Persons from one row, so they pair.
+                             narrators: book.files.first { $0.id == fileID }?.narrators ?? names(row["narrators"]),
                              narratorIDs: book.files.first { $0.id == fileID }?.narratorIDs ?? [],
                              authors: book.authors,
                              series: book.series.first.map { ListeningSeries(name: $0.name, number: $0.number, numberEnd: $0.numberEnd) },
@@ -333,7 +334,7 @@ extension CatalogStore {
             for result in results where types[result.id] != nil {
                 switch result.result {
                 case .accepted, .duplicate:
-                    try CatalogStore.finishBookmarkChange(eventID: result.id, in: db)
+                    try CatalogStore.finishBookmarkChange(eventID: result.id, duplicate: result.result == .duplicate, in: db)
                     try db.execute(sql: "DELETE FROM journal WHERE event_id = ?", arguments: [result.id])
                 case .refused:
                     try CatalogStore.undoRefusedBookmarkChange(eventID: result.id, in: db)

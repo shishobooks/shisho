@@ -305,7 +305,6 @@ private struct TriggerLabel: View {
             Spacer(minLength: 0)
             Icon(pushes ? .chevronRight : .chevronsUpDown, size: 13, relativeTo: .footnote)
                 .foregroundStyle(Theme.mutedForeground)
-                .accessibilityHidden(true)
         }
         .padding(.horizontal, 12)
         .frame(maxWidth: .infinity, minHeight: 42)

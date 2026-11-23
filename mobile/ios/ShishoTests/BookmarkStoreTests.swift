@@ -218,4 +218,44 @@ final class BookmarkStoreTests: XCTestCase {
         XCTAssertEqual(try bookmarks().map(\.seconds), [20, 30])
         XCTAssertEqual(try bookmarks().last?.id, pending.id)
     }
+
+    /// After a restore, the server can give a web Bookmark's id to one made
+    /// on another phone. It arrives as a Bookmark of its own, and the page
+    /// applies; the old one, which the server no longer has, goes.
+    func testAServerIDReusedForAnotherPhonesBookmarkApplies() throws {
+        try store.apply(feedBookmark(42, seconds: 10, note: "web", cursor: 3))
+        try store.apply(feedBookmark(42, seconds: 99, note: "other phone", localID: "other-phone-uuid", cursor: 4))
+        let listed = try bookmarks()
+        XCTAssertEqual(listed.map(\.note), ["other phone"])
+        XCTAssertEqual(listed.first?.serverID, 42)
+    }
+
+    /// An edit the server took in before, whose answer was lost, comes back
+    /// as a duplicate when sent again. By then the feed has the server's
+    /// note, which may be a later edit on the web, so that one shows.
+    func testAResentEditDoesntReplaceTheFeedsNote() throws {
+        try store.apply(feedBookmark(43, note: "web", cursor: 3))
+        let id = try XCTUnwrap(bookmarks().first?.id)
+        try store.editBookmarkNote(id, note: "mine", at: now)
+        try store.apply(feedBookmark(43, note: "later on the web", cursor: 4))
+        let rows = try journalRows()
+        try store.applyJournalResults(rows.map { Shishoapp.JournalResult(id: $0.eventID, result: .duplicate) }, sent: rows, capabilities: "")
+        XCTAssertEqual(try bookmarks().map(\.note), ["later on the web"])
+    }
+
+    /// The player names the File's authors and narrators by their Persons,
+    /// so each name links to its page.
+    func testAListeningFileNamesItsPersons() throws {
+        try store.apply(page("""
+        {"entries":[{"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Harbor Lights","sort_title":"Harbor Lights",
+          "created_at":"2026-01-01T00:00:00Z","cover_version":"1-1","authors":[{"person_id":7,"name":"Ann Author","sort_name":"Author, Ann"}],
+          "files":[{"id":5,"file_type":"m4b","file_role":"main","size_bytes":10,"audiobook_duration_seconds":600,"chapters":[],
+          "narrators":[{"person_id":8,"name":"Ned Narrator","sort_name":"Narrator, Ned"},{"person_id":9,"name":"Nia Voice","sort_name":"Voice, Nia"}]}]}}],
+         "cursor":3}
+        """))
+        let file = try XCTUnwrap(store.pool.read { try CatalogStore.listeningFile($0, fileID: 5) })
+        XCTAssertEqual(file.authors.map(\.personID), [7])
+        XCTAssertEqual(file.narrators, ["Ned Narrator", "Nia Voice"])
+        XCTAssertEqual(file.narratorIDs, [8, 9])
+    }
 }

@@ -82,7 +82,7 @@ struct AppTabBar: View {
             }
         } label: {
             VStack(spacing: 3) {
-                Icon(icon, size: 24, relativeTo: .caption2)
+                Icon(icon, size: 24, relativeTo: nil)
                     .frame(height: 26)
                 Text(title)
                     .font(.geist(size: 10.5, relativeTo: .caption2, weight: .medium))
@@ -118,7 +118,7 @@ struct RootToolbar: ToolbarContent {
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
             NavigationLink(value: Route.search) {
-                Icon(.search, size: 20)
+                Icon(.search, size: 20, relativeTo: nil)
                     .foregroundStyle(Theme.foreground)
             }
             .accessibilityLabel("Search")
@@ -242,20 +242,22 @@ struct SectionHeading: View {
 /// Says a screen has nothing to show yet.
 struct EmptyNotice: View {
     let title: String
-    let message: String
+    var message: String?
     let icon: Lucide
 
     var body: some View {
         VStack(spacing: 10) {
-            Icon(icon, size: 40, relativeTo: .largeTitle)
+            Icon(icon, size: 40, relativeTo: nil)
                 .foregroundStyle(Theme.primary)
                 .padding(.bottom, 4)
             Text(title)
                 .font(.geist(.headline, weight: .semibold))
-            Text(message)
-                .font(.geist(.subheadline))
-                .foregroundStyle(Theme.mutedForeground)
-                .multilineTextAlignment(.center)
+            if let message {
+                Text(message)
+                    .font(.geist(.subheadline))
+                    .foregroundStyle(Theme.mutedForeground)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 56)

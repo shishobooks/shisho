@@ -44,9 +44,10 @@ final class AudioPlayer {
         file.flatMap { AudioChapters.index(at: position, in: $0.chapters) }
     }
 
+    /// The chapter playing, as `AudioChapters.name` names it.
     var chapterTitle: String? {
         guard let file, let index = chapterIndex else { return nil }
-        return file.chapters[index].title
+        return AudioChapters.name(of: index, in: file.chapters)
     }
 
     /// Where the current chapter starts and ends, or the whole File without

@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// The web app's icons, Lucide, drawn the same way: a 24 point grid with a
-/// stroke of 2 that scales with the icon. `mobile/ios/scripts/lucide-icons.mjs`
-/// writes them into the asset catalog from the web app's lucide-react; add a
-/// name there, run `mise ios:icons`, then add a case here. A filled variant
-/// ends in "-fill".
+/// stroke of 2 that scales with the icon. Add a case named for the Lucide
+/// icon (the raw value when Swift can't spell it), then run `mise ios:icons`,
+/// which writes it into the asset catalog from the web app's lucide-react. A
+/// raw value ending in "-fill" is the icon filled.
 enum Lucide: String, CaseIterable {
     case arrowDown = "arrow-down"
     case arrowDownUp = "arrow-down-up"
@@ -76,18 +76,23 @@ enum Lucide: String, CaseIterable {
 }
 
 /// A Lucide icon, size points across at the default text size, growing with
-/// Dynamic Type as text of style does, in the foreground style. It's
-/// decorative: the control it's in carries the label.
+/// Dynamic Type as text of style does, in the foreground style. With no
+/// style it stays size points, for one in a fixed-size frame, such as a
+/// cover's ribbon or a control that caps its text size. It's decorative: the
+/// control it's in carries the label.
 struct Icon: View {
     let name: Lucide
-    @ScaledMetric private var size: CGFloat
+    private let fixed: CGFloat?
+    @ScaledMetric private var scaled: CGFloat
 
-    init(_ name: Lucide, size: CGFloat = 20, relativeTo style: Font.TextStyle = .body) {
+    init(_ name: Lucide, size: CGFloat = 20, relativeTo style: Font.TextStyle? = .body) {
         self.name = name
-        _size = ScaledMetric(wrappedValue: size, relativeTo: style)
+        fixed = style == nil ? size : nil
+        _scaled = ScaledMetric(wrappedValue: size, relativeTo: style ?? .body)
     }
 
     var body: some View {
+        let size = fixed ?? scaled
         name.image
             .resizable()
             .frame(width: size, height: size)
@@ -124,55 +129,5 @@ extension Label where Title == Text, Icon == Image {
 
     init(verbatim title: String, menuIcon icon: Lucide) {
         self.init { Text(verbatim: title) } icon: { icon.image }
-    }
-}
-
-/// "Nothing here" with a Lucide icon, as the system's empty and unavailable
-/// screens show.
-struct EmptyState<Actions: View>: View {
-    let title: Text
-    let icon: Lucide
-    var description: Text?
-    @ViewBuilder var actions: () -> Actions
-
-    var body: some View {
-        ContentUnavailableView {
-            Label { title } icon: { Icon(icon, size: 44, relativeTo: .largeTitle) }
-        } description: {
-            if let description { description }
-        } actions: {
-            actions()
-        }
-    }
-}
-
-extension EmptyState where Actions == EmptyView {
-    init(_ title: LocalizedStringKey, icon: Lucide, description: Text? = nil) {
-        self.init(title: Text(title), icon: icon, description: description) { EmptyView() }
-    }
-
-    init(verbatim title: String, icon: Lucide, description: Text? = nil) {
-        self.init(title: Text(verbatim: title), icon: icon, description: description) { EmptyView() }
-    }
-}
-
-/// The skip buttons' icon, as the web player draws it: Lucide's rotate arrow,
-/// back or forward, around the seconds it skips, the listener's setting.
-struct SkipIcon: View {
-    let forward: Bool
-    let seconds: Double
-    var size: CGFloat = 30
-
-    var body: some View {
-        ZStack {
-            Icon(forward ? .rotateCw : .rotateCcw, size: size)
-            Text(verbatim: "\(Int(seconds))")
-                .font(.geist(size: size * 0.3, relativeTo: .body, weight: .bold))
-                .monospacedDigit()
-                .minimumScaleFactor(0.7)
-                .frame(width: size * 0.5)
-                .offset(y: size * 0.02)
-        }
-        .accessibilityHidden(true)
     }
 }

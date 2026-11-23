@@ -114,7 +114,7 @@ run = "go run ./tools/checkversions"
 
 [tasks."lint:js"]
 description = "Run all JS/TS linting"
-depends = ["tygo", "lint:eslint", "lint:prettier", "lint:types", "build:sdk"]
+depends = ["tygo", "lint:eslint", "lint:prettier", "lint:types", "build:sdk", "lint:icons"]
 
 [tasks."lint:eslint"]
 description = "Run ESLint"
@@ -307,6 +307,10 @@ run = "go run ./tools/appharness base"
 [tasks."ios:icons"]
 description = "Write the Lucide icons the iOS app uses into its asset catalog, from the web app's lucide-react"
 run = "node mobile/ios/scripts/lucide-icons.mjs"
+
+[tasks."lint:icons"]
+description = "Fail when the iOS app's Lucide icons differ from lucide-react's, or its Swift names an SF Symbol"
+run = "node mobile/ios/scripts/lucide-icons.mjs --check"
 
 [tasks."ios:strings"]
 description = "Update the iOS app's String Catalog from the strings in its code, which command-line builds leave alone"

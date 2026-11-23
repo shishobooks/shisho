@@ -43,7 +43,7 @@ struct PlayerToolbar: View {
         VStack(spacing: 5) {
             HStack(spacing: 0) {
                 Button { player.setRate(player.rate - PlaybackSpeed.step) } label: {
-                    Icon(.minus, size: 15).frame(width: 32, height: 30).hitArea(height: 30)
+                    Icon(.minus, size: 15, relativeTo: nil).frame(width: 32, height: 30).hitArea(height: 30)
                 }
                 .disabled(player.rate <= PlaybackSpeed.range.lowerBound)
                 .accessibilityLabel("Slower")
@@ -60,7 +60,7 @@ struct PlayerToolbar: View {
                     .accessibilityLabel("Speed \(PlaybackSpeed.label(player.rate))")
                     .accessibilityIdentifier("player.speed")
                 Button { player.setRate(player.rate + PlaybackSpeed.step) } label: {
-                    Icon(.plus, size: 15).frame(width: 32, height: 30).hitArea(height: 30)
+                    Icon(.plus, size: 15, relativeTo: nil).frame(width: 32, height: 30).hitArea(height: 30)
                 }
                 .disabled(player.rate >= PlaybackSpeed.range.upperBound)
                 .accessibilityLabel("Faster")
@@ -130,7 +130,7 @@ private struct ToolLabel: View {
 
     var body: some View {
         VStack(spacing: 5) {
-            Icon(icon, size: 22, relativeTo: .caption2)
+            Icon(icon, size: 22, relativeTo: nil)
                 .frame(width: 36, height: 30)
             caption
                 .font(.geist(size: 11, relativeTo: .caption2, weight: .medium))
@@ -374,11 +374,11 @@ struct PlayerListSheet: View {
                 }
                 .frame(width: 20, alignment: .leading)
                 .foregroundStyle(playing ? Theme.primary : Theme.mutedForeground)
-                Text(chapter.title)
+                Text(AudioChapters.name(of: index, in: file.chapters))
                     .font(.geist(.subheadline, weight: .medium))
                     .foregroundStyle(playing ? Theme.primary : Theme.foreground)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                Text(TimeLabels.length(length))
+                Text(FileFacts.duration(length))
                     .font(.geist(.caption))
                     .monospacedDigit()
                     .foregroundStyle(playing ? Theme.primary : Theme.mutedForeground)
@@ -389,7 +389,7 @@ struct PlayerListSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(RowPressStyle())
-        .accessibilityLabel("\(chapter.title), \(TimeLabels.length(length))")
+        .accessibilityLabel("\(AudioChapters.name(of: index, in: file.chapters)), \(FileFacts.duration(length))")
         .accessibilityAddTraits(playing ? .isSelected : [])
         .accessibilityIdentifier("chapters.row")
     }
@@ -445,12 +445,12 @@ struct PlayerListSheet: View {
             .accessibilityHint("Goes to this moment")
             .accessibilityIdentifier("bookmarks.row")
             Button { edit(bookmark) } label: {
-                Icon(.pencil, size: 17).frame(width: 44, height: 44).contentShape(Rectangle())
+                Icon(.pencil, size: 17, relativeTo: nil).frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("Edit note for bookmark at \(time)")
             .accessibilityIdentifier("bookmarks.editNote")
             Button { player.deleteBookmark(bookmark) } label: {
-                Icon(.trash, size: 17).frame(width: 44, height: 44).contentShape(Rectangle())
+                Icon(.trash, size: 17, relativeTo: nil).frame(width: 44, height: 44).contentShape(Rectangle())
             }
             .accessibilityLabel("Delete bookmark at \(time)")
             .accessibilityIdentifier("bookmarks.delete")

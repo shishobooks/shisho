@@ -37,7 +37,8 @@ const (
 	KindUserBook        = "user_book"
 	// A List's entry carries its owner as its user, and reaches everyone
 	// it's shared with too.
-	KindList     = "list"
+	KindList = "list"
+	// A Bookmark's entry carries its owner as its user.
 	KindBookmark = "bookmark"
 )
 

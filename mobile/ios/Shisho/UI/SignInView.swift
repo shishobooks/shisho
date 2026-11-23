@@ -119,11 +119,11 @@ struct SignInView: View {
         .scrollDismissesKeyboard(.interactively)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
-                Button { moveFocus(by: -1) } label: { Icon(.chevronUp) }
+                Button { moveFocus(by: -1) } label: { Icon(.chevronUp, relativeTo: nil) }
                     .disabled(focus == Field.allCases.first)
                     .accessibilityLabel("Previous field")
                     .accessibilityIdentifier("keyboard.previous")
-                Button { moveFocus(by: 1) } label: { Icon(.chevronDown) }
+                Button { moveFocus(by: 1) } label: { Icon(.chevronDown, relativeTo: nil) }
                     .disabled(focus == Field.allCases.last)
                     .accessibilityLabel("Next field")
                     .accessibilityIdentifier("keyboard.next")

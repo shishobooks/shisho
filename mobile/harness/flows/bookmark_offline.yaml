@@ -19,30 +19,43 @@ name: Bookmark offline and sync later
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
+# Paused before going on, so nothing below depends on where playback is.
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
 - runScript:
     file: scripts/go_offline.js
     env:
       CONTROL: ${CONTROL}
 
-# Bookmark adds one where playback is at once, and offers a note.
+# Bookmark adds one where playback is at once. Its note is added from the
+# list, a tab of the chapters sheet, rather than the message offering one,
+# which a stall could outlast.
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.bookmark
-- tapOn:
-    id: bookmark.addNote
-# The note's field is in an alert, found by what it says.
-- tapOn: Note
-- inputText: Made offline
-- tapOn: Save
-# The list is a tab of the chapters sheet.
 - runFlow:
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.chapters
 - tapOn:
     id: list.bookmarks
-- assertVisible: .*Made offline.*
+- extendedWaitUntil:
+    visible:
+      id: bookmarks.editNote
+    timeout: 30000
+- tapOn:
+    id: bookmarks.editNote
+# The note's field is in an alert, found by what it says.
+- tapOn: Note
+- inputText: Made offline
+- tapOn: Save
+- extendedWaitUntil:
+    visible: .*Made offline.*
+    timeout: 30000
 - tapOn:
     id: list.done
 

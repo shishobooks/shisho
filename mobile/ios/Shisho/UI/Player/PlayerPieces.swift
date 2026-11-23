@@ -24,6 +24,26 @@ struct PlayingIndicator: View {
     }
 }
 
+/// The skip buttons' icon, as the web player draws it: Lucide's rotate arrow,
+/// back or forward, around the seconds it skips, the listener's setting. It
+/// stays one size, as the player's controls do.
+struct SkipIcon: View {
+    let forward: Bool
+    let seconds: Double
+    var size: CGFloat = 30
+
+    var body: some View {
+        ZStack {
+            Icon(forward ? .rotateCw : .rotateCcw, size: size, relativeTo: nil)
+            Text(verbatim: "\(Int(seconds))")
+                .font(.custom(Theme.Fonts.geist, fixedSize: size * 0.3).weight(.bold))
+                .monospacedDigit()
+                .offset(y: size * 0.02)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 /// A round control in the player that gives under the finger.
 struct PlayerControlStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {

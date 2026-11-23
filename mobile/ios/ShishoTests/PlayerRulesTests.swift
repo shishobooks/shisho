@@ -54,4 +54,13 @@ final class PlayerRulesTests: XCTestCase {
         XCTAssertEqual(SleepTimerRules.chapterEnd(after: 7, chapters: chapters, duration: 9), 9)
         XCTAssertEqual(SleepTimerRules.chapterEnd(after: 7, chapters: [], duration: 9), 9)
     }
+
+    /// A chapter is named by its title, or by its number when it has none,
+    /// wherever the player names it: never "2. Chapter 1" after an
+    /// introduction, and never a blank.
+    func testAChapterIsNamedByItsTitleOrNumber() {
+        let chapters = [AudioChapter(title: "Introduction", start: 0), AudioChapter(title: "  ", start: 60)]
+        XCTAssertEqual(AudioChapters.name(of: 0, in: chapters), "Introduction")
+        XCTAssertEqual(AudioChapters.name(of: 1, in: chapters), "Chapter 2")
+    }
 }

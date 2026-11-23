@@ -26,7 +26,7 @@ struct MiniPlayer: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("miniplayer.open")
             Button { player.togglePlay() } label: {
-                Icon(player.isPlaying ? .pauseFill : .playFill, size: 22)
+                Icon(player.isPlaying ? .pauseFill : .playFill, size: 22, relativeTo: nil)
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(PlayerControlStyle())

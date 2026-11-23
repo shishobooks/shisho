@@ -1,94 +1,28 @@
 // Writes the Lucide icons the Shisho app uses into its asset catalog, from
 // the lucide-react the web app is built with, so both draw the same icons.
-// Each is a template image under Lucide/, such as Image("Lucide/moon"),
-// drawn on Lucide's 24 point grid with a stroke of 2 that scales with it,
-// as on the web.
+// The names are the raw values of the `Lucide` enum in
+// Shisho/UI/Icons.swift; a name ending in "-fill" is that icon with its
+// shapes filled, as the web fills a rated star. Each is a template image
+// under Lucide/, drawn on Lucide's 24 point grid with a stroke of 2.
 //
-// A name ending in ":fill" also fills the icon's shapes, as the web fills a
-// rated star, and is written as "<name>-fill".
+// It reads lucide-react's built modules (dist/esm/icons/<name>.mjs and their
+// __iconData export), so a lucide-react upgrade that changes that layout
+// fails here rather than drawing nothing.
 //
-// Run `mise ios:icons` after adding a name to `icons` or bumping
-// lucide-react, and commit what it writes.
+// `mise ios:icons` writes them; commit what it writes. `--check` (run by
+// `mise lint:icons`) writes nothing and fails when the catalog differs from
+// what lucide-react draws now, as after a lucide-react bump, or when the
+// app's Swift names an SF Symbol, which never draws the web's icons.
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const icons = [
-  "arrow-down",
-  "arrow-down-up",
-  "arrow-up",
-  "arrow-up-right",
-  "book",
-  "book-open",
-  "book-open-check",
-  "bookmark",
-  "bookmark-plus",
-  "check",
-  "chevron-down",
-  "chevron-right",
-  "chevron-up",
-  "chevrons-up-down",
-  "circle-alert",
-  "clock",
-  "clock-arrow-up",
-  "ellipsis",
-  "file",
-  "file-search",
-  "file-x",
-  "headphones",
-  "languages",
-  "layers",
-  "library",
-  "list",
-  "list-filter",
-  "list-music",
-  "list-x",
-  "lock",
-  "log-out",
-  "message-circle-warning",
-  "minus",
-  "moon",
-  "moon:fill",
-  "pause",
-  "pause:fill",
-  "pencil",
-  "play",
-  "play:fill",
-  "plus",
-  "refresh-cw",
-  "rotate-ccw",
-  "rotate-cw",
-  "search",
-  "server",
-  "share-2",
-  "skip-back",
-  "skip-forward",
-  "square",
-  "square-check-big",
-  "star",
-  "star:fill",
-  "star-half:fill",
-  "tags",
-  "trash-2",
-  "triangle-alert",
-  "user",
-  "user-x",
-  "users",
-  "wifi-off",
-  "x",
-];
-
+const check = process.argv.includes("--check");
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..", "..");
-const catalog = join(
-  here,
-  "..",
-  "Shisho",
-  "Resources",
-  "Assets.xcassets",
-  "Lucide",
-);
+const app = join(here, "..", "Shisho");
+const catalog = join(app, "Resources", "Assets.xcassets", "Lucide");
 const iconsDir = join(
   root,
   "node_modules",
@@ -97,6 +31,17 @@ const iconsDir = join(
   "esm",
   "icons",
 );
+
+// The `Lucide` enum's raw values: a case's own name, or its explicit value.
+const iconNames = async () => {
+  const source = await readFile(join(app, "UI", "Icons.swift"), "utf8");
+  // The enum's body ends at the first closing brace in the first column.
+  const body = /enum Lucide[^{]*\{([\s\S]*?)\n\}/.exec(source);
+  if (!body) throw new Error("no `enum Lucide` in Icons.swift");
+  return [...body[1].matchAll(/^\s*case (\w+)(?:\s*=\s*"([^"]+)")?\s*$/gm)].map(
+    ([, name, raw]) => raw ?? name,
+  );
+};
 
 const escape = (value) =>
   String(value)
@@ -123,34 +68,34 @@ const iconData = async (name) => {
     await readFile(file, "utf8"),
   );
   if (alias) return iconData(alias[1]);
-  return (await import(file)).__iconData;
+  const data = (await import(file)).__iconData;
+  if (!data?.node)
+    throw new Error(`lucide-react's ${name}.mjs has no __iconData`);
+  return data;
 };
 
 const json = (value) => JSON.stringify(value, null, 2) + "\n";
 
-await rm(catalog, { recursive: true, force: true });
-await mkdir(catalog, { recursive: true });
-await writeFile(
-  join(catalog, "Contents.json"),
+// Every file the catalog should hold, by path under it.
+const files = new Map();
+files.set(
+  "Contents.json",
   json({
     info: { author: "xcode", version: 1 },
     properties: { "provides-namespace": true },
   }),
 );
-for (const entry of icons) {
-  const [name, variant] = entry.split(":");
-  const filled = variant === "fill";
-  const asset = filled ? `${name}-fill` : name;
-  const data = await iconData(name);
-  const svg =
+for (const asset of await iconNames()) {
+  const filled = asset.endsWith("-fill");
+  const data = await iconData(filled ? asset.slice(0, -"-fill".length) : asset);
+  files.set(
+    join(`${asset}.imageset`, `${asset}.svg`),
     `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" ` +
-    `fill="${filled ? "#000" : "none"}" stroke="#000" stroke-width="2" stroke-linecap="round" ` +
-    `stroke-linejoin="round">${data.node.map(element).join("")}</svg>\n`;
-  const set = join(catalog, `${asset}.imageset`);
-  await mkdir(set);
-  await writeFile(join(set, `${asset}.svg`), svg);
-  await writeFile(
-    join(set, "Contents.json"),
+      `fill="${filled ? "#000" : "none"}" stroke="#000" stroke-width="2" stroke-linecap="round" ` +
+      `stroke-linejoin="round">${data.node.map(element).join("")}</svg>\n`,
+  );
+  files.set(
+    join(`${asset}.imageset`, "Contents.json"),
     json({
       images: [{ filename: `${asset}.svg`, idiom: "universal" }],
       info: { author: "xcode", version: 1 },
@@ -161,4 +106,62 @@ for (const entry of icons) {
     }),
   );
 }
-console.log(`wrote ${icons.length} icons to ${catalog}`);
+
+// Every file under dir, by path under it.
+const listFiles = async (dir) => {
+  const out = [];
+  for (const entry of await readdir(dir, {
+    withFileTypes: true,
+    recursive: true,
+  })) {
+    if (entry.isFile())
+      out.push(relative(dir, join(entry.parentPath, entry.name)));
+  }
+  return out;
+};
+
+if (!check) {
+  await rm(catalog, { recursive: true, force: true });
+  for (const [path, content] of files) {
+    await mkdir(dirname(join(catalog, path)), { recursive: true });
+    await writeFile(join(catalog, path), content);
+  }
+  console.log(`wrote ${files.size} files to ${catalog}`);
+} else {
+  const problems = [];
+  const committed = await listFiles(catalog).catch(() => []);
+  for (const path of committed) {
+    if (!files.has(path))
+      problems.push(`${path} isn't a Lucide icon the app names`);
+  }
+  for (const [path, content] of files) {
+    const current = await readFile(join(catalog, path), "utf8").catch(
+      () => null,
+    );
+    if (current !== content)
+      problems.push(
+        `${path} ${current === null ? "is missing" : "differs from lucide-react's"}`,
+      );
+  }
+  for (const path of await listFiles(app)) {
+    if (!path.endsWith(".swift")) continue;
+    const lines = (await readFile(join(app, path), "utf8")).split("\n");
+    lines.forEach((line, index) => {
+      if (/\b(systemName|systemImage):/.test(line)) {
+        problems.push(
+          `Shisho/${path}:${index + 1} names an SF Symbol; use Icon and Lucide instead`,
+        );
+      }
+    });
+  }
+  if (problems.length) {
+    console.error(problems.join("\n"));
+    console.error(
+      "Run `mise ios:icons` and commit what it writes, or swap the SF Symbol for a Lucide icon.",
+    );
+    process.exit(1);
+  }
+  console.log(
+    `the app's ${files.size - 1} Lucide files match lucide-react, and it names no SF Symbols`,
+  );
+}

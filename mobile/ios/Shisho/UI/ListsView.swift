@@ -115,7 +115,7 @@ struct ListDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if case .some(.none) = list {
-                        EmptyState("This List isn't available anymore", icon: .listX)
+                        EmptyNotice(title: String(localized: "This List isn't available anymore"), icon: .listX)
                             .padding(.top, 80)
                     } else {
                         if let description = (list ?? nil)?.description, !description.isEmpty {

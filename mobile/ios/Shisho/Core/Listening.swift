@@ -197,6 +197,14 @@ enum AudioChapters {
         return found
     }
 
+    /// The chapter's name wherever the player shows it: its title, or its
+    /// number when it has none. Never its number beside its title, which can
+    /// disagree with it, as "2. Chapter 1" after an introduction.
+    static func name(of index: Int, in chapters: [AudioChapter]) -> String {
+        let title = chapters[index].title.trimmingCharacters(in: .whitespaces)
+        return title.isEmpty ? String(localized: "Chapter \(index + 1)") : title
+    }
+
     /// Where chapter index ends: the next one's start, or the end.
     static func end(of index: Int, in chapters: [AudioChapter], duration: Double) -> Double {
         index + 1 < chapters.count ? chapters[index + 1].start : duration
@@ -243,19 +251,5 @@ enum TimeLabels {
             return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
         }
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-
-    /// A File's length, "3h 51m" or "12m", as the web app writes one. Time
-    /// left is never this: it's a `clock`, to the second.
-    static func length(_ seconds: Double) -> String {
-        // Some time, but under a minute, would otherwise read as none.
-        if seconds > 0, seconds < 60 {
-            return String(localized: "<1m")
-        }
-        let minutes = Int((max(0, seconds) / 60).rounded())
-        if minutes >= 60 {
-            return String(localized: "\(minutes / 60)h \(minutes % 60)m")
-        }
-        return String(localized: "\(minutes)m")
     }
 }

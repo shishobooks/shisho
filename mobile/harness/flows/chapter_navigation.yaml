@@ -18,6 +18,12 @@ name: Navigate by chapter
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
+# Paused before going on, so the chapter jumps land where they're checked.
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
 
 # The list goes to a chapter's start.
 - runFlow:
