@@ -367,8 +367,19 @@ const activate = async (a) => {
             ? a.ownerDocument
             : await noteDoc(resolved.index);
         const paragraphs = doc ? noteText(resolved.anchor(doc)) : [];
+        // The font around the reference, for the popover, as the web
+        // reader's takes it.
+        const fontFamily =
+          a.ownerDocument.defaultView?.getComputedStyle(a.parentElement ?? a)
+            .fontFamily ?? "";
         if (paragraphs.length)
-          return post({ type: "note", paragraphs, rect: rectOf(a), href });
+          return post({
+            type: "note",
+            paragraphs,
+            rect: rectOf(a),
+            href,
+            fontFamily,
+          });
       }
     } catch (err) {
       post({ type: "log", message: "note failed: " + err });

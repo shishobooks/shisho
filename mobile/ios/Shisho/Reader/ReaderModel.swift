@@ -21,6 +21,8 @@ struct OpenNote: Identifiable, Equatable {
     /// The reference's box, in the pager's points.
     let rect: CGRect
     let href: String
+    /// The book's font around the reference.
+    let font: NoteFont
 }
 
 /// One open Reflowable File: the pages, where the reader is, and what's
@@ -300,8 +302,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         }
     }
 
-    func foliateNote(paragraphs: [String], at rect: CGRect, href: String) {
-        note = OpenNote(paragraphs: paragraphs, rect: rect, href: href)
+    func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont) {
+        note = OpenNote(paragraphs: paragraphs, rect: rect, href: href, font: font)
     }
 
     func foliateExternalLink(_ url: URL) {

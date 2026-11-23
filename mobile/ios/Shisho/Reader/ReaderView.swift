@@ -441,11 +441,8 @@ private struct NotePopover: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(note.paragraphs.enumerated()), id: \.offset) { _, paragraph in
                         Text(paragraph)
-                            // The note is the book's text, not the app's, so
-                            // it's set in a serif standing in for a book
-                            // face; the page's own font isn't available
-                            // outside the page.
-                            .font(.system(.callout, design: .serif))
+                            // The note is the book's text, not the app's.
+                            .font(note.font.font(relativeTo: .callout))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

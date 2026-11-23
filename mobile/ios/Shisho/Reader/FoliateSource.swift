@@ -29,7 +29,7 @@ protocol FoliateSourceDelegate: AnyObject {
     /// Where each chapter given to `contents` is in the book.
     func foliateContents(_ entries: [PageMessage.ContentsEntry])
     /// A footnote, shown beside its reference (in the pager's points).
-    func foliateNote(paragraphs: [String], at rect: CGRect, href: String)
+    func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont)
     func foliateExternalLink(_ url: URL)
     /// The book couldn't be shown, or its pages kept failing.
     func foliateFailed()
@@ -374,7 +374,8 @@ final class FoliateSource: PagerSource {
         case "note":
             let box = message.rect ?? []
             let rect = box.count == 4 ? CGRect(x: box[0], y: box[1], width: box[2], height: box[3]) : .zero
-            delegate?.foliateNote(paragraphs: message.paragraphs ?? [], at: rect, href: message.href ?? "")
+            delegate?.foliateNote(paragraphs: message.paragraphs ?? [], at: rect, href: message.href ?? "",
+                                  font: NoteFont.resolve(message.fontFamily ?? ""))
         case "link":
             if let href = message.href { jump(to: .href(href)) }
         case "external":

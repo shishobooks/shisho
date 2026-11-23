@@ -154,6 +154,8 @@ struct PageMessage: Decodable, Sendable {
     /// The note reference's box, in the WebView's points.
     var rect: [Double]?
     var href: String?
+    /// The CSS font-family around a note reference.
+    var fontFamily: String?
     var dir: Int?
     var message: String?
 }
