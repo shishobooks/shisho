@@ -245,6 +245,7 @@ export default tseslint.config(
         CONTROL: "readonly",
         TITLE: "readonly",
         ACCESS: "readonly",
+        NOTE: "readonly",
       },
     },
   },

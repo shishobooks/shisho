@@ -46,13 +46,23 @@ The app can be signed in to several servers, or several accounts on one server, 
 
 ## Listening
 
-Books with an M4B audiobook have a **Listen** button that plays it from your server. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip 30 seconds. Headphone and car controls skip 30 seconds too; chapters change in the app. The chapters are the ones Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. Speed moves in steps of 0.1 and is kept for each audiobook file on that phone, since it usually suits the narrator; a new one starts at 1x. Tap the time left under the position bar to switch the bar between the chapter and the whole book.
+Books with an M4B audiobook have a **Listen** button that plays it from your server. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app. Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
+
+The chapters are the ones Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. Tap the chapter's name under the title, or **Chapters** under the player, to list them and go to one. Tap the time left under the position bar, which is at your current speed, to switch the bar between the chapter and the whole book.
+
+Speed moves in steps of 0.1, from 0.5x to 4x, and is kept for each audiobook file on that phone, since it usually suits the narrator; a new one starts at 1x. The **…** menu at the top of the player sets how far skip back and skip forward go, separately, from 5 to 90 seconds, 30 by default; the lock screen, headphones, and car use the same lengths. **Rewind After a Pause**, on by default and turned off there too, goes back a few seconds when you resume after a minute or more, further the longer the pause. The AirPlay button beside the menu plays to a speaker or other output.
+
+**Sleep** stops playback after a set time, counting only time spent playing, or at the end of the chapter. The last seconds fade out. Shake the phone while the timer runs to start its time over.
 
 The app saves your place every few seconds while playing and when you pause, and sends it, with your listening time, the next time it reaches your server. Listening done offline, such as on a plane, counts at the time you listened, not when it synced: [Reading History](./reading-tracking.md#reading-history) and [Reading Stats](./reading-stats.md) show it on the right day, under the phone's Device. Listening starts and finishes a book's Read-through by the same rules as the [web player](./reading-tracking.md#starting-and-finishing-automatically).
 
 Opening a book takes you to your latest place from any device, unless you've also listened on this phone since it last synced. Then it stays where the phone was and offers the other place, without jumping. A place that arrives while you listen is only offered too.
 
 If the server turns down a change the app made offline, for example listening to a book that has since been deleted, the app drops it and says so in the library.
+
+### Bookmarks
+
+**Bookmark** under the player adds a [bookmark](./reading-and-playback.md#bookmarks) at the current moment; tap **Add Note** in the message that follows to write a note. The **Bookmarks** tab beside **Chapters**, also in the **…** menu, lists them in time order: tap one to go to its moment, or use its buttons to edit its note or delete it. Bookmarks work offline and sync with your account, so ones you add on the web show in the app after it syncs, and ones you add in the app show on the web. If a note was edited in two places, the later edit wins, and a deleted bookmark stays deleted.
 
 ## Diagnostics
 

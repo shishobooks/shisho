@@ -128,6 +128,12 @@
     "%@, descending" : {
 
     },
+    "%lld Minutes" : {
+
+    },
+    "%lld Seconds" : {
+
+    },
     "%lld changes made on this device couldn't be saved on the server. The last: %@" : {
       "localizations" : {
         "en" : {
@@ -173,6 +179,9 @@
     "1 star" : {
 
     },
+    "<1m" : {
+
+    },
     "A change made on this device couldn't be saved on the server: %@" : {
 
     },
@@ -182,7 +191,16 @@
     "Account" : {
 
     },
+    "Add Bookmark" : {
+
+    },
+    "Add Note" : {
+
+    },
     "Add Server" : {
+
+    },
+    "Add a Note" : {
 
     },
     "Add genres…" : {
@@ -192,6 +210,9 @@
 
     },
     "Added" : {
+
+    },
+    "AirPlay" : {
 
     },
     "All Languages" : {
@@ -218,19 +239,34 @@
     "App version" : {
 
     },
+    "At %@" : {
+
+    },
     "Author" : {
 
     },
     "Authors, narrators, and other contributors" : {
 
     },
-    "Back 30 Seconds" : {
+    "Back %lld Seconds" : {
 
     },
     "Bitrate" : {
 
     },
     "Book remaining %@" : {
+
+    },
+    "Bookmark" : {
+
+    },
+    "Bookmark added at %@" : {
+
+    },
+    "Bookmarks" : {
+
+    },
+    "Bookmarks where playback is" : {
 
     },
     "Books" : {
@@ -275,6 +311,9 @@
     "Chapter %lld" : {
 
     },
+    "Chapter End" : {
+
+    },
     "Chapter remaining %@" : {
 
     },
@@ -317,6 +356,12 @@
     "Date released" : {
 
     },
+    "Delete" : {
+
+    },
+    "Delete bookmark at %@" : {
+
+    },
     "Diagnostics" : {
 
     },
@@ -341,10 +386,19 @@
     "Duration" : {
 
     },
+    "Edit Note" : {
+
+    },
+    "Edit note for bookmark at %@" : {
+
+    },
     "Editor" : {
 
     },
     "Elapsed %@" : {
+
+    },
+    "End of Chapter" : {
 
     },
     "Enter your Shisho server's address." : {
@@ -389,7 +443,7 @@
     "Format" : {
 
     },
-    "Forward 30 Seconds" : {
+    "Forward %lld Seconds" : {
 
     },
     "From " : {
@@ -402,6 +456,9 @@
 
     },
     "Go to %@" : {
+
+    },
+    "Goes to this moment" : {
 
     },
     "Highest rating" : {
@@ -420,6 +477,9 @@
 
     },
     "Last synced" : {
+
+    },
+    "Leave it empty to remove the note." : {
 
     },
     "Letterer" : {
@@ -477,6 +537,9 @@
     "Modified" : {
 
     },
+    "More" : {
+
+    },
     "Move down" : {
 
     },
@@ -513,6 +576,9 @@
     "No Lists yet" : {
 
     },
+    "No bookmarks yet. Use Bookmark under the player to mark where you are." : {
+
+    },
     "No chapters" : {
 
     },
@@ -526,6 +592,9 @@
 
     },
     "Not supported in this version of the app" : {
+
+    },
+    "Note" : {
 
     },
     "Nothing here yet" : {
@@ -665,7 +734,13 @@
     "Resume listening" : {
 
     },
+    "Rewind After a Pause" : {
+
+    },
     "Right to left" : {
+
+    },
+    "Save" : {
 
     },
     "Search" : {
@@ -719,6 +794,9 @@
     "Show more" : {
 
     },
+    "Shows the chapters" : {
+
+    },
     "Sign In" : {
 
     },
@@ -748,6 +826,24 @@
 
     },
     "Size" : {
+
+    },
+    "Skip Back" : {
+
+    },
+    "Skip Forward" : {
+
+    },
+    "Sleep" : {
+
+    },
+    "Sleep Timer, %@ left" : {
+
+    },
+    "Sleep Timer, Off" : {
+
+    },
+    "Sleep Timer, stops at the end of the chapter" : {
 
     },
     "Slower" : {
@@ -866,6 +962,9 @@
 
     },
     "Translator" : {
+
+    },
+    "Turn Off Timer" : {
 
     },
     "URL" : {

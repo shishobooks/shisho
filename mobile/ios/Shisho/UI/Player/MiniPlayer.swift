@@ -34,11 +34,11 @@ struct MiniPlayer: View {
             .buttonStyle(PlayerControlStyle())
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
             .accessibilityIdentifier("miniplayer.playPause")
-            Button { player.skip(by: AudioPlayer.skipInterval) } label: {
-                SkipIcon(forward: true, size: 22).frame(width: 40, height: 40)
+            Button { player.skipForward() } label: {
+                SkipIcon(forward: true, seconds: player.forwardInterval, size: 22).frame(width: 40, height: 40)
             }
             .buttonStyle(PlayerControlStyle())
-            .accessibilityLabel("Forward 30 Seconds")
+            .accessibilityLabel("Forward \(Int(player.forwardInterval)) Seconds")
             .accessibilityIdentifier("miniplayer.skipForward")
         }
         .foregroundStyle(Theme.foreground)

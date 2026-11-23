@@ -24,14 +24,24 @@ struct PlayingIndicator: View {
     }
 }
 
-/// The skip buttons' icon: an arrow around the seconds it skips.
+/// The skip buttons' icon: an arrow around the seconds it skips, the
+/// listener's setting.
 struct SkipIcon: View {
     let forward: Bool
+    let seconds: Double
     var size: CGFloat = 30
 
+    /// The system's icon for a skip, which exists for each of
+    /// `PlayerSettings.skipLengths`.
+    nonisolated static func symbol(forward: Bool, seconds: Double) -> String {
+        "\(forward ? "goforward" : "gobackward").\(Int(seconds))"
+    }
+
     var body: some View {
-        Image(systemName: forward ? "goforward.30" : "gobackward.30")
+        Image(systemName: SkipIcon.symbol(forward: forward, seconds: seconds))
             .font(.system(size: size, weight: .regular))
+            .contentTransition(.symbolEffect(.replace))
+            .accessibilityHidden(true)
     }
 }
 

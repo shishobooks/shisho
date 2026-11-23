@@ -1,0 +1,69 @@
+# Add a Bookmark with a note while the server is offline. It shows at once,
+# and reaches the server, placed when it was made, once the app can sync
+# (#916).
+appId: ${APP_ID}
+name: Bookmark offline and sync later
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Harbor Lights
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+
+# Bookmark adds one where playback is at once, and offers a note.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.bookmark
+- tapOn:
+    id: bookmark.addNote
+# The note's field is in an alert, found by what it says.
+- tapOn: Note
+- inputText: Made offline
+- tapOn: Save
+# The list is a tab of the chapters sheet.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.chapters
+- tapOn:
+    id: list.bookmarks
+- assertVisible: .*Made offline.*
+- tapOn:
+    id: list.done
+
+# Opened again once the server is back, the app syncs what it kept.
+- stopApp
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: miniplayer.open
+    timeout: 20000
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 6000
+    optional: true
+- runScript:
+    file: scripts/assert_bookmark.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+      NOTE: Made offline

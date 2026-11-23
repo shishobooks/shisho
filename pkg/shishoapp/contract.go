@@ -61,10 +61,10 @@ const (
 // app on the new protocol assumes everything listed before it. Never remove
 // one while its protocol is accepted. Protocol 1's baseline is signing in,
 // the feed, covers, Original File downloads and streams, and the journal's
-// position and session events, so it lists nothing yet. A journal event
-// type added later is a capability (ADR 0024).
+// position and session events. A journal event type added later is a
+// capability (ADR 0024).
 var capabilities = map[int][]string{
-	1: {},
+	1: {CapabilityBookmarks},
 }
 
 // Contract is the range of app protocols this server accepts and what it

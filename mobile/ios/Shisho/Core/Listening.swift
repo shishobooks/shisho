@@ -237,20 +237,25 @@ enum PlaybackSpeed {
 enum TimeLabels {
     /// "4:05", or "1:04:05" from an hour.
     static func clock(_ seconds: Double) -> String {
-        let total = Int(max(0, seconds).rounded(.down))
+        // Bounded, so a nonsense time from the server can't trap.
+        let total = Int(min(max(0, seconds.isFinite ? seconds : 0), 1e9).rounded(.down))
         if total >= 3600 {
             return String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
         }
         return String(format: "%d:%02d", total / 60, total % 60)
     }
 
-    /// "3h 51m" or "12m", as the web app writes a length.
-    static func left(_ seconds: Double) -> String {
+    /// A File's length, "3h 51m" or "12m", as the web app writes one. Time
+    /// left is never this: it's a `clock`, to the second.
+    static func length(_ seconds: Double) -> String {
+        // Some time, but under a minute, would otherwise read as none.
+        if seconds > 0, seconds < 60 {
+            return String(localized: "<1m")
+        }
         let minutes = Int((max(0, seconds) / 60).rounded())
         if minutes >= 60 {
             return String(localized: "\(minutes / 60)h \(minutes % 60)m")
         }
-        // Some time, but under a minute, would otherwise read as none.
-        return String(localized: "\(max(minutes, seconds > 0 ? 1 : 0))m")
+        return String(localized: "\(minutes)m")
     }
 }

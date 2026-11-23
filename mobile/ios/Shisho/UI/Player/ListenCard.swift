@@ -58,7 +58,7 @@ struct ListenCard: View {
         if finished && !playing {
             return String(localized: "Finished")
         }
-        return String(localized: "\(TimeLabels.left(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))")
+        return String(localized: "\(TimeLabels.clock(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))")
     }
 
     private var icon: some View {

@@ -74,9 +74,9 @@ enum FileProgressText {
         let percent = Percent.text(clamped)
         guard clamped < 1 else { return percent }
         let rest = 1 - clamped
-        // Rounded as the Listen card rounds it, so the two agree.
+        // To the second, as the Listen card says it, so the two agree.
         if let seconds = durationSeconds, seconds > 0 {
-            return String(localized: "\(percent) · \(TimeLabels.left(seconds * rest)) left")
+            return String(localized: "\(percent) · \(TimeLabels.clock(seconds * rest)) left")
         }
         if let pages = pageCount, pages > 0 {
             return String(localized: "\(percent) · \(FileFacts.pages(Int((Double(pages) * rest).rounded()))) left")

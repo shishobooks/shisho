@@ -25,7 +25,7 @@ name: Listen, kill, and resume
       CONTROL_ID: player.prevChapter
 - assertVisible:
     id: player.chapter
-    text: The Harbor
+    text: "1. The Harbor"
 # Listening long enough for a save or two.
 - extendedWaitUntil:
     visible:

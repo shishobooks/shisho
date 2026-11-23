@@ -123,7 +123,7 @@ final class CatalogStore: Sendable {
     /// The kinds and fields of the feed this version understands. When an
     /// app update understands more, raise it, and the catalog downloads
     /// again from the start in the background.
-    static let feedVersion = 3
+    static let feedVersion = 4
 
     let pool: DatabasePool
 
@@ -290,6 +290,31 @@ final class CatalogStore: Sendable {
             }
         }
         migrator.registerMigration("v3: full catalog", migrate: CatalogStore.migrateFullCatalog)
+        // Bookmarks (#916), from the feed and made on the device. A
+        // Bookmark's journal events name it, so deleting one not yet sent
+        // drops them, and a note edited here shows until its edit is sent.
+        migrator.registerMigration("v4: bookmarks") { db in
+            try db.create(table: "bookmarks") { t in
+                // The id this installation made it under, or "server-<id>"
+                // for one made elsewhere.
+                t.primaryKey("id", .text)
+                t.column("server_id", .integer).unique()
+                t.column("local_id", .text)
+                t.column("file_id", .integer).notNull().indexed()
+                t.column("seconds", .double).notNull()
+                // The server's note, and one edited here, shown while its
+                // edit waits in the journal.
+                t.column("note", .text)
+                t.column("local_note", .text)
+                t.column("created_at", .double).notNull()
+                // Deleted here, until the server's delete arrives.
+                t.column("deleted", .boolean).notNull().defaults(to: false)
+                t.column("generation", .integer).notNull()
+            }
+            try db.alter(table: "journal") { t in
+                t.add(column: "bookmark_id", .text).indexed()
+            }
+        }
         return migrator
     }
 
@@ -370,6 +395,9 @@ final class CatalogStore: Sendable {
             try CatalogStore.reindex(touched, in: db)
             try db.execute(sql: "UPDATE sync_state SET cursor = ?, expired_through = ?, last_synced_at = ? WHERE id = 1",
                            arguments: [page.cursor, page.expiredThrough, Date()])
+            if !page.hasMore {
+                try CatalogStore.dropBookmarksTheServerDeleted(in: db)
+            }
             let finishing = try CatalogStore.syncState(db).startingOver
             if !page.hasMore, finishing {
                 // The Series of Books going now keep their titles in their
@@ -383,6 +411,15 @@ final class CatalogStore: Sendable {
                 try db.execute(sql: "DELETE FROM reading_positions WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM read_throughs WHERE generation < ?", arguments: [generation])
                 try CatalogStore.dropOlderCatalog(before: generation, in: db)
+                // Bookmarks the server hasn't had yet stay, with their
+                // changes. One it had and didn't send is deleted there, and
+                // its changes waiting here are moot.
+                let gone = """
+                    SELECT id FROM bookmarks WHERE generation < ? AND (server_id IS NOT NULL
+                        OR id NOT IN (SELECT bookmark_id FROM journal WHERE bookmark_id IS NOT NULL))
+                    """
+                try db.execute(sql: "DELETE FROM journal WHERE bookmark_id IN (\(gone))", arguments: [generation])
+                try db.execute(sql: "DELETE FROM bookmarks WHERE id IN (\(gone))", arguments: [generation])
                 // A place the server reset while its deletion expired goes
                 // too, unless this device has moves still to send.
                 try db.execute(sql: """
@@ -459,6 +496,12 @@ final class CatalogStore: Sendable {
                                 readThrough.outcome.rawValue, readThrough.paused,
                                 readThrough.lastReadAt.flatMap(CatalogStore.timestamp), generation]
                 )
+            }
+        case .bookmark:
+            if entry.deleted {
+                try db.execute(sql: "DELETE FROM bookmarks WHERE server_id = ?", arguments: [entry.id])
+            } else if let bookmark = entry.bookmark {
+                try CatalogStore.upsert(bookmark, generation: generation, in: db)
             }
         default:
             try CatalogStore.applyCatalogEntry(entry, generation: generation, touched: &touched, in: db)

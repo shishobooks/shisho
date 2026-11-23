@@ -20,7 +20,8 @@ final class AudioPlayerTests: XCTestCase {
         {"entries":[{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Audio","cover_aspect_ratio":"audiobook"}},
          {"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Harbor Lights","sort_title":"Harbor Lights",
           "created_at":"2026-01-01T00:00:00Z","cover_version":"1-1","files":[{"id":5,"file_type":"m4b","file_role":"main","size_bytes":10,
-          "audiobook_duration_seconds":600,"chapters":[]}]}}],
+          "audiobook_duration_seconds":600,"chapters":[]},{"id":6,"file_type":"m4b","file_role":"main","size_bytes":10,
+          "audiobook_duration_seconds":300,"chapters":[]}]}}],
          "cursor":2}
         """))
         player = AudioPlayer(session: session) {}
@@ -80,5 +81,31 @@ final class AudioPlayerTests: XCTestCase {
         next.restore()
         XCTAssertEqual(next.file?.fileID, 5, "still the one opened at the next launch")
         next.stop()
+    }
+
+    /// Speed is remembered per File on the device, since it suits the
+    /// narrator, and a File never played starts at 1x.
+    func testSpeedIsRememberedPerFile() {
+        player.open(fileID: 5, autoplay: false)
+        XCTAssertEqual(player.rate, 1)
+        player.setRate(1.4)
+        player.open(fileID: 6, autoplay: false)
+        XCTAssertEqual(player.rate, 1)
+        player.setRate(1.1)
+        player.open(fileID: 5, autoplay: false)
+        XCTAssertEqual(player.rate, 1.4, accuracy: 0.001)
+        XCTAssertEqual(AudioPlayer.storedRate(accountID: session.account.id, fileID: 6), 1.1, accuracy: 0.001)
+        XCTAssertEqual(AudioPlayer.storedRate(accountID: "another-account", fileID: 5), 1)
+    }
+
+    /// A Bookmark is made where playback is, through the player, so it's kept
+    /// with no screen open.
+    func testABookmarkIsMadeWherePlaybackIs() throws {
+        player.open(fileID: 5, autoplay: false)
+        player.seek(to: 83)
+        player.addBookmark(note: "here")
+        let bookmarks = try session.store.pool.read { try CatalogStore.bookmarks($0, fileID: 5) }
+        XCTAssertEqual(bookmarks.map(\.seconds), [83])
+        XCTAssertEqual(bookmarks.map(\.note), ["here"])
     }
 }

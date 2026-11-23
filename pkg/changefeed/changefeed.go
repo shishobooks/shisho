@@ -37,7 +37,8 @@ const (
 	KindUserBook        = "user_book"
 	// A List's entry carries its owner as its user, and reaches everyone
 	// it's shared with too.
-	KindList = "list"
+	KindList     = "list"
+	KindBookmark = "bookmark"
 )
 
 // catalogKinds are the kinds whose entries belong to a Library, which a
@@ -102,6 +103,20 @@ type Service struct {
 
 func NewService(db *bun.DB) *Service {
 	return &Service{db: db, now: time.Now}
+}
+
+// MoveOwn moves the entry of one of userID's own records to the end of the
+// log through db, such as a transaction, so installations get the record
+// again though nothing in it changed: as when the server keeps a Bookmark's
+// note over an older edit an installation showed while it waited to send it.
+func (s *Service) MoveOwn(ctx context.Context, db bun.IDB, kind string, recordID, userID int) error {
+	if _, err := db.NewDelete().Model((*Entry)(nil)).
+		Where("kind = ? AND record_id = ? AND user_id = ?", kind, recordID, userID).
+		Exec(ctx); err != nil {
+		return errors.WithStack(err)
+	}
+	_, err := db.NewInsert().Model(&Entry{Kind: kind, RecordID: recordID, UserID: &userID, ChangedAt: s.now().UTC()}).Exec(ctx)
+	return errors.WithStack(err)
 }
 
 // Read runs fn in a read transaction, so the entries a page lists and the

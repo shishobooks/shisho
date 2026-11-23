@@ -67,6 +67,7 @@ var feedTables = map[string][]string{
 	// A Read-through's document carries when it was last read.
 	"reading_position_updates": {"INSERT", "UPDATE", "DELETE"},
 	"user_books":               {"INSERT", "UPDATE", "DELETE"},
+	"bookmarks":                {"INSERT", "UPDATE", "DELETE"},
 }
 
 const (
@@ -224,6 +225,9 @@ var columnsNotCompared = map[string]string{
 	"read_throughs.book_title":            "set only when its Book is deleted, which clears book_id",
 	"read_throughs.book_authors":          "set only when its Book is deleted, which clears book_id",
 	"read_throughs.left_to_read_position": "the To Read place a delete restores, which only the server uses",
+
+	"bookmarks.id":         reasonPrimaryKey,
+	"bookmarks.updated_at": "when the note last changed, which only the server compares",
 }
 
 const (
@@ -246,6 +250,7 @@ var tablesNotInFeed = map[string]string{
 	"change_log_expiries":           "the change log's own bookkeeping",
 	"app_journal_events":            "which Shisho app journal events were taken in, for ignoring repeats",
 	"app_journal_sessions":          "which Reading Session each Shisho app sitting's snapshots update",
+	"app_journal_bookmarks":         "written with its Bookmark and never changed, so the Bookmark's entry carries it",
 	"jobs":                          reasonServer,
 	"job_logs":                      reasonServer,
 	"library_paths":                 reasonServer,
@@ -281,7 +286,6 @@ var tablesNotInFeed = map[string]string{
 	"share_links":                   "Share Links, managed only on the web",
 	"user_delivery_rules":           "Delivery Rules, which the Shisho app doesn't follow",
 	"user_settings":                 "web display settings",
-	"bookmarks":                     reasonUserNext,
 	"reading_sessions":              reasonUserNext,
 	"books_fts":                     reasonFTS,
 	"genres_fts":                    reasonFTS,

@@ -619,7 +619,9 @@ final class AppModel {
     }
 
     private func recordCapabilities(_ listed: [String], accountID: String) {
-        guard var account = session?.account, account.id == accountID, account.capabilities != listed else { return }
+        guard var account = session?.account, account.id == accountID else { return }
+        player?.capabilitiesChanged(listed)
+        guard account.capabilities != listed else { return }
         account.capabilities = listed
         accounts.save(account)
     }

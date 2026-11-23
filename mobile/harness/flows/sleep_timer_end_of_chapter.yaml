@@ -1,0 +1,69 @@
+# A sleep timer set to the end of the chapter stops playback there, ready
+# to play the next chapter from its start (#916).
+appId: ${APP_ID}
+name: Sleep at the end of the chapter
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Quiet Lighthouse
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+# From the start of the first chapter, which is three seconds long.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.chapters
+- tapOn:
+    id: chapters.row
+    text: Chapter 1.*
+- assertVisible:
+    id: player.chapter
+    text: "1. Chapter 1"
+
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.sleep
+- tapOn: End of Chapter
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 20000
+- assertVisible:
+    id: player.chapter
+    text: "2. Chapter 2"
+- assertVisible:
+    id: player.position
+    text: .*0:00
+
+# Playing again goes on from the next chapter, to the end, where the other
+# flows expect to find this File.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: "3. Chapter 3"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 20000

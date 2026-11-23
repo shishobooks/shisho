@@ -13,10 +13,20 @@ struct ListeningFile: Equatable, Sendable {
     /// The File's label among its Book's Files.
     var displayName = ""
     var narrators: [String] = []
+    /// The Book's first Series and its place in it, which Now Playing's
+    /// header names.
+    var series: ListeningSeries?
     /// The real length, which speed doesn't change.
     let duration: Double
     /// Shisho's chapters, top level only, in order (ADR 0022).
     let chapters: [AudioChapter]
+}
+
+/// A Book's place in a Series.
+struct ListeningSeries: Equatable, Sendable {
+    let name: String
+    let number: Double?
+    var numberEnd: Double?
 }
 
 /// How far through a Book's audiobook the user is, for its Book page.
@@ -77,8 +87,9 @@ extension CatalogStore {
               let book = try CatalogStore.book(db, id: row["book_id"])
         else { return nil }
         return ListeningFile(fileID: fileID, book: book.summary, coverVersion: row["cover_version"], displayName: row["display_name"],
-                             narrators: names(row["narrators"]), duration: row["duration_seconds"] ?? 0,
-                             chapters: try chapters(db, fileID: fileID))
+                             narrators: names(row["narrators"]),
+                             series: book.series.first.map { ListeningSeries(name: $0.name, number: $0.number, numberEnd: $0.numberEnd) },
+                             duration: row["duration_seconds"] ?? 0, chapters: try chapters(db, fileID: fileID))
     }
 
     /// The File's top-level chapters with a start time.
@@ -272,11 +283,12 @@ extension CatalogStore {
         }
     }
 
-    private static func append(_ db: Database, type: Shishoapp.JournalEventType, at: Date, payload: Data, fileID: Int?,
-                               coalesceKey: String?) throws {
+    static func append(_ db: Database, type: Shishoapp.JournalEventType, at: Date, payload: Data, fileID: Int?,
+                       coalesceKey: String?, bookmarkID: String? = nil) throws {
         try db.execute(sql: """
-            INSERT INTO journal (event_id, type, at, payload, file_id, coalesce_key) VALUES (?, ?, ?, ?, ?, ?)
-            """, arguments: [UUID().uuidString.lowercased(), type.rawValue, at.timeIntervalSince1970, payload, fileID, coalesceKey])
+            INSERT INTO journal (event_id, type, at, payload, file_id, coalesce_key, bookmark_id) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, arguments: [UUID().uuidString.lowercased(), type.rawValue, at.timeIntervalSince1970, payload, fileID, coalesceKey,
+                             bookmarkID])
     }
 
     /// The sitting being timed, kept across launches.
@@ -314,8 +326,10 @@ extension CatalogStore {
             for result in results where types[result.id] != nil {
                 switch result.result {
                 case .accepted, .duplicate:
+                    try CatalogStore.finishBookmarkChange(eventID: result.id, in: db)
                     try db.execute(sql: "DELETE FROM journal WHERE event_id = ?", arguments: [result.id])
                 case .refused:
+                    try CatalogStore.undoRefusedBookmarkChange(eventID: result.id, in: db)
                     try db.execute(sql: "DELETE FROM journal WHERE event_id = ?", arguments: [result.id])
                     try db.execute(sql: "INSERT INTO journal_notes (at, event_type, reason) VALUES (?, ?, ?)",
                                    arguments: [Date().timeIntervalSince1970, types[result.id] ?? "", result.reason])
