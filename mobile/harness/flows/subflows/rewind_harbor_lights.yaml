@@ -1,0 +1,46 @@
+# Rewinds the open player to the start of Harbor Lights' first chapter, The
+# Harbor, wherever another flow left the place, and plays from there. Not a
+# flow of its own.
+#
+# "Previous chapter" goes back a chapter only within its first 3 seconds, and
+# otherwise to the start of the one playing. While playing, a tap that lands
+# late on a slow CI simulator restarts the same chapter again, so the player
+# is paused while it skips back.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      visible:
+        id: player.playPause
+        text: Pause
+    file: tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- repeat:
+    times: 3
+    while:
+      notVisible:
+        id: player.chapter
+        text: The Harbor
+    commands:
+      - runFlow:
+          file: tap_player.yaml
+          env:
+            CONTROL_ID: player.prevChapter
+# Now in The Harbor: to its start.
+- runFlow:
+    file: tap_player.yaml
+    env:
+      CONTROL_ID: player.prevChapter
+- assertVisible:
+    id: player.chapter
+    text: The Harbor
+- runFlow:
+    file: tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Pause
+    timeout: 30000
