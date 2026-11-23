@@ -52,6 +52,8 @@ Agents run these checks many times a ticket, so a few seconds in every flow add 
 
 - **What's reused between runs**: the worktree's simulators, kept booted, each run removing the app and its Keychain first; and the harness's fixtures, cached under the user's cache folder and keyed by the files they're made from (`fixtureSources` in `tools/appharness/fixtures.go`), so neither needs clearing when something changes. `SHISHO_HARNESS_FRESH=1` reuses neither, for a run from a clean slate. CI clones a fresh simulator each run and caches the fixtures by the same key.
 - **Sign in with `subflows/launch_signed_in.yaml`**, which signs a debug build in as it launches, not with the sign-in screen, which costs each flow around 20 seconds of typing. Only flows about the sign-in screen itself use `subflows/sign_in.yaml`. The shortcut is `#if DEBUG` (`HarnessSignIn`), so release builds don't have it.
+- **Launch with `permissions: {}`**, as every flow does. Without it Maestro grants the app every permission on each launch, which takes seconds on CI. A relaunch right after `stopApp` also passes `stopApp: false`, so the app isn't stopped twice.
+- **Move through the app's screens rather than relaunching it**, unless the flow checks what survives a relaunch: a launch takes 10 seconds to over a minute on CI.
 - **Listen only as long as what the flow checks needs.** Listening is real time: Reading Sessions and the periodic saves of the place are timed by the clock, not the place, so playing faster doesn't shorten a flow that checks them. A flow that needs a place reached, not time listened, skips to it.
 
 ## Writing flows

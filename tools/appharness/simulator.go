@@ -193,6 +193,9 @@ type simulatorClone struct {
 }
 
 func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
+	if clone, ok := takePreparedClone(ctx); ok {
+		return clone, nil
+	}
 	base, err := baseSimulator(ctx)
 	if err != nil {
 		return nil, err
@@ -212,6 +215,52 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 		return nil, err
 	}
 	return clone, nil
+}
+
+// preparedCloneName names the clone `base -prepare` boots on a CI runner
+// while the app builds, which the job's run then takes instead of cloning
+// and booting one after the build: a boot there takes a minute or two.
+const preparedCloneName = "Shisho Harness Prepared"
+
+// prepareClone clones the base and boots it, for the job's run to take.
+func prepareClone(ctx context.Context) error {
+	base, err := baseSimulator(ctx)
+	if err != nil {
+		return err
+	}
+	udid, err := simctl(ctx, "clone", base, preparedCloneName)
+	if err != nil {
+		return err
+	}
+	if _, err := simctl(ctx, "boot", udid); err != nil {
+		return err
+	}
+	_, err = simctl(ctx, "bootstatus", udid, "-b")
+	return err
+}
+
+// takePreparedClone returns the clone prepareClone booted, if there's one,
+// renamed so no other run takes it too.
+func takePreparedClone(ctx context.Context) (*simulatorClone, bool) {
+	devices, err := listDevices(ctx)
+	if err != nil {
+		return nil, false
+	}
+	for udid, device := range devices {
+		if device.Name != preparedCloneName || !device.IsAvailable {
+			continue
+		}
+		if _, err := simctl(ctx, "rename", udid, fmt.Sprintf("Shisho Harness %d", time.Now().UnixNano())); err != nil {
+			return nil, false
+		}
+		if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+			removeSimulator(udid)
+			return nil, false
+		}
+		fmt.Fprintln(os.Stderr, "appharness: using the simulator booted while the app built")
+		return &simulatorClone{UDID: udid}, true
+	}
+	return nil, false
 }
 
 // Remove shuts the clone down and deletes it, even after the run was

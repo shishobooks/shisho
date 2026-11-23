@@ -28,7 +28,8 @@ name: Listen, kill, and resume
 # Killed while playing: only the saves every five seconds kept the place.
 - stopApp
 - evalScript: ${output.killedAt = Date.now()}
-- launchApp
+- launchApp:
+    permissions: {}
 - extendedWaitUntil:
     visible:
       id: miniplayer.open

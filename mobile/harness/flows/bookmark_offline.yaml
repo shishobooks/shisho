@@ -66,7 +66,8 @@ name: Bookmark offline and sync later
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp
+- launchApp:
+    permissions: {}
 - extendedWaitUntil:
     visible:
       id: miniplayer.open

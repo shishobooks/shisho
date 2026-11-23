@@ -566,10 +566,10 @@ jobs:
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
           hit: ${{ steps.setup.outputs.simulator-hit }}
-      # The server log and Maestro's own log and screenshots, which also show
-      # where a slow run spent its time.
+      # The server log and Maestro's own log and screenshots, for a failed
+      # run. Uploading them takes most of a minute, so a passing run skips it.
       - name: Keep the harness output
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: harness-output-shard-${{ matrix.shard }}

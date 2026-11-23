@@ -47,8 +47,8 @@ func topLevelFlows(dir string) ([]string, error) {
 
 // shardFlows returns the flows shard index of total runs (1-based), packing
 // the longest first onto the shard with the least time so far, so the
-// shards finish at about the same time. Every flow lands on exactly one
-// shard.
+// shards finish at about the same time, and orders them shortest first.
+// Every flow lands on exactly one shard.
 func shardFlows(flows []string, index, total int, seconds map[string]float64) ([]string, error) {
 	if total < 1 || index < 1 || index > total {
 		return nil, errors.Errorf("shard %d of %d: want 1 to %d", index, total, total)
@@ -88,6 +88,10 @@ func shardFlows(flows []string, index, total int, seconds map[string]float64) ([
 		if least == index-1 {
 			mine = append(mine, flow)
 		}
+	}
+	// The shortest first: a cold runner's first flow is its slowest.
+	for i, j := 0, len(mine)-1; i < j; i, j = i+1, j-1 {
+		mine[i], mine[j] = mine[j], mine[i]
 	}
 	return mine, nil
 }

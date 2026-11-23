@@ -7,6 +7,7 @@ name: Sign in and browse Books offline
 ---
 - launchApp:
     clearState: true
+    permissions: {}
 - runFlow: subflows/sign_in.yaml
 
 # The Library comes from the device's copy of the catalog.
@@ -39,7 +40,9 @@ name: Sign in and browse Books offline
     env:
       CONTROL: ${CONTROL}
 - stopApp
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - extendedWaitUntil:
     visible:
       id: library.grid

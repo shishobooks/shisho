@@ -116,10 +116,11 @@ func runIOS(ctx context.Context, args []string) error {
 	}, flowArgs...)...)
 	maestro.Stdout, maestro.Stderr = os.Stdout, os.Stderr
 	stopWithProcessGroup(maestro)
+	maestro.Env = append(os.Environ(), "MAESTRO_CLI_NO_ANALYTICS=1")
 	// Maestro installs and starts its driver on the simulator first, which
 	// takes minutes on a CI runner, far longer than Maestro's default.
 	if os.Getenv("MAESTRO_DRIVER_STARTUP_TIMEOUT") == "" {
-		maestro.Env = append(os.Environ(), "MAESTRO_DRIVER_STARTUP_TIMEOUT=600000")
+		maestro.Env = append(maestro.Env, "MAESTRO_DRIVER_STARTUP_TIMEOUT=600000")
 	}
 	err = maestro.Run()
 	killProcessGroup(ctx, maestro)

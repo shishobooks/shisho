@@ -29,7 +29,9 @@ name: A Book removed by an access change disappears
       ACCESS: none
 # Opening the app again syncs.
 - stopApp
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - extendedWaitUntil:
     visible: No Books yet
     timeout: 30000
@@ -41,7 +43,9 @@ name: A Book removed by an access change disappears
       CONTROL: ${CONTROL}
       ACCESS: all
 - stopApp
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - extendedWaitUntil:
     visible: The Harness Novel
     timeout: 30000

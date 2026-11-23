@@ -10,6 +10,7 @@ appId: ${APP_ID}
 ---
 - launchApp:
     clearState: true
+    permissions: {}
     arguments:
       harnessServer: ${SERVER}
       harnessUsername: ${USERNAME}

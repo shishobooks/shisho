@@ -45,3 +45,14 @@ func TestShardFlowsRefusesABadShard(t *testing.T) {
 		assert.Error(t, err, shard)
 	}
 }
+
+// Each shard runs its shortest flow first, so the slow first flow on a cold
+// runner is a short one.
+func TestShardFlowsRunShortestFirst(t *testing.T) {
+	t.Parallel()
+	flows := []string{"a.yaml", "b.yaml", "c.yaml"}
+	seconds := map[string]float64{"a.yaml": 300, "b.yaml": 50, "c.yaml": 100}
+	shard, err := shardFlows(flows, 1, 1, seconds)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"b.yaml", "c.yaml", "a.yaml"}, shard)
+}
