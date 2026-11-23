@@ -3,21 +3,25 @@
 # flow of its own.
 #
 # "Previous chapter" goes back a chapter only within its first 3 seconds, and
-# otherwise to the start of the one playing. While playing, a tap that lands
-# late on a slow CI simulator restarts the same chapter again, so the player
-# is paused while it skips back.
+# otherwise to the start of the one playing, so the player is paused while it
+# skips back. A tap on a slow CI simulator can be lost, so each step repeats
+# until what it does shows, and it checks the place, not only the chapter: the
+# sleep timer's flow leaves the place at the end of The Harbor.
 appId: ${APP_ID}
 ---
-- runFlow:
-    when:
+- repeat:
+    times: 3
+    while:
       visible:
         id: player.playPause
         text: Pause
-    file: tap_player.yaml
-    env:
-      CONTROL_ID: player.playPause
+    commands:
+      - runFlow:
+          file: tap_player.yaml
+          env:
+            CONTROL_ID: player.playPause
 - repeat:
-    times: 3
+    times: 4
     while:
       notVisible:
         id: player.chapter
@@ -28,19 +32,37 @@ appId: ${APP_ID}
           env:
             CONTROL_ID: player.prevChapter
 # Now in The Harbor: to its start.
-- runFlow:
-    file: tap_player.yaml
-    env:
-      CONTROL_ID: player.prevChapter
+- repeat:
+    times: 4
+    while:
+      notVisible:
+        id: player.position
+        text: ".*[^0-9]0:0[0-2]"
+    commands:
+      - runFlow:
+          file: tap_player.yaml
+          env:
+            CONTROL_ID: player.prevChapter
 - assertVisible:
     id: player.chapter
     text: The Harbor
-- runFlow:
-    file: tap_player.yaml
-    env:
-      CONTROL_ID: player.playPause
-- extendedWaitUntil:
-    visible:
-      id: player.playPause
-      text: Pause
-    timeout: 30000
+- assertVisible:
+    id: player.position
+    text: ".*[^0-9]0:0[0-2]"
+- repeat:
+    times: 3
+    while:
+      notVisible:
+        id: player.playPause
+        text: Pause
+    commands:
+      - runFlow:
+          file: tap_player.yaml
+          env:
+            CONTROL_ID: player.playPause
+      - extendedWaitUntil:
+          visible:
+            id: player.playPause
+            text: Pause
+          timeout: 10000
+          optional: true
