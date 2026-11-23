@@ -34,6 +34,8 @@ struct ReaderView: View {
                     }
                     .accessibilityIdentifier("reader.page")
                     .opacity(model.phase == .reading ? 1 : 0)
+                    // Hidden pages are still read by VoiceOver.
+                    .accessibilityHidden(model.phase != .reading)
             }
             status
             VStack(spacing: 0) {
@@ -103,9 +105,7 @@ struct ReaderView: View {
                 .accessibilityIdentifier("reader.loading")
         case .failed(let message):
             VStack(spacing: 14) {
-                Image(systemName: "exclamationmark.triangle")
-                    .font(.system(size: 30))
-                    .accessibilityHidden(true)
+                Icon(.triangleAlert, size: 30, relativeTo: .title)
                 Text(message)
                     .font(.geist(.body))
                     .multilineTextAlignment(.center)
@@ -136,8 +136,7 @@ struct ReaderView: View {
         HStack(spacing: 0) {
             Button(action: close) {
                 HStack(spacing: 2) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 20, weight: .semibold))
+                    Icon(.chevronLeft, size: 24, relativeTo: .body)
                     Text("Book")
                         .font(.geist(.subheadline, weight: .medium))
                 }
@@ -163,22 +162,21 @@ struct ReaderView: View {
             .accessibilityElement(children: .combine)
             HStack(spacing: 0) {
                 Button { showingContents = true } label: {
-                    Image(systemName: "list.bullet")
-                        .frame(width: 44, height: 44)
+                    Icon(.list, size: 20)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 // The book's own controls only once it shows.
                 .disabled(model.contents.isEmpty || model.phase != .reading)
                 .accessibilityLabel(Text("Contents"))
                 .accessibilityIdentifier("reader.contents")
                 Button { showingSettings = true } label: {
-                    Image(systemName: "gearshape")
-                        .frame(width: 44, height: 44)
+                    Icon(.settings, size: 20)
+                        .frame(minWidth: 44, minHeight: 44)
                 }
                 .disabled(model.phase != .reading)
                 .accessibilityLabel(Text("Settings"))
                 .accessibilityIdentifier("reader.settings")
             }
-            .font(.system(size: 17, weight: .medium))
             .foregroundStyle(Theme.foreground)
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
@@ -235,8 +233,7 @@ struct ReaderView: View {
             .foregroundStyle(foreground.opacity(0.55))
             .lineLimit(1)
             .padding(.horizontal, 24)
-            .frame(maxWidth: .infinity)
-            .frame(height: 22)
+            .frame(maxWidth: .infinity, minHeight: 22)
             .accessibilityLabel(Text(place))
             .accessibilityIdentifier("reader.progress")
     }
@@ -381,6 +378,9 @@ private struct NotePopover: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(note.paragraphs.enumerated()), id: \.offset) { _, paragraph in
                         Text(paragraph)
+                            // The note is the book's, as the page is, so
+                            // it's set in a book face, as the web reader's
+                            // popover takes the book's own font.
                             .font(.system(.callout, design: .serif))
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -390,7 +390,7 @@ private struct NotePopover: View {
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("reader.note.text")
             Button(action: goToNote) {
-                Label("Go to Note", systemImage: "arrow.down.right")
+                Label("Go to Note", icon: .arrowDownRight)
                     .font(.geist(.subheadline, weight: .semibold))
             }
             .foregroundStyle(Color(UIColor(hex: theme.colors.noteLink)))

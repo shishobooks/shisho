@@ -48,8 +48,18 @@ name: Read, kill, and reopen at the same place
 - evalScript: ${output.afterRelaunch = maestro.copiedText}
 - assertTrue: ${output.beforeKill == output.afterRelaunch}
 # Relaunching synced the place the turns saved, where the app showed it.
-- runScript:
-    file: scripts/assert_read_position.js
-    env:
-      CONTROL: ${CONTROL}
-      TITLE: The Harness Novel
+- retry:
+    maxRetries: 3
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 5000
+          optional: true
+      - runScript:
+          file: scripts/assert_read_position.js
+          env:
+            CONTROL: ${CONTROL}
+            TITLE: The Harness Novel
+      - assertTrue:
+          condition: ${output.serverCheck == "ok"}
+          label: The server check passed

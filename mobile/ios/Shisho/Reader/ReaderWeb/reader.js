@@ -799,8 +799,89 @@ let navigation = Promise.resolve();
 // CFI whose section this copy of the book doesn't have.
 const landed = () => currentDoc() != null && view.lastLocation != null;
 
+// MARK: - The book, a part at a time
+
+// The book on the device, read a part at a time through the app, as the web
+// reader reads one from the server (app/libraries/rangeFile.ts), so no page
+// holds a whole book: a photo cookbook runs to hundreds of megabytes, and
+// three pages each read it.
+const localFile = (url, size) => ({
+  size,
+  async read(offset, length) {
+    if (length <= 0) return new Uint8Array(0);
+    const response = await fetch(url, {
+      headers: { Range: `bytes=${offset}-${offset + length - 1}` },
+    });
+    if (response.status !== 206) {
+      throw new Error(`reading the book failed: ${response.status}`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  },
+});
+
+// What foliate's MOBI reader asks of a file: slice(start, end) and its
+// bytes (app/libraries/rangeMobi.ts).
+const rangeBlob = (file, start, end) => {
+  const clamp = (at) => Math.min(Math.max(at, 0), end - start);
+  return {
+    size: end - start,
+    slice: (from = 0, to = end - start) =>
+      rangeBlob(file, start + clamp(from), start + clamp(to)),
+    arrayBuffer: async () => {
+      const data = await file.read(start, end - start);
+      return data.buffer.slice(
+        data.byteOffset,
+        data.byteOffset + data.byteLength,
+      );
+    },
+  };
+};
+
+// An EPUB through zip.js, reading each entry as foliate asks for it, as
+// openRangeEPUB in app/libraries/rangeEpub.ts does. Reads are local, so it
+// needs none of the web's fetching ahead.
+const openEPUB = async (file) => {
+  const [
+    { EPUB },
+    { BlobReader, BlobWriter, configure, TextWriter, ZipReader },
+  ] = await Promise.all([
+    import("../foliate/epub.js"),
+    import("../foliate/vendor/zip.js"),
+  ]);
+  class RangeReader extends BlobReader {
+    constructor() {
+      super(new Blob());
+      this.size = file.size;
+    }
+    readUint8Array(offset, length) {
+      return file.read(offset, length);
+    }
+  }
+  configure({ useWebWorkers: false });
+  const reader = new ZipReader(new RangeReader());
+  const entries = await reader.getEntries();
+  const map = new Map(entries.map((entry) => [entry.filename, entry]));
+  const loadText = (name) => map.get(name)?.getData(new TextWriter()) ?? null;
+  const loadBlob = (name, type) =>
+    map.get(name)?.getData(new BlobWriter(type)) ?? null;
+  const getSize = (name) => map.get(name)?.uncompressedSize ?? 0;
+  return new EPUB({ loadText, loadBlob, getSize }).init();
+};
+
+// A MOBI or AZW3 through foliate's MOBI reader, a record at a time
+// (openRangeMOBI in app/libraries/rangeMobi.ts).
+const openMOBI = async (file) => {
+  const [{ MOBI }, { unzlibSync }] = await Promise.all([
+    import("../foliate/mobi.js"),
+    import("../foliate/vendor/fflate.js"),
+  ]);
+  return new MOBI({ unzlib: unzlibSync }).open(rangeBlob(file, 0, file.size));
+};
+
 const open = async ({
   url,
+  size,
+  format,
   start,
   fallback,
   settings: s,
@@ -808,10 +889,10 @@ const open = async ({
   token,
   idle,
 }) => {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  // foliate tells EPUB from MOBI by the bytes, so the name is only a label.
-  await view.open(new File([blob], "book", { type: blob.type }));
+  const file = localFile(url, size);
+  await view.open(
+    format === "mobi" ? await openMOBI(file) : await openEPUB(file),
+  );
   applyStyles(s);
   post({
     type: "opened",

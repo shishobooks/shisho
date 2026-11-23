@@ -13,33 +13,84 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
     static let bookURL = "\(scheme)://app/book"
 
     /// The book's file on the device.
-    var bookFile: URL?
+    var bookFile: URL? {
+        didSet { book = nil }
+    }
+    /// The book, mapped rather than read: a page asks for a part at a time,
+    /// and only the parts it asks for come into memory.
+    private var book: Data?
 
     func webView(_ webView: WKWebView, start task: any WKURLSchemeTask) {
         guard let url = task.request.url else { return }
-        let file: URL?
         if url.path == "/book" {
-            file = bookFile
-        } else {
-            // Only the bundle's own resources, never a path out of it.
-            let path = url.path.split(separator: "/").filter { $0 != ".." }.joined(separator: "/")
-            file = Bundle.main.resourceURL?.appendingPathComponent(path)
+            serveBook(task, url: url)
+            return
         }
-        guard let file, let data = try? Data(contentsOf: file, options: .mappedIfSafe) else {
+        // Only the bundle's own resources, never a path out of it.
+        let path = url.path.split(separator: "/").filter { $0 != ".." }.joined(separator: "/")
+        guard let file = Bundle.main.resourceURL?.appendingPathComponent(path),
+              let data = try? Data(contentsOf: file, options: .mappedIfSafe)
+        else {
             task.didFailWithError(URLError(.fileDoesNotExist))
             return
         }
         let types = ["html": "text/html", "js": "text/javascript", "css": "text/css"]
-        let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-            "Content-Type": types[file.pathExtension] ?? "application/octet-stream",
-            "Content-Length": String(data.count),
-        ])!
+        respond(task, url: url, status: 200, data: data, headers: ["Content-Type": types[file.pathExtension] ?? "application/octet-stream"])
+    }
+
+    /// The part of the book the page asked for with a Range header, as the
+    /// web reader reads one from the server (app/libraries/rangeFile.ts), so
+    /// no WebView holds a whole book: a photo cookbook runs to hundreds of
+    /// megabytes, and three WebViews each read it.
+    private func serveBook(_ task: any WKURLSchemeTask, url: URL) {
+        if book == nil, let bookFile {
+            book = try? Data(contentsOf: bookFile, options: .alwaysMapped)
+        }
+        guard let book else {
+            task.didFailWithError(URLError(.fileDoesNotExist))
+            return
+        }
+        guard let range = ByteRange.parse(task.request.value(forHTTPHeaderField: "Range"), size: book.count) else {
+            respond(task, url: url, status: 416, data: Data(), headers: ["Content-Range": "bytes */\(book.count)"])
+            return
+        }
+        respond(task, url: url, status: 206, data: book.subdata(in: range), headers: [
+            "Content-Type": "application/octet-stream",
+            "Content-Range": "bytes \(range.lowerBound)-\(range.upperBound - 1)/\(book.count)",
+        ])
+    }
+
+    private func respond(_ task: any WKURLSchemeTask, url: URL, status: Int, data: Data, headers: [String: String]) {
+        var fields = headers
+        fields["Content-Length"] = String(data.count)
+        let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: fields)!
         task.didReceive(response)
         task.didReceive(data)
         task.didFinish()
     }
 
     func webView(_ webView: WKWebView, stop task: any WKURLSchemeTask) {}
+}
+
+/// A single range from an HTTP Range header, as the reader's page asks for
+/// part of the book.
+enum ByteRange {
+    /// The bytes header asks for of a file of size bytes, or nil for one
+    /// that can't be served: none, several, or one past the end.
+    static func parse(_ header: String?, size: Int) -> Range<Int>? {
+        guard let header, header.hasPrefix("bytes="), size > 0 else { return nil }
+        let spec = header.dropFirst("bytes=".count)
+        guard !spec.contains(","), let dash = spec.firstIndex(of: "-") else { return nil }
+        let first = spec[..<dash], last = spec[spec.index(after: dash)...]
+        if first.isEmpty {
+            guard let count = Int(last), count > 0 else { return nil }
+            return max(0, size - count)..<size
+        }
+        guard let start = Int(first), start < size else { return nil }
+        if last.isEmpty { return start..<size }
+        guard let end = Int(last), end >= start else { return nil }
+        return start..<min(size, end + 1)
+    }
 }
 
 /// Where a page is in the book, as its script reports it.

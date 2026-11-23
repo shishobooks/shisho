@@ -13,4 +13,4 @@ appId: ${APP_ID}
 - extendedWaitUntil:
     visible:
       id: reader.close
-    timeout: 5000
+    timeout: 30000

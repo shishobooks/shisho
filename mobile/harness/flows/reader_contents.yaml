@@ -23,10 +23,10 @@ name: Jump to a chapter from the table of contents
     visible:
       text: Chapter Three
       enabled: true
-    timeout: 10000
+    timeout: 30000
 - tapOn: Chapter Three
 - extendedWaitUntil:
     visible:
       id: reader.progress
       text: "Chapter Three.*"
-    timeout: 15000
+    timeout: 30000

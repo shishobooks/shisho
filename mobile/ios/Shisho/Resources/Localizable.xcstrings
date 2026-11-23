@@ -238,6 +238,12 @@
     "Bitrate" : {
 
     },
+    "Black" : {
+
+    },
+    "Book" : {
+
+    },
     "Book remaining %@" : {
 
     },
@@ -319,10 +325,19 @@
     "Close Player" : {
 
     },
+    "Close the book" : {
+
+    },
     "Codec" : {
 
     },
     "Colorist" : {
+
+    },
+    "Contents" : {
+
+    },
+    "Continue reading" : {
 
     },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
@@ -332,6 +347,9 @@
 
     },
     "Currently Reading" : {
+
+    },
+    "Dark" : {
 
     },
     "Date added" : {
@@ -445,6 +463,9 @@
     "Go to %@" : {
 
     },
+    "Go to Note" : {
+
+    },
     "Goes to this moment" : {
 
     },
@@ -466,6 +487,9 @@
     "Last synced" : {
 
     },
+    "Layout" : {
+
+    },
     "Leave it empty to remove the note." : {
 
     },
@@ -479,6 +503,9 @@
 
     },
     "Library: %@" : {
+
+    },
+    "Light" : {
 
     },
     "Listen" : {
@@ -628,6 +655,9 @@
     "Open Settings" : {
 
     },
+    "Opening the book" : {
+
+    },
     "Opens the File's page" : {
 
     },
@@ -646,6 +676,9 @@
     "Pages" : {
 
     },
+    "Paginated" : {
+
+    },
     "Password" : {
 
     },
@@ -659,6 +692,9 @@
 
     },
     "People" : {
+
+    },
+    "Place in the book" : {
 
     },
     "Plain HTTP only works for servers on your local network. Use the server's https:// address." : {
@@ -697,6 +733,12 @@
     "Read" : {
 
     },
+    "Read %@" : {
+
+    },
+    "Read again" : {
+
+    },
     "Reading Direction" : {
 
     },
@@ -733,6 +775,9 @@
     "Save" : {
 
     },
+    "Scrolled" : {
+
+    },
     "Search" : {
 
     },
@@ -748,6 +793,9 @@
     "Search your Libraries" : {
 
     },
+    "Sepia" : {
+
+    },
     "Series" : {
 
     },
@@ -761,6 +809,9 @@
 
     },
     "Server version" : {
+
+    },
+    "Settings" : {
 
     },
     "Share" : {
@@ -893,6 +944,9 @@
     "The server sends the app to another server (%@), which it doesn't follow with your sign-in. Sign in with that address instead." : {
 
     },
+    "Theme" : {
+
+    },
     "Then by %@" : {
 
     },
@@ -912,6 +966,12 @@
 
     },
     "This book" : {
+
+    },
+    "This book couldn't be downloaded. Check your connection to the server and try again." : {
+
+    },
+    "This book couldn't be opened." : {
 
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
@@ -954,6 +1014,9 @@
     "Translator" : {
 
     },
+    "Try Again" : {
+
+    },
     "Turn Off Timer" : {
 
     },
@@ -961,6 +1024,9 @@
 
     },
     "Unknown" : {
+
+    },
+    "Untitled" : {
 
     },
     "Up to %@ stars" : {
@@ -991,6 +1057,12 @@
 
     },
     "You listened up to %@ on the web." : {
+
+    },
+    "You read up to %@ on another device." : {
+
+    },
+    "You read up to %@ on the web." : {
 
     },
     "Your account can't read Books on this server. Ask the server's owner for access." : {

@@ -121,7 +121,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         case .fraction(let fraction): .fraction(fraction)
         case nil: nil
         }
-        let source = FoliateSource(bookFile: bookFile, settings: settings)
+        let source = FoliateSource(bookFile: bookFile, fileType: file.fileType, settings: settings)
         source.delegate = self
         self.source = source
         source.open(at: start, fallback: fallback, chapters: file.usesShishoChapters ? shownChapters : nil)

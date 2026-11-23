@@ -51,8 +51,7 @@ struct ReadCard: View {
     /// The outlined button under the listen bar.
     private var outlined: some View {
         HStack(spacing: 8) {
-            Image(systemName: finished ? "arrow.counterclockwise" : "book")
-                .font(.system(size: 16, weight: .semibold))
+            Icon(finished ? .rotateCcw : .bookOpen, size: 17, relativeTo: nil)
             Text(title)
                 .font(.geist(.callout, weight: .semibold))
             if !detail.isEmpty {
@@ -74,8 +73,7 @@ struct ReadCard: View {
     /// ebook.
     private var primary: some View {
         HStack(spacing: 12) {
-            Image(systemName: finished ? "arrow.counterclockwise" : "book")
-                .font(.system(size: 20, weight: .semibold))
+            Icon(finished ? .rotateCcw : .bookOpen, size: 22, relativeTo: nil)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)

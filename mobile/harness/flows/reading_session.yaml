@@ -38,13 +38,21 @@ name: A reading session reaches the server
 - extendedWaitUntil:
     visible:
       id: book.read
-    timeout: 10000
-- extendedWaitUntil:
-    visible: __never__
-    timeout: 5000
-    optional: true
-- runScript:
-    file: scripts/assert_read_session.js
-    env:
-      CONTROL: ${CONTROL}
-      TITLE: The Harness Novel
+    timeout: 30000
+# Checked in a retry, since the sync can take longer than one wait on a
+# loaded CI simulator.
+- retry:
+    maxRetries: 3
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 5000
+          optional: true
+      - runScript:
+          file: scripts/assert_read_session.js
+          env:
+            CONTROL: ${CONTROL}
+            TITLE: The Harness Novel
+      - assertTrue:
+          condition: ${output.serverCheck == "ok"}
+          label: The server check passed

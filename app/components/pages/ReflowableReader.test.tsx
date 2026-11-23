@@ -336,13 +336,8 @@ describe("ReflowableReader", () => {
     }
   });
 
-<<<<<<< HEAD
-  it("shows progress to a tenth of a percent", async () => {
-    vi.mocked(useReflowableBook).mockReturnValue({
-=======
   it("shows progress as a whole percent, with the bar to the page", async () => {
-    vi.mocked(useReflowableBlob).mockReturnValue({
->>>>>>> fc637f29 ([Feature] Read an EPUB in the Shisho app on iOS (#919))
+    vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,

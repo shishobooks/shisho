@@ -90,8 +90,15 @@ final class FoliateSource: PagerSource {
     /// The section the book first opened in.
     private var openedSection: Int?
 
-    init(bookFile: URL, settings: ReaderSettings) {
+    /// How the page opens the book a part at a time: as a zip (EPUB,
+    /// KePub) or as MOBI records (MOBI, AZW3), and how big it is.
+    private let bookFormat: String
+    private let bookSize: Int
+
+    init(bookFile: URL, fileType: String, settings: ReaderSettings) {
         handler.bookFile = bookFile
+        bookFormat = ["mobi", "azw3"].contains(fileType) ? "mobi" : "zip"
+        bookSize = (try? bookFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         self.settings = settings
         let background = settings.theme.background
         back = ReaderPage(handler: handler, background: background)
@@ -138,7 +145,8 @@ final class FoliateSource: PagerSource {
     }
 
     private func openArguments(start: ReaderTarget?, neighbor: Int, token: Int, idle: Bool = false) -> String {
-        "{url: \(javaScriptLiteral(ReaderSchemeHandler.bookURL)), start: \(start?.script ?? "null"), "
+        "{url: \(javaScriptLiteral(ReaderSchemeHandler.bookURL)), size: \(bookSize), format: \(javaScriptLiteral(bookFormat)), "
+            + "start: \(start?.script ?? "null"), "
             + "fallback: \(fallback.map { String($0) } ?? "null"), settings: \(settings.script), "
             + "neighborDir: \(neighbor), token: \(token), idle: \(idle)}"
     }

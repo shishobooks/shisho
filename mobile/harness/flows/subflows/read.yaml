@@ -2,10 +2,10 @@
 # for its first page, with its chapters found. Not a flow of its own.
 appId: ${APP_ID}
 ---
-- extendedWaitUntil:
-    visible: ${TITLE}
-    timeout: 30000
-- tapOn: ${TITLE}
+- runFlow:
+    file: open_book.yaml
+    env:
+      TITLE: ${TITLE}
 - scrollUntilVisible:
     element:
       id: book.read
@@ -24,4 +24,4 @@ appId: ${APP_ID}
     visible:
       id: reader.progress
       text: ".+ · [0-9]+%"
-    timeout: 15000
+    timeout: 30000

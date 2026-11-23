@@ -474,8 +474,7 @@ private struct FileCard: View {
                 // Every ebook File opens from here; the Read button above
                 // opens the one read last.
                 Button { model.read(fileID: file.id) } label: {
-                    Image(systemName: "book")
-                        .font(.system(size: 16, weight: .semibold))
+                    Icon(.bookOpen, size: 18, relativeTo: nil)
                         .foregroundStyle(Theme.primary)
                         .frame(width: 40, height: 40)
                         .background(Theme.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))

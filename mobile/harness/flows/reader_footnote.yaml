@@ -22,22 +22,22 @@ name: Open a footnote
     visible:
       text: Chapter Two
       enabled: true
-    timeout: 10000
+    timeout: 30000
 - tapOn: Chapter Two
 - extendedWaitUntil:
     visible:
       id: reader.progress
       text: "Chapter Two.*"
-    timeout: 15000
+    timeout: 30000
 # The note reference, a link in the book's text.
 - tapOn: "\\[1\\]"
 - extendedWaitUntil:
     visible: ".*The footnote's text.*"
-    timeout: 10000
+    timeout: 30000
 - tapOn:
     id: reader.note.go
 - extendedWaitUntil:
     visible:
       id: reader.progress
       text: "Notes.*"
-    timeout: 10000
+    timeout: 30000

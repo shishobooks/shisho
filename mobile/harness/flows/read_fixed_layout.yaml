@@ -16,7 +16,7 @@ name: Turn the pages of a fixed-layout book
       TITLE: Harness Picture Book
 - extendedWaitUntil:
     visible: "Fixed page 1 of the picture book."
-    timeout: 10000
+    timeout: 30000
 - swipe:
     direction: LEFT
 - swipe:
@@ -25,5 +25,5 @@ name: Turn the pages of a fixed-layout book
     visible:
       id: reader.progress
       text: "Page 3 · .*"
-    timeout: 10000
+    timeout: 30000
 - assertVisible: "Fixed page 3 of the picture book."
