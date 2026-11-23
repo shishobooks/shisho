@@ -1,3 +1,7 @@
+// The Shisho app's reader repeats readerAtEnd and withinFirstScreen in
+// mobile/ios/Shisho/Reader/ReaderWeb/reader.js, which can't import
+// TypeScript: change both.
+
 // What the ebook reader reads from foliate's renderer to tell the end.
 export interface EndRenderer {
   scrolled?: boolean;

@@ -21,6 +21,11 @@ type Fixture struct {
 	FileType string
 	// Series is an EPUB's Series, which it's number 1 of.
 	Series string
+	// Novel writes an EPUB with chapters, a footnote, and a picture
+	// (writeNovel), for the reader's flows; FixedLayout a fixed-layout one
+	// (writePictureBook).
+	Novel       bool
+	FixedLayout bool
 	// Duration is an audiobook's length in seconds, and Chapters where its
 	// chapters start.
 	Duration float64
@@ -34,7 +39,9 @@ type Fixture struct {
 // long enough to listen to for a while, and small enough that the player
 // buffers all of it, so the flows can listen offline.
 var fixtures = []Fixture{
-	{Title: "The Harness Novel", Author: "Ada Writer", FileType: "epub", Series: "Harness Series"},
+	{Title: "The Harness Novel", Author: "Ada Writer", FileType: "epub", Series: "Harness Series", Novel: true},
+	// A fixed-layout EPUB, which the readers page as foliate lays it out.
+	{Title: "Harness Picture Book", Author: "Ivy Illustrator", FileType: "epub", FixedLayout: true},
 	{Title: "Harness Comic", Author: "Pat Penciller", FileType: "cbz"},
 	{Title: "Quiet Lighthouse", Author: "Ann Author", FileType: "m4b", Duration: 9,
 		Chapters: []testgen.M4BChapter{{Title: "Chapter 1", Start: 0}, {Title: "Chapter 2", Start: 3}, {Title: "Chapter 3", Start: 6}}},
@@ -78,6 +85,8 @@ func (t fixtureT) Fatalf(format string, args ...any) {
 // -key`).
 var fixtureSources = []string{
 	"tools/appharness/fixtures.go",
+	// The reader's novel and picture book.
+	"tools/appharness/novel.go",
 	"internal/testgen",
 	"internal/mobigen",
 	"pkg/mediafile",
@@ -253,6 +262,16 @@ func writeFixture(t fixtureT, folder string, f Fixture, one *float64) {
 	}
 	switch f.FileType {
 	case "epub":
+		if f.Novel || f.FixedLayout {
+			write := func(path string) error { return writeNovel(path, f.Title, f.Author, f.Series) }
+			if f.FixedLayout {
+				write = func(path string) error { return writePictureBook(path, f.Title, f.Author) }
+			}
+			if err := write(filepath.Join(folder, "book.epub")); err != nil {
+				t.Fatalf("write %s: %v", f.Title, err)
+			}
+			return
+		}
 		options := testgen.EPUBOptions{Title: f.Title, Authors: []string{f.Author}, Series: f.Series, HasCover: true}
 		if f.Series != "" {
 			options.SeriesNumber = one

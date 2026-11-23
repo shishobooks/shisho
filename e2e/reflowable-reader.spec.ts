@@ -555,7 +555,7 @@ test.describe("Reflowable reader", () => {
             position: { percentage: number } | null;
           };
           return body.position
-            ? String(Math.round(body.position.percentage * 1000) / 10)
+            ? String(Math.round(body.position.percentage * 100))
             : null;
         },
         { timeout: 10_000 },

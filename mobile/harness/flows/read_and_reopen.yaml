@@ -1,0 +1,55 @@
+# Open an EPUB, turn a few pages, kill the app, and reopen it at the same
+# place; the server has the place as a CFI too (#919).
+appId: ${APP_ID}
+name: Read, kill, and reopen at the same place
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- copyTextFrom:
+    id: reader.progress
+- evalScript: ${output.atOpen = maestro.copiedText}
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          direction: LEFT
+# Turns that queued behind a page being laid out land in a moment.
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 3000
+    optional: true
+- copyTextFrom:
+    id: reader.progress
+- evalScript: ${output.beforeKill = maestro.copiedText}
+- assertTrue: ${output.beforeKill != output.atOpen}
+
+# Killed: every turn already saved the place.
+- stopApp
+- launchApp
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 2000
+    optional: true
+- copyTextFrom:
+    id: reader.progress
+- evalScript: ${output.afterRelaunch = maestro.copiedText}
+- assertTrue: ${output.beforeKill == output.afterRelaunch}
+# Relaunching synced the place the turns saved, where the app showed it.
+- runScript:
+    file: scripts/assert_read_position.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: The Harness Novel

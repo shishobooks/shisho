@@ -1,0 +1,32 @@
+# The table of contents is Shisho's chapters, and jumps to one (#919).
+appId: ${APP_ID}
+name: Jump to a chapter from the table of contents
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.contents
+- assertVisible: Chapter One
+- assertVisible: Notes
+# A chapter can be tapped once the reader has found it in the book.
+- extendedWaitUntil:
+    visible:
+      text: Chapter Three
+      enabled: true
+    timeout: 10000
+- tapOn: Chapter Three
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Three.*"
+    timeout: 15000

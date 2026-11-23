@@ -1,0 +1,29 @@
+# A fixed-layout EPUB pages as foliate lays it out, as on the web: one page
+# at a time on a portrait phone, each turn landing on the next page.
+appId: ${APP_ID}
+name: Turn the pages of a fixed-layout book
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Picture Book
+- extendedWaitUntil:
+    visible: "Fixed page 1 of the picture book."
+    timeout: 10000
+- swipe:
+    direction: LEFT
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Page 3 · .*"
+    timeout: 10000
+- assertVisible: "Fixed page 3 of the picture book."

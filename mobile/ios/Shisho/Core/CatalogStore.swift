@@ -315,6 +315,16 @@ final class CatalogStore: Sendable {
                 t.add(column: "bookmark_id", .text).indexed()
             }
         }
+        // Reading ebooks (#919): this installation's place in an ebook is a
+        // CFI, and so is another device's place offered instead. seconds
+        // stays an audiobook's, 0 for an ebook.
+        migrator.registerMigration("v5: reading") { db in
+            try db.alter(table: "local_positions") { t in
+                t.add(column: "cfi", .text)
+                t.add(column: "offer_cfi", .text)
+                t.add(column: "offer_percentage", .double)
+            }
+        }
         return migrator
     }
 

@@ -336,8 +336,13 @@ describe("ReflowableReader", () => {
     }
   });
 
+<<<<<<< HEAD
   it("shows progress to a tenth of a percent", async () => {
     vi.mocked(useReflowableBook).mockReturnValue({
+=======
+  it("shows progress as a whole percent, with the bar to the page", async () => {
+    vi.mocked(useReflowableBlob).mockReturnValue({
+>>>>>>> fc637f29 ([Feature] Read an EPUB in the Shisho app on iOS (#919))
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
       isError: false,
@@ -356,9 +361,11 @@ describe("ReflowableReader", () => {
         );
     });
 
-    expect(progress).toHaveAttribute("aria-valuenow", "23.5");
-    expect(progress).toHaveAttribute("aria-valuetext", "23.5%");
-    expect(screen.getByText("23.5%")).toBeInTheDocument();
+    expect(progress).toHaveAttribute("aria-valuenow", "23");
+    expect(progress).toHaveAttribute("aria-valuetext", "23%");
+    expect(screen.getByText("23%")).toBeInTheDocument();
+    // The bar still moves with each page.
+    expect(progress.firstElementChild).toHaveStyle({ width: "23.45%" });
   });
 
   it("lists headings in the chapter menu without making them selectable", async () => {

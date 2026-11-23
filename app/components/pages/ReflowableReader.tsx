@@ -1122,12 +1122,9 @@ export default function ReflowableReader({
     jumpTo(() => view?.goToFraction?.(e.key === "Home" ? 0 : 1));
   };
 
-  // To a tenth of a percent, so the bar and the number move with each page
-  // in all but the longest books.
-  const progressPercent = useMemo(
-    () => Math.round(fraction * 1000) / 10,
-    [fraction],
-  );
+  // The number is a whole percent; the bar moves with each page.
+  const progressPercent = useMemo(() => Math.round(fraction * 100), [fraction]);
+  const progressWidth = fraction * 100;
 
   // A failed background refetch keeps an open book on screen, but not one
   // whose reads failed.
@@ -1365,7 +1362,7 @@ export default function ReflowableReader({
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={progressPercent}
-            aria-valuetext={`${progressPercent.toFixed(1)}%`}
+            aria-valuetext={`${progressPercent}%`}
             className="relative h-1.5 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={handleProgressClick}
             onKeyDown={handleProgressKeyDown}
@@ -1374,7 +1371,7 @@ export default function ReflowableReader({
           >
             <div
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
-              style={{ width: `${progressPercent}%` }}
+              style={{ width: `${progressWidth}%` }}
             />
             <ProgressMarks marks={progressMarks} />
           </div>
@@ -1396,7 +1393,7 @@ export default function ReflowableReader({
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <span className="text-sm text-muted-foreground tabular-nums">
-            {progressPercent.toFixed(1)}%
+            {progressPercent}%
           </span>
           <Button
             aria-label={rtl ? "Previous page" : "Next page"}

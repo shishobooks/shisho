@@ -38,6 +38,9 @@ struct RootView: View {
             .tint(Theme.primary)
             .presentationDragIndicator(.visible)
         }
+        .fullScreenCover(item: Binding(get: { model.reader }, set: { if $0 == nil { model.closeReader() } })) { reader in
+            ReaderView(model: reader) { model.closeReader() }
+        }
     }
 }
 

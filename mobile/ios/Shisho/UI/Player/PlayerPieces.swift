@@ -54,17 +54,35 @@ struct PlayerControlStyle: ButtonStyle {
     }
 }
 
-/// Offers another device's place without jumping to it (#912).
+/// Offers another device's place without jumping to it (#912), in the
+/// player or the reader.
 struct PlaceOfferBanner: View {
+    enum Kind {
+        case listening, reading
+
+        /// Starts the banner's identifiers, the same on every platform.
+        var prefix: String { self == .listening ? "player" : "reader" }
+    }
+
     let offer: ServerPlace
+    var kind = Kind.listening
     let accept: () -> Void
     let dismiss: () -> Void
 
     private var message: String {
-        let time = TimeLabels.clock(offer.seconds)
-        return offer.source == "web_reader"
-            ? String(localized: "You listened up to \(time) on the web.")
-            : String(localized: "You listened up to \(time) on another device.")
+        let web = offer.source == "web_reader"
+        switch kind {
+        case .listening:
+            let time = TimeLabels.clock(offer.seconds)
+            return web
+                ? String(localized: "You listened up to \(time) on the web.")
+                : String(localized: "You listened up to \(time) on another device.")
+        case .reading:
+            let percent = offer.percentage.formatted(.percent.precision(.fractionLength(0)))
+            return web
+                ? String(localized: "You read up to \(percent) on the web.")
+                : String(localized: "You read up to \(percent) on another device.")
+        }
     }
 
     var body: some View {
@@ -79,20 +97,20 @@ struct PlaceOfferBanner: View {
             Button("Go There", action: accept)
                 .font(.geist(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.primary)
-                .accessibilityIdentifier("player.offer.accept")
+                .accessibilityIdentifier("\(kind.prefix).offer.accept")
             Button(action: dismiss) {
                 Icon(.x, size: 16, relativeTo: .footnote)
                     .foregroundStyle(Theme.mutedForeground)
                     .frame(width: 28, height: 28)
             }
             .accessibilityLabel("Stay Here")
-            .accessibilityIdentifier("player.offer.dismiss")
+            .accessibilityIdentifier("\(kind.prefix).offer.dismiss")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .cardStyle()
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("player.offer")
+        .accessibilityIdentifier("\(kind.prefix).offer")
     }
 }
 
@@ -111,6 +129,9 @@ struct Scrubber: View {
     let onCommit: (Double) -> Void
     /// What VoiceOver's swipe up and down moves by.
     var step: Double = 15
+    /// Places marked on the bar, such as where each chapter starts, in the
+    /// same units as value.
+    var marks: [Double] = []
 
     /// Where a drag began, and where the handle is now, in seconds.
     @State private var dragStart: Double?
@@ -136,6 +157,14 @@ struct Scrubber: View {
                 Capsule()
                     .fill(Theme.primary)
                     .frame(width: min(width, x + Scrubber.thumb / 2), height: Scrubber.track)
+                ForEach(Array(marks.enumerated()), id: \.offset) { _, mark in
+                    Capsule()
+                        .fill(Theme.foreground.opacity(0.3))
+                        .frame(width: 1.5, height: 12)
+                        .offset(x: Scrubber.thumb / 2 - 0.75 + travel * min(1, max(0, length > 0 ? mark / length : 0)))
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 // White in both appearances, as the system slider's handle
                 // is, ringed in the brand color.
                 Circle()

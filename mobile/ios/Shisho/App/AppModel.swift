@@ -14,6 +14,7 @@ final class AccountSession {
     let store: CatalogStore
     let sync: SyncEngine
     let covers: CoverCache
+    let ebooks: EbookCache
 
     /// The capabilities the server listed in its last response, which any
     /// thread may read.
@@ -31,6 +32,7 @@ final class AccountSession {
         store = try CatalogStore(path: account.folder.appendingPathComponent("catalog.sqlite").path)
         sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
+        ebooks = EbookCache(client: client, accountID: account.id)
     }
 }
 
@@ -63,6 +65,9 @@ final class AppModel {
     private(set) var player: AudioPlayer?
     /// Now Playing is open.
     var showingPlayer = false
+    /// The ebook open in the reader, which records reading whatever the
+    /// screen does, as the player records listening.
+    private(set) var reader: ReaderModel?
     /// The tab showing, and each tab's navigation: the pages pushed on it.
     var tab: AppTab = .library
     /// The Related tab a Book opened from the Related panel starts on, as
@@ -159,6 +164,7 @@ final class AppModel {
         player?.stop()
         player = nil
         showingPlayer = false
+        closeReader()
         libraryPath = []
         listsPath = []
         showingAccount = false
@@ -180,12 +186,21 @@ final class AppModel {
 
     func didEnterBackground() {
         playingInBackground = player?.isPlaying == true
+        reader?.background()
+    }
+
+    /// The app is leaving the screen, perhaps to be swiped away, which skips
+    /// the background: reading time ends here, and goes on if the reader is
+    /// back within 30 seconds.
+    func didResignActive() {
+        reader?.background()
     }
 
     /// Coming back while the audio played on, as by tapping it on the lock
     /// screen or in Control Center, opens Now Playing, where its controls
     /// are. iOS doesn't say which of those brought the app back.
     func didBecomeActive() {
+        reader?.foreground()
         if playingInBackground, player?.isPlaying == true, player?.file != nil {
             showingPlayer = true
         }
@@ -304,6 +319,32 @@ final class AppModel {
         player.seek(to: seconds)
         player.play()
         showingPlayer = true
+    }
+
+    /// Opens a Reflowable File in the reader.
+    func read(fileID: Int) {
+        guard let session else { return }
+        let file: ReadingFile?
+        do {
+            file = try session.store.pool.read { try CatalogStore.readingFile($0, fileID: fileID) }
+        } catch {
+            Task { await Diagnostics.shared.log(.reader, "file \(fileID): couldn't read it from the catalog: \(Diagnostics.describe(error))") }
+            return
+        }
+        guard let file else { return }
+        closeReader()
+        showingPlayer = false
+        reader = ReaderModel(file: file, session: session) { [weak self] in
+            Task { await self?.syncNow() }
+        } onGone: { [weak self] in
+            self?.closeReader()
+        }
+    }
+
+    /// Closes the reader, recording what was read.
+    func closeReader() {
+        reader?.close()
+        reader = nil
     }
 
     /// The diagnostics export, for the user to read before sharing it: the

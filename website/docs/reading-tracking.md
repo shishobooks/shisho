@@ -69,13 +69,13 @@ To stop treating a book as Reference, choose another status. **Mark as read**, *
 
 - **KOReader** starts and finishes a book by where you are in it, as the Shisho reader does. With the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin), reading done offline is dated by when you read it: a book you start offline starts on the day you read it. The plugin also syncs KOReader's own [statuses and stars](./koreader.md#statuses-and-ratings) both ways, so finishing, pausing, or rating a book in KOReader counts in Shisho, and so does opening one for the first time, which KOReader counts as reading it.
 - **A Kobo** says outright when you are reading a book and when you finish it, so opening a book on the Kobo starts it even on its first page, and a finish from the Kobo is never undone the way an automatic finish can be.
-- **The [Shisho app](./shisho-app.md#listening)** follows the same rules as the web player, and listening done offline is dated by when you listened.
+- **The [Shisho app](./shisho-app.md)** follows the same rules as the Shisho reader and the web player, and reading or listening done offline is dated by when you did it.
 
 ### Moving Between Readers
 
 Your place carries between the Shisho reader, KOReader, and a Kobo in every direction:
 
-- **EPUB and KePub books** carry the exact spot between the Shisho reader and KOReader, whether KOReader holds the book as an EPUB or as a KePub. A book you read in KOReader opens in the Shisho reader where KOReader left off, and KOReader offers to jump to where you stopped in the Shisho reader.
+- **EPUB and KePub books** carry the exact spot between the Shisho reader and the Shisho app, and between the Shisho reader and KOReader, whether KOReader holds the book as an EPUB or as a KePub. The Shisho app opens a place KOReader saved at its percentage. A book you read in KOReader opens in the Shisho reader where KOReader left off, and KOReader offers to jump to where you stopped in the Shisho reader.
 - **On a Kobo**, places are estimates within the chapter. The Kobo opens at the sentence nearest where you were, usually within a page or two, and the Shisho reader and KOReader open at or near the sentence the Kobo was on. This needs the Kobo to hold the book as a KePub.
 - **Comics and PDFs** carry the page.
 - **MOBI and AZW3 books** don't carry between the Shisho reader and KOReader: KOReader shows no progress for a place the Shisho reader saved.
@@ -85,11 +85,12 @@ When the exact spot can't be found, such as a place saved before the file was re
 
 ### Reading Time From Devices
 
-Reading time from KOReader with the plugin and listening time from the Shisho app are measured. Elsewhere, Shisho estimates it:
+Reading time from KOReader with the plugin and from the Shisho app, and listening time from the Shisho app, are measured. Elsewhere, Shisho estimates it:
 
 - **KOReader with the plugin** sends the time its statistics recorded on each page. A break of more than ten minutes starts a new session, and a session's time counts only the time spent on its pages, so it can be shorter than the span from its start to its end. KOReader's statistics also leave out a page you turned past in under 5 seconds and count at most 2 minutes on any one page, by default; both are **Read page duration limits** under **Reading statistics > Settings** in KOReader.
 - **KOReader without the plugin**, using progress sync, doesn't report how long you read. A session runs from when KOReader pulls your position on opening a book to its last push before you close it.
 - **A Kobo** counts the minutes it spends on each book. Each time it reports more, the extra minutes become one session that ends when the Kobo reported them, so reading over a few days with Wi-Fi off becomes one session.
+- **The Shisho app** times reading as the [Shisho reader](#reading-time) does. Leaving the app or locking the phone ends a session too, and coming back within 30 seconds continues it.
 - **The Shisho app** times listening on the phone. A session counts only the time playing. Each pause sends the session so far, so it shows here moments later, or when the phone next connects. Playing again within 5 minutes of a pause or phone call continues the same session; a longer break starts a new one.
 
 A session that reaches Shisho late belongs to the Read-through you were on when it started, or to none if you weren't reading the book then, and counts toward your reading time either way.

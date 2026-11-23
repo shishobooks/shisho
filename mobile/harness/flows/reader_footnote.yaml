@@ -1,0 +1,43 @@
+# A small note reference opens its note in a popover rather than turning
+# the page, and Go to Note goes to the note (#919).
+appId: ${APP_ID}
+name: Open a footnote
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.contents
+# A chapter can be tapped once the reader has found it in the book.
+- extendedWaitUntil:
+    visible:
+      text: Chapter Two
+      enabled: true
+    timeout: 10000
+- tapOn: Chapter Two
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 15000
+# The note reference, a link in the book's text.
+- tapOn: "\\[1\\]"
+- extendedWaitUntil:
+    visible: ".*The footnote's text.*"
+    timeout: 10000
+- tapOn:
+    id: reader.note.go
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Notes.*"
+    timeout: 10000

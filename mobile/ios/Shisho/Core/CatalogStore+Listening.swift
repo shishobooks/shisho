@@ -115,31 +115,35 @@ extension CatalogStore {
     /// reader left only as a percentage is placed by the File's length.
     static func serverPlace(_ db: Database, fileID: Int) throws -> ServerPlace? {
         guard let row = try Row.fetchOne(db, sql: """
-            SELECT p.seconds, p.percentage, p.occurred_at, p.device_id, p.source, f.duration_seconds
+            SELECT p.seconds, p.cfi, p.percentage, p.occurred_at, p.device_id, p.source, f.duration_seconds
             FROM reading_positions p LEFT JOIN book_files f ON f.id = p.file_id
             WHERE p.file_id = ?
             """, arguments: [fileID])
         else { return nil }
         let duration: Double = row["duration_seconds"] ?? 0
-        let seconds: Double = row["seconds"] ?? (row["percentage"] as Double) * duration
+        let percentage: Double = row["percentage"]
+        let seconds: Double = row["seconds"] ?? percentage * duration
         return ServerPlace(seconds: seconds, occurredAt: Date(timeIntervalSince1970: row["occurred_at"]),
-                           deviceID: row["device_id"], source: row["source"])
+                           deviceID: row["device_id"], source: row["source"], cfi: row["cfi"], percentage: percentage)
     }
 
     static func localPlace(_ db: Database, fileID: Int) throws -> LocalPlace? {
         guard let row = try Row.fetchOne(db, sql: """
-            SELECT seconds, updated_at, base_occurred_at, offer_seconds, offer_occurred_at, offer_source, offer_device_id
+            SELECT seconds, cfi, percentage, updated_at, base_occurred_at, offer_seconds, offer_cfi, offer_percentage,
+                offer_occurred_at, offer_source, offer_device_id
             FROM local_positions WHERE file_id = ?
             """, arguments: [fileID])
         else { return nil }
         var offer: ServerPlace?
         if let seconds: Double = row["offer_seconds"], let at: Double = row["offer_occurred_at"] {
             offer = ServerPlace(seconds: seconds, occurredAt: Date(timeIntervalSince1970: at),
-                                deviceID: row["offer_device_id"], source: row["offer_source"] ?? "")
+                                deviceID: row["offer_device_id"], source: row["offer_source"] ?? "",
+                                cfi: row["offer_cfi"], percentage: row["offer_percentage"] ?? 0)
         }
         return LocalPlace(seconds: row["seconds"], updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
                           pending: try hasPendingMoves(db, fileID: fileID),
-                          base: (row["base_occurred_at"] as Double?).map(Date.init(timeIntervalSince1970:)), offer: offer)
+                          base: (row["base_occurred_at"] as Double?).map(Date.init(timeIntervalSince1970:)), offer: offer,
+                          cfi: row["cfi"], percentage: row["percentage"])
     }
 
     /// Keeps another device's place as an offer when it arrives while this
@@ -154,10 +158,11 @@ extension CatalogStore {
                                         arguments: [position.fileId]) ?? false
         guard try offered || hasPendingMoves(db, fileID: position.fileId) else { return }
         try db.execute(sql: """
-            UPDATE local_positions SET offer_seconds = ?, offer_occurred_at = ?, offer_source = ?, offer_device_id = ?
+            UPDATE local_positions SET offer_seconds = ?, offer_cfi = ?, offer_percentage = ?, offer_occurred_at = ?,
+                offer_source = ?, offer_device_id = ?
             WHERE file_id = ? AND ? > COALESCE(base_occurred_at, 0) AND ? > COALESCE(offer_occurred_at, 0)
-            """, arguments: [place.seconds, occurredAt, position.source.rawValue, position.deviceId, position.fileId,
-                             occurredAt, occurredAt])
+            """, arguments: [place.seconds, place.cfi, place.percentage, occurredAt, position.source.rawValue, position.deviceId,
+                             position.fileId, occurredAt, occurredAt])
     }
 
     /// The user went to the offered place, or chose to stay. Either way the
@@ -165,16 +170,21 @@ extension CatalogStore {
     /// to again until another device moves.
     func resolveOffer(fileID: Int) throws {
         try pool.write { db in
-            try db.execute(sql: """
-                UPDATE local_positions SET offer_seconds = NULL, offer_occurred_at = NULL, offer_source = NULL, offer_device_id = NULL,
-                    base_occurred_at = MAX(COALESCE(base_occurred_at, 0),
-                        COALESCE((SELECT occurred_at FROM reading_positions WHERE file_id = ?), 0))
-                WHERE file_id = ?
-                """, arguments: [fileID, fileID])
+            try CatalogStore.resolveOffer(db, fileID: fileID)
         }
     }
 
-    private static func hasPendingMoves(_ db: Database, fileID: Int) throws -> Bool {
+    static func resolveOffer(_ db: Database, fileID: Int) throws {
+        try db.execute(sql: """
+            UPDATE local_positions SET offer_seconds = NULL, offer_cfi = NULL, offer_percentage = NULL, offer_occurred_at = NULL,
+                offer_source = NULL, offer_device_id = NULL,
+                base_occurred_at = MAX(COALESCE(base_occurred_at, 0),
+                    COALESCE((SELECT occurred_at FROM reading_positions WHERE file_id = ?), 0))
+            WHERE file_id = ?
+            """, arguments: [fileID, fileID])
+    }
+
+    static func hasPendingMoves(_ db: Database, fileID: Int) throws -> Bool {
         try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM journal WHERE type = ? AND file_id = ? AND held_for IS NULL)",
                           arguments: [Shishoapp.JournalEventType.readingPosition.rawValue, fileID]) ?? false
     }
@@ -245,19 +255,28 @@ extension CatalogStore {
         let data = try JSONEncoder().encode(payload)
         let key = atEnd ? nil : "position:\(fileID):\(sitting.map { String($0.startedAt.timeIntervalSince1970) } ?? "idle")"
         try pool.write { db in
-            let pending = try CatalogStore.hasPendingMoves(db, fileID: fileID)
-            let serverAt = try Double.fetchOne(db, sql: "SELECT occurred_at FROM reading_positions WHERE file_id = ?", arguments: [fileID])
-            try db.execute(sql: """
-                INSERT INTO local_positions (file_id, seconds, percentage, updated_at, base_occurred_at) VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT (file_id) DO UPDATE SET seconds = excluded.seconds, percentage = excluded.percentage,
-                    updated_at = excluded.updated_at,
-                    base_occurred_at = CASE WHEN ? THEN local_positions.base_occurred_at ELSE excluded.base_occurred_at END
-                """, arguments: [fileID, seconds, percentage, at.timeIntervalSince1970, serverAt, pending])
-            if let key {
-                try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
-            }
-            try CatalogStore.append(db, type: .readingPosition, at: at, payload: data, fileID: fileID, coalesceKey: key)
+            try CatalogStore.writePosition(db, fileID: fileID, seconds: seconds, cfi: nil, percentage: percentage, at: at,
+                                           payload: data, coalesceKey: key)
         }
+    }
+
+    /// Saves a place locally and queues its event, in the caller's
+    /// transaction. coalesceKey names moves that replace each other until
+    /// sent; nil is always sent.
+    static func writePosition(_ db: Database, fileID: Int, seconds: Double, cfi: String?, percentage: Double, at: Date,
+                              payload: Data, coalesceKey key: String?) throws {
+        let pending = try hasPendingMoves(db, fileID: fileID)
+        let serverAt = try Double.fetchOne(db, sql: "SELECT occurred_at FROM reading_positions WHERE file_id = ?", arguments: [fileID])
+        try db.execute(sql: """
+            INSERT INTO local_positions (file_id, seconds, cfi, percentage, updated_at, base_occurred_at) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (file_id) DO UPDATE SET seconds = excluded.seconds, cfi = excluded.cfi, percentage = excluded.percentage,
+                updated_at = excluded.updated_at,
+                base_occurred_at = CASE WHEN ? THEN local_positions.base_occurred_at ELSE excluded.base_occurred_at END
+            """, arguments: [fileID, seconds, cfi, percentage, at.timeIntervalSince1970, serverAt, pending])
+        if let key {
+            try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
+        }
+        try append(db, type: .readingPosition, at: at, payload: payload, fileID: fileID, coalesceKey: key)
     }
 
     /// Keeps the sitting being timed, or forgets it with nil, and queues a
@@ -265,22 +284,9 @@ extension CatalogStore {
     /// between can't lose the session or record it apart from its sitting.
     func saveSitting(_ sitting: ListeningSitting?, recording session: FinishedSession? = nil) throws {
         let kept = try sitting.map { try JSONEncoder().encode($0) }
-        let ended = try session.map { session in
-            try JSONEncoder().encode(Shishoapp.JournalSessionPayload(
-                sessionId: session.sittingID, fileId: session.fileID, startedAt: JournalTime.string(session.startedAt), endedAt: JournalTime.string(session.endedAt),
-                startPercentage: min(1, max(0, session.startPercentage)), endPercentage: min(1, max(0, session.endPercentage)),
-                duration: session.duration
-            ))
-        }
         try pool.write { db in
-            if let session, let ended {
-                // A later snapshot of a sitting's session replaces one not
-                // yet sent; the server keeps the latest anyway.
-                let key = session.sittingID.isEmpty ? nil : "session:\(session.sittingID)"
-                if let key {
-                    try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
-                }
-                try CatalogStore.append(db, type: .readingSession, at: session.endedAt, payload: ended, fileID: session.fileID, coalesceKey: key)
+            if let session {
+                try CatalogStore.appendSession(db, session)
             }
             if let kept {
                 try db.execute(sql: "INSERT INTO open_sitting (id, sitting) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET sitting = excluded.sitting",
@@ -289,6 +295,22 @@ extension CatalogStore {
                 try db.execute(sql: "DELETE FROM open_sitting")
             }
         }
+    }
+
+    /// Queues a snapshot of a Reading Session, in the caller's transaction.
+    /// A later snapshot of a session replaces one not yet sent; the server
+    /// keeps the latest anyway.
+    static func appendSession(_ db: Database, _ session: FinishedSession) throws {
+        let data = try JSONEncoder().encode(Shishoapp.JournalSessionPayload(
+            sessionId: session.sittingID, fileId: session.fileID, startedAt: JournalTime.string(session.startedAt),
+            endedAt: JournalTime.string(session.endedAt), startPercentage: min(1, max(0, session.startPercentage)),
+            endPercentage: min(1, max(0, session.endPercentage)), duration: session.duration
+        ))
+        let key = session.sittingID.isEmpty ? nil : "session:\(session.sittingID)"
+        if let key {
+            try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
+        }
+        try append(db, type: .readingSession, at: session.endedAt, payload: data, fileID: session.fileID, coalesceKey: key)
     }
 
     static func append(_ db: Database, type: Shishoapp.JournalEventType, at: Date, payload: Data, fileID: Int?,

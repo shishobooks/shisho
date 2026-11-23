@@ -1,0 +1,50 @@
+# Read a page for a while, turn, read another, and close the reader: the
+# Reading Session reaches the server with its time counted per page, and
+# the place with it (#919).
+appId: ${APP_ID}
+name: A reading session reaches the server
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runScript:
+    file: scripts/note_app_sessions.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: The Harness Novel
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+# Each page counts from 5 seconds.
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 8000
+    optional: true
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 8000
+    optional: true
+- runFlow: subflows/show_reader_controls.yaml
+# Closing ends the session, which syncs.
+- tapOn:
+    id: reader.close
+- extendedWaitUntil:
+    visible:
+      id: book.read
+    timeout: 10000
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 5000
+    optional: true
+- runScript:
+    file: scripts/assert_read_session.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: The Harness Novel

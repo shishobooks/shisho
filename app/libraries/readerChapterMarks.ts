@@ -7,6 +7,10 @@
 // file) is placed by how much of the section's text comes before it, which
 // tracks the same sizes closely. Elements here come from section documents,
 // another realm, so nothing uses `instanceof`.
+//
+// The Shisho app's reader repeats these rules in
+// mobile/ios/Shisho/Reader/ReaderWeb/reader.js, which can't import
+// TypeScript: change both.
 
 // What foliate's resolveHref gives for a link: the section, and a function
 // finding the place in the section's document.

@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- Books are untrusted: their own scripts never run, and nothing loads
+     from outside the app. foliate's section frames come from blob: URLs,
+     which take this policy from the page that made them. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' blob: data: 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' blob: data:; media-src 'self' blob: data:; connect-src 'self' blob: data:; frame-src 'self' blob: data:; object-src 'none'; base-uri 'none'"
+    />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        -webkit-user-select: none;
+      }
+      foliate-view {
+        display: block;
+        position: absolute;
+        inset: 0;
+      }
+    </style>
+    <script type="module" src="reader.js"></script>
+  </head>
+  <body>
+    <foliate-view id="view"></foliate-view>
+  </body>
+</html>

@@ -14,7 +14,7 @@ actor Diagnostics {
     static let shared = Diagnostics()
 
     enum Category: String, Sendable {
-        case app, sync, journal, player
+        case app, sync, journal, player, reader
     }
 
     /// The log is trimmed to its newer half once it passes this size.

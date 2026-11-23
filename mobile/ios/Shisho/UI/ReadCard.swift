@@ -1,0 +1,123 @@
+import SwiftUI
+
+/// Read on a Book's page (variant E). Beside an audiobook's listen bar it's
+/// the outlined button under it, with how far through the ebook the user
+/// is; for a Book with only an ebook it's the primary bar, as the listen
+/// bar is for audiobooks.
+struct ReadCard: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let progress: ReadProgress
+    /// The Book also has an audiobook, whose bar is the primary one.
+    var secondary = false
+
+    private var started: Bool { progress.percentage > 0.001 }
+    private var finished: Bool { progress.percentage >= 0.999 }
+    private var percent: String { progress.percentage.formatted(.percent.precision(.fractionLength(0))) }
+
+    private var title: LocalizedStringKey {
+        if finished { return "Read again" }
+        return started ? "Continue reading" : "Read"
+    }
+
+    /// Which ebook this opens, when the Book has more than one.
+    private var fileName: String? {
+        progress.ebookCount > 1 && !progress.fileName.isEmpty ? progress.fileName : nil
+    }
+
+    private var detail: String {
+        var parts: [String] = []
+        if let fileName { parts.append(fileName) }
+        if finished {
+            parts.append(String(localized: "Finished"))
+        } else if started {
+            parts.append(percent)
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    var body: some View {
+        Button { model.read(fileID: progress.fileID) } label: {
+            if secondary { outlined } else { primary }
+        }
+        .buttonStyle(PressableStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(title))
+        .accessibilityValue(detail)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("book.read")
+    }
+
+    /// The outlined button under the listen bar.
+    private var outlined: some View {
+        HStack(spacing: 8) {
+            Image(systemName: finished ? "arrow.counterclockwise" : "book")
+                .font(.system(size: 16, weight: .semibold))
+            Text(title)
+                .font(.geist(.callout, weight: .semibold))
+            if !detail.isEmpty {
+                Text(detail)
+                    .font(.geist(.footnote))
+                    .foregroundStyle(Theme.mutedForeground)
+                    .lineLimit(1)
+            }
+        }
+        .foregroundStyle(Theme.foreground)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 46)
+        .background(Theme.background.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.input))
+        .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
+    }
+
+    /// The primary bar, as ListenCard draws it, for a Book with only an
+    /// ebook.
+    private var primary: some View {
+        HStack(spacing: 12) {
+            Image(systemName: finished ? "arrow.counterclockwise" : "book")
+                .font(.system(size: 20, weight: .semibold))
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.geist(.callout, weight: .bold))
+                    .fixedSize(horizontal: false, vertical: true)
+                if let fileName {
+                    Text(fileName)
+                        .font(.geist(.caption, weight: .medium))
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                }
+                if finished {
+                    Text("Finished")
+                        .font(.geist(.caption))
+                        .opacity(0.8)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if started && !finished {
+                Text(percent)
+                    .font(.geist(.title3, weight: .heavy))
+                    .tracking(-0.4)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.top, 12)
+        .padding(.bottom, started ? 15 : 12)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 60)
+        .foregroundStyle(Theme.primaryForeground)
+        .background(Theme.primary)
+        .overlay(alignment: .bottomLeading) {
+            if started && !finished {
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(Theme.primaryForeground.opacity(0.55))
+                        .frame(width: geometry.size.width * progress.percentage, height: 3)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                }
+                .accessibilityHidden(true)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .shadow(color: Theme.primary.opacity(0.35), radius: 14, y: 10)
+    }
+}

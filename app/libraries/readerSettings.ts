@@ -208,7 +208,9 @@ export interface ReaderFontFace {
   faces: string;
 }
 
-// The stylesheet foliate injects into each section of the book.
+// The stylesheet foliate injects into each section of the book. The Shisho
+// app's reader repeats it, and the theme colors, in
+// mobile/ios/Shisho/Reader/ReaderWeb/reader.js and ReaderSettings.swift.
 export const readerCSS = (
   settings: ReaderSettings,
   fontFace?: ReaderFontFace,

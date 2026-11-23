@@ -1,5 +1,8 @@
 import type { SessionPayload } from "@/types";
 
+// The Shisho app times reading by these same rules in
+// mobile/ios/Shisho/Core/Reading.swift: change both.
+
 // A Reading Session ends after this long with no input: a tab left open
 // overnight isn't eight hours of reading.
 export const READING_IDLE_MS = 5 * 60 * 1000;
