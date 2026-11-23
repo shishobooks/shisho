@@ -890,9 +890,8 @@ func (h *handler) updatePosition(c echo.Context) error {
 	return errors.WithStack(c.JSON(http.StatusOK, result))
 }
 
-// clearPosition deletes the caller's Reading Position in a File, for
-// starting it over from the book page, and responds with the Book's reading
-// record.
+// clearPosition deletes the caller's Reading Position in a File, so it
+// starts over, and responds with the Book's reading record.
 func (h *handler) clearPosition(c echo.Context) error {
 	user, err := auth.RequireUser(c)
 	if err != nil {

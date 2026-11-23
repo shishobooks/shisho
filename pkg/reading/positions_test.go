@@ -339,6 +339,24 @@ func TestUpdatePosition_ClearingThePlaceKeepsAnAutomaticFinish(t *testing.T) {
 	assert.Len(t, f.readThroughs(), 1)
 }
 
+// Clearing one File's place leaves another File's automatic finish as it was.
+func TestUpdatePosition_ClearingAnotherFilesPlaceKeepsTheUndo(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	audio := f.addAudiobook(3600)
+	f.listen(audio, 1800, 0.5, false)
+	f.listen(audio, 3600, 1, true)
+	require.Equal(t, models.ReadingStatusRead, f.status())
+
+	_, err := f.svc.ClearPosition(f.ctx, f.user.ID, f.file.ID)
+	require.NoError(t, err)
+	f.clock.advance(time.Minute)
+	result := f.listen(audio, 1800, 0.5, false)
+
+	assert.True(t, result.Reverted)
+	assert.Equal(t, models.ReadingStatusCurrentlyReading, f.status())
+}
+
 func TestUpdatePosition_GoingBackAfterTheWindowKeepsTheFinish(t *testing.T) {
 	t.Parallel()
 	f := newPositionsFixture(t)

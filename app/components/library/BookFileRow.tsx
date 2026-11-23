@@ -6,7 +6,6 @@ import {
   MoreHorizontal,
   Pencil,
   RefreshCw,
-  RotateCcw,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +16,7 @@ import {
   fileEditionRows,
   fileIdentifierRows,
 } from "@/components/files/fileFacts";
+import { ClearPositionMenuItem } from "@/components/library/ClearPositionDialog";
 import CoverImage from "@/components/library/CoverImage";
 import DetailsDialog, {
   type DetailRow,
@@ -433,10 +433,10 @@ const BookFileRow = ({
             {progress != null && onClearPosition && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={onClearPosition}>
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Clear saved position
-                </DropdownMenuItem>
+                <ClearPositionMenuItem
+                  iconClassName="h-4 w-4 mr-2"
+                  onSelect={onClearPosition}
+                />
               </>
             )}
             {canWriteBooks && (

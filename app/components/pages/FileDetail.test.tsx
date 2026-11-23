@@ -307,6 +307,19 @@ describe("FileDetail saved position", () => {
     expect(await fileMenu()).toEqual(["Clear saved position"]);
   });
 
+  it("offers Clear saved position disabled in Demo Mode, saying why", async () => {
+    setAuth({ permissions: ["books:read"], demoMode: true });
+    reading.positions = [{ file_id: 42, percentage: 0.25 }];
+    renderPage();
+
+    await user().click(screen.getByRole("button", { name: "File actions" }));
+    const item = screen.getByRole("menuitem", {
+      name: /Clear saved position/,
+    });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("This action is unavailable in the demo.");
+  });
+
   it("clears the saved position after confirming", async () => {
     const success = vi.spyOn(toast, "success");
     reading.clear = vi.fn().mockResolvedValue({});

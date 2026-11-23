@@ -5,7 +5,6 @@ import {
   MoveRight,
   Pencil,
   RefreshCw,
-  RotateCcw,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -24,7 +23,9 @@ import {
 import FilePageGrid from "@/components/files/FilePageGrid";
 import { BookEditDialog } from "@/components/library/BookEditDialog";
 import BookReviewBadge from "@/components/library/BookReviewBadge";
-import ClearPositionDialog from "@/components/library/ClearPositionDialog";
+import ClearPositionDialog, {
+  ClearPositionMenuItem,
+} from "@/components/library/ClearPositionDialog";
 import { DeleteConfirmationDialog } from "@/components/library/DeleteConfirmationDialog";
 import DownloadErrorDialog from "@/components/library/DownloadErrorDialog";
 import FileDownloadControl from "@/components/library/FileDownloadControl";
@@ -289,10 +290,9 @@ const FileDetail = () => {
             {position && (
               <>
                 {canWriteBooks && <DropdownMenuSeparator />}
-                <DropdownMenuItem onSelect={() => setClearPositionOpen(true)}>
-                  <RotateCcw aria-hidden="true" className="h-4 w-4" />
-                  Clear saved position
-                </DropdownMenuItem>
+                <ClearPositionMenuItem
+                  onSelect={() => setClearPositionOpen(true)}
+                />
               </>
             )}
             {canWriteBooks && (

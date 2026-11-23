@@ -882,15 +882,10 @@ func retrievePosition(ctx context.Context, db bun.IDB, userID, fileID int) (*mod
 // back, so it mustn't undo the finish within RevertWindow.
 func (svc *Service) ClearPosition(ctx context.Context, userID, fileID int) (int, error) {
 	var bookID int
+	// The writes come first, so the transaction takes SQLite's write lock
+	// before it reads; a missing File rolls them back.
 	err := svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
-		err := tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrFileNotFound
-		}
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		_, err = tx.NewDelete().
+		_, err := tx.NewDelete().
 			Model((*models.ReadingPosition)(nil)).
 			Where("user_id = ? AND file_id = ?", userID, fileID).
 			Exec(ctx)
@@ -902,6 +897,13 @@ func (svc *Service) ClearPosition(ctx context.Context, userID, fileID int) (int,
 			Set("auto_finished = FALSE").
 			Where("user_id = ? AND file_id = ? AND auto_finished", userID, fileID).
 			Exec(ctx)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		err = tx.NewSelect().Model((*models.File)(nil)).Column("f.book_id").Where("f.id = ?", fileID).Scan(ctx, &bookID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrFileNotFound
+		}
 		return errors.WithStack(err)
 	})
 	if err != nil {

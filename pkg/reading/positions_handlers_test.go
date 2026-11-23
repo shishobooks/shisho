@@ -261,6 +261,23 @@ func TestPositionRoutes_DatabaseFailureIs500(t *testing.T) {
 	path := fmt.Sprintf("/files/%d/position", f.file.ID)
 	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodGet, path, nil).Code)
 	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodPost, path, map[string]any{"cfi": "epubcfi(/6/4!/4/2)", "percentage": 0.5}).Code)
+	assert.Equal(t, http.StatusInternalServerError, api.do(http.MethodDelete, path, nil).Code)
+}
+
+// A failure partway through a clear keeps the place: the position's delete
+// rolls back with it.
+func TestPositionRoutes_AFailedClearKeepsThePosition(t *testing.T) {
+	t.Parallel()
+	f := newPositionsFixture(t)
+	f.read(f.file, "epubcfi(/6/20!/4/2)", 0.5, false)
+	api := newReadingAPI(t, f.db, f.user)
+
+	_, err := f.db.Exec("DROP TABLE reading_position_updates")
+	require.NoError(t, err)
+	rec := api.do(http.MethodDelete, fmt.Sprintf("/files/%d/position", f.file.ID), nil)
+
+	assert.Equal(t, http.StatusInternalServerError, rec.Code, rec.Body.String())
+	assert.NotNil(t, f.position(f.file))
 }
 
 func TestPositionRoutes_ASessionWithoutAPositionRecordsOnlyTheSession(t *testing.T) {

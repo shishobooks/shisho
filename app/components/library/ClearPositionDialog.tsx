@@ -1,10 +1,42 @@
+import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { useClearFilePosition } from "@/hooks/queries/reading";
-import { toastRequestError } from "@/libraries/api";
+import { useAuth } from "@/hooks/useAuth";
+import { DEMO_MODE_MESSAGE, toastRequestError } from "@/libraries/api";
 import type { File } from "@/types";
 import { fileLabel } from "@/utils/format";
+
+/**
+ * The file menu's entry that opens ClearPositionDialog. The demo can't
+ * change reading data, so there it is disabled and says why. iconClassName
+ * matches the menu's other icons, which space themselves differently from
+ * page to page.
+ */
+export const ClearPositionMenuItem = ({
+  onSelect,
+  iconClassName = "h-4 w-4",
+}: {
+  onSelect: () => void;
+  iconClassName?: string;
+}) => {
+  const { demoMode } = useAuth();
+  return (
+    <DropdownMenuItem disabled={demoMode} onSelect={onSelect}>
+      <RotateCcw aria-hidden="true" className={iconClassName} />
+      <span className="flex flex-col">
+        Clear saved position
+        {demoMode && (
+          <span className="text-xs text-muted-foreground">
+            {DEMO_MODE_MESSAGE}
+          </span>
+        )}
+      </span>
+    </DropdownMenuItem>
+  );
+};
 
 interface ClearPositionDialogProps {
   file: File;

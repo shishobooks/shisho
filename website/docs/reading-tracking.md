@@ -107,7 +107,7 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 - The audiobook player saves every 15 seconds while playing, and right away when you pause or seek.
 - Reading the same book in two browsers, the place you reached most recently wins, so opening the book on your laptop after reading on your phone continues from the phone's place.
 - **Read again**, or deleting the Read-through you're on from **Reading history**, sends every main file of the book back to the start.
-- To send one file back to the start, choose **Clear saved position** from its **...** menu, on the book's page or the file's own page. Your status and reading history stay as they are. A KOReader or Kobo that has the book keeps its own place, and sends it back to Shisho the next time it syncs that book.
+- To send one file back to the start, choose **Clear saved position** from the file's actions menu, on the book's page or the file's own page. Your status and reading history stay as they are, and an automatic finish in that file can no longer be undone by going back. A KOReader or Kobo that has the book keeps its own place, and sends it to Shisho again the next time you read the book there.
 
 ### Starting and Finishing Automatically
 
@@ -115,7 +115,7 @@ A book opens where you stopped reading it. Each file of a book keeps its own pla
 - **Rereading**: a book you have read or abandoned starts again only when you choose **Read again**, or when you've added it back to To Read to plan a reread. Otherwise you can open it to look something up, and only your place in it is saved.
 - **Resuming**: turning a page of a paused book, or listening to 5 seconds of it in one sitting, makes it **Currently Reading** again.
 - **Finishing**: reaching the last page finishes the Read-through, dated today. An audiobook finishes when playback ends or you're within its last 60 seconds, so end credits don't stop it being marked read. A message says **Marked as read**, with stars to rate the book and **Undo**, which makes it **Currently Reading** again.
-- **Peeking at the end**: going back before the end within 15 minutes of an automatic finish, in the reader that finished it, undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way, and neither is one from another reader or device. After 15 minutes, the book stays **Read**.
+- **Peeking at the end**: going back before the end within 15 minutes of an automatic finish, in the reader that finished it, undoes it, so jumping to the end to look at the back matter doesn't mark the book read. A finish you chose with **Mark as read** is never undone this way, and neither is one from another reader or device, or one in a file whose saved position you cleared since. After 15 minutes, the book stays **Read**.
 
 ### Reading Time
 

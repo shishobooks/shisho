@@ -1058,6 +1058,7 @@ describe("BookDetailBody Share button", () => {
 describe("BookDetailBody file progress", () => {
   afterEach(() => {
     readingPositions.current = [];
+    clearing.position = undefined;
   });
 
   const twoFiles = {
@@ -1184,6 +1185,19 @@ describe("BookDetailBody file progress", () => {
     ]);
   });
 
+  it("offers Clear saved position disabled in Demo Mode, saying why", async () => {
+    setAuth({ permissions: ["books:read"], demoMode: true });
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({ book: twoFiles });
+
+    await fileMenu();
+    const item = screen.getByRole("menuitem", {
+      name: /Clear saved position/,
+    });
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveTextContent("This action is unavailable in the demo.");
+  });
+
   it("offers no Clear saved position on a file with no position", async () => {
     readingPositions.current = [{ file_id: 2, percentage: 0.62 }];
     renderBody({ book: twoFiles });
@@ -1218,7 +1232,6 @@ describe("BookDetailBody file progress", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
     expect(success).toHaveBeenCalledWith("Saved position cleared");
-    clearing.position = undefined;
   });
 
   it("shows no progress on a file with no position", () => {
