@@ -10,7 +10,7 @@ import (
 )
 
 // flowSeconds is about how long each flow takes on a CI runner, to balance
-// the flows across CI's parallel jobs (`ios -shard`). A flow missing here
+// the flows when they're split across jobs (`ios -shard`). A flow missing here
 // counts as the median, so a new one still runs; add it once CI has timed it
 // (the `[Passed]` lines in the job's log).
 var flowSeconds = map[string]float64{

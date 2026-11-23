@@ -58,7 +58,7 @@ Agents run these checks many times a ticket, so a few seconds in every flow add 
 
 ## Writing flows
 
-CI's macOS simulators stall now and then: a view hierarchy read or the app's main thread can freeze for around 10 seconds, so a flow that passes locally can still fail there. When a flow fails on CI, read the timestamps in the Maestro logs of the failed job's `harness-output-*` artifact before treating the failure as an app bug. Write flows to tolerate those stalls:
+CI's macOS simulators stall now and then: a view hierarchy read or the app's main thread can freeze for around 10 seconds, so a flow that passes locally can still fail there. When a flow fails on CI, read the timestamps in the Maestro logs of the failed job's `harness-output` artifact before treating the failure as an app bug. Write flows to tolerate those stalls:
 
 - **Never assert a state that lasts only a few seconds**, such as a short chapter or a narrow window of the playback position. Assert a state that stays put (the last chapter once playback stops), or an open-ended one ("at least 0:12", not "0:12 to 0:19"). To listen for a while from a place that varies, build the pattern from that place, as `scripts/note_online_pause.js` does.
 - **Wait for the UI with `extendedWaitUntil` and a timeout of at least 30 seconds.** A longer timeout costs nothing when the flow passes, and a 10 to 15 second one fails on a single stall.
