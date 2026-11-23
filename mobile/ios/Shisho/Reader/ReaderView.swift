@@ -35,8 +35,11 @@ struct ReaderView: View {
                     .padding(.bottom, 28)
                     .accessibilityIdentifier("reader.page")
                     .opacity(model.phase == .reading ? 1 : 0)
-                    // Hidden pages are still read by VoiceOver.
-                    .accessibilityHidden(model.phase != .reading)
+                    // Hidden pages are still read by VoiceOver. Under a
+                    // sheet, which VoiceOver keeps to anyway, the page's
+                    // text isn't read out of its web process each time
+                    // the screen's elements are, which UI tests do often.
+                    .accessibilityHidden(model.phase != .reading || showingContents || showingSettings)
             }
             status
             if model.turnWaiting {

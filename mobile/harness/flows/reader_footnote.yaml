@@ -18,8 +18,14 @@ name: Open a footnote and a picture
     env:
       CHAPTER: Chapter One
 # The picture under Chapter One's heading opens on its own, and Close goes
-# back to the page.
-- tapOn: "A drawing in black lines"
+# back to the page. Tapped by where it is, centered under the heading: the
+# iOS 26 simulator gives the picture's element the wrong left edge, which
+# puts its middle in the left third, where a tap turns the page.
+- extendedWaitUntil:
+    visible: "A drawing in black lines"
+    timeout: 30000
+- tapOn:
+    point: "50%,29%"
 - extendedWaitUntil:
     visible:
       id: reader.image.close
