@@ -521,8 +521,9 @@ jobs:
           hit: ${{ steps.setup.outputs.simulator-hit }}
 
   app-ios-flows:
-    # EXPERIMENT (#965 follow-up): the flows split across parallel jobs,
-    # each sampling the runner's CPU by process.
+    # The flows split across three jobs (`ios -shard`, balanced in
+    # tools/appharness/shard.go): one runner takes 25 to 35 minutes for all
+    # of them.
     name: iOS flows (shard ${{ matrix.shard }}/3)
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
@@ -559,11 +560,6 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install ffmpeg
-      - name: Sample the runner's CPU
-        run: |
-          mkdir -p "$RUNNER_TEMP/harness"
-          nohup top -l 0 -s 10 -n 25 -o cpu -stats pid,command,cpu,mem > "$RUNNER_TEMP/harness/cpu.log" 2>&1 &
-          nohup top -l 0 -s 30 -n 25 -o mem -stats pid,command,mem,cpu > "$RUNNER_TEMP/harness/mem.log" 2>&1 &
       - name: Run the Maestro flows
         run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/3
       - uses: ./.github/actions/save-ios-simulator

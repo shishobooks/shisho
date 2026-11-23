@@ -78,7 +78,19 @@ func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runS
 	if err != nil {
 		return nil, err
 	}
+	quietSimulator(ctx, clone.UDID)
 	return &runSimulator{UDID: clone.UDID, release: clone.Remove}, nil
+}
+
+// quietSimulator stops apsd, Apple's push notification service, which
+// nothing the app or its tests do needs. On CI runners it reconnects to
+// Apple's servers several times a second, about 60% of the simulator's log
+// and, through the logging daemons that carry that log to Maestro, about 14%
+// of the runner's CPU. The service may already be stopped in a simulator the
+// worktree kept, so errors are ignored.
+func quietSimulator(ctx context.Context, udid string) {
+	_, _ = simctl(ctx, "spawn", udid, "launchctl", "disable", "system/com.apple.apsd")
+	_, _ = simctl(ctx, "spawn", udid, "launchctl", "bootout", "system/com.apple.apsd")
 }
 
 // worktreeSimulatorState is what the harness keeps of a worktree's
@@ -231,6 +243,7 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 	if _, err := simctl(ctx, "bootstatus", state.UDID, "-b"); err != nil {
 		return "", err
 	}
+	quietSimulator(ctx, state.UDID)
 	return state.UDID, resetSimulator(ctx, state.UDID, bundleID)
 }
 
