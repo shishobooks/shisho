@@ -169,10 +169,14 @@ extension CatalogStore {
             WHERE file_id = ? AND ? > COALESCE(base_occurred_at, 0) AND ? > COALESCE(offer_occurred_at, 0)
             """, arguments: [place.seconds, place.cfi, place.percentage, occurredAt, position.source.rawValue, position.deviceId,
                              position.deviceName, position.fileId, occurredAt, occurredAt])
+        // The same move by ServerPlace.isSameMove: another Device's move at
+        // the same moment is a different one.
         try db.execute(sql: """
             UPDATE local_positions SET offer_device_id = ?, offer_device_name = ?
-            WHERE file_id = ? AND offer_occurred_at = ? AND offer_source = ?
-            """, arguments: [position.deviceId, position.deviceName, position.fileId, occurredAt, position.source.rawValue])
+            WHERE file_id = ? AND offer_occurred_at = ? AND offer_source = ? AND offer_seconds = ?
+                AND offer_cfi IS ? AND offer_percentage = ?
+            """, arguments: [position.deviceId, position.deviceName, position.fileId, occurredAt, position.source.rawValue,
+                             place.seconds, place.cfi, place.percentage])
     }
 
     /// The user went to the offered place, or chose to stay. Either way the

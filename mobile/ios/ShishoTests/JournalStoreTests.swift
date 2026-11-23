@@ -196,6 +196,23 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(offer.percentage, 0.6)
     }
 
+    /// Another Device's move at the same moment is a different move: the
+    /// offer kept stays the first, with its own Device's name.
+    func testAMoveAtTheSameMomentFromAnotherDeviceKeepsTheOffersName() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+          "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":"kobo-1","device_name":"Kobo One"}}],"cursor":4}
+        """), ownDeviceID: "me")
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":800,"percentage":0.8,
+          "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":"kobo-2","device_name":"Kobo Two"}}],"cursor":6}
+        """), ownDeviceID: "me")
+        let offer = try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+        XCTAssertEqual(offer.percentage, 0.6)
+        XCTAssertEqual(offer.deviceName, "Kobo One")
+    }
+
     /// Staying put dismisses the offer for good: the next open doesn't jump
     /// to the place the user just declined, even though it's still the
     /// server's newest.

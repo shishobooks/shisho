@@ -80,7 +80,8 @@ func writeNovel(path, title, author, series string) (err error) {
 		var body strings.Builder
 		fmt.Fprintf(&body, "<h1 id=\"start\">%s</h1>\n", chapter)
 		if i == 0 {
-			body.WriteString(`<p><img src="lineart.png" alt="A drawing in black lines"/></p>` + "\n")
+			// Centered, in the page's middle third, where a tap opens it.
+			body.WriteString(`<p style="text-align: center"><img src="lineart.png" alt="A drawing in black lines"/></p>` + "\n")
 		}
 		for p := 1; p <= novelParagraphs; p++ {
 			note := ""

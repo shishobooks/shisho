@@ -138,7 +138,14 @@ const linkRects = () => {
         const width = r.width * scale;
         if (width === 0 || x + width < 0 || x > innerWidth) continue;
         if (id < 0) id = linkElements.push(a) - 1;
-        note ??= isNoteReference(a) ? 1 : 0;
+        // Not a superscript citation of a web page, which opens a browser.
+        note ??=
+          isNoteReference(a) &&
+          !view.book.isExternal?.(
+            resolveLink(a, sectionOfDoc.get(doc) ?? currentIndex()),
+          )
+            ? 1
+            : 0;
         out.push([
           Math.round(x),
           Math.round(fr.top + r.top * scale),
@@ -198,8 +205,9 @@ const sectionPlace = (index, page, pages) => {
 };
 
 // Where the chapters start, as the contents placed them, resolved once the
-// book is open and grouped by section. Native sends them to every page. A
-// file's sections are resolved once each, not once per chapter: foliate's
+// book is open and grouped by section: an anchor function each, as foliate
+// resolves an href to. Native sends them to every page. An EPUB file's
+// sections are resolved once each, not once per chapter: foliate's
 // resolveHref searches the manifest and spine, and contents can run to tens
 // of thousands of entries.
 let chapterHrefs = [];
@@ -207,24 +215,34 @@ let chapterTargets = null;
 const resolvedChapters = () => {
   if (chapterTargets || !view.book) return chapterTargets ?? new Map();
   chapterTargets = new Map();
-  const sections = new Map();
+  const files = new Map();
+  const resolve = (href) => {
+    const resolved = view.book.resolveHref(href);
+    // A KF8 MOBI resolves later; its chapters are counted the estimated way.
+    return resolved && !(resolved instanceof Promise) && resolved.index >= 0
+      ? resolved
+      : null;
+  };
   for (const href of chapterHrefs) {
     try {
       const [path, hash] = href.split("#");
-      if (!sections.has(path)) {
-        const resolved = view.book.resolveHref(path);
-        // A MOBI resolves later; its chapters are counted the estimated way.
-        sections.set(
-          path,
-          resolved && !(resolved instanceof Promise) && resolved.index >= 0
-            ? resolved.index
-            : null,
-        );
+      let target;
+      if (hash && view.book.getTOCFragment) {
+        if (!files.has(path)) files.set(path, resolve(path)?.index ?? null);
+        const index = files.get(path);
+        target =
+          index == null
+            ? null
+            : { index, anchor: (doc) => view.book.getTOCFragment(doc, hash) };
+      } else {
+        // A MOBI's own targets, as filepos:500, carry their place without
+        // a #.
+        target = resolve(href);
       }
-      const index = sections.get(path);
-      if (index == null) continue;
-      if (!chapterTargets.has(index)) chapterTargets.set(index, []);
-      chapterTargets.get(index).push(hash || null);
+      if (!target) continue;
+      if (!chapterTargets.has(target.index))
+        chapterTargets.set(target.index, []);
+      chapterTargets.get(target.index).push(target.anchor);
     } catch {
       // A chapter this copy doesn't have.
     }
@@ -241,11 +259,12 @@ const chapterPagesIn = (index, doc, r) => {
   if (chapterPages?.doc === doc && chapterPages.key === key)
     return chapterPages.pages;
   const pages = [];
-  for (const id of resolvedChapters().get(index) ?? []) {
-    // A chapter that starts the section is on its first page.
-    if (id == null) continue;
-    const node = view.book.getTOCFragment?.(doc, id);
-    const page = node && r.pageOf?.(node);
+  for (const anchor of resolvedChapters().get(index) ?? []) {
+    // A chapter that starts the section, anchored at 0, is on its first
+    // page.
+    const node = anchor?.(doc);
+    if (!node || typeof node !== "object") continue;
+    const page = r.pageOf?.(node);
     if (page == null) continue;
     pages.push({
       page,
@@ -1142,7 +1161,9 @@ window.R = {
   },
   // Jumps of the current page run one at a time, each after any turn in
   // progress, which would otherwise drop it.
-  goTo(target, fallback) {
+  // A jump on the current page. Jumps land in turn, each answering its
+  // token once it has, or has failed.
+  goTo(target, fallback, token) {
     navigation = navigation.then(async () => {
       try {
         await view.renderer?.settled?.();
@@ -1150,6 +1171,7 @@ window.R = {
       } catch (err) {
         post({ type: "log", message: "jump failed: " + err });
       }
+      post({ type: "jumped", token });
     });
   },
   next() {

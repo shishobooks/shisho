@@ -92,6 +92,9 @@ final class FoliateSource: PagerSource {
     private var opened = false
     /// The current page is going somewhere: its neighbors wait for it.
     private var navigating = false
+    /// The last jump sent: jumps land in turn, and the reader is still
+    /// jumping until this one has.
+    private var jumpToken = 0
     /// Whether a jump hasn't landed yet.
     var isJumping: Bool { navigating }
     private var navigationTimeout: Task<Void, Never>?
@@ -238,7 +241,8 @@ final class FoliateSource: PagerSource {
     func jump(to target: ReaderTarget, fallback: Double? = nil) {
         let fallbackScript = fallback.map { String($0) } ?? "null"
         pager.reset()
-        current.call("R.goTo(\(target.script), \(fallbackScript))")
+        jumpToken += 1
+        current.call("R.goTo(\(target.script), \(fallbackScript), \(jumpToken))")
         navigating = true
         // Scrolled, the neighbors follow once the page lands: they're the
         // sections beside it, not the pages.
@@ -248,7 +252,7 @@ final class FoliateSource: PagerSource {
                 page.call("R.jump(\(target.script), \(direction(of: page).rawValue), \(token), \(fallbackScript))")
             }
         }
-        // In case the jump doesn't move the page.
+        // In case the page never says it landed, as when its process ends.
         navigationTimeout?.cancel()
         navigationTimeout = Task { [weak self] in
             try? await Task.sleep(for: .seconds(4))
@@ -411,8 +415,6 @@ final class FoliateSource: PagerSource {
             if message.quiet == false, reason != "anchor", reason != nil {
                 // A scroll, a jump landing, or a turn inside the page while
                 // selecting: the reader moved.
-                navigating = false
-                navigationTimeout?.cancel()
                 lastCFI = current.location.cfi ?? lastCFI
                 delegate?.foliateMoved(current.location)
             } else if opened {
@@ -420,6 +422,13 @@ final class FoliateSource: PagerSource {
                 // loads: the same place, with new page counts.
                 delegate?.foliateLaidOut(current.location)
             }
+            reconcile()
+        case "jumped":
+            // The last jump landed, or failed: an earlier one landing
+            // leaves the reader jumping still.
+            guard message.token == jumpToken, navigating else { return }
+            navigating = false
+            navigationTimeout?.cancel()
             reconcile()
         case "applied":
             if opened { delegate?.foliateLaidOut(current.location) }
@@ -504,11 +513,17 @@ final class FoliateSource: PagerSource {
             (back, current, forward) = (recycled, back, old)
         }
         if old.hasSelection { old.clearSelection() }
-        // The old page is one page from the new one: it's where it was.
-        update(old) { $0 = PageState(base: self.currentBase) }
         lastCFI = current.location.cfi ?? lastCFI
         delegate?.foliateMoved(current.location)
         current.call("R.preloadNotes()")
+        if paginated {
+            // The old page is one page from the new one: it's where it was.
+            update(old) { $0 = PageState(base: self.currentBase) }
+        } else {
+            // Scrolled, it's the section beside but scrolled to wherever the
+            // reader left it; a neighbor shows its section from the top.
+            sync(old)
+        }
         sync(recycled)
     }
 

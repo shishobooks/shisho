@@ -273,6 +273,9 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     /// jump made before the last one lands records nothing: the reader is
     /// still where the first left from, which it recorded.
     private func recordJump() {
+        // Any jump ends a run of the scrubber's adjustments; one of those
+        // sets it again after.
+        lastAdjustment = nil
         guard source?.isJumping != true, let cfi = location?.cfi else { return }
         history.recordJump(from: cfi)
     }
@@ -282,12 +285,14 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     /// going back from it would drop the entry for it.
     func goBack() {
         guard source?.isJumping != true, let cfi = location?.cfi, let target = history.back(from: cfi) else { return }
+        lastAdjustment = nil
         source?.jump(to: .cfi(target))
     }
 
     /// Forward to where the reader was when they went back.
     func goForward() {
         guard source?.isJumping != true, let cfi = location?.cfi, let target = history.forward(from: cfi) else { return }
+        lastAdjustment = nil
         source?.jump(to: .cfi(target))
     }
 
@@ -349,7 +354,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         if !adjusting || lastAdjustment.map({ now.timeIntervalSince($0) > 3 }) ?? true {
             recordJump()
         }
-        lastAdjustment = adjusting ? now : nil
+        if adjusting { lastAdjustment = now }
         source?.jump(to: .fraction(value))
     }
 

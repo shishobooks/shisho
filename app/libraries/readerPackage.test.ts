@@ -50,6 +50,13 @@ describe("cleanPackage", () => {
     expect(dcTitles(cleaned)).toEqual(["A"]);
   });
 
+  it("declares a prefix on the package element, not in a comment before it", () => {
+    const text = `<?xml version="1.0"?><!-- this doc uses <package> --><opf:package xmlns:opf="http://www.idpf.org/2007/opf"><opf:metadata><dc:title>A</dc:title></opf:metadata></opf:package>`;
+    const cleaned = cleanPackage(text);
+    expect(parse(cleaned).querySelector("parsererror")).toBeNull();
+    expect(dcTitles(cleaned)).toEqual(["A"]);
+  });
+
   it("keeps a processing instruction that only looks like a declaration", () => {
     const text = `<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="${DC}"><?xml-stylesheet href="a.css"?><metadata><dc:title>A</dc:title></metadata></package>`;
     expect(cleanPackage(text)).toBe(text);

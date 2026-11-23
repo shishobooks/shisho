@@ -50,14 +50,20 @@ export const cleanPackage = (text) => {
     }
   }
   // A prefix used but never declared makes the whole document an error.
+  // Declared on the package element, past any comment, processing
+  // instruction, or doctype that mentions it first.
   const declare = (prefix, uri) => {
     const used = new RegExp(`</?${prefix}:|\\s${prefix}:[\\w-]+\\s*=`);
     const declared = new RegExp(`xmlns:${prefix}\\s*=`);
-    if (used.test(out) && !declared.test(out))
-      out = out.replace(
-        /<((?:[\w-]+:)?package)\b/,
-        `<$1 xmlns:${prefix}="${uri}"`,
-      );
+    if (!used.test(out) || declared.test(out)) return;
+    const tags =
+      /<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<!DOCTYPE[^>]*>|<((?:[\w-]+:)?package)\b/g;
+    for (let m; (m = tags.exec(out));) {
+      if (!m[1]) continue;
+      const at = m.index + 1 + m[1].length;
+      out = `${out.slice(0, at)} xmlns:${prefix}="${uri}"${out.slice(at)}`;
+      return;
+    }
   };
   declare("dc", DC);
   declare("opf", OPF);

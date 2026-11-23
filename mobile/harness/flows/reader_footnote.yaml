@@ -18,13 +18,8 @@ name: Open a footnote and a picture
     env:
       CHAPTER: Chapter One
 # The picture under Chapter One's heading opens on its own, and Close goes
-# back to the page. Its right half, in the page's middle third: a tap in
-# the left third turns the page.
-- extendedWaitUntil:
-    visible: "A drawing in black lines"
-    timeout: 30000
-- tapOn:
-    point: "45%,30%"
+# back to the page.
+- tapOn: "A drawing in black lines"
 - extendedWaitUntil:
     visible:
       id: reader.image.close
