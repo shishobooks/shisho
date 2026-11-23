@@ -163,6 +163,31 @@ func lockFile(path string) (*os.File, error) {
 	return f, nil
 }
 
+// waitForLock takes path's exclusive lock, waiting for whoever holds it, and
+// returns how to let it go.
+func waitForLock(ctx context.Context, path string) (func(), error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // The harness's own state folder.
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return func() { unlockFile(f) }, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			_ = f.Close()
+			return nil, errors.Wrapf(err, "lock %s", path)
+		}
+		select {
+		case <-ctx.Done():
+			_ = f.Close()
+			return nil, errors.WithStack(ctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
+}
+
 func unlockFile(f *os.File) {
 	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 	_ = f.Close()

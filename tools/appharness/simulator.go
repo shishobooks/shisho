@@ -68,6 +68,17 @@ func baseSimulator(ctx context.Context) (string, error) {
 	if named := os.Getenv("SHISHO_SIMULATOR_BASE"); named != "" {
 		return named, nil
 	}
+	// Runs in other worktrees, or on a Mac's two CI runners, mustn't both
+	// make a base, or delete one another is cloning.
+	dir, err := simulatorStateDir()
+	if err != nil {
+		return "", err
+	}
+	unlock, err := waitForLock(ctx, filepath.Join(dir, "base.lock"))
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
 	out, err := simctl(ctx, "list", "devices", "available", "-j")
 	if err != nil {
 		return "", err
@@ -217,13 +228,22 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 	return clone, nil
 }
 
-// preparedCloneName names the clone `base -prepare` boots on a CI runner
+// preparedCloneName names the clone `base` boots on one of GitHub's runners
 // while the app builds, which the job's run then takes instead of cloning
 // and booting one after the build: a boot there takes a minute or two.
 const preparedCloneName = "Shisho Harness Prepared"
 
-// prepareClone clones the base and boots it, for the job's run to take.
-func prepareClone(ctx context.Context) error {
+// prepareClone clones the base and boots it, for the job's run to take. It's
+// only a head start, so a failure is reported and the run clones its own.
+func prepareClone(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
+	defer cancel()
+	if err := bootPreparedClone(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "appharness: couldn't boot the run's simulator ahead of it:", err)
+	}
+}
+
+func bootPreparedClone(ctx context.Context) error {
 	base, err := baseSimulator(ctx)
 	if err != nil {
 		return err
@@ -242,6 +262,11 @@ func prepareClone(ctx context.Context) error {
 // takePreparedClone returns the clone prepareClone booted, if there's one,
 // renamed so no other run takes it too.
 func takePreparedClone(ctx context.Context) (*simulatorClone, bool) {
+	if !disposableRunner() {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
+	defer cancel()
 	devices, err := listDevices(ctx)
 	if err != nil {
 		return nil, false

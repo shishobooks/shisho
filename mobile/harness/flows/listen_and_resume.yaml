@@ -29,6 +29,7 @@ name: Listen, kill, and resume
 - stopApp
 - evalScript: ${output.killedAt = Date.now()}
 - launchApp:
+    stopApp: false
     permissions: {}
 - extendedWaitUntil:
     visible:

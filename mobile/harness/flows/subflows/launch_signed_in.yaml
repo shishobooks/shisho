@@ -16,7 +16,7 @@ appId: ${APP_ID}
       harnessUsername: ${USERNAME}
       harnessPassword: ${PASSWORD}
 # Signed in once the Library shows. A CI runner short of CPU can take most of
-# a minute to check the password, so this waits well past the usual 30 s.
+# a minute to answer, so this waits well past the usual 30 s.
 - extendedWaitUntil:
     visible:
       id: account.button

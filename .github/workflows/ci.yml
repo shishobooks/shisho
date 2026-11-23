@@ -479,7 +479,10 @@ jobs:
       # no one sees when started from the runner's service.
       - id: ios
         env:
-          TRUSTED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          # An allowlist, so a trigger added later doesn't reach the Macs by
+          # default. Dependabot's branches are in this repo, but their changes
+          # are unreviewed when CI runs.
+          TRUSTED: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && github.actor != 'dependabot[bot]' }}
           SELF_HOSTED: ${{ vars.IOS_SELF_HOSTED != 'false' }}
         run: |
           if [ "$TRUSTED" = true ] && [ "$SELF_HOSTED" = true ]; then
@@ -532,6 +535,10 @@ jobs:
   # included, so it skips the caches, which would overwrite its own.
   app-ios:
     name: iOS
+    # Read-only, even when release.yml calls this workflow with more: these
+    # jobs can run on a self-hosted Mac.
+    permissions:
+      contents: read
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: ${{ fromJSON(needs.app-changes.outputs.ios-runner) }}
@@ -558,6 +565,10 @@ jobs:
   # where one job takes over half an hour.
   app-ios-flows:
     name: iOS flows (${{ matrix.shard }}/${{ matrix.of }})
+    # Read-only, even when release.yml calls this workflow with more: these
+    # jobs can run on a self-hosted Mac.
+    permissions:
+      contents: read
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: ${{ fromJSON(needs.app-changes.outputs.ios-runner) }}
@@ -600,7 +611,10 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install ffmpeg
+      # Well inside the job's limit, so a hang still leaves time to upload
+      # the harness output below.
       - name: Run the Maestro flows
+        timeout-minutes: 35
         run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/${{ matrix.of }}
       - if: runner.environment == 'github-hosted'
         uses: ./.github/actions/save-ios-simulator

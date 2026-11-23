@@ -81,6 +81,7 @@ name: Listen offline and sync later
     env:
       CONTROL: ${CONTROL}
 - launchApp:
+    stopApp: false
     permissions: {}
 - extendedWaitUntil:
     visible:

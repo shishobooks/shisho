@@ -21,11 +21,10 @@ const (
 // as it's seeded, or to none, writing the server's database as the web
 // app's user editor would.
 func setReaderAccess(ctx context.Context, path string, access bool) error {
-	connector, err := sqliteconn.NewConnector("file:"+path, "PRAGMA busy_timeout = 5000", "PRAGMA foreign_keys = ON")
+	db, err := openServerDB(path)
 	if err != nil {
 		return err
 	}
-	db := sql.OpenDB(connector)
 	defer db.Close()
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
@@ -51,11 +50,10 @@ func setReaderAccess(ctx context.Context, path string, access bool) error {
 // than the quarter second the server's own cost takes here, which a CI runner
 // short of CPU stretches past the app's 30 s request timeout.
 func cheapenPasswords(ctx context.Context, path string) error {
-	connector, err := sqliteconn.NewConnector("file:"+path, "PRAGMA busy_timeout = 5000", "PRAGMA foreign_keys = ON")
+	db, err := openServerDB(path)
 	if err != nil {
 		return err
 	}
-	db := sql.OpenDB(connector)
 	defer db.Close()
 	for username, password := range map[string]string{harnessUsername: harnessPassword, readerUsername: readerPassword} {
 		hash, err := cheapPasswordHash(password)
@@ -77,4 +75,14 @@ func cheapenPasswords(ctx context.Context, path string) error {
 func cheapPasswordHash(password string) (string, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	return string(hash), errors.WithStack(err)
+}
+
+// openServerDB opens the run's server database for the harness to write, as
+// an admin's change on the web would.
+func openServerDB(path string) (*sql.DB, error) {
+	connector, err := sqliteconn.NewConnector("file:"+path, "PRAGMA busy_timeout = 5000", "PRAGMA foreign_keys = ON")
+	if err != nil {
+		return nil, err
+	}
+	return sql.OpenDB(connector), nil
 }

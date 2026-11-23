@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -28,8 +27,8 @@ var flowSeconds = map[string]float64{
 	"switch_accounts.yaml":            75,
 }
 
-// topLevelFlows lists the flows in dir that Maestro runs: its YAML files
-// other than config.yaml, not the subflows folder's.
+// topLevelFlows lists the flows in dir that Maestro runs: its .yaml and
+// .yml files other than its config, not the subflows folder's.
 func topLevelFlows(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -38,7 +37,8 @@ func topLevelFlows(dir string) ([]string, error) {
 	var flows []string
 	for _, entry := range entries {
 		name := entry.Name()
-		if !entry.IsDir() && strings.HasSuffix(name, ".yaml") && name != "config.yaml" {
+		ext := filepath.Ext(name)
+		if !entry.IsDir() && (ext == ".yaml" || ext == ".yml") && name != "config.yaml" && name != "config.yml" {
 			flows = append(flows, name)
 		}
 	}

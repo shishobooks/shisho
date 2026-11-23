@@ -52,7 +52,7 @@ func main() {
 		// clone.
 		_, err = baseSimulator(ctx)
 		if err == nil && disposableRunner() && !freshRun() {
-			err = prepareClone(ctx)
+			prepareClone(ctx)
 		}
 	case "fixtures":
 		if len(os.Args) != 3 {
