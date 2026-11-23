@@ -234,4 +234,22 @@ final class ReadingStoreTests: XCTestCase {
         progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })
         XCTAssertEqual(progress.percentage, 0.35)
     }
+
+    /// The chapter and pages left the reader last showed come with the
+    /// place, while it's still the place the card shows; they're dropped
+    /// once the card shows another, as one another device moved to.
+    func testTheBookPageShowsTheChapterAndPagesLeftAtThePlace() throws {
+        try store.recordReading(fileID: 8, cfi: "epubcfi(/6/6!/4/2)", percentage: 0.35, atEnd: false, at: now,
+                                sessionID: "s", sessionStartedAt: now, session: nil)
+        try store.noteReaderPlace(fileID: 8, chapter: "Chapter Two", pagesLeft: 120, percentage: 0.35)
+        var progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })
+        XCTAssertEqual(progress.chapter, "Chapter Two")
+        XCTAssertEqual(progress.pagesLeft, 120)
+
+        try store.noteReaderPlace(fileID: 8, chapter: "Chapter One", pagesLeft: 200, percentage: 0.1)
+        progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })
+        XCTAssertEqual(progress.percentage, 0.35)
+        XCTAssertNil(progress.chapter)
+        XCTAssertNil(progress.pagesLeft)
+    }
 }

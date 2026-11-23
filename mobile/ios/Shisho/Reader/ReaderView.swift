@@ -8,6 +8,8 @@ struct ReaderView: View {
     let model: ReaderModel
     @State private var showingContents = false
     @State private var showingSettings = false
+    /// The page's frame on screen.
+    @State private var pagerFrame: CGRect = .zero
     /// The readout counts pages left in the book rather than the chapter,
     /// as the bar does.
     @AppStorage(ReaderBottomBar.pagesLeftInBookKey) private var pagesLeftInBook = false
@@ -29,19 +31,10 @@ struct ReaderView: View {
                 PagerHost(pager: source.pager)
                     // Try Again makes a new source, with new pages.
                     .id(ObjectIdentifier(source))
+                    // Where the page is, which a footnote's place is given in.
+                    .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: { pagerFrame = $0 })
                     .padding(.top, 8)
                     .padding(.bottom, 28)
-                    // A card of the app's own rather than a system popover,
-                    // whose corners and arrow it can't shape, over the
-                    // page dimmed so the note stands out.
-                    .overlay {
-                        if let note = model.note {
-                            NoteOverlay(note: note, theme: theme, goToNote: model.goToNote, close: model.closeNote)
-                                .padding(.top, 8)
-                                .padding(.bottom, 28)
-                                .transition(.opacity)
-                        }
-                    }
                     .accessibilityIdentifier("reader.page")
                     .opacity(model.phase == .reading ? 1 : 0)
                     // Hidden pages are still read by VoiceOver.
@@ -70,6 +63,13 @@ struct ReaderView: View {
                         readout
                     }
                 }
+            }
+            // A card of the app's own rather than a system popover, whose
+            // corners and arrow it can't shape, over everything dimmed so
+            // the note stands out.
+            if let note = model.note {
+                NoteOverlay(note: note, theme: theme, page: pagerFrame, goToNote: model.goToNote, close: model.closeNote)
+                    .transition(.opacity)
             }
         }
         .animation(.easeOut(duration: 0.18), value: model.chromeVisible)
@@ -239,29 +239,38 @@ struct ReaderView: View {
     /// Where the reader is, small under the page while the controls are
     /// hidden.
     private var readout: some View {
-        // The chapter gives way first, so the counts always show.
-        HStack(spacing: 4) {
-            if let chapter = model.chapterTitle {
-                Text(chapter)
-                    .lineLimit(1)
-                Text(verbatim: "·")
-            }
-            if let pagesLeft = pagesLeftLabel {
-                Text(pagesLeft)
-                    .lineLimit(1)
+        // The chapter gives way first, so the counts always show. A tap
+        // counts the book's pages rather than the chapter's, as the bar's
+        // does.
+        Button { pagesLeftInBook.toggle() } label: {
+            HStack(spacing: 4) {
+                if let chapter = model.chapterTitle {
+                    Text(chapter)
+                        .lineLimit(1)
+                    Text(verbatim: "·")
+                }
+                if let pagesLeft = pagesLeftLabel {
+                    Text(pagesLeft)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    Text(verbatim: "·")
+                }
+                Text(percentShown)
                     .layoutPriority(1)
-                Text(verbatim: "·")
             }
-            Text(percentShown)
-                .layoutPriority(1)
+            .font(.geist(.caption2, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(foreground.opacity(0.55))
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, minHeight: 22)
+            .hitArea(height: 22)
         }
-        .font(.geist(.caption2, weight: .medium))
-        .monospacedDigit()
-        .foregroundStyle(foreground.opacity(0.55))
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, minHeight: 22)
+        .buttonStyle(.plain)
+        .disabled(pagesLeftLabel == nil)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(readoutLabel))
+        .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
+        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("reader.progress")
     }
 
@@ -519,25 +528,28 @@ private struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
     }
 }
 
-/// A footnote's card beside its reference, over the page dimmed a little,
-/// with an arrow to the reference. A tap outside closes it.
+/// A footnote's card beside its reference, over everything dimmed a
+/// little, with an arrow to the reference. A tap outside closes it.
 private struct NoteOverlay: View {
     let note: OpenNote
     let theme: ReaderSettings.Theme
+    /// The page's frame on screen, which the note's place is given in.
+    let page: CGRect
     let goToNote: () -> Void
     let close: () -> Void
     @State private var cardSize: CGSize = .zero
 
     var body: some View {
         GeometryReader { geometry in
-            let width = min(geometry.size.width - NotePlacement.margin * 2, 380)
-            let placement = NotePlacement(reference: note.rect, card: cardSize, in: geometry.size)
+            let screen = geometry.frame(in: .global)
+            let width = min(page.width - NotePlacement.margin * 2, 380)
+            let placement = NotePlacement(reference: note.rect, card: cardSize, in: page.size)
             ZStack(alignment: .topLeading) {
                 Color.black.opacity(theme == .light || theme == .sepia ? 0.18 : 0.4)
                     .contentShape(Rectangle())
                     .onTapGesture(perform: close)
                     .accessibilityHidden(true)
-                NoteCard(note: note, theme: theme, goToNote: goToNote)
+                NoteCard(note: note, theme: theme, maxTextHeight: min(360, page.height * 0.45), goToNote: goToNote)
                     .frame(width: width)
                     .background {
                         NoteCardShape(arrowX: placement.arrowX, above: placement.above)
@@ -545,13 +557,14 @@ private struct NoteOverlay: View {
                             .shadow(color: .black.opacity(0.25), radius: 18, y: 6)
                     }
                     .onGeometryChange(for: CGSize.self, of: \.size) { cardSize = $0 }
-                    .offset(x: placement.origin.x, y: placement.origin.y)
+                    .offset(x: page.minX - screen.minX + placement.origin.x, y: page.minY - screen.minY + placement.origin.y)
                     // Placed once its height is known.
                     .opacity(cardSize == .zero ? 0 : 1)
                     .accessibilityAddTraits(.isModal)
                     .accessibilityAction(.escape, close)
             }
         }
+        .ignoresSafeArea()
     }
 }
 
@@ -561,18 +574,21 @@ private struct NoteCardShape: Shape {
     let above: Bool
 
     func path(in rect: CGRect) -> Path {
-        var path = Path(roundedRect: rect, cornerRadius: NotePlacement.radius, style: .continuous)
+        let card = Path(roundedRect: rect, cornerRadius: NotePlacement.radius, style: .continuous)
         let half = NotePlacement.arrowWidth / 2
         let height = NotePlacement.arrowHeight
         let edge = above ? rect.maxY : rect.minY
         let tip = above ? edge + height : edge - height
-        // Overlaps the edge a point so no seam shows.
-        let base = above ? edge - 1 : edge + 1
-        path.move(to: CGPoint(x: rect.minX + arrowX - half, y: base))
-        path.addLine(to: CGPoint(x: rect.minX + arrowX, y: tip))
-        path.addLine(to: CGPoint(x: rect.minX + arrowX + half, y: base))
-        path.closeSubpath()
-        return path
+        // Into the card a little, so the two join with no seam: one shape,
+        // as two overlapping ones drawn opposite ways leave the overlap
+        // unfilled.
+        let base = above ? edge - 2 : edge + 2
+        var arrow = Path()
+        arrow.move(to: CGPoint(x: rect.minX + arrowX - half, y: base))
+        arrow.addLine(to: CGPoint(x: rect.minX + arrowX, y: tip))
+        arrow.addLine(to: CGPoint(x: rect.minX + arrowX + half, y: base))
+        arrow.closeSubpath()
+        return card.union(arrow)
     }
 }
 
@@ -580,36 +596,45 @@ private struct NoteCardShape: Shape {
 private struct NoteCard: View {
     let note: OpenNote
     let theme: ReaderSettings.Theme
+    /// The text's height past which it scrolls.
+    let maxTextHeight: CGFloat
     let goToNote: () -> Void
+    @State private var textHeight: CGFloat = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 6) {
+            // As tall as the text, up to maxTextHeight, then it scrolls.
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(note.paragraphs.enumerated()), id: \.offset) { _, paragraph in
                         Text(paragraph)
-                            // The note is the book's text, not the app's.
+                            // The note is the book's text, not the app's,
+                            // with the page's spacing between its lines.
                             .font(note.font.font(relativeTo: .callout))
+                            .lineSpacing(note.font.lineSpacing(for: note.lineHeight, relativeTo: .callout,
+                                                               base: Font.textStyleSize(.callout)))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: CGFloat.self, of: \.size.height) { textHeight = $0 }
             }
+            .frame(height: min(textHeight, maxTextHeight))
             .scrollBounceBehavior(.basedOnSize)
             .accessibilityIdentifier("reader.note.text")
             Button(action: goToNote) {
                 Label("Go to Note", icon: .arrowDownRight)
                     .font(.geist(.subheadline, weight: .semibold))
-                    .frame(minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
+                    // A 44-point target without the room around it.
+                    .hitArea(height: 20)
             }
             .foregroundStyle(Color(UIColor(hex: theme.colors.noteLink)))
             .accessibilityIdentifier("reader.note.go")
         }
         .foregroundStyle(Color(theme.foreground))
-        .padding(16)
-        .frame(maxHeight: 320)
-        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 16)
+        .padding(.top, 14)
+        .padding(.bottom, 12)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("reader.note")
     }

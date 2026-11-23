@@ -336,6 +336,16 @@ final class CatalogStore: Sendable {
                 t.add(column: "offer_device_name", .text)
             }
         }
+        // The chapter and pages left the reader last showed in a File, for
+        // its Book's page, which can't work them out without the book.
+        migrator.registerMigration("v7: reader places") { db in
+            try db.create(table: "reader_places") { t in
+                t.primaryKey("file_id", .integer)
+                t.column("chapter", .text)
+                t.column("pages_left", .integer)
+                t.column("percentage", .double).notNull()
+            }
+        }
         return migrator
     }
 

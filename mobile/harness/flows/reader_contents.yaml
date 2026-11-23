@@ -6,9 +6,7 @@ name: Jump to a chapter from the table of contents
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp:
-    clearState: true
-- runFlow: subflows/sign_in.yaml
+- runFlow: subflows/launch_signed_in.yaml
 - runFlow:
     file: subflows/read.yaml
     env:
@@ -18,14 +16,14 @@ name: Jump to a chapter from the table of contents
 - extendedWaitUntil:
     visible:
       id: reader.pagesLeft
-      text: ".* in the chapter"
+      text: ".* in chapter"
     timeout: 30000
 - tapOn:
     id: reader.pagesLeft
 - extendedWaitUntil:
     visible:
       id: reader.pagesLeft
-      text: ".* in the book"
+      text: ".* in book"
     timeout: 30000
 - tapOn:
     id: reader.contents

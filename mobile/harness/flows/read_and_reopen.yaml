@@ -7,9 +7,7 @@ name: Read, kill, and reopen at the same place
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp:
-    clearState: true
-- runFlow: subflows/sign_in.yaml
+- runFlow: subflows/launch_signed_in.yaml
 - runFlow:
     file: subflows/read.yaml
     env:
@@ -44,18 +42,12 @@ name: Read, kill, and reopen at the same place
 - evalScript: ${output.afterRelaunch = maestro.copiedText}
 - assertTrue: ${output.beforeKill == output.afterRelaunch}
 # Relaunching synced the place the turns saved, where the app showed it.
-- retry:
-    maxRetries: 3
-    commands:
-      - extendedWaitUntil:
-          visible: __never__
-          timeout: 5000
-          optional: true
-      - runScript:
-          file: scripts/assert_read_position.js
-          env:
-            CONTROL: ${CONTROL}
-            TITLE: The Harness Novel
-      - assertTrue:
-          condition: ${output.serverCheck == "ok"}
-          label: The server check passed
+# The script polls the server until the sync lands.
+- runScript:
+    file: scripts/assert_read_position.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: The Harness Novel
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed

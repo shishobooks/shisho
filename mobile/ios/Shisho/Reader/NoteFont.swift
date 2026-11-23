@@ -41,6 +41,20 @@ enum NoteFont: Equatable {
 
     private static let installedFamilies = Set(UIFont.familyNames)
 
+    /// The space to add between lines so they're lineHeight times the text's
+    /// size apart, as the page sets them, at style's size.
+    func lineSpacing(for lineHeight: Double?, relativeTo style: UIFont.TextStyle, base: CGFloat) -> CGFloat {
+        guard let lineHeight else { return 0 }
+        let size = UIFontMetrics(forTextStyle: style).scaledValue(for: base)
+        let font: UIFont = switch self {
+        case .family(let name):
+            UIFont(descriptor: UIFontDescriptor(fontAttributes: [.family: name]), size: size)
+        case .system:
+            .systemFont(ofSize: size)
+        }
+        return max(0, size * lineHeight - font.lineHeight)
+    }
+
     /// The font at style's size, following Dynamic Type.
     func font(relativeTo style: Font.TextStyle) -> Font {
         switch self {

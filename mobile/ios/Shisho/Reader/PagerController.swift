@@ -23,6 +23,8 @@ protocol PagerSource: AnyObject {
     func pagerSawInput()
     /// The middle of the page was tapped.
     func pagerToggleChrome()
+    /// Scrolled, a sideways swipe: to the next or previous chapter.
+    func pagerSwipe(_ direction: TurnDirection)
     /// A turn was asked for whose page isn't laid out yet, or the last one
     /// waiting turned or was dropped.
     func pagerWaiting(_ waiting: Bool)
@@ -266,8 +268,11 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         let held = ProcessInfo.processInfo.systemUptime - touchDownAt
         if held >= PagerController.longPress { return false }
         guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
-        guard paging, source?.pagerBlocksDrag != true else { return false }
+        guard source?.pagerBlocksDrag != true else { return false }
         let velocity = pan.velocity(in: stage)
+        // Scrolled, the page scrolls itself, and only a clearly sideways
+        // swipe is the pager's: it skips a chapter.
+        if !paging { return abs(velocity.x) > abs(velocity.y) * 2 }
         return abs(velocity.x) > abs(velocity.y)
     }
 
@@ -300,6 +305,15 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
 
     @objc private func panned(_ recognizer: UIPanGestureRecognizer) {
         let dx = recognizer.translation(in: stage).x
+        guard paging else {
+            let velocity = recognizer.velocity(in: stage).x
+            if recognizer.state == .ended, abs(dx) > 60 || abs(velocity) > 500,
+               let direction = PagerZones.direction(dragX: dx, rightToLeft: rightToLeft) {
+                source?.pagerSawInput()
+                source?.pagerSwipe(direction)
+            }
+            return
+        }
         switch recognizer.state {
         case .began:
             source?.pagerSawInput()

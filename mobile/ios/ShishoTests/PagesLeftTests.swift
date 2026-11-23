@@ -44,6 +44,15 @@ final class PagesLeftTests: XCTestCase {
         XCTAssertNil(PagesLeft.pagesPerShare([]))
     }
 
+    /// Where the page knows the page the next chapter starts on, the count
+    /// is exact: that page is this chapter's too unless the next one starts
+    /// at its top.
+    func testTheNextChaptersPageCountsExactly() {
+        XCTAssertEqual(PagesLeft.count(in: place, toChapterOn: 9, atTop: true), 5)
+        XCTAssertEqual(PagesLeft.count(in: place, toChapterOn: 9, atTop: false), 6)
+        XCTAssertEqual(PagesLeft.count(in: place, toChapterOn: 4, atTop: true), 0)
+    }
+
     /// A fixed-layout book's sections are a page each.
     func testAFixedLayoutPageIsItsSection() {
         let spread = PagesLeft.Section(from: 0.5, to: 0.55, page: 1, pages: 1)

@@ -26,10 +26,13 @@ protocol FoliateSourceDelegate: AnyObject {
     func foliateShowed(_ location: PageLocation)
     /// The reader moved: a turn, a scroll, a jump.
     func foliateMoved(_ location: PageLocation)
+    /// The page showing laid out again without moving, as once its images
+    /// load or the settings change: its page counts may differ.
+    func foliateLaidOut(_ location: PageLocation)
     /// Where each chapter given to `contents` is in the book.
     func foliateContents(_ entries: [PageMessage.ContentsEntry])
     /// A footnote, shown beside its reference (in the pager's points).
-    func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont)
+    func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont, lineHeight: Double?)
     func foliateExternalLink(_ url: URL)
     /// A page turn is waiting for its page to be laid out.
     func foliateWaiting(_ waiting: Bool)
@@ -39,6 +42,8 @@ protocol FoliateSourceDelegate: AnyObject {
     /// A page turn is starting, which hides the controls.
     func foliateTurning()
     func foliateToggleChrome()
+    /// Scrolled, a sideways swipe asked for the next or previous chapter.
+    func foliateSkipChapter(_ direction: TurnDirection)
 }
 
 /// foliate as the pager's page source for Reflowable Files (ADR 0026).
@@ -98,6 +103,8 @@ final class FoliateSource: PagerSource {
     private var restarts: [Date] = []
     /// The section the book first opened in.
     private var openedSection: Int?
+    /// Gives a page the chapters' places, sent again to one that restarts.
+    private var chapterTargetsScript: String?
     /// The neighbors waiting to open, with the tokens their open answers.
     private var neighborTokens: [(ReaderPage, TurnDirection, Int)] = []
 
@@ -186,6 +193,7 @@ final class FoliateSource: PagerSource {
         }
         Task { await Diagnostics.shared.log(.reader, "a page's web content process ended; reopening it") }
         page.reload()
+        if let chapterTargetsScript { page.call(chapterTargetsScript) }
         let start = lastCFI.map(ReaderTarget.cfi) ?? openStart
         if page === current {
             // The neighbors are sent beside it again once it shows.
@@ -307,7 +315,14 @@ final class FoliateSource: PagerSource {
             Task { await Diagnostics.shared.log(.reader, "page: \(text)") }
             return
         case "contents":
-            if message.token == contentsToken { delegate?.foliateContents(message.contents ?? []) }
+            guard message.token == contentsToken else { return }
+            let entries = message.contents ?? []
+            delegate?.foliateContents(entries)
+            // Every page counts pages to the next chapter from these.
+            let targets = (try? JSONSerialization.data(withJSONObject: entries.compactMap(\.target)))
+                .map { String(decoding: $0, as: UTF8.self) } ?? "[]"
+            chapterTargetsScript = "R.setChapterTargets(\(targets))"
+            for page in [back, current, forward] { page.call(chapterTargetsScript ?? "") }
             return
         case "synced":
             guard page !== current, message.token == state(page).token else { return }
@@ -380,15 +395,20 @@ final class FoliateSource: PagerSource {
                 navigationTimeout?.cancel()
                 lastCFI = current.location.cfi ?? lastCFI
                 delegate?.foliateMoved(current.location)
+            } else if opened {
+                // The page laid out again in place, as once a large image
+                // loads: the same place, with new page counts.
+                delegate?.foliateLaidOut(current.location)
             }
             reconcile()
         case "applied":
+            if opened { delegate?.foliateLaidOut(current.location) }
             reconcile()
         case "note":
             let box = message.rect ?? []
             let rect = box.count == 4 ? CGRect(x: box[0], y: box[1], width: box[2], height: box[3]) : .zero
             delegate?.foliateNote(paragraphs: message.paragraphs ?? [], at: rect, href: message.href ?? "",
-                                  font: NoteFont.resolve(message.fontFamily ?? ""))
+                                  font: NoteFont.resolve(message.fontFamily ?? ""), lineHeight: message.lineHeight)
         case "link":
             if let href = message.href { jump(to: .href(href)) }
         case "external":
@@ -492,6 +512,15 @@ final class FoliateSource: PagerSource {
 
     func pagerToggleChrome() {
         delegate?.foliateToggleChrome()
+    }
+
+    func pagerSwipe(_ direction: TurnDirection) {
+        delegate?.foliateSkipChapter(direction)
+    }
+
+    /// The next or previous section, for a book with no chapters to go to.
+    func skipSection(_ direction: TurnDirection) {
+        current.call("R.skipSection(\(direction.rawValue))")
     }
 
     func pagerWaiting(_ waiting: Bool) {

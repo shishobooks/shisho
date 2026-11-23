@@ -37,6 +37,10 @@ struct ReadProgress: Equatable, Sendable {
     let underway: Bool
     var fileName = ""
     var ebookCount = 1
+    /// The chapter and pages left in the book the reader last showed here,
+    /// while that's still the place shown.
+    var chapter: String?
+    var pagesLeft: Int?
 }
 
 extension CatalogStore {
@@ -108,8 +112,15 @@ extension CatalogStore {
             SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type IN (\(reflowableList)) AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
         let name = try String.fetchOne(db, sql: "SELECT display_name FROM book_files WHERE id = ?", arguments: [fileID]) ?? ""
-        return ReadProgress(fileID: fileID, percentage: min(1, max(0, percentage)), underway: underway, fileName: name,
-                            ebookCount: ebooks)
+        var progress = ReadProgress(fileID: fileID, percentage: min(1, max(0, percentage)), underway: underway, fileName: name,
+                                    ebookCount: ebooks)
+        if let place = try Row.fetchOne(db, sql: "SELECT chapter, pages_left, percentage FROM reader_places WHERE file_id = ?",
+                                        arguments: [fileID]),
+           abs((place["percentage"] as Double) - progress.percentage) < 0.005 {
+            progress.chapter = place["chapter"]
+            progress.pagesLeft = place["pages_left"]
+        }
+        return progress
     }
 
     // MARK: - Recording
@@ -151,6 +162,18 @@ extension CatalogStore {
                     updated_at = excluded.updated_at
                 """, arguments: [fileID, cfi, percentage, at.timeIntervalSince1970, serverAt])
             try CatalogStore.resolveOffer(db, fileID: fileID)
+        }
+    }
+
+    /// Keeps the chapter and pages left in the book the reader shows at
+    /// percentage through fileID, for its Book's page.
+    func noteReaderPlace(fileID: Int, chapter: String?, pagesLeft: Int?, percentage: Double) throws {
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO reader_places (file_id, chapter, pages_left, percentage) VALUES (?, ?, ?, ?)
+                ON CONFLICT (file_id) DO UPDATE SET chapter = excluded.chapter, pages_left = excluded.pages_left,
+                    percentage = excluded.percentage
+                """, arguments: [fileID, chapter, pagesLeft, percentage])
         }
     }
 

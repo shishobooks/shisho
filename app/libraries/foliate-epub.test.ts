@@ -29,7 +29,7 @@ describe("vendored epub.js patches", () => {
   it("opens a book whose metadata has no Dublin Core elements", async () => {
     const book = await new EPUB({
       loadText: async (name: string) => files[name] ?? null,
-      loadBlob: async () => null,
+      loadBlob: async () => new Blob(),
       getSize: () => 0,
     }).init();
     expect(book.sections).toHaveLength(1);

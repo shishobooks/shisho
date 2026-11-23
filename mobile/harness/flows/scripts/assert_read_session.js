@@ -2,12 +2,11 @@
 // Session from the Shisho app for TITLE, from the phone's Device, counting
 // the pages read (each from 5 seconds), and the place it ended at. Reading
 // past the first page starts a Read-through, as on the web.
-// It records "ok", or what's wrong, in output.serverCheck rather than
-// throwing: the flow checks that with assertTrue inside a retry, which
-// retries Maestro's own failures but not a script's error.
+// It polls the server until the check passes or 25 s pass, since the sync
+// can land late on a stalled CI simulator, and records "ok", or what's still
+// wrong, in output.serverCheck for the flow's assertTrue.
 
-output.serverCheck = "";
-try {
+function check() {
   const response = http.get(
     CONTROL + "/reading?title=" + encodeURIComponent(TITLE),
   );
@@ -42,8 +41,17 @@ try {
       "the Read-through is " + JSON.stringify(reading.read_through),
     );
   }
-  output.serverCheck = "ok";
-} catch (e) {
-  output.serverCheck = String(e.message || e);
-  console.log("server check: " + output.serverCheck);
 }
+
+const deadline = Date.now() + 25000;
+for (;;) {
+  try {
+    check();
+    output.serverCheck = "ok";
+  } catch (e) {
+    output.serverCheck = String(e.message || e);
+  }
+  if (output.serverCheck === "ok" || Date.now() > deadline) break;
+  http.get(CONTROL + "/wait?ms=500");
+}
+console.log("server check: " + output.serverCheck);

@@ -23,6 +23,9 @@ struct OpenNote: Identifiable, Equatable {
     let href: String
     /// The book's font around the reference.
     let font: NoteFont
+    /// The book's line height around the reference, as a multiple of the
+    /// text's size.
+    let lineHeight: Double?
 }
 
 /// One open Reflowable File: the pages, where the reader is, and what's
@@ -45,6 +48,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     @ObservationIgnored private var pageStart: Double?
     /// The section showing and the page in it, for pages left.
     private var pageSection: PageLocation.SectionPlace?
+    /// The page in the section the next chapter starts on, when it does.
+    private var nextChapter: PageLocation.NextChapter?
     /// Each section shown, by index: its pages and share of the book, for
     /// estimating pages past the one showing.
     @ObservationIgnored private var seenSections: [Int: (pages: Int, share: Double)] = [:]
@@ -121,8 +126,12 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         guard let place = pageSection else { return nil }
         let section = PagesLeft.Section(from: place.from, to: place.to, page: place.page, pages: place.pages)
         let rate = PagesLeft.pagesPerShare(Array(seenSections.values))
-        return (chapterEnd.map { PagesLeft.count(in: section, to: $0, pagesPerShare: rate) },
-                PagesLeft.count(in: section, to: 1, pagesPerShare: rate))
+        // Where the page knows the next chapter's page, it counts to it
+        // exactly: a chapter's share of the text misplaces its end among
+        // pages that are photos.
+        let chapter = nextChapter.map { PagesLeft.count(in: section, toChapterOn: $0.page, atTop: $0.atTop) }
+            ?? chapterEnd.map { PagesLeft.count(in: section, to: $0, pagesPerShare: rate) }
+        return (chapter, PagesLeft.count(in: section, to: 1, pagesPerShare: rate))
     }
 
     private func noteSection(_ location: PageLocation) {
@@ -145,13 +154,13 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         guard let left = pagesLeft else { return nil }
         if inBook {
             return left.book == 0
-                ? AttributedString(localized: "Last page in the book")
-                : AttributedString(localized: "^[\(left.book) page](inflect: true) left in the book")
+                ? AttributedString(localized: "Last page in book")
+                : AttributedString(localized: "^[\(left.book) page](inflect: true) left in book")
         }
         guard let chapter = left.chapter else { return nil }
         return chapter == 0
-            ? AttributedString(localized: "Last page in the chapter")
-            : AttributedString(localized: "^[\(chapter) page](inflect: true) left in the chapter")
+            ? AttributedString(localized: "Last page in chapter")
+            : AttributedString(localized: "^[\(chapter) page](inflect: true) left in chapter")
     }
 
     /// Where the chapter showing ends: where the next one starts, or the
@@ -280,6 +289,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     // MARK: - The app's life
 
     func background() {
+        noteReaderPlace()
         tracker.background()
     }
 
@@ -292,6 +302,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     }
 
     func close() {
+        noteReaderPlace()
         closed = true
         turnWait?.cancel()
         tracker.close()
@@ -370,6 +381,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         fraction = location.fraction ?? 0
         pageStart = location.start
         pageSection = location.section
+        nextChapter = location.nextChapter
         noteSection(location)
         // A page reopened after WebKit ended its process shows the place
         // again; the session goes on.
@@ -382,9 +394,20 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         self.location = location
         pageStart = location.start
         pageSection = location.section
+        nextChapter = location.nextChapter
         noteSection(location)
         fraction = location.fraction ?? fraction
         tracker.moved(location)
+    }
+
+    func foliateLaidOut(_ location: PageLocation) {
+        guard phase == .reading else { return }
+        self.location = location
+        pageStart = location.start ?? pageStart
+        pageSection = location.section
+        nextChapter = location.nextChapter
+        noteSection(location)
+        fraction = location.fraction ?? fraction
     }
 
     func foliateContents(_ entries: [PageMessage.ContentsEntry]) {
@@ -398,8 +421,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         contents = placed
     }
 
-    func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont) {
-        note = OpenNote(paragraphs: paragraphs, rect: rect, href: href, font: font)
+    func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont, lineHeight: Double?) {
+        note = OpenNote(paragraphs: paragraphs, rect: rect, href: href, font: font, lineHeight: lineHeight)
     }
 
     func foliateWaiting(_ waiting: Bool) {
@@ -442,6 +465,33 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         // move them out from under the reader's focus.
         guard !UIAccessibility.isVoiceOverRunning else { return }
         chromeVisible = false
+    }
+
+    /// The next chapter's start, or the previous chapter's, from the
+    /// contents; by section in a book whose contents can't be placed.
+    func foliateSkipChapter(_ direction: TurnDirection) {
+        let here = start(atOrBefore: pageStart ?? fraction)
+        let place = here.map { starts[$0].position } ?? -1
+        let candidates: [Int] = direction == .forward
+            ? Array(((here ?? -1) + 1)..<starts.count)
+            : Array(stride(from: (here ?? 0) - 1, through: 0, by: -1))
+        for k in candidates {
+            let entry = contents[starts[k].index]
+            let further = direction == .forward ? starts[k].position > place + 0.0001 : starts[k].position < place - 0.0001
+            if further, entry.target != nil {
+                go(to: entry)
+                return
+            }
+        }
+        if starts.isEmpty { source?.skipSection(direction) }
+    }
+
+    /// Keeps the chapter and pages left for the Book's page, which can't
+    /// work them out without the book.
+    private func noteReaderPlace() {
+        guard phase == .reading, location != nil else { return }
+        try? session.store.noteReaderPlace(fileID: file.fileID, chapter: chapterTitle, pagesLeft: pagesLeft?.book,
+                                           percentage: fraction)
     }
 
     func foliateToggleChrome() {

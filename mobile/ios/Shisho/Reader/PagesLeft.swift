@@ -33,6 +33,13 @@ enum PagesLeft {
         return min(max(0, endPage - 1), leftHere)
     }
 
+    /// Pages after the one showing, before the chapter that starts on page
+    /// next in the section: the page it starts on is the next chapter's
+    /// when it starts at the top, and this one's too when it starts lower.
+    static func count(in section: Section, toChapterOn next: Int, atTop: Bool) -> Int {
+        max(0, next - section.page - (atTop ? 1 : 0))
+    }
+
     /// Pages per share of the book over the sections seen, each weighed by
     /// its share, so a short title page barely moves it.
     static func pagesPerShare(_ sections: [(pages: Int, share: Double)]) -> Double? {

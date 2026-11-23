@@ -490,10 +490,10 @@
     "Language" : {
 
     },
-    "Last page in the book" : {
+    "Last page in book" : {
 
     },
-    "Last page in the chapter" : {
+    "Last page in chapter" : {
 
     },
     "Last read" : {
@@ -1133,10 +1133,13 @@
     "^[%lld page](inflect: true)" : {
 
     },
-    "^[%lld page](inflect: true) left in the book" : {
+    "^[%lld page](inflect: true) left" : {
 
     },
-    "^[%lld page](inflect: true) left in the chapter" : {
+    "^[%lld page](inflect: true) left in book" : {
+
+    },
+    "^[%lld page](inflect: true) left in chapter" : {
 
     },
     "a newer release" : {

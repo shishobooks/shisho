@@ -7,9 +7,7 @@ name: Turn the pages of a fixed-layout book
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp:
-    clearState: true
-- runFlow: subflows/sign_in.yaml
+- runFlow: subflows/launch_signed_in.yaml
 - runFlow:
     file: subflows/read.yaml
     env:

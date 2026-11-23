@@ -102,6 +102,14 @@ struct PageLocation: Decodable, Equatable, Sendable {
     /// The section showing and the page in it, for pages left; nil when
     /// scrolled.
     var section: SectionPlace?
+    /// The page in the section the next chapter starts on, when it starts
+    /// in this section, and whether at the page's top.
+    var nextChapter: NextChapter?
+
+    struct NextChapter: Decodable, Equatable, Sendable {
+        let page: Int
+        let atTop: Bool
+    }
 
     struct SectionPlace: Decodable, Equatable, Sendable {
         let from: Double
@@ -166,6 +174,9 @@ struct PageMessage: Decodable, Sendable {
     var href: String?
     /// The CSS font-family around a note reference.
     var fontFamily: String?
+    /// The line height around a note reference, as a multiple of the
+    /// text's size.
+    var lineHeight: Double?
     var dir: Int?
     var message: String?
 }

@@ -190,12 +190,67 @@ const sectionPlace = (index, page, pages) => {
   };
 };
 
+// Where the chapters start, as the contents placed them, resolved once the
+// book is open. Native sends them to every page.
+let chapterHrefs = [];
+let chapterTargets = null;
+const resolvedChapters = () => {
+  if (chapterTargets || !view.book) return chapterTargets ?? [];
+  chapterTargets = [];
+  for (const href of chapterHrefs) {
+    try {
+      const resolved = view.book.resolveHref(href);
+      // A MOBI resolves later; its chapters are counted the estimated way.
+      if (resolved && !(resolved instanceof Promise) && resolved.index >= 0)
+        chapterTargets.push(resolved);
+    } catch {
+      // A chapter this copy doesn't have.
+    }
+  }
+  return chapterTargets;
+};
+
+// The first page after the one showing that a chapter starts on, in the
+// section showing, as foliate pages it (the paginator's #scrollToRect), and
+// whether it starts at the page's top. Paginated only; null when the next
+// chapter is in a later section. Exact where the chapters' share of the text
+// isn't, as on pages that are a photo.
+const nextChapterPage = (index, page) => {
+  try {
+    const r = view.renderer;
+    if (view.isFixedLayout || r?.scrolled || page == null || !r.size)
+      return null;
+    const doc = currentDoc();
+    if (!doc) return null;
+    let next = null;
+    for (const target of resolvedChapters()) {
+      if (target.index !== index) continue;
+      const el = target.anchor?.(doc);
+      const node = el?.nodeType === 1 ? el : el?.startContainer?.parentElement;
+      if (!node?.getBoundingClientRect) continue;
+      const rect = node.getBoundingClientRect();
+      const offset =
+        view.book?.dir === "rtl" ? r.pages * r.size - rect.right : rect.left;
+      const at = Math.floor(offset / r.size) + 1;
+      if (at <= page || (next && at >= next.page)) continue;
+      next = {
+        page: at,
+        atTop: rect.top < (doc.defaultView?.innerHeight ?? 0) * 0.15,
+      };
+    }
+    return next;
+  } catch {
+    return null;
+  }
+};
+
 const location = () => {
   const d = view.lastLocation;
   const { page, pages } = geometry();
   const index = d?.section?.current ?? currentIndex();
   return {
     section: sectionPlace(index, page, pages),
+    nextChapter: nextChapterPage(index, page),
     cfi: d?.cfi ?? null,
     fraction: Number.isFinite(d?.fraction) ? d.fraction : null,
     start: pageStart(index, page, pages),
@@ -395,9 +450,14 @@ const activate = async (a) => {
         const paragraphs = doc ? noteText(resolved.anchor(doc)) : [];
         // The font around the reference, for the popover, as the web
         // reader's takes it.
-        const fontFamily =
-          a.ownerDocument.defaultView?.getComputedStyle(a.parentElement ?? a)
-            .fontFamily ?? "";
+        // And its line height, as a multiple of the text's size; "normal"
+        // gives none.
+        const style = a.ownerDocument.defaultView?.getComputedStyle(
+          a.parentElement ?? a,
+        );
+        const fontFamily = style?.fontFamily ?? "";
+        const lineHeight =
+          parseFloat(style?.lineHeight) / parseFloat(style?.fontSize);
         if (paragraphs.length)
           return post({
             type: "note",
@@ -405,6 +465,7 @@ const activate = async (a) => {
             rect: rectOf(a),
             href,
             fontFamily,
+            lineHeight: Number.isFinite(lineHeight) ? lineHeight : null,
           });
       }
     } catch (err) {
@@ -527,6 +588,24 @@ const checkSelectionEdge = (doc) => {
   }, 600);
 };
 
+// Scrolled, whether the text was still moving when a finger touched down:
+// a tap that only stops a scroll isn't a tap on the page, so it doesn't
+// show the controls. Watched a frame at a time, only while scrolled.
+let scrollMovedAt = 0;
+let scrollStart = null;
+let touchStoppedScroll = false;
+const watchScroll = () => {
+  if (isScrolled()) {
+    const start = view.renderer?.start;
+    if (start !== scrollStart) {
+      scrollStart = start;
+      scrollMovedAt = performance.now();
+    }
+  }
+  requestAnimationFrame(watchScroll);
+};
+requestAnimationFrame(watchScroll);
+
 let selectionActive = false;
 const guardWindow = (win, isTop) => {
   const capture = { capture: true, passive: true };
@@ -535,7 +614,11 @@ const guardWindow = (win, isTop) => {
       type,
       (e) => {
         onPull(e);
-        if (type === "touchstart") noteActivity();
+        if (type === "touchstart") {
+          noteActivity();
+          touchStoppedScroll =
+            isScrolled() && performance.now() - scrollMovedAt < 100;
+        }
         // foliate's paginator drags the page from touchmove and snaps
         // on touchend; native owns that.
         e.stopPropagation();
@@ -861,10 +944,29 @@ window.R = {
   },
   // Scrolled mode: the page moves under native, so the hit test is here.
   tapLink(x, y) {
+    if (touchStoppedScroll) {
+      touchStoppedScroll = false;
+      return true;
+    }
     const a = nearestLink(x, y, 24);
     if (!a) return false;
     activate(a);
     return true;
+  },
+  setChapterTargets(hrefs) {
+    chapterHrefs = hrefs;
+    chapterTargets = null;
+  },
+  // The next or previous section, for a sideways swipe in a book with no
+  // chapters to go to.
+  skipSection(dir) {
+    navigation = navigation.then(async () => {
+      try {
+        await view.renderer?.[dir > 0 ? "nextSection" : "prevSection"]?.();
+      } catch (err) {
+        post({ type: "log", message: "section skip failed: " + err });
+      }
+    });
   },
   clearSelection() {
     currentDoc()?.getSelection()?.removeAllRanges();
