@@ -233,11 +233,6 @@ final class FoliateSource: PagerSource {
         if let chapterTargetsScript { page.call(chapterTargetsScript) }
         if !matchCFIs.isEmpty { page.call(Self.addMatchesScript(matchCFIs)) }
         if let markScript { page.call(markScript) }
-        // A search the page was running ended with it, part way.
-        if let running = runningSearch, running.page === page {
-            runningSearch = nil
-            delegate?.foliateSearchInterrupted(token: running.token)
-        }
         let start = lastCFI.map(ReaderTarget.cfi) ?? openStart
         if page === current {
             // The neighbors are sent beside it again once it shows.
@@ -252,6 +247,12 @@ final class FoliateSource: PagerSource {
             let token = startFlight(page)
             pager.neighbor(direction(of: page), is: .pending)
             page.call("R.open(\(openArguments(start: start, neighbor: direction(of: page).rawValue, token: token)))")
+        }
+        // A search the page was running ended with it, part way. Told after
+        // the open is sent, so a search run again waits for the book.
+        if let running = runningSearch, running.page === page {
+            runningSearch = nil
+            delegate?.foliateSearchInterrupted(token: running.token)
         }
     }
 

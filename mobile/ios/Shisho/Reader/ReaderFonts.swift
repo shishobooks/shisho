@@ -196,6 +196,12 @@ enum ReaderFonts {
 
     @MainActor private static var noteFonts: [ReaderFont: NoteFont] = [:]
 
+    /// Drops a removed font's descriptor.
+    @MainActor
+    static func forget(_ font: ReaderFont) {
+        noteFonts[font] = nil
+    }
+
     @MainActor
     private static func readNoteFont(for font: ReaderFont, store: ImportedFontStore) -> NoteFont? {
         let data: Data? = switch font {
@@ -276,6 +282,10 @@ final class ImportedFontStore {
         // A file from another app's storage is lent for the moment.
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        // Checked before reading, so a huge file is never read in.
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > ImportedFontStore.largestFont {
+            throw FontImportError(message: String(localized: "\(fileName) is too large. Choose a font file under 50 MB."))
+        }
         let data: Data
         do {
             data = try Data(contentsOf: url)
@@ -304,14 +314,18 @@ final class ImportedFontStore {
         return font
     }
 
-    func remove(_ id: Int) {
+    /// Removes the font, returning whether it did. It's kept when the list
+    /// can't be saved, or the list would name a font whose file is gone.
+    @discardableResult
+    func remove(_ id: Int) -> Bool {
         let remaining = fonts.filter { $0.id != id }
-        guard remaining.count != fonts.count else { return }
-        // Kept when the list can't be saved, or it would list a font whose
-        // file is gone.
-        guard (try? save(Index(nextID: nextID, fonts: remaining))) != nil else { return }
+        guard remaining.count != fonts.count,
+              (try? save(Index(nextID: nextID, fonts: remaining))) != nil
+        else { return false }
         try? FileManager.default.removeItem(at: fileURL(for: id))
         fonts = remaining
+        ReaderFonts.forget(.imported(id))
+        return true
     }
 
     private func save(_ index: Index) throws {

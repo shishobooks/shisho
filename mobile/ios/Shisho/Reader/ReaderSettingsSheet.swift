@@ -413,8 +413,7 @@ private struct ReaderFontList: View {
             .accessibilityIdentifier("reader.font.\(choice.rawValue)")
             if removable, case .imported(let id) = choice {
                 Button {
-                    if chosen { font = .book }
-                    store.remove(id)
+                    if store.remove(id), chosen { font = .book }
                 } label: {
                     Icon(.x, size: 18, relativeTo: .body)
                         .foregroundStyle(Theme.mutedForeground)

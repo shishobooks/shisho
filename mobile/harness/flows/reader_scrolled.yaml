@@ -20,6 +20,12 @@ name: Read in scrolled layout
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.settings
+# Below the fold of the half-height sheet.
+- scrollUntilVisible:
+    element:
+      id: reader.layout.scrolled
+    direction: DOWN
+    timeout: 30000
 - tapOn:
     id: reader.layout.scrolled
 - tapOn:

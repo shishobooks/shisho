@@ -71,8 +71,12 @@ const applyStyles = (s, relayout = true) => {
 // so it lays out again once the font is in, as the web reader does. foliate
 // keeps the place across it.
 let fontWait = 0;
+// Bumped each time native moves this page as a neighbor: a font that
+// arrives after leaves it alone.
+let moves = 0;
 const relayoutWhenFontLoads = (s) => {
   const wait = ++fontWait;
+  const moved = moves;
   if (!s.font) return;
   const family = `1em "${s.font.family}"`;
   for (const { doc } of view.renderer?.getContents?.() ?? []) {
@@ -80,7 +84,7 @@ const relayoutWhenFontLoads = (s) => {
     doc.fonts
       .load(family)
       .then(() => {
-        if (wait === fontWait) view.renderer?.render?.();
+        if (wait === fontWait && moved === moves) view.renderer?.render?.();
       })
       .catch(() => {
         // The page keeps the fallback font it already shows.
@@ -1236,8 +1240,15 @@ const unmark = (cfi) =>
 const shownSections = () =>
   new Set((view.renderer?.getContents?.() ?? []).map(({ index }) => index));
 
+// Matches sent before the book opened, as to a page opening again after its
+// process ended, marked once it has.
+let pendingMatches = [];
+
 const addMatches = (cfis) => {
-  if (!view.book) return;
+  if (!view.book) {
+    pendingMatches.push(...cfis);
+    return;
+  }
   const shown = shownSections();
   for (const cfi of cfis) {
     if (matchSet.has(cfi)) continue;
@@ -1259,6 +1270,7 @@ const clearMatches = () => {
   if (chosenResult && !matchSet.has(chosenResult)) unmark(chosenResult);
   matches = new Map();
   matchSet = new Set();
+  pendingMatches = [];
   chosenResult = null;
 };
 
@@ -1299,9 +1311,20 @@ window.R = {
   // as a share of the section's pages, which a new size changes.
   apply(s, keepPlace) {
     chained("apply", async () => {
+      // After any jump in flight, whose move would otherwise pass for this
+      // relayout.
+      await navigation;
+      // Only a page that shows something: an empty page's CFI is its
+      // section's body, which would go back to the section's start.
+      const shown = view.lastLocation?.range;
       const place =
-        keepPlace && !view.isFixedLayout && landed()
-          ? view.lastLocation?.cfi
+        keepPlace &&
+        !view.isFixedLayout &&
+        landed() &&
+        shown &&
+        !shown.collapsed &&
+        shown.toString().trim()
+          ? view.lastLocation.cfi
           : null;
       if (place) await goToOrNear(place, null).catch(() => {});
       applyStyles(s, keepPlace);
@@ -1315,6 +1338,7 @@ window.R = {
   // round trip isn't exact, and foliate's next() and prev() hold a lock and
   // relocate twice at a section's edge.
   sync(index, page, pages, dir, token) {
+    moves++;
     chained(
       "sync",
       async () => {
@@ -1327,6 +1351,7 @@ window.R = {
   // A jump a neighbor makes at the same time as the current page: go
   // there, then step one page.
   jump(target, dir, token, fallback) {
+    moves++;
     chained(
       "jump",
       async () => {
@@ -1585,6 +1610,11 @@ const open = async ({
   // book's own can be a form foliate can't use, as en_US or English.
   if (language && book.metadata) book.metadata.language = language;
   await view.open(book);
+  if (pendingMatches.length) {
+    const cfis = pendingMatches;
+    pendingMatches = [];
+    addMatches(cfis);
+  }
   view.renderer?.addEventListener?.("scroll", noteScroll, { passive: true });
   applyStyles(s);
   post({
