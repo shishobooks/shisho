@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// Now Playing, presented as a sheet over the screen it came from. Variant
-/// E's most expressive screen: the cover's color washes it, the artwork is
-/// large, and the controls are big. The full
-/// player (chapters list, sleep timer, Bookmarks) builds on it in #916.
+/// E's most expressive screen, in the web app's design language: the cover's
+/// color washes it, the artwork is large, and the controls are big. Under
+/// the transport sit speed, the sleep timer, Bookmark, and the chapter list;
+/// the rest of the player's settings are in the header's menu.
 struct NowPlayingView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -17,17 +18,42 @@ struct NowPlayingView: View {
     /// The bar spans the whole book instead of the chapter; tapping the time
     /// left switches it.
     @AppStorage("player.scrubsWholeBook") private var wholeBook = false
+    /// The chapters and Bookmarks sheet, open at a tab.
+    @State private var list: PlayerListSheet.Tab?
+    /// The Bookmark just added, which the toast offers a note for.
+    @State private var added: Bookmark?
+    @State private var noting: Bookmark?
+    @State private var note = ""
 
     var body: some View {
         Group {
             if let player = model.player, let file = player.file {
                 content(player, file)
+                    .overlay(alignment: .top) { toast(player) }
             } else {
-                ContentUnavailableView("Nothing is playing", systemImage: "headphones")
+                EmptyNotice(title: String(localized: "Nothing is playing"), icon: .headphones)
             }
         }
         .background(alignment: .top) { backdrop }
         .background(Theme.background)
+        .sheet(item: $list) { tab in
+            if let player = model.player {
+                PlayerListSheet(player: player, tab: tab)
+            }
+        }
+        .alert("Add a Note", isPresented: Binding(get: { noting != nil }, set: { if !$0 { noting = nil } })) {
+            TextField("Note", text: $note)
+                .accessibilityIdentifier("bookmark.note")
+            Button("Save") {
+                if let noting { model.player?.editBookmark(noting, note: note) }
+                noting = nil
+            }
+            .accessibilityIdentifier("bookmark.saveNote")
+            Button("Cancel", role: .cancel) { noting = nil }
+                .accessibilityIdentifier("bookmark.cancelNote")
+        } message: {
+            Text("At \(TimeLabels.clock(noting?.seconds ?? 0))")
+        }
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(28)
     }
@@ -50,7 +76,7 @@ struct NowPlayingView: View {
     private func content(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
         GeometryReader { geometry in
             // When it all fits, the page fills the sheet, so the controls
-            // can center in the room left and speed sits at the bottom. A
+            // can center in the room left and the tools sit at the bottom. A
             // scroll view would size it to its content instead, so it
             // scrolls only when it doesn't fit, as at large text sizes.
             ViewThatFits(in: .vertical) {
@@ -65,28 +91,28 @@ struct NowPlayingView: View {
 
     private func page(_ player: AudioPlayer, _ file: ListeningFile, space: CGSize) -> some View {
         VStack(spacing: 0) {
-            header(file)
+            header(player, file)
             if let offer = player.offer {
                 PlaceOfferBanner(offer: offer, accept: player.acceptOffer, dismiss: player.dismissOffer)
                     .padding(.top, 12)
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
             if let error = player.error {
-                NoticeCard(text: error, systemImage: "exclamationmark.triangle.fill", tint: Theme.destructive)
+                NoticeCard(text: error, icon: .triangleAlert, tint: Theme.destructive)
                     .padding(.top, 12)
                     .accessibilityIdentifier("player.error")
             }
             artwork(player, file, size: artworkWidth(space))
             titles(file)
-            chapterRow(player)
+            chapterRow(player, file)
             scrubber(player, file)
-            Spacer(minLength: 20)
+            Spacer(minLength: 12)
             transport(player)
-            Spacer(minLength: 20)
+            Spacer(minLength: 16)
             tools(player)
         }
         .padding(.horizontal, 22)
-        // The home indicator's safe area is room enough under speed.
+        // The home indicator's safe area is room enough under the tools.
         .padding(.bottom, 8)
         .frame(maxWidth: 560)
         .frame(maxWidth: .infinity)
@@ -101,38 +127,46 @@ struct NowPlayingView: View {
         return max(120, min(336, space.width - 44, height))
     }
 
-    private func header(_ file: ListeningFile) -> some View {
-        HStack {
-            Button { dismiss() } label: {
-                Image(systemName: "chevron.down")
-                    .font(.geist(.body, weight: .semibold))
-                    .foregroundStyle(Theme.foreground)
-                    .frame(width: 40, height: 40)
-                    .background(Theme.background.opacity(0.4), in: Circle())
-            }
-            .accessibilityLabel("Close Player")
-            .accessibilityIdentifier("player.close")
-            Spacer()
+    // MARK: - Header
+
+    /// Close, the Book's Series (or title) leading to its page, and the
+    /// player's menu with AirPlay beside it.
+    private func header(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
+        ZStack {
             // Goes to the Book's page, under the player.
             Button { model.showBook(file.book) } label: {
-                HStack(spacing: 4) {
-                    Text(file.book.title)
+                // The number first, as the Book page and the Library show it.
+                HStack(spacing: 6) {
+                    if let number = file.series?.number {
+                        SeriesNumberBadge(number: number, end: file.series?.numberEnd)
+                    }
+                    Text(file.series?.name ?? file.book.title)
                         .lineLimit(1)
-                    Image(systemName: "chevron.right")
-                        .font(.geist(.caption2, weight: .bold))
-                        .opacity(0.6)
                 }
                 .font(.geist(.footnote, weight: .semibold))
-                .foregroundStyle(Theme.foreground.opacity(0.75))
+                .foregroundStyle(Theme.foreground)
                 .padding(.horizontal, 10)
                 .frame(minHeight: 40)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.horizontal, 96)
             .accessibilityLabel("Go to \(file.book.title)")
             .accessibilityIdentifier("player.book")
-            Spacer()
-            Color.clear.frame(width: 40, height: 40)
+            HStack(spacing: 8) {
+                Button { dismiss() } label: {
+                    RoundIcon(.chevronDown, size: 22)
+                }
+                .accessibilityLabel("Close Player")
+                .accessibilityIdentifier("player.close")
+                Spacer()
+                RoutePicker()
+                    .frame(width: 40, height: 40)
+                    .background(Theme.background.opacity(0.4), in: Circle())
+                    .accessibilityIdentifier("player.airplay")
+                PlayerMenu(player: player, showBookmarks: { list = .bookmarks })
+            }
+            .buttonStyle(PlayerControlStyle())
         }
         // A control keeps its size; VoiceOver and the large content viewer
         // read it at any text size.
@@ -148,56 +182,102 @@ struct NowPlayingView: View {
             guard !Task.isCancelled else { return }
             tint = average?.color
         }
-        .padding(.top, 18)
+        .padding(.top, 12)
     }
 
     private func titles(_ file: ListeningFile) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(file.book.title)
                 .font(.geist(size: 26, relativeTo: .title, weight: .heavy))
-                .tracking(-0.6)
+                .tracking(-0.8)
                 .lineLimit(2)
                 .foregroundStyle(Theme.foreground)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("player.title")
             if let byline = byline(file) {
                 Text(byline)
-                    .font(.geist(.callout))
+                    .font(.geist(.subheadline))
                     .foregroundStyle(Theme.foreground.opacity(0.7))
-                    .lineLimit(1)
+                    // However long, so no name's link is cut off; the page
+                    // scrolls when it doesn't fit.
+                    .fixedSize(horizontal: false, vertical: true)
+                    // A name goes to its Person's page, under the player.
+                    .environment(\.openURL, OpenURLAction { url in
+                        guard let route = LinkedText.route(url) else { return .systemAction }
+                        model.showFromPlayer(route)
+                        return .handled
+                    })
+                    .accessibilityIdentifier("player.byline")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 24)
+        .padding(.top, 22)
     }
 
-    /// "Author · Narrated by Narrator", whichever there are.
-    private func byline(_ file: ListeningFile) -> String? {
-        var parts: [String] = []
-        if !file.book.authors.isEmpty { parts.append(file.book.authors) }
-        if !file.narrators.isEmpty {
-            parts.append(String(localized: "Narrated by \(file.narrators.joined(separator: ", "))"))
+    /// "Author · Narrated by Narrator", whichever there are, each name
+    /// linked to its Person's page as on the Book's page.
+    private func byline(_ file: ListeningFile) -> AttributedString? {
+        // Each Person once, though they may have several roles.
+        var seen: Set<Int> = []
+        let authors = file.authors.filter { seen.insert($0.personID).inserted }
+            .map { (Route.resource(.person, id: $0.personID, name: $0.name), $0.name) }
+        var parts: [AttributedString] = []
+        if !authors.isEmpty {
+            parts.append(Byline.links(authors))
         }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        if !file.narrators.isEmpty {
+            // Their Persons can be missing while a catalog downloads again,
+            // as after an app update: the names show without links then.
+            let narrators = file.narratorIDs.count == file.narrators.count
+                ? Byline.links(zip(file.narratorIDs, file.narrators).map { (Route.resource(.person, id: $0.0, name: $0.1), $0.1) })
+                : AttributedString(file.narrators.joined(separator: ", "))
+            parts.append(LinkedText.muted(String(localized: "Narrated by ")) + narrators)
+        }
+        guard var text = parts.first else { return nil }
+        for part in parts.dropFirst() {
+            text += LinkedText.muted(" · ") + part
+        }
+        return text
     }
 
-    private func chapterRow(_ player: AudioPlayer) -> some View {
-        HStack(spacing: 8) {
-            PlayingIndicator(playing: player.isPlaying && !player.isBuffering)
+    // MARK: - Chapter and position
+
+    /// The chapter playing, which opens the chapter list.
+    private func chapterRow(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
+        HStack(spacing: 10) {
+            Button { list = .chapters } label: {
+                HStack(spacing: 7) {
+                    PlayingIndicator(playing: player.isPlaying && !player.isBuffering)
+                    Text(chapterLabel(player))
+                        .font(.geist(.footnote, weight: .medium))
+                        .lineLimit(1)
+                        .accessibilityIdentifier("player.chapter")
+                    if !file.chapters.isEmpty {
+                        Icon(.chevronDown, size: 14, relativeTo: .footnote)
+                            .opacity(0.6)
+                    }
+                    if player.isBuffering {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .accessibilityLabel("Loading")
+                    }
+                }
                 .foregroundStyle(Theme.primary)
-            Text(player.chapterTitle ?? String(localized: "No chapters"))
-                .font(.geist(.subheadline, weight: .medium))
-                .foregroundStyle(Theme.primary)
-                .lineLimit(1)
-                .accessibilityIdentifier("player.chapter")
-            if player.isBuffering {
-                ProgressView()
-                    .controlSize(.mini)
-                    .accessibilityLabel("Loading")
+                .frame(minHeight: 32)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(file.chapters.isEmpty)
+            .accessibilityHint("Shows the chapters")
+            .accessibilityIdentifier("player.chapterLink")
             Spacer(minLength: 0)
         }
-        .padding(.top, 14)
+        .padding(.top, 12)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    private func chapterLabel(_ player: AudioPlayer) -> String {
+        player.chapterTitle ?? String(localized: "No chapters")
     }
 
     private func scrubber(_ player: AudioPlayer, _ file: ListeningFile) -> some View {
@@ -227,9 +307,11 @@ struct NowPlayingView: View {
             let stacked = dynamicTypeSize.isAccessibilitySize
             let timeLeft = Button { wholeBook.toggle() } label: {
                 Text(wholeBook
-                    ? "\(TimeLabels.left(left)) left in the book at \(PlaybackSpeed.label(player.rate))"
-                    : "\(TimeLabels.left(left)) left in the chapter at \(PlaybackSpeed.label(player.rate))")
+                    ? "\(TimeLabels.clock(left)) left in the book at \(PlaybackSpeed.label(player.rate))"
+                    : "\(TimeLabels.clock(left)) left in the chapter at \(PlaybackSpeed.label(player.rate))")
                     .contentTransition(.numericText())
+                    .frame(minHeight: 32)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityHint(wholeBook ? "Makes the bar span the chapter" : "Makes the bar span the whole book")
@@ -257,96 +339,133 @@ struct NowPlayingView: View {
             .monospacedDigit()
             .foregroundStyle(Theme.foreground.opacity(0.7))
         }
-        .padding(.top, 14)
+        .padding(.top, 12)
     }
+
+    // MARK: - Transport
 
     private func transport(_ player: AudioPlayer) -> some View {
         HStack {
-            control("backward.end.fill", label: "Previous Chapter", id: "player.prevChapter", size: 22) { player.previousChapter() }
-            Spacer()
-            Button { player.skip(by: -AudioPlayer.skipInterval) } label: {
-                SkipIcon(forward: false).frame(width: 52, height: 52)
+            Button { player.previousChapter() } label: {
+                Icon(.skipBack, size: 24, relativeTo: nil).frame(width: 48, height: 48)
             }
-            .accessibilityLabel("Back 30 Seconds")
+            .accessibilityLabel("Previous Chapter")
+            .accessibilityIdentifier("player.prevChapter")
+            Spacer()
+            Button { player.skipBack() } label: {
+                SkipIcon(forward: false, seconds: player.backInterval, size: 34).frame(width: 48, height: 48)
+            }
+            .accessibilityLabel("Back \(Int(player.backInterval)) Seconds")
             .accessibilityIdentifier("player.skipBack")
             Spacer()
             Button { player.togglePlay() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 30, weight: .bold))
-                    .contentTransition(.symbolEffect(.replace))
+                Icon(player.isPlaying ? .pauseFill : .playFill, size: 30, relativeTo: nil)
+                    // The triangle's weight sits left of its box's center.
+                    .offset(x: player.isPlaying ? 0 : 2)
                     .foregroundStyle(Theme.primaryForeground)
-                    .frame(width: 76, height: 76)
+                    .frame(width: 72, height: 72)
                     .background(Theme.primary, in: Circle())
                     .shadow(color: Theme.primary.opacity(0.45), radius: 16)
             }
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
             .accessibilityIdentifier("player.playPause")
             Spacer()
-            Button { player.skip(by: AudioPlayer.skipInterval) } label: {
-                SkipIcon(forward: true).frame(width: 52, height: 52)
+            Button { player.skipForward() } label: {
+                SkipIcon(forward: true, seconds: player.forwardInterval, size: 34).frame(width: 48, height: 48)
             }
-            .accessibilityLabel("Forward 30 Seconds")
+            .accessibilityLabel("Forward \(Int(player.forwardInterval)) Seconds")
             .accessibilityIdentifier("player.skipForward")
             Spacer()
-            control("forward.end.fill", label: "Next Chapter", id: "player.nextChapter", size: 22) { player.nextChapter() }
+            Button { player.nextChapter() } label: {
+                Icon(.skipForward, size: 24, relativeTo: nil).frame(width: 48, height: 48)
+            }
+            .accessibilityLabel("Next Chapter")
+            .accessibilityIdentifier("player.nextChapter")
         }
         .buttonStyle(PlayerControlStyle())
         .foregroundStyle(Theme.foreground)
+        .padding(.top, 2)
+        // The controls keep their size; at accessibility sizes a long press
+        // shows each large.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityShowsLargeContentViewer()
     }
 
-    private func control(_ symbol: String, label: LocalizedStringKey, id: String, size: CGFloat, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: size, weight: .semibold))
-                .frame(width: 44, height: 44)
-        }
-        .accessibilityLabel(label)
-        .accessibilityIdentifier(id)
-    }
+    // MARK: - Tools
 
-    /// Speed in the web player's 0.1 steps, remembered per Book.
+    /// Speed, the sleep timer, Bookmark, and Chapters, under a rule.
     private func tools(_ player: AudioPlayer) -> some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 0) {
-                Button { player.setRate(player.rate - PlaybackSpeed.step) } label: {
-                    Image(systemName: "minus").frame(width: 44, height: 40)
-                }
-                .disabled(player.rate <= PlaybackSpeed.range.lowerBound)
-                .accessibilityLabel("Slower")
-                .accessibilityIdentifier("player.speedDown")
-                Text(PlaybackSpeed.label(player.rate))
-                    .font(.geist(.subheadline, weight: .heavy))
-                    .monospacedDigit()
-                    .frame(minWidth: 52)
-                    .padding(.vertical, 8)
-                    .overlay(alignment: .leading) { Rectangle().fill(Theme.border).frame(width: 1) }
-                    .overlay(alignment: .trailing) { Rectangle().fill(Theme.border).frame(width: 1) }
-                    .contentTransition(.numericText())
-                    .accessibilityLabel("Speed \(PlaybackSpeed.label(player.rate))")
-                    .accessibilityIdentifier("player.speed")
-                Button { player.setRate(player.rate + PlaybackSpeed.step) } label: {
-                    Image(systemName: "plus").frame(width: 44, height: 40)
-                }
-                .disabled(player.rate >= PlaybackSpeed.range.upperBound)
-                .accessibilityLabel("Faster")
-                .accessibilityIdentifier("player.speedUp")
-            }
-            .font(.geist(.footnote, weight: .semibold))
-            .foregroundStyle(Theme.foreground)
-            .background(Theme.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.border))
-            .animation(.snappy, value: player.rate)
-            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            Text("Speed")
-                .font(.geist(.caption))
-                .foregroundStyle(Theme.foreground.opacity(0.66))
-                .accessibilityHidden(true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 22)
+        PlayerToolbar(
+            player: player,
+            addBookmark: {
+                guard let bookmark = player.addBookmark(note: nil) else { return }
+                added = bookmark
+                AccessibilityNotification.Announcement(String(localized: "Bookmark added at \(TimeLabels.clock(bookmark.seconds))")).post()
+            },
+            showChapters: { list = .chapters }
+        )
+        .padding(.top, 12)
         .overlay(alignment: .top) {
-            Rectangle().fill(Theme.foreground.opacity(0.1)).frame(height: 1).padding(.top, 8)
+            Rectangle().fill(Theme.foreground.opacity(0.12)).frame(height: 1)
         }
+    }
+
+    // MARK: - Toast
+
+    /// Says a Bookmark was added, offering to add a note to it, for a few
+    /// seconds.
+    @ViewBuilder
+    private func toast(_ player: AudioPlayer) -> some View {
+        if let added {
+            HStack(spacing: 12) {
+                Text("Bookmark added at \(TimeLabels.clock(added.seconds))")
+                    .monospacedDigit()
+                Button {
+                    note = ""
+                    noting = added
+                    self.added = nil
+                } label: {
+                    Text("Add Note")
+                        .fontWeight(.semibold)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("bookmark.addNote")
+            }
+            .font(.geist(.footnote, weight: .medium))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .background(Color(white: 0.07), in: Capsule())
+            .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+            // Under the header, so its controls stay in reach.
+            .padding(.top, 64)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("bookmark.toast")
+            .task(id: added) {
+                try? await Task.sleep(for: .seconds(4))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.25)) { self.added = nil }
+            }
+        }
+    }
+}
+
+/// An icon in the round, translucent button variant E's player header uses.
+struct RoundIcon: View {
+    let name: Lucide
+    var size: CGFloat = 20
+
+    init(_ name: Lucide, size: CGFloat = 20) {
+        self.name = name
+        self.size = size
+    }
+
+    var body: some View {
+        Icon(name, size: size, relativeTo: nil)
+            .foregroundStyle(Theme.foreground)
+            .frame(width: 40, height: 40)
+            .background(Theme.background.opacity(0.4), in: Circle())
     }
 }

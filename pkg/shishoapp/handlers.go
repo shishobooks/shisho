@@ -10,6 +10,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
+	"github.com/shishobooks/shisho/pkg/bookmarks"
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/devices"
@@ -46,13 +47,14 @@ type Options struct {
 }
 
 type handler struct {
-	db       *bun.DB
-	auth     *auth.Service
-	devices  *devices.Service
-	feed     *changefeed.Service
-	reading  *reading.Service
-	contract *Contract
-	opts     Options
+	db        *bun.DB
+	auth      *auth.Service
+	devices   *devices.Service
+	feed      *changefeed.Service
+	reading   *reading.Service
+	bookmarks *bookmarks.Service
+	contract  *Contract
+	opts      Options
 	// feedBudget and feedChunk replace the package's defaults in tests; a
 	// negative budget ends every page after its first chunk.
 	feedBudget time.Duration

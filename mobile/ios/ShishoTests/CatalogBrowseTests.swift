@@ -390,11 +390,15 @@ final class CatalogBrowseTests: XCTestCase {
     }
 
     func testAFileRowSaysHowMuchIsLeftAsTheWebDoes() {
-        XCTAssertEqual(FileProgressText.text(0.5, durationSeconds: 7200, pageCount: nil), "50% · 1h 0m left")
+        XCTAssertEqual(FileProgressText.text(0.5, durationSeconds: 7200, pageCount: nil), "50% · 1:00:00 left")
         XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: 200), "25% · 150 pages left")
         XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil), "25%")
         XCTAssertEqual(FileProgressText.text(1, durationSeconds: 7200, pageCount: nil), "100%", "nothing left to say at the end")
-        XCTAssertEqual(FileProgressText.text(0.02, durationSeconds: 241, pageCount: nil), "2% · 4m left", "rounded as the Listen card rounds")
+        XCTAssertEqual(FileProgressText.text(0.02, durationSeconds: 241, pageCount: nil), "2% · 3:56 left", "to the second, as the Listen card says it")
+        // Not a second short from the fraction's rounding error.
+        XCTAssertEqual(FileProgressText.text(200.0 / 240, durationSeconds: 240, pageCount: nil), "83% · 0:40 left")
+        // A real fraction of a second isn't rounded up, as the Listen bar doesn't.
+        XCTAssertEqual(FileProgressText.text(120.0002 / 240, durationSeconds: 240, pageCount: nil), "50% · 1:59 left")
     }
 
     /// By the server's time for each Read-through underway, not the latest

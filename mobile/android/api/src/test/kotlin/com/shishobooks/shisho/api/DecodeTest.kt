@@ -54,14 +54,14 @@ class DecodeTest {
         assertEquals("djvu", book.files.single().fileType.raw)
         assertEquals(12345678901L, book.files.single().sizeBytes)
 
-        val response = ShishoJson.decodeFromString<FeedResponse>("""{"entries":[{"kind":"bookmark","id":1}],"cursor":9}""")
-        assertEquals(FeedKind.Unknown("bookmark"), response.entries.single().kind)
+        val response = ShishoJson.decodeFromString<FeedResponse>("""{"entries":[{"kind":"highlight","id":1}],"cursor":9}""")
+        assertEquals(FeedKind.Unknown("highlight"), response.entries.single().kind)
         assertEquals(9L, response.cursor)
     }
 
     @Test
     fun encodesKnownAndUnknownValuesAsSent() {
-        val json = ShishoJson.encodeToString(FeedEntry.serializer(), FeedEntry(kind = FeedKind.Unknown("bookmark"), id = 1))
-        assertEquals(true, json.contains("\"kind\":\"bookmark\""))
+        val json = ShishoJson.encodeToString(FeedEntry.serializer(), FeedEntry(kind = FeedKind.Unknown("highlight"), id = 1))
+        assertEquals(true, json.contains("\"kind\":\"highlight\""))
     }
 }

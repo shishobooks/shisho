@@ -75,6 +75,10 @@ func buildEntries(ctx context.Context, tx bun.IDB, user *models.User, entries []
 	if err != nil {
 		return nil, err
 	}
+	bookmarks, err := loadBookmarks(ctx, tx, userID, ids[changefeed.KindBookmark])
+	if err != nil {
+		return nil, err
+	}
 
 	out := make([]FeedEntry, 0, len(entries))
 	for _, entry := range entries {
@@ -107,6 +111,8 @@ func buildEntries(ctx context.Context, tx bun.IDB, user *models.User, entries []
 				item.ReadingPosition, ok = positions[entry.RecordID]
 			case changefeed.KindReadThrough:
 				item.ReadThrough, ok = readThroughs[entry.RecordID]
+			case changefeed.KindBookmark:
+				item.Bookmark, ok = bookmarks[entry.RecordID]
 			default:
 				// A kind this server doesn't build documents for yet.
 			}
@@ -400,6 +406,48 @@ func loadReadThroughs(ctx context.Context, tx bun.IDB, userID int, ids []int) (m
 			at := row.At
 			rt.LastReadAt = &at
 		}
+	}
+	return out, nil
+}
+
+// loadBookmarks reads userID's Bookmarks among ids, with the id the app made
+// each under, if it made it.
+func loadBookmarks(ctx context.Context, tx bun.IDB, userID int, ids []int) (map[int]*FeedBookmark, error) {
+	out := map[int]*FeedBookmark{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var bookmarks []*models.Bookmark
+	err := tx.NewSelect().Model(&bookmarks).
+		Where("bm.user_id = ?", userID).
+		Where("bm.id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	var links []journalBookmark
+	err = tx.NewSelect().Model(&links).
+		Where("user_id = ?", userID).
+		Where("bookmark_id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	localIDs := map[int]string{}
+	for _, link := range links {
+		if link.BookmarkID != nil {
+			localIDs[*link.BookmarkID] = link.LocalID
+		}
+	}
+	for _, bookmark := range bookmarks {
+		doc := &FeedBookmark{
+			ID: bookmark.ID, FileID: bookmark.FileID, Seconds: bookmark.Seconds, Note: bookmark.Note,
+			CreatedAt: bookmark.CreatedAt.UTC(),
+		}
+		if localID, ok := localIDs[bookmark.ID]; ok {
+			doc.LocalID = &localID
+		}
+		out[bookmark.ID] = doc
 	}
 	return out, nil
 }

@@ -29,6 +29,16 @@ type ServerInfo struct {
 	ThumbnailRenderKey string `json:"thumbnail_render_key"`
 }
 
+// The capabilities a server can list (ServerInfo.Capabilities, and the
+// X-Shisho-Capabilities header). An app turns a feature on for a server only
+// when it lists the feature's capability.
+const (
+	//tygo:emit export type Capability = typeof CapabilityBookmarks;
+	// CapabilityBookmarks is the Bookmark events in the journal and
+	// Bookmarks in the feed.
+	CapabilityBookmarks = "bookmarks"
+)
+
 // SignInPayload signs an installation in with the user's username and
 // password, which creates a Shisho app Device for it.
 type SignInPayload struct {
@@ -79,7 +89,7 @@ type FeedQuery struct {
 // The kinds of record the feed sends. An app ignores a kind it doesn't
 // know, and its cursor moves past it anyway (ADR 0023).
 const (
-	//tygo:emit export type FeedKind = typeof FeedKindBook | typeof FeedKindLibrary | typeof FeedKindSeries | typeof FeedKindPerson | typeof FeedKindGenre | typeof FeedKindTag | typeof FeedKindPublisher | typeof FeedKindBookLeft | typeof FeedKindReadingPosition | typeof FeedKindReadThrough | typeof FeedKindUserBook | typeof FeedKindList;
+	//tygo:emit export type FeedKind = typeof FeedKindBook | typeof FeedKindLibrary | typeof FeedKindSeries | typeof FeedKindPerson | typeof FeedKindGenre | typeof FeedKindTag | typeof FeedKindPublisher | typeof FeedKindBookLeft | typeof FeedKindReadingPosition | typeof FeedKindReadThrough | typeof FeedKindUserBook | typeof FeedKindList | typeof FeedKindBookmark;
 	FeedKindBook      = "book"
 	FeedKindLibrary   = "library"
 	FeedKindSeries    = "series"
@@ -98,6 +108,8 @@ const (
 	FeedKindUserBook        = "user_book"
 	// A List the user owns or that's shared with them.
 	FeedKindList = "list"
+	// One of the user's Bookmarks.
+	FeedKindBookmark = "bookmark"
 )
 
 // FeedResponse is one page of the catalog's changes (ADR 0023).
@@ -160,6 +172,7 @@ type FeedEntry struct {
 	ReadThrough     *FeedReadThrough     `json:"read_through,omitempty"`
 	UserBook        *FeedUserBook        `json:"user_book,omitempty"`
 	List            *FeedList            `json:"list,omitempty"`
+	Bookmark        *FeedBookmark        `json:"bookmark,omitempty"`
 }
 
 // FeedLibrary is a Library the user can access.
@@ -450,6 +463,21 @@ type FeedReadThrough struct {
 	LastReadAt *time.Time `json:"last_read_at"`
 }
 
+// FeedBookmark is one of the user's Bookmarks: a moment in an audiobook
+// File, with an optional note.
+type FeedBookmark struct {
+	ID      int     `json:"id"`
+	FileID  int     `json:"file_id"`
+	Seconds float64 `json:"seconds"`
+	Note    *string `json:"note"`
+	// CreatedAt is when it was made.
+	CreatedAt time.Time `json:"created_at"`
+	// LocalID is the id an installation of the app made it under, so that
+	// installation knows the Bookmark as one of its own, or null for one
+	// made on the web.
+	LocalID *string `json:"local_id"`
+}
+
 // JournalPayload is a batch of the app's journal (ADR 0024): events made on
 // the device, each judged on its own. Events are raw so that one the server
 // doesn't understand, an unknown type or field, is answered for that event
@@ -464,9 +492,14 @@ type JournalPayload struct {
 // The journal's event types. A new kind of change the app can make is a new
 // type, not a new protocol (ADR 0024).
 const (
-	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession;
+	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession | typeof JournalEventBookmarkCreate | typeof JournalEventBookmarkNote | typeof JournalEventBookmarkDelete;
 	JournalEventReadingPosition = "reading_position"
 	JournalEventReadingSession  = "reading_session"
+	// The Bookmark events, sent only to a server that lists
+	// CapabilityBookmarks.
+	JournalEventBookmarkCreate = "bookmark_create"
+	JournalEventBookmarkNote   = "bookmark_note"
+	JournalEventBookmarkDelete = "bookmark_delete"
 )
 
 // JournalEvent is one change the app made. ID is unique to the
@@ -476,7 +509,7 @@ type JournalEvent struct {
 	ID      string          `json:"id"`
 	Type    string          `json:"type" tstype:"JournalEventType"`
 	At      time.Time       `json:"at"`
-	Payload json.RawMessage `json:"payload" tstype:"JournalPositionPayload | JournalSessionPayload"`
+	Payload json.RawMessage `json:"payload" tstype:"JournalPositionPayload | JournalSessionPayload | JournalBookmarkCreatePayload | JournalBookmarkNotePayload | JournalBookmarkRef"`
 }
 
 // JournalPositionPayload is a Reading Position update: where the user is in
@@ -515,6 +548,38 @@ type JournalSessionPayload struct {
 	EndPercentage   float64   `json:"end_percentage" validate:"min=0,max=1"`
 	// Duration is the seconds the session counted, when less than its span.
 	Duration *int `json:"duration,omitempty" validate:"omitempty,min=0"`
+}
+
+// JournalBookmarkCreatePayload adds a Bookmark, made at the event's time.
+type JournalBookmarkCreatePayload struct {
+	// LocalID is the installation's own id for the Bookmark, a UUID, which
+	// later events name it by until the feed brings its server id. A
+	// Bookmark is made once per LocalID: sent again, even after it was
+	// deleted, it changes nothing.
+	LocalID string   `json:"local_id" validate:"required,max=64"`
+	FileID  int      `json:"file_id" validate:"required,min=1"`
+	Seconds *float64 `json:"seconds" validate:"required,gte=0" tstype:"number,required"`
+	// Note is optional; a blank one is no note.
+	Note *string `json:"note,omitempty" validate:"omitempty,max=2000"`
+}
+
+// JournalBookmarkRef names one of the user's Bookmarks, by exactly one of
+// its server id, from the feed, or the LocalID the installation made it
+// under. It's the whole payload of a delete. Naming one that's gone, or
+// never was the user's, is taken in and changes nothing: a delete wins
+// (ADR 0024).
+type JournalBookmarkRef struct {
+	BookmarkID *int    `json:"bookmark_id,omitempty" validate:"omitempty,min=1"`
+	LocalID    *string `json:"local_id,omitempty" validate:"omitempty,min=1,max=64"`
+}
+
+// JournalBookmarkNotePayload replaces a Bookmark's note, unless it changed
+// later than the event, on the web or another installation.
+type JournalBookmarkNotePayload struct {
+	JournalBookmarkRef
+	// Note is required, so an event that leaves it out can't clear it by
+	// accident; a blank one clears it.
+	Note *string `json:"note" validate:"required,max=2000" tstype:"string,required"`
 }
 
 // What the server did with each event.

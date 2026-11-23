@@ -46,15 +46,15 @@ final class DecodeTests: XCTestCase {
 
         let response = try makeShishoDecoder().decode(
             Shishoapp.FeedResponse.self,
-            from: Data(#"{"entries":[{"kind":"bookmark","id":1}],"cursor":9}"#.utf8)
+            from: Data(#"{"entries":[{"kind":"highlight","id":1}],"cursor":9}"#.utf8)
         )
-        XCTAssertEqual(response.entries.first?.kind, .unknown("bookmark"))
+        XCTAssertEqual(response.entries.first?.kind, .unknown("highlight"))
         XCTAssertEqual(response.cursor, 9)
     }
 
     func testEncodesKnownAndUnknownValuesAsSent() throws {
-        let data = try JSONEncoder().encode(Shishoapp.FeedEntry(kind: .unknown("bookmark"), id: 1))
+        let data = try JSONEncoder().encode(Shishoapp.FeedEntry(kind: .unknown("highlight"), id: 1))
         let json = try XCTUnwrap(String(data: data, encoding: .utf8))
-        XCTAssertTrue(json.contains(#""kind":"bookmark""#), json)
+        XCTAssertTrue(json.contains(#""kind":"highlight""#), json)
     }
 }

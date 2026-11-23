@@ -1,0 +1,93 @@
+# Add a Bookmark with a note while the server is offline. It shows at once,
+# and reaches the server, placed when it was made, once the app can sync
+# (#916).
+appId: ${APP_ID}
+name: Bookmark offline and sync later
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Harbor Lights
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+# Paused before going on, so nothing below depends on where playback is.
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+
+# Bookmark adds one where playback is at once. Its note is added from the
+# list, a tab of the chapters sheet, rather than the message offering one,
+# which a stall could outlast.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.bookmark
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.chapters
+- tapOn:
+    id: list.bookmarks
+- extendedWaitUntil:
+    visible:
+      id: bookmarks.editNote
+    timeout: 30000
+- tapOn:
+    id: bookmarks.editNote
+# The note's field is in an alert, found by what it says.
+- extendedWaitUntil:
+    visible: Edit Note
+    timeout: 30000
+- tapOn: Note
+- inputText: Made offline
+- tapOn: Save
+- extendedWaitUntil:
+    visible: .*Made offline.*
+    timeout: 30000
+- tapOn:
+    id: list.done
+
+# Opened again once the server is back, the app syncs what it kept.
+- stopApp
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: miniplayer.open
+    timeout: 30000
+# Checked in a retry, since the sync can take longer than one wait on a
+# loaded CI simulator.
+- retry:
+    maxRetries: 3
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 5000
+          optional: true
+      - runScript:
+          file: scripts/assert_bookmark.js
+          env:
+            CONTROL: ${CONTROL}
+            TITLE: Harbor Lights
+            NOTE: Made offline
+      - assertTrue:
+          condition: ${output.serverCheck == "ok"}
+          label: The server check passed

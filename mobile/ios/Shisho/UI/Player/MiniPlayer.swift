@@ -26,19 +26,17 @@ struct MiniPlayer: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityIdentifier("miniplayer.open")
             Button { player.togglePlay() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 20, weight: .semibold))
-                    .contentTransition(.symbolEffect(.replace))
+                Icon(player.isPlaying ? .pauseFill : .playFill, size: 22, relativeTo: nil)
                     .frame(width: 40, height: 40)
             }
             .buttonStyle(PlayerControlStyle())
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
             .accessibilityIdentifier("miniplayer.playPause")
-            Button { player.skip(by: AudioPlayer.skipInterval) } label: {
-                SkipIcon(forward: true, size: 22).frame(width: 40, height: 40)
+            Button { player.skipForward() } label: {
+                SkipIcon(forward: true, seconds: player.forwardInterval, size: 26).frame(width: 40, height: 40)
             }
             .buttonStyle(PlayerControlStyle())
-            .accessibilityLabel("Forward 30 Seconds")
+            .accessibilityLabel("Forward \(Int(player.forwardInterval)) Seconds")
             .accessibilityIdentifier("miniplayer.skipForward")
         }
         .foregroundStyle(Theme.foreground)
@@ -69,6 +67,7 @@ struct MiniPlayer: View {
         // It docks over every screen, so it grows only so far with the text
         // size; Now Playing shows everything in it at full size.
         .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+        .accessibilityShowsLargeContentViewer()
         // Paused, it swipes down out of the way, as docked players do; playing,
         // it only gives a little and springs back.
         .offset(y: drag)

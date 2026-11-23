@@ -182,6 +182,17 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(state)
 	})
+	// The harness user's Bookmarks in the Book titled ?title=, to check what
+	// the app made offline reached the server.
+	mux.HandleFunc("GET /bookmarks", func(w http.ResponseWriter, r *http.Request) {
+		bookmarks, err := readBookmarks(r.Context(), filepath.Join(srv.dir, "data.sqlite"), r.URL.Query().Get("title"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(bookmarks)
+	})
 	go func() { _ = http.Serve(listener, mux) }()
 	return &control{URL: "http://" + strings.TrimPrefix(listener.Addr().String(), "http://"), listener: listener}, nil
 }

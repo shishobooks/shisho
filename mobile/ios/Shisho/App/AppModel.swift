@@ -184,13 +184,7 @@ final class AppModel {
     /// Closes Now Playing onto book's page in the tab showing, pushing it
     /// unless it's showing.
     func showBook(_ book: BookSummary) {
-        showingPlayer = false
-        let route = Route.book(book)
-        switch tab {
-        case .library where libraryPath.last != route: libraryPath.append(route)
-        case .lists where listsPath.last != route: listsPath.append(route)
-        default: break
-        }
+        showFromPlayer(.book(book))
     }
 
     /// Goes back to tab's first screen.
@@ -230,6 +224,16 @@ final class AppModel {
             scrollToTop[tab, default: 0] += 1
         } else {
             popToRoot(tab)
+        }
+    }
+
+    /// Closes Now Playing onto route's page in the tab showing, pushing it
+    /// unless it's the page under the player.
+    func showFromPlayer(_ route: Route) {
+        showingPlayer = false
+        let path = tab == .library ? libraryPath : listsPath
+        if path.last.map({ !$0.isSamePage(as: route) }) ?? true {
+            push(route)
         }
     }
 
@@ -619,7 +623,9 @@ final class AppModel {
     }
 
     private func recordCapabilities(_ listed: [String], accountID: String) {
-        guard var account = session?.account, account.id == accountID, account.capabilities != listed else { return }
+        guard var account = session?.account, account.id == accountID else { return }
+        player?.capabilitiesChanged(listed)
+        guard account.capabilities != listed else { return }
         account.capabilities = listed
         accounts.save(account)
     }
@@ -706,6 +712,18 @@ enum AppTab: Hashable {
 
 /// A page pushed on a tab's navigation.
 enum Route: Hashable {
+    /// Whether two routes open the same page: the same Book or resource by
+    /// id, though the copy a route holds, such as a Book's progress or a
+    /// Person's name, may have changed since.
+    func isSamePage(as other: Route) -> Bool {
+        switch (self, other) {
+        case let (.book(a), .book(b)): a.id == b.id
+        case let (.resource(kindA, idA, _), .resource(kindB, idB, _)): kindA == kindB && idA == idB
+        case let (.list(idA, _), .list(idB, _)): idA == idB
+        default: self == other
+        }
+    }
+
     case book(BookSummary)
     /// Every Series, Person, Genre, or Tag of the Library picked.
     case browse(ResourceKind)
