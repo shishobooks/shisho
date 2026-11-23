@@ -13,7 +13,7 @@ func TestCheapPasswordHashStillChecksThePassword(t *testing.T) {
 	hash, err := cheapPasswordHash("harness-password")
 	require.NoError(t, err)
 	require.NoError(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("harness-password")))
-	assert.Error(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("wrong")))
+	require.Error(t, bcrypt.CompareHashAndPassword([]byte(hash), []byte("wrong")))
 	cost, err := bcrypt.Cost([]byte(hash))
 	require.NoError(t, err)
 	assert.Equal(t, bcrypt.MinCost, cost)
