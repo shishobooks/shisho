@@ -3,23 +3,33 @@
 # Only the first field is tapped. Return moves to the next field and the
 # last one submits, as the sign-in screen's focus order does, because a tap
 # while the keyboard is still sliding in can land on the wrong field.
+#
+# A busy CI runner can drop a typed character, which the server then refuses
+# as the wrong password, so each field is cleared first and a sign-in that
+# doesn't go through is typed again, once.
 appId: ${APP_ID}
 ---
-- tapOn:
-    id: signin.server
-- inputText: ${SERVER}
-- pressKey: Enter
-- inputText: ${USERNAME}
-- pressKey: Enter
-- inputText: ${PASSWORD}
-- pressKey: Enter
-# The harness's simulators disallow password AutoFill (tools/appharness), so
-# iOS never offers to save the password, which would cover the app and stall
-# Maestro.
-# Signed in once the sign-in screen goes. A CI runner short of CPU can take
-# most of a minute to check the password, so this waits well past the usual
-# 30 s.
-- extendedWaitUntil:
-    notVisible:
-      id: signin.server
-    timeout: 90000
+- retry:
+    maxRetries: 1
+    commands:
+      - tapOn:
+          id: signin.server
+      - eraseText
+      - inputText: ${SERVER}
+      - pressKey: Enter
+      - eraseText
+      - inputText: ${USERNAME}
+      - pressKey: Enter
+      - eraseText
+      - inputText: ${PASSWORD}
+      - pressKey: Enter
+      # The harness's simulators disallow password AutoFill
+      # (tools/appharness), so iOS never offers to save the password, which
+      # would cover the app and stall Maestro.
+      # Signed in once the sign-in screen goes. A CI runner short of CPU can
+      # take most of a minute to check the password, so this waits well past
+      # the usual 30 s.
+      - extendedWaitUntil:
+          notVisible:
+            id: signin.server
+          timeout: 90000
