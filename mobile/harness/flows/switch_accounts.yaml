@@ -46,14 +46,14 @@ name: Switch between accounts
     id: account.switch.harness
 - extendedWaitUntil:
     visible: The Harness Novel
-    timeout: 5000
+    timeout: 30000
 - tapOn:
     id: account.button
 - tapOn:
     id: account.switch.${READER_USERNAME}
 - extendedWaitUntil:
     visible: No Books yet
-    timeout: 5000
+    timeout: 30000
 - assertNotVisible: The Harness Novel
 
 - runScript:

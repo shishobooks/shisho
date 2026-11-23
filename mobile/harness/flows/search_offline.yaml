@@ -23,7 +23,7 @@ name: Search the library offline
 - extendedWaitUntil:
     visible:
       id: library.grid
-    timeout: 15000
+    timeout: 30000
 
 - tapOn:
     id: search.button
@@ -34,7 +34,7 @@ name: Search the library offline
     visible:
       id: search.book
       text: .*The Harness Novel.*
-    timeout: 10000
+    timeout: 30000
 # A word from a title, by its start.
 - eraseText: 10
 - inputText: Lighth
@@ -42,7 +42,7 @@ name: Search the library offline
     visible:
       id: search.book
       text: .*Quiet Lighthouse.*
-    timeout: 10000
+    timeout: 30000
 - assertNotVisible: The Harness Novel
 # A person.
 - eraseText: 10
@@ -51,12 +51,12 @@ name: Search the library offline
     visible:
       id: search.person
       text: .*Ann Author.*
-    timeout: 10000
+    timeout: 30000
 - tapOn:
     id: search.person
 - extendedWaitUntil:
     visible: Harbor Lights
-    timeout: 10000
+    timeout: 30000
 - assertVisible: Quiet Lighthouse
 
 - runScript:

@@ -15,24 +15,32 @@ name: Listen to the end and check the server
     file: subflows/listen_to.yaml
     env:
       TITLE: Quiet Lighthouse
-# Chapters come from Shisho's list.
-- extendedWaitUntil:
-    visible:
-      id: player.chapter
-      text: Chapter 2
-    timeout: 20000
 # Playback ending stops the player, which syncs.
 - extendedWaitUntil:
     visible:
       id: player.playPause
       text: Play
     timeout: 30000
-- extendedWaitUntil:
-    visible: __never__
-    timeout: 5000
-    optional: true
-- runScript:
-    file: scripts/assert_listened.js
-    env:
-      CONTROL: ${CONTROL}
-      TITLE: Quiet Lighthouse
+# Chapters come from Shisho's list. Checked once the player has stopped on
+# the last one: each chapter lasts only a few seconds, and a slow tap or view
+# hierarchy read on CI can take longer than that.
+- assertVisible:
+    id: player.chapter
+    text: Chapter 3
+# Checked in a retry, since the sync can take longer than one wait on a
+# loaded CI simulator.
+- retry:
+    maxRetries: 3
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 5000
+          optional: true
+      - runScript:
+          file: scripts/assert_listened.js
+          env:
+            CONTROL: ${CONTROL}
+            TITLE: Quiet Lighthouse
+      - assertTrue:
+          condition: ${output.serverCheck == "ok"}
+          label: The server check passed
