@@ -43,8 +43,13 @@ const iconNames = async () => {
   const names = [];
   for (const line of body[1].split("\n")) {
     if (!/^\s*case\b/.test(line)) continue;
-    const match = /^\s*case (\w+)(?:\s*=\s*"([^"]+)")?\s*(?:\/\/.*)?$/.exec(line);
-    if (!match) throw new Error(`can't read \`${line.trim()}\` in Icons.swift; give each case a line of its own`);
+    const match = /^\s*case (\w+)(?:\s*=\s*"([^"]+)")?\s*(?:\/\/.*)?$/.exec(
+      line,
+    );
+    if (!match)
+      throw new Error(
+        `can't read \`${line.trim()}\` in Icons.swift; give each case a line of its own`,
+      );
     names.push(match[2] ?? match[1]);
   }
   return names;
