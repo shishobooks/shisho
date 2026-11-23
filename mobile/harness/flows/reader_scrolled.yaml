@@ -14,27 +14,21 @@ name: Read in scrolled layout
     file: subflows/read.yaml
     env:
       TITLE: The Harness Novel
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter One
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.settings
 - tapOn:
     id: reader.layout.scrolled
-# The sheet covers the bar until it's gone; a tap lost to a stall is
-# tried again.
-- retry:
-    maxRetries: 3
-    commands:
-      - runFlow:
-          when:
-            visible:
-              id: reader.settings.done
-          commands:
-            - tapOn:
-                id: reader.settings.done
-      - extendedWaitUntil:
-          notVisible:
-            id: reader.settings.done
-          timeout: 30000
+- tapOn:
+    id: reader.settings.done
+- extendedWaitUntil:
+    notVisible:
+      id: reader.settings.done
+    timeout: 30000
 - extendedWaitUntil:
     visible:
       id: reader.progress

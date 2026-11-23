@@ -61,6 +61,9 @@ final class FoliateSource: PagerSource {
         /// how many times in a row.
         var failedBase: [Int]?
         var failures = 0
+        /// The current page's place a sync in flight was sent from; nil for
+        /// an open or a jump.
+        var syncedFrom: [Int]?
     }
 
     weak var delegate: FoliateSourceDelegate?
@@ -296,7 +299,9 @@ final class FoliateSource: PagerSource {
                 // Tried again from the same place once; a page that still
                 // can't be laid out is treated as the end, so turns toward
                 // it stop queueing.
-                let base = current.location.base
+                // Charged to the place the sync was sent from, which the
+                // current page may have moved off since.
+                let base = state(page).syncedFrom ?? current.location.base
                 let failures = state(page).failedBase == base ? state(page).failures + 1 : 1
                 update(page) { $0 = PageState(failedBase: base, failures: failures) }
                 if failures >= 2 {
@@ -409,7 +414,7 @@ final class FoliateSource: PagerSource {
     private func sync(_ page: ReaderPage) {
         guard let base = current.location.base else { return }
         let token = startFlight(page)
-        update(page) { $0.base = nil }
+        update(page) { $0.base = nil; $0.syncedFrom = base }
         pager.neighbor(direction(of: page), is: .pending)
         page.call("R.sync(\(base[0]), \(base[1]), \(base[2]), \(direction(of: page).rawValue), \(token))")
     }

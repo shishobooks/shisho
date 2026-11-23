@@ -315,6 +315,9 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
             session.ebooks.discard(file)
         }
         phase = .failed(String(localized: "This book couldn't be opened."))
+        // The session ends with the page; time on the error screen isn't
+        // reading.
+        tracker.close()
     }
 
     func foliateSawInput() {

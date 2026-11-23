@@ -1,0 +1,19 @@
+# Goes to the start of the chapter titled ${CHAPTER} from the open reader's
+# table of contents, since the server may have the Book's place anywhere
+# after other flows. Not a flow of its own.
+appId: ${APP_ID}
+---
+- runFlow: show_reader_controls.yaml
+- tapOn:
+    id: reader.contents
+- extendedWaitUntil:
+    visible:
+      text: ${CHAPTER}
+      enabled: true
+    timeout: 30000
+- tapOn: ${CHAPTER}
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "${CHAPTER}.*"
+    timeout: 30000

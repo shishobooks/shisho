@@ -85,15 +85,17 @@ final class ReadingStoreTests: XCTestCase {
         XCTAssertEqual(try positions.map { try payload($0)["at_end"] as? Bool ?? false }, [true, false])
     }
 
-    /// Turning through the last pages again in one session sends the end
-    /// once, not once per page.
-    func testTheEndIsSentOncePerSession() throws {
-        for (offset, cfi) in ["epubcfi(/6/20!/4/2)", "epubcfi(/6/20!/4/4)", "epubcfi(/6/20!/4/6)"].enumerated() {
-            try store.recordReading(fileID: 8, cfi: cfi, percentage: 1, atEnd: true, at: now.addingTimeInterval(Double(offset)),
-                                    sessionID: "s", sessionStartedAt: now, session: nil)
+    /// Every end is sent, in order: the server finishes at the first and
+    /// undoes it only for a move back soon after, so a later end can't
+    /// stand in for an earlier one.
+    func testEveryEndIsSent() throws {
+        for (offset, cfi) in ["epubcfi(/6/20!/4/2)", "epubcfi(/6/18!/4/2)", "epubcfi(/6/20!/4/4)"].enumerated() {
+            try store.recordReading(fileID: 8, cfi: cfi, percentage: offset == 1 ? 0.95 : 1, atEnd: offset != 1,
+                                    at: now.addingTimeInterval(Double(offset) * 1200), sessionID: "s", sessionStartedAt: now, session: nil)
         }
         let positions = try journal().filter { $0["type"] == "reading_position" }
-        XCTAssertEqual(try positions.map { try payload($0)["cfi"] as? String }, ["epubcfi(/6/20!/4/6)"])
+        XCTAssertEqual(try positions.map { try payload($0)["cfi"] as? String },
+                       ["epubcfi(/6/20!/4/2)", "epubcfi(/6/18!/4/2)", "epubcfi(/6/20!/4/4)"])
     }
 
     /// Turns of two sessions are sent apart, even before either counted

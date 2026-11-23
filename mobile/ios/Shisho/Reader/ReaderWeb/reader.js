@@ -735,10 +735,21 @@ const flattenToc = (items, depth = 0, out = []) => {
 // another edition), to fallback of the way through.
 const goToOrNear = async (target, fallback) => {
   // foliate goes nowhere, without an error, for a section it doesn't have.
+  // A CFI from a longer edition can name a section past this copy's last.
   const resolved = await view.goTo(target);
-  if (!(resolved?.index >= 0) && fallback != null) {
+  const found =
+    resolved?.index >= 0 && resolved.index < (view.book?.sections?.length ?? 0);
+  if (!found && fallback != null) {
     await view.goTo({ fraction: fallback });
   }
+};
+
+// The arguments the page was last opened with, to open the book again when
+// that open failed: a neighbor asked to step from a book it never opened
+// opens it first.
+let lastOpen = null;
+const openIfNeeded = async () => {
+  if (!view.book && lastOpen) await open({ ...lastOpen, idle: true });
 };
 
 // MARK: - Native calls
@@ -748,7 +759,10 @@ window.R = {
   // neighbor opens there at the same time, then steps one page itself. An
   // idle neighbor, in scrolled mode, only opens the book.
   open(args) {
-    chained("open", () => open(args));
+    lastOpen = args;
+    // A neighbor's open answers its token, as a sync does, even when it
+    // fails.
+    chained("open", () => open(args), args.neighborDir ? args.token : null);
   },
   apply(s) {
     chained("apply", async () => {
@@ -763,7 +777,14 @@ window.R = {
   // round trip isn't exact, and foliate's next() and prev() hold a lock and
   // relocate twice at a section's edge.
   sync(index, page, pages, dir, token) {
-    chained("sync", () => step({ index, page, pages }, dir, token), token);
+    chained(
+      "sync",
+      async () => {
+        await openIfNeeded();
+        await step({ index, page, pages }, dir, token);
+      },
+      token,
+    );
   },
   // A jump a neighbor makes at the same time as the current page: go
   // there, then step one page.
@@ -771,6 +792,7 @@ window.R = {
     chained(
       "jump",
       async () => {
+        await openIfNeeded();
         await goToOrNear(target, fallback);
         await settle();
         await step(dir ? ownBase() : null, dir, token);
@@ -914,15 +936,14 @@ const openEPUB = async (file) => {
     constructor() {
       super(new Blob());
       this.size = file.size;
-      // An entry's data comes through in reads of this size; zip.js's own
-      // 64 KB would be dozens of round trips for one photo.
-      this.chunkSize = 1024 * 1024;
     }
     readUint8Array(offset, length) {
       return file.read(offset, length);
     }
   }
-  configure({ useWebWorkers: false });
+  // An entry's data comes through in reads of chunkSize; zip.js's own 64 KB
+  // would be dozens of round trips for one photo.
+  configure({ useWebWorkers: false, chunkSize: 1024 * 1024 });
   const reader = new ZipReader(new RangeReader());
   const entries = await reader.getEntries();
   const map = new Map(entries.map((entry) => [entry.filename, entry]));

@@ -14,6 +14,12 @@ name: Turn pages quickly
     file: subflows/read.yaml
     env:
       TITLE: The Harness Novel
+# Seven pages from the book's start, clear of its end.
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter One
+- runFlow: subflows/settled_place.yaml
 - copyTextFrom:
     id: reader.progress
 - evalScript: ${output.atOpen = maestro.copiedText}
@@ -35,10 +41,33 @@ name: Turn pages quickly
 - swipe:
     direction: RIGHT
     duration: 150
+# Net, that's seven pages on. Each page of the fixture is a different
+# whole percent, so seven slow turns back land where the book opened, and
+# seven forward land where the quick turns did: a turn dropped, doubled, or
+# stuck in the queue fails one or the other.
 - runFlow: subflows/settled_place.yaml
+- evalScript: ${output.afterQuick = output.settledPlace}
 - assertTrue:
-    condition: ${output.settledPlace != output.atOpen}
+    condition: ${output.afterQuick != output.atOpen}
     label: The turns moved the reader on
+- repeat:
+    times: 7
+    commands:
+      - tapOn:
+          point: "8%,50%"
+      - runFlow: subflows/settled_place.yaml
+- assertTrue:
+    condition: ${output.settledPlace == output.atOpen}
+    label: Seven turns back reach where the book opened
+- repeat:
+    times: 7
+    commands:
+      - tapOn:
+          point: "92%,50%"
+      - runFlow: subflows/settled_place.yaml
+- assertTrue:
+    condition: ${output.settledPlace == output.afterQuick}
+    label: Seven turns on reach where the quick turns did
 # Nothing is stuck: the controls still show, and the contents open.
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
