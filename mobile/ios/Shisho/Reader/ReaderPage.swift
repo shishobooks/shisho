@@ -6,7 +6,9 @@ import WebKit
 /// device (ADR 0026).
 @MainActor
 final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
-    static let scheme = "shisho-reader"
+    nonisolated static let scheme = "shisho-reader"
+    /// The origin every page and the files it loads share.
+    nonisolated static let appURL = "\(scheme)://app"
     /// The page every WebView loads.
     static let pageURL = URL(string: "\(scheme)://app/ReaderWeb/reader.html")!
     /// Where the page fetches the book from.
@@ -26,6 +28,15 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
             serveBook(task, url: url)
             return
         }
+        // A font imported from Files, by id (ImportedFontStore.url).
+        if url.pathComponents.count == 3, url.pathComponents[1] == "imported-fonts" {
+            guard let id = Int(url.pathComponents[2]), let data = ImportedFontStore.shared.data(for: id) else {
+                task.didFailWithError(URLError(.fileDoesNotExist))
+                return
+            }
+            respond(task, url: url, status: 200, data: data, headers: ["Content-Type": "application/octet-stream"])
+            return
+        }
         // Only the bundle's own resources, never a path out of it.
         let path = url.path.split(separator: "/").filter { $0 != ".." }.joined(separator: "/")
         guard let file = Bundle.main.resourceURL?.appendingPathComponent(path),
@@ -34,7 +45,8 @@ final class ReaderSchemeHandler: NSObject, WKURLSchemeHandler {
             task.didFailWithError(URLError(.fileDoesNotExist))
             return
         }
-        let types = ["html": "text/html", "js": "text/javascript", "css": "text/css"]
+        let types = ["html": "text/html", "js": "text/javascript", "css": "text/css", "woff2": "font/woff2", "ttf": "font/ttf",
+                     "otf": "font/otf"]
         respond(task, url: url, status: 200, data: data, headers: ["Content-Type": types[file.pathExtension] ?? "application/octet-stream"])
     }
 
@@ -155,9 +167,20 @@ struct PageMessage: Decodable, Sendable {
         let position: Double?
     }
 
+    /// A match of a search inside the Book, with the text around it.
+    struct SearchResult: Decodable, Equatable, Sendable {
+        let cfi: String
+        let pre: String
+        let match: String
+        let post: String
+        /// The chapter it's in.
+        let chapter: String
+    }
+
     let type: String
     var token: Int?
     var loc: PageLocation?
+    var results: [SearchResult]?
     /// The current page's [index, page, pages] a neighbor stepped from.
     var base: [Int]?
     var edge: Bool?

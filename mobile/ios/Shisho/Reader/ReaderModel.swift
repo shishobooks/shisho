@@ -28,8 +28,11 @@ struct OpenNote: Identifiable, Equatable {
     /// The reference's box, in the pager's points.
     let rect: CGRect
     let href: String
-    /// The book's font around the reference.
+    /// The book's font around the reference, or the one chosen in the
+    /// settings.
     let font: NoteFont
+    /// The text's size: 90% of the reader's font size.
+    let size: CGFloat
     /// The book's line height around the reference, as a multiple of the
     /// text's size.
     let lineHeight: Double?
@@ -39,7 +42,7 @@ struct OpenNote: Identifiable, Equatable {
 /// recorded as they read.
 @MainActor
 @Observable
-final class ReaderModel: FoliateSourceDelegate, Identifiable {
+final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable {
     enum Phase: Equatable {
         case loading
         case reading
@@ -52,7 +55,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     var chromeVisible = true
     private(set) var fraction: Double = 0
     /// Where the page showing starts, which names its chapter.
-    @ObservationIgnored private var pageStart: Double?
+    private var pageStart: Double?
     /// The section showing and the page in it, for pages left.
     private var pageSection: PageLocation.SectionPlace?
     /// The page in the section the next chapter starts on, when it does.
@@ -89,10 +92,13 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
             settings.save()
             // The app's appearance changing under a chosen theme changes
             // nothing on the page.
-            guard settings.script != oldValue.script else { return }
+            guard settings.pageScript != oldValue.pageScript else { return }
             source?.apply(settings)
         }
     }
+
+    /// Search inside the Book.
+    let search = ReaderSearch()
 
     private(set) var source: FoliateSource?
     @ObservationIgnored private let session: AccountSession
@@ -122,6 +128,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         tracker = ReadingTracker(fileID: file.fileID, store: session.store, requestSync: requestSync)
         contents = ReaderModel.entries(file.chapters)
         shownChapters = file.chapters
+        search.engine = self
     }
 
     /// The chapter the reader is in: the last one starting at or before the
@@ -212,6 +219,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     /// reader left off, here or on another device.
     func load() async {
         phase = .loading
+        // Try Again opens new pages, with no search running in them.
+        search.close()
         placeWatch?.cancel()
         fileWatch?.cancel()
         let bookFile: URL
@@ -269,15 +278,29 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     /// The places jumps left from (LocationHistory).
     private(set) var history = LocationHistory()
 
+    /// The history before the jump under way, and where it left from: a
+    /// jump that lands where it left records nothing, as the web reader's
+    /// rules have it (app/libraries/locationHistory.ts).
+    @ObservationIgnored private var unmovedCheck: (saved: LocationHistory, origin: String)?
+
     /// Notes where the reader is before a jump, so they can come back. A
     /// jump made before the last one lands records nothing: the reader is
-    /// still where the first left from, which it recorded.
-    private func recordJump() {
+    /// still where the first left from, which it recorded. Jumps in one
+    /// group, as one search's results, record only the first that moves.
+    private func recordJump(group: Int? = nil) {
         // Any jump ends a run of the scrubber's adjustments; one of those
         // sets it again after.
         lastAdjustment = nil
         guard source?.isJumping != true, let cfi = location?.cfi else { return }
-        history.recordJump(from: cfi)
+        unmovedCheck = (history, cfi)
+        history.recordJump(from: cfi, group: group)
+    }
+
+    func foliateJumpLanded() {
+        guard let check = unmovedCheck else { return }
+        unmovedCheck = nil
+        // The same CFI: the same page when paginated, so nothing moved.
+        if location?.cfi == check.origin { history = check.saved }
     }
 
     /// Back to where the reader was before the last jump. Not while a jump
@@ -286,6 +309,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     func goBack() {
         guard source?.isJumping != true, let cfi = location?.cfi, let target = history.back(from: cfi) else { return }
         lastAdjustment = nil
+        unmovedCheck = nil
         source?.jump(to: .cfi(target))
     }
 
@@ -293,6 +317,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     func goForward() {
         guard source?.isJumping != true, let cfi = location?.cfi, let target = history.forward(from: cfi) else { return }
         lastAdjustment = nil
+        unmovedCheck = nil
         source?.jump(to: .cfi(target))
     }
 
@@ -397,6 +422,37 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
 
     private func resolveOffer() {
         try? session.store.resolveOffer(fileID: file.fileID)
+    }
+
+    // MARK: - Search
+
+    func startSearch(_ query: String) -> Int? {
+        source?.search(query)
+    }
+
+    func cancelSearch() {
+        source?.cancelSearch()
+    }
+
+    func markResult(_ cfi: String?) {
+        source?.markResult(cfi)
+    }
+
+    func goToResult(_ cfi: String, group: Int) {
+        recordJump(group: group)
+        source?.jump(to: .cfi(cfi))
+    }
+
+    func foliateSearchResults(_ results: [PageMessage.SearchResult], token: Int) {
+        search.received(results, token: token)
+    }
+
+    func foliateSearchDone(token: Int) {
+        search.finished(token: token)
+    }
+
+    func foliateSearchInterrupted(token: Int) {
+        search.interrupted(token: token)
     }
 
     // MARK: - The app's life
@@ -535,7 +591,12 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     }
 
     func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont, lineHeight: Double?) {
-        note = OpenNote(paragraphs: paragraphs, rect: rect, href: href, font: font, lineHeight: lineHeight)
+        // A chosen font replaces the book's in the note as on the page.
+        let chosen = ReaderFonts.noteFont(for: settings.font, store: ImportedFontStore.shared)
+        // The reader's line spacing, as the web's popover takes it, rather
+        // than whatever the book sets around the reference.
+        note = OpenNote(paragraphs: paragraphs, rect: rect, href: href, font: chosen ?? font,
+                        size: NoteFont.size(forReaderSize: settings.size), lineHeight: settings.lineSpacing)
     }
 
     func foliateWaiting(_ waiting: Bool) {

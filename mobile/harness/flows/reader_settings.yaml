@@ -1,0 +1,141 @@
+# Change each kind of display setting: each applies in place without losing
+# the place, and they're kept after the app restarts (#920).
+appId: ${APP_ID}
+name: Change the reader's settings and reopen
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter Two
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+
+# The font, from its own list, while the row is at the sheet's top: a row
+# scrolled back to sits behind the sheet's edge for a moment.
+- tapOn:
+    id: reader.font
+- tapOn:
+    id: reader.font.opendyslexic
+- extendedWaitUntil:
+    visible:
+      id: reader.font.opendyslexic
+      selected: true
+    timeout: 30000
+- tapOn:
+    id: reader.settings.done
+- extendedWaitUntil:
+    notVisible:
+      id: reader.settings.done
+    timeout: 30000
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+
+# Numbers step with minus and plus, as the web's do.
+- tapOn:
+    id: reader.size.increase
+- tapOn:
+    id: reader.size.increase
+- extendedWaitUntil:
+    visible:
+      id: reader.size.value
+      text: 17 px
+    timeout: 30000
+- tapOn:
+    id: reader.lineSpacing.increase
+- extendedWaitUntil:
+    visible:
+      id: reader.lineSpacing.value
+      text: "1.50"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: reader.margins.decrease
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: reader.margins.decrease
+- extendedWaitUntil:
+    visible:
+      id: reader.margins.value
+      text: 6%
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: reader.pages.one
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: reader.justify
+- tapOn:
+    id: reader.theme.sepia
+- tapOn:
+    id: reader.pages.one
+- tapOn:
+    id: reader.settings.done
+- extendedWaitUntil:
+    notVisible:
+      id: reader.settings.done
+    timeout: 30000
+# Every change reflowed the book where it was.
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
+
+# After a restart, the book is in the same settings, at the same place.
+- stopApp
+- launchApp:
+    stopApp: false
+    permissions: {}
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- extendedWaitUntil:
+    visible:
+      id: reader.font.value
+      text: OpenDyslexic
+    timeout: 30000
+- assertVisible:
+    id: reader.size.value
+    text: 17 px
+- assertVisible:
+    id: reader.lineSpacing.value
+    text: "1.50"
+- assertVisible:
+    id: reader.margins.value
+    text: 6%
+- scrollUntilVisible:
+    element:
+      id: reader.pages.one
+    direction: DOWN
+    timeout: 30000
+- assertVisible:
+    id: reader.theme.sepia
+    selected: true
+- assertVisible:
+    id: reader.pages.one
+    selected: true
+- assertVisible:
+    id: reader.justify
+    checked: false

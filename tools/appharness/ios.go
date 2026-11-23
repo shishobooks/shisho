@@ -104,6 +104,10 @@ func runIOS(ctx context.Context, args []string) error {
 	if _, err := simctl(ctx, "install", sim.UDID, appPath); err != nil {
 		return err
 	}
+	// Only the font import flow needs it, which fails on its own without it.
+	if err := seedFiles(ctx, root, sim.UDID); err != nil {
+		fmt.Fprintln(os.Stderr, "appharness: couldn't put the font in Files, so the import flow will fail:", err)
+	}
 
 	fmt.Fprintf(os.Stderr, "appharness: server %s, simulator %s\n", srv.URL, sim.UDID)
 	//nolint:gosec // The harness's own flags and paths.

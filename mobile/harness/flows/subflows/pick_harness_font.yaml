@@ -1,0 +1,26 @@
+# Picks "Harness Font.ttf", which the harness puts in the device's files
+# first (tools/appharness/files.go), in the system's document picker. Each
+# platform's picker is its own; the Android app adds its steps here. Not a
+# flow of its own.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: Browse
+          timeout: 30000
+      - tapOn: Browse
+      # Browse opens where the picker was last, or at its list of places.
+      - runFlow:
+          when:
+            visible: On My iPhone
+          commands:
+            - tapOn: On My iPhone
+      - extendedWaitUntil:
+          visible: Harness Font.ttf
+          timeout: 30000
+      # The file's cell, named for the file and its details: its name
+      # alone doesn't take the tap.
+      - tapOn: "Harness Font\\.ttf, .*"

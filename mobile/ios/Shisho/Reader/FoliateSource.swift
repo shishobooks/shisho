@@ -49,6 +49,14 @@ protocol FoliateSourceDelegate: AnyObject {
     func foliatePull(_ direction: TurnDirection?, progress: Double, destination: Double?)
     /// An image to show on its own, as a data URL.
     func foliateImage(_ dataURL: String)
+    /// Matches a search found in a section, under its token.
+    func foliateSearchResults(_ results: [PageMessage.SearchResult], token: Int)
+    /// A search read the whole book, or stopped.
+    func foliateSearchDone(token: Int)
+    /// The page running a search ended before it finished.
+    func foliateSearchInterrupted(token: Int)
+    /// The last jump landed, or failed.
+    func foliateJumpLanded()
     /// A link inside the book was tapped: the reader jumps there.
     func foliateFollowLink(_ href: String)
 }
@@ -119,6 +127,15 @@ final class FoliateSource: PagerSource {
     private var chapterTargetsScript: String?
     /// The neighbors waiting to open, with the tokens their open answers.
     private var unopenedNeighbors: [(ReaderPage, TurnDirection)] = []
+    /// The search under way, by token, and the page running it: the page
+    /// that was current when it started, whichever it is now.
+    private var searchTokens = 0
+    private var runningSearch: (token: Int, page: ReaderPage)?
+    /// Marks the chosen search result, sent again to a page that restarts.
+    private var markScript: String?
+    /// The search's matches so far, which every page shades, sent again to a
+    /// page that restarts.
+    private var matchCFIs: [String] = []
 
     /// How the page opens the book a part at a time: as a zip (EPUB,
     /// KePub) or as MOBI records (MOBI, AZW3), and how big it is.
@@ -196,7 +213,7 @@ final class FoliateSource: PagerSource {
     private func openArguments(start: ReaderTarget?, neighbor: Int, token: Int, idle: Bool = false) -> String {
         "{url: \(javaScriptLiteral(ReaderSchemeHandler.bookURL)), size: \(bookSize), format: \(javaScriptLiteral(bookFormat)), "
             + "start: \(start?.script ?? "null"), "
-            + "fallback: \(fallback.map { String($0) } ?? "null"), settings: \(settings.script), "
+            + "fallback: \(fallback.map { String($0) } ?? "null"), settings: \(settings.pageScript), "
             + "neighborDir: \(neighbor), token: \(token), idle: \(idle), "
             + "language: \(language.map(javaScriptLiteral) ?? "null")}"
     }
@@ -214,6 +231,13 @@ final class FoliateSource: PagerSource {
         Task { await Diagnostics.shared.log(.reader, "a page's web content process ended; reopening it") }
         page.reload()
         if let chapterTargetsScript { page.call(chapterTargetsScript) }
+        if !matchCFIs.isEmpty { page.call(Self.addMatchesScript(matchCFIs)) }
+        if let markScript { page.call(markScript) }
+        // A search the page was running ended with it, part way.
+        if let running = runningSearch, running.page === page {
+            runningSearch = nil
+            delegate?.foliateSearchInterrupted(token: running.token)
+        }
         let start = lastCFI.map(ReaderTarget.cfi) ?? openStart
         if page === current {
             // The neighbors are sent beside it again once it shows.
@@ -258,6 +282,7 @@ final class FoliateSource: PagerSource {
             try? await Task.sleep(for: .seconds(4))
             guard let self, !Task.isCancelled, self.navigating else { return }
             self.navigating = false
+            self.delegate?.foliateJumpLanded()
             self.reconcile()
         }
     }
@@ -275,11 +300,46 @@ final class FoliateSource: PagerSource {
                 tokens += 1
                 states[ObjectIdentifier(page)] = PageState(token: tokens)
             }
-            page.call("R.apply(\(settings.script))")
+            // The page showing keeps its place by its text.
+            page.call("R.apply(\(settings.pageScript), \(page === current))")
         }
         if layoutChanged {
             navigating = false
         }
+    }
+
+    // MARK: - Search
+
+    /// Searches the whole book from the current page, which sends each
+    /// section's matches as it reads them; returns the token they come
+    /// with.
+    func search(_ query: String) -> Int {
+        cancelSearch()
+        searchTokens += 1
+        runningSearch = (searchTokens, current)
+        current.call("R.search(\(javaScriptLiteral(query)), \(searchTokens))")
+        return searchTokens
+    }
+
+    /// Stops any search and takes its marks off every page.
+    func cancelSearch() {
+        runningSearch = nil
+        matchCFIs = []
+        markScript = nil
+        for page in [back, current, forward] { page.call("R.cancelSearch()") }
+    }
+
+    private static func addMatchesScript(_ cfis: [String]) -> String {
+        let json = (try? JSONSerialization.data(withJSONObject: cfis)).map { String(decoding: $0, as: UTF8.self) } ?? "[]"
+        return "R.addMatches(\(json))"
+    }
+
+    /// Marks the chosen result on every page, so it shows on whichever the
+    /// reader turns to.
+    func markResult(_ cfi: String?) {
+        let script = "R.markResult(\(cfi.map(javaScriptLiteral) ?? "null"))"
+        markScript = cfi == nil ? nil : script
+        for page in [back, current, forward] { page.call(script) }
     }
 
     /// Shisho's chapters changed, as when they were edited on the server.
@@ -377,6 +437,21 @@ final class FoliateSource: PagerSource {
         case "activity":
             if page === current { delegate?.foliateSawInput() }
             return
+        case "searchResults":
+            guard let token = message.token, token == runningSearch?.token else { return }
+            let results = message.results ?? []
+            // Every page shades them, whichever shows their section.
+            let cfis = results.map(\.cfi)
+            matchCFIs += cfis
+            let script = Self.addMatchesScript(cfis)
+            for page in [back, current, forward] { page.call(script) }
+            delegate?.foliateSearchResults(results, token: token)
+            return
+        case "searchDone":
+            guard let token = message.token, token == runningSearch?.token else { return }
+            runningSearch = nil
+            delegate?.foliateSearchDone(token: token)
+            return
         default:
             break
         }
@@ -429,6 +504,7 @@ final class FoliateSource: PagerSource {
             guard message.token == jumpToken, navigating else { return }
             navigating = false
             navigationTimeout?.cancel()
+            delegate?.foliateJumpLanded()
             reconcile()
         case "applied":
             if opened { delegate?.foliateLaidOut(current.location) }
