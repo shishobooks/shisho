@@ -70,7 +70,7 @@ final class FoliateSource: PagerSource {
 
     weak var delegate: FoliateSourceDelegate?
     let pager: PagerController
-    private let handler = ReaderSchemeHandler()
+    private let handler: ReaderSchemeHandler
     private var back: ReaderPage
     private var current: ReaderPage
     private var forward: ReaderPage
@@ -98,25 +98,30 @@ final class FoliateSource: PagerSource {
     private var restarts: [Date] = []
     /// The section the book first opened in.
     private var openedSection: Int?
+    /// The neighbors waiting to open, with the tokens their open answers.
+    private var neighborTokens: [(ReaderPage, TurnDirection, Int)] = []
 
     /// How the page opens the book a part at a time: as a zip (EPUB,
     /// KePub) or as MOBI records (MOBI, AZW3), and how big it is.
     private let bookFormat: String
     private let bookSize: Int
 
-    init(bookFile: URL, fileType: String, settings: ReaderSettings) {
+    /// pages are booted pages from ReaderPagePool.
+    init(bookFile: URL, fileType: String, settings: ReaderSettings, pages: ReaderPagePool.Pages) {
+        handler = pages.handler
         handler.bookFile = bookFile
         bookFormat = ["mobi", "azw3"].contains(fileType) ? "mobi" : "zip"
         bookSize = (try? bookFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         self.settings = settings
         let background = settings.theme.background
-        back = ReaderPage(handler: handler, background: background)
-        current = ReaderPage(handler: handler, background: background)
-        forward = ReaderPage(handler: handler, background: background)
+        back = pages.back
+        current = pages.current
+        forward = pages.forward
         pager = PagerController()
         pager.backdropColor = background
         pager.paging = settings.layout == .paginated
         for page in [back, current, forward] {
+            page.setBackground(background)
             states[ObjectIdentifier(page)] = PageState()
             page.onMessage = { [weak self, weak page] message in
                 guard let self, let page else { return }
@@ -137,8 +142,9 @@ final class FoliateSource: PagerSource {
 
     // MARK: - Opening
 
-    /// Opens the book at start, and the neighbors beside it at the same
-    /// time, each then stepping one page itself. chapters is the table of
+    /// Opens the book at start. The neighbors open once the current page
+    /// shows, each then stepping one page itself: opening all three at once
+    /// on a phone's few cores slows the first page. chapters is the table of
     /// contents from Shisho, or nil to use the file's own.
     func open(at start: ReaderTarget?, fallback: Double?, chapters: [ReaderChapter]?) {
         self.chapters = chapters ?? []
@@ -147,10 +153,18 @@ final class FoliateSource: PagerSource {
         self.fallback = fallback
         if case .cfi(let cfi) = start { lastCFI = cfi }
         current.call("R.open(\(openArguments(start: start, neighbor: 0, token: 0)))")
-        for (page, direction) in [(forward, TurnDirection.forward), (back, .back)] {
-            let token = startFlight(page)
+        // Waiting for their open, so nothing syncs them before it.
+        neighborTokens = [(forward, .forward, startFlight(forward)), (back, .back, startFlight(back))]
+    }
+
+    /// The neighbors' first open, once the current page shows, from where
+    /// it is.
+    private func openNeighbors() {
+        let start = lastCFI.map(ReaderTarget.cfi) ?? openStart
+        for (page, direction, token) in neighborTokens where state(page).token == token {
             page.call("R.open(\(openArguments(start: start, neighbor: paginated ? direction.rawValue : 0, token: token, idle: !paginated)))")
         }
+        neighborTokens = []
     }
 
     private func openArguments(start: ReaderTarget?, neighbor: Int, token: Int, idle: Bool = false) -> String {
@@ -336,14 +350,10 @@ final class FoliateSource: PagerSource {
             }
             pager.rightToLeft = message.rtl ?? false
             if message.fixedLayout == true, !fixedLayout {
+                // Paged whatever the layout setting: the neighbors, which
+                // open once the page shows, open paged.
                 fixedLayout = true
                 pager.paging = true
-                // Neighbors opened idle for scrolled mode are sent beside
-                // the current page once it shows.
-                for neighbor in [back, forward] where state(neighbor).inFlight && settings.layout == .scrolled {
-                    tokens += 1
-                    states[ObjectIdentifier(neighbor)] = PageState(token: tokens)
-                }
             }
             delegate?.foliateOpened(toc: toc)
         case "ready":
@@ -358,6 +368,7 @@ final class FoliateSource: PagerSource {
             }
             lastCFI = message.loc?.cfi ?? lastCFI
             delegate?.foliateShowed(current.location)
+            openNeighbors()
             requestContents()
             reconcile()
         case "relocate":

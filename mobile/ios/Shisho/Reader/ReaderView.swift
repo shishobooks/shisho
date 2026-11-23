@@ -10,6 +10,9 @@ struct ReaderView: View {
     @State private var showingSettings = false
     /// The scrubber's place while it's being dragged.
     @State private var scrubbing: Double?
+    /// The bar counts pages left in the book rather than the chapter, as
+    /// Now Playing counts time.
+    @AppStorage("reader.pagesLeftInBook") private var pagesLeftInBook = false
     /// The settings sheet's height, grown with the text in it.
     @ScaledMetric(relativeTo: .subheadline) private var settingsHeight: CGFloat = 250
     let close: () -> Void
@@ -229,6 +232,22 @@ struct ReaderView: View {
         model.chapterTitle.map { "\($0) · \(percentShown)" } ?? percentShown
     }
 
+    /// Pages left in the chapter, or the book, while the scrubber rests.
+    /// Scrolled there are no pages, and the chapter's count waits for the
+    /// contents to place it.
+    private var pagesLeftLabel: AttributedString? {
+        guard scrubbing == nil, let left = model.pagesLeft else { return nil }
+        if pagesLeftInBook {
+            return left.book == 0
+                ? AttributedString(localized: "Last page in the book")
+                : AttributedString(localized: "^[\(left.book) page](inflect: true) left in the book")
+        }
+        guard let chapter = left.chapter else { return nil }
+        return chapter == 0
+            ? AttributedString(localized: "Last page in the chapter")
+            : AttributedString(localized: "^[\(chapter) page](inflect: true) left in the chapter")
+    }
+
     private var bottomBar: some View {
         VStack(spacing: 4) {
             Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
@@ -238,18 +257,34 @@ struct ReaderView: View {
             .accessibilityLabel(Text("Place in the book"))
             .accessibilityValue(Text(percentShown))
             .accessibilityIdentifier("reader.scrubber")
-            HStack {
+            HStack(spacing: 6) {
                 Text(model.chapterTitle ?? "")
                     .lineLimit(1)
+                    // Read with the percentage, as the place.
+                    .accessibilityHidden(true)
                 Spacer(minLength: 12)
+                if let pagesLeft = pagesLeftLabel {
+                    Button { pagesLeftInBook.toggle() } label: {
+                        Text(pagesLeft)
+                            .lineLimit(1)
+                            .contentTransition(.numericText())
+                            .frame(minHeight: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
+                    .accessibilityIdentifier("reader.pagesLeft")
+                    Text(verbatim: "·")
+                        .accessibilityHidden(true)
+                }
                 Text(percentShown)
                     .monospacedDigit()
+                    .accessibilityLabel(Text(place))
+                    .accessibilityIdentifier("reader.progress")
             }
             .font(.geist(.caption))
             .foregroundStyle(Theme.mutedForeground)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(place))
-            .accessibilityIdentifier("reader.progress")
+            .accessibilityElement(children: .contain)
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)

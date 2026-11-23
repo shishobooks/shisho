@@ -124,6 +124,7 @@ final class AppModel {
     private(set) var signedOutAccount: Account?
 
     init() {
+        ReaderPagePool.loadPreviewSupport()
         if let current = accounts.current {
             if current.signedOut {
                 signedOutAccount = current

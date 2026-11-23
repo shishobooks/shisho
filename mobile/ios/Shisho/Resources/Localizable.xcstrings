@@ -232,9 +232,6 @@
     "Authors, narrators, and other contributors" : {
 
     },
-    "Auto" : {
-
-    },
     "Back %lld Seconds" : {
 
     },
@@ -347,6 +344,12 @@
 
     },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
+
+    },
+    "Counts pages left in the book" : {
+
+    },
+    "Counts pages left in the chapter" : {
 
     },
     "Cover Artist" : {
@@ -485,6 +488,12 @@
 
     },
     "Language" : {
+
+    },
+    "Last page in the book" : {
+
+    },
+    "Last page in the chapter" : {
 
     },
     "Last read" : {
@@ -935,6 +944,9 @@
     "Sync Now" : {
 
     },
+    "System" : {
+
+    },
     "Tags" : {
 
     },
@@ -1099,6 +1111,12 @@
 
     },
     "^[%lld page](inflect: true)" : {
+
+    },
+    "^[%lld page](inflect: true) left in the book" : {
+
+    },
+    "^[%lld page](inflect: true) left in the chapter" : {
 
     },
     "a newer release" : {

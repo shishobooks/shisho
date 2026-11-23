@@ -1,0 +1,32 @@
+import Foundation
+
+/// Pages left to a place further on, as the reader's bar shows for the
+/// chapter and the book. The section showing is laid out, so its pages are
+/// exact; past it the count is an estimate, at that section's pages per
+/// share of the book, since the rest isn't laid out.
+enum PagesLeft {
+    /// The section showing, as a share of the book, and the page showing
+    /// in it, from 1.
+    struct Section: Equatable {
+        let from: Double
+        let to: Double
+        let page: Int
+        let pages: Int
+    }
+
+    /// Pages after the one showing, up to the one end falls on.
+    static func count(in section: Section, to end: Double) -> Int {
+        let pages = max(1, section.pages)
+        let page = min(max(1, section.page), pages)
+        let perPage = (section.to - section.from) / Double(pages)
+        guard perPage > 0 else { return 0 }
+        let leftHere = pages - page
+        // Within a hair of the section's end is its end.
+        if end >= section.to - perPage / 2 {
+            return leftHere + max(0, Int(((end - section.to) / perPage).rounded()))
+        }
+        let pageStart = section.from + Double(page - 1) * perPage
+        let endPage = Int(((end - pageStart) / perPage).rounded(.up))
+        return min(max(0, endPage - 1), leftHere)
+    }
+}

@@ -43,6 +43,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     private(set) var fraction: Double = 0
     /// Where the page showing starts, which names its chapter.
     @ObservationIgnored private var pageStart: Double?
+    /// The section showing and the page in it, for pages left.
+    private var pageSection: PageLocation.SectionPlace?
     private(set) var contents: [ContentsEntry] = []
     private(set) var note: OpenNote?
     /// A page turn has waited a moment for its page to be laid out, as
@@ -103,6 +105,22 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         return contents.last { ($0.position ?? .infinity) <= place + 0.0001 }
     }
 
+    /// Pages left in the chapter and in the book, or nil scrolled. The
+    /// chapter's are nil before the contents know where it ends.
+    var pagesLeft: (chapter: Int?, book: Int)? {
+        guard let place = pageSection else { return nil }
+        let section = PagesLeft.Section(from: place.from, to: place.to, page: place.page, pages: place.pages)
+        return (chapterEnd.map { PagesLeft.count(in: section, to: $0) }, PagesLeft.count(in: section, to: 1))
+    }
+
+    /// Where the chapter showing ends: where the next one starts, or the
+    /// end of the book.
+    private var chapterEnd: Double? {
+        guard let current = currentEntry, let start = current.position else { return nil }
+        let later = contents.drop { $0.id != current.id }.dropFirst()
+        return later.compactMap(\.position).first { $0 > start + 0.0001 } ?? 1
+    }
+
     /// Where the chapters start along the book, for the scrubber.
     var marks: [Double] {
         contents.compactMap(\.position)
@@ -140,7 +158,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         case .fraction(let fraction): .fraction(fraction)
         case nil: nil
         }
-        let source = FoliateSource(bookFile: bookFile, fileType: file.fileType, settings: settings)
+        let source = FoliateSource(bookFile: bookFile, fileType: file.fileType, settings: settings, pages: ReaderPagePool.shared.take())
         source.delegate = self
         self.source = source
         source.open(at: start, fallback: fallback, chapters: file.usesShishoChapters ? shownChapters : nil)
@@ -289,6 +307,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         self.location = location
         fraction = location.fraction ?? 0
         pageStart = location.start
+        pageSection = location.section
         // A page reopened after WebKit ended its process shows the place
         // again; the session goes on.
         guard phase != .reading else { return }
@@ -299,6 +318,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     func foliateMoved(_ location: PageLocation) {
         self.location = location
         pageStart = location.start
+        pageSection = location.section
         fraction = location.fraction ?? fraction
         tracker.moved(location)
     }

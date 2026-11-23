@@ -14,6 +14,19 @@ name: Jump to a chapter from the table of contents
     env:
       TITLE: The Harness Novel
 - runFlow: subflows/show_reader_controls.yaml
+# The bar counts the pages left in the chapter, and a tap counts the book's.
+- extendedWaitUntil:
+    visible:
+      id: reader.pagesLeft
+      text: ".* in the chapter"
+    timeout: 30000
+- tapOn:
+    id: reader.pagesLeft
+- extendedWaitUntil:
+    visible:
+      id: reader.pagesLeft
+      text: ".* in the book"
+    timeout: 30000
 - tapOn:
     id: reader.contents
 - extendedWaitUntil:

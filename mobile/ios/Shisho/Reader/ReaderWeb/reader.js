@@ -165,11 +165,37 @@ const pageStart = (index, page, pages) => {
   return from + Math.min(1, Math.max(0, within)) * (to - from);
 };
 
+// The section showing as a share of the book, and the page showing in it
+// from 1, for counting pages left. Paginated or fixed-layout only: scrolled,
+// a page isn't a page.
+const sectionPlace = (index, page, pages) => {
+  const fractions = view.getSectionFractions?.() ?? [];
+  if (index == null || fractions[index] === undefined || page == null)
+    return null;
+  try {
+    if (view.renderer?.scrolled) return null;
+  } catch {
+    return null;
+  }
+  const from = fractions[index];
+  const to = fractions[index + 1] ?? 1;
+  // The paginator counts a blank page at each end of a section.
+  if (view.isFixedLayout) return { from, to, page: 1, pages: 1 };
+  const textPages = Math.max(1, pages - 2);
+  return {
+    from,
+    to,
+    page: Math.min(Math.max(1, page), textPages),
+    pages: textPages,
+  };
+};
+
 const location = () => {
   const d = view.lastLocation;
   const { page, pages } = geometry();
   const index = d?.section?.current ?? currentIndex();
   return {
+    section: sectionPlace(index, page, pages),
     cfi: d?.cfi ?? null,
     fraction: Number.isFinite(d?.fraction) ? d.fraction : null,
     start: pageStart(index, page, pages),
@@ -1030,5 +1056,37 @@ const open = async ({
   post({ type: "ready", loc: location(), restored });
   preloadNotes();
 };
+
+// WebKit on iOS asks QuickLook whether it previews a frame's document when
+// that document isn't HTML or plain text. The first ask loads QuickLook into
+// this page's process, which blocks it for a second or more (several on a
+// cold start). Every section of a book is XHTML, so the page asks once here,
+// as it starts, instead of in the middle of laying out the first page.
+// WebCore's SubresourceLoader::shouldCreatePreviewLoaderForResponse is the
+// check.
+const warmQuickLook = () => {
+  const frame = document.createElement("iframe");
+  frame.setAttribute("sandbox", "allow-same-origin");
+  frame.setAttribute("aria-hidden", "true");
+  frame.style.cssText =
+    "position:absolute;width:0;height:0;border:0;visibility:hidden";
+  const url = URL.createObjectURL(
+    new Blob(
+      [
+        '<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title></title></head><body/></html>',
+      ],
+      { type: "application/xhtml+xml" },
+    ),
+  );
+  frame.addEventListener("load", () => {
+    // The first load is the frame's initial blank document.
+    if (frame.contentDocument?.URL !== url) return;
+    frame.remove();
+    URL.revokeObjectURL(url);
+  });
+  frame.src = url;
+  document.body.append(frame);
+};
+warmQuickLook();
 
 post({ type: "boot" });

@@ -99,6 +99,16 @@ struct PageLocation: Decodable, Equatable, Sendable {
     var fraction: Double?
     /// Where the page starts along the book; fraction is where it ends.
     var start: Double?
+    /// The section showing and the page in it, for pages left; nil when
+    /// scrolled.
+    var section: SectionPlace?
+
+    struct SectionPlace: Decodable, Equatable, Sendable {
+        let from: Double
+        let to: Double
+        let page: Int
+        let pages: Int
+    }
     /// Section index, page, and page count, as foliate's paginator counts
     /// them: one page from another means the same layout.
     var index: Int?
@@ -191,10 +201,13 @@ final class ReaderPage: NSObject, WKNavigationDelegate {
     private(set) var location = PageLocation()
     private(set) var hasSelection = false
 
-    init(handler: ReaderSchemeHandler, background: UIColor) {
+    init(handler: ReaderSchemeHandler, background: UIColor = .clear) {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(handler, forURLScheme: ReaderSchemeHandler.scheme)
         configuration.suppressesIncrementalRendering = false
+        // A page booted ahead of the reader isn't in a window yet, where
+        // WebKit would otherwise suspend it (ReaderPagePool).
+        configuration.preferences.inactiveSchedulingPolicy = .none
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         configuration.userContentController.add(MessageProxy(self), name: "bridge")

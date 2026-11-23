@@ -41,6 +41,9 @@ struct BookDetailView: View {
                     }
                     if let progress = read ?? nil {
                         ReadCard(progress: progress, secondary: (listen ?? nil) != nil)
+                            // The reader opens on pages booted while the
+                            // Book's page shows.
+                            .onAppear { ReaderPagePool.shared.prewarm() }
                             .padding(.top, (listen ?? nil) == nil ? 22 : 10)
                             .frame(maxWidth: 520)
                     }
