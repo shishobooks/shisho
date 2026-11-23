@@ -33,11 +33,12 @@ name: Speed steps and is kept per File
     id: player.left
     text: .* at 1\.4x
 
-# Another audiobook starts at 1x and keeps a speed of its own.
-# Opened again, the app starts on the Library, and speeds stay on the
-# device.
-- stopApp
-- launchApp
+# Another audiobook starts at 1x and keeps a speed of its own. Switched to
+# from the Library: choosing its tab again goes back to the Library's top.
+- tapOn:
+    id: player.close
+- tapOn:
+    id: tab.library
 - runFlow:
     file: subflows/listen_to.yaml
     env:
@@ -73,7 +74,9 @@ name: Speed steps and is kept per File
 # Opened again, the app starts on the Library, and speeds stay on the
 # device.
 - stopApp
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - runFlow:
     file: subflows/listen_to.yaml
     env:

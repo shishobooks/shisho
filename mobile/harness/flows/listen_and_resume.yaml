@@ -13,17 +13,7 @@ name: Listen, kill, and resume
     env:
       TITLE: Harbor Lights
 # Another flow may have listened already: start from the beginning.
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.prevChapter
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.prevChapter
-- assertVisible:
-    id: player.chapter
-    text: The Harbor
+- runFlow: subflows/rewind_harbor_lights.yaml
 # Listening long enough for a save or two.
 - extendedWaitUntil:
     visible:
@@ -38,7 +28,9 @@ name: Listen, kill, and resume
 # Killed while playing: only the saves every five seconds kept the place.
 - stopApp
 - evalScript: ${output.killedAt = Date.now()}
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - extendedWaitUntil:
     visible:
       id: miniplayer.open

@@ -24,6 +24,7 @@ func runIOS(ctx context.Context, args []string) error {
 	flowDir := flags.String("flows", "mobile/harness/flows", "folder of Maestro flows to run")
 	keep := flags.Bool("keep", false, "keep the run's folder (server log, database, Maestro output) for debugging")
 	out := flags.String("out", "", "make the run's folder here, and keep it")
+	shard := flags.String("shard", "", "run only this shard of the flows, as i/n (CI's parallel jobs)")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -42,6 +43,13 @@ func runIOS(ctx context.Context, args []string) error {
 	flows, err := filepath.Abs(*flowDir)
 	if err != nil {
 		return errors.WithStack(err)
+	}
+	flowArgs := []string{flows}
+	if *shard != "" {
+		if flowArgs, err = shardFlowPaths(flows, *shard); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "appharness: shard %s runs %d flows\n", *shard, len(flowArgs))
 	}
 
 	var dir string
@@ -75,6 +83,9 @@ func runIOS(ctx context.Context, args []string) error {
 	if err := srv.seed(ctx, library, harnessPassword); err != nil {
 		return err
 	}
+	if err := cheapenPasswords(ctx, filepath.Join(dir, "data.sqlite")); err != nil {
+		return err
+	}
 
 	control, err := startControl(ctx, srv)
 	if err != nil {
@@ -93,22 +104,23 @@ func runIOS(ctx context.Context, args []string) error {
 
 	fmt.Fprintf(os.Stderr, "appharness: server %s, simulator %s\n", srv.URL, sim.UDID)
 	//nolint:gosec // The harness's own flags and paths.
-	maestro := exec.CommandContext(ctx, "maestro", "--device", sim.UDID, "test",
+	maestro := exec.CommandContext(ctx, "maestro", append([]string{"--device", sim.UDID, "test",
 		"--debug-output", filepath.Join(dir, "maestro"),
-		"-e", "APP_ID="+appID,
-		"-e", "SERVER="+srv.URL,
-		"-e", "USERNAME="+harnessUsername,
-		"-e", "PASSWORD="+harnessPassword,
-		"-e", "READER_USERNAME="+readerUsername,
-		"-e", "READER_PASSWORD="+readerPassword,
-		"-e", "CONTROL="+control.URL,
-		flows)
+		"-e", "APP_ID=" + appID,
+		"-e", "SERVER=" + srv.URL,
+		"-e", "USERNAME=" + harnessUsername,
+		"-e", "PASSWORD=" + harnessPassword,
+		"-e", "READER_USERNAME=" + readerUsername,
+		"-e", "READER_PASSWORD=" + readerPassword,
+		"-e", "CONTROL=" + control.URL,
+	}, flowArgs...)...)
 	maestro.Stdout, maestro.Stderr = os.Stdout, os.Stderr
 	stopWithProcessGroup(maestro)
+	maestro.Env = append(os.Environ(), "MAESTRO_CLI_NO_ANALYTICS=1")
 	// Maestro installs and starts its driver on the simulator first, which
 	// takes minutes on a CI runner, far longer than Maestro's default.
 	if os.Getenv("MAESTRO_DRIVER_STARTUP_TIMEOUT") == "" {
-		maestro.Env = append(os.Environ(), "MAESTRO_DRIVER_STARTUP_TIMEOUT=600000")
+		maestro.Env = append(maestro.Env, "MAESTRO_DRIVER_STARTUP_TIMEOUT=600000")
 	}
 	err = maestro.Run()
 	killProcessGroup(ctx, maestro)

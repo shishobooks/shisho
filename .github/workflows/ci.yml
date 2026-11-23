@@ -520,12 +520,15 @@ jobs:
           key: ${{ steps.setup.outputs.simulator-key }}
           hit: ${{ steps.setup.outputs.simulator-hit }}
 
+  # One job: splitting the flows (`ios -shard`) saved minutes when GitHub had
+  # macOS capacity, but each extra macOS job is another that can wait for a
+  # runner, and the Free plan runs five at once across every pull request.
   app-ios-flows:
     name: iOS flows
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -553,16 +556,20 @@ jobs:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install ffmpeg
+      # Well inside the job's limit, so a hang still leaves time to upload
+      # the harness output below.
       - name: Run the Maestro flows
+        timeout-minutes: 50
         run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
       - uses: ./.github/actions/save-ios-simulator
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
           hit: ${{ steps.setup.outputs.simulator-hit }}
-      # The server log and Maestro's own log and screenshots, which also show
-      # where a slow run spent its time.
+      # The server log and Maestro's own log and screenshots, for a failed
+      # or timed-out run. Uploading them takes most of a minute, so a passing
+      # run skips it.
       - name: Keep the harness output
-        if: always()
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
           name: harness-output

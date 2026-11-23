@@ -65,9 +65,51 @@ func simctl(ctx context.Context, args ...string) (string, error) {
 // iOS runtime when it doesn't exist yet. SHISHO_SIMULATOR_BASE names
 // another to clone instead.
 func baseSimulator(ctx context.Context) (string, error) {
+	var base string
+	err := withBase(ctx, func(udid string) error {
+		base = udid
+		return nil
+	})
+	return base, err
+}
+
+// cloneBase clones the base simulator as name, returning the base's UDID and
+// the clone's.
+func cloneBase(ctx context.Context, name string) (base, clone string, err error) {
+	err = withBase(ctx, func(udid string) error {
+		base = udid
+		clone, err = simctl(ctx, "clone", udid, name)
+		return err
+	})
+	return base, clone, err
+}
+
+// withBase calls use with the base simulator's UDID, under a lock that runs
+// in other worktrees take too, so none makes a second base or deletes an old
+// one while another is cloning it.
+func withBase(ctx context.Context, use func(udid string) error) error {
 	if named := os.Getenv("SHISHO_SIMULATOR_BASE"); named != "" {
-		return named, nil
+		return use(named)
 	}
+	dir, err := simulatorStateDir()
+	if err != nil {
+		return err
+	}
+	unlock, err := waitForLock(ctx, filepath.Join(dir, "base.lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	base, err := findOrMakeBase(ctx)
+	if err != nil {
+		return err
+	}
+	return use(base)
+}
+
+// findOrMakeBase deletes bases of older numbers, and returns the current
+// base's UDID, making it when there's none. Callers hold the base lock.
+func findOrMakeBase(ctx context.Context) (string, error) {
 	out, err := simctl(ctx, "list", "devices", "available", "-j")
 	if err != nil {
 		return "", err
@@ -193,12 +235,10 @@ type simulatorClone struct {
 }
 
 func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
-	base, err := baseSimulator(ctx)
-	if err != nil {
-		return nil, err
+	if clone, ok := takePreparedClone(ctx); ok {
+		return clone, nil
 	}
-	name := fmt.Sprintf("Shisho Harness %d", time.Now().UnixNano())
-	udid, err := simctl(ctx, "clone", base, name)
+	_, udid, err := cloneBase(ctx, fmt.Sprintf("Shisho Harness %d", time.Now().UnixNano()))
 	if err != nil {
 		return nil, err
 	}
@@ -214,11 +254,78 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 	return clone, nil
 }
 
+// preparedCloneName names the clone `base` boots on one of GitHub's runners
+// while the app builds, which the job's run then takes instead of cloning
+// and booting one after the build: a boot there takes a minute or two.
+const preparedCloneName = "Shisho Harness Prepared"
+
+// prepareClone clones the base and boots it, for the job's run to take. It's
+// only a head start, so a failure is reported and the run clones its own.
+func prepareClone(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
+	defer cancel()
+	if err := bootPreparedClone(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "appharness: couldn't boot the run's simulator ahead of it:", err)
+	}
+}
+
+// bootPreparedClone boots a clone under a name of its own, and gives it the
+// prepared name only once it's ready, so the run never waits on one that
+// failed; a failed one is deleted.
+func bootPreparedClone(ctx context.Context) error {
+	_, udid, err := cloneBase(ctx, fmt.Sprintf("Shisho Harness Preparing %d", time.Now().UnixNano()))
+	if err != nil {
+		return err
+	}
+	if _, err := simctl(ctx, "boot", udid); err != nil {
+		removeSimulator(udid)
+		return err
+	}
+	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+		removeSimulator(udid)
+		return err
+	}
+	if _, err := simctl(ctx, "rename", udid, preparedCloneName); err != nil {
+		removeSimulator(udid)
+		return err
+	}
+	return nil
+}
+
+// takePreparedClone returns the clone prepareClone booted, if there's one,
+// renamed so no other run takes it too.
+func takePreparedClone(ctx context.Context) (*simulatorClone, bool) {
+	if !disposableRunner() {
+		return nil, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
+	defer cancel()
+	devices, err := listDevices(ctx)
+	if err != nil {
+		return nil, false
+	}
+	for udid, device := range devices {
+		if device.Name != preparedCloneName || !device.IsAvailable {
+			continue
+		}
+		if _, err := simctl(ctx, "rename", udid, fmt.Sprintf("Shisho Harness %d", time.Now().UnixNano())); err != nil {
+			return nil, false
+		}
+		if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+			removeSimulator(udid)
+			return nil, false
+		}
+		fmt.Fprintln(os.Stderr, "appharness: using the simulator booted while the app built")
+		return &simulatorClone{UDID: udid}, true
+	}
+	return nil, false
+}
+
 // Remove shuts the clone down and deletes it, even after the run was
-// interrupted. On a GitHub Actions runner, which is thrown away after the
+// interrupted. On one of GitHub's runners, which is thrown away after the
 // job, it leaves the clone, saving the best part of a minute.
 func (c *simulatorClone) Remove() {
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
+	if disposableRunner() {
 		return
 	}
 	removeSimulator(c.UDID)

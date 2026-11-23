@@ -17,7 +17,9 @@ name: Search the library offline
     env:
       CONTROL: ${CONTROL}
 - stopApp
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - extendedWaitUntil:
     visible:
       id: library.grid

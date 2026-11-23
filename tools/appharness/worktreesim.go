@@ -44,6 +44,14 @@ type runSimulator struct {
 
 func (s *runSimulator) Release() { s.release() }
 
+// disposableRunner says whether this runs on one of GitHub's own runners,
+// which is thrown away after the job: there's nothing to keep for later runs,
+// and nothing to clean up. A self-hosted runner, like a worktree, keeps its
+// checkout's simulators warm between runs.
+func disposableRunner() bool {
+	return os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("RUNNER_ENVIRONMENT") != "self-hosted"
+}
+
 // freshRun says whether SHISHO_HARNESS_FRESH asks for a run that reuses
 // nothing: a disposable simulator, and fixtures made for the run.
 func freshRun() bool {
@@ -57,12 +65,12 @@ func freshRun() bool {
 // It's the worktree's own, kept booted between runs, since a clone of the
 // base spends half a minute booting, and runs in other worktrees never share
 // it. A run holds its simulator's lock for as long as it uses it; a second
-// run in the same worktree meanwhile gets a disposable clone. CI, whose
-// runner is thrown away after the job, gets a disposable clone too, and so
-// does SHISHO_HARNESS_FRESH, which also discards the worktree's own.
+// run in the same worktree meanwhile gets a disposable clone. GitHub's own
+// runners (disposableRunner) get a disposable clone too, and so does
+// SHISHO_HARNESS_FRESH, which also discards the worktree's own.
 func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runSimulator, error) {
 	switch {
-	case os.Getenv("GITHUB_ACTIONS") == "true":
+	case disposableRunner():
 	case freshRun():
 		if err := discardWorktreeSimulator(root, purpose); err != nil && !errors.Is(err, errSimulatorBusy) {
 			return nil, err
@@ -78,7 +86,19 @@ func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runS
 	if err != nil {
 		return nil, err
 	}
+	quietSimulator(ctx, clone.UDID)
 	return &runSimulator{UDID: clone.UDID, release: clone.Remove}, nil
+}
+
+// quietSimulator stops apsd, Apple's push notification service, which
+// nothing the app or its tests do needs. On CI runners it reconnects to
+// Apple's servers several times a second, about 60% of the simulator's log
+// and, through the logging daemons that carry that log to Maestro, about 14%
+// of the runner's CPU. The service may already be stopped in a simulator the
+// worktree kept, so errors are ignored.
+func quietSimulator(ctx context.Context, udid string) {
+	_, _ = simctl(ctx, "spawn", udid, "launchctl", "disable", "system/com.apple.apsd")
+	_, _ = simctl(ctx, "spawn", udid, "launchctl", "bootout", "system/com.apple.apsd")
 }
 
 // worktreeSimulatorState is what the harness keeps of a worktree's
@@ -141,6 +161,31 @@ func lockFile(path string) (*os.File, error) {
 		return nil, errors.Wrapf(err, "lock %s", path)
 	}
 	return f, nil
+}
+
+// waitForLock takes path's exclusive lock, waiting for whoever holds it, and
+// returns how to let it go.
+func waitForLock(ctx context.Context, path string) (func(), error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600) //nolint:gosec // The harness's own state folder.
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return func() { unlockFile(f) }, nil
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			_ = f.Close()
+			return nil, errors.Wrapf(err, "lock %s", path)
+		}
+		select {
+		case <-ctx.Done():
+			_ = f.Close()
+			return nil, errors.WithStack(ctx.Err())
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 }
 
 func unlockFile(f *os.File) {
@@ -207,11 +252,11 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 		if exists {
 			removeSimulator(state.UDID)
 		}
-		udid, err := simctl(ctx, "clone", base, paths.name)
+		cloned, udid, err := cloneBase(ctx, paths.name)
 		if err != nil {
 			return "", err
 		}
-		state = worktreeSimulatorState{UDID: udid, Base: base, Root: root}
+		state = worktreeSimulatorState{UDID: udid, Base: cloned, Root: root}
 		data, _ := json.Marshal(state)
 		if err := os.WriteFile(paths.state, data, 0o600); err != nil {
 			removeSimulator(udid)
@@ -231,6 +276,7 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 	if _, err := simctl(ctx, "bootstatus", state.UDID, "-b"); err != nil {
 		return "", err
 	}
+	quietSimulator(ctx, state.UDID)
 	return state.UDID, resetSimulator(ctx, state.UDID, bundleID)
 }
 
@@ -252,6 +298,10 @@ func discardWorktreeSimulator(root, purpose string) error {
 		return err
 	}
 	paths := worktreeSimulatorPaths(dir, root, purpose)
+	// A worktree that never ran the checks has nothing to discard.
+	if _, err := os.Stat(paths.state); os.IsNotExist(err) {
+		return nil
+	}
 	lock, err := lockFile(paths.lock)
 	if err != nil {
 		return err

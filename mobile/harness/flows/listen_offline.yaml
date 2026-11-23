@@ -19,14 +19,7 @@ name: Listen offline and sync later
     env:
       TITLE: Harbor Lights
 # Another flow may have listened already: start from the beginning.
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.prevChapter
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.prevChapter
+- runFlow: subflows/rewind_harbor_lights.yaml
 # A few seconds online, so the player buffers the whole (small) File.
 - extendedWaitUntil:
     visible:
@@ -87,7 +80,9 @@ name: Listen offline and sync later
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - extendedWaitUntil:
     visible:
       id: miniplayer.open
