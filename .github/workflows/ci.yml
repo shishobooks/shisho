@@ -460,10 +460,31 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.paths.outputs.changed }}
+      ios-runner: ${{ steps.ios.outputs.runner }}
+      ios-shards: ${{ steps.ios.outputs.shards }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      # Where the iOS jobs run. Pushes and this repo's own branches run on
+      # the maintainer's self-hosted Macs (label shisho-m3), in one flows job
+      # with simulators kept warm between runs. Forks' pull requests never
+      # reach those machines: they run on GitHub's runners, with the flows
+      # split across two jobs, since one takes over half an hour there. The
+      # repository variable IOS_SELF_HOSTED=false sends everything to GitHub's
+      # runners, for when the Macs are offline.
+      - id: ios
+        env:
+          TRUSTED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          SELF_HOSTED: ${{ vars.IOS_SELF_HOSTED != 'false' }}
+        run: |
+          if [ "$TRUSTED" = true ] && [ "$SELF_HOSTED" = true ]; then
+            echo 'runner=["self-hosted", "shisho-m3"]' >> "$GITHUB_OUTPUT"
+            echo 'shards=[{"shard": 1, "of": 1}]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'runner="macos-26"' >> "$GITHUB_OUTPUT"
+            echo 'shards=[{"shard": 1, "of": 2}, {"shard": 2, "of": 2}]' >> "$GITHUB_OUTPUT"
+          fi
       - id: paths
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -501,53 +522,68 @@ jobs:
 
   # The unit tests and the Maestro flows each get a runner: one macOS
   # runner is too small for two simulators, and the flows' driver times out
-  # beside anything else. setup-ios restores what they'd otherwise rebuild,
-  # the base simulator included.
+  # beside anything else. app-changes picks the runners. On GitHub's,
+  # setup-ios restores what they'd otherwise rebuild, the base simulator
+  # included; a self-hosted Mac keeps all of it, its checkout's build
+  # included, so it skips the caches, which would overwrite its own.
   app-ios:
     name: iOS
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
-    runs-on: macos-26
+    runs-on: ${{ fromJSON(needs.app-changes.outputs.ios-runner) }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
       - uses: jdx/mise-action@v5
+        with:
+          cache: ${{ runner.environment == 'github-hosted' }}
       - id: setup
+        if: runner.environment == 'github-hosted'
         uses: ./.github/actions/setup-ios
       - run: mise ios:test
-      - uses: ./.github/actions/save-ios-simulator
+      - if: runner.environment == 'github-hosted'
+        uses: ./.github/actions/save-ios-simulator
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
           hit: ${{ steps.setup.outputs.simulator-hit }}
 
+  # The flows, in one job on a self-hosted Mac, or split across jobs on
+  # GitHub's runners (`ios -shard`, balanced in tools/appharness/shard.go),
+  # where one job takes over half an hour.
   app-ios-flows:
-    # The flows split across two jobs (`ios -shard`, balanced in
-    # tools/appharness/shard.go): one runner takes 25 to 35 minutes for all
-    # of them.
-    name: iOS flows (shard ${{ matrix.shard }}/2)
+    name: iOS flows (${{ matrix.shard }}/${{ matrix.of }})
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
-    runs-on: macos-26
+    runs-on: ${{ fromJSON(needs.app-changes.outputs.ios-runner) }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        include: ${{ fromJSON(needs.app-changes.outputs.ios-shards) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          clean: ${{ runner.environment == 'github-hosted' }}
       - uses: jdx/mise-action@v5
+        with:
+          cache: ${{ runner.environment == 'github-hosted' }}
       - id: setup
+        if: runner.environment == 'github-hosted'
         uses: ./.github/actions/setup-ios
       # Keyed by the harness's own cache key, so a hit here is a hit there
       # and the run needs no ffmpeg.
       - name: Name the harness's fixtures
         id: fixture-key
+        if: runner.environment == 'github-hosted'
         run: |
           key=$(go run ./tools/appharness fixtures -key)
           test -n "$key"
           echo "key=$key" >> "$GITHUB_OUTPUT"
       - name: Restore the harness's fixtures
         id: fixtures
+        if: runner.environment == 'github-hosted'
         uses: actions/cache@v6
         with:
           path: ~/Library/Caches/shisho-appharness/fixtures
@@ -555,14 +591,15 @@ jobs:
       # The harness makes its M4B fixture with ffmpeg. Homebrew skips
       # updating itself first, which the runner image's Homebrew doesn't need.
       - name: Install ffmpeg
-        if: steps.fixtures.outputs.cache-hit != 'true'
+        if: runner.environment == 'github-hosted' && steps.fixtures.outputs.cache-hit != 'true'
         env:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: brew install ffmpeg
       - name: Run the Maestro flows
-        run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/2
-      - uses: ./.github/actions/save-ios-simulator
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/${{ matrix.of }}
+      - if: runner.environment == 'github-hosted'
+        uses: ./.github/actions/save-ios-simulator
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
           hit: ${{ steps.setup.outputs.simulator-hit }}
@@ -572,7 +609,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: harness-output-shard-${{ matrix.shard }}
+          name: harness-output-${{ matrix.shard }}-of-${{ matrix.of }}
           path: ${{ runner.temp }}/harness
           if-no-files-found: ignore
           retention-days: 7

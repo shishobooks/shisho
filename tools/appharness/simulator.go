@@ -264,10 +264,10 @@ func takePreparedClone(ctx context.Context) (*simulatorClone, bool) {
 }
 
 // Remove shuts the clone down and deletes it, even after the run was
-// interrupted. On a GitHub Actions runner, which is thrown away after the
+// interrupted. On one of GitHub's runners, which is thrown away after the
 // job, it leaves the clone, saving the best part of a minute.
 func (c *simulatorClone) Remove() {
-	if os.Getenv("GITHUB_ACTIONS") == "true" {
+	if disposableRunner() {
 		return
 	}
 	removeSimulator(c.UDID)

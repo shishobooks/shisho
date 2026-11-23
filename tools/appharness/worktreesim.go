@@ -44,6 +44,14 @@ type runSimulator struct {
 
 func (s *runSimulator) Release() { s.release() }
 
+// disposableRunner says whether this runs on one of GitHub's own runners,
+// which is thrown away after the job: there's nothing to keep for later runs,
+// and nothing to clean up. A self-hosted runner, like a worktree, keeps its
+// checkout's simulators warm between runs.
+func disposableRunner() bool {
+	return os.Getenv("GITHUB_ACTIONS") == "true" && os.Getenv("RUNNER_ENVIRONMENT") != "self-hosted"
+}
+
 // freshRun says whether SHISHO_HARNESS_FRESH asks for a run that reuses
 // nothing: a disposable simulator, and fixtures made for the run.
 func freshRun() bool {
@@ -57,12 +65,12 @@ func freshRun() bool {
 // It's the worktree's own, kept booted between runs, since a clone of the
 // base spends half a minute booting, and runs in other worktrees never share
 // it. A run holds its simulator's lock for as long as it uses it; a second
-// run in the same worktree meanwhile gets a disposable clone. CI, whose
-// runner is thrown away after the job, gets a disposable clone too, and so
-// does SHISHO_HARNESS_FRESH, which also discards the worktree's own.
+// run in the same worktree meanwhile gets a disposable clone. GitHub's own
+// runners (disposableRunner) get a disposable clone too, and so does
+// SHISHO_HARNESS_FRESH, which also discards the worktree's own.
 func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runSimulator, error) {
 	switch {
-	case os.Getenv("GITHUB_ACTIONS") == "true":
+	case disposableRunner():
 	case freshRun():
 		if err := discardWorktreeSimulator(root, purpose); err != nil && !errors.Is(err, errSimulatorBusy) {
 			return nil, err

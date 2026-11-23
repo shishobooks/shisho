@@ -47,10 +47,11 @@ func main() {
 		err = runServe(ctx)
 	case "base":
 		// Makes the base simulator ahead of a run, so its first boot can
-		// happen while the app builds (`mise ios:simulator`). On a CI runner,
-		// whose runs use disposable clones, it also boots the run's clone.
+		// happen while the app builds (`mise ios:simulator`). On one of GitHub's
+		// runners, whose runs use disposable clones, it also boots the run's
+		// clone.
 		_, err = baseSimulator(ctx)
-		if err == nil && os.Getenv("GITHUB_ACTIONS") == "true" && !freshRun() {
+		if err == nil && disposableRunner() && !freshRun() {
 			err = prepareClone(ctx)
 		}
 	case "fixtures":
