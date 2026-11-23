@@ -14,6 +14,7 @@
 import "../foliate/view.js";
 
 import { cleanPackage } from "./package.js";
+import { stepPull } from "./pull.js";
 
 const post = (msg) =>
   window.webkit?.messageHandlers?.bridge?.postMessage(JSON.stringify(msg));
@@ -586,7 +587,7 @@ const openImage = async (img) => {
 // past the start, shows native's hint, and letting go past PULL brings in
 // the section beside. Screen coordinates, since the frame moves as the
 // container scrolls.
-const PULL = 130;
+const PULL = 150;
 let pull = null;
 let pullShown = null;
 const atScrollEnd = () => view.renderer.viewSize - view.renderer.end <= 2;
@@ -618,32 +619,32 @@ const onPull = (e) => {
   const t = e.changedTouches?.[0];
   if (!t) return;
   if (e.type === "touchstart") {
-    pull = { y: t.screenY, down: 0, up: 0 };
+    pull = { y: t.screenY, amount: 0, start: view.renderer.start };
     return;
   }
   if (!pull) return;
   if (e.type === "touchmove") {
     const dy = pull.y - t.screenY;
     pull.y = t.screenY;
-    // A pull that started at the edge goes on while the finger keeps going
-    // that way: at the top, the overscroll makes foliate's start (the
-    // absolute scrollTop) read as scrolled away from it.
-    if (dy > 0 && (pull.down > 0 || atScrollEnd())) pull.down += dy;
-    else if (dy < 0) pull.down = Math.max(0, pull.down + dy);
-    if (dy < 0 && (pull.up > 0 || atScrollStart())) pull.up -= dy;
-    else if (dy > 0) pull.up = Math.max(0, pull.up - dy);
-    if (pull.down > 0) showPull(1, pull.down);
-    else if (pull.up > 0) showPull(-1, pull.up);
+    // At the top, the overscroll makes foliate's start (the absolute
+    // scrollTop) grow again as the finger keeps going down, so that's the
+    // top too, and a scroll that reaches it can go on into a pull, as one
+    // that reaches the bottom can.
+    const start = view.renderer.start;
+    const atStart = atScrollStart() || (dy < 0 && start > pull.start);
+    pull.start = start;
+    pull.amount = stepPull(pull.amount, dy, atStart, atScrollEnd());
+    if (pull.amount > 0) showPull(1, pull.amount);
+    else if (pull.amount < 0) showPull(-1, -pull.amount);
     else if (pullShown) showPull(pullShown.dir, 0);
     return;
   }
   const p = pull;
   pull = null;
-  const shown = pullShown;
-  if (shown) showPull(shown.dir, 0);
-  if (e.type !== "touchend" || !shown) return;
-  const amount = shown.dir > 0 ? p.down : p.up;
-  if (amount >= PULL) post({ type: "pullRelease", dir: shown.dir });
+  if (pullShown) showPull(pullShown.dir, 0);
+  if (e.type !== "touchend") return;
+  if (Math.abs(p.amount) >= PULL)
+    post({ type: "pullRelease", dir: Math.sign(p.amount) });
 };
 
 // Input inside the book, for timing reading; at most every few seconds.
