@@ -23,6 +23,9 @@ protocol PagerSource: AnyObject {
     func pagerSawInput()
     /// The middle of the page was tapped.
     func pagerToggleChrome()
+    /// A turn was asked for whose page isn't laid out yet, or the last one
+    /// waiting turned or was dropped.
+    func pagerWaiting(_ waiting: Bool)
 }
 
 /// The one native pager every File is read in (ADR 0026): pages follow the
@@ -51,7 +54,12 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         didSet { backdrop.backgroundColor = backdropColor }
     }
 
-    private(set) var turns = PagerTurns()
+    private(set) var turns = PagerTurns() {
+        didSet {
+            let waiting = turns.queued > 0
+            if waiting != (oldValue.queued > 0) { source?.pagerWaiting(waiting) }
+        }
+    }
     private let stage = PagerStage()
     private let backdrop = UIView()
     private var back: UIView!

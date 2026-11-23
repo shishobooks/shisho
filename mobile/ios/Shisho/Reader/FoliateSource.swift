@@ -31,6 +31,8 @@ protocol FoliateSourceDelegate: AnyObject {
     /// A footnote, shown beside its reference (in the pager's points).
     func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont)
     func foliateExternalLink(_ url: URL)
+    /// A page turn is waiting for its page to be laid out.
+    func foliateWaiting(_ waiting: Bool)
     /// The book couldn't be shown, or its pages kept failing.
     func foliateFailed()
     func foliateSawInput()
@@ -477,5 +479,9 @@ final class FoliateSource: PagerSource {
 
     func pagerToggleChrome() {
         delegate?.foliateToggleChrome()
+    }
+
+    func pagerWaiting(_ waiting: Bool) {
+        delegate?.foliateWaiting(waiting)
     }
 }

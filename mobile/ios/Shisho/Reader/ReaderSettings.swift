@@ -4,19 +4,52 @@ import UIKit
 /// The ebook reader's display settings, with the web reader's names and
 /// colors (app/libraries/readerSettings.ts). They're kept per installation,
 /// so a phone and a tablet each keep their own, and never reach the server.
+///
+/// The theme follows the app's appearance, Light or Dark, until the user
+/// picks one. The reader's bars and sheets always take the app's
+/// appearance, whatever the page's theme.
 struct ReaderSettings: Codable, Equatable, Sendable {
     enum Theme: String, Codable, CaseIterable, Sendable {
         case light, sepia, dark, black
+    }
+
+    /// The theme the user picked, or Auto to follow the app.
+    enum ThemeChoice: String, Codable, CaseIterable, Sendable {
+        case auto, light, sepia, dark, black
+
+        var theme: Theme? { Theme(rawValue: rawValue) }
     }
 
     enum Layout: String, Codable, CaseIterable, Sendable {
         case paginated, scrolled
     }
 
-    var theme = Theme.light
+    var themeChoice = ThemeChoice.auto
     var layout = Layout.paginated
+    /// The app is in Dark Mode. Not a setting: the reader sets it from the
+    /// screen, and it isn't kept.
+    var appDark = false
+
+    /// The theme the page is drawn in.
+    var theme: Theme {
+        themeChoice.theme ?? (appDark ? .dark : .light)
+    }
 
     private static let key = "reader.settings"
+
+    private enum CodingKeys: String, CodingKey {
+        case themeChoice, layout
+    }
+
+    init() {}
+
+    /// Each setting on its own, so one a kept copy lacks, as from an earlier
+    /// build, takes its default without losing the others.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        themeChoice = (try? container.decodeIfPresent(ThemeChoice.self, forKey: .themeChoice)) ?? .auto
+        layout = (try? container.decodeIfPresent(Layout.self, forKey: .layout)) ?? .paginated
+    }
 
     static func load(_ defaults: UserDefaults = .standard) -> ReaderSettings {
         guard let data = defaults.data(forKey: key),
@@ -52,13 +85,14 @@ extension ReaderSettings.Theme {
         }
     }
 
-    var isDark: Bool { self == .dark || self == .black }
-
     var background: UIColor { UIColor(hex: colors.bg) }
     var foreground: UIColor { UIColor(hex: colors.fg) }
+}
 
+extension ReaderSettings.ThemeChoice {
     var label: LocalizedStringResource {
         switch self {
+        case .auto: "Auto"
         case .light: "Light"
         case .sepia: "Sepia"
         case .dark: "Dark"

@@ -45,12 +45,20 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     @ObservationIgnored private var pageStart: Double?
     private(set) var contents: [ContentsEntry] = []
     private(set) var note: OpenNote?
+    /// A page turn has waited a moment for its page to be laid out, as
+    /// while the book is still opening: shown, so the page doesn't look
+    /// frozen.
+    private(set) var turnWaiting = false
+    @ObservationIgnored private var turnWait: Task<Void, Never>?
     /// Another device's place, offered without jumping.
     private(set) var offer: ServerPlace?
     var settings: ReaderSettings {
         didSet {
             guard settings != oldValue else { return }
             settings.save()
+            // The app's appearance changing under a chosen theme changes
+            // nothing on the page.
+            guard settings.script != oldValue.script else { return }
             source?.apply(settings)
         }
     }
@@ -211,6 +219,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
 
     func close() {
         closed = true
+        turnWait?.cancel()
         tracker.close()
         placeWatch?.cancel()
         fileWatch?.cancel()
@@ -304,6 +313,21 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
 
     func foliateNote(paragraphs: [String], at rect: CGRect, href: String, font: NoteFont) {
         note = OpenNote(paragraphs: paragraphs, rect: rect, href: href, font: font)
+    }
+
+    func foliateWaiting(_ waiting: Bool) {
+        turnWait?.cancel()
+        guard waiting else {
+            turnWaiting = false
+            return
+        }
+        // Not for a page that lands in a moment, so quick turns don't
+        // flicker.
+        turnWait = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled else { return }
+            self?.turnWaiting = true
+        }
     }
 
     func foliateExternalLink(_ url: URL) {

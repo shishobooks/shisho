@@ -14,11 +14,12 @@ struct ReaderView: View {
     @ScaledMetric(relativeTo: .subheadline) private var settingsHeight: CGFloat = 250
     let close: () -> Void
 
+    /// The app's appearance, which the bars and sheets take.
+    @Environment(\.colorScheme) private var appScheme
     private var theme: ReaderSettings.Theme { model.settings.theme }
     private var foreground: Color { Color(theme.foreground) }
     /// The reader's controls and sheets are dark under the Dark and Black
     /// themes.
-    private var colorScheme: ColorScheme { theme.isDark ? .dark : .light }
 
     var body: some View {
         ZStack {
@@ -40,6 +41,9 @@ struct ReaderView: View {
                     .accessibilityHidden(model.phase != .reading)
             }
             status
+            if model.turnWaiting {
+                turnSpinner
+            }
             VStack(spacing: 0) {
                 if model.chromeVisible { topBar.transition(.move(edge: .top).combined(with: .opacity)) }
                 // Only once the book shows, so going there has a page to move.
@@ -63,8 +67,17 @@ struct ReaderView: View {
         }
         .animation(.easeOut(duration: 0.18), value: model.chromeVisible)
         .animation(.easeOut(duration: 0.2), value: model.offer)
-        .preferredColorScheme(colorScheme)
-        .task { await model.load() }
+        .animation(.easeOut(duration: 0.15), value: model.turnWaiting)
+        // Hidden with the bars, since the page under it may be in a theme
+        // the app's appearance doesn't show on.
+        .statusBarHidden(!model.chromeVisible && model.phase == .reading)
+        .task {
+            model.settings.appDark = appScheme == .dark
+            await model.load()
+        }
+        .onChange(of: appScheme) { _, scheme in
+            model.settings.appDark = scheme == .dark
+        }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
             model.memoryWarning()
         }
@@ -77,16 +90,12 @@ struct ReaderView: View {
             .presentationDragIndicator(.visible)
             .presentationBackground(Theme.background)
             .tint(Theme.primary)
-            // A sheet takes the appearance it was opened in; this keeps it
-            // in step with a theme chosen while it's open.
-            .preferredColorScheme(colorScheme)
         }
         .sheet(isPresented: $showingSettings) {
             ReaderSettingsSheet(settings: Bindable(model).settings) { showingSettings = false }
                 .presentationDetents([.height(settingsHeight)])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.background)
-                .preferredColorScheme(colorScheme)
         }
     }
 
@@ -125,6 +134,19 @@ struct ReaderView: View {
         case .reading:
             EmptyView()
         }
+    }
+
+    /// A turn waiting for its page to be laid out.
+    private var turnSpinner: some View {
+        ProgressView()
+            .controlSize(.regular)
+            .tint(foreground)
+            .padding(14)
+            .background(.ultraThinMaterial, in: Circle())
+            .transition(.opacity)
+            .allowsHitTesting(false)
+            .accessibilityLabel(Text("Loading the next page"))
+            .accessibilityIdentifier("reader.turnLoading")
     }
 
     // MARK: - Controls
@@ -371,7 +393,7 @@ private struct ReaderSettingsSheet: View {
             }
             .padding(.top, 10)
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            ChoiceSet(title: "Theme", options: ReaderSettings.Theme.allCases, selection: $settings.theme, label: \.label,
+            ChoiceSet(title: "Theme", options: ReaderSettings.ThemeChoice.allCases, selection: $settings.themeChoice, label: \.label,
                       identifier: "reader.theme")
             ChoiceSet(title: "Layout", options: ReaderSettings.Layout.allCases, selection: $settings.layout, label: \.label,
                       identifier: "reader.layout")

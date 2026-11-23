@@ -15,6 +15,8 @@ final class PagerControllerTests: XCTestCase {
         let layoutDelay: Duration
         private(set) var page: Int
         private(set) var rotations = 0
+        /// Each time the pager said a turn started or stopped waiting.
+        private(set) var waits: [Bool] = []
         private let views = (back: UIView(), current: UIView(), forward: UIView())
 
         init(pageCount: Int, at page: Int, layoutDelay: Duration) {
@@ -45,6 +47,7 @@ final class PagerControllerTests: XCTestCase {
         func pagerWillTurn() {}
         func pagerSawInput() {}
         func pagerToggleChrome() {}
+        func pagerWaiting(_ waiting: Bool) { waits.append(waiting) }
     }
 
     private var window: UIWindow!
@@ -101,6 +104,23 @@ final class PagerControllerTests: XCTestCase {
         }
         await wait(1500)
         XCTAssertEqual(book.page, 50)
+        assertSettled(book)
+        hide()
+    }
+
+    /// A turn asked for before its page is laid out says it's waiting, so
+    /// the reader can show it's loading, and stops once the page turns.
+    func testATurnWaitingForItsPageSaysSo() async {
+        let book = Book(pageCount: 100, at: 50, layoutDelay: .milliseconds(400))
+        show(book)
+        book.pager.tap(atFraction: 0.9)
+        XCTAssertEqual(book.waits, [])
+        await wait(30)
+        book.pager.tap(atFraction: 0.9)
+        XCTAssertEqual(book.waits, [true])
+        await wait(1200)
+        XCTAssertEqual(book.page, 52)
+        XCTAssertEqual(book.waits, [true, false])
         assertSettled(book)
         hide()
     }
