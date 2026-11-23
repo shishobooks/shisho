@@ -64,6 +64,14 @@ struct ReaderView: View {
                     }
                 }
             }
+            if let pull = model.pull {
+                PullHint(direction: pull.direction, progress: pull.progress,
+                         chapter: model.chapterTitle(toward: pull.direction), foreground: foreground)
+                    .frame(maxHeight: .infinity, alignment: pull.direction == .forward ? .bottom : .top)
+                    .padding(.vertical, 56)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
             if let image = model.image {
                 ImageViewer(image: image.image) { model.image = nil }
                     .transition(.opacity)
@@ -300,6 +308,13 @@ private struct ReaderBottomBar: View {
         (scrubbing ?? model.fraction).formatted(.percent.precision(.fractionLength(0)))
     }
 
+    /// The scrubber's value as VoiceOver says it: the chapter there, and how
+    /// far through.
+    private var scrubValue: String {
+        let fraction = scrubbing ?? model.fraction
+        return [model.chapterTitle(at: fraction), percentShown].compactMap { $0 }.joined(separator: ", ")
+    }
+
     /// Where the reader is, as VoiceOver says it, and as the readout does.
     private var place: String {
         model.placeLabel(percent: percentShown, pagesLeft: pagesLeftLabel)
@@ -339,13 +354,14 @@ private struct ReaderBottomBar: View {
                     model.go(toFraction: value)
                 }, step: 0.01, marks: model.marks)
                 .accessibilityLabel(Text("Place in the book"))
-                .accessibilityValue(Text(percentShown))
+                .accessibilityValue(Text(scrubValue))
                 .accessibilityIdentifier("reader.scrubber")
+
                 historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
                               identifier: "reader.forward", action: model.goForward)
             }
             HStack(spacing: 6) {
-                Text(model.chapterTitle ?? "")
+                Text((scrubbing.map(model.chapterTitle(at:)) ?? model.chapterTitle) ?? "")
                     .lineLimit(1)
                     // Read with the percentage, as the place.
                     .accessibilityHidden(true)
@@ -379,6 +395,87 @@ private struct ReaderBottomBar: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .background(ReaderView.barBackground.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Theme.border.frame(height: 1) }
+        // Where a drag would go, above the bar where a finger doesn't
+        // cover it, so it isn't blind. After the border, so it's in front.
+        .overlay(alignment: .top) {
+            if let scrubbing {
+                ScrubLabel(chapter: model.chapterTitle(at: scrubbing), percent: percentShown)
+                    // Its bottom on the bar's top edge, then 12 points up.
+                    .frame(height: 0, alignment: .bottom)
+                    .offset(y: -12)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: scrubbing == nil)
+    }
+}
+
+/// The chapter and place a scrubber drag would go to, in a pill centered
+/// over the bar, in the brand color so it catches the eye.
+private struct ScrubLabel: View {
+    let chapter: String?
+    let percent: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let chapter {
+                Text(chapter)
+                    .font(.geist(.footnote, weight: .semibold))
+                    .lineLimit(1)
+            }
+            Text(percent)
+                .font(.geist(.footnote))
+                .monospacedDigit()
+                .opacity(chapter == nil ? 1 : 0.8)
+        }
+        .foregroundStyle(Theme.primaryForeground)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Theme.primary, in: Capsule())
+        .shadow(color: Theme.primary.opacity(0.35), radius: 10, y: 4)
+        .padding(.horizontal, 24)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+}
+
+/// Scrolled, the hint for a pull past a section's end or start: it fades in
+/// as the pull goes on, and says letting go brings the chapter in once it
+/// would.
+private struct PullHint: View {
+    let direction: TurnDirection
+    let progress: Double
+    let chapter: String?
+    let foreground: Color
+
+    private var armed: Bool { progress >= 1 }
+
+    private var text: String {
+        if armed {
+            return chapter.map { String(localized: "Release for \($0)") }
+                ?? (direction == .forward ? String(localized: "Release for next chapter")
+                    : String(localized: "Release for previous chapter"))
+        }
+        return direction == .forward ? String(localized: "Pull for next chapter") : String(localized: "Pull for previous chapter")
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Icon(direction == .forward ? .arrowUp : .arrowDown, size: 15)
+                .rotationEffect(.degrees(armed ? 180 : 0))
+            Text(text)
+                .font(.geist(.footnote, weight: .medium))
+                .lineLimit(1)
+        }
+        .foregroundStyle(foreground.opacity(0.75))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(foreground.opacity(0.08), in: Capsule())
+        .padding(.horizontal, 24)
+        .opacity(min(1, progress * 1.4))
+        .scaleEffect(0.92 + 0.08 * min(1, progress))
+        .animation(.snappy(duration: 0.2), value: armed)
     }
 }
 
@@ -387,11 +484,13 @@ private struct ReaderBottomBar: View {
 private struct ImageViewer: View {
     let image: UIImage
     let close: () -> Void
+    /// How far a drag down has gone toward closing, from 0 to 1.
+    @State private var dismissing: CGFloat = 0
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            Color.black.ignoresSafeArea()
-            ZoomingImage(image: image)
+            Color.black.opacity(1 - dismissing * 0.8).ignoresSafeArea()
+            ZoomingImage(image: image, onDrag: { dismissing = $0 }, onDismiss: close)
                 .ignoresSafeArea()
                 .accessibilityLabel(Text("Image"))
                 .accessibilityAddTraits(.isImage)
@@ -418,15 +517,23 @@ private struct ImageViewer: View {
 /// A scroll view that fits the image and zooms it, by pinch or double-tap.
 private struct ZoomingImage: UIViewRepresentable {
     let image: UIImage
+    /// A drag down's progress toward closing, from 0 to 1.
+    let onDrag: (CGFloat) -> Void
+    let onDismiss: () -> Void
 
-    func makeUIView(context: Context) -> ZoomView { ZoomView(image: image) }
+    func makeUIView(context: Context) -> ZoomView { ZoomView(image: image, onDrag: onDrag, onDismiss: onDismiss) }
     func updateUIView(_ view: ZoomView, context: Context) {}
 
-    final class ZoomView: UIScrollView, UIScrollViewDelegate {
+    final class ZoomView: UIScrollView, UIScrollViewDelegate, UIGestureRecognizerDelegate {
         private let imageView: UIImageView
+        private let onDrag: (CGFloat) -> Void
+        private let onDismiss: () -> Void
+        private var dismissPan: UIPanGestureRecognizer!
 
-        init(image: UIImage) {
+        init(image: UIImage, onDrag: @escaping (CGFloat) -> Void, onDismiss: @escaping () -> Void) {
             imageView = UIImageView(image: image)
+            self.onDrag = onDrag
+            self.onDismiss = onDismiss
             super.init(frame: .zero)
             delegate = self
             showsVerticalScrollIndicator = false
@@ -440,6 +547,46 @@ private struct ZoomingImage: UIViewRepresentable {
             let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
             doubleTap.numberOfTapsRequired = 2
             addGestureRecognizer(doubleTap)
+            // A drag down closes the image, as in Photos, while it isn't
+            // zoomed in; zoomed, a drag pans it.
+            dismissPan = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+            dismissPan.delegate = self
+            addGestureRecognizer(dismissPan)
+            panGestureRecognizer.require(toFail: dismissPan)
+        }
+
+        override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard recognizer === dismissPan else { return super.gestureRecognizerShouldBegin(recognizer) }
+            let velocity = dismissPan.velocity(in: self)
+            return zoomScale <= minimumZoomScale * 1.01 && abs(velocity.y) > abs(velocity.x) * 1.5
+        }
+
+        private static let dismissDistance: CGFloat = 140
+
+        @objc private func dragged(_ recognizer: UIPanGestureRecognizer) {
+            let dy = recognizer.translation(in: self).y
+            switch recognizer.state {
+            case .changed:
+                imageView.transform = CGAffineTransform(translationX: 0, y: dy).scaledBy(x: zoomScale, y: zoomScale)
+                onDrag(min(1, abs(dy) / (Self.dismissDistance * 2)))
+            case .ended, .cancelled:
+                let velocity = recognizer.velocity(in: self).y
+                let closes = recognizer.state == .ended && (abs(dy) > Self.dismissDistance || abs(velocity) > 900)
+                if closes {
+                    let away = (dy >= 0 ? 1 : -1) * bounds.height
+                    UIView.animate(withDuration: 0.22, delay: 0, options: .curveEaseIn) {
+                        self.imageView.transform = CGAffineTransform(translationX: 0, y: away).scaledBy(x: self.zoomScale, y: self.zoomScale)
+                    } completion: { _ in self.onDismiss() }
+                    onDrag(1)
+                } else {
+                    UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0) {
+                        self.imageView.transform = CGAffineTransform(scaleX: self.zoomScale, y: self.zoomScale)
+                    }
+                    onDrag(0)
+                }
+            default:
+                break
+            }
         }
 
         required init?(coder: NSCoder) { nil }

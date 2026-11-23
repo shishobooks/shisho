@@ -71,6 +71,9 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     private(set) var note: OpenNote?
     /// An image open on its own, to zoom into.
     var image: OpenImage?
+    /// Scrolled, a pull past a section's end or start under way: which way
+    /// and how far toward letting go bringing the section beside in.
+    private(set) var pull: (direction: TurnDirection, progress: Double)?
     /// A page turn has waited a moment for its page to be laid out, as
     /// while the book is still opening: shown, so the page doesn't look
     /// frozen.
@@ -280,6 +283,33 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     func goForward() {
         guard let cfi = location?.cfi, let target = history.forward(from: cfi) else { return }
         source?.jump(to: .cfi(target))
+    }
+
+    func foliatePull(_ direction: TurnDirection?, progress: Double) {
+        let wasArmed = (pull?.progress ?? 0) >= 1
+        pull = direction.map { ($0, progress) }
+        // A tick when letting go would turn, as a pull to refresh gives.
+        if !wasArmed, progress >= 1, direction != nil {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
+    /// The chapter at fraction of the way through, as the scrubber's label
+    /// names where it would go.
+    func chapterTitle(at fraction: Double) -> String? {
+        start(atOrBefore: fraction).map { contents[starts[$0].index].title }
+    }
+
+    /// The chapter a pull that way would bring in, for its hint.
+    func chapterTitle(toward direction: TurnDirection) -> String? {
+        guard let here = start(atOrBefore: pageStart ?? fraction) else {
+            return direction == .forward ? starts.first.map { contents[$0.index].title } : nil
+        }
+        let place = starts[here].position
+        if direction == .forward {
+            return starts[(here + 1)...].first { $0.position > place + 0.0001 }.map { contents[$0.index].title }
+        }
+        return starts[..<here].last { $0.position < place - 0.0001 }.map { contents[$0.index].title }
     }
 
     func foliateImage(_ dataURL: String) {

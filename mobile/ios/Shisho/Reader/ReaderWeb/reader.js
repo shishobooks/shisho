@@ -582,54 +582,68 @@ const openImage = async (img) => {
 
 // MARK: - Touches
 
-// Scrolled mode stops at a section's end: pulling on past the end, or a
-// quick flick that starts there, continues into the next section, and the
-// same at the start. Screen coordinates, since the frame moves as the
+// Scrolled mode stops at a section's end. Pulling on past the end, or back
+// past the start, shows native's hint, and letting go past PULL brings in
+// the section beside. Screen coordinates, since the frame moves as the
 // container scrolls.
+const PULL = 130;
 let pull = null;
+let pullShown = null;
 const atScrollEnd = () => view.renderer.viewSize - view.renderer.end <= 2;
 const atScrollStart = () => view.renderer.start <= 1;
+// Whether there's a section that way to pull into.
+const hasSection = (dir) => {
+  const sections = view.book?.sections ?? [];
+  for (let i = currentIndex() + dir; i >= 0 && i < sections.length; i += dir)
+    if (sections[i].linear !== "no") return true;
+  return false;
+};
+const showPull = (dir, amount) => {
+  const shown = amount > 0 && hasSection(dir) ? { dir, amount } : null;
+  if (
+    shown?.dir === pullShown?.dir &&
+    Math.abs((shown?.amount ?? 0) - (pullShown?.amount ?? 0)) < 2
+  )
+    return;
+  pullShown = shown;
+  post({
+    type: "pull",
+    dir,
+    amount: shown ? Math.round(amount) : 0,
+    threshold: PULL,
+  });
+};
 const onPull = (e) => {
   if (!isScrolled()) return;
   const t = e.changedTouches?.[0];
   if (!t) return;
   if (e.type === "touchstart") {
-    pull = {
-      y0: t.screenY,
-      y: t.screenY,
-      t0: e.timeStamp,
-      down: 0,
-      up: 0,
-      startEnd: atScrollEnd(),
-      startStart: atScrollStart(),
-    };
+    pull = { y: t.screenY, down: 0, up: 0 };
     return;
   }
   if (!pull) return;
   if (e.type === "touchmove") {
     const dy = pull.y - t.screenY;
     pull.y = t.screenY;
-    pull.down =
-      dy > 0 && atScrollEnd()
-        ? pull.down + dy
-        : Math.max(0, pull.down + Math.min(dy, 0));
-    pull.up =
-      dy < 0 && atScrollStart()
-        ? pull.up - dy
-        : Math.max(0, pull.up - Math.max(dy, 0));
+    // A pull that started at the edge goes on while the finger keeps going
+    // that way: at the top, the overscroll makes foliate's start (the
+    // absolute scrollTop) read as scrolled away from it.
+    if (dy > 0 && (pull.down > 0 || atScrollEnd())) pull.down += dy;
+    else if (dy < 0) pull.down = Math.max(0, pull.down + dy);
+    if (dy < 0 && (pull.up > 0 || atScrollStart())) pull.up -= dy;
+    else if (dy > 0) pull.up = Math.max(0, pull.up - dy);
+    if (pull.down > 0) showPull(1, pull.down);
+    else if (pull.up > 0) showPull(-1, pull.up);
+    else if (pullShown) showPull(pullShown.dir, 0);
     return;
   }
   const p = pull;
   pull = null;
-  if (e.type !== "touchend") return;
-  const quick = e.timeStamp - p.t0 < 300;
-  // Past the first or last section there's nowhere to go, which foliate
-  // rejects.
-  const go = (turn) => Promise.resolve(turn).catch(() => {});
-  if (p.down > 60 || (p.startEnd && quick && p.y0 - p.y > 30))
-    go(view.renderer.next());
-  else if (p.up > 60 || (p.startStart && quick && p.y - p.y0 > 30))
-    go(view.renderer.prev());
+  const shown = pullShown;
+  if (shown) showPull(shown.dir, 0);
+  if (e.type !== "touchend" || !shown) return;
+  const amount = shown.dir > 0 ? p.down : p.up;
+  if (amount >= PULL) post({ type: "pullRelease", dir: shown.dir });
 };
 
 // Input inside the book, for timing reading; at most every few seconds.
@@ -1101,6 +1115,20 @@ window.R = {
   setChapterTargets(hrefs) {
     chapterHrefs = hrefs;
     chapterTargets = null;
+  },
+  // Moves into the section beside in place, for a pull let go before the
+  // neighbor that slides in was ready. Past the first or last section
+  // there's nowhere to go, which foliate rejects.
+  pullThrough(dir) {
+    Promise.resolve(view.renderer?.[dir > 0 ? "next" : "prev"]?.()).catch(
+      () => {},
+    );
+  },
+  // A sideways drag took the touch: a pull under way stops, and letting go
+  // of it brings nothing in.
+  cancelPull() {
+    pull = null;
+    if (pullShown) showPull(pullShown.dir, 0);
   },
   openImage(id) {
     const img = imageElements[id];

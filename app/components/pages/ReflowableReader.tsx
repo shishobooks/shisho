@@ -1168,33 +1168,13 @@ export default function ReflowableReader({
     <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col">
       <header
         className={cn(
-          "flex items-center justify-between gap-2 px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          "flex items-center justify-end gap-2 px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           overlayChrome &&
             "fixed top-[var(--banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           overlayChrome && !chromeVisible && "-translate-y-full",
         )}
         ref={headerRef}
       >
-        {/* Always shown, and disabled when there's nowhere to go, so they're
-            where the reader expects them after paging around a jump. */}
-        <div className="flex items-center">
-          <LocationButton
-            disabled={!bookReady || !locations.canGoBack}
-            hint="Back to where you were before a jump, such as a link, a chapter, or a search result"
-            label="Back to previous location"
-            onClick={locations.goBack}
-          >
-            <Undo2 className="h-4 w-4" />
-          </LocationButton>
-          <LocationButton
-            disabled={!bookReady || !locations.canGoForward}
-            hint="Forward to where you were when you went back"
-            label="Forward to next location"
-            onClick={locations.goForward}
-          >
-            <Redo2 className="h-4 w-4" />
-          </LocationButton>
-        </div>
         <div className="flex min-w-0 items-center gap-2">
           {toc.length > 0 && (
             <ReaderChapterSelect
@@ -1365,14 +1345,26 @@ export default function ReflowableReader({
       >
         {/* The window's arrow-key handler already turns pages, so the bar
             adds only Home and End for keyboard seeking. */}
-        <div className="px-4 pt-3">
+        {/* Back and forward through jumps either side of the bar, as the
+            Shisho app has them. Always shown, and disabled when there's
+            nowhere to go, so they're where the reader expects them after
+            paging around a jump. */}
+        <div className="flex items-center gap-1 px-2 pt-2">
+          <LocationButton
+            disabled={!bookReady || !locations.canGoBack}
+            hint="Back to where you were before a jump, such as a link, a chapter, or a search result"
+            label="Back to previous location"
+            onClick={locations.goBack}
+          >
+            <Undo2 className="h-4 w-4" />
+          </LocationButton>
           <div
             aria-label="Reading progress"
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={progressPercent}
             aria-valuetext={`${progressPercent}%`}
-            className="relative h-1.5 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="relative h-1.5 flex-1 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={handleProgressClick}
             onKeyDown={handleProgressKeyDown}
             role="slider"
@@ -1384,12 +1376,20 @@ export default function ReflowableReader({
             />
             <ProgressMarks marks={progressMarks} />
           </div>
-          {currentTocLabel && (
-            <div className="text-xs text-muted-foreground mt-1">
-              {currentTocLabel}
-            </div>
-          )}
+          <LocationButton
+            disabled={!bookReady || !locations.canGoForward}
+            hint="Forward to where you were when you went back"
+            label="Forward to next location"
+            onClick={locations.goForward}
+          >
+            <Redo2 className="h-4 w-4" />
+          </LocationButton>
         </div>
+        {currentTocLabel && (
+          <div className="px-4 text-xs text-muted-foreground">
+            {currentTocLabel}
+          </div>
+        )}
 
         <div className="flex items-center justify-between px-4 py-2">
           <Button

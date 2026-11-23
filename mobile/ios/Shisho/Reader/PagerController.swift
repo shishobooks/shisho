@@ -70,6 +70,8 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     /// Which way the drag going on brings a page in, and whether that page
     /// was put under the finger rather than the backdrop.
     private var dragDirection: TurnDirection?
+    /// A finger is dragging the pages sideways.
+    private(set) var isDragging = false
     private var revealed = false
     private var touchDownAt: TimeInterval = 0
 
@@ -150,6 +152,37 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         prepare(direction)
         place(dx: 0, direction: direction)
         animate(direction, commit: true, velocity: 0)
+    }
+
+    /// Scrolled, a pull past a section's end or start: the section beside
+    /// slides in from below or above over this one, which moves a little
+    /// the other way. False when its page isn't ready.
+    @discardableResult
+    func slide(_ direction: TurnDirection) -> Bool {
+        guard turns.available(direction) else { return false }
+        finishAnimation()
+        source?.pagerWillTurn()
+        let height = stage.bounds.height
+        let outgoing = current!
+        let incoming = page(direction)
+        let from: CGFloat = direction == .forward ? 1 : -1
+        backdrop.isHidden = true
+        stage.bringSubviewToFront(incoming)
+        incoming.transform = CGAffineTransform(translationX: 0, y: from * height)
+        let animator = UIViewPropertyAnimator(duration: 0.4, timingParameters: UISpringTimingParameters(dampingRatio: 1))
+        animator.addAnimations {
+            incoming.transform = .identity
+            outgoing.transform = CGAffineTransform(translationX: 0, y: -from * height * 0.25)
+        }
+        animator.addCompletion { [weak self] _ in
+            guard let self, self.animator === animator else { return }
+            self.animator = nil
+            self.settle()
+        }
+        self.animator = animator
+        rotate(direction)
+        animator.startAnimation()
+        return true
     }
 
     private func page(_ direction: TurnDirection) -> UIView {
@@ -319,6 +352,7 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     func dragBegan() {
+        isDragging = true
         finishAnimation()
         turns.dragBegan()
         dragDirection = nil
@@ -337,6 +371,7 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     func dragEnded(_ dx: CGFloat, velocity: CGFloat, completed: Bool) {
+        isDragging = false
         guard let direction = dragDirection else {
             _ = turns.dragEnded(.forward, asked: false, revealed: false)
             settle()

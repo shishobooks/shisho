@@ -73,7 +73,7 @@ A tap on the left or right third of the page turns it, and a tap in the middle s
 The controls have:
 
 - **Contents**, the book's chapters. For EPUB and KePub books these are the chapters Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. MOBI and AZW3 books use the table of contents inside the file.
-- A bar across the bottom to move through the book, with a mark where each chapter starts.
+- A bar across the bottom to move through the book, with a mark where each chapter starts, and at its ends, [back and forward](./reading-and-playback.md#going-back-after-a-jump) to where you were before following a link, choosing a chapter, or going to a note.
 
 Under the page, with or without the controls, are the chapter, the pages left in it, and how far through the book you are. Tap the pages left to count the pages left in the book instead. Pages past the chapter showing are estimated from the pages read so far, so the count settles as you read.
 - **Settings**: the [theme](./reading-and-playback.md#display-settings) and **Paginated** or **Scrolled** layout, kept on each phone or tablet. The theme starts on **System**, which is Light or Dark to match the app's appearance; choose another theme to keep it whatever the appearance. In scrolled mode, keep scrolling past the end of a chapter to go on to the next, or swipe left or right to go to the next or previous chapter. A tap that stops a scroll doesn't show the controls. Fixed-layout books always turn page by page, whatever the layout setting, as in the Shisho reader.

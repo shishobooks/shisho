@@ -180,6 +180,10 @@ struct PageMessage: Decodable, Sendable {
     /// text's size.
     var lineHeight: Double?
     var dir: Int?
+    /// How far a pull has gone past a section's end or start, and how far
+    /// it has to go to bring the section beside in.
+    var amount: Double?
+    var threshold: Double?
     var message: String?
 }
 

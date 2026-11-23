@@ -42,6 +42,10 @@ protocol FoliateSourceDelegate: AnyObject {
     /// A page turn is starting, which hides the controls.
     func foliateTurning()
     func foliateToggleChrome()
+    /// Scrolled, a pull past a section's end or start: which way, and how
+    /// far toward bringing the section beside in, from 0 to 1; nil when it
+    /// stopped.
+    func foliatePull(_ direction: TurnDirection?, progress: Double)
     /// An image to show on its own, as a data URL.
     func foliateImage(_ dataURL: String)
     /// A link inside the book was tapped: the reader jumps there.
@@ -421,6 +425,17 @@ final class FoliateSource: PagerSource {
                                   font: NoteFont.resolve(message.fontFamily ?? ""), lineHeight: message.lineHeight)
         case "link":
             if let href = message.href { delegate?.foliateFollowLink(href) }
+        case "pull":
+            let amount = message.amount ?? 0
+            let direction: TurnDirection = (message.dir ?? 1) > 0 ? .forward : .back
+            delegate?.foliatePull(amount > 0 ? direction : nil, progress: min(1, amount / max(1, message.threshold ?? 80)))
+        case "pullRelease":
+            // Not while a sideways drag has the touch, which turns instead.
+            guard !pager.isDragging else { return }
+            // The section beside slides in when it's laid out; when it isn't
+            // yet, the page moves into it in place.
+            let direction: TurnDirection = (message.dir ?? 1) > 0 ? .forward : .back
+            if !pager.slide(direction) { current.call("R.pullThrough(\(direction.rawValue))") }
         case "image":
             if let data = message.message { delegate?.foliateImage(data) }
         case "external":
@@ -521,6 +536,11 @@ final class FoliateSource: PagerSource {
     var pagerBlocksDrag: Bool { current.hasSelection }
 
     func pagerWillTurn() {
+        // A sideways drag or turn ends any pull past a section's end.
+        if !paginated {
+            current.call("R.cancelPull()")
+            delegate?.foliatePull(nil, progress: 0)
+        }
         if current.hasSelection { current.clearSelection() }
         delegate?.foliateTurning()
     }

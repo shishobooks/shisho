@@ -751,6 +751,12 @@
     "Publisher" : {
 
     },
+    "Pull for next chapter" : {
+
+    },
+    "Pull for previous chapter" : {
+
+    },
     "Rated %@ of 5 stars" : {
 
     },
@@ -773,6 +779,15 @@
 
     },
     "Reference" : {
+
+    },
+    "Release for %@" : {
+
+    },
+    "Release for next chapter" : {
+
+    },
+    "Release for previous chapter" : {
 
     },
     "Released" : {

@@ -48,3 +48,14 @@ name: Read in scrolled layout
       id: reader.progress
       text: "Chapter Two.*"
     timeout: 30000
+# From the top of Chapter Two, pulling down past its start brings Chapter
+# One back in.
+- swipe:
+    start: "50%,30%"
+    end: "50%,85%"
+    duration: 900
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter One.*"
+    timeout: 30000
