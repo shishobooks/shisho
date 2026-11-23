@@ -974,6 +974,19 @@ export class Paginator extends HTMLElement {
     async scrollToAnchor(anchor, select) {
         return this.#scrollToAnchor(anchor, select ? 'selection' : 'navigation')
     }
+    // Shisho patch: the page going to an element or range would show,
+    // paginated, as #scrollToAnchor and #scrollToRect work it out; null when
+    // scrolled or it isn't drawn. The iOS reader counts the pages to the
+    // next chapter with it.
+    pageOf(anchor) {
+        if (this.scrolled || !this.size) return null
+        const rects = contentStart(uncollapse(anchor))?.getClientRects?.()
+        const rect = rects && (Array.from(rects)
+            .find(r => r.width > 0 && r.height > 0) || rects[0])
+        if (!rect) return null
+        const offset = this.#getRectMapper()(rect).left
+        return Math.floor(offset / this.size) + (this.#rtl ? -1 : 1)
+    }
     async #scrollToAnchor(anchor, reason = 'anchor') {
         this.#anchor = anchor
         // Shisho patch: measure an element at its first drawn content

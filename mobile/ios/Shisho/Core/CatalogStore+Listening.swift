@@ -152,7 +152,9 @@ extension CatalogStore {
 
     /// Keeps another device's place as an offer when it arrives while this
     /// device has moves of its own to send, since sending them may replace
-    /// it on the server. A newer one replaces an offer kept already.
+    /// it on the server. A newer one replaces an offer kept already, and the
+    /// same move sent again, as when its Device is renamed or deleted,
+    /// brings the Device's name up to date.
     static func keepOffer(_ position: Shishoapp.FeedReadingPosition, ownDeviceID: String, in db: Database) throws {
         guard !ownDeviceID.isEmpty, position.deviceId != ownDeviceID,
               let occurredAt = timestamp(position.occurredAt),
@@ -167,6 +169,10 @@ extension CatalogStore {
             WHERE file_id = ? AND ? > COALESCE(base_occurred_at, 0) AND ? > COALESCE(offer_occurred_at, 0)
             """, arguments: [place.seconds, place.cfi, place.percentage, occurredAt, position.source.rawValue, position.deviceId,
                              position.deviceName, position.fileId, occurredAt, occurredAt])
+        try db.execute(sql: """
+            UPDATE local_positions SET offer_device_id = ?, offer_device_name = ?
+            WHERE file_id = ? AND offer_occurred_at = ? AND offer_source = ?
+            """, arguments: [position.deviceId, position.deviceName, position.fileId, occurredAt, position.source.rawValue])
     }
 
     /// The user went to the offered place, or chose to stay. Either way the

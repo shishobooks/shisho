@@ -962,6 +962,9 @@
     "Supplement to " : {
 
     },
+    "Swipe up or down to zoom" : {
+
+    },
     "Switches to this account" : {
 
     },
@@ -1155,9 +1158,6 @@
 
     },
     "^[%lld page](inflect: true)" : {
-
-    },
-    "^[%lld page](inflect: true) left" : {
 
     },
     "^[%lld page](inflect: true) left in book" : {

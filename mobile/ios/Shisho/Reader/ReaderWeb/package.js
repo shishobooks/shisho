@@ -27,8 +27,9 @@ const DC_ELEMENTS = [
 export const cleanPackage = (text) => {
   let out = text;
   // A byte-order mark or blank line before the declaration is an error.
-  const declaration = out.indexOf("<?xml");
-  if (declaration > 0) out = out.slice(declaration);
+  // Not <?xml-stylesheet ...?>, which can come anywhere.
+  const before = /^[\s\uFEFF]+(?=<\?xml[\s?])/.exec(out);
+  if (before) out = out.slice(before[0].length);
   // Dublin Core 1.0, from the oldest books, as the 1.1 foliate reads.
   out = out.replaceAll("http://purl.org/dc/elements/1.0/", DC);
   // Dublin Core elements written without a prefix, in the package's own
@@ -53,7 +54,10 @@ export const cleanPackage = (text) => {
     const used = new RegExp(`</?${prefix}:|\\s${prefix}:[\\w-]+\\s*=`);
     const declared = new RegExp(`xmlns:${prefix}\\s*=`);
     if (used.test(out) && !declared.test(out))
-      out = out.replace(/<package\b/, `<package xmlns:${prefix}="${uri}"`);
+      out = out.replace(
+        /<((?:[\w-]+:)?package)\b/,
+        `<$1 xmlns:${prefix}="${uri}"`,
+      );
   };
   declare("dc", DC);
   declare("opf", OPF);

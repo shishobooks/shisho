@@ -117,7 +117,8 @@ const atEnd = () => {
 };
 
 // The links on the current page, in the WebView's points, so native can
-// hit-test a tap without a round trip: [x, y, width, height, id] per box.
+// hit-test a tap without a round trip: [x, y, width, height, id, note] per
+// box, note 1 for a note reference.
 let linkElements = [];
 const linkRects = () => {
   linkElements = [];
@@ -131,17 +132,20 @@ const linkRects = () => {
     const scale = frame.offsetWidth > 0 ? fr.width / frame.offsetWidth : 1;
     for (const a of doc.querySelectorAll("a[href]")) {
       let id = -1;
+      let note = null;
       for (const r of a.getClientRects()) {
         const x = fr.left + r.left * scale;
         const width = r.width * scale;
         if (width === 0 || x + width < 0 || x > innerWidth) continue;
         if (id < 0) id = linkElements.push(a) - 1;
+        note ??= isNoteReference(a) ? 1 : 0;
         out.push([
           Math.round(x),
           Math.round(fr.top + r.top * scale),
           Math.round(width),
           Math.round(r.height * scale),
           id,
+          note,
         ]);
       }
     }
@@ -194,23 +198,65 @@ const sectionPlace = (index, page, pages) => {
 };
 
 // Where the chapters start, as the contents placed them, resolved once the
-// book is open. Native sends them to every page.
+// book is open and grouped by section. Native sends them to every page. A
+// file's sections are resolved once each, not once per chapter: foliate's
+// resolveHref searches the manifest and spine, and contents can run to tens
+// of thousands of entries.
 let chapterHrefs = [];
 let chapterTargets = null;
 const resolvedChapters = () => {
-  if (chapterTargets || !view.book) return chapterTargets ?? [];
-  chapterTargets = [];
+  if (chapterTargets || !view.book) return chapterTargets ?? new Map();
+  chapterTargets = new Map();
+  const sections = new Map();
   for (const href of chapterHrefs) {
     try {
-      const resolved = view.book.resolveHref(href);
-      // A MOBI resolves later; its chapters are counted the estimated way.
-      if (resolved && !(resolved instanceof Promise) && resolved.index >= 0)
-        chapterTargets.push(resolved);
+      const [path, hash] = href.split("#");
+      if (!sections.has(path)) {
+        const resolved = view.book.resolveHref(path);
+        // A MOBI resolves later; its chapters are counted the estimated way.
+        sections.set(
+          path,
+          resolved && !(resolved instanceof Promise) && resolved.index >= 0
+            ? resolved.index
+            : null,
+        );
+      }
+      const index = sections.get(path);
+      if (index == null) continue;
+      if (!chapterTargets.has(index)) chapterTargets.set(index, []);
+      chapterTargets.get(index).push(hash || null);
     } catch {
       // A chapter this copy doesn't have.
     }
   }
   return chapterTargets;
+};
+
+// The pages the chapters in the section showing start on, laid out as it is
+// now: the same until the section or its layout changes, and dropped when
+// the page lays out again in place.
+let chapterPages = null;
+const chapterPagesIn = (index, doc, r) => {
+  const key = `${index} ${r.size} ${r.pages} ${view.book?.dir}`;
+  if (chapterPages?.doc === doc && chapterPages.key === key)
+    return chapterPages.pages;
+  const pages = [];
+  for (const id of resolvedChapters().get(index) ?? []) {
+    // A chapter that starts the section is on its first page.
+    if (id == null) continue;
+    const node = view.book.getTOCFragment?.(doc, id);
+    const page = node && r.pageOf?.(node);
+    if (page == null) continue;
+    pages.push({
+      page,
+      atTop:
+        node.getBoundingClientRect().top <
+        (doc.defaultView?.innerHeight ?? 0) * 0.15,
+    });
+  }
+  pages.sort((a, b) => a.page - b.page);
+  chapterPages = { doc, key, pages };
+  return pages;
 };
 
 // The first page after the one showing that a chapter starts on, in the
@@ -225,23 +271,7 @@ const nextChapterPage = (index, page) => {
       return null;
     const doc = currentDoc();
     if (!doc) return null;
-    let next = null;
-    for (const target of resolvedChapters()) {
-      if (target.index !== index) continue;
-      const el = target.anchor?.(doc);
-      const node = el?.nodeType === 1 ? el : el?.startContainer?.parentElement;
-      if (!node?.getBoundingClientRect) continue;
-      const rect = node.getBoundingClientRect();
-      const offset =
-        view.book?.dir === "rtl" ? r.pages * r.size - rect.right : rect.left;
-      const at = Math.floor(offset / r.size) + 1;
-      if (at <= page || (next && at >= next.page)) continue;
-      next = {
-        page: at,
-        atTop: rect.top < (doc.defaultView?.innerHeight ?? 0) * 0.15,
-      };
-    }
-    return next;
+    return chapterPagesIn(index, doc, r).find((c) => c.page > page) ?? null;
   } catch {
     return null;
   }
@@ -308,6 +338,9 @@ view.addEventListener("relocate", (e) => {
   // like any other.
   const reason =
     e.detail?.reason ?? (view.isFixedLayout && !quiet ? "navigation" : null);
+  // Laid out again in place, as once fonts or images load: where the
+  // chapters fall can move without the page count changing.
+  if (reason === "anchor") chapterPages = null;
   const firstScreen =
     reason === "scroll" &&
     currentIndex() === openedSection &&
@@ -437,7 +470,7 @@ const rectOf = (a) => {
 };
 
 // Follows a link native hit-tested. A note reference shows its note in a
-// native popover; another link inside the book jumps there.
+// native card; another link inside the book jumps there.
 const activate = async (a) => {
   // A fixed-layout spread shows two sections; a link belongs to its own.
   const index = sectionOfDoc.get(a.ownerDocument) ?? currentIndex();
@@ -452,7 +485,7 @@ const activate = async (a) => {
             ? a.ownerDocument
             : await noteDoc(resolved.index);
         const paragraphs = doc ? noteText(resolved.anchor(doc)) : [];
-        // The font around the reference, for the popover, as the web
+        // The font around the reference, for the card, as the web
         // reader's takes it.
         // And its line height, as a multiple of the text's size; "normal"
         // gives none.
@@ -559,6 +592,31 @@ const imageAt = (x, y) => {
   return null;
 };
 
+// An SVG drawn as a PNG, its longer side 2048 pixels, to zoom into.
+const rasterize = async (blob) => {
+  const url = URL.createObjectURL(blob);
+  try {
+    const im = new Image();
+    im.src = url;
+    await im.decode();
+    const w = im.naturalWidth || 1024;
+    const h = im.naturalHeight || 1024;
+    const scale = 2048 / Math.max(w, h);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    canvas.getContext("2d").drawImage(im, 0, 0, canvas.width, canvas.height);
+    return await new Promise((resolve, reject) =>
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("no PNG"))),
+        "image/png",
+      ),
+    );
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
+
 // Sends an image's bytes to native to show on its own, zoomable.
 const openImage = async (img) => {
   try {
@@ -568,7 +626,9 @@ const openImage = async (img) => {
       img.getAttribute("href") ||
       img.getAttributeNS("http://www.w3.org/1999/xlink", "href");
     if (!src) return;
-    const blob = await (await fetch(src)).blob();
+    let blob = await (await fetch(src)).blob();
+    // Native shows bitmaps, so an SVG is drawn to one first.
+    if (blob.type === "image/svg+xml") blob = await rasterize(blob);
     const data = await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -600,18 +660,29 @@ const hasSection = (dir) => {
   return false;
 };
 const showPull = (dir, amount) => {
-  const shown = amount > 0 && hasSection(dir) ? { dir, amount } : null;
+  const shown =
+    amount > 0 && hasSection(dir)
+      ? { dir, amount, armed: amount >= PULL }
+      : null;
   if (
     shown?.dir === pullShown?.dir &&
+    shown?.armed === pullShown?.armed &&
     Math.abs((shown?.amount ?? 0) - (pullShown?.amount ?? 0)) < 2
   )
     return;
   pullShown = shown;
+  // The section it brings in, by where it starts, so the hint names the
+  // chapter showing at its top: two chapters in one section are passed by.
+  const next = shown ? adjacentSection(currentIndex(), dir) : null;
   post({
     type: "pull",
     dir,
     amount: shown ? Math.round(amount) : 0,
     threshold: PULL,
+    // By the rule letting go uses, which the rounded amount can miss.
+    armed: !!shown?.armed,
+    destination:
+      next == null ? null : (view.getSectionFractions?.()[next] ?? null),
   });
 };
 const onPull = (e) => {
@@ -686,21 +757,13 @@ const checkSelectionEdge = (doc) => {
 
 // Scrolled, whether the text was still moving when a finger touched down:
 // a tap that only stops a scroll isn't a tap on the page, so it doesn't
-// show the controls. Watched a frame at a time, only while scrolled.
+// show the controls. From the paginator's scroll events, which go on
+// through momentum, so an idle page does no work.
 let scrollMovedAt = 0;
-let scrollStart = null;
 let touchStoppedScroll = false;
-const watchScroll = () => {
-  if (isScrolled()) {
-    const start = view.renderer?.start;
-    if (start !== scrollStart) {
-      scrollStart = start;
-      scrollMovedAt = performance.now();
-    }
-  }
-  requestAnimationFrame(watchScroll);
+const noteScroll = () => {
+  scrollMovedAt = performance.now();
 };
-requestAnimationFrame(watchScroll);
 
 let selectionActive = false;
 const guardWindow = (win, isTop) => {
@@ -830,17 +893,21 @@ const stepFixed = async (base, dir) => {
   return currentIndex() !== base.index;
 };
 
+// The section a step that way from index goes to, past any outside the
+// reading order, or null past the first or last.
+const adjacentSection = (index, dir) => {
+  if (index == null) return null;
+  const sections = view.book?.sections ?? [];
+  for (let i = index + dir; i >= 0 && i < sections.length; i += dir)
+    if (sections[i].linear !== "no") return i;
+  return null;
+};
+
 // Scrolled, a neighbor is the next or previous section from its top, so a
 // sideways drag brings in the chapter beside, as a turn brings in a page.
 // Its base is the section alone: scrolling within it moves nothing.
 const stepSection = async (index, dir, token) => {
-  const sections = view.book.sections;
-  let next = null;
-  for (let i = index + dir; i >= 0 && i < sections.length; i += dir)
-    if (sections[i].linear !== "no") {
-      next = i;
-      break;
-    }
+  const next = adjacentSection(index, dir);
   if (next != null) {
     await view.renderer.goTo({ index: next });
     await settle();
@@ -1116,14 +1183,16 @@ window.R = {
   setChapterTargets(hrefs) {
     chapterHrefs = hrefs;
     chapterTargets = null;
+    chapterPages = null;
   },
   // Moves into the section beside in place, for a pull let go before the
-  // neighbor that slides in was ready. Past the first or last section
-  // there's nowhere to go, which foliate rejects.
+  // neighbor that slides in was ready: at its top, where the neighbor would
+  // have shown it. Not foliate's prev, which lands at the previous section's
+  // end, and during the bounce at the top only scrolls back to it.
   pullThrough(dir) {
-    Promise.resolve(view.renderer?.[dir > 0 ? "next" : "prev"]?.()).catch(
-      () => {},
-    );
+    const next = adjacentSection(currentIndex(), dir);
+    if (next == null) return;
+    Promise.resolve(view.renderer?.goTo({ index: next })).catch(() => {});
   },
   // A sideways drag took the touch: a pull under way stops, and letting go
   // of it brings nothing in.
@@ -1295,6 +1364,7 @@ const open = async ({
   // book's own can be a form foliate can't use, as en_US or English.
   if (language && book.metadata) book.metadata.language = language;
   await view.open(book);
+  view.renderer?.addEventListener?.("scroll", noteScroll, { passive: true });
   applyStyles(s);
   post({
     type: "opened",

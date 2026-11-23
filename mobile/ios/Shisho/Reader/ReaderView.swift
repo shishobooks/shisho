@@ -21,8 +21,6 @@ struct ReaderView: View {
     @Environment(\.colorScheme) private var appScheme
     private var theme: ReaderSettings.Theme { model.settings.theme }
     private var foreground: Color { Color(theme.foreground) }
-    /// The reader's controls and sheets are dark under the Dark and Black
-    /// themes.
 
     var body: some View {
         ZStack {
@@ -66,7 +64,7 @@ struct ReaderView: View {
             }
             if let pull = model.pull {
                 PullHint(direction: pull.direction, progress: pull.progress,
-                         chapter: model.chapterTitle(toward: pull.direction), foreground: foreground)
+                         chapter: pull.chapter, foreground: foreground)
                     .frame(maxHeight: .infinity, alignment: pull.direction == .forward ? .bottom : .top)
                     .padding(.vertical, 56)
                     .allowsHitTesting(false)
@@ -170,11 +168,10 @@ struct ReaderView: View {
 
     // MARK: - Controls
 
-    /// The bars over the page take the app's look, in the reader theme's
-    /// appearance: a native navigation bar with the web app's type and
-    /// colors (variant E).
-    /// Solid, not a blur: a blur over the live pages costs every frame
-    /// they or the bars move.
+    /// The bars over the page take the app's look and appearance, whatever
+    /// the reader theme: a native navigation bar with the web app's type and
+    /// colors (variant E). Solid, not a blur: a blur over the live pages
+    /// costs every frame they or the bars move.
     static var barBackground: some View {
         Theme.background
     }
@@ -280,10 +277,8 @@ struct ReaderView: View {
         }
         .buttonStyle(.plain)
         .disabled(pagesLeftLabel == nil)
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(readoutLabel))
         .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
-        .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("reader.progress")
     }
 
@@ -325,7 +320,9 @@ private struct ReaderBottomBar: View {
         Button(action: action) {
             Icon(icon, size: 18)
                 .frame(width: 36, height: 44)
-                .contentShape(Rectangle())
+                // 44 points wide to tap, a little into the scrubber's ends,
+                // which only its handle moves.
+                .contentShape(Rectangle().inset(by: -4))
         }
         .buttonStyle(.plain)
         .foregroundStyle(Theme.foreground.opacity(enabled ? 0.85 : 0.3))
@@ -352,7 +349,7 @@ private struct ReaderBottomBar: View {
                 Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
                     scrubbing = nil
                     model.go(toFraction: value)
-                }, step: 0.01, marks: model.marks)
+                }, step: 0.01, onAdjust: { model.go(toFraction: $0, adjusting: true) }, marks: model.marks)
                 .accessibilityLabel(Text("Place in the book"))
                 .accessibilityValue(Text(scrubValue))
                 .accessibilityIdentifier("reader.scrubber")
@@ -372,7 +369,7 @@ private struct ReaderBottomBar: View {
                             .lineLimit(1)
                             .contentTransition(.numericText())
                             .frame(minHeight: 32)
-                            .contentShape(Rectangle())
+                            .hitArea(height: 32)
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
@@ -492,8 +489,6 @@ private struct ImageViewer: View {
             Color.black.opacity(1 - dismissing * 0.8).ignoresSafeArea()
             ZoomingImage(image: image, onDrag: { dismissing = $0 }, onDismiss: close)
                 .ignoresSafeArea()
-                .accessibilityLabel(Text("Image"))
-                .accessibilityAddTraits(.isImage)
             Button(action: close) {
                 Icon(.x, size: 20)
                     .foregroundStyle(.white)
@@ -553,6 +548,19 @@ private struct ZoomingImage: UIViewRepresentable {
             dismissPan.delegate = self
             addGestureRecognizer(dismissPan)
             panGestureRecognizer.require(toFail: dismissPan)
+            // VoiceOver's swipe up and down zooms, for those who can't pinch.
+            isAccessibilityElement = true
+            accessibilityLabel = String(localized: "Image")
+            accessibilityHint = String(localized: "Swipe up or down to zoom")
+            accessibilityTraits = [.image, .adjustable]
+        }
+
+        override func accessibilityIncrement() {
+            setZoomScale(min(maximumZoomScale, zoomScale * 2), animated: true)
+        }
+
+        override func accessibilityDecrement() {
+            setZoomScale(max(minimumZoomScale, zoomScale / 2), animated: true)
         }
 
         override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {

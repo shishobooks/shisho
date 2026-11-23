@@ -10,3 +10,12 @@ describe("the paginator's settled() patch", () => {
     expect(typeof Paginator.prototype.settled).toBe("function");
   });
 });
+
+// The iOS reader (mobile/ios/Shisho/Reader/ReaderWeb/reader.js) counts the
+// pages to the next chapter with pageOf() where it exists, and falls back to
+// an estimate where it doesn't, so losing the patch would fail nothing else.
+describe("the paginator's pageOf() patch", () => {
+  it("is there", () => {
+    expect(typeof Paginator.prototype.pageOf).toBe("function");
+  });
+});

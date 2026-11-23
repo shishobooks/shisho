@@ -42,10 +42,11 @@ protocol FoliateSourceDelegate: AnyObject {
     /// A page turn is starting, which hides the controls.
     func foliateTurning()
     func foliateToggleChrome()
-    /// Scrolled, a pull past a section's end or start: which way, and how
-    /// far toward bringing the section beside in, from 0 to 1; nil when it
-    /// stopped.
-    func foliatePull(_ direction: TurnDirection?, progress: Double)
+    /// Scrolled, a pull past a section's end or start: which way, how far
+    /// toward bringing the section beside in, from 0 to 1 (1 only once
+    /// letting go would), and where that section starts along the book; nil
+    /// when it stopped.
+    func foliatePull(_ direction: TurnDirection?, progress: Double, destination: Double?)
     /// An image to show on its own, as a data URL.
     func foliateImage(_ dataURL: String)
     /// A link inside the book was tapped: the reader jumps there.
@@ -91,6 +92,8 @@ final class FoliateSource: PagerSource {
     private var opened = false
     /// The current page is going somewhere: its neighbors wait for it.
     private var navigating = false
+    /// Whether a jump hasn't landed yet.
+    var isJumping: Bool { navigating }
     private var navigationTimeout: Task<Void, Never>?
     /// The place to reopen at if a page's process ends.
     private var lastCFI: String?
@@ -112,7 +115,7 @@ final class FoliateSource: PagerSource {
     /// Gives a page the chapters' places, sent again to one that restarts.
     private var chapterTargetsScript: String?
     /// The neighbors waiting to open, with the tokens their open answers.
-    private var neighborTokens: [(ReaderPage, TurnDirection, Int)] = []
+    private var unopenedNeighbors: [(ReaderPage, TurnDirection)] = []
 
     /// How the page opens the book a part at a time: as a zip (EPUB,
     /// KePub) or as MOBI records (MOBI, AZW3), and how big it is.
@@ -171,17 +174,20 @@ final class FoliateSource: PagerSource {
         if case .cfi(let cfi) = start { lastCFI = cfi }
         current.call("R.open(\(openArguments(start: start, neighbor: 0, token: 0)))")
         // Waiting for their open, so nothing syncs them before it.
-        neighborTokens = [(forward, .forward, startFlight(forward)), (back, .back, startFlight(back))]
+        unopenedNeighbors = [(forward, .forward), (back, .back)]
+        for page in [forward, back] { _ = startFlight(page) }
     }
 
     /// The neighbors' first open, once the current page shows, from where
-    /// it is.
+    /// it is and in the settings then: a token of their own, as settings
+    /// applied while the page opened replace the ones they waited with.
     private func openNeighbors() {
         let start = lastCFI.map(ReaderTarget.cfi) ?? openStart
-        for (page, direction, token) in neighborTokens where state(page).token == token {
+        for (page, direction) in unopenedNeighbors {
+            let token = startFlight(page)
             page.call("R.open(\(openArguments(start: start, neighbor: direction.rawValue, token: token)))")
         }
-        neighborTokens = []
+        unopenedNeighbors = []
     }
 
     private func openArguments(start: ReaderTarget?, neighbor: Int, token: Int, idle: Bool = false) -> String {
@@ -428,7 +434,8 @@ final class FoliateSource: PagerSource {
         case "pull":
             let amount = message.amount ?? 0
             let direction: TurnDirection = (message.dir ?? 1) > 0 ? .forward : .back
-            delegate?.foliatePull(amount > 0 ? direction : nil, progress: min(1, amount / max(1, message.threshold ?? 80)))
+            let progress = message.armed == true ? 1 : min(0.99, amount / max(1, message.threshold ?? 80))
+            delegate?.foliatePull(amount > 0 ? direction : nil, progress: progress, destination: message.destination)
         case "pullRelease":
             // Not while a sideways drag has the touch, which turns instead.
             guard !pager.isDragging else { return }
@@ -522,13 +529,14 @@ final class FoliateSource: PagerSource {
         let width = current.webView.bounds.width
         let fraction = width > 0 ? point.x / width : 0.5
         let slop = PagerZones.linkSlop(at: fraction)
+        let noteSlop = PagerController.linkSlop
         // An image opens on its own from the middle of the page; the edges
         // still turn, so a page that's all photo can.
-        if resting, current.link(near: point, slop: slop) == nil, slop > 0, let image = current.image(at: point) {
+        if resting, current.link(near: point, slop: slop, noteSlop: noteSlop) == nil, slop > 0, let image = current.image(at: point) {
             current.call("R.openImage(\(image))")
             return true
         }
-        guard resting, let id = current.link(near: point, slop: slop) else { return false }
+        guard resting, let id = current.link(near: point, slop: slop, noteSlop: noteSlop) else { return false }
         current.call("R.activateLink(\(id), \(point.x), \(point.y))")
         return true
     }
@@ -539,7 +547,7 @@ final class FoliateSource: PagerSource {
         // A sideways drag or turn ends any pull past a section's end.
         if !paginated {
             current.call("R.cancelPull()")
-            delegate?.foliatePull(nil, progress: 0)
+            delegate?.foliatePull(nil, progress: 0, destination: nil)
         }
         if current.hasSelection { current.clearSelection() }
         delegate?.foliateTurning()

@@ -175,9 +175,25 @@ final class JournalStoreTests: XCTestCase {
           "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":null,"device_name":null}}],"cursor":6}
         """), ownDeviceID: "me")
         XCTAssertNil(try XCTUnwrap(store.pool.read { try CatalogStore.serverPlace($0, fileID: 5) }).deviceName)
+        XCTAssertNil(try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer).deviceName)
 
         try store.resolveOffer(fileID: 5)
         XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+    }
+
+    /// A renamed Device sends its place again, the same move: an offer kept
+    /// from it takes the new name.
+    func testAKeptOfferTakesARenamedDevicesName() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        for (name, cursor) in [("Robin's Kobo", 4), ("Study Kobo", 6)] {
+            try store.apply(page("""
+            {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+              "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":"kobo-1","device_name":"\(name)"}}],"cursor":\(cursor)}
+            """), ownDeviceID: "me")
+        }
+        let offer = try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+        XCTAssertEqual(offer.deviceName, "Study Kobo")
+        XCTAssertEqual(offer.percentage, 0.6)
     }
 
     /// Staying put dismisses the offer for good: the next open doesn't jump

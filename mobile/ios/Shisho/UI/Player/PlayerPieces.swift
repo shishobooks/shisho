@@ -135,6 +135,9 @@ struct Scrubber: View {
     let onCommit: (Double) -> Void
     /// What VoiceOver's swipe up and down moves by.
     var step: Double = 15
+    /// Called for each of VoiceOver's swipes up and down instead of
+    /// onCommit, for a bar that treats a run of them as one move.
+    var onAdjust: ((Double) -> Void)?
     /// Places marked on the bar, such as where each chapter starts, in the
     /// same units as value.
     var marks: [Double] = []
@@ -230,8 +233,8 @@ struct Scrubber: View {
         .accessibilityAddTraits(.updatesFrequently)
         .accessibilityAdjustableAction { direction in
             switch direction {
-            case .increment: onCommit(min(length, value + step))
-            case .decrement: onCommit(max(0, value - step))
+            case .increment: (onAdjust ?? onCommit)(min(length, value + step))
+            case .decrement: (onAdjust ?? onCommit)(max(0, value - step))
             @unknown default: break
             }
         }

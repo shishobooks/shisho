@@ -1,4 +1,5 @@
 import GRDB
+import ImageIO
 import Observation
 import UIKit
 
@@ -20,7 +21,7 @@ struct OpenImage: Identifiable, Equatable {
     let image: UIImage
 }
 
-/// A footnote shown in a popover beside its reference.
+/// A footnote shown in a card beside its reference.
 struct OpenNote: Identifiable, Equatable {
     let id = UUID()
     let paragraphs: [String]
@@ -71,9 +72,10 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     private(set) var note: OpenNote?
     /// An image open on its own, to zoom into.
     var image: OpenImage?
-    /// Scrolled, a pull past a section's end or start under way: which way
-    /// and how far toward letting go bringing the section beside in.
-    private(set) var pull: (direction: TurnDirection, progress: Double)?
+    /// Scrolled, a pull past a section's end or start under way: which way,
+    /// how far toward letting go bringing the section beside in, and the
+    /// chapter showing at that section's top.
+    private(set) var pull: (direction: TurnDirection, progress: Double, chapter: String?)?
     /// A page turn has waited a moment for its page to be laid out, as
     /// while the book is still opening: shown, so the page doesn't look
     /// frozen.
@@ -161,8 +163,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     }
 
     /// Pages left in the chapter, or the book, as the bar and readout say
-    /// it. Scrolled there are no pages, and the chapter's count waits for
-    /// the contents to place it.
+    /// it. Scrolled there are no pages. Until the contents place the
+    /// chapter, or when they can't, the book's count stands in.
     func pagesLeftLabel(inBook: Bool) -> AttributedString? {
         guard let left = pagesLeft else { return nil }
         if inBook {
@@ -170,7 +172,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
                 ? AttributedString(localized: "Last page in book")
                 : AttributedString(localized: "^[\(left.book) page](inflect: true) left in book")
         }
-        guard let chapter = left.chapter else { return nil }
+        guard let chapter = left.chapter else { return pagesLeftLabel(inBook: true) }
         return chapter == 0
             ? AttributedString(localized: "Last page in chapter")
             : AttributedString(localized: "^[\(chapter) page](inflect: true) left in chapter")
@@ -267,27 +269,31 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     /// The places jumps left from (LocationHistory).
     private(set) var history = LocationHistory()
 
-    /// Notes where the reader is before a jump, so they can come back.
+    /// Notes where the reader is before a jump, so they can come back. A
+    /// jump made before the last one lands records nothing: the reader is
+    /// still where the first left from, which it recorded.
     private func recordJump() {
-        guard let cfi = location?.cfi else { return }
+        guard source?.isJumping != true, let cfi = location?.cfi else { return }
         history.recordJump(from: cfi)
     }
 
-    /// Back to where the reader was before the last jump.
+    /// Back to where the reader was before the last jump. Not while a jump
+    /// is landing: the place showing isn't where the reader is going, and
+    /// going back from it would drop the entry for it.
     func goBack() {
-        guard let cfi = location?.cfi, let target = history.back(from: cfi) else { return }
+        guard source?.isJumping != true, let cfi = location?.cfi, let target = history.back(from: cfi) else { return }
         source?.jump(to: .cfi(target))
     }
 
     /// Forward to where the reader was when they went back.
     func goForward() {
-        guard let cfi = location?.cfi, let target = history.forward(from: cfi) else { return }
+        guard source?.isJumping != true, let cfi = location?.cfi, let target = history.forward(from: cfi) else { return }
         source?.jump(to: .cfi(target))
     }
 
-    func foliatePull(_ direction: TurnDirection?, progress: Double) {
+    func foliatePull(_ direction: TurnDirection?, progress: Double, destination: Double?) {
         let wasArmed = (pull?.progress ?? 0) >= 1
-        pull = direction.map { ($0, progress) }
+        pull = direction.map { ($0, progress, destination.flatMap(chapterTitle(at:))) }
         // A tick when letting go would turn, as a pull to refresh gives.
         if !wasArmed, progress >= 1, direction != nil {
             UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -300,18 +306,6 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         start(atOrBefore: fraction).map { contents[starts[$0].index].title }
     }
 
-    /// The chapter a pull that way would bring in, for its hint.
-    func chapterTitle(toward direction: TurnDirection) -> String? {
-        guard let here = start(atOrBefore: pageStart ?? fraction) else {
-            return direction == .forward ? starts.first.map { contents[$0.index].title } : nil
-        }
-        let place = starts[here].position
-        if direction == .forward {
-            return starts[(here + 1)...].first { $0.position > place + 0.0001 }.map { contents[$0.index].title }
-        }
-        return starts[..<here].last { $0.position < place - 0.0001 }.map { contents[$0.index].title }
-    }
-
     func foliateImage(_ dataURL: String) {
         Task { [weak self] in
             let image = await Task.detached(priority: .userInitiated) { ReaderModel.decodeImage(dataURL) }.value
@@ -320,12 +314,26 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         }
     }
 
-    nonisolated private static func decodeImage(_ dataURL: String) -> UIImage? {
+    /// The longest side, in pixels, an image opens at: about three times a
+    /// phone's screen, room to zoom without holding a huge map or comic
+    /// page's every pixel.
+    nonisolated static let largestImageSide = 3000
+
+    nonisolated static func decodeImage(_ dataURL: String) -> UIImage? {
         guard let comma = dataURL.firstIndex(of: ","),
-              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...]))
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: comma)...])),
+              let source = CGImageSourceCreateWithData(data as CFData, nil)
         else { return nil }
-        // Decoded here, off the main thread, rather than as it first draws.
-        return UIImage(data: data)?.preparingForDisplay()
+        // Scaled down and decoded here, off the main thread, rather than at
+        // full size as it first draws.
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: largestImageSide,
+        ]
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return UIImage(cgImage: image)
     }
 
     func foliateFollowLink(_ href: String) {
@@ -333,11 +341,19 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         source?.jump(to: .href(href))
     }
 
-    /// Goes to fraction of the way through, from the scrubber.
-    func go(toFraction value: Double) {
-        recordJump()
+    /// Goes to fraction of the way through, from the scrubber. A run of
+    /// VoiceOver's adjustments, each a few seconds from the last, is one
+    /// jump, so going back returns to where the run started.
+    func go(toFraction value: Double, adjusting: Bool = false) {
+        let now = Date()
+        if !adjusting || lastAdjustment.map({ now.timeIntervalSince($0) > 3 }) ?? true {
+            recordJump()
+        }
+        lastAdjustment = adjusting ? now : nil
         source?.jump(to: .fraction(value))
     }
+
+    @ObservationIgnored private var lastAdjustment: Date?
 
     func turn(_ direction: TurnDirection) {
         source?.pager.turn(direction)

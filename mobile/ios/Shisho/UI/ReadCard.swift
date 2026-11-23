@@ -35,7 +35,9 @@ struct ReadCard: View {
         // without the book.
         if !started { return progress.sizeBytes > 0 ? FileFacts.size(progress.sizeBytes) : nil }
         guard let pages = progress.pagesLeft else { return nil }
-        return String(AttributedString(localized: "^[\(pages) page](inflect: true) left").characters)
+        // The book's pages: the chapter, on the line above, would read as
+        // the one counted otherwise.
+        return String(AttributedString(localized: "^[\(pages) page](inflect: true) left in book").characters)
     }
 
     private var titleText: some View {

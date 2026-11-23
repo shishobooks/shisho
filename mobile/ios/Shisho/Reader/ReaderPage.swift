@@ -128,7 +128,8 @@ struct PageLocation: Decodable, Equatable, Sendable {
     /// Which screen shows, for timing reading per page.
     var screen: String?
     /// The links on the page, in the WebView's points: x, y, width,
-    /// height, and the id the script knows the link by.
+    /// height, the id the script knows the link by, and 1 for a note
+    /// reference.
     var links: [[Double]]?
     /// The images big enough to open on their own, as links are given.
     var images: [[Double]]?
@@ -184,6 +185,10 @@ struct PageMessage: Decodable, Sendable {
     /// it has to go to bring the section beside in.
     var amount: Double?
     var threshold: Double?
+    /// Whether letting go of the pull now would bring the section in.
+    var armed: Bool?
+    /// Where the section a pull brings in starts along the book.
+    var destination: Double?
     var message: String?
 }
 
@@ -314,16 +319,22 @@ final class ReaderPage: NSObject, WKNavigationDelegate {
         return nil
     }
 
-    /// The link nearest to point (in the WebView's points) within slop, from
-    /// the boxes the page last reported, so a tap needs no round trip.
-    func link(near point: CGPoint, slop: CGFloat) -> Int? {
+    /// The link nearest to point (in the WebView's points) within slop, or
+    /// noteSlop for a note reference, from the boxes the page last reported,
+    /// so a tap needs no round trip.
+    func link(near point: CGPoint, slop: CGFloat, noteSlop: CGFloat) -> Int? {
+        Self.link(in: location.links ?? [], near: point, slop: slop, noteSlop: noteSlop)
+    }
+
+    nonisolated static func link(in boxes: [[Double]], near point: CGPoint, slop: CGFloat, noteSlop: CGFloat) -> Int? {
         var best: (id: Int, distance: CGFloat)?
-        for box in location.links ?? [] where box.count == 5 {
+        for box in boxes where box.count >= 5 {
             let rect = CGRect(x: box[0], y: box[1], width: box[2], height: box[3])
             let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
             let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
             let distance = hypot(dx, dy)
-            if distance <= slop, distance < (best?.distance ?? .infinity) {
+            let reach = box.count > 5 && box[5] == 1 ? max(slop, noteSlop) : slop
+            if distance <= reach, distance < (best?.distance ?? .infinity) {
                 best = (Int(box[4]), distance)
             }
         }

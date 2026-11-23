@@ -1,5 +1,6 @@
 # Switch to scrolled layout and scroll into the next chapter: the place
-# follows the scroll (#919).
+# follows the scroll. A sideways swipe and a pull past a chapter's start go
+# to the chapter beside (#919).
 appId: ${APP_ID}
 name: Read in scrolled layout
 ---
@@ -43,6 +44,21 @@ name: Read in scrolled layout
           start: "50%,75%"
           end: "50%,20%"
           duration: 300
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
+# A swipe sideways goes to the chapter beside, and back.
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Three.*"
+    timeout: 30000
+- swipe:
+    direction: RIGHT
 - extendedWaitUntil:
     visible:
       id: reader.progress

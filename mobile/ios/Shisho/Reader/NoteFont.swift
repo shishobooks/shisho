@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// The font a footnote's popover is set in: the one the book sets around the
+/// The font a footnote's card is set in: the one the book sets around the
 /// note reference, as the page draws it, as the web reader's popover takes
 /// the book's font. A font the book carries itself isn't installed outside
 /// the page, so the next family in the list stands in, and a generic one is

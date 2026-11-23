@@ -36,9 +36,9 @@ final class ReaderPagePool {
     /// WebKit asks QuickLook whether it previews a document that isn't HTML
     /// or plain text, as each of a book's XHTML sections is, in the app's
     /// own process too, on the main thread. The first ask loads QuickLook,
-    /// which froze the app for seconds as the first book of a launch
-    /// opened. Loading it on a background thread first leaves WebKit's
-    /// load nothing to do. (WebCore's PreviewConverter::supportsMIMEType.)
+    /// which holds the main thread for seconds the first time a book opens
+    /// after launch. Loading it on a background thread first leaves
+    /// WebKit's load nothing to do. (WebCore's PreviewConverter::supportsMIMEType.)
     nonisolated static func loadPreviewSupport() {
         DispatchQueue.global(qos: .utility).async {
             _ = dlopen("/System/Library/Frameworks/QuickLook.framework/QuickLook", RTLD_LAZY)

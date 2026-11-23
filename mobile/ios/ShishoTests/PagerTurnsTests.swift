@@ -171,6 +171,18 @@ final class PagerTurnsTests: XCTestCase {
         XCTAssertEqual(PagerZones.linkSlop(at: 0.9), 0)
     }
 
+    func testANoteReferenceKeepsItsReachWhereOtherLinksNeedAHit() {
+        // A plain link and a note reference, each 10 points square, 20
+        // points from the tap.
+        let link: [Double] = [100, 100, 10, 10, 0, 0]
+        let note: [Double] = [100, 200, 10, 10, 1, 1]
+        let nearLink = CGPoint(x: 130, y: 105)
+        let nearNote = CGPoint(x: 130, y: 205)
+        XCTAssertNil(ReaderPage.link(in: [link, note], near: nearLink, slop: 0, noteSlop: 24))
+        XCTAssertEqual(ReaderPage.link(in: [link, note], near: nearNote, slop: 0, noteSlop: 24), 1)
+        XCTAssertEqual(ReaderPage.link(in: [link, note], near: nearLink, slop: 24, noteSlop: 24), 0)
+    }
+
     /// A finger moving left brings in the page on the right: the next one,
     /// or the previous one in a right-to-left book.
     func testDragsFollowTheReadingDirection() {

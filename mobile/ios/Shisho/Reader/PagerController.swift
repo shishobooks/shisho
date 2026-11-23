@@ -145,6 +145,14 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         perform(turns.ask(direction))
     }
 
+    /// VoiceOver's scroll: a page paginated, the section beside scrolled,
+    /// as a sideways drag brings in. False when there's nowhere to go yet.
+    func accessibilityTurn(_ direction: TurnDirection) -> Bool {
+        guard paging else { return slide(direction) }
+        turn(direction)
+        return true
+    }
+
     private func perform(_ action: PagerTurns.Action) {
         guard case .turn(let direction) = action else { return }
         finishAnimation()
@@ -395,19 +403,21 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     }
 }
 
-/// The view the pages sit in. VoiceOver's three-finger scroll turns pages.
+/// The view the pages sit in. VoiceOver's three-finger scroll sideways
+/// turns pages, or scrolled, goes to the chapter beside.
 final class PagerStage: UIView {
     weak var pager: PagerController?
 
     override func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
+        guard let pager else { return false }
+        let rightToLeft = pager.rightToLeft
         switch direction {
-        case .left: pager?.turn(pager?.rightToLeft == true ? .back : .forward)
-        case .right: pager?.turn(pager?.rightToLeft == true ? .forward : .back)
-        case .next: pager?.turn(.forward)
-        case .previous: pager?.turn(.back)
+        case .left: return pager.accessibilityTurn(rightToLeft ? .back : .forward)
+        case .right: return pager.accessibilityTurn(rightToLeft ? .forward : .back)
+        case .next: return pager.accessibilityTurn(.forward)
+        case .previous: return pager.accessibilityTurn(.back)
         default: return false
         }
-        return true
     }
 
     /// VoiceOver's two-finger double tap shows or hides the reader's bars,

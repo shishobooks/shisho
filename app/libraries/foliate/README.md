@@ -39,7 +39,7 @@ Some of the other files (e.g. `fb2.js`, `progress.js`, `tts.js`) are not importe
 
 ## Local patches
 
-`epub.js`, `fixed-layout.js`, `mobi.js`, `paginator.js`, `search.js`, and `view.js` carry changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the `mobi.js` patches and fails when one or its call site is missing, `app/libraries/foliate-search.test.ts` fails when the `search.js` patch is missing, `app/libraries/foliate-paginator.test.ts` fails when the paginator's `settled()` is, and `app/libraries/foliate-epub.test.ts` fails when `epub.js` throws on a package with no Dublin Core metadata.
+`epub.js`, `fixed-layout.js`, `mobi.js`, `paginator.js`, `search.js`, and `view.js` carry changes marked `Shisho patch` in comments. Reapply them after copying a new upstream snapshot unless upstream has fixed the same bug. `app/libraries/foliate-mobi.test.ts` tests the `mobi.js` patches and fails when one or its call site is missing, `app/libraries/foliate-search.test.ts` fails when the `search.js` patch is missing, `app/libraries/foliate-paginator.test.ts` fails when the paginator's `settled()` or `pageOf()` is, and `app/libraries/foliate-epub.test.ts` fails when `epub.js` throws on a package with no Dublin Core metadata.
 
 ## To update
 

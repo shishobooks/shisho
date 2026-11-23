@@ -29,19 +29,27 @@ final class ReaderPagePoolTests: XCTestCase {
         XCTAssertFalse(pool.isWarm)
     }
 
+    /// The pool lets go on the main actor after the notification, which a
+    /// busy CI simulator can hold up for seconds.
+    private func waitUntilCold(_ pool: ReaderPagePool) async throws {
+        let deadline = Date().addingTimeInterval(30)
+        while pool.isWarm, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertFalse(pool.isWarm)
+    }
+
     func testMemoryPressureLetsThePagesGo() async throws {
         let pool = ReaderPagePool.shared
         pool.prewarm()
         NotificationCenter.default.post(name: UIApplication.didReceiveMemoryWarningNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(100))
-        XCTAssertFalse(pool.isWarm)
+        try await waitUntilCold(pool)
     }
 
     func testGoingToTheBackgroundLetsThePagesGo() async throws {
         let pool = ReaderPagePool.shared
         pool.prewarm()
         NotificationCenter.default.post(name: UIApplication.didEnterBackgroundNotification, object: nil)
-        try await Task.sleep(for: .milliseconds(100))
-        XCTAssertFalse(pool.isWarm)
+        try await waitUntilCold(pool)
     }
 }
