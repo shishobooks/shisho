@@ -472,7 +472,11 @@ jobs:
       # reach those machines: they run on GitHub's runners, with the flows
       # split across two jobs, since one takes over half an hour there. The
       # repository variable IOS_SELF_HOSTED=false sends everything to GitHub's
-      # runners, for when the Macs are offline.
+      # runners, for when the Macs are offline. A runner Mac needs Xcode,
+      # mise, and ffmpeg, and `sudo automationmodetool
+      # enable-automationmode-without-authentication`, as GitHub's images
+      # have: without it, Maestro's UI-test driver waits forever on a prompt
+      # no one sees when started from the runner's service.
       - id: ios
         env:
           TRUSTED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}

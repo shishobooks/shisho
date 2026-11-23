@@ -273,6 +273,10 @@ func discardWorktreeSimulator(root, purpose string) error {
 		return err
 	}
 	paths := worktreeSimulatorPaths(dir, root, purpose)
+	// A worktree that never ran the checks has nothing to discard.
+	if _, err := os.Stat(paths.state); os.IsNotExist(err) {
+		return nil
+	}
 	lock, err := lockFile(paths.lock)
 	if err != nil {
 		return err
