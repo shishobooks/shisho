@@ -42,6 +42,8 @@ name: Listen offline and sync later
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.onlinePaused = maestro.copiedText}
+- runScript:
+    file: scripts/note_online_pause.js
 # The pause sends the session so far. Checked in a retry, since the sync can
 # take longer than one wait on a loaded CI simulator.
 - retry:
@@ -69,12 +71,12 @@ name: Listen offline and sync later
     file: subflows/tap_player.yaml
     env:
       CONTROL_ID: player.playPause
-# Timed by the clock, not the position: a stall then only listens for
-# longer. assert_offline_session.js checks the place moved while offline.
+# Until the place is well past where it paused online.
 - extendedWaitUntil:
-    visible: __never__
-    timeout: 15000
-    optional: true
+    visible:
+      id: player.position
+      text: ${output.offlineTarget}
+    timeout: 60000
 - runFlow:
     file: subflows/tap_player.yaml
     env:

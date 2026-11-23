@@ -1,6 +1,7 @@
 # Taps ${CONTROL_ID}, a player control or one that starts playback. The
-# position ticks while playing, so the tap doesn't wait for the screen to
-# settle. Not a flow of its own.
+# position ticks while playing, so the tap waits only briefly for the screen
+# to settle, and isn't repeated when the screen looks unchanged. Not a flow of
+# its own.
 appId: ${APP_ID}
 ---
 - tapOn:

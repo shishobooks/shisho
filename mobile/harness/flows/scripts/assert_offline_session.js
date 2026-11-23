@@ -1,6 +1,7 @@
 // Listening done offline reaches the server placed at the time it happened,
 // not when it synced: the session ended before the server came back, and
-// counts the time listened offline.
+// the server counts the time listened offline. The server may add that time
+// to the session the pause sent, so it's counted across all of them.
 // It records "ok", or what's wrong, in output.serverCheck rather than
 // throwing: the flow checks that with assertTrue inside a retry, which
 // retries Maestro's own failures but not a script's error.
@@ -48,13 +49,14 @@ try {
   if (session.ended_at < reading.offline_at) {
     throw new Error("the session ended before the server went offline");
   }
-  if (session.duration < 12) {
-    throw new Error(
-      "the session counts " + session.duration + " s, not the time offline",
-    );
+  const counted =
+    sessions.reduce((total, s) => total + s.duration, 0) -
+    output.appSecondsBeforeOffline;
+  if (counted < 12) {
+    throw new Error("the server counts " + counted + " s of listening offline");
   }
-  // The player kept playing offline: the flow listened offline for longer
-  // than this, timed by the clock, between its two pauses.
+  // The player kept playing offline: the flow waited for the place to move
+  // this far between its two pauses.
   const offline = seconds(output.paused) - seconds(output.onlinePaused);
   if (offline < 12) {
     throw new Error(
