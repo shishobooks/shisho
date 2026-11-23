@@ -69,19 +69,25 @@ struct PlaceOfferBanner: View {
     let accept: () -> Void
     let dismiss: () -> Void
 
-    private var message: String {
+    private var message: String { PlaceOfferBanner.message(for: offer, kind: kind) }
+
+    /// What the banner says about offer, which VoiceOver reads too: where
+    /// the place came from, by the Device's name when it has one.
+    nonisolated static func message(for offer: ServerPlace, kind: Kind) -> String {
         let web = offer.source == "web_reader"
+        var device = offer.deviceName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if device?.isEmpty == true { device = nil }
         switch kind {
         case .listening:
             let time = TimeLabels.clock(offer.seconds)
-            return web
-                ? String(localized: "You listened up to \(time) on the web.")
-                : String(localized: "You listened up to \(time) on another device.")
+            if web { return String(localized: "You listened up to \(time) on the web.") }
+            if let device { return String(localized: "You listened up to \(time) on \(device).") }
+            return String(localized: "You listened up to \(time) on another device.")
         case .reading:
             let percent = offer.percentage.formatted(.percent.precision(.fractionLength(0)))
-            return web
-                ? String(localized: "You read up to \(percent) on the web.")
-                : String(localized: "You read up to \(percent) on another device.")
+            if web { return String(localized: "You read up to \(percent) on the web.") }
+            if let device { return String(localized: "You read up to \(percent) on \(device).") }
+            return String(localized: "You read up to \(percent) on another device.")
         }
     }
 

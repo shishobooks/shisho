@@ -122,6 +122,18 @@ struct ServerPlace: Equatable, Sendable {
     /// gave only a percentage.
     var cfi: String?
     var percentage: Double = 0
+    /// The Device's name as its user sees it, or nil for the web and for a
+    /// Device deleted since.
+    var deviceName: String?
+
+    /// Whether other is this same move, whatever its Device is called now:
+    /// renaming or deleting a Device sends its places again, changed only
+    /// in the Device, and a place dismissed stays dismissed.
+    func isSameMove(as other: ServerPlace?) -> Bool {
+        guard let other else { return false }
+        return seconds == other.seconds && occurredAt == other.occurredAt && source == other.source && cfi == other.cfi
+            && percentage == other.percentage
+    }
 }
 
 /// This installation's own place in a File.

@@ -446,6 +446,10 @@ type FeedReadingPosition struct {
 	// DeviceID is the Device that reported it, so an installation knows its
 	// own, or null for the web.
 	DeviceID *string `json:"device_id"`
+	// DeviceName is that Device's name as its user sees it on the Devices
+	// page, or null for the web and once the Device is deleted. Renaming the
+	// Device moves its positions in the feed, so the name stays current.
+	DeviceName *string `json:"device_name"`
 }
 
 // FeedReadThrough is one of the user's passes through a Book (ADR 0013).

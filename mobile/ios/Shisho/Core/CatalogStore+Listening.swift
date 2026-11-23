@@ -115,7 +115,7 @@ extension CatalogStore {
     /// reader left only as a percentage is placed by the File's length.
     static func serverPlace(_ db: Database, fileID: Int) throws -> ServerPlace? {
         guard let row = try Row.fetchOne(db, sql: """
-            SELECT p.seconds, p.cfi, p.percentage, p.occurred_at, p.device_id, p.source, f.duration_seconds
+            SELECT p.seconds, p.cfi, p.percentage, p.occurred_at, p.device_id, p.device_name, p.source, f.duration_seconds
             FROM reading_positions p LEFT JOIN book_files f ON f.id = p.file_id
             WHERE p.file_id = ?
             """, arguments: [fileID])
@@ -124,13 +124,14 @@ extension CatalogStore {
         let percentage: Double = row["percentage"]
         let seconds: Double = row["seconds"] ?? percentage * duration
         return ServerPlace(seconds: seconds, occurredAt: Date(timeIntervalSince1970: row["occurred_at"]),
-                           deviceID: row["device_id"], source: row["source"], cfi: row["cfi"], percentage: percentage)
+                           deviceID: row["device_id"], source: row["source"], cfi: row["cfi"], percentage: percentage,
+                           deviceName: row["device_name"])
     }
 
     static func localPlace(_ db: Database, fileID: Int) throws -> LocalPlace? {
         guard let row = try Row.fetchOne(db, sql: """
             SELECT seconds, cfi, percentage, updated_at, base_occurred_at, offer_seconds, offer_cfi, offer_percentage,
-                offer_occurred_at, offer_source, offer_device_id
+                offer_occurred_at, offer_source, offer_device_id, offer_device_name
             FROM local_positions WHERE file_id = ?
             """, arguments: [fileID])
         else { return nil }
@@ -138,7 +139,8 @@ extension CatalogStore {
         if let seconds: Double = row["offer_seconds"], let at: Double = row["offer_occurred_at"] {
             offer = ServerPlace(seconds: seconds, occurredAt: Date(timeIntervalSince1970: at),
                                 deviceID: row["offer_device_id"], source: row["offer_source"] ?? "",
-                                cfi: row["offer_cfi"], percentage: row["offer_percentage"] ?? 0)
+                                cfi: row["offer_cfi"], percentage: row["offer_percentage"] ?? 0,
+                                deviceName: row["offer_device_name"])
         }
         return LocalPlace(seconds: row["seconds"], updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
                           pending: try hasPendingMoves(db, fileID: fileID),
@@ -159,10 +161,10 @@ extension CatalogStore {
         guard try offered || hasPendingMoves(db, fileID: position.fileId) else { return }
         try db.execute(sql: """
             UPDATE local_positions SET offer_seconds = ?, offer_cfi = ?, offer_percentage = ?, offer_occurred_at = ?,
-                offer_source = ?, offer_device_id = ?
+                offer_source = ?, offer_device_id = ?, offer_device_name = ?
             WHERE file_id = ? AND ? > COALESCE(base_occurred_at, 0) AND ? > COALESCE(offer_occurred_at, 0)
             """, arguments: [place.seconds, place.cfi, place.percentage, occurredAt, position.source.rawValue, position.deviceId,
-                             position.fileId, occurredAt, occurredAt])
+                             position.deviceName, position.fileId, occurredAt, occurredAt])
     }
 
     /// The user went to the offered place, or chose to stay. Either way the
@@ -177,7 +179,7 @@ extension CatalogStore {
     static func resolveOffer(_ db: Database, fileID: Int) throws {
         try db.execute(sql: """
             UPDATE local_positions SET offer_seconds = NULL, offer_cfi = NULL, offer_percentage = NULL, offer_occurred_at = NULL,
-                offer_source = NULL, offer_device_id = NULL,
+                offer_source = NULL, offer_device_id = NULL, offer_device_name = NULL,
                 base_occurred_at = MAX(COALESCE(base_occurred_at, 0),
                     COALESCE((SELECT occurred_at FROM reading_positions WHERE file_id = ?), 0))
             WHERE file_id = ?

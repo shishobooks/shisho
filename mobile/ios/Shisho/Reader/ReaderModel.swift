@@ -334,7 +334,13 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     }
 
     private func serverPlaceChanged(_ place: ServerPlace?) {
-        guard let place, place != dismissedOffer, place != offer else { return }
+        guard let place, !place.isSameMove(as: dismissedOffer) else { return }
+        // A renamed Device sends its place again: the offer shown takes the
+        // new name.
+        if place.isSameMove(as: offer) {
+            if place != offer { offer = place }
+            return
+        }
         let here = (cfi: location?.cfi, percentage: location?.fraction ?? fraction)
         if let offered = PlaceRules.offerWhileReading(server: place, at: here, known: knownServerAt,
                                                       ownDeviceID: session.account.deviceID) {

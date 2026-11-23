@@ -359,12 +359,50 @@ func loadPositions(ctx context.Context, tx bun.IDB, userID int, fileIDs []int) (
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+	deviceIDs := []string{}
 	for _, position := range positions {
+		if position.SourceDeviceID != nil {
+			deviceIDs = append(deviceIDs, *position.SourceDeviceID)
+		}
+	}
+	names, err := loadDeviceNames(ctx, tx, deviceIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, position := range positions {
+		var name *string
+		if position.SourceDeviceID != nil {
+			if n, ok := names[*position.SourceDeviceID]; ok {
+				name = &n
+			}
+		}
 		out[position.FileID] = &FeedReadingPosition{
 			FileID: position.FileID, CFI: position.CFI, Page: position.Page, Seconds: position.Seconds,
 			Percentage: position.Percentage, OccurredAt: position.OccurredAt.UTC(), Source: position.Source,
-			DeviceID: position.SourceDeviceID,
+			DeviceID: position.SourceDeviceID, DeviceName: name,
 		}
+	}
+	return out, nil
+}
+
+// loadDeviceNames reads the names of the Devices in ids, by id.
+func loadDeviceNames(ctx context.Context, tx bun.IDB, ids []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		ID   string `bun:"id"`
+		Name string `bun:"name"`
+	}
+	err := tx.NewSelect().Table("devices").Column("id", "name").
+		Where("id IN (?)", bun.List(ids)).
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	for _, row := range rows {
+		out[row.ID] = row.Name
 	}
 	return out, nil
 }

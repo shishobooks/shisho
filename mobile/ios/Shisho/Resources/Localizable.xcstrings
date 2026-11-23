@@ -1074,11 +1074,31 @@
     "Yes" : {
 
     },
+    "You listened up to %@ on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You listened up to %1$@ on %2$@."
+          }
+        }
+      }
+    },
     "You listened up to %@ on another device." : {
 
     },
     "You listened up to %@ on the web." : {
 
+    },
+    "You read up to %@ on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You read up to %1$@ on %2$@."
+          }
+        }
+      }
     },
     "You read up to %@ on another device." : {
 
