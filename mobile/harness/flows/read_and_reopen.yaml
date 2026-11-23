@@ -28,7 +28,9 @@ name: Read, kill, and reopen at the same place
 
 # Killed: every turn already saved the place.
 - stopApp
-- launchApp
+- launchApp:
+    stopApp: false
+    permissions: {}
 - runFlow:
     file: subflows/read.yaml
     env:
