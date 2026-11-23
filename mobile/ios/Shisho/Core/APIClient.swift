@@ -45,7 +45,9 @@ final class APIClient: Sendable {
     /// fixed at creation, since requests on any thread read it.
     private let onCapabilities: (@Sendable ([String]) -> Void)?
 
-    init(baseURL: URL, credential: String?, onCapabilities: (@Sendable ([String]) -> Void)? = nil) {
+    /// protocolClasses answer requests before the network, for tests.
+    init(baseURL: URL, credential: String?, onCapabilities: (@Sendable ([String]) -> Void)? = nil,
+         protocolClasses: [AnyClass] = []) {
         self.baseURL = baseURL
         self.credential = credential
         self.onCapabilities = onCapabilities
@@ -55,6 +57,7 @@ final class APIClient: Sendable {
         configuration.httpCookieStorage = nil
         configuration.timeoutIntervalForRequest = 30
         configuration.waitsForConnectivity = false
+        configuration.protocolClasses = protocolClasses + (configuration.protocolClasses ?? [])
         session = URLSession(configuration: configuration, delegate: RedirectPolicy(), delegateQueue: nil)
     }
 

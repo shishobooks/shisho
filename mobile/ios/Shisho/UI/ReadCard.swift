@@ -48,20 +48,34 @@ struct ReadCard: View {
         .accessibilityIdentifier("book.read")
     }
 
-    /// The outlined button under the listen bar.
+    /// The outlined button under the listen bar, as variant E draws it:
+    /// lighter than OutlineButtonStyle, a translucent fill under the
+    /// cover's wash and the input border, and it carries how far through.
     private var outlined: some View {
-        HStack(spacing: 8) {
-            Icon(finished ? .rotateCcw : .bookOpen, size: 17, relativeTo: nil)
-            Text(title)
-                .font(.geist(.callout, weight: .semibold))
+        // At accessibility text sizes the detail goes under the title, so
+        // no word breaks.
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+            : AnyLayout(HStackLayout(spacing: 8))
+        return layout {
+            HStack(spacing: 8) {
+                Icon(finished ? .rotateCcw : .bookOpen, size: 17, relativeTo: nil)
+                Text(title)
+                    .font(.geist(.callout, weight: .semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if !detail.isEmpty {
                 Text(detail)
                     .font(.geist(.footnote))
                     .foregroundStyle(Theme.mutedForeground)
-                    .lineLimit(1)
+                    .lineLimit(stacked ? nil : 1)
+                    .fixedSize(horizontal: false, vertical: stacked)
             }
         }
+        .frame(maxWidth: stacked ? .infinity : nil, alignment: .leading)
         .foregroundStyle(Theme.foreground)
+        .padding(.vertical, stacked ? 10 : 0)
         .padding(.horizontal, 16)
         .frame(maxWidth: .infinity, minHeight: 46)
         .background(Theme.background.opacity(0.7), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -72,17 +86,27 @@ struct ReadCard: View {
     /// The primary bar, as ListenCard draws it, for a Book with only an
     /// ebook.
     private var primary: some View {
-        HStack(spacing: 12) {
-            Icon(finished ? .rotateCcw : .bookOpen, size: 22, relativeTo: nil)
-                .frame(width: 24)
+        // At accessibility text sizes the parts stack, as ListenCard's do.
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 12))
+        let titleText = Text(title)
+            .font(.geist(.callout, weight: .bold))
+            .fixedSize(horizontal: false, vertical: true)
+        return layout {
+            HStack(spacing: 12) {
+                Icon(finished ? .rotateCcw : .bookOpen, size: 22, relativeTo: nil)
+                    .frame(width: 24)
+                if stacked { titleText }
+            }
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.geist(.callout, weight: .bold))
-                    .fixedSize(horizontal: false, vertical: true)
+                if !stacked { titleText }
                 if let fileName {
                     Text(fileName)
                         .font(.geist(.caption, weight: .medium))
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                        .lineLimit(stacked ? nil : 1)
+                        .fixedSize(horizontal: false, vertical: stacked)
                 }
                 if finished {
                     Text("Finished")

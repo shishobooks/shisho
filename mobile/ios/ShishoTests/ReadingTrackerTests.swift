@@ -84,6 +84,16 @@ final class ReadingTrackerTests: XCTestCase {
         XCTAssertEqual(syncs, 3)
     }
 
+    /// Opening again, as Try Again does after a page failed, records the
+    /// session before it instead of dropping it.
+    func testOpeningAgainRecordsTheSessionBefore() throws {
+        let tracker = tracker()
+        tracker.opened(page(1))
+        wait(20)
+        tracker.opened(page(1))
+        XCTAssertEqual(try journal(), ["reading_session"])
+    }
+
     /// A book that finishes opening while the app is away counts nothing
     /// until it's back.
     func testOpeningWhileAwayCountsFromTheReturn() throws {

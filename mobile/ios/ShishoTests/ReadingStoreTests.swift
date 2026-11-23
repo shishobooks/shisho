@@ -85,6 +85,17 @@ final class ReadingStoreTests: XCTestCase {
         XCTAssertEqual(try positions.map { try payload($0)["at_end"] as? Bool ?? false }, [true, false])
     }
 
+    /// Turning through the last pages again in one session sends the end
+    /// once, not once per page.
+    func testTheEndIsSentOncePerSession() throws {
+        for (offset, cfi) in ["epubcfi(/6/20!/4/2)", "epubcfi(/6/20!/4/4)", "epubcfi(/6/20!/4/6)"].enumerated() {
+            try store.recordReading(fileID: 8, cfi: cfi, percentage: 1, atEnd: true, at: now.addingTimeInterval(Double(offset)),
+                                    sessionID: "s", sessionStartedAt: now, session: nil)
+        }
+        let positions = try journal().filter { $0["type"] == "reading_position" }
+        XCTAssertEqual(try positions.map { try payload($0)["cfi"] as? String }, ["epubcfi(/6/20!/4/6)"])
+    }
+
     /// Turns of two sessions are sent apart, even before either counted
     /// time, so the first turn that starts a Read-through isn't replaced by
     /// a later day's.

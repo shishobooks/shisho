@@ -33,6 +33,10 @@ final class ReadingTracker {
     /// The first page showed. Opening counts as input, so its time counts
     /// from now, not from while the book was loading.
     func opened(_ location: PageLocation) {
+        // Opened again, as by Try Again: the session before ends here.
+        if let earlier = session, earlier.awayAt == nil {
+            record(ReadingRules.snapshot(earlier, at: now()))
+        }
         self.location = location
         if let cfi = location.cfi {
             saved = (cfi, location.atEnd ?? false)

@@ -22,14 +22,10 @@ name: Read, kill, and reopen at the same place
     commands:
       - swipe:
           direction: LEFT
-# Turns that queued behind a page being laid out land in a moment.
-- extendedWaitUntil:
-    visible: __never__
-    timeout: 3000
-    optional: true
-- copyTextFrom:
-    id: reader.progress
-- evalScript: ${output.beforeKill = maestro.copiedText}
+# Turns that queued behind a page being laid out land in a moment: the
+# place is read once it reads the same twice in a row.
+- runFlow: subflows/settled_place.yaml
+- evalScript: ${output.beforeKill = output.settledPlace}
 - assertTrue: ${output.beforeKill != output.atOpen}
 
 # Killed: every turn already saved the place.

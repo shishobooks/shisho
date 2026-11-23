@@ -1,0 +1,50 @@
+# Quick taps and swipes, both ways, while pages are still being laid out:
+# every turn lands, nothing sticks, and the reader still answers (#919).
+appId: ${APP_ID}
+name: Turn pages quickly
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- copyTextFrom:
+    id: reader.progress
+- evalScript: ${output.atOpen = maestro.copiedText}
+- repeat:
+    times: 6
+    commands:
+      - tapOn:
+          point: "92%,50%"
+          waitToSettleTimeoutMs: 200
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          direction: LEFT
+          duration: 150
+- tapOn:
+    point: "8%,50%"
+    waitToSettleTimeoutMs: 200
+- swipe:
+    direction: RIGHT
+    duration: 150
+- runFlow: subflows/settled_place.yaml
+- assertTrue:
+    condition: ${output.settledPlace != output.atOpen}
+    label: The turns moved the reader on
+# Nothing is stuck: the controls still show, and the contents open.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.contents
+- extendedWaitUntil:
+    visible:
+      text: Chapter One
+      enabled: true
+    timeout: 30000

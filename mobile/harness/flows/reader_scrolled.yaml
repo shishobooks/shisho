@@ -1,0 +1,58 @@
+# Switch to scrolled layout and scroll into the next chapter: the place
+# follows the scroll (#919).
+appId: ${APP_ID}
+name: Read in scrolled layout
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    clearState: true
+- runFlow: subflows/sign_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- tapOn:
+    id: reader.layout.scrolled
+# The sheet covers the bar until it's gone; a tap lost to a stall is
+# tried again.
+- retry:
+    maxRetries: 3
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: reader.settings.done
+          commands:
+            - tapOn:
+                id: reader.settings.done
+      - extendedWaitUntil:
+          notVisible:
+            id: reader.settings.done
+          timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter One.*"
+    timeout: 30000
+- repeat:
+    while:
+      notVisible:
+        id: reader.progress
+        text: "Chapter Two.*"
+    times: 60
+    commands:
+      - swipe:
+          start: "50%,75%"
+          end: "50%,20%"
+          duration: 300
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000

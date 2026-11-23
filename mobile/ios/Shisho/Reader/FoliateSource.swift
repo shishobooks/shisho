@@ -57,6 +57,10 @@ final class FoliateSource: PagerSource {
         /// page from.
         var base: [Int]?
         var edge = false
+        /// The current page's place this neighbor's syncs failed from, and
+        /// how many times in a row.
+        var failedBase: [Int]?
+        var failures = 0
     }
 
     weak var delegate: FoliateSourceDelegate?
@@ -185,14 +189,17 @@ final class FoliateSource: PagerSource {
     /// A table of contents or link jump. The neighbors go to the same place
     /// at the same time and step from there, instead of waiting for the
     /// current page to lay out a large section.
-    func jump(to target: ReaderTarget) {
+    /// fallback, how far through the book, is where to go instead when the
+    /// target isn't in this copy of the book.
+    func jump(to target: ReaderTarget, fallback: Double? = nil) {
+        let fallbackScript = fallback.map { String($0) } ?? "null"
         pager.reset()
-        current.call("R.goTo(\(target.script))")
+        current.call("R.goTo(\(target.script), \(fallbackScript))")
         navigating = true
         guard paginated else { return }
         for page in [forward, back] {
             let token = startFlight(page)
-            page.call("R.jump(\(target.script), \(direction(of: page).rawValue), \(token))")
+            page.call("R.jump(\(target.script), \(direction(of: page).rawValue), \(token), \(fallbackScript))")
         }
         // In case the jump doesn't move the page.
         navigationTimeout?.cancel()
@@ -263,7 +270,7 @@ final class FoliateSource: PagerSource {
     private func startFlight(_ page: ReaderPage) -> Int {
         tokens += 1
         let token = tokens
-        update(page) { $0 = PageState(inFlight: true, token: token) }
+        update(page) { $0 = PageState(inFlight: true, token: token, failedBase: $0.failedBase, failures: $0.failures) }
         return token
     }
 
@@ -272,7 +279,9 @@ final class FoliateSource: PagerSource {
         case "error":
             let text = message.message ?? "unknown error"
             Task { await Diagnostics.shared.log(.reader, "page script failed: \(text)") }
-            if page === current { delegate?.foliateFailed() }
+            // Before the book shows, it didn't open. After, the page is
+            // still there to read, so the failure is only logged.
+            if page === current, !opened { delegate?.foliateFailed() }
             return
         case "log":
             let text = message.message ?? ""
@@ -283,10 +292,25 @@ final class FoliateSource: PagerSource {
             return
         case "synced":
             guard page !== current, message.token == state(page).token else { return }
+            if message.failed == true {
+                // Tried again from the same place once; a page that still
+                // can't be laid out is treated as the end, so turns toward
+                // it stop queueing.
+                let base = current.location.base
+                let failures = state(page).failedBase == base ? state(page).failures + 1 : 1
+                update(page) { $0 = PageState(failedBase: base, failures: failures) }
+                if failures >= 2 {
+                    update(page) { $0.base = base; $0.edge = true }
+                }
+                reconcile()
+                return
+            }
             update(page) {
                 $0.inFlight = false
                 $0.base = message.base
                 $0.edge = message.edge ?? false
+                $0.failedBase = nil
+                $0.failures = 0
             }
             reconcile()
             return

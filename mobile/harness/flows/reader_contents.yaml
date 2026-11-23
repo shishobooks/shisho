@@ -16,8 +16,12 @@ name: Jump to a chapter from the table of contents
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.contents
-- assertVisible: Chapter One
-- assertVisible: Notes
+- extendedWaitUntil:
+    visible: Chapter One
+    timeout: 30000
+- extendedWaitUntil:
+    visible: Notes
+    timeout: 30000
 # A chapter can be tapped once the reader has found it in the book.
 - extendedWaitUntil:
     visible:

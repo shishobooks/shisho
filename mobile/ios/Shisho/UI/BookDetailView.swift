@@ -332,7 +332,7 @@ private struct FileCard: View {
     private var isReflowable: Bool { CatalogStore.reflowableTypes.contains(file.fileType) }
 
     private var readLabel: String {
-        String(localized: "Read \(file.displayName.isEmpty ? FileTypes.label(file.fileType) : file.displayName)")
+        String(localized: "Read \(name)")
     }
 
     /// How far through the File the user is: for the audiobook the Listen

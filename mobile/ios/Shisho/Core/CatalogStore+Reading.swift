@@ -125,7 +125,9 @@ extension CatalogStore {
         let payload = Shishoapp.JournalPositionPayload(fileId: fileID, cfi: cfi, percentage: min(1, max(0, percentage)), atEnd: atEnd,
                                                        listeningSince: JournalTime.string(min(sessionStartedAt, at)))
         let data = try JSONEncoder().encode(payload)
-        let key = atEnd ? nil : "position:\(fileID):\(sessionID)"
+        // Reaching the end is never replaced by a later move, which would
+        // lose the finish; it replaces only an earlier end in the session.
+        let key = "\(atEnd ? "position-end" : "position"):\(fileID):\(sessionID)"
         try pool.write { db in
             try CatalogStore.writePosition(db, fileID: fileID, seconds: 0, cfi: cfi, percentage: percentage, at: at,
                                            payload: data, coalesceKey: key)

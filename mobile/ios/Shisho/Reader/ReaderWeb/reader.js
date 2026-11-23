@@ -219,7 +219,10 @@ const withinFirstScreen = () => {
 // Every page reports its moves; native listens to the one showing, whose
 // role changes with each turn.
 view.addEventListener("relocate", (e) => {
-  const reason = e.detail?.reason ?? null;
+  // foliate's fixed-layout renderer gives no reason for a jump; it's a move
+  // like any other.
+  const reason =
+    e.detail?.reason ?? (view.isFixedLayout && !quiet ? "navigation" : null);
   const firstScreen =
     reason === "scroll" &&
     currentIndex() === openedSection &&
@@ -351,7 +354,8 @@ const rectOf = (a) => {
 // Follows a link native hit-tested. A note reference shows its note in a
 // native popover; another link inside the book jumps there.
 const activate = async (a) => {
-  const index = currentIndex();
+  // A fixed-layout spread shows two sections; a link belongs to its own.
+  const index = sectionOfDoc.get(a.ownerDocument) ?? currentIndex();
   const href = resolveLink(a, index);
   if (view.book.isExternal?.(href)) return post({ type: "external", href });
   if (isNoteReference(a)) {
@@ -440,10 +444,13 @@ const onPull = (e) => {
   pull = null;
   if (e.type !== "touchend") return;
   const quick = e.timeStamp - p.t0 < 300;
+  // Past the first or last section there's nowhere to go, which foliate
+  // rejects.
+  const go = (turn) => Promise.resolve(turn).catch(() => {});
   if (p.down > 60 || (p.startEnd && quick && p.y0 - p.y > 30))
-    view.renderer.next();
+    go(view.renderer.next());
   else if (p.up > 60 || (p.startStart && quick && p.y - p.y0 > 30))
-    view.renderer.prev();
+    go(view.renderer.prev());
 };
 
 // Input inside the book, for timing reading; at most every few seconds.
@@ -529,25 +536,36 @@ const guardWindow = (win, isTop) => {
   );
 };
 guardWindow(window, true);
-view.addEventListener("load", ({ detail: { doc } }) =>
-  guardWindow(doc.defaultView, false),
-);
+// Each section's document by the section it shows.
+const sectionOfDoc = new WeakMap();
+view.addEventListener("load", ({ detail: { doc, index } }) => {
+  if (index != null) sectionOfDoc.set(doc, index);
+  guardWindow(doc.defaultView, false);
+});
 
 // MARK: - Neighbors
 
 // Each call waits for the one before, so a sync never overlaps the open or
 // another sync.
 let chain = Promise.resolve();
-const chained = (label, f) => {
+// A sync or jump that fails still answers its token, as failed, so native
+// stops waiting on it.
+const chained = (label, f, token) => {
   chain = chain.then(async () => {
     quiet = true;
     try {
       await f();
     } catch (err) {
       post({
-        type: "error",
-        message: label + ": " + String(err?.stack ?? err),
+        type: "log",
+        message: label + " failed: " + String(err?.stack ?? err),
       });
+      if (token != null) post({ type: "synced", token, failed: true });
+      else
+        post({
+          type: "error",
+          message: label + ": " + String(err?.stack ?? err),
+        });
     } finally {
       quiet = false;
     }
@@ -674,7 +692,9 @@ const contents = async (chapters, relative) => {
     entries[i].target = target;
     const start = fractions[resolved.index];
     if (start === undefined) continue;
-    if (!target.includes("#")) {
+    // An EPUB link without a #fragment starts its section; a MOBI's
+    // filepos or kindle:pos link can be anywhere in one.
+    if (relative && !target.includes("#")) {
       entries[i].position = start;
       continue;
     }
@@ -711,6 +731,16 @@ const flattenToc = (items, depth = 0, out = []) => {
   return out;
 };
 
+// Goes to target, or, when this copy of the book can't find it (a CFI from
+// another edition), to fallback of the way through.
+const goToOrNear = async (target, fallback) => {
+  // foliate goes nowhere, without an error, for a section it doesn't have.
+  const resolved = await view.goTo(target);
+  if (!(resolved?.index >= 0) && fallback != null) {
+    await view.goTo({ fraction: fallback });
+  }
+};
+
 // MARK: - Native calls
 
 window.R = {
@@ -733,24 +763,28 @@ window.R = {
   // round trip isn't exact, and foliate's next() and prev() hold a lock and
   // relocate twice at a section's edge.
   sync(index, page, pages, dir, token) {
-    chained("sync", () => step({ index, page, pages }, dir, token));
+    chained("sync", () => step({ index, page, pages }, dir, token), token);
   },
   // A jump a neighbor makes at the same time as the current page: go
   // there, then step one page.
-  jump(target, dir, token) {
-    chained("jump", async () => {
-      await view.goTo(target);
-      await settle();
-      await step(dir ? ownBase() : null, dir, token);
-    });
+  jump(target, dir, token, fallback) {
+    chained(
+      "jump",
+      async () => {
+        await goToOrNear(target, fallback);
+        await settle();
+        await step(dir ? ownBase() : null, dir, token);
+      },
+      token,
+    );
   },
   // Jumps of the current page run one at a time, each after any turn in
   // progress, which would otherwise drop it.
-  goTo(target) {
+  goTo(target, fallback) {
     navigation = navigation.then(async () => {
       try {
         await view.renderer?.settled?.();
-        await view.goTo(target);
+        await goToOrNear(target, fallback);
       } catch (err) {
         post({ type: "log", message: "jump failed: " + err });
       }
@@ -805,10 +839,15 @@ const landed = () => currentDoc() != null && view.lastLocation != null;
 // reader reads one from the server (app/libraries/rangeFile.ts), so no page
 // holds a whole book: a photo cookbook runs to hundreds of megabytes, and
 // three pages each read it.
-const localFile = (url, size) => ({
-  size,
-  async read(offset, length) {
-    if (length <= 0) return new Uint8Array(0);
+// Reads smaller than this come from a block of BLOCK bytes kept for the next
+// one: foliate's MOBI reader reads four bytes of every resource record at
+// open, hundreds of reads that would each be a round trip.
+const SMALL_READ = 16 * 1024;
+const BLOCK = 256 * 1024;
+const BLOCKS_KEPT = 8;
+
+const localFile = (url, size) => {
+  const fetchRange = async (offset, length) => {
     const response = await fetch(url, {
       headers: { Range: `bytes=${offset}-${offset + length - 1}` },
     });
@@ -816,8 +855,31 @@ const localFile = (url, size) => ({
       throw new Error(`reading the book failed: ${response.status}`);
     }
     return new Uint8Array(await response.arrayBuffer());
-  },
-});
+  };
+  const blocks = new Map();
+  const block = (start) => {
+    let data = blocks.get(start);
+    if (!data) {
+      data = fetchRange(start, Math.min(BLOCK, size - start));
+      data.catch(() => blocks.delete(start));
+      blocks.set(start, data);
+      if (blocks.size > BLOCKS_KEPT) blocks.delete(blocks.keys().next().value);
+    }
+    return data;
+  };
+  return {
+    size,
+    async read(offset, length) {
+      if (length <= 0) return new Uint8Array(0);
+      const start = Math.floor(offset / BLOCK) * BLOCK;
+      if (length <= SMALL_READ && offset + length <= start + BLOCK) {
+        const data = await block(start);
+        return data.slice(offset - start, offset - start + length);
+      }
+      return fetchRange(offset, length);
+    },
+  };
+};
 
 // What foliate's MOBI reader asks of a file: slice(start, end) and its
 // bytes (app/libraries/rangeMobi.ts).
@@ -852,6 +914,9 @@ const openEPUB = async (file) => {
     constructor() {
       super(new Blob());
       this.size = file.size;
+      // An entry's data comes through in reads of this size; zip.js's own
+      // 64 KB would be dozens of round trips for one photo.
+      this.chunkSize = 1024 * 1024;
     }
     readUint8Array(offset, length) {
       return file.read(offset, length);

@@ -322,10 +322,13 @@
     "Clear all filters" : {
 
     },
+    "Close" : {
+
+    },
     "Close Player" : {
 
     },
-    "Close the book" : {
+    "Closes the book" : {
 
     },
     "Codec" : {

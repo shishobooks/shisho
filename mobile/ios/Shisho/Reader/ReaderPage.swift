@@ -140,6 +140,8 @@ struct PageMessage: Decodable, Sendable {
     /// The current page's [index, page, pages] a neighbor stepped from.
     var base: [Int]?
     var edge: Bool?
+    /// A sync or jump that threw: the neighbor isn't anywhere.
+    var failed: Bool?
     var reason: String?
     /// The move came from opening or syncing the page, not the reader.
     var quiet: Bool?

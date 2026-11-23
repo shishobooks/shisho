@@ -361,4 +361,12 @@ final class PagerStage: UIView {
         }
         return true
     }
+
+    /// VoiceOver's two-finger double tap shows or hides the reader's bars,
+    /// as a tap in the middle of the page does.
+    override func accessibilityPerformMagicTap() -> Bool {
+        guard let source = pager?.source else { return false }
+        source.pagerToggleChrome()
+        return true
+    }
 }

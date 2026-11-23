@@ -67,6 +67,8 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     @ObservationIgnored private var shownChapters: [ReaderChapter]
     /// Asks the app to close the reader, as when the File is gone.
     @ObservationIgnored private let onGone: @MainActor () -> Void
+    /// The reader closed, so a load still running stops where it is.
+    @ObservationIgnored private var closed = false
 
     init(file: ReadingFile, session: AccountSession, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
@@ -82,8 +84,13 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     /// The chapter the reader is in: the last one starting at or before the
     /// place.
     var chapterTitle: String? {
+        currentEntry?.title
+    }
+
+    /// The table of contents' entry for the chapter the reader is in.
+    var currentEntry: ContentsEntry? {
         let place = pageStart ?? fraction
-        return contents.last { ($0.position ?? .infinity) <= place + 0.0001 }?.title
+        return contents.last { ($0.position ?? .infinity) <= place + 0.0001 }
     }
 
     /// Where the chapters start along the book, for the scrubber.
@@ -103,6 +110,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         do {
             bookFile = try await session.ebooks.file(file)
         } catch {
+            guard !closed else { return }
             log("couldn't fetch the File: \(Diagnostics.describe(error))")
             phase = .failed(String(localized: "This book couldn't be downloaded. Check your connection to the server and try again."))
             return
@@ -113,6 +121,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
             (try CatalogStore.ebookOpening(db, fileID: fileID, ownDeviceID: ownDevice),
              try CatalogStore.serverPlace(db, fileID: fileID)?.occurredAt)
         }
+        guard !closed else { return }
         knownServerAt = choice?.1
         offer = choice?.0.offer
         let fallback = choice?.0.start == nil ? nil : choice?.0.percentage
@@ -165,7 +174,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
         guard let offer else { return }
         self.offer = nil
         resolveOffer()
-        source?.jump(to: offer.cfi.map(ReaderTarget.cfi) ?? .fraction(offer.percentage))
+        source?.jump(to: offer.cfi.map(ReaderTarget.cfi) ?? .fraction(offer.percentage), fallback: offer.percentage)
     }
 
     func dismissOffer() {
@@ -199,6 +208,7 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     }
 
     func close() {
+        closed = true
         tracker.close()
         placeWatch?.cancel()
         fileWatch?.cancel()
@@ -312,6 +322,9 @@ final class ReaderModel: FoliateSourceDelegate, Identifiable {
     }
 
     func foliateTurning() {
+        // With VoiceOver the bars stay: hiding them on every turn would
+        // move them out from under the reader's focus.
+        guard !UIAccessibility.isVoiceOverRunning else { return }
         chromeVisible = false
     }
 

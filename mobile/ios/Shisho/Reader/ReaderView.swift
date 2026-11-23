@@ -10,6 +10,8 @@ struct ReaderView: View {
     @State private var showingSettings = false
     /// The scrubber's place while it's being dragged.
     @State private var scrubbing: Double?
+    /// The settings sheet's height, grown with the text in it.
+    @ScaledMetric(relativeTo: .subheadline) private var settingsHeight: CGFloat = 250
     let close: () -> Void
 
     private var theme: ReaderSettings.Theme { model.settings.theme }
@@ -74,15 +76,15 @@ struct ReaderView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .presentationBackground(Theme.background)
+            .tint(Theme.primary)
             // A sheet takes the appearance it was opened in; this keeps it
             // in step with a theme chosen while it's open.
             .preferredColorScheme(colorScheme)
         }
         .sheet(isPresented: $showingSettings) {
             ReaderSettingsSheet(settings: Bindable(model).settings) { showingSettings = false }
-                .presentationDetents([.height(250)])
+                .presentationDetents([.height(settingsHeight)])
                 .presentationDragIndicator(.visible)
-                .presentationBackgroundInteraction(.enabled)
                 .presentationBackground(Theme.background)
                 .preferredColorScheme(colorScheme)
         }
@@ -104,6 +106,8 @@ struct ReaderView: View {
                 .accessibilityLabel(Text("Opening the book"))
                 .accessibilityIdentifier("reader.loading")
         case .failed(let message):
+            // Over the page, in the reader theme's colors, rather than the
+            // app's NoticeCard, which is drawn for the app's own background.
             VStack(spacing: 14) {
                 Icon(.triangleAlert, size: 30, relativeTo: .title)
                 Text(message)
@@ -144,7 +148,10 @@ struct ReaderView: View {
                 .frame(minWidth: 44, minHeight: 44, alignment: .leading)
                 .padding(.leading, 6)
             }
-            .accessibilityLabel(Text("Close the book"))
+            // Named as it shows, so Voice Control's "Tap Book" works.
+            .accessibilityHint(Text("Closes the book"))
+            .accessibilityInputLabels([Text("Book"), Text("Close")])
+            .accessibilityShowsLargeContentViewer()
             .accessibilityIdentifier("reader.close")
             .frame(maxWidth: .infinity, alignment: .leading)
             VStack(spacing: 1) {
@@ -168,6 +175,7 @@ struct ReaderView: View {
                 // The book's own controls only once it shows.
                 .disabled(model.contents.isEmpty || model.phase != .reading)
                 .accessibilityLabel(Text("Contents"))
+                .accessibilityShowsLargeContentViewer()
                 .accessibilityIdentifier("reader.contents")
                 Button { showingSettings = true } label: {
                     Icon(.settings, size: 20)
@@ -175,6 +183,7 @@ struct ReaderView: View {
                 }
                 .disabled(model.phase != .reading)
                 .accessibilityLabel(Text("Settings"))
+                .accessibilityShowsLargeContentViewer()
                 .accessibilityIdentifier("reader.settings")
             }
             .foregroundStyle(Theme.foreground)
@@ -182,6 +191,9 @@ struct ReaderView: View {
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
+        // Past this the bar would cover the page; the buttons show large
+        // on a long press instead.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .background(barBackground.ignoresSafeArea(edges: .top))
         .overlay(alignment: .bottom) { Theme.border.frame(height: 1) }
     }
@@ -220,6 +232,7 @@ struct ReaderView: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 6)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .background(barBackground.ignoresSafeArea(edges: .bottom))
         .overlay(alignment: .top) { Theme.border.frame(height: 1) }
     }
@@ -247,62 +260,102 @@ private struct PagerHost: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: PagerController, context: Context) {}
 }
 
-/// The table of contents, as a sheet with the chapter the reader is in
-/// marked.
+/// The table of contents, as the audio player's chapter list draws it:
+/// bordered rows, the chapter the reader is in tinted.
 private struct ContentsSheet: View {
     @Environment(\.dismiss) private var dismiss
     let model: ReaderModel
     let select: (ContentsEntry) -> Void
 
     var body: some View {
-        NavigationStack {
-            List(model.contents) { entry in
-                let current = entry.title == model.chapterTitle
-                Button { select(entry) } label: {
-                    HStack(spacing: 10) {
-                        Text(entry.title.isEmpty ? String(localized: "Untitled") : entry.title)
-                            .font(.geist(.body, weight: current ? .semibold : .regular))
-                            .foregroundStyle(entry.target == nil ? Theme.mutedForeground : current ? Theme.primary : Theme.foreground)
-                        Spacer(minLength: 8)
-                        if let position = entry.position {
-                            Text(position.formatted(.percent.precision(.fractionLength(0))))
-                                .font(.geist(.footnote))
-                                .monospacedDigit()
-                                .foregroundStyle(Theme.mutedForeground)
+        let currentID = model.currentEntry?.id
+        VStack(spacing: 0) {
+            header
+            ScrollViewReader { scroller in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(model.contents) { entry in
+                            if entry.id != model.contents.first?.id {
+                                Rectangle().fill(Theme.border).frame(height: 1)
+                            }
+                            row(entry, current: entry.id == currentID)
+                                .id(entry.id)
                         }
                     }
-                    .padding(.leading, CGFloat(min(entry.depth, 4)) * 16)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
                 }
-                .disabled(entry.target == nil)
-                .listRowBackground(current ? Theme.primary.opacity(0.08) : Theme.background)
-                .accessibilityAddTraits(current ? .isSelected : [])
-                .accessibilityIdentifier("reader.contents.entry")
-            }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(Theme.background)
-            .navigationTitle(Text("Contents"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                        .font(.geist(.subheadline, weight: .semibold))
-                        .foregroundStyle(Theme.primary)
+                .onAppear {
+                    if let currentID { scroller.scrollTo(currentID, anchor: .center) }
                 }
             }
         }
+        .background(Theme.background)
+    }
+
+    private var header: some View {
+        ZStack {
+            Text("Contents")
+                .font(.geist(.subheadline, weight: .semibold))
+                .foregroundStyle(Theme.foreground)
+                .accessibilityAddTraits(.isHeader)
+            HStack {
+                Spacer()
+                Button("Done") { dismiss() }
+                    .font(.geist(.subheadline, weight: .semibold))
+                    .foregroundStyle(Theme.primary)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("reader.contents.done")
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 18)
+        .padding(.bottom, 10)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+
+    private func row(_ entry: ContentsEntry, current: Bool) -> some View {
+        let title = entry.title.isEmpty ? String(localized: "Untitled") : entry.title
+        let percent = entry.position?.formatted(.percent.precision(.fractionLength(0)))
+        return Button { select(entry) } label: {
+            HStack(spacing: 12) {
+                Text(title)
+                    .font(.geist(.subheadline, weight: .medium))
+                    .foregroundStyle(entry.target == nil ? Theme.mutedForeground : current ? Theme.primary : Theme.foreground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if let percent {
+                    Text(percent)
+                        .font(.geist(.caption))
+                        .monospacedDigit()
+                        .foregroundStyle(current ? Theme.primary : Theme.mutedForeground)
+                }
+            }
+            .padding(.leading, 12 + CGFloat(min(entry.depth, 4)) * 16)
+            .padding(.trailing, 12)
+            .padding(.vertical, 11)
+            .frame(minHeight: 44)
+            .background(current ? Theme.primary.opacity(0.1) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(RowPressStyle())
+        // A heading, or a chapter this copy of the book doesn't have.
+        .disabled(entry.target == nil)
+        .accessibilityLabel(percent.map { "\(title), \($0)" } ?? title)
+        .accessibilityAddTraits(current ? .isSelected : [])
+        .accessibilityIdentifier("reader.contents.entry")
     }
 }
 
 /// The settings this version offers: theme and layout, as the web reader's
-/// settings set them, with its button sets. The rest of its list comes with
-/// #920.
+/// settings set them. The rest of its list comes with #920.
 private struct ReaderSettingsSheet: View {
     @Binding var settings: ReaderSettings
     let done: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             ZStack {
                 Text("Settings")
                     .font(.geist(.subheadline, weight: .semibold))
@@ -312,10 +365,12 @@ private struct ReaderSettingsSheet: View {
                     Button("Done", action: done)
                         .font(.geist(.subheadline, weight: .semibold))
                         .foregroundStyle(Theme.primary)
+                        .frame(minHeight: 44)
                         .accessibilityIdentifier("reader.settings.done")
                 }
             }
-            .padding(.top, 14)
+            .padding(.top, 10)
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
             ChoiceSet(title: "Theme", options: ReaderSettings.Theme.allCases, selection: $settings.theme, label: \.label,
                       identifier: "reader.theme")
             ChoiceSet(title: "Layout", options: ReaderSettings.Layout.allCases, selection: $settings.layout, label: \.label,
@@ -328,9 +383,10 @@ private struct ReaderSettingsSheet: View {
     }
 }
 
-/// One setting's choices as the web app's button set: the chosen one
-/// filled, the others outlined.
-private struct ChoiceSet<Option: Hashable>: View {
+/// One setting's choices as the web reader's settings draw them: a row of
+/// buttons, the chosen one filled. Not the player's SegmentedChoice, which
+/// is the web app's tab switch, a different control there.
+private struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
     let title: LocalizedStringResource
     let options: [Option]
     @Binding var selection: Option
@@ -338,29 +394,36 @@ private struct ChoiceSet<Option: Hashable>: View {
     let identifier: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.geist(.footnote, weight: .medium))
-                .foregroundStyle(Theme.mutedForeground)
+                .font(.geist(.subheadline, weight: .medium))
+                .foregroundStyle(Theme.foreground)
+                .accessibilityAddTraits(.isHeader)
             HStack(spacing: 8) {
                 ForEach(options, id: \.self) { option in
                     let chosen = option == selection
                     Button { selection = option } label: {
                         Text(option[keyPath: label])
                             .font(.geist(.footnote, weight: .medium))
-                            .frame(maxWidth: .infinity, minHeight: 34)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                            .padding(.horizontal, 6)
+                            .frame(maxWidth: .infinity, minHeight: 36)
                             .foregroundStyle(chosen ? Theme.primaryForeground : Theme.foreground)
                             .background(chosen ? Theme.primary : Theme.background,
                                         in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
                                 .strokeBorder(chosen ? Color.clear : Theme.border))
+                            // The button is drawn at the web's height; it
+                            // takes taps over 44 points.
+                            .padding(.vertical, 4)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(PressableStyle())
                     .accessibilityAddTraits(chosen ? .isSelected : [])
+                    .accessibilityIdentifier("\(identifier).\(option.rawValue)")
                 }
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier(identifier)
         }
     }
 }
@@ -378,9 +441,10 @@ private struct NotePopover: View {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(note.paragraphs.enumerated()), id: \.offset) { _, paragraph in
                         Text(paragraph)
-                            // The note is the book's, as the page is, so
-                            // it's set in a book face, as the web reader's
-                            // popover takes the book's own font.
+                            // The note is the book's text, not the app's, so
+                            // it's set in a serif standing in for a book
+                            // face; the page's own font isn't available
+                            // outside the page.
                             .font(.system(.callout, design: .serif))
                             .fixedSize(horizontal: false, vertical: true)
                     }
