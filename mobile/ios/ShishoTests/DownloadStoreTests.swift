@@ -20,9 +20,9 @@ final class DownloadStoreTests: XCTestCase {
 
     private let library = #"{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Fiction","cover_aspect_ratio":"book"}}"#
 
-    private func book(_ id: Int, files: [(Int, String, String)], series: Bool = true) -> String {
+    private func book(_ id: Int, files: [(Int, String, String)], series: Bool = true, sizes: [Int: Int] = [:]) -> String {
         let fileJSON = files.map {
-            #"{"id":\#($0.0),"file_type":"\#($0.1)","file_role":"\#($0.2)","size_bytes":\#($0.0 * 100),"display_name":"File \#($0.0)"}"#
+            #"{"id":\#($0.0),"file_type":"\#($0.1)","file_role":"\#($0.2)","size_bytes":\#(sizes[$0.0] ?? $0.0 * 100),"display_name":"File \#($0.0)"}"#
         }.joined(separator: ",")
         let seriesJSON = series ? #"[{"series_id":1,"name":"Saga","sort_name":"Saga","number":\#(id)}]"# : "[]"
         return """
@@ -94,6 +94,27 @@ final class DownloadStoreTests: XCTestCase {
         try store.requeueDownloads([10])
         XCTAssertEqual(try store.pool.read { try CatalogStore.download($0, fileID: 10) }?.state, .queued)
         XCTAssertEqual(try store.queueDownloads([10]), [], "already queued")
+    }
+
+    /// A File replaced on the server, which the catalog sees as a new size,
+    /// downloads again; one whose bytes on the device differ from the
+    /// catalog's size, but whose catalog size hasn't changed, doesn't.
+    func testAReplacedFileDownloadsAgain() throws {
+        try store.queueDownloads([10, 11])
+        XCTAssertTrue(try store.markDownloaded(fileID: 10, sizeBytes: 987))
+        XCTAssertTrue(try store.markDownloaded(fileID: 11, sizeBytes: 1100))
+        XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [], "the catalog's size is the one it was queued at")
+
+        try store.apply(page(#"{"entries":[\#(book(1, files: [(10, "m4b", "main"), (11, "epub", "main"), (12, "pdf", "supplement")], sizes: [10: 5000]))],"cursor":5}"#))
+        XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [10])
+
+        XCTAssertEqual(try store.requeueReplaced(), [10])
+        let row = try XCTUnwrap(store.pool.read { try CatalogStore.download($0, fileID: 10) })
+        XCTAssertEqual(row.state, .queued)
+        XCTAssertEqual(row.sizeBytes, 5000)
+        XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [], "queued at its new size")
+        XCTAssertTrue(try store.markDownloaded(fileID: 10, sizeBytes: 4999))
+        XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [])
     }
 
     func testASeriesDownloadsItsBooksMainFilesItKnows() throws {

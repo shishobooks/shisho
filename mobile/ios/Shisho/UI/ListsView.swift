@@ -109,6 +109,7 @@ struct ListDetailView: View {
 
     @State private var list: ListSummary??
     @State private var books: [BookSummary]?
+    @State private var downloadable: DownloadAllButton.Files?
 
     var body: some View {
         GeometryReader { geometry in
@@ -154,9 +155,14 @@ struct ListDetailView: View {
         .navigationTitle((list ?? nil)?.name ?? initialName)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                DownloadAllButton(listID: listID)
+            if let downloadable, !downloadable.fileIDs.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    DownloadAllButton(files: downloadable)
+                }
             }
+        }
+        .observing(model.session?.store, id: listID, into: $downloadable) { [listID] db in
+            try DownloadAllButton.Files.fetch(db, listID: listID)
         }
         .observing(model.session?.store, id: listID, into: $list) { [listID] db in
             try CatalogStore.list(db, id: listID)

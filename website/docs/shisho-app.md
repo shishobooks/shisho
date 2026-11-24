@@ -110,7 +110,7 @@ Two settings on the **Downloads** tab apply to every account on the phone, and b
 - **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi.
 - **Remove when finished**: a download is removed once you listen to or read it to the end, which finishes its Read-through. A book in the reader is removed when you close it.
 
-A downloaded file that's deleted from your library, or is in a library you lose access to, is removed from the phone at the next sync.
+A downloaded file that's deleted from your library, or is in a library you lose access to, is removed from the phone at the next sync. One that's replaced in your library with a new copy of the file downloads again at the next sync; until it's back, it plays or opens from your server.
 
 ### Sharing a File
 

@@ -377,6 +377,20 @@ final class DownloadManager {
         remove(gone)
     }
 
+    /// Downloads a File again once the server's copy was replaced, which the
+    /// catalog shows as a new size, so the device doesn't keep a stale one.
+    /// Until the new one arrives, the File streams or opens from the
+    /// server, as one not downloaded does.
+    func refreshReplaced() {
+        guard let replaced = try? store.requeueReplaced(), !replaced.isEmpty else { return }
+        log("\(replaced.map { "file \($0)" }.joined(separator: ", ")) changed on the server, so it downloads again")
+        for fileID in replaced {
+            failures[fileID] = nil
+            onChange?(fileID)
+        }
+        pump()
+    }
+
     // MARK: - Network
 
     /// The device's network changed. Transfers are left to iOS, which holds

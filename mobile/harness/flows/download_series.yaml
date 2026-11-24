@@ -1,0 +1,37 @@
+# Download a whole Series in one tap, from the download button at the top
+# of its page (#915).
+appId: ${APP_ID}
+name: Download a whole Series
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/open_book.yaml
+    env:
+      TITLE: The Harness Novel
+- extendedWaitUntil:
+    visible:
+      id: book.detail.series
+    timeout: 30000
+- tapOn:
+    id: book.detail.series
+- extendedWaitUntil:
+    visible:
+      id: downloadAll
+    timeout: 30000
+- tapOn:
+    id: downloadAll
+# The button says so once every Book's Files are downloaded.
+- extendedWaitUntil:
+    visible:
+      id: downloadAll
+      text: All downloaded
+    timeout: 60000
+- tapOn:
+    id: tab.downloads
+- extendedWaitUntil:
+    visible: The Harness Novel
+    timeout: 30000

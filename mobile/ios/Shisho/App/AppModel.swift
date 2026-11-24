@@ -829,8 +829,10 @@ final class AppModel {
             try await session.sync.run()
             guard isCurrent() else { return }
             syncStatus = .idle
-            // Caught up, so a File missing from the copy has left the library.
+            // Caught up, so a File missing from the copy has left the library,
+            // and one with a new size was replaced.
             session.downloads.dropOrphans()
+            session.downloads.refreshReplaced()
             prefetchCoversIfWanted(session)
         } catch {
             await Diagnostics.shared.log(.sync, "sync failed: \(Diagnostics.describe(error))")

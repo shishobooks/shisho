@@ -1,3 +1,4 @@
+import GRDB
 import SwiftUI
 import UIKit
 
@@ -147,37 +148,34 @@ private extension View {
 
 /// Download All for a Series or a List, in its toolbar: one tap downloads
 /// the main Files of every Book in it. It says when they're all downloaded.
+/// Its page observes `Files` and adds it once there's something to
+/// download: a toolbar item that starts out empty never runs its own tasks.
 struct DownloadAllButton: View {
     struct Files: Equatable, Sendable {
         let fileIDs: [Int]
         /// How many have no Download, or one that failed.
         let missing: Int
-    }
 
-    @Environment(AppModel.self) private var model
-    var seriesID: Int?
-    var listID: Int?
-    @State private var files: Files?
-
-    var body: some View {
-        Group {
-            if let files, !files.fileIDs.isEmpty {
-                Button {
-                    model.session?.downloads.download(files.fileIDs)
-                } label: {
-                    Icon(files.missing == 0 ? .check : .download, size: 20, relativeTo: nil)
-                        .foregroundStyle(files.missing == 0 ? Theme.mutedForeground : Theme.foreground)
-                }
-                .disabled(files.missing == 0)
-                .accessibilityLabel(files.missing == 0 ? String(localized: "All downloaded") : String(localized: "Download All"))
-                .accessibilityValue(files.missing == 0 ? "" : String(AttributedString(localized: "^[\(files.missing) file](inflect: true)").characters))
-                .accessibilityIdentifier("downloadAll")
-            }
-        }
-        .observing(model.session?.store, id: "\(seriesID ?? 0)-\(listID ?? 0)", into: $files) { [seriesID, listID] db in
+        static func fetch(_ db: Database, seriesID: Int? = nil, listID: Int? = nil) throws -> Files {
             let ids = try CatalogStore.downloadableFiles(db, seriesID: seriesID, listID: listID)
             return Files(fileIDs: ids, missing: try CatalogStore.notDownloaded(db, fileIDs: ids))
         }
+    }
+
+    @Environment(AppModel.self) private var model
+    let files: Files
+
+    var body: some View {
+        Button {
+            model.session?.downloads.download(files.fileIDs)
+        } label: {
+            Icon(files.missing == 0 ? .check : .download, size: 20, relativeTo: nil)
+                .foregroundStyle(files.missing == 0 ? Theme.mutedForeground : Theme.foreground)
+        }
+        .disabled(files.missing == 0)
+        .accessibilityLabel(files.missing == 0 ? String(localized: "All downloaded") : String(localized: "Download All"))
+        .accessibilityValue(files.missing == 0 ? "" : String(AttributedString(localized: "^[\(files.missing) file](inflect: true)").characters))
+        .accessibilityIdentifier("downloadAll")
     }
 }
 

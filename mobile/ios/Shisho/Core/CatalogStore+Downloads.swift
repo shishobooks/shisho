@@ -49,6 +49,12 @@ extension CatalogStore {
             t.column("file_type", .text).notNull()
             t.column("state", .text).notNull()
             t.column("size_bytes", .integer).notNull()
+            // The File's size in the catalog when it was queued. A File
+            // replaced on the server shows as a new size there, and
+            // downloads again. Kept apart from size_bytes, which becomes the
+            // bytes on the device, so a catalog size that never matched the
+            // bytes doesn't download it over and over.
+            t.column("catalog_size", .integer).notNull().defaults(to: 0)
             t.column("error", .text)
             // Read to its end with Remove when finished on, while the reader
             // still had it open: it goes once the reader lets go of it, or
@@ -81,6 +87,16 @@ extension CatalogStore {
     private static func downloadRow(_ row: Row) -> DownloadRow {
         DownloadRow(fileID: row["file_id"], fileType: row["file_type"],
                     state: DownloadState(rawValue: row["state"]) ?? .failed, sizeBytes: row["size_bytes"], error: row["error"])
+    }
+
+    /// Finished Downloads whose File was replaced on the server, which the
+    /// catalog shows as a size other than the one they were queued at.
+    static func replacedDownloads(_ db: Database) throws -> [Int] {
+        try Int.fetchAll(db, sql: """
+            SELECT d.file_id FROM downloads d JOIN book_files f ON f.id = d.file_id
+            WHERE d.state = 'done' AND f.size_bytes != d.catalog_size
+            ORDER BY d.file_id
+            """)
     }
 
     /// Downloads whose File isn't in the catalog copy anymore: deleted on
@@ -160,11 +176,13 @@ extension CatalogStore {
                 guard existing == nil || existing == DownloadState.failed.rawValue else { continue }
                 // In the order asked for, so a Series downloads in order.
                 try db.execute(sql: """
-                    INSERT INTO downloads (file_id, file_type, state, size_bytes, error, requested_at)
-                    VALUES (?, ?, 'queued', ?, NULL, ?)
+                    INSERT INTO downloads (file_id, file_type, state, size_bytes, catalog_size, error, requested_at)
+                    VALUES (?, ?, 'queued', ?, ?, NULL, ?)
                     ON CONFLICT (file_id) DO UPDATE SET file_type = excluded.file_type, state = 'queued',
-                        size_bytes = excluded.size_bytes, error = NULL, remove_pending = 0, requested_at = excluded.requested_at
-                    """, arguments: [fileID, row["file_type"], row["size_bytes"], at.timeIntervalSince1970 + Double(offset) / 1000])
+                        size_bytes = excluded.size_bytes, catalog_size = excluded.catalog_size, error = NULL, remove_pending = 0,
+                        requested_at = excluded.requested_at
+                    """, arguments: [fileID, row["file_type"], row["size_bytes"], row["size_bytes"],
+                                     at.timeIntervalSince1970 + Double(offset) / 1000])
                 queued.append(fileID)
             }
             return queued
@@ -198,6 +216,23 @@ extension CatalogStore {
             try db.execute(sql: """
                 UPDATE downloads SET state = 'queued', error = NULL WHERE file_id IN (\(fileIDs.map(String.init).joined(separator: ",")))
                 """)
+        }
+    }
+
+    /// Queues every replaced Download again at its File's new size, and
+    /// returns them. Each keeps its file until the new one arrives.
+    func requeueReplaced() throws -> [Int] {
+        try pool.write { db in
+            let replaced = try CatalogStore.replacedDownloads(db)
+            for fileID in replaced {
+                try db.execute(sql: """
+                    UPDATE downloads SET state = 'queued', error = NULL, remove_pending = 0,
+                        size_bytes = (SELECT size_bytes FROM book_files WHERE id = downloads.file_id),
+                        catalog_size = (SELECT size_bytes FROM book_files WHERE id = downloads.file_id)
+                    WHERE file_id = ?
+                    """, arguments: [fileID])
+            }
+            return replaced
         }
     }
 
