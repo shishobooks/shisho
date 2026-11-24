@@ -44,6 +44,9 @@ const css = (s) => `
       html { -webkit-text-size-adjust: 100% !important; }
       ${bookCSS(s)}`;
 
+// The space above and below the text, inside the page.
+const TEXT_BAND = "16px";
+
 // relayout, for the page showing: a neighbor waits for its fonts before it
 // says it's ready, and a late relayout would move it off its page.
 const applyStyles = (s, relayout = true) => {
@@ -61,9 +64,14 @@ const applyStyles = (s, relayout = true) => {
   const gap = set("gap", layout.gap);
   const flow = set("flow", layout.flow);
   const columns = set("max-column-count", layout.maxColumnCount);
-  // The paginator only sets a style for the gap and the columns, which a
-  // section already laid out doesn't notice; a new flow renders itself.
-  if ((gap || columns) && !flow) renderer.render?.();
+  // foliate keeps a band above and below the text for running heads, 48 px
+  // unless told otherwise. The app draws none, and its own readout has room
+  // under the page, so the band shrinks to a little air. (The web reader
+  // keeps it: its search panel hangs into the top band.)
+  const band = set("margin", TEXT_BAND);
+  // The paginator only sets a style for these, which a section already laid
+  // out doesn't notice; a new flow renders itself.
+  if ((gap || columns || band) && !flow) renderer.render?.();
   if (relayout) relayoutWhenFontLoads(s);
 };
 

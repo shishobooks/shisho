@@ -2166,6 +2166,16 @@ describe("ReflowableReader display settings", () => {
     expect(screen.getByText("Only for Paginated")).toBeInTheDocument();
   });
 
+  it("says when Auto shows two pages", async () => {
+    await openBook();
+    await openSettings();
+    expect(
+      screen.getByRole("group", { name: "Pages" }),
+    ).toHaveAccessibleDescription(
+      "Auto shows two pages side by side when the window is wider than it is tall and has room for both.",
+    );
+  });
+
   it("doesn't save display settings to the account", async () => {
     const mutate = vi.fn();
     vi.mocked(useUpdateUserSettings).mockReturnValue({ mutate } as never);

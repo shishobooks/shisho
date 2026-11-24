@@ -20,7 +20,8 @@ name: Search inside the Book and jump to a result
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.search
-- tapOn: Search in book
+- tapOn:
+    id: reader.search.field
 # Each chapter has one ninth paragraph.
 - inputText: paragraph 9
 - extendedWaitUntil:

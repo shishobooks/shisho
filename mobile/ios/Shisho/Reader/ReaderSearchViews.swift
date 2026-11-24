@@ -9,7 +9,7 @@ struct ReaderSearchSheet: View {
     /// Next (true) or previous from the keyboard.
     let step: (Bool) -> Void
     let done: () -> Void
-    @State private var fieldActive = false
+    @FocusState private var fieldFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
@@ -44,12 +44,15 @@ struct ReaderSearchSheet: View {
                     .frame(maxWidth: .infinity)
                 }
                 .scrollDismissesKeyboard(.immediately)
+                // The field stays above the results as they scroll.
+                .safeAreaInset(edge: .top, spacing: 0) { field }
                 .onAppear {
-                    // Back from the page, the chosen result is in view.
+                    // Back from the page, the chosen result is in view;
+                    // otherwise the keyboard comes up with the sheet.
                     if let current = search.current {
                         scroller.scrollTo(current, anchor: .center)
                     } else {
-                        fieldActive = true
+                        fieldFocused = true
                     }
                 }
             }
@@ -58,11 +61,6 @@ struct ReaderSearchSheet: View {
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(Theme.background, for: .navigationBar)
-            .searchable(text: Binding(get: { search.query }, set: { search.changeQuery($0) }), isPresented: $fieldActive,
-                        placement: .navigationBarDrawer(displayMode: .always), prompt: Text("Search in book"))
-            .onSubmit(of: .search) { search.submit() }
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.never)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done", action: done)
@@ -78,7 +76,7 @@ struct ReaderSearchSheet: View {
         // Shift-Command-G step and show the page, and Escape closes search.
         .background {
             Group {
-                Button("Search in Book") { fieldActive = true }
+                Button("Search in Book") { fieldFocused = true }
                     .keyboardShortcut("f", modifiers: .command)
                 Button("Next Result") { step(true) }
                     .keyboardShortcut("g", modifiers: .command)
@@ -96,6 +94,49 @@ struct ReaderSearchSheet: View {
             .opacity(0)
             .accessibilityHidden(true)
         }
+    }
+
+    /// The app's own field rather than the system's searchable one, which
+    /// hides the title and Done while it has the keyboard.
+    private var field: some View {
+        HStack(spacing: 8) {
+            Icon(.search, size: 16, relativeTo: .body)
+                .foregroundStyle(Theme.mutedForeground)
+                .accessibilityHidden(true)
+            TextField("Search in book", text: Binding(get: { search.query }, set: { search.changeQuery($0) }))
+                .font(.geist(.body))
+                .focused($fieldFocused)
+                .submitLabel(.search)
+                .onSubmit { search.submit() }
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .accessibilityIdentifier("reader.search.field")
+            if !search.query.isEmpty {
+                Button {
+                    search.changeQuery("")
+                    fieldFocused = true
+                } label: {
+                    Icon(.x, size: 16, relativeTo: .body)
+                        .foregroundStyle(Theme.mutedForeground)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle())
+                .accessibilityLabel(Text("Clear search"))
+                .accessibilityIdentifier("reader.search.clear")
+            }
+        }
+        .padding(.leading, 12)
+        .frame(minHeight: 44)
+        .background(Theme.background, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+            .strokeBorder(fieldFocused ? Theme.primary : Theme.input))
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .padding(.bottom, 8)
+        .frame(maxWidth: 680)
+        .frame(maxWidth: .infinity)
+        .background(Theme.background)
     }
 
     @ViewBuilder

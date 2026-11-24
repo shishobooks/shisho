@@ -30,7 +30,8 @@ struct ReaderSettingsSheet: View {
                               label: \.label, identifier: "reader.layout")
                     ChoiceSet(title: "Pages", options: ReaderSettings.Pages.allCases, selection: $settings.pages, label: \.label,
                               identifier: "reader.pages",
-                              disabledReason: settings.layout == .scrolled ? "Only for Paginated" : nil)
+                              disabledReason: settings.layout == .scrolled ? "Only for Paginated" : nil,
+                              hint: "Auto shows two pages side by side when the screen is wider than it is tall and has room for both.")
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
@@ -214,6 +215,8 @@ private struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
     let identifier: String
     /// Disables the choices and says why, beside the title.
     var disabledReason: LocalizedStringResource?
+    /// Says what the choices do, under them.
+    var hint: LocalizedStringResource?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -237,6 +240,11 @@ private struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
             }
             .disabled(disabledReason != nil)
             .opacity(disabledReason != nil ? 0.5 : 1)
+            if let hint {
+                Text(hint)
+                    .font(.geist(.footnote))
+                    .foregroundStyle(Theme.mutedForeground)
+            }
         }
     }
 

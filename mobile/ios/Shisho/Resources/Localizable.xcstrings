@@ -247,6 +247,9 @@
     "Auto" : {
 
     },
+    "Auto shows two pages side by side when the screen is wider than it is tall and has room for both." : {
+
+    },
     "Back %lld Seconds" : {
 
     },
@@ -344,6 +347,9 @@
 
     },
     "Clear all filters" : {
+
+    },
+    "Clear search" : {
 
     },
     "Close" : {

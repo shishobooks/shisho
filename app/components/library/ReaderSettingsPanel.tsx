@@ -42,6 +42,7 @@ function OptionGroup<T extends string>({
   value,
   onChange,
   disabledReason,
+  hint,
 }: {
   label: string;
   options: readonly T[];
@@ -49,8 +50,11 @@ function OptionGroup<T extends string>({
   onChange: (value: T) => void;
   // Disables the group and says why, next to its label.
   disabledReason?: string;
+  // Says what the options do, under them.
+  hint?: string;
 }) {
   const labelId = useId();
+  const hintId = useId();
   return (
     <div>
       <p className="text-sm font-medium" id={labelId}>
@@ -62,6 +66,7 @@ function OptionGroup<T extends string>({
         )}
       </p>
       <div
+        aria-describedby={hint ? hintId : undefined}
         aria-labelledby={labelId}
         className="flex flex-wrap gap-2 mt-2"
         role="group"
@@ -79,6 +84,11 @@ function OptionGroup<T extends string>({
           </Button>
         ))}
       </div>
+      {hint && (
+        <p className="text-xs text-muted-foreground mt-1" id={hintId}>
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
@@ -380,6 +390,7 @@ export default function ReaderSettingsPanel({
         disabledReason={
           settings.layout === "scrolled" ? "Only for Paginated" : undefined
         }
+        hint="Auto shows two pages side by side when the window is wider than it is tall and has room for both."
         label="Pages"
         onChange={(pages) => onChange({ pages })}
         options={READER_PAGES}

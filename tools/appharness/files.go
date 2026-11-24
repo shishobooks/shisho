@@ -23,7 +23,11 @@ func seedFiles(ctx context.Context, root, udid string) error {
 	if err != nil {
 		return err
 	}
-	dir, ok := localStorage(out)
+	home, err := simctl(ctx, "getenv", udid, "HOME")
+	if err != nil {
+		return err
+	}
+	dir, ok := localStorage(out, home)
 	if !ok {
 		return errors.New("the simulator has no Files storage on the device")
 	}
@@ -37,13 +41,16 @@ func seedFiles(ctx context.Context, root, udid string) error {
 	return errors.WithStack(os.WriteFile(filepath.Join(dir, filesFontName), font, 0o600))
 }
 
-// localStorage finds the folder Files shows as On My iPhone in simctl's
-// listing of an app's group containers.
-func localStorage(groups string) (string, bool) {
+// localStorage finds the folder Files shows as On My iPhone, from simctl's
+// listing of an app's group containers and the simulator's home. A cloned
+// simulator's listing gives the paths in the device it was cloned from,
+// such as the harness's base, which the flows must never change; the clone
+// has the same folders under its own home.
+func localStorage(groups, home string) (string, bool) {
 	for _, line := range strings.Split(groups, "\n") {
 		id, path, ok := strings.Cut(strings.TrimSpace(line), "\t")
 		if ok && id == "group.com.apple.FileProvider.LocalStorage" {
-			return filepath.Join(path, "File Provider Storage"), true
+			return filepath.Join(home, "Containers", "Shared", "AppGroup", filepath.Base(path), "File Provider Storage"), true
 		}
 	}
 	return "", false

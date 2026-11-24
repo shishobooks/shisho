@@ -54,17 +54,18 @@ struct ReaderView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
                 Spacer(minLength: 0)
-                // A chosen search result's bar, while the results are away.
-                if model.search.current != nil, model.phase == .reading, !showingSearch {
-                    ReaderSearchBar(search: model.search) { showingSearch = true }
-                        .padding(.bottom, 8)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
                 // Only once the page shows, so it never reads 0% while the
                 // book opens.
                 if model.phase == .reading {
                     if model.chromeVisible {
+                        if showingSearchBar {
+                            searchBar.padding(.bottom, 8)
+                        }
                         ReaderBottomBar(model: model).transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if showingSearchBar {
+                        // In the readout's place under the page, which is
+                        // as tall as the bar, so it covers no text.
+                        searchBar
                     } else {
                         readout
                     }
@@ -142,7 +143,10 @@ struct ReaderView: View {
                 showingSearch = false
                 if forward { model.search.next() } else { model.search.previous() }
             }, done: { showingSearch = false })
-            .presentationDetents([.medium, .large])
+            // Full height from the start, as the keyboard comes up with it:
+            // a half-height sheet would grow once the keyboard showed, and
+            // drop back when it went.
+            .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationBackground(Theme.background)
         }
@@ -208,6 +212,16 @@ struct ReaderView: View {
         }
     }
 
+    /// A chosen search result's bar, while the results are away.
+    private var showingSearchBar: Bool {
+        model.search.current != nil && !showingSearch
+    }
+
+    private var searchBar: some View {
+        ReaderSearchBar(search: model.search) { showingSearch = true }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
     /// A turn waiting for its page to be laid out.
     private var turnSpinner: some View {
         ProgressView()
@@ -263,8 +277,10 @@ struct ReaderView: View {
         // Past this the bar would cover the page; the buttons show large
         // on a long press instead.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .background(ReaderView.barBackground.ignoresSafeArea(edges: .top))
-        .overlay(alignment: .bottom) { Theme.border.frame(height: 1) }
+        // To the screen's edges in landscape, past the sides' safe areas,
+        // which the buttons stay inside.
+        .background(ReaderView.barBackground.ignoresSafeArea(edges: [.top, .horizontal]))
+        .overlay(alignment: .bottom) { Theme.border.frame(height: 1).ignoresSafeArea(edges: .horizontal) }
     }
 
     private var closeButton: some View {
@@ -453,61 +469,85 @@ private struct ReaderBottomBar: View {
         scrubbing == nil ? model.pagesLeftLabel(inBook: pagesLeftInBook) : nil
     }
 
-    var body: some View {
-        VStack(spacing: 4) {
-            // Back and forward through jumps either side of the bar, as the
-            // web reader has them: always there, and disabled when there's
-            // nowhere to go, so they're where the reader looks after paging
-            // around a jump.
-            HStack(spacing: 2) {
-                historyButton(.undo2, label: "Back to previous location", enabled: model.history.canGoBack,
-                              identifier: "reader.back", action: model.goBack)
-                Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
-                    scrubbing = nil
-                    model.go(toFraction: value)
-                }, step: 0.01, onAdjust: { model.go(toFraction: $0, adjusting: true) }, marks: model.marks)
-                .accessibilityLabel(Text("Place in the book"))
-                .accessibilityValue(Text(scrubValue))
-                .accessibilityIdentifier("reader.scrubber")
+    /// Back and forward through jumps either side of the bar, as the web
+    /// reader has them: always there, and disabled when there's nowhere to
+    /// go, so they're where the reader looks after paging around a jump.
+    private var scrubberRow: some View {
+        HStack(spacing: 2) {
+            historyButton(.undo2, label: "Back to previous location", enabled: model.history.canGoBack,
+                          identifier: "reader.back", action: model.goBack)
+            Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
+                scrubbing = nil
+                model.go(toFraction: value)
+            }, step: 0.01, onAdjust: { model.go(toFraction: $0, adjusting: true) }, marks: model.marks)
+            .accessibilityLabel(Text("Place in the book"))
+            .accessibilityValue(Text(scrubValue))
+            .accessibilityIdentifier("reader.scrubber")
 
-                historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
-                              identifier: "reader.forward", action: model.goForward)
-            }
-            HStack(spacing: 6) {
+            historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
+                          identifier: "reader.forward", action: model.goForward)
+        }
+    }
+
+    /// The chapter, pages left, and how far through.
+    private func placeRow(showingChapter: Bool) -> some View {
+        HStack(spacing: 6) {
+            if showingChapter {
                 Text((scrubbing.map(model.chapterTitle(at:)) ?? model.chapterTitle) ?? "")
                     .lineLimit(1)
                     // Read with the percentage, as the place.
                     .accessibilityHidden(true)
                 Spacer(minLength: 12)
-                if let pagesLeft = pagesLeftLabel {
-                    Button { pagesLeftInBook.toggle() } label: {
-                        Text(pagesLeft)
-                            .lineLimit(1)
-                            .contentTransition(.numericText())
-                            .frame(minHeight: 32)
-                            .hitArea(height: 32)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
-                    .accessibilityIdentifier("reader.pagesLeft")
-                    Text(verbatim: "·")
-                        .accessibilityHidden(true)
-                }
-                Text(percentShown)
-                    .monospacedDigit()
-                    .accessibilityLabel(Text(place))
-                    .accessibilityIdentifier("reader.progress")
             }
-            .font(.geist(.caption))
-            .foregroundStyle(Theme.mutedForeground)
-            .accessibilityElement(children: .contain)
+            if let pagesLeft = pagesLeftLabel {
+                Button { pagesLeftInBook.toggle() } label: {
+                    Text(pagesLeft)
+                        .lineLimit(1)
+                        .contentTransition(.numericText())
+                        .frame(minHeight: 32)
+                        .hitArea(height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
+                .accessibilityIdentifier("reader.pagesLeft")
+                Text(verbatim: "·")
+                    .accessibilityHidden(true)
+            }
+            Text(percentShown)
+                .monospacedDigit()
+                .accessibilityLabel(Text(place))
+                .accessibilityIdentifier("reader.progress")
+        }
+        .font(.geist(.caption))
+        .foregroundStyle(Theme.mutedForeground)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Short, as a phone in landscape: one row, the chapter left to the
+    /// title over the page, so the bar covers less of the page.
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    var body: some View {
+        Group {
+            if verticalSizeClass == .compact {
+                HStack(spacing: 12) {
+                    scrubberRow
+                    placeRow(showingChapter: false)
+                        .fixedSize()
+                }
+            } else {
+                VStack(spacing: 4) {
+                    scrubberRow
+                    placeRow(showingChapter: true)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 6)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .background(ReaderView.barBackground.ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) { Theme.border.frame(height: 1) }
+        .background(ReaderView.barBackground.ignoresSafeArea(edges: [.bottom, .horizontal]))
+        .overlay(alignment: .top) { Theme.border.frame(height: 1).ignoresSafeArea(edges: .horizontal) }
         // Where a drag would go, above the bar where a finger doesn't
         // cover it, so it isn't blind. After the border, so it's in front.
         .overlay(alignment: .top) {
