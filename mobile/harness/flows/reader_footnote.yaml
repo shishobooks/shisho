@@ -1,8 +1,10 @@
-# A picture opens on its own, and a small note reference opens its note in
-# a card rather than turning the page. Go to Note goes to the note, and Back
-# returns to where it left from (#919). Then search inside the Book, see each
-# result in its sentence under its chapter, open one, and land on it; next
-# and previous step through the rest (#920).
+# A picture opens on its own, the readout counts pages left in the chapter
+# or the book, and Back returns from a jump from the contents. A small note
+# reference opens its note in a card rather than turning the page, Go to
+# Note goes to the note, and Back returns to where it left from (#919). Then
+# search inside the Book, see each result in its sentence under its
+# chapter, open one, and land on it; next steps through the rest, wrapping
+# to the first (#920).
 appId: ${APP_ID}
 name: Open a picture and a footnote, go back, and search the Book
 ---
@@ -43,6 +45,19 @@ name: Open a picture and a footnote, go back, and search the Book
       id: reader.image.close
     timeout: 30000
 - runFlow: subflows/show_reader_controls.yaml
+# The bar counts the pages left in the chapter, and a tap counts the book's.
+- extendedWaitUntil:
+    visible:
+      id: reader.pagesLeft
+      text: ".* in chapter"
+    timeout: 30000
+- tapOn:
+    id: reader.pagesLeft
+- extendedWaitUntil:
+    visible:
+      id: reader.pagesLeft
+      text: ".* in book"
+    timeout: 30000
 - tapOn:
     id: reader.contents
 # A chapter can be tapped once the reader has found it in the book.
@@ -57,6 +72,19 @@ name: Open a picture and a footnote, go back, and search the Book
       id: reader.progress
       text: "Chapter Two.*"
     timeout: 30000
+# Back returns from the jump, and the contents go to Chapter Two again.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.back
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter One.*"
+    timeout: 30000
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter Two
 # The note reference, a link in the book's text.
 - tapOn: "\\[1\\]"
 - extendedWaitUntil:
