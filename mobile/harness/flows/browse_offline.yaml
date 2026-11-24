@@ -86,11 +86,11 @@ name: Browse Books offline
 - assertVisible: Harbor Lights
 # A stalled CI simulator can drop the tap, so it's tapped again until the
 # Library shows. A tap that lands on the Library itself only scrolls it to
-# its top.
+# its top. The loop ends on a flag, as subflows/pause_player.yaml's does.
+- evalScript: ${output.libraryShown = false}
 - repeat:
     while:
-      notVisible:
-        id: library.grid
+      true: ${!output.libraryShown}
     times: 3
     commands:
       - tapOn:
@@ -100,6 +100,12 @@ name: Browse Books offline
             id: library.grid
           timeout: 30000
           optional: true
+      - runFlow:
+          when:
+            visible:
+              id: library.grid
+          commands:
+            - evalScript: ${output.libraryShown = true}
 - assertVisible:
     id: library.grid
 
