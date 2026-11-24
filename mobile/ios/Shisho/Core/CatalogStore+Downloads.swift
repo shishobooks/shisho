@@ -39,6 +39,9 @@ struct StoredDownload: Equatable, Identifiable, Sendable {
     /// Keys the File's own cover, which shows its edition; empty when it
     /// has none and shows its Book's.
     var coverVersion = ""
+    /// How far through the File the user is, from 0 to 1: this device's
+    /// place, or the server's; nil when it hasn't been started.
+    var progress: Double?
 }
 
 extension CatalogStore {
@@ -102,6 +105,14 @@ extension CatalogStore {
             """)
     }
 
+    /// The Books with a File on the device, which the Library shows as they
+    /// are while the server can't be reached, and the rest dimmed.
+    static func downloadedBookIDs(_ db: Database) throws -> Set<Int> {
+        Set(try Int.fetchAll(db, sql: """
+            SELECT DISTINCT f.book_id FROM downloads d JOIN book_files f ON f.id = d.file_id WHERE d.state = 'done'
+            """))
+    }
+
     /// How many Downloads are on their way, for the Downloads tab's badge.
     static func downloadingCount(_ db: Database) throws -> Int {
         try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM downloads WHERE state = 'queued'") ?? 0
@@ -117,7 +128,9 @@ extension CatalogStore {
     /// tab.
     static func storedDownloads(_ db: Database) throws -> [StoredDownload] {
         let rows = try Row.fetchAll(db, sql: """
-            SELECT d.file_id, d.file_type, d.state, d.size_bytes, d.error, f.display_name, f.book_id, f.cover_version
+            SELECT d.file_id, d.file_type, d.state, d.size_bytes, d.error, f.display_name, f.book_id, f.cover_version,
+                COALESCE((SELECT percentage FROM local_positions WHERE file_id = d.file_id),
+                    (SELECT percentage FROM reading_positions WHERE file_id = d.file_id)) AS progress
             FROM downloads d JOIN book_files f ON f.id = d.file_id
             ORDER BY d.requested_at DESC, d.file_id
             """)
@@ -132,7 +145,7 @@ extension CatalogStore {
             return StoredDownload(fileID: row["file_id"], book: book, fileType: type,
                                   label: name.isEmpty ? FileTypes.label(type) : name,
                                   state: DownloadState(rawValue: row["state"]) ?? .failed, sizeBytes: row["size_bytes"],
-                                  error: row["error"], coverVersion: row["cover_version"])
+                                  error: row["error"], coverVersion: row["cover_version"], progress: row["progress"])
         }
     }
 

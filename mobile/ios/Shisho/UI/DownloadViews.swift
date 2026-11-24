@@ -26,6 +26,32 @@ enum DownloadWords {
     }
 }
 
+extension DownloadWords {
+    /// A Download's line under its Book's title: the File's own name when
+    /// it isn't the Book's, as an edition's is, its format, and how far
+    /// through it the user is, to tell which can go when space runs low.
+    static func facts(_ item: StoredDownload) -> String {
+        var parts: [String] = []
+        if item.label.localizedCaseInsensitiveCompare(item.book.title) != .orderedSame {
+            parts.append(item.label)
+        }
+        parts.append(FileTypes.label(item.fileType))
+        parts.append(progress(item))
+        return parts.joined(separator: " · ")
+    }
+
+    private static func progress(_ item: StoredDownload) -> String {
+        if item.book.status == "read" || (item.progress ?? 0) >= 0.995 {
+            return String(localized: "Finished")
+        }
+        guard let progress = item.progress, progress > 0 else {
+            return String(localized: "Not started")
+        }
+        let percent = progress.formatted(.percent.precision(.fractionLength(0)))
+        return item.fileType == "m4b" ? String(localized: "Listening \(percent)") : String(localized: "Reading \(percent)")
+    }
+}
+
 /// A File's Download button, beside Listen and Read on its Book's page:
 /// Download, a ring that fills while it downloads and stops it when
 /// tapped, or a check with a menu to remove it. A File Type this version
@@ -373,6 +399,15 @@ struct DownloadsView: View {
                                 .buttonStyle(OutlineButtonStyle(role: .destructive))
                                 .labelStyle(ActionLabelStyle())
                                 .accessibilityIdentifier("downloads.removeAll")
+                                // On the button, so where iOS shows it as a
+                                // popover, it points at the button.
+                                .confirmationDialog(String(localized: "Remove every Download from this device?"),
+                                                    isPresented: $confirmingRemoveAll, titleVisibility: .visible) {
+                                    Button("Remove All Downloads", role: .destructive) { model.session?.downloads.removeAll() }
+                                        .accessibilityIdentifier("downloads.removeAll.confirm")
+                                } message: {
+                                    Text("They stay in your library, and you can redownload them later.")
+                                }
                             }
                         }
                     }
@@ -391,13 +426,6 @@ struct DownloadsView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar { RootToolbar(downloadSettings: true) }
             .routeDestinations()
-            .confirmationDialog(String(localized: "Remove every Download from this device?"), isPresented: $confirmingRemoveAll,
-                                titleVisibility: .visible) {
-                Button("Remove All Downloads", role: .destructive) { model.session?.downloads.removeAll() }
-                    .accessibilityIdentifier("downloads.removeAll.confirm")
-            } message: {
-                Text("They stay in your library, to download again.")
-            }
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloads) { db in
             try CatalogStore.storedDownloads(db)
@@ -415,7 +443,7 @@ struct DownloadsView: View {
         // the count, rather than leaving "0 downloads" while one runs.
         var parts = [Counts.downloads(count)]
         if coming > 0 { parts.append(String(localized: "\(coming) on the way")) }
-        if let free { parts.append(String(localized: "\(FileFacts.size(Int(free))) free on this device")) }
+        if let free { parts.append(String(localized: "\(FileFacts.size(Int(free))) available")) }
         return VStack(alignment: .leading, spacing: 4) {
             Text(FileFacts.size(used))
                 .font(.geist(size: 30, relativeTo: .title, weight: .bold))
@@ -521,7 +549,7 @@ private struct DownloadRowView: View {
                         Text(item.book.title)
                             .font(.geist(.subheadline, weight: .semibold))
                             .lineLimit(2)
-                        Text(verbatim: "\(item.label) · \(FileTypes.label(item.fileType))")
+                        Text(verbatim: DownloadWords.facts(item))
                             .font(.geist(.footnote))
                             .foregroundStyle(Theme.mutedForeground)
                             // Room to wrap at large text, so the format isn't cut off.

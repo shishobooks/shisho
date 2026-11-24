@@ -17,6 +17,9 @@ struct LibraryFilter: Hashable, Sendable {
     var tags: Set<String> = []
     /// A BCP 47 tag, as the Files have it, or nil for every language.
     var language: String?
+    /// Only Books with a File downloaded to this device. The app's own: the
+    /// web has no Downloads.
+    var downloaded = false
 
     var isEmpty: Bool { self == LibraryFilter() }
 }
@@ -107,6 +110,11 @@ extension CatalogStore {
             sql.append("EXISTS (SELECT 1 FROM book_files WHERE book_id = b.id AND (language = ? OR language LIKE ?))")
             arguments.append(language)
             arguments.append(language + "-%")
+        }
+        if filter.downloaded {
+            sql.append("""
+                EXISTS (SELECT 1 FROM downloads d JOIN book_files f ON f.id = d.file_id WHERE f.book_id = b.id AND d.state = 'done')
+                """)
         }
         return (sql, arguments)
     }

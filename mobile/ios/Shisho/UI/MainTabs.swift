@@ -289,12 +289,15 @@ private struct MiniPlayerOverlay: ViewModifier {
 /// Books in a grid, as the Library shows them: as many columns as fit, each
 /// opening its Book. badges are Series Numbers to show inline with titles.
 struct BookGrid: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let books: [BookSummary]
     let width: CGFloat
     var badges: [Int: (Double, Double?)] = [:]
     var identifier = "library.grid"
+    /// The Books with a File on the device.
+    @State private var downloaded: Set<Int>?
 
     var body: some View {
         let layout = GridLayout(width: width, regular: sizeClass == .regular,
@@ -302,14 +305,23 @@ struct BookGrid: View {
         let column = GridItem(.fixed(layout.cellWidth), spacing: GridLayout.spacing, alignment: .top)
         LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(books) { book in
+                let onDevice = model.connection == .online || downloaded?.contains(book.id) == true
                 NavigationLink(value: Route.book(book)) {
                     BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id])
+                        // Without the server, a Book with nothing downloaded
+                        // can't be listened to or read: dimmed, though its
+                        // page still opens.
+                        .opacity(onDevice ? 1 : 0.5)
                 }
                 .buttonStyle(PressableStyle())
+                .accessibilityHint(onDevice ? "" : String(localized: "Not downloaded"))
             }
         }
         .padding(.horizontal, GridLayout.margin)
         .accessibilityIdentifier(identifier)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloaded) { db in
+            try CatalogStore.downloadedBookIDs(db)
+        }
     }
 }
 
