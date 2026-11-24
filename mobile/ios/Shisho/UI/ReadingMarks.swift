@@ -128,9 +128,11 @@ struct FileProgressLine: View {
     let durationSeconds: Double?
     let pageCount: Int?
     let wordCount: Int?
+    var pagesLeft: Int?
 
     var body: some View {
-        let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount)
+        let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount,
+                                         pagesLeft: pagesLeft)
         HStack(spacing: 8) {
             ProgressBar(value: progress)
                 .frame(maxWidth: 150)

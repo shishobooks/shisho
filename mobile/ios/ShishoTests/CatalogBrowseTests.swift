@@ -425,6 +425,8 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil, wordCount: nil), "25%")
         XCTAssertEqual(FileProgressText.text(1, durationSeconds: 7200, pageCount: nil, wordCount: nil), "100%", "nothing left to say at the end")
         XCTAssertEqual(FileProgressText.text(0.02, durationSeconds: 241, pageCount: nil, wordCount: nil), "2% · 3:56 left", "to the second, as the Listen card says it")
+        // Exact, as the Read card knows it for a comic or PDF.
+        XCTAssertEqual(FileProgressText.text(3.0 / 7, durationSeconds: nil, pageCount: 8, wordCount: nil, pagesLeft: 4), "43% · 4 pages left")
         // Not a second short from the fraction's rounding error.
         XCTAssertEqual(FileProgressText.text(200.0 / 240, durationSeconds: 240, pageCount: nil, wordCount: nil), "83% · 0:40 left")
         // A real fraction of a second isn't rounded up, as the Listen bar doesn't.

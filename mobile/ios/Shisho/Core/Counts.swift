@@ -88,7 +88,9 @@ enum FileFacts {
 /// How far through a File the user is, as its row says it under its
 /// facts: the percentage, and the time, pages, or words left.
 enum FileProgressText {
-    static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?, wordCount: Int?) -> String {
+    /// pagesLeft, when known exactly, as the Read card knows it, is said
+    /// rather than an estimate from the percentage.
+    static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?, wordCount: Int?, pagesLeft: Int? = nil) -> String {
         let clamped = min(1, max(0, progress))
         let percent = Percent.text(clamped)
         guard clamped < 1 else { return percent }
@@ -102,7 +104,8 @@ enum FileProgressText {
             return String(localized: "\(percent) · \(TimeLabels.clock(left)) left")
         }
         if let pages = pageCount, pages > 0 {
-            return String(localized: "\(percent) · \(FileFacts.pages(Int((Double(pages) * rest).rounded()))) left")
+            let left = pagesLeft ?? Int((Double(pages) * rest).rounded())
+            return String(localized: "\(percent) · \(FileFacts.pages(left)) left")
         }
         if let words = wordCount, words > 0 {
             return String(localized: "\(percent) · \(FileFacts.words(Int((Double(words) * rest).rounded()))) left")

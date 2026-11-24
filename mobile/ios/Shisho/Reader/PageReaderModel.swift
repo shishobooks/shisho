@@ -36,7 +36,9 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// otherwise follows the pages' shapes.
     private(set) var chosenFlow: PageFlow?
     var flow: PageFlow { source?.flow ?? .paginated }
-    var rightToLeft: Bool { source?.rightToLeft ?? false }
+    /// The pages turn right to left, the File's direction followed: kept
+    /// here, where the scrubber sees it change.
+    var rightToLeft: Bool { settings.rightToLeft(file) }
 
     @ObservationIgnored private let session: AccountSession
     @ObservationIgnored private let tracker: ReadingTracker
