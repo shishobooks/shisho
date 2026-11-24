@@ -91,8 +91,10 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
             guard settings != oldValue else { return }
             settings.save()
             // The app's appearance changing under a chosen theme changes
-            // nothing on the page.
-            guard settings.pageScript != oldValue.pageScript else { return }
+            // nothing on the page. A font change always does: an imported
+            // font removed as it's unchosen is already gone from both
+            // scripts.
+            guard settings.pageScript != oldValue.pageScript || settings.font != oldValue.font else { return }
             source?.apply(settings)
         }
     }

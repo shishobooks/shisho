@@ -393,7 +393,6 @@ private struct ReaderFontList: View {
                 HStack(spacing: 12) {
                     Text(name)
                         .font(previews[choice] ?? .geist(.body))
-                        .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if chosen {
                         Icon(.check, size: 18, relativeTo: .body)
