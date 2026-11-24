@@ -77,17 +77,23 @@ name: Read, kill, reopen at the same place, and send a Reading Session
 
 # Each page counts from 5 seconds, and the session needs 10. The page
 # reopened at has shown since the relaunch; the next counts once the turn
-# lands, so its wait leaves room for a slow turn.
+# has landed, so the flow waits for the place to move and settle first.
 - extendedWaitUntil:
     visible: __never__
     timeout: 6000
     optional: true
 - swipe:
     direction: LEFT
+- runFlow: subflows/settled_place.yaml
+- evalScript: ${output.secondPage = output.settledPlace}
+- assertTrue:
+    condition: ${output.secondPage != output.afterRelaunch}
+    label: The turn landed on the next page
 - extendedWaitUntil:
     visible: __never__
-    timeout: 8000
+    timeout: 7000
     optional: true
+- evalScript: ${output.dwellEnded = Date.now()}
 - runFlow: subflows/show_reader_controls.yaml
 # Closing ends the session, which syncs.
 - tapOn:
@@ -97,8 +103,9 @@ name: Read, kill, reopen at the same place, and send a Reading Session
       id: book.read
     timeout: 30000
 # The script polls the server until the sync lands, for a session that
-# started after the relaunch: the one from before the kill can reach the
-# server after the place does.
+# started after the relaunch and ended after the second page's wait (the
+# one from before the kill can reach the server after the place does), with
+# the place on the second page.
 - runScript:
     file: scripts/assert_read_session.js
     env:
