@@ -99,6 +99,30 @@ final class AudioPlayerTests: XCTestCase {
         XCTAssertEqual(AudioPlayer.storedRate(accountID: "another-account", fileID: 5), 1)
     }
 
+    /// The speed buttons step it by 0.1, held to the range.
+    func testSpeedSteps() {
+        player.open(fileID: 5, autoplay: false)
+        for _ in 0..<4 { player.stepRate(by: 1) }
+        XCTAssertEqual(player.rate, 1.4)
+        player.stepRate(by: -1)
+        player.stepRate(by: -1)
+        XCTAssertEqual(player.rate, 1.2)
+        player.setRate(4)
+        player.stepRate(by: 1)
+        XCTAssertEqual(player.rate, 4)
+    }
+
+    /// A File's speed comes back with it at the next launch.
+    func testAStoredSpeedIsRestored() {
+        player.open(fileID: 5, autoplay: false)
+        player.setRate(1.4)
+        let next = AudioPlayer(session: session) {}
+        next.restore()
+        XCTAssertEqual(next.file?.fileID, 5)
+        XCTAssertEqual(next.rate, 1.4, accuracy: 0.001)
+        next.stop()
+    }
+
     /// A Bookmark is made where playback is, through the player, so it's kept
     /// with no screen open.
     func testABookmarkIsMadeWherePlaybackIs() throws {

@@ -390,6 +390,12 @@ final class AudioPlayer {
         savePosition()
     }
 
+    /// Steps the speed by steps of the web player's 0.1, as the speed
+    /// buttons do.
+    func stepRate(by steps: Int) {
+        setRate(rate + Double(steps) * PlaybackSpeed.step)
+    }
+
     func setRate(_ value: Double) {
         let clamped = PlaybackSpeed.clamp(value)
         rate = clamped
