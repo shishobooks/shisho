@@ -44,11 +44,13 @@ func runServe(ctx context.Context) error {
 		_ = os.WriteFile(remembered, []byte(strconv.Itoa(lease.Port())), 0o600)
 	}
 
-	dir, err := os.MkdirTemp("", "shisho-qa-server-")
+	sweepLeftoverRunDirs()
+	run, err := makeRunDir(os.TempDir(), qaServerRunPrefix, false)
 	if err != nil {
-		return errors.WithStack(err)
+		return err
 	}
-	defer os.RemoveAll(dir)
+	defer run.Close()
+	dir := run.Path
 
 	library := filepath.Join(dir, "library")
 	if err := writeFixtures(ctx, env.CurrentRoot, library); err != nil {

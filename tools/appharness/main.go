@@ -18,7 +18,8 @@
 // once and kept booted between runs (worktreesim.go), and the fixtures are
 // cached between runs (fixtures.go); SHISHO_HARNESS_FRESH=1 reuses neither.
 // `fixtures -key` prints the cache's key, and `cleanup` deletes the
-// worktree's simulators (`mise cleanup`).
+// worktree's simulators (`mise cleanup`). `ios`, `serve`, and `cleanup`
+// remove the temp folders of runs that were killed outright (rundir.go).
 // Use the mise tasks (`mise ios:harness`, `mise ios:test`), which build what
 // these need first.
 package main

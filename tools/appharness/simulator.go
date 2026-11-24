@@ -27,7 +27,7 @@ import (
 // The number changes when how the harness makes a base does; it deletes a
 // base of an older number and makes a new one. CI caches the base by this
 // name (.github/actions/setup-ios), so keep it on one line as it is.
-const baseSimulatorName = "Shisho Harness Base 4"
+const baseSimulatorName = "Shisho Harness Base 5"
 
 // oldBaseSimulatorPrefix names every base the harness has made.
 const oldBaseSimulatorPrefix = "Shisho Harness Base"
@@ -171,11 +171,14 @@ func findOrMakeBase(ctx context.Context) (string, error) {
 }
 
 // setUp boots a new simulator until iOS finishes its first-boot setup, shuts
-// it down, and disallows password AutoFill.
+// it down, and disallows password AutoFill. It's quieted first, so the base
+// carries no half-downloaded assets for its clones to throw away and fetch
+// again.
 func setUp(ctx context.Context, udid string) error {
 	if _, err := simctl(ctx, "boot", udid); err != nil {
 		return err
 	}
+	quietSimulator(ctx, udid)
 	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
 		return err
 	}
@@ -247,6 +250,7 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 		clone.Remove()
 		return nil, err
 	}
+	quietSimulator(ctx, udid)
 	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
 		clone.Remove()
 		return nil, err
@@ -281,6 +285,7 @@ func bootPreparedClone(ctx context.Context) error {
 		removeSimulator(udid)
 		return err
 	}
+	quietSimulator(ctx, udid)
 	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
 		removeSimulator(udid)
 		return err

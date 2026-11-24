@@ -86,19 +86,78 @@ func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runS
 	if err != nil {
 		return nil, err
 	}
-	quietSimulator(ctx, clone.UDID)
 	return &runSimulator{UDID: clone.UDID, release: clone.Remove}, nil
 }
 
-// quietSimulator stops apsd, Apple's push notification service, which
-// nothing the app or its tests do needs. On CI runners it reconnects to
-// Apple's servers several times a second, about 60% of the simulator's log
-// and, through the logging daemons that carry that log to Maestro, about 14%
-// of the runner's CPU. The service may already be stopped in a simulator the
-// worktree kept, so errors are ignored.
+// quietServices are the system services quietSimulator stops, which nothing
+// the app or its tests do needs:
+//
+//   - apsd, Apple's push notification service. On CI runners it reconnects
+//     to Apple's servers several times a second, about 60% of the simulator's
+//     log and, through the logging daemons that carry that log to Maestro,
+//     about 14% of the runner's CPU.
+//   - mobileassetd, which downloads iOS's on-demand assets in the background
+//     after each boot: Siri, speech, and language models, over a gigabyte
+//     of them. A clone throws away what the base had half downloaded and
+//     starts over, so each worktree's simulator grew from 1.5 GB to 3 or 4,
+//     costing CPU and network while the flows ran. The app bundles its fonts
+//     and needs none of the assets.
+var quietServices = []string{"com.apple.apsd", "com.apple.mobileassetd"}
+
+// quietTimeout is how long quietSimulator keeps trying to stop
+// quietServices while the simulator boots.
+const quietTimeout = time.Minute
+
+// quietSimulator stops quietServices in a simulator, booted or booting. Call
+// it right after `simctl boot`, before waiting for the boot to finish, so
+// mobileassetd has little time to start. launchd sends mobileassetd's
+// commands to the user's domain, which a booting simulator may not have yet,
+// so it tries again until launchd lists every service as disabled, or
+// quietTimeout passes. The services stay disabled through the simulator's
+// later boots but not into its clones.
 func quietSimulator(ctx context.Context, udid string) {
-	_, _ = simctl(ctx, "spawn", udid, "launchctl", "disable", "system/com.apple.apsd")
-	_, _ = simctl(ctx, "spawn", udid, "launchctl", "bootout", "system/com.apple.apsd")
+	deadline := time.Now().Add(quietTimeout)
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
+		out, err := simctl(ctx, "spawn", udid, "launchctl", "print-disabled", "system")
+		if err == nil && allDisabled(out, quietServices) {
+			return
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintln(os.Stderr, "appharness: couldn't stop the simulator's background services; it may download iOS assets")
+			return
+		}
+		// Disabling keeps a service from starting; booting it out stops it
+		// if it already has.
+		for _, service := range quietServices {
+			_, _ = simctl(ctx, "spawn", udid, "launchctl", "disable", "system/"+service)
+			_, _ = simctl(ctx, "spawn", udid, "launchctl", "bootout", "system/"+service)
+		}
+	}
+}
+
+// allDisabled says whether `launchctl print-disabled` printed every one of
+// services as disabled.
+func allDisabled(printed string, services []string) bool {
+	disabled := map[string]bool{}
+	for line := range strings.SplitSeq(printed, "\n") {
+		label, state, ok := strings.Cut(strings.TrimSpace(line), " => ")
+		if ok && state == "disabled" {
+			disabled[strings.Trim(label, `"`)] = true
+		}
+	}
+	for _, service := range services {
+		if !disabled[service] {
+			return false
+		}
+	}
+	return true
 }
 
 // worktreeSimulatorState is what the harness keeps of a worktree's
@@ -273,10 +332,10 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 			return "", err
 		}
 	}
+	quietSimulator(ctx, state.UDID)
 	if _, err := simctl(ctx, "bootstatus", state.UDID, "-b"); err != nil {
 		return "", err
 	}
-	quietSimulator(ctx, state.UDID)
 	return state.UDID, resetSimulator(ctx, state.UDID, bundleID)
 }
 
@@ -317,8 +376,9 @@ func discardWorktreeSimulator(root, purpose string) error {
 }
 
 // runCleanup deletes the simulators of the worktree at root, and of
-// worktrees that are gone, for when a worktree is put away
-// (`mise cleanup`). It leaves the fixture cache, which worktrees share.
+// worktrees that are gone, and the temp folders of runs that were killed
+// (rundir.go), for when a worktree is put away (`mise cleanup`). It leaves
+// the fixture cache, which worktrees share.
 func runCleanup(ctx context.Context, root string) error {
 	for _, purpose := range worktreePurposes {
 		err := discardWorktreeSimulator(root, purpose)
@@ -335,6 +395,7 @@ func runCleanup(ctx context.Context, root string) error {
 		return err
 	}
 	pruneWorktreeSimulators(ctx, dir, "")
+	sweepLeftoverRunDirs()
 	return nil
 }
 

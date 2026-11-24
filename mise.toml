@@ -407,7 +407,7 @@ run = [
 # What a worktree keeps outside its folder that's worth removing with it.
 # Shared caches stay, since other worktrees use them.
 [tasks.cleanup]
-description = "Delete this worktree's simulators, and those of worktrees already gone; run it before removing a worktree"
+description = "Delete this worktree's simulators, those of worktrees already gone, and the temp folders of harness runs that were killed; run it before removing a worktree"
 run = "go run ./tools/appharness cleanup"
 
 [tasks.docker]

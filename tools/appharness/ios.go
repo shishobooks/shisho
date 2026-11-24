@@ -52,6 +52,7 @@ func runIOS(ctx context.Context, args []string) error {
 		fmt.Fprintf(os.Stderr, "appharness: shard %s runs %d flows\n", *shard, len(flowArgs))
 	}
 
+	sweepLeftoverRunDirs()
 	var dir string
 	if *out != "" {
 		dir, err = filepath.Abs(*out)
@@ -60,15 +61,17 @@ func runIOS(ctx context.Context, args []string) error {
 		}
 		*keep = true
 	} else {
-		dir, err = os.MkdirTemp("", "shisho-harness-")
+		var run *runDir
+		if run, err = makeRunDir(os.TempDir(), flowsRunPrefix, *keep); err == nil {
+			dir = run.Path
+			defer run.Close()
+		}
 	}
 	if err != nil {
 		return errors.WithStack(err)
 	}
 	if *keep {
 		fmt.Fprintln(os.Stderr, "appharness: keeping", dir)
-	} else {
-		defer os.RemoveAll(dir)
 	}
 
 	library := filepath.Join(dir, "library")
