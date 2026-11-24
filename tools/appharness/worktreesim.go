@@ -21,8 +21,9 @@ import (
 const worktreeSimulatorPrefix = "Shisho Worktree"
 
 // worktreePurposes are the simulators each worktree has: one for the unit
-// tests and one for the flows, so the two can run at once.
-var worktreePurposes = []string{"tests", "flows"}
+// tests and one for the flows, so the two can run at once, and one more for
+// each other shard of `ios -parallel` (flowsPurpose).
+var worktreePurposes = []string{"tests", "flows", "flows-2"}
 
 // idleSimulatorShutdown is how long another worktree's simulator stays
 // booted unused before a run shuts it down.

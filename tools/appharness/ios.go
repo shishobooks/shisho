@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -25,7 +26,12 @@ func runIOS(ctx context.Context, args []string) error {
 	keep := flags.Bool("keep", false, "keep the run's folder (server log, database, Maestro output) for debugging")
 	out := flags.String("out", "", "make the run's folder here, and keep it")
 	shard := flags.String("shard", "", "run only this shard of the flows, as i/n (CI's parallel jobs)")
+	parallel := flags.Int("parallel", 1, fmt.Sprintf("split the flows into this many shards run at once, each with its own simulator and server (at most %d)", maxParallelShards))
 	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	shards, err := parallelShards(*parallel, *shard)
+	if err != nil {
 		return err
 	}
 	root, err := os.Getwd()
@@ -44,35 +50,63 @@ func runIOS(ctx context.Context, args []string) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	flowArgs := []string{flows}
-	if *shard != "" {
-		if flowArgs, err = shardFlowPaths(flows, *shard); err != nil {
+	sweepLeftoverRunDirs()
+	run := flowRun{root: root, appPath: appPath, appID: appID, flows: flows, out: *out, keep: *keep}
+	if len(shards) == 1 {
+		run.shard, run.purpose, run.stdout, run.stderr = shards[0], flowsPurpose(1), os.Stdout, os.Stderr
+		return runFlows(ctx, run)
+	}
+	return runParallel(ctx, run, shards)
+}
+
+// flowRun is one Maestro run of the flows in flows (or the shard of them
+// named "i/n"), against a server of its own, on the worktree's simulator
+// for purpose.
+type flowRun struct {
+	root, appPath, appID, flows string
+	shard, purpose              string
+	// out, when set, is the run's folder, kept; keep keeps a temporary one.
+	out            string
+	keep           bool
+	stdout, stderr io.Writer
+}
+
+func runFlows(ctx context.Context, r flowRun) error {
+	flowArgs := []string{r.flows}
+	if r.shard != "" {
+		var err error
+		if flowArgs, err = shardFlowPaths(r.flows, r.shard); err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "appharness: shard %s runs %d flows\n", *shard, len(flowArgs))
+		fmt.Fprintf(r.stderr, "appharness: shard %s runs %d flows\n", r.shard, len(flowArgs))
+		if len(flowArgs) == 0 {
+			return nil
+		}
 	}
 
-	sweepLeftoverRunDirs()
 	var dir string
-	if *out != "" {
-		if dir, err = filepath.Abs(*out); err != nil {
+	keep := r.keep
+	if r.out != "" {
+		var err error
+		if dir, err = filepath.Abs(r.out); err != nil {
 			return errors.WithStack(err)
 		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return errors.WithStack(err)
 		}
-		*keep = true
+		keep = true
 	} else {
-		run, err := makeRunDir(os.TempDir(), flowsRunPrefix, *keep)
+		run, err := makeRunDir(os.TempDir(), flowsRunPrefix, keep)
 		if err != nil {
 			return err
 		}
 		defer run.Close()
 		dir = run.Path
 	}
-	if *keep {
-		fmt.Fprintln(os.Stderr, "appharness: keeping", dir)
+	if keep {
+		fmt.Fprintln(r.stderr, "appharness: keeping", dir)
 	}
+	root, appPath, appID := r.root, r.appPath, r.appID
 
 	library := filepath.Join(dir, "library")
 	if err := writeFixtures(ctx, root, library); err != nil {
@@ -98,7 +132,7 @@ func runIOS(ctx context.Context, args []string) error {
 	}
 	defer control.Close()
 
-	sim, err := simulatorForRun(ctx, root, "flows", appID)
+	sim, err := simulatorForRun(ctx, root, r.purpose, appID)
 	if err != nil {
 		return err
 	}
@@ -108,10 +142,10 @@ func runIOS(ctx context.Context, args []string) error {
 	}
 	// Only the font import flow needs it, which fails on its own without it.
 	if err := seedFiles(ctx, root, sim.UDID); err != nil {
-		fmt.Fprintln(os.Stderr, "appharness: couldn't put the font in Files, so the import flow will fail:", err)
+		fmt.Fprintln(r.stderr, "appharness: couldn't put the font in Files, so the import flow will fail:", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "appharness: server %s, simulator %s\n", srv.URL, sim.UDID)
+	fmt.Fprintf(r.stderr, "appharness: server %s, simulator %s\n", srv.URL, sim.UDID)
 	//nolint:gosec // The harness's own flags and paths.
 	maestro := exec.CommandContext(ctx, "maestro", append([]string{"--device", sim.UDID, "test",
 		"--debug-output", filepath.Join(dir, "maestro"),
@@ -123,7 +157,7 @@ func runIOS(ctx context.Context, args []string) error {
 		"-e", "READER_PASSWORD=" + readerPassword,
 		"-e", "CONTROL=" + control.URL,
 	}, flowArgs...)...)
-	maestro.Stdout, maestro.Stderr = os.Stdout, os.Stderr
+	maestro.Stdout, maestro.Stderr = r.stdout, r.stderr
 	stopWithProcessGroup(maestro)
 	maestro.Env = append(os.Environ(), "MAESTRO_CLI_NO_ANALYTICS=1")
 	// Maestro installs and starts its driver on the simulator first, which
@@ -134,8 +168,8 @@ func runIOS(ctx context.Context, args []string) error {
 	err = maestro.Run()
 	killProcessGroup(ctx, maestro)
 	if err != nil {
-		if !*keep {
-			fmt.Fprintln(os.Stderr, "appharness: a flow failed; run with -keep to keep the server log and Maestro's screenshots")
+		if !keep {
+			fmt.Fprintln(r.stderr, "appharness: a flow failed; run with -keep to keep the server log and Maestro's screenshots")
 		}
 		return errors.Wrap(err, "maestro")
 	}

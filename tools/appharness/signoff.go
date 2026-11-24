@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,7 +54,8 @@ func runSignoff(ctx context.Context, args []string) error {
 	if hasSignoffPass(passes, sha) {
 		fmt.Fprintf(os.Stderr, "appharness: the flows already passed on %s here\n", short(sha))
 	} else {
-		if err := runIOS(ctx, nil); err != nil {
+		// Split across simulators, which takes roughly half the time.
+		if err := runIOS(ctx, []string{"-parallel", strconv.Itoa(maxParallelShards)}); err != nil {
 			return err
 		}
 		// The run tested the checkout, so it only vouches for the commit if

@@ -2,7 +2,7 @@
 // Maestro drives the app through its accessibility identifiers against a
 // Shisho server seeded with small fixtures made for the run.
 //
-//	go run ./tools/appharness ios [-app Shisho.app] [-flows dir] [-keep]
+//	go run ./tools/appharness ios [-app Shisho.app] [-flows dir] [-keep] [-shard i/n | -parallel 2]
 //	go run ./tools/appharness signoff
 //	go run ./tools/appharness serve
 //	go run ./tools/appharness base
@@ -12,8 +12,10 @@
 //
 // `ios` builds and seeds a throwaway server, installs the app on the
 // worktree's simulator for flows, runs every flow, and removes the server's
-// files afterwards. `serve` runs the same seeded server until interrupted,
-// for QA without touching real data (`mise start:qa`). `simulator` runs a
+// files afterwards; `-parallel` splits the flows into shards run at once,
+// each with its own simulator and server (parallel.go). `serve` runs the
+// same seeded server until interrupted, for QA without touching real data
+// (`mise start:qa`). `simulator` runs a
 // command against the worktree's simulator for tests, its UDID in
 // SIMULATOR_UDID. Each worktree's simulators are its own, cloned from a base
 // once and kept booted between runs (worktreesim.go), and the fixtures are
