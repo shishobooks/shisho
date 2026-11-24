@@ -75,37 +75,15 @@ name: Listen offline and sync later, then kill and resume
     id: player.position
 - evalScript: ${output.paused = maestro.copiedText}
 
-# Bookmark adds one where playback is at once. Its note is added from the
-# list, a tab of the chapters sheet, rather than the message offering one,
-# which a stall could outlast.
+# Bookmark adds one where playback is at once, on a paused player, so the
+# screen holds still for a plain tap, which Maestro repeats when nothing
+# changes.
+- tapOn:
+    id: player.bookmark
 - runFlow:
-    file: subflows/tap_player.yaml
+    file: subflows/note_first_bookmark.yaml
     env:
-      CONTROL_ID: player.bookmark
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.chapters
-- tapOn:
-    id: list.bookmarks
-- extendedWaitUntil:
-    visible:
-      id: bookmarks.editNote
-    timeout: 30000
-- tapOn:
-    id: bookmarks.editNote
-# The note's field is in an alert, found by what it says.
-- extendedWaitUntil:
-    visible: Edit Note
-    timeout: 30000
-- tapOn: Note
-- inputText: Noted offline
-- tapOn: Save
-- extendedWaitUntil:
-    visible: .*Noted offline.*
-    timeout: 30000
-- tapOn:
-    id: list.done
+      NOTE: Noted offline
 
 # The app is closed, which ends the session, and opened once the server is
 # back: what it kept offline syncs.

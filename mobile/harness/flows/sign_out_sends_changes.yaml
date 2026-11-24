@@ -39,37 +39,17 @@ onFlowComplete:
 
 # A Bookmark made while the server is unreachable waits in the journal, and
 # coming back starts no sync, so only signing out sends it. Bookmark adds one
-# where playback is at once. Its note is added from the list, a tab of the
-# chapters sheet, rather than the message offering one, which a stall could
-# outlast.
+# where playback is at once, and the list gives it its note.
 - runScript:
     file: scripts/go_offline.js
     env:
       CONTROL: ${CONTROL}
 - tapOn:
     id: player.bookmark
-- tapOn:
-    id: player.chapters
-- tapOn:
-    id: list.bookmarks
-- extendedWaitUntil:
-    visible:
-      id: bookmarks.editNote
-    timeout: 30000
-- tapOn:
-    id: bookmarks.editNote
-# The note's field is in an alert, found by what it says.
-- extendedWaitUntil:
-    visible: Edit Note
-    timeout: 30000
-- tapOn: Note
-- inputText: Made offline
-- tapOn: Save
-- extendedWaitUntil:
-    visible: .*Made offline.*
-    timeout: 30000
-- tapOn:
-    id: list.done
+- runFlow:
+    file: subflows/note_first_bookmark.yaml
+    env:
+      NOTE: Made offline
 - runScript:
     file: scripts/go_online.js
     env:
