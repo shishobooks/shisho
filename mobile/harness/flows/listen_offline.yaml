@@ -1,8 +1,10 @@
 # Pause, and the session so far reaches the server. Then listen while the
 # server is offline and reconnect: the session reaches the server placed at
-# the time it happened, not when it synced (#912).
+# the time it happened, not when it synced. Then listen, kill the app while
+# it plays, and relaunch: it resumes where it was, and the server has the
+# place too (#912).
 appId: ${APP_ID}
-name: Listen offline and sync later
+name: Listen offline and sync later, then kill and resume
 ---
 - runScript:
     file: scripts/go_online.js
@@ -34,7 +36,9 @@ name: Listen offline and sync later
     id: player.position
 - evalScript: ${output.onlinePaused = maestro.copiedText}
 - runScript:
-    file: scripts/note_online_pause.js
+    file: scripts/note_listen_target.js
+    env:
+      FROM: ${output.onlinePaused}
 # The pause sends the session so far; the script polls the server until it
 # lands.
 - runScript:
@@ -59,7 +63,7 @@ name: Listen offline and sync later
 - extendedWaitUntil:
     visible:
       id: player.position
-      text: ${output.offlineTarget}
+      text: ${output.listenTarget}
     timeout: 60000
 - runFlow:
     file: subflows/tap_player.yaml
@@ -90,6 +94,63 @@ name: Listen offline and sync later
 # The script polls the server until the sync lands.
 - runScript:
     file: scripts/assert_offline_session.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed
+
+# Listening on from where it paused offline, long enough for a save or two.
+- tapOn:
+    id: miniplayer.open
+- extendedWaitUntil:
+    visible:
+      id: player.position
+    timeout: 30000
+- copyTextFrom:
+    id: player.position
+- runScript:
+    file: scripts/note_listen_target.js
+    env:
+      FROM: ${maestro.copiedText}
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: ${output.listenTarget}
+    timeout: 60000
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.beforeKill = maestro.copiedText}
+- evalScript: ${output.seenAt = Date.now()}
+
+# Killed while playing: only the saves every five seconds kept the place.
+- stopApp
+- evalScript: ${output.killedAt = Date.now()}
+- launchApp:
+    stopApp: false
+    permissions: {}
+- extendedWaitUntil:
+    visible:
+      id: miniplayer.open
+    timeout: 30000
+- tapOn:
+    id: miniplayer.open
+- extendedWaitUntil:
+    visible:
+      id: player.position
+    timeout: 30000
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.afterRelaunch = maestro.copiedText}
+# Relaunching syncs what the last save kept; the script polls the server
+# until it lands.
+- runScript:
+    file: scripts/assert_resumed.js
     env:
       CONTROL: ${CONTROL}
       TITLE: Harbor Lights
