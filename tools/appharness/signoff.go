@@ -166,11 +166,14 @@ func commitOnGitHub(ctx context.Context, root, sha string) (bool, error) {
 }
 
 type ciRun struct {
-	ID         int64  `json:"id"`
-	Name       string `json:"name"`
-	Event      string `json:"event"`
-	Status     string `json:"status"`
-	Conclusion string `json:"conclusion"`
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Event        string `json:"event"`
+	Status       string `json:"status"`
+	Conclusion   string `json:"conclusion"`
+	PullRequests []struct {
+		Number int `json:"number"`
+	} `json:"pull_requests"`
 }
 
 type ciJob struct {
@@ -178,16 +181,22 @@ type ciJob struct {
 	Conclusion string `json:"conclusion"`
 }
 
-// latestFailedCIRun returns the newest CI run for a pull request among
-// runs, when it has finished and failed. An older run is never rerun: its
-// pull request has moved on, and a rerun would join the pull request's
-// concurrency group and cancel the newer run. One still going finds the
-// signoff itself.
-func latestFailedCIRun(runs []ciRun) (ciRun, bool) {
+// latestFailedCIRun returns the newest CI run among runs for one of pulls
+// (the open pull requests this commit still heads), when it has finished
+// and failed. A run for a pull request that has moved on to another commit
+// is never rerun: it would join that pull request's concurrency group and
+// cancel its newer run. One still going finds the signoff itself.
+func latestFailedCIRun(runs []ciRun, pulls map[int]bool) (ciRun, bool) {
 	var latest ciRun
 	for _, r := range runs {
-		if r.Name == ciWorkflow && r.Event == "pull_request" && r.ID > latest.ID {
-			latest = r
+		if r.Name != ciWorkflow || r.Event != "pull_request" || r.ID <= latest.ID {
+			continue
+		}
+		for _, pull := range r.PullRequests {
+			if pulls[pull.Number] {
+				latest = r
+				break
+			}
 		}
 	}
 	return latest, latest.ID != 0 && latest.Status == "completed" && latest.Conclusion == "failure"
@@ -211,26 +220,30 @@ func onlyCIOKFailed(jobs []ciJob) bool {
 }
 
 // rerunCIOK reruns `CI OK` when sha heads an open pull request whose newest
-// CI run failed only there: it gave up waiting before the signoff came.
+// CI run, on that commit, failed only there: it gave up waiting before the
+// signoff came.
 func rerunCIOK(ctx context.Context, sha string) error {
 	out, err := gh(ctx, "api", "repos/{owner}/{repo}/commits/"+sha+"/pulls")
 	if err != nil {
 		return err
 	}
 	var pulls []struct {
-		State string `json:"state"`
-		Head  struct {
+		Number int    `json:"number"`
+		State  string `json:"state"`
+		Head   struct {
 			SHA string `json:"sha"`
 		} `json:"head"`
 	}
 	if err := json.Unmarshal(out, &pulls); err != nil {
 		return errors.WithStack(err)
 	}
-	heads := false
+	heads := map[int]bool{}
 	for _, pull := range pulls {
-		heads = heads || (pull.State == "open" && pull.Head.SHA == sha)
+		if pull.State == "open" && pull.Head.SHA == sha {
+			heads[pull.Number] = true
+		}
 	}
-	if !heads {
+	if len(heads) == 0 {
 		return nil
 	}
 	out, err = gh(ctx, "api", "repos/{owner}/{repo}/actions/runs?event=pull_request&head_sha="+sha+"&per_page=100")
@@ -243,7 +256,7 @@ func rerunCIOK(ctx context.Context, sha string) error {
 	if err := json.Unmarshal(out, &runs); err != nil {
 		return errors.WithStack(err)
 	}
-	latest, failed := latestFailedCIRun(runs.WorkflowRuns)
+	latest, failed := latestFailedCIRun(runs.WorkflowRuns, heads)
 	if !failed {
 		return nil
 	}

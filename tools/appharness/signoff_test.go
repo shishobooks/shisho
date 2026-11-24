@@ -82,7 +82,13 @@ func TestCIOKIsRerunOnlyWhenItAloneFailed(t *testing.T) {
 
 func TestOnlyThePullRequestsNewestCIRunIsRerun(t *testing.T) {
 	t.Parallel()
-	failed := ciRun{ID: 10, Name: ciWorkflow, Event: "pull_request", Status: "completed", Conclusion: "failure"}
+	forPull := func(r ciRun, number int) ciRun {
+		r.PullRequests = append(r.PullRequests, struct {
+			Number int `json:"number"`
+		}{number})
+		return r
+	}
+	failed := forPull(ciRun{ID: 10, Name: ciWorkflow, Event: "pull_request", Status: "completed", Conclusion: "failure"}, 1)
 	for _, tc := range []struct {
 		name string
 		runs []ciRun
@@ -91,17 +97,24 @@ func TestOnlyThePullRequestsNewestCIRunIsRerun(t *testing.T) {
 		{name: "the newest failed", runs: []ciRun{failed}, want: 10},
 		{
 			name: "a newer run is still going",
-			runs: []ciRun{failed, {ID: 11, Name: ciWorkflow, Event: "pull_request", Status: "in_progress"}},
+			runs: []ciRun{failed, forPull(ciRun{ID: 11, Name: ciWorkflow, Event: "pull_request", Status: "in_progress"}, 1)},
 		},
 		{
 			name: "a newer run passed",
-			runs: []ciRun{failed, {ID: 11, Name: ciWorkflow, Event: "pull_request", Status: "completed", Conclusion: "success"}},
+			runs: []ciRun{failed, forPull(ciRun{ID: 11, Name: ciWorkflow, Event: "pull_request", Status: "completed", Conclusion: "success"}, 1)},
+		},
+		{
+			// Pull request 2 moved on from this commit, so its run here is
+			// old, and rerunning it would cancel its newer one.
+			name: "a newer failed run for a pull request that moved on",
+			runs: []ciRun{failed, forPull(ciRun{ID: 11, Name: ciWorkflow, Event: "pull_request", Status: "completed", Conclusion: "failure"}, 2)},
+			want: 10,
 		},
 		{
 			name: "other workflows and events don't count",
 			runs: []ciRun{
 				failed,
-				{ID: 12, Name: "Docs", Event: "pull_request", Status: "completed", Conclusion: "success"},
+				forPull(ciRun{ID: 12, Name: "Docs", Event: "pull_request", Status: "completed", Conclusion: "success"}, 1),
 				{ID: 13, Name: ciWorkflow, Event: "push", Status: "completed", Conclusion: "success"},
 			},
 			want: 10,
@@ -110,7 +123,7 @@ func TestOnlyThePullRequestsNewestCIRunIsRerun(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			run, ok := latestFailedCIRun(tc.runs)
+			run, ok := latestFailedCIRun(tc.runs, map[int]bool{1: true})
 			assert.Equal(t, tc.want != 0, ok)
 			if ok {
 				assert.Equal(t, tc.want, run.ID)
@@ -157,4 +170,8 @@ func TestCIChecksTheStatusTheSignoffPosts(t *testing.T) {
 	for _, want := range []string{"name: " + ciOKJob + "\n", `select(.context == "` + signoffContext + `")`} {
 		assert.Contains(t, workflow, want)
 	}
+	// The label's workflow posts the same status in the signoff's place.
+	label, err := os.ReadFile("../../.github/workflows/ios-flows-on-github.yml")
+	require.NoError(t, err)
+	assert.Contains(t, string(label), `context="`+signoffContext+`"`)
 }

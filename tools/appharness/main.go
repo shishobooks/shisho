@@ -3,7 +3,8 @@
 // Shisho server seeded with small fixtures made for the run.
 //
 //	go run ./tools/appharness ios [-app Shisho.app] [-flows dir] [-keep] [-shard i/n | -parallel 2]
-//	go run ./tools/appharness signoff
+//	go run ./tools/appharness signoff [-keep] [-parallel n]
+//	go run ./tools/appharness rerun-ci-ok SHA
 //	go run ./tools/appharness serve
 //	go run ./tools/appharness base
 //	go run ./tools/appharness fixtures DIR | -key
@@ -15,13 +16,14 @@
 // files afterwards; `-parallel` splits the flows into shards run at once,
 // each with its own simulator and server (parallel.go). `serve` runs the
 // same seeded server until interrupted, for QA without touching real data
-// (`mise start:qa`). `simulator` runs a
-// command against the worktree's simulator for tests, its UDID in
-// SIMULATOR_UDID. Each worktree's simulators are its own, cloned from a base
+// (`mise start:qa`). `simulator` runs a command against the worktree's
+// simulator for tests, its UDID in SIMULATOR_UDID. Each worktree's simulators are its own, cloned from a base
 // once and kept booted between runs (worktreesim.go), and the fixtures are
 // cached between runs (fixtures.go); SHISHO_HARNESS_FRESH=1 reuses neither.
 // `signoff` runs every flow on a committed checkout and posts the commit
-// status this repository's pull requests merge on (signoff.go).
+// status this repository's pull requests merge on (signoff.go), and
+// `rerun-ci-ok` reruns a CI OK that gave up waiting for it, for
+// ios-flows-on-github.yml.
 // `fixtures -key` prints the cache's key, and `cleanup` deletes the
 // worktree's simulators (`mise cleanup`). `ios`, `serve`, and `cleanup`
 // remove the temp folders of runs that were killed outright (rundir.go).
@@ -51,6 +53,11 @@ func main() {
 		err = runIOS(ctx, os.Args[2:])
 	case "signoff":
 		err = runSignoff(ctx, os.Args[2:])
+	case "rerun-ci-ok":
+		if len(os.Args) != 3 {
+			usage()
+		}
+		err = rerunCIOK(ctx, os.Args[2])
 	case "serve":
 		err = runServe(ctx)
 	case "base":
@@ -97,7 +104,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | signoff | serve | base | fixtures DIR | fixtures -key | cleanup | simulator [-app Shisho.app] -- COMMAND...")
+	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | signoff [flags] | rerun-ci-ok SHA | serve | base | fixtures DIR | fixtures -key | cleanup | simulator [-app Shisho.app] -- COMMAND...")
 	flag.PrintDefaults()
 	os.Exit(2)
 }

@@ -384,9 +384,9 @@ func runCleanup(ctx context.Context, root string) error {
 
 // pruneWorktreeSimulators deletes the simulators of worktrees that are gone,
 // and shuts down those unused for idleSimulatorShutdown, skipping any a run
-// holds. It leaves every simulator of the worktree at except alone: shards
-// of one run take that worktree's simulators at the same moment, and one
-// pruning another's would push it onto a disposable clone.
+// holds. It leaves the flows simulators of the worktree at except alone: a
+// parallel run's shards take them at the same moment, and one pruning
+// another's would push it onto a disposable clone.
 func pruneWorktreeSimulators(ctx context.Context, dir, except string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -395,7 +395,7 @@ func pruneWorktreeSimulators(ctx context.Context, dir, except string) {
 	for _, entry := range entries {
 		statePath := filepath.Join(dir, entry.Name())
 		id, ok := strings.CutSuffix(entry.Name(), ".json")
-		if !ok || !prunable(statePath) || (except != "" && readSimulatorState(statePath).Root == except) {
+		if !ok || !prunable(statePath) || (strings.HasPrefix(id, "flows") && except != "" && readSimulatorState(statePath).Root == except) {
 			continue
 		}
 		lock, err := lockFile(filepath.Join(dir, id+".lock"))
@@ -432,7 +432,7 @@ func removeOrphanSimulators(ctx context.Context, dir, except string) {
 			continue
 		}
 		id := strings.ReplaceAll(purposeAndHash, " ", "-")
-		if except != "" && strings.HasSuffix(id, "-"+worktreeHash(except)) {
+		if except != "" && strings.HasPrefix(id, "flows") && strings.HasSuffix(id, "-"+worktreeHash(except)) {
 			continue
 		}
 		lock, err := lockFile(filepath.Join(dir, id+".lock"))

@@ -1,0 +1,51 @@
+name: iOS flows on GitHub
+
+# For a pull request labelled ios-flows-on-github: runs the iOS flows on
+# GitHub's runners and posts the "iOS flows signoff" status that CI OK
+# (ci.yml) waits for, in place of `mise ios:signoff`, for when a
+# maintainer's Mac can't run them. Only accounts with write access can
+# label, and a fork's token can't post the status. A workflow of its own so
+# that other labels don't restart CI.
+
+on:
+  pull_request:
+    branches: [master]
+    types: [labeled, synchronize]
+
+# Another label's event gets a group of its own, so it never cancels a run
+# going for this one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name != 'ios-flows-on-github' && github.run_id || 'flows' }}
+  cancel-in-progress: true
+
+jobs:
+  flows:
+    if: >-
+      contains(github.event.pull_request.labels.*.name, 'ios-flows-on-github') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'ios-flows-on-github')
+    uses: ./.github/workflows/ios-flows.yml
+
+  signoff:
+    name: Post the iOS flows signoff
+    needs: flows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+        with:
+          install_args: go
+      - name: Post the signoff and rerun a CI OK that gave up waiting
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+            -f state=success \
+            -f context="iOS flows signoff" \
+            -f description="Every Maestro flow passed on GitHub's runners (ios-flows-on-github)"
+          go run ./tools/appharness rerun-ci-ok "$SHA"
