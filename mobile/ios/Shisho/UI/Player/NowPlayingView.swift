@@ -240,8 +240,6 @@ struct NowPlayingView: View {
     /// first few again.
     private static let morePeople = URL(string: "shisho-player:more-people")!
     private static let fewerPeople = URL(string: "shisho-player:fewer-people")!
-    /// How many authors, and how many narrators, show before "more".
-    private static let peopleShown = 2
 
     /// "Author · Narrated by Narrator", whichever there are, each name
     /// linked to its Person's page as on the Book's page. Unless all, at
@@ -257,8 +255,8 @@ struct NowPlayingView: View {
         let narrators: [(Route?, String)] = file.narrators.enumerated().map { index, name in
             (linked ? Route.resource(.person, id: file.narratorIDs[index], name: name) : nil, name)
         }
-        let limit = all ? Int.max : Self.peopleShown
-        let hidden = max(0, authors.count - limit) + max(0, narrators.count - limit)
+        let cut = PlayerPeople.cut(authors: authors.count, narrators: narrators.count, all: all)
+        let limit = cut.limit
         var parts: [AttributedString] = []
         if !authors.isEmpty {
             parts.append(Byline.links(Array(authors.prefix(limit))))
@@ -275,9 +273,9 @@ struct NowPlayingView: View {
         for part in parts.dropFirst() {
             text += LinkedText.muted(" · ") + part
         }
-        if hidden > 0 {
-            text += LinkedText.muted(" ") + Self.toggleLink(String(localized: "+\(hidden) more"), Self.morePeople)
-        } else if all, authors.count > Self.peopleShown || narrators.count > Self.peopleShown {
+        if cut.hidden > 0 {
+            text += LinkedText.muted(" ") + Self.toggleLink(String(localized: "+\(cut.hidden) more"), Self.morePeople)
+        } else if cut.collapsible {
             text += LinkedText.muted(" ") + Self.toggleLink(String(localized: "Show less"), Self.fewerPeople)
         }
         return text
@@ -523,5 +521,27 @@ struct RoundIcon: View {
             .foregroundStyle(Theme.foreground)
             .frame(width: 40, height: 40)
             .background(Theme.background.opacity(0.4), in: Circle())
+    }
+}
+
+/// How many of a File's authors and narrators the player names before
+/// "+N more": two of each, unless the user asked for everyone.
+enum PlayerPeople {
+    static let shown = 2
+
+    struct Cut: Equatable {
+        /// How many authors, and how many narrators, show.
+        let limit: Int
+        /// How many more there are, which "+N more" shows.
+        let hidden: Int
+        /// Everyone shows, and there are more than the first few: "Show
+        /// less" cuts them again.
+        let collapsible: Bool
+    }
+
+    static func cut(authors: Int, narrators: Int, all: Bool) -> Cut {
+        let limit = all ? Int.max : shown
+        return Cut(limit: limit, hidden: max(0, authors - limit) + max(0, narrators - limit),
+                   collapsible: all && (authors > shown || narrators > shown))
     }
 }

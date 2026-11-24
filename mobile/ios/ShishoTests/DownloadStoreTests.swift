@@ -148,6 +148,31 @@ final class DownloadStoreTests: XCTestCase {
     }
 }
 
+extension DownloadStoreTests {
+    /// The Library's Downloaded filter and dimming, and the tab's badge,
+    /// count only finished Downloads, and the badge only those on their way.
+    func testWhatsDownloadedAndWhatsOnItsWay() throws {
+        try store.queueDownloads([10, 20])
+        XCTAssertTrue(try store.markDownloaded(fileID: 20, sizeBytes: 5))
+        XCTAssertEqual(try store.pool.read(CatalogStore.downloadedBookIDs), [2])
+        XCTAssertEqual(try store.pool.read(CatalogStore.downloadingCount), 1)
+        let filtered = try store.pool.read { try CatalogStore.books($0, libraryID: nil, filter: LibraryFilter(downloaded: true)) }
+        XCTAssertEqual(filtered.map(\.id), [2])
+    }
+
+    /// Each Download's row says how far the user is: this device's place
+    /// before the server's.
+    func testTheDownloadsTabShowsProgress() throws {
+        try store.queueDownloads([10, 11, 30])
+        try store.apply(page(#"{"entries":[{"kind":"reading_position","id":11,"reading_position":{"file_id":11,"percentage":0.4,"occurred_at":"2026-01-01T00:00:00Z","source":"web_reader"}}],"cursor":4}"#))
+        try store.recordPosition(fileID: 10, seconds: 0, percentage: 0.25, at: Date(), atEnd: false, sitting: nil)
+        let stored = try store.pool.read(CatalogStore.storedDownloads)
+        XCTAssertEqual(stored.first { $0.fileID == 10 }?.progress, 0.25)
+        XCTAssertEqual(stored.first { $0.fileID == 11 }?.progress, 0.4)
+        XCTAssertNil(stored.first { $0.fileID == 30 }?.progress)
+    }
+}
+
 final class DownloadRulesTests: XCTestCase {
     func testWiFiOnlyWaitsOffWiFi() {
         XCTAssertNil(DownloadRules.wait(wifiOnly: false, network: .cellular))
@@ -198,6 +223,23 @@ final class DownloadRulesTests: XCTestCase {
 }
 
 final class DownloadWordsTests: XCTestCase {
+    private func item(label: String = "Book", fileType: String = "m4b", status: String? = nil, progress: Double?) -> StoredDownload {
+        StoredDownload(fileID: 1, book: BookSummary(id: 1, libraryID: 1, title: "Book", authors: "", coverVersion: "", coverAspectRatio: "book",
+                                                    fileTypes: [fileType], status: status),
+                       fileType: fileType, label: label, state: .done, sizeBytes: 1, error: nil, progress: progress)
+    }
+
+    /// A row names the File only when it isn't the Book's title, then its
+    /// type and how far the user is, to help choose what to remove.
+    func testARowSaysHowFarTheUserIs() {
+        XCTAssertEqual(DownloadWords.facts(item(progress: nil)), "M4B · Not started")
+        XCTAssertEqual(DownloadWords.facts(item(progress: 0.42)), "M4B · Listening \(0.42.formatted(.percent.precision(.fractionLength(0))))")
+        XCTAssertEqual(DownloadWords.facts(item(label: "Unabridged", fileType: "epub", progress: 0.1)),
+                       "Unabridged · EPUB · Reading \(0.1.formatted(.percent.precision(.fractionLength(0))))")
+        XCTAssertEqual(DownloadWords.facts(item(progress: 0.999)), "M4B · Finished")
+        XCTAssertEqual(DownloadWords.facts(item(status: "read", progress: nil)), "M4B · Finished", "marked read")
+    }
+
     /// The stop button says how far a Download has got, or why it waits.
     func testTheStopButtonsValue() {
         XCTAssertEqual(DownloadWords.progress(.running(0.42)), 0.42.formatted(.percent.precision(.fractionLength(0))))
@@ -206,10 +248,11 @@ final class DownloadWordsTests: XCTestCase {
     }
 }
 
-/// Remove when finished, which the Maestro flow reaches only through the
-/// player: the reader's finish waits until it lets go of the file.
+/// The manager's rules for Downloads already on the device: Remove when
+/// finished, which the Maestro flow reaches only through the player, and a
+/// File the server replaced.
 @MainActor
-final class RemoveWhenFinishedTests: XCTestCase {
+final class DownloadManagerTests: XCTestCase {
     private var session: AccountSession!
     private var removeWhenFinished = false
 
@@ -223,7 +266,8 @@ final class RemoveWhenFinishedTests: XCTestCase {
         try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""
         {"entries":[{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Fiction","cover_aspect_ratio":"book"}},
          {"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Book","sort_title":"Book","created_at":"2026-01-01T00:00:00Z",
-          "cover_version":"1-1","files":[{"id":10,"file_type":"m4b","file_role":"main","size_bytes":3},{"id":11,"file_type":"epub","file_role":"main","size_bytes":3}]}}],
+          "cover_version":"1-1","files":[{"id":10,"file_type":"m4b","file_role":"main","size_bytes":3},{"id":11,"file_type":"epub","file_role":"main","size_bytes":3},
+           {"id":12,"file_type":"epub","file_role":"supplement","size_bytes":3}]}}],
          "cursor":2}
         """.utf8)))
     }
@@ -266,5 +310,39 @@ final class RemoveWhenFinishedTests: XCTestCase {
         session.downloads.released(fileID: 11)
         XCTAssertFalse(FileManager.default.fileExists(atPath: ebook.path))
         XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) })
+    }
+
+    /// Peeking at the end and going back, which undoes an automatic finish,
+    /// keeps the Download.
+    func testGoingBackFromTheEndKeepsTheDownload() throws {
+        let ebook = try downloaded(11, "epub")
+        session.downloads.removeWhenFinished = true
+        session.downloads.finished(fileID: 11, holding: true)
+        session.downloads.unfinished(fileID: 11)
+        session.downloads.released(fileID: 11)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ebook.path))
+        XCTAssertNotNil(session.downloads.localFile(fileID: 11))
+    }
+
+    /// A supplement never finishes a Read-through, so reaching its end
+    /// doesn't remove it.
+    func testASupplementIsntRemovedAtItsEnd() throws {
+        _ = try downloaded(12, "epub")
+        session.downloads.removeWhenFinished = true
+        session.downloads.finished(fileID: 12)
+        XCTAssertNotNil(session.downloads.localFile(fileID: 12))
+    }
+
+    /// A File the server replaced downloads again, and the copy on the
+    /// device still plays and opens until the new one arrives, offline too.
+    func testAReplacedFilesCopyStaysUsableUntilTheNewOneArrives() throws {
+        _ = try downloaded(10, "m4b")
+        try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""
+        {"entries":[{"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Book","sort_title":"Book","created_at":"2026-01-01T00:00:00Z",
+          "cover_version":"1-1","files":[{"id":10,"file_type":"m4b","file_role":"main","size_bytes":5000},{"id":11,"file_type":"epub","file_role":"main","size_bytes":3},
+           {"id":12,"file_type":"epub","file_role":"supplement","size_bytes":3}]}}],"cursor":3}
+        """.utf8)))
+        XCTAssertEqual(try session.store.requeueReplaced(), [10])
+        XCTAssertNotNil(session.downloads.localFile(fileID: 10))
     }
 }

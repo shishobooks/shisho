@@ -238,7 +238,8 @@ struct DownloadAllButton: View {
                 .foregroundStyle(files.missing == 0 ? Theme.mutedForeground : Theme.foreground)
         }
         .disabled(files.missing == 0)
-        .accessibilityLabel(files.missing == 0 ? String(localized: "All downloaded") : String(localized: "Download All"))
+        // Queued counts too: what's on its way needs nothing more.
+        .accessibilityLabel(files.missing == 0 ? String(localized: "All downloaded or on their way") : String(localized: "Download All"))
         .accessibilityValue(files.missing == 0 ? "" : String(AttributedString(localized: "^[\(files.missing) file](inflect: true)").characters))
         .accessibilityIdentifier("downloadAll")
         .modifier(NeedsConnection(available: files.missing == 0 || model.connection == .online))

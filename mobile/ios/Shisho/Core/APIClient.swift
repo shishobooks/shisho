@@ -113,8 +113,11 @@ final class APIClient: Sendable {
 
     /// Signs the Device out on the server, so its credential stops working.
     /// It's best effort: a sign-out offline still forgets the credential.
+    /// It's tried whatever was last heard of the server, which may be out of
+    /// date, since a credential left valid on a server that's back is worse
+    /// than a request that fails.
     func signOut() async {
-        _ = try? await data("mobile/device", method: "DELETE")
+        _ = try? await data("mobile/device", method: "DELETE", check: true)
     }
 
     /// One page of the feed, and what the user can access now, when the

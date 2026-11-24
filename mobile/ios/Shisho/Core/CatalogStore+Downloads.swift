@@ -264,6 +264,19 @@ extension CatalogStore {
         }
     }
 
+    /// Going back from the end, which undoes an automatic finish, keeps it.
+    func clearRemovePending(fileID: Int) throws {
+        try pool.write { db in
+            try db.execute(sql: "UPDATE downloads SET remove_pending = 0 WHERE file_id = ?", arguments: [fileID])
+        }
+    }
+
+    /// A supplement never finishes a Read-through, so Remove when finished
+    /// leaves it.
+    static func isSupplement(_ db: Database, fileID: Int) throws -> Bool {
+        try String.fetchOne(db, sql: "SELECT file_role FROM book_files WHERE id = ?", arguments: [fileID]) == "supplement"
+    }
+
     static func removePending(_ db: Database) throws -> [Int] {
         try Int.fetchAll(db, sql: "SELECT file_id FROM downloads WHERE remove_pending")
     }

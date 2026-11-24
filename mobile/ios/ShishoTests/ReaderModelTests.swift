@@ -1,3 +1,4 @@
+import ShishoAPI
 import XCTest
 @testable import Shisho
 
@@ -73,5 +74,52 @@ final class ReaderModelTests: XCTestCase {
         let next = model()
         XCTAssertEqual(next.settings.size, 21)
         XCTAssertEqual(next.settings.layout, .scrolled)
+    }
+
+    /// The book (File 8) downloaded, as a finished transfer leaves it.
+    private func downloadedBook() throws -> URL {
+        try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""
+        {"entries":[{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Fiction","cover_aspect_ratio":"book"}},
+         {"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Book","sort_title":"Book","created_at":"2026-01-01T00:00:00Z",
+          "cover_version":"1-1","files":[{"id":8,"file_type":"epub","file_role":"main","size_bytes":10}]}}],"cursor":2}
+        """.utf8)))
+        try session.store.queueDownloads([8])
+        XCTAssertTrue(try session.store.markDownloaded(fileID: 8, sizeBytes: 3))
+        let url = session.downloads.location(fileID: 8, fileType: "epub")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("abc".utf8).write(to: url)
+        return url
+    }
+
+    /// A Download that won't open stays: a page failing under memory
+    /// pressure, say on a plane, mustn't cost the only copy. Only one this
+    /// open just downloaded goes, to be downloaded again on Try Again.
+    func testABookThatWontOpenKeepsItsDownload() throws {
+        let book = try downloadedBook()
+        model().foliateFailed()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: book.path))
+        XCTAssertNotNil(session.downloads.localFile(fileID: 8))
+    }
+
+    /// Going back from the end undoes an automatic finish, so Remove when
+    /// finished keeps the book.
+    func testPeekingAtTheEndKeepsTheDownload() throws {
+        let removeWhenFinished = DownloadSettings.removeWhenFinished
+        defer { DownloadSettings.removeWhenFinished = removeWhenFinished }
+        let book = try downloadedBook()
+        session.downloads.removeWhenFinished = true
+        let model = model()
+        var end = page(nextChapter: nil)
+        end.atEnd = true
+        model.foliateMoved(end)
+        model.foliateMoved(page(nextChapter: nil))
+        model.close()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: book.path))
+
+        // Reaching the end and staying there does remove it.
+        let again = self.model()
+        again.foliateMoved(end)
+        again.close()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: book.path))
     }
 }

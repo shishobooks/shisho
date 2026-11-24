@@ -273,8 +273,6 @@ final class AudioPlayer {
         }
     }
 
-    /// Shows that the stream failed. Playing again builds a new one from
-    /// where it was.
     /// The connection changed: back, the message that it's needed goes; gone
     /// while a stream waits for more, playback stops and says why.
     func connectionChanged(_ connection: Connection) {
@@ -299,6 +297,8 @@ final class AudioPlayer {
         updateNowPlaying()
     }
 
+    /// Shows that the stream failed. Playing again builds a new one from
+    /// where it was.
     private func couldNotPlay(_ failure: String) {
         isPlaying = false
         isBuffering = false
@@ -1240,11 +1240,11 @@ final class AudioPlayer {
         MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
     }
 
-    /// The lock screen's artwork: the File's own cover, or its Book's.
     /// The cover's size in pixels for the lock screen and Now Playing, which
     /// downloading every cover fetches each File's own at.
     nonisolated static let artworkSize = 512
 
+    /// The lock screen's artwork: the File's own cover, or its Book's.
     private func loadArtwork(_ loaded: ListeningFile) {
         let covers = session.covers
         let (owner, version): (CoverCache.Owner, String) = loaded.coverVersion.isEmpty

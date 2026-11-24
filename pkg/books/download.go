@@ -116,7 +116,7 @@ func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *m
 	})
 }
 
-// ResolvePreparedDownload returns what the Shisho app gets to share a file
+// resolvePreparedDownload returns what the Shisho app gets to share a file
 // out of itself as its own File Type (ADR 0022): the Generated File, built
 // into the download cache before anything is sent, so it goes out with its
 // size and Range support even on its first build, and an interrupted
@@ -127,7 +127,7 @@ func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *m
 // stands in as it does for ResolveFallbackDownload.
 //
 // ServePreparedDownload serves it.
-func ResolvePreparedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
+func resolvePreparedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
 	ctx := c.Request().Context()
 	return resolveOwnType(ctx, book, file, func() (*Download, error) {
 		path, _, err := cache.GetOrGenerate(ctx, book, file, file.FileType)
@@ -147,11 +147,11 @@ func ResolvePreparedDownload(c echo.Context, cache *downloadcache.Cache, book *m
 	})
 }
 
-// ServePreparedDownload sends ResolvePreparedDownload's file. A Generated File
+// ServePreparedDownload sends resolvePreparedDownload's file. A Generated File
 // larger than the cache's limit can be cleaned out of the cache between its
 // build and its opening; it's streamed instead, as other devices get it.
 func ServePreparedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) error {
-	download, err := ResolvePreparedDownload(c, cache, book, file)
+	download, err := resolvePreparedDownload(c, cache, book, file)
 	if err != nil {
 		return err
 	}

@@ -103,7 +103,7 @@ The app saves your place on every page turn, and a book opens at the same place 
 
 Each file in a book's list of files has a download button, so you can keep a book's audiobook without its ebook, or the other way round. The download button at the top of a series or a list downloads the main files of every book in it in one tap; supplements download one at a time. A file type this version of the app doesn't support shows as not supported, with its download button turned off.
 
-Downloads go on in the background when you switch to another app or lock the phone. One that's interrupted, by losing the connection or by the app closing, carries on from where it stopped instead of starting over. A downloaded audiobook plays, and a downloaded book opens, without a connection.
+Downloads go on in the background when you switch to another app or lock the phone. One that's interrupted, by losing the connection or by the app closing, carries on from where it stopped instead of starting over. Downloads go on for the account you're using; another account's pause until you switch back to it. A downloaded audiobook plays, and a downloaded book opens, without a connection.
 
 The app downloads each file as it is in your library. Titles, authors, covers, and chapters always come from the app's copy of your library, so an edit on the web shows in the app at its next sync without downloading anything again.
 
@@ -111,10 +111,10 @@ The **Downloads** tab lists what's downloaded and what's on its way, with the sp
 
 Two settings in **Download Settings**, the gear at the top of the **Downloads** tab, apply to every account on the phone, and both start off:
 
-- **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi.
-- **Remove when finished**: a download is removed once you listen to or read it to the end, which finishes its Read-through. A book in the reader is removed when you close it.
+- **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi. A book you open in the reader still downloads on any network, since the reader needs the whole book to show a page, just as an audiobook streams on any network.
+- **Remove when finished**: a download is removed once you listen to or read it to the end. A book in the reader is removed when you close it, unless you went back from the end. Supplements are never removed this way.
 
-A downloaded file that's deleted from your library, or is in a library you lose access to, is removed from the phone at the next sync. One that's replaced in your library with a new copy of the file downloads again at the next sync; until it's back, it plays or opens from your server.
+A downloaded file that's deleted from your library, or is in a library you lose access to, is removed from the phone at the next sync. One whose file in your library is replaced by a copy of a different size downloads again at the next sync, and the copy already on the phone plays or opens until the new one arrives.
 
 ### Sharing a File
 
@@ -162,9 +162,9 @@ A server with a certificate from your own certificate authority works once the a
 
 ### A Download Doesn't Start
 
-**Symptom:** A download says it's waiting for Wi-Fi or for a connection.
+**Symptom:** A download says it's waiting for Wi-Fi or for a connection, or that it kept stopping.
 
-**Likely cause:** **Download on Wi-Fi only** is on and the phone is on cellular or a limited network, or the phone can't reach the server.
+**Likely cause:** **Download on Wi-Fi only** is on and the phone is on cellular or a limited network, the phone has no connection, or it can't reach your server.
 
 **Verify:** Check the **Downloads** tab, which says why each download is waiting, and open the server's address in the phone's browser.
 

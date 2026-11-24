@@ -347,9 +347,12 @@ final class CatalogStore: Sendable {
             }
         }
         // Downloads (#915): the Files kept on the device to listen to and
-        // read offline, and those on their way.
-        migrator.registerMigration("v8: downloads", migrate: CatalogStore.createDownloads)
-        migrator.registerMigration("v9: local progress", migrate: CatalogStore.createLocalProgress)
+        // read offline, and those on their way; and this device's place to
+        // the whole percent, for covers and the Downloads tab.
+        migrator.registerMigration("v8: downloads") { db in
+            try CatalogStore.createDownloads(db)
+            try CatalogStore.createLocalProgress(db)
+        }
         return migrator
     }
 

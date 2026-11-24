@@ -123,6 +123,9 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     @ObservationIgnored private var waitingForConnection = false
     /// A page at the end showed, which finishes the Read-through.
     @ObservationIgnored private var readToEnd = false
+    /// This open downloaded the book, so a copy that won't open can go, to
+    /// be downloaded again on Try Again.
+    @ObservationIgnored private var fetchedToOpen = false
 
     init(file: ReadingFile, session: AccountSession, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
@@ -230,6 +233,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         fileWatch?.cancel()
         let bookFile: URL
         waitingForConnection = false
+        fetchedToOpen = false
         do {
             if let downloaded = session.downloads.localFile(fileID: file.fileID) {
                 bookFile = downloaded
@@ -243,6 +247,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
                 // The reader needs all of a book before it can show a page,
                 // so opening one downloads it, as a Download like any other.
                 bookFile = try await session.downloads.fetchNow(fileID: file.fileID)
+                fetchedToOpen = true
             }
         } catch {
             guard !closed else { return }
@@ -615,6 +620,10 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
             // The pages read the file as they open, so it goes once the
             // reader closes, or at the next launch.
             session.downloads.finished(fileID: file.fileID, holding: true)
+        } else if location.atEnd != true, readToEnd {
+            // Back from the end, which undoes an automatic finish.
+            readToEnd = false
+            session.downloads.unfinished(fileID: file.fileID)
         }
     }
 
@@ -669,8 +678,10 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
 
     func foliateFailed() {
         guard phase == .loading || source != nil else { return }
-        if phase == .loading {
-            // A copy that won't open is downloaded again on Try Again.
+        // A copy this open just downloaded that won't open is downloaded
+        // again on Try Again. One downloaded before stays: a page that fails
+        // under memory pressure, say on a plane, mustn't cost the only copy.
+        if phase == .loading, fetchedToOpen {
             session.downloads.remove([file.fileID])
         }
         phase = .failed(String(localized: "This book couldn't be opened."))

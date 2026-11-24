@@ -2,6 +2,27 @@ import os
 import XCTest
 @testable import Shisho
 
+/// Answers every request with an empty 204, and keeps what each asked.
+private final class StubRecordingServer: URLProtocol {
+    private static let asked = OSAllocatedUnfairLock<[String]>(initialState: [])
+
+    static func reset() { asked.withLock { $0 = [] } }
+    static var requests: [String] { asked.withLock { $0 } }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let asked = "\(request.httpMethod ?? "GET") \(request.url?.path ?? "")"
+        Self.asked.withLock { $0.append(asked) }
+        let response = HTTPURLResponse(url: request.url!, statusCode: 204, httpVersion: "HTTP/1.1", headerFields: [:])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 /// Whether a server can be reached, as every request and screen reads it.
 final class ConnectionTests: XCTestCase {
     func testTheNetworkAndTheServerTogetherSayTheConnection() {
@@ -36,6 +57,18 @@ final class ConnectionTests: XCTestCase {
         }
     }
 
+    /// Signing out tells the server even while the last word was that it
+    /// can't be reached, which may be out of date: otherwise the Device's
+    /// credential would stay valid on a server that's back.
+    func testSigningOutTriesTheServerWhateverWasLastHeard() async {
+        StubRecordingServer.reset()
+        let client = APIClient(baseURL: URL(string: "https://shisho.test")!, credential: "c",
+                               protocolClasses: [StubRecordingServer.self])
+        client.reachability.failed(URLError(.timedOut))
+        await client.signOut()
+        XCTAssertEqual(StubRecordingServer.requests, ["DELETE /mobile/device"])
+    }
+
     /// A client known not to reach its server fails at once rather than
     /// waiting out a timeout.
     func testRequestsFailAtOnceWhileTheServerCantBeReached() async {
@@ -49,5 +82,19 @@ final class ConnectionTests: XCTestCase {
             XCTAssertEqual(error as? APIError, .unreachable("offline"))
         }
         XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+    }
+
+    /// Without the server, only what's on the device opens, or what's
+    /// already playing; a Book with nothing downloaded looks dimmed.
+    func testWhatOpensWithoutTheServer() {
+        XCTAssertTrue(ConnectionRules.canOpen(connection: .online, downloaded: false, playing: false))
+        XCTAssertFalse(ConnectionRules.canOpen(connection: .unreachable, downloaded: false, playing: false))
+        XCTAssertTrue(ConnectionRules.canOpen(connection: .offline, downloaded: true, playing: false))
+        XCTAssertTrue(ConnectionRules.canOpen(connection: .offline, downloaded: false, playing: true))
+
+        XCTAssertFalse(ConnectionRules.dimmed(bookID: 1, connection: .online, downloaded: nil))
+        XCTAssertTrue(ConnectionRules.dimmed(bookID: 1, connection: .offline, downloaded: nil), "not known yet")
+        XCTAssertTrue(ConnectionRules.dimmed(bookID: 1, connection: .unreachable, downloaded: [2]))
+        XCTAssertFalse(ConnectionRules.dimmed(bookID: 2, connection: .unreachable, downloaded: [2]))
     }
 }

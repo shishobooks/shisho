@@ -131,6 +131,20 @@ struct Transfers<ID: Hashable> {
     }
 }
 
+/// One transfer, by its session and its task's identifier there, which
+/// stay the same for the task's life, across launches too. A task object's
+/// address can be reused once it's freed, while its last event is still on
+/// its way.
+struct TransferID: Hashable, Sendable {
+    let session: String
+    let task: Int
+
+    init(_ task: URLSessionTask, in session: URLSession) {
+        self.session = session.configuration.identifier ?? ""
+        self.task = task.taskIdentifier
+    }
+}
+
 /// The Download settings, for every account on this installation. Both are
 /// off until the user turns them on.
 enum DownloadSettings {
@@ -195,14 +209,14 @@ final class DownloadManager {
     @ObservationIgnored private var foundTasks: [Bool: [URLSessionDownloadTask]] = [:]
     /// Events that arrived before then, handled once it's done.
     @ObservationIgnored private var early: [DownloadSessionDelegate.Event] = []
-    @ObservationIgnored private var transfers = Transfers<ObjectIdentifier>()
-    @ObservationIgnored private var tasks: [ObjectIdentifier: URLSessionDownloadTask] = [:]
+    @ObservationIgnored private var transfers = Transfers<TransferID>()
+    @ObservationIgnored private var tasks: [TransferID: URLSessionDownloadTask] = [:]
     /// Which session each transfer is in: true for the one kept off
     /// cellular.
-    @ObservationIgnored private var keptOffCellular: [ObjectIdentifier: Bool] = [:]
+    @ObservationIgnored private var keptOffCellular: [TransferID: Bool] = [:]
     /// Transfers carried on from what an earlier one left, which start over
     /// if the server turns them down.
-    @ObservationIgnored private var resumed: Set<ObjectIdentifier> = []
+    @ObservationIgnored private var resumed: Set<TransferID> = []
     /// Transfers that failed in a row without finishing, by File, so one
     /// that keeps failing stops being tried.
     @ObservationIgnored private var failures: [Int: Int] = [:]
@@ -219,6 +233,8 @@ final class DownloadManager {
     /// anything waited for them.
     @ObservationIgnored private var backgroundEventsArrived: Set<String> = []
     @ObservationIgnored private var stopped = false
+    /// Events from before the transfers were found are being handled.
+    @ObservationIgnored private var replaying = false
     /// Called when a File's Download arrives or goes, so the player can
     /// switch to it or back to streaming.
     @ObservationIgnored var onChange: ((Int) -> Void)?
@@ -245,8 +261,9 @@ final class DownloadManager {
             remove(pending)
         }
         // One whose file is gone, as after restoring a backup, which leaves
-        // Downloads out, downloads again.
-        let rows = (try? store.pool.read { try CatalogStore.downloads($0) }) ?? []
+        // Downloads out, downloads again. A read that fails leaves
+        // everything as it is: an empty list would sweep every file away.
+        guard let rows = try? store.pool.read({ try CatalogStore.downloads($0) }) else { return }
         let missing = rows.filter {
             $0.state == .done && !FileManager.default.fileExists(atPath: location(fileID: $0.fileID, fileType: $0.fileType).path)
         }
@@ -282,8 +299,11 @@ final class DownloadManager {
     }
 
     /// The File's Download on the device, or nil without a finished one.
+    /// A File the server replaced is queued again with its old copy still
+    /// here, which is used until the new one arrives: only a finished
+    /// transfer is ever moved into place.
     nonisolated func localFile(fileID: Int) -> URL? {
-        guard let row = try? store.pool.read({ try CatalogStore.download($0, fileID: fileID) }), row.state == .done else {
+        guard let row = try? store.pool.read({ try CatalogStore.download($0, fileID: fileID) }) else {
             return nil
         }
         let url = location(fileID: fileID, fileType: row.fileType)
@@ -318,6 +338,8 @@ final class DownloadManager {
         if let local = localFile(fileID: fileID) { return local }
         let fetched = try await client.download(fileID: fileID)
         defer { try? FileManager.default.removeItem(at: fetched) }
+        // A background transfer of it may have finished meanwhile.
+        if let local = localFile(fileID: fileID) { return local }
         try store.queueDownloads([fileID])
         // One finished whose file is gone counts as wanted again.
         try store.requeueDownloads([fileID])
@@ -377,13 +399,21 @@ final class DownloadManager {
     /// still open, as in the reader, which reads it as pages open, is
     /// marked to go once it's let go (`released`), or at the next launch.
     func finished(fileID: Int, holding: Bool = false) {
-        guard removeWhenFinished, localFile(fileID: fileID) != nil else { return }
+        guard removeWhenFinished, localFile(fileID: fileID) != nil,
+              (try? store.pool.read({ try CatalogStore.isSupplement($0, fileID: fileID) })) == false
+        else { return }
         if holding {
             try? store.markRemovePending(fileID: fileID)
             return
         }
         log("file \(fileID): finished, so its Download is removed")
         remove([fileID])
+    }
+
+    /// The reader went back from the end, which undoes an automatic finish,
+    /// so a removal waiting for it to let go is called off.
+    func unfinished(fileID: Int) {
+        try? store.clearRemovePending(fileID: fileID)
     }
 
     /// The reader let go of a File: a Download finished meanwhile goes now.
@@ -476,13 +506,17 @@ final class DownloadManager {
     /// Takes in the transfers iOS kept running from before this launch, and
     /// handles what arrived meanwhile.
     private func attach(_ found: [Bool: [URLSessionDownloadTask]]) {
-        let queued = Set(((try? store.pool.read { try CatalogStore.downloads($0) }) ?? []).filter { $0.state == .queued }.map(\.fileID))
+        // A read that fails keeps every transfer, rather than cancelling
+        // them all as unwanted.
+        let rows = try? store.pool.read { try CatalogStore.downloads($0) }
+        let queued = rows.map { Set($0.filter { $0.state == .queued }.map(\.fileID)) }
         for (offCellular, task) in found.flatMap({ kind, tasks in tasks.map { (kind, $0) } }) {
-            guard let fileID = task.taskDescription.flatMap(Int.init), queued.contains(fileID), !transfers.busy(fileID: fileID) else {
+            guard let fileID = task.taskDescription.flatMap(Int.init), queued?.contains(fileID) ?? true,
+                  !transfers.busy(fileID: fileID), let session = sessions[offCellular] else {
                 task.cancel()
                 continue
             }
-            let id = ObjectIdentifier(task)
+            let id = TransferID(task, in: session)
             transfers.started(fileID: fileID, id: id)
             tasks[id] = task
             keptOffCellular[id] = offCellular
@@ -496,7 +530,12 @@ final class DownloadManager {
         attached = true
         let waiting = early
         early = []
+        // A force-quit's transfers end at this launch, each with what to
+        // carry on from. They're all kept before any starts again: one
+        // started early starts over, its resume data arriving stale.
+        replaying = true
         for event in waiting { handle(event) }
+        replaying = false
         // One in the session the setting doesn't ask for moves.
         moveToPolicySession()
     }
@@ -504,7 +543,7 @@ final class DownloadManager {
     /// Starts every queued Download that isn't running, when the network
     /// allows, from what an interrupted transfer left when there is some.
     private func pump() {
-        guard !stopped else { return }
+        guard !stopped, !replaying else { return }
         let rows = ((try? store.pool.read { try CatalogStore.downloads($0) }) ?? []).filter { $0.state == .queued }
         guard !rows.isEmpty else { return }
         // A Download goes to iOS even while it waits for Wi-Fi or a
@@ -512,18 +551,23 @@ final class DownloadManager {
         ensureSessions()
         guard attached, let session = sessions[wifiOnly] else { return }
         let now = Date()
+        // The queue goes on when the soonest File waiting to try again may.
+        let waits = rows.compactMap { notBefore[$0.fileID] }.filter { $0 > now }
+        if let soonest = waits.min() {
+            scheduleRetry(after: soonest.timeIntervalSince(now))
+        }
         for row in rows where !transfers.busy(fileID: row.fileID) && !awaitingResume.contains(row.fileID)
             && (notBefore[row.fileID].map { $0 <= now } ?? true) {
             let task: URLSessionDownloadTask
             if let resumeData = DownloadResume.take(fileID: row.fileID, in: folder) {
                 task = session.downloadTask(withResumeData: resumeData)
-                resumed.insert(ObjectIdentifier(task))
+                resumed.insert(TransferID(task, in: session))
             } else {
                 task = session.downloadTask(with: client.downloadRequest(fileID: row.fileID))
             }
             task.taskDescription = String(row.fileID)
             task.countOfBytesClientExpectsToReceive = Int64(row.sizeBytes)
-            let id = ObjectIdentifier(task)
+            let id = TransferID(task, in: session)
             transfers.started(fileID: row.fileID, id: id)
             tasks[id] = task
             keptOffCellular[id] = wifiOnly
@@ -611,7 +655,19 @@ final class DownloadManager {
         case .stopped(let fileID, let id, let error, let resumeData):
             let ending = transfers.ended(fileID: fileID, id: id)
             settle(fileID: fileID, id: id, ending: ending)
-            guard ending != .stale else { return }
+            if ending == .stale {
+                // A transfer from before this launch, ended late, after
+                // one started over from nothing: it carries on from here
+                // instead.
+                if let resumeData, let current = transfers.id(fileID: fileID), !resumed.contains(current) {
+                    _ = transfers.drop(fileID: fileID)
+                    tasks.removeValue(forKey: current)?.cancel()
+                    settle(fileID: fileID, id: current, ending: .current)
+                    DownloadResume.save(resumeData, fileID: fileID, in: folder)
+                    pump()
+                }
+                return
+            }
             if let resumeData {
                 DownloadResume.save(resumeData, fileID: fileID, in: folder)
             }
@@ -628,7 +684,7 @@ final class DownloadManager {
             } else {
                 let delay = Double(count * count) * 5
                 notBefore[fileID] = Date().addingTimeInterval(delay)
-                scheduleRetry(after: delay)
+                pump()
             }
         case .backgroundEventsFinished(let identifier):
             let waiting = backgroundEventsDone.removeValue(forKey: identifier) ?? []
@@ -638,7 +694,7 @@ final class DownloadManager {
     }
 
     /// Forgets a transfer that ended.
-    private func settle(fileID: Int, id: ObjectIdentifier, ending: Transfers<ObjectIdentifier>.Ending) {
+    private func settle(fileID: Int, id: TransferID, ending: Transfers<TransferID>.Ending) {
         tasks[id] = nil
         keptOffCellular[id] = nil
         resumed.remove(id)
@@ -798,14 +854,14 @@ final class DownloadSessions: Sendable {
 /// after, so that part happens here; the rest goes to the manager.
 final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, Sendable {
     enum Event: Sendable {
-        case progress(Int, ObjectIdentifier, Double)
+        case progress(Int, TransferID, Double)
         /// kept is false when the Download was removed while it ran.
-        case finished(Int, ObjectIdentifier, kept: Bool)
+        case finished(Int, TransferID, kept: Bool)
         /// The server answered with an error that trying again won't fix.
-        case refused(Int, ObjectIdentifier, APIError)
+        case refused(Int, TransferID, APIError)
         /// The transfer stopped before it finished, with what to carry on
         /// from.
-        case stopped(Int, ObjectIdentifier, Error, Data?)
+        case stopped(Int, TransferID, Error, Data?)
         /// iOS handed over every event of a background launch for the
         /// session named.
         case backgroundEventsFinished(String)
@@ -835,7 +891,7 @@ final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, Senda
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
         guard let fileID = downloadTask.taskDescription.flatMap(Int.init) else { return }
-        let id = ObjectIdentifier(downloadTask)
+        let id = TransferID(downloadTask, in: session)
         let sink = current
         do {
             try DownloadSessionDelegate.checkOrigin(downloadTask)
@@ -858,7 +914,10 @@ final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, Senda
             try FileManager.default.moveItem(at: location, to: destination)
             let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? row.sizeBytes
             let kept = try sink.store.markDownloaded(fileID: fileID, sizeBytes: size)
-            if !kept {
+            // Removed meanwhile, its file goes too. One finished meanwhile,
+            // as by opening it in the reader, keeps the file there, the
+            // same File's whichever transfer put it there.
+            if !kept, try sink.store.pool.read({ try CatalogStore.download($0, fileID: fileID) })?.state != .done {
                 try? FileManager.default.removeItem(at: destination)
             }
             sink.send(.finished(fileID, id, kept: kept))
@@ -899,13 +958,13 @@ final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, Senda
         let before = (totalBytesWritten - bytesWritten) * 100 / totalBytesExpectedToWrite
         let now = totalBytesWritten * 100 / totalBytesExpectedToWrite
         guard now != before else { return }
-        current.send(.progress(fileID, ObjectIdentifier(downloadTask), Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
+        current.send(.progress(fileID, TransferID(downloadTask, in: session), Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)))
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let error, let fileID = task.taskDescription.flatMap(Int.init) else { return }
         let resumeData = (error as NSError).userInfo[NSURLSessionDownloadTaskResumeData] as? Data
-        current.send(.stopped(fileID, ObjectIdentifier(task), error, resumeData))
+        current.send(.stopped(fileID, TransferID(task, in: session), error, resumeData))
     }
 
     func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {

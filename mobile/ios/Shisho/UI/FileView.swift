@@ -236,7 +236,6 @@ struct FileView: View {
                 if supported, model.session?.sharesFiles == true {
                     ShareFileButton(fileID: file.id, label: file.label)
                         // The server makes the copy it shares.
-                        .disabled(model.connection != .online)
                         .modifier(NeedsConnection(available: model.connection == .online))
                 }
             }

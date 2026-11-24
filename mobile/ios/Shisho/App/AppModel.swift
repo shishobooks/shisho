@@ -256,9 +256,9 @@ final class AppModel {
     /// Whether a File can be listened to or read now: it's on the device, or
     /// the server can be reached, or it's already playing.
     func canOpen(fileID: Int) -> Bool {
-        if connection == .online { return true }
-        if player?.file?.fileID == fileID, player?.isPlaying == true { return true }
-        return session?.downloads.localFile(fileID: fileID) != nil
+        ConnectionRules.canOpen(connection: connection,
+                                downloaded: connection != .online && session?.downloads.localFile(fileID: fileID) != nil,
+                                playing: player?.file?.fileID == fileID && player?.isPlaying == true)
     }
 
     /// Asks the server whether it answers now, quickly.
@@ -908,6 +908,12 @@ final class AppModel {
         guard networkAvailable else {
             syncStatus = .offline
             return
+        }
+        // Last heard not to answer: asked once first, since a sync from a
+        // pause or a background refresh may be what finds it back, with
+        // nothing else checking.
+        if !session.client.reachability.allowsRequests {
+            _ = await session.client.checkServer()
         }
         do {
             try await session.sync.run()

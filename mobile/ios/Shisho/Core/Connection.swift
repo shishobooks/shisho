@@ -83,6 +83,18 @@ enum ConnectionRules {
         }
     }
 
+    /// Whether a File can be listened to or read now: the server can be
+    /// reached, or it's on the device, or it's already playing.
+    static func canOpen(connection: Connection, downloaded: Bool, playing: Bool) -> Bool {
+        connection == .online || downloaded || playing
+    }
+
+    /// Whether the Library dims a Book: without the server, one with
+    /// nothing downloaded, and every one until the downloaded are known.
+    static func dimmed(bookID: Int, connection: Connection, downloaded: Set<Int>?) -> Bool {
+        connection != .online && downloaded?.contains(bookID) != true
+    }
+
     /// What the player says about an audiobook it can't stream.
     static func audiobook(_ connection: Connection) -> String {
         connection == .offline
