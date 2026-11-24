@@ -2,8 +2,9 @@
 # ${NOTE}, from the list, a tab of the chapters sheet, rather than the
 # message offering one, which a stall could outlast. Not a flow of its own.
 #
-# The player is paused, so the screen holds still for plain taps, which
-# Maestro taps again when nothing changes, and each waits for what it opens.
+# The player is paused, so the screen holds still, and each tap here is safe
+# to repeat: `retryTapIfNoChange` taps again when the screen doesn't change
+# (Maestro doesn't by default), and each waits for what it opens.
 # A stall can drop typed text too, so the note is typed again until the list
 # shows all of it. The loop ends on a flag a `when` sets, since a `while`
 # on an element takes about 7 s to give up on it once the element shows.
@@ -11,12 +12,14 @@ appId: ${APP_ID}
 ---
 - tapOn:
     id: player.chapters
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: list.bookmarks
     timeout: 30000
 - tapOn:
     id: list.bookmarks
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: bookmarks.editNote
@@ -31,6 +34,7 @@ appId: ${APP_ID}
       # The note's field is in an alert, which names it.
       - tapOn:
           id: bookmarks.editNote
+          retryTapIfNoChange: true
       - extendedWaitUntil:
           visible: Edit Note
           timeout: 30000
@@ -40,6 +44,7 @@ appId: ${APP_ID}
       - inputText: ${NOTE}
       - tapOn:
           id: bookmarks.save
+          retryTapIfNoChange: true
       - extendedWaitUntil:
           notVisible: Edit Note
           timeout: 30000
@@ -56,6 +61,7 @@ appId: ${APP_ID}
 
 - tapOn:
     id: list.done
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     notVisible:
       id: list.done

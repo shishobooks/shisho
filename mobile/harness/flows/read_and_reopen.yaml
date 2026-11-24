@@ -84,16 +84,34 @@ name: Read, kill, reopen at the same place, and send a Reading Session
     optional: true
 # A stall can drop the turn, or land it after the place read as settled,
 # so the flow turns again while the place still reads as the reopened page.
+# Before turning again it waits a stall's length and looks once more, so a
+# late first turn doesn't get a second one queued behind it.
 - evalScript: ${output.secondPage = output.afterRelaunch}
+- evalScript: ${output.turns = 0}
 - repeat:
     while:
       true: ${output.secondPage == output.afterRelaunch}
     times: 3
     commands:
-      - swipe:
-          direction: LEFT
-      - runFlow: subflows/settled_place.yaml
-      - evalScript: ${output.secondPage = output.settledPlace}
+      - runFlow:
+          when:
+            true: ${output.turns > 0}
+          commands:
+            - extendedWaitUntil:
+                visible: __never__
+                timeout: 10000
+                optional: true
+            - runFlow: subflows/settled_place.yaml
+            - evalScript: ${output.secondPage = output.settledPlace}
+      - runFlow:
+          when:
+            true: ${output.secondPage == output.afterRelaunch}
+          commands:
+            - swipe:
+                direction: LEFT
+            - evalScript: ${output.turns = output.turns + 1}
+            - runFlow: subflows/settled_place.yaml
+            - evalScript: ${output.secondPage = output.settledPlace}
 - assertTrue:
     condition: ${output.secondPage != output.afterRelaunch}
     label: The turn landed on the next page

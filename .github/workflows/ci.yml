@@ -10,10 +10,11 @@ on:
 env:
   SHARD_TOTAL: 2
 
-# A rerun's attempt gets a group of its own, so rerunning an old run (as
-# `mise ios:signoff` reruns CI OK) never cancels a newer push's run.
+# A rerun gets a group of its own run's, so rerunning an old run (as
+# `mise ios:signoff` reruns CI OK) never cancels a newer push's run, or a
+# newer run's rerun.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_attempt }}
+  group: ${{ github.workflow }}-${{ github.ref }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.run_id) || '' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
