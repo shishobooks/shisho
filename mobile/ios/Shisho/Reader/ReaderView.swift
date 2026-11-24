@@ -119,7 +119,7 @@ struct ReaderView: View {
             model.memoryWarning()
         }
         .sheet(isPresented: $showingContents) {
-            ContentsSheet(model: model) { entry in
+            ContentsSheet(entries: model.contents, currentID: model.currentEntry?.id) { entry in
                 showingContents = false
                 model.go(to: entry)
             }
@@ -590,7 +590,7 @@ private struct ReaderBottomBar: View {
 
 /// The chapter and place a scrubber drag would go to, in a pill centered
 /// over the bar, in the brand color so it catches the eye.
-private struct ScrubLabel: View {
+struct ScrubLabel: View {
     let chapter: String?
     let percent: String
 
@@ -829,7 +829,7 @@ private struct ZoomingImage: UIViewRepresentable {
 }
 
 /// The pager's view controller, in SwiftUI.
-private struct PagerHost: UIViewControllerRepresentable {
+struct PagerHost: UIViewControllerRepresentable {
     let pager: PagerController
 
     func makeUIViewController(context: Context) -> PagerController { pager }
@@ -838,20 +838,21 @@ private struct PagerHost: UIViewControllerRepresentable {
 
 /// The table of contents, as the audio player's chapter list draws it:
 /// bordered rows, the chapter the reader is in tinted.
-private struct ContentsSheet: View {
+struct ContentsSheet: View {
     @Environment(\.dismiss) private var dismiss
-    let model: ReaderModel
+    let entries: [ContentsEntry]
+    /// The chapter the reader is in.
+    let currentID: Int?
     let select: (ContentsEntry) -> Void
 
     var body: some View {
-        let currentID = model.currentEntry?.id
         VStack(spacing: 0) {
             header
             ScrollViewReader { scroller in
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(model.contents) { entry in
-                            if entry.id != model.contents.first?.id {
+                        ForEach(entries) { entry in
+                            if entry.id != entries.first?.id {
                                 Rectangle().fill(Theme.border).frame(height: 1)
                             }
                             row(entry, current: entry.id == currentID)

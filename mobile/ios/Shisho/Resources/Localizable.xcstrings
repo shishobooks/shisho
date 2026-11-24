@@ -544,6 +544,9 @@
     "Enter your Shisho server's address." : {
 
     },
+    "Every book turns left to right. Saved on this device." : {
+
+    },
     "Every cover in your Libraries shows offline. Otherwise covers download as you browse." : {
 
     },
@@ -577,7 +580,13 @@
     "Finished" : {
 
     },
+    "Flow" : {
+
+    },
     "Folder" : {
+
+    },
+    "Follow Reading Direction" : {
 
     },
     "Font" : {
@@ -907,11 +916,41 @@
     "Page %lld" : {
 
     },
+    "Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld of %2$lld"
+          }
+        }
+      }
+    },
     "Page count" : {
 
     },
     "Pages" : {
 
+    },
+    "Pages %lld and %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Pages %1$lld and %2$lld of %3$lld"
+          }
+        }
+      }
+    },
+    "Pages %lld–%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Pages %1$lld–%2$lld of %3$lld"
+          }
+        }
+      }
     },
     "Paginated" : {
 
@@ -929,6 +968,9 @@
 
     },
     "People" : {
+
+    },
+    "Picked from the page shapes until you choose." : {
 
     },
     "Place in the book" : {
@@ -1073,7 +1115,13 @@
     "Right to left" : {
 
     },
+    "Right to left books turn the other way. Saved on this device." : {
+
+    },
     "Save" : {
+
+    },
+    "Saved for this book." : {
 
     },
     "Scrolled" : {
@@ -1344,6 +1392,9 @@
 
     },
     "This book couldn't be opened." : {
+
+    },
+    "This book has no pages." : {
 
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {

@@ -1,0 +1,75 @@
+# A right-to-left CBZ turns the other way: a swipe to the right goes
+# forward. With Follow Reading Direction off it turns left to right like
+# any other (#921).
+appId: ${APP_ID}
+name: Read a right-to-left comic, following its direction and not
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Manga
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 1 of 6.*"
+    timeout: 30000
+# Right to left, the next page comes in from the left.
+- swipe:
+    direction: RIGHT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 2 of 6.*"
+    timeout: 30000
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 1 of 6.*"
+    timeout: 30000
+
+# Every book left to right.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- tapOn:
+    id: reader.followReadingDirection
+- tapOn:
+    id: reader.settings.done
+- extendedWaitUntil:
+    notVisible:
+      id: reader.settings.done
+    timeout: 30000
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 2 of 6.*"
+    timeout: 30000
+
+# Back on, which the other flows expect.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- tapOn:
+    id: reader.followReadingDirection
+- tapOn:
+    id: reader.settings.done
+- extendedWaitUntil:
+    notVisible:
+      id: reader.settings.done
+    timeout: 30000
+- swipe:
+    direction: RIGHT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 3 of 6.*"
+    timeout: 30000

@@ -172,7 +172,7 @@ private struct NumberSetting: View {
 /// One setting's choices as the web reader's settings draw them: a row of
 /// buttons, the chosen one filled. Not the player's SegmentedChoice, which
 /// is the web app's tab switch, a different control there.
-private struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
+struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
     let title: LocalizedStringResource
     let options: [Option]
     @Binding var selection: Option

@@ -276,6 +276,8 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         let start: ReaderTarget? = switch choice?.0.start {
         case .cfi(let cfi): .cfi(cfi)
         case .fraction(let fraction): .fraction(fraction)
+        // A page is a Page-based File's place, never a Reflowable one's.
+        case .page: .fraction(choice?.0.percentage ?? 0)
         case nil: nil
         }
         let source = FoliateSource(bookFile: bookFile, fileType: file.fileType, settings: settings, pages: ReaderPagePool.shared.take(),

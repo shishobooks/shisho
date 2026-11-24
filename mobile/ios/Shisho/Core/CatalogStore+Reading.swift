@@ -9,10 +9,12 @@ struct ReaderChapter: Equatable, Hashable, Sendable {
     /// for a heading with nowhere to go.
     let href: String?
     let depth: Int
+    /// The 0-based page it starts on in a Page-based File.
+    var startPage: Int?
 }
 
-/// A Reflowable File as the reader needs it, from the device's copy of the
-/// catalog.
+/// An ebook File as the reader needs it, from the device's copy of the
+/// catalog: a Reflowable one, or a Page-based one (CBZ or PDF).
 struct ReadingFile: Equatable, Identifiable, Sendable {
     var id: Int { fileID }
     let fileID: Int
@@ -25,6 +27,18 @@ struct ReadingFile: Equatable, Identifiable, Sendable {
     /// The File's language as Shisho normalized it, which a book's own
     /// metadata may give in a form the reader can't use.
     var language: String?
+    /// A CBZ's pages, as the names of its archive entries in the order
+    /// Shisho counts them (ADR 0025): the reader never sorts them itself.
+    var pages: [String] = []
+    /// The File's Reading Direction, "rtl" or "ltr", or nil for left to
+    /// right.
+    var readingDirection: String?
+
+    /// Read in the image pager (ADR 0025) rather than with foliate.
+    var isPageBased: Bool { CatalogStore.pageBasedTypes.contains(fileType) }
+
+    /// The File runs right to left, as manga does.
+    var rightToLeft: Bool { readingDirection == "rtl" }
 
     /// Shisho's chapters are the table of contents for an EPUB. MOBI and
     /// AZW3 use the table of contents inside the file until Shisho's stored
@@ -61,23 +75,29 @@ struct ReadProgress: Equatable, Sendable {
 extension CatalogStore {
     /// The File Types the reader lays out with foliate (ADR 0026).
     static let reflowableTypes: Set<String> = ["epub", "kepub", "mobi", "azw3"]
+    /// The File Types the reader shows in the image pager (ADR 0025).
+    static let pageBasedTypes: Set<String> = ["cbz", "pdf"]
+    /// Every File Type the reader opens.
+    static var readableTypes: Set<String> { reflowableTypes.union(pageBasedTypes) }
     /// The Reflowable File Types whose Shisho chapters the reader can go to.
     static let navigableChapterTypes: Set<String> = ["epub", "kepub"]
 
-    private static var reflowableList: String {
-        reflowableTypes.sorted().map { "'\($0)'" }.joined(separator: ", ")
+    private static var readableList: String {
+        readableTypes.sorted().map { "'\($0)'" }.joined(separator: ", ")
     }
 
     // MARK: - Reading
 
     static func readingFile(_ db: Database, fileID: Int) throws -> ReadingFile? {
         guard let row = try Row.fetchOne(db, sql: """
-                SELECT book_id, file_type, display_name, size_bytes, language FROM book_files WHERE id = ? AND file_type IN (\(reflowableList))
+                SELECT book_id, file_type, display_name, size_bytes, language, pages, reading_direction
+                FROM book_files WHERE id = ? AND file_type IN (\(readableList))
                 """, arguments: [fileID]),
               let book = try CatalogStore.book(db, id: row["book_id"])
         else { return nil }
         return ReadingFile(fileID: fileID, book: book.summary, fileType: row["file_type"], displayName: row["display_name"],
-                           sizeBytes: row["size_bytes"], chapters: try readerChapters(db, fileID: fileID), language: row["language"])
+                           sizeBytes: row["size_bytes"], chapters: try readerChapters(db, fileID: fileID), language: row["language"],
+                           pages: names(row["pages"]), readingDirection: row["reading_direction"])
     }
 
     /// The File's chapters, each nested one deeper than its parent. The feed
@@ -85,13 +105,13 @@ extension CatalogStore {
     static func readerChapters(_ db: Database, fileID: Int) throws -> [ReaderChapter] {
         var depths: [Int: Int] = [:]
         return try Row.fetchAll(db, sql: """
-            SELECT chapter_id, parent_id, title, href FROM book_file_chapters WHERE file_id = ? ORDER BY position
+            SELECT chapter_id, parent_id, title, href, start_page FROM book_file_chapters WHERE file_id = ? ORDER BY position
             """, arguments: [fileID]).map { row in
             let parent: Int? = row["parent_id"]
             let depth = parent.flatMap { depths[$0].map { $0 + 1 } } ?? 0
             depths[row["chapter_id"]] = depth
             let href: String? = row["href"]
-            return ReaderChapter(title: row["title"], href: href?.isEmpty == true ? nil : href, depth: depth)
+            return ReaderChapter(title: row["title"], href: href?.isEmpty == true ? nil : href, depth: depth, startPage: row["start_page"])
         }
     }
 
@@ -109,7 +129,7 @@ extension CatalogStore {
             SELECT f.id FROM book_files f
             LEFT JOIN local_positions l ON l.file_id = f.id
             LEFT JOIN reading_positions p ON p.file_id = f.id
-            WHERE f.book_id = ? AND f.file_type IN (\(reflowableList)) AND f.file_role != 'supplement'
+            WHERE f.book_id = ? AND f.file_type IN (\(readableList)) AND f.file_role != 'supplement'
             ORDER BY MAX(COALESCE(l.updated_at, 0), COALESCE(p.occurred_at, 0)) DESC, f.position
             LIMIT 1
             """, arguments: [bookID])
@@ -124,7 +144,7 @@ extension CatalogStore {
         let underway = try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM read_throughs WHERE book_id = ? AND outcome = 'underway')",
                                          arguments: [bookID]) ?? false
         let ebooks = try Int.fetchOne(db, sql: """
-            SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type IN (\(reflowableList)) AND file_role != 'supplement'
+            SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type IN (\(readableList)) AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
         let file = try Row.fetchOne(db, sql: "SELECT display_name, word_count, size_bytes FROM book_files WHERE id = ?", arguments: [fileID])
         var progress = ReadProgress(fileID: fileID, percentage: min(1, max(0, percentage)), underway: underway,
@@ -147,17 +167,19 @@ extension CatalogStore {
     /// other until sent, but reaching the end is always sent. Each carries
     /// when the session began, so a Read-through it starts begins that day
     /// even when only a later turn is sent.
-    func recordReading(fileID: Int, cfi: String, percentage: Double, atEnd: Bool, at: Date, sessionID: String,
+    /// The place is a CFI in a Reflowable File, or a 0-based page in a
+    /// Page-based one.
+    func recordReading(fileID: Int, cfi: String?, page: Int? = nil, percentage: Double, atEnd: Bool, at: Date, sessionID: String,
                        sessionStartedAt: Date, session: FinishedSession?) throws {
-        let payload = Shishoapp.JournalPositionPayload(fileId: fileID, cfi: cfi, percentage: min(1, max(0, percentage)), atEnd: atEnd,
-                                                       listeningSince: JournalTime.string(min(sessionStartedAt, at)))
+        let payload = Shishoapp.JournalPositionPayload(fileId: fileID, cfi: cfi, page: page, percentage: min(1, max(0, percentage)),
+                                                       atEnd: atEnd, listeningSince: JournalTime.string(min(sessionStartedAt, at)))
         let data = try JSONEncoder().encode(payload)
         // Reaching the end is never replaced, not even by a later end: the
         // server finishes the Read-through at the first one, and undoes it
         // only for a move back soon after it.
         let key = atEnd ? nil : "position:\(fileID):\(sessionID)"
         try pool.write { db in
-            try CatalogStore.writePosition(db, fileID: fileID, seconds: 0, cfi: cfi, percentage: percentage, at: at,
+            try CatalogStore.writePosition(db, fileID: fileID, seconds: 0, cfi: cfi, page: page, percentage: percentage, at: at,
                                            payload: data, coalesceKey: key)
             if let session {
                 try CatalogStore.appendSession(db, session)
@@ -169,14 +191,15 @@ extension CatalogStore {
     /// it, when the user chose it over another device's, and marks the
     /// server's place seen: the next open stays here rather than going to
     /// the place they turned down, or to an older place of this device's.
-    func stayHere(fileID: Int, cfi: String, percentage: Double, at: Date) throws {
+    func stayHere(fileID: Int, cfi: String?, page: Int? = nil, percentage: Double, at: Date) throws {
         try pool.write { db in
             let serverAt = try Double.fetchOne(db, sql: "SELECT occurred_at FROM reading_positions WHERE file_id = ?", arguments: [fileID])
             try db.execute(sql: """
-                INSERT INTO local_positions (file_id, seconds, cfi, percentage, updated_at, base_occurred_at) VALUES (?, 0, ?, ?, ?, ?)
-                ON CONFLICT (file_id) DO UPDATE SET cfi = excluded.cfi, percentage = excluded.percentage,
+                INSERT INTO local_positions (file_id, seconds, cfi, page, percentage, updated_at, base_occurred_at)
+                VALUES (?, 0, ?, ?, ?, ?, ?)
+                ON CONFLICT (file_id) DO UPDATE SET cfi = excluded.cfi, page = excluded.page, percentage = excluded.percentage,
                     updated_at = excluded.updated_at
-                """, arguments: [fileID, cfi, percentage, at.timeIntervalSince1970, serverAt])
+                """, arguments: [fileID, cfi, page, percentage, at.timeIntervalSince1970, serverAt])
             try CatalogStore.resolveOffer(db, fileID: fileID)
         }
     }

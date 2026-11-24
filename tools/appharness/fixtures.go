@@ -26,6 +26,9 @@ type Fixture struct {
 	// (writePictureBook).
 	Novel       bool
 	FixedLayout bool
+	// Comic is a CBZ's pages (writeComic): numbered pages, printed, manga,
+	// or webtoon strips.
+	Comic comicKind
 	// Duration is an audiobook's length in seconds, and Chapters where its
 	// chapters start.
 	Duration float64
@@ -42,7 +45,11 @@ var fixtures = []Fixture{
 	{Title: "The Harness Novel", Author: "Ada Writer", FileType: "epub", Series: "Harness Series", Novel: true},
 	// A fixed-layout EPUB, which the readers page as foliate lays it out.
 	{Title: "Harness Picture Book", Author: "Ivy Illustrator", FileType: "epub", FixedLayout: true},
-	{Title: "Harness Comic", Author: "Pat Penciller", FileType: "cbz"},
+	// The page reader's comics: a printed one with a wide page, a manga
+	// that runs right to left, and a webtoon that opens scrolled.
+	{Title: "Harness Comic", Author: "Pat Penciller", FileType: "cbz", Comic: comicPrinted},
+	{Title: "Harness Manga", Author: "Pat Penciller", FileType: "cbz", Comic: comicManga},
+	{Title: "Harness Webtoon", Author: "Pat Penciller", FileType: "cbz", Comic: comicWebtoon},
 	{Title: "Quiet Lighthouse", Author: "Ann Author", FileType: "m4b", Duration: 9,
 		Chapters: []testgen.M4BChapter{{Title: "Chapter 1", Start: 0}, {Title: "Chapter 2", Start: 3}, {Title: "Chapter 3", Start: 6}}},
 	{Title: "Harbor Lights", Author: "Ann Author", FileType: "m4b", Duration: 240,
@@ -85,8 +92,10 @@ func (t fixtureT) Fatalf(format string, args ...any) {
 // -key`).
 var fixtureSources = []string{
 	"tools/appharness/fixtures.go",
-	// The reader's novel and picture book.
+	// The reader's novel and picture book, comics, and PDF.
 	"tools/appharness/novel.go",
+	"tools/appharness/comics.go",
+	"tools/appharness/manual.go",
 	"internal/testgen",
 	"internal/mobigen",
 	"pkg/mediafile",
@@ -230,8 +239,8 @@ func pruneFixtureCache(cacheRoot, key string) {
 }
 
 // makeFixtures writes each fixture into its own folder under dir, and the
-// annex's under annexDir(dir): an EPUB and a CBZ from the Go test helpers, an
-// M4B of tones with known chapters (ffmpeg), and a PDF.
+// annex's under annexDir(dir): EPUBs, CBZs of numbered pages, an M4B of
+// tones with known chapters (ffmpeg), and a PDF with an outline.
 func makeFixtures(ctx context.Context, dir string) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -278,15 +287,17 @@ func writeFixture(t fixtureT, folder string, f Fixture, one *float64) {
 		}
 		testgen.GenerateEPUB(t, folder, "novel.epub", options)
 	case "cbz":
-		testgen.GenerateCBZ(t, folder, "comic.cbz", testgen.CBZOptions{
-			Title: f.Title, Penciller: f.Author, HasComicInfo: true, PageCount: 3,
-		})
+		if err := writeComic(filepath.Join(folder, "comic.cbz"), f.Title, f.Author, f.Comic); err != nil {
+			t.Fatalf("write %s: %v", f.Title, err)
+		}
 	case "m4b":
 		testgen.GenerateM4B(t, folder, "audiobook.m4b", testgen.M4BOptions{
 			Title: f.Title, Artist: f.Author, Composer: "Ned Narrator", Duration: f.Duration, HasCover: true,
 			Chapters: f.Chapters,
 		})
 	case "pdf":
-		testgen.GeneratePDF(t, folder, "manual.pdf", testgen.PDFOptions{PageCount: 2})
+		if err := writeManual(filepath.Join(folder, "manual.pdf"), f.Title); err != nil {
+			t.Fatalf("write %s: %v", f.Title, err)
+		}
 	}
 }

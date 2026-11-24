@@ -1,0 +1,385 @@
+import UIKit
+
+/// One screen of a Page-based File in the pager: a page, or a spread of two
+/// side by side, fitted to the screen. Pinch or double-tap zooms it, and
+/// only then is it drawn at full resolution. A zoomed page pans by drag
+/// until it reaches its edge; from there a drag turns the page.
+@MainActor
+final class ImagePageView: UIScrollView, UIScrollViewDelegate {
+    /// The pages shown, in reading order.
+    private(set) var pages: [Int] = []
+    /// Called when every page shown has its screen-size image, or couldn't
+    /// be read: the page is ready to turn to.
+    var onReady: ((ImagePageView) -> Void)?
+    private(set) var isReady = false
+
+    private let content = UIView()
+    private var imageViews: [UIImageView] = []
+    /// The pages left to right on screen, with their shapes.
+    private var visual: [(page: Int, size: CGSize)] = []
+    private var cache: PageImageCache?
+    /// Bumped on each change of pages or size, so a decode that lands
+    /// after one is dropped.
+    private var token = 0
+    private var fittedTo: CGSize = .zero
+    /// Showing full-resolution images while zoomed.
+    private var sharp = false
+    /// Screen-size images still being decoded.
+    private var waiting = 0
+
+    static let maximumZoom: CGFloat = 4
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        delegate = self
+        backgroundColor = .clear
+        showsHorizontalScrollIndicator = false
+        showsVerticalScrollIndicator = false
+        contentInsetAdjustmentBehavior = .never
+        decelerationRate = .fast
+        minimumZoomScale = 1
+        maximumZoomScale = Self.maximumZoom
+        bouncesZoom = true
+        addSubview(content)
+        isAccessibilityElement = true
+        accessibilityTraits = .image
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    var isZoomed: Bool { zoomScale > 1.01 }
+
+    /// Shows pages, in reading order, with their shapes; right to left puts
+    /// the first on the right. Empty pages show nothing, as past the end.
+    func show(pages: [Int], sizes: [CGSize], rightToLeft: Bool, cache: PageImageCache, label: String) {
+        token += 1
+        self.pages = pages
+        self.cache = cache
+        let pairs = Array(zip(pages, sizes))
+        visual = rightToLeft ? pairs.reversed() : pairs
+        accessibilityLabel = label
+        sharp = false
+        isReady = false
+        if zoomScale != 1 { setZoomScale(1, animated: false) }
+        while imageViews.count < visual.count {
+            let view = UIImageView()
+            view.contentMode = .scaleAspectFit
+            view.backgroundColor = .clear
+            content.addSubview(view)
+            imageViews.append(view)
+        }
+        while imageViews.count > visual.count { imageViews.removeLast().removeFromSuperview() }
+        // A page kept already shows at once, rather than after a frame
+        // of nothing.
+        fittedTo = .zero
+        for view in imageViews { view.image = nil }
+        setNeedsLayout()
+        layoutIfNeeded()
+    }
+
+    /// Back to the screen-size images and no zoom, as when the page leaves
+    /// the screen.
+    func resetZoom() {
+        if zoomScale != 1 { setZoomScale(1, animated: false) }
+        if sharp {
+            sharp = false
+            loadScreenImages()
+        }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.size != fittedTo, bounds.width > 0, bounds.height > 0, !isZooming else {
+            center()
+            return
+        }
+        fittedTo = bounds.size
+        if zoomScale != 1 { setZoomScale(1, animated: false) }
+        let frames = PageLayout.frames(sizes: visual.map(\.size), in: bounds.size)
+        let union = frames.reduce(CGRect.null) { $0.union($1) }
+        let area = union.isNull ? CGRect(origin: .zero, size: bounds.size) : union
+        content.frame = CGRect(origin: .zero, size: area.size)
+        for (view, frame) in zip(imageViews, frames) {
+            view.frame = frame.offsetBy(dx: -area.minX, dy: -area.minY)
+        }
+        contentSize = area.size
+        center()
+        token += 1
+        sharp = false
+        loadScreenImages()
+    }
+
+    /// Keeps a page smaller than the screen in its middle.
+    private func center() {
+        let x = max(0, (bounds.width - contentSize.width) / 2)
+        let y = max(0, (bounds.height - contentSize.height) / 2)
+        let inset = UIEdgeInsets(top: y, left: x, bottom: y, right: x)
+        if contentInset != inset { contentInset = inset }
+    }
+
+    private var screenScale: CGFloat { max(1, traitCollection.displayScale) }
+
+    /// The pixels a page fills on screen at zoom.
+    private func pixels(for view: UIImageView, zoom: CGFloat) -> Int {
+        Int((max(view.bounds.width, view.bounds.height) * screenScale * zoom).rounded(.up))
+    }
+
+    private func loadScreenImages() {
+        guard let cache, fittedTo != .zero else { return }
+        let token = token
+        guard !visual.isEmpty else {
+            markReady()
+            return
+        }
+        waiting = visual.count
+        for (index, page) in visual.enumerated() {
+            let view = imageViews[index]
+            let maxPixel = pixels(for: view, zoom: 1)
+            if let image = cache.cached(page: page.page, maxPixel: maxPixel) {
+                view.image = image
+                waiting -= 1
+                continue
+            }
+            Task { [weak self] in
+                let image = await cache.image(page: page.page, maxPixel: maxPixel, need: .now)
+                guard let self, self.token == token else { return }
+                view.image = image
+                self.waiting -= 1
+                if self.waiting == 0 { self.markReady() }
+            }
+        }
+        if waiting == 0 { markReady() }
+    }
+
+    private func markReady() {
+        guard !isReady else { return }
+        isReady = true
+        onReady?(self)
+    }
+
+    /// Full resolution for the zoomed page, held by this view alone.
+    private func loadSharpImages() {
+        guard let cache, !sharp else { return }
+        sharp = true
+        let token = token
+        let zoom = zoomScale
+        for (index, page) in visual.enumerated() {
+            let view = imageViews[index]
+            let maxPixel = pixels(for: view, zoom: zoom)
+            Task { [weak self] in
+                let image = await cache.image(page: page.page, maxPixel: maxPixel, need: .now, keep: false)
+                guard let self, self.token == token, self.sharp, let image else { return }
+                view.image = image
+            }
+        }
+    }
+
+    // MARK: - Zoom
+
+    /// A double tap: zooms in to point, in this view's points, or back out
+    /// when zoomed.
+    func toggleZoom(at point: CGPoint) {
+        if isZoomed {
+            setZoomScale(1, animated: true)
+            return
+        }
+        let inContent = convert(point, to: content)
+        let scale: CGFloat = 2.5
+        let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
+        let x = min(max(inContent.x, 0), content.bounds.width)
+        let y = min(max(inContent.y, 0), content.bounds.height)
+        zoom(to: CGRect(x: x - size.width / 2, y: y - size.height / 2, width: size.width, height: size.height), animated: true)
+    }
+
+    /// Whether a sideways drag at velocityX is the pager's to turn with:
+    /// always when not zoomed, and zoomed, once the page is at its edge that
+    /// way.
+    func yieldsDrag(velocityX: CGFloat) -> Bool {
+        guard isZoomed else { return true }
+        let leftmost = -contentInset.left
+        let rightmost = contentSize.width + contentInset.right - bounds.width
+        // A finger moving right shows more of the left.
+        return velocityX > 0 ? contentOffset.x <= leftmost + 1 : contentOffset.x >= rightmost - 1
+    }
+
+    override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        if recognizer === panGestureRecognizer {
+            guard isZoomed else { return false }
+            let velocity = panGestureRecognizer.velocity(in: self)
+            if abs(velocity.x) > abs(velocity.y), yieldsDrag(velocityX: velocity.x) { return false }
+        }
+        return super.gestureRecognizerShouldBegin(recognizer)
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? { content }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) { center() }
+
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+        if scale > 1.05 {
+            // Sharper again for a deeper zoom.
+            sharp = false
+            loadSharpImages()
+        } else if sharp {
+            sharp = false
+            loadScreenImages()
+        }
+    }
+
+    // MARK: - VoiceOver
+
+    override func accessibilityIncrement() {
+        setZoomScale(min(maximumZoomScale, zoomScale * 2), animated: true)
+    }
+
+    override func accessibilityDecrement() {
+        setZoomScale(max(minimumZoomScale, zoomScale / 2), animated: true)
+    }
+}
+
+/// The scrolled Page flow: every page in one column, edge to edge, as a
+/// webtoon is read. Pages decode as they near the screen.
+@MainActor
+final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout,
+    UICollectionViewDataSourcePrefetching {
+    /// The page at the top quarter of the screen changed.
+    var onPage: ((Int) -> Void)?
+    /// Called once the first pages on screen have their images.
+    var onReady: (() -> Void)?
+
+    private let collection: UICollectionView
+    private let sizes: [CGSize]
+    private let cache: PageImageCache
+    private let label: (Int) -> String
+    private(set) var page = 0
+    private var pending: Int?
+    private var laidOutWidth: CGFloat = 0
+    private var ready = false
+
+    init(sizes: [CGSize], cache: PageImageCache, startPage: Int, label: @escaping (Int) -> String) {
+        self.sizes = sizes
+        self.cache = cache
+        self.label = label
+        page = startPage
+        pending = startPage
+        let layout = UICollectionViewFlowLayout()
+        layout.scrollDirection = .vertical
+        layout.minimumLineSpacing = 0
+        layout.minimumInteritemSpacing = 0
+        collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        super.init(frame: .zero)
+        collection.backgroundColor = .clear
+        collection.showsVerticalScrollIndicator = false
+        collection.contentInsetAdjustmentBehavior = .never
+        collection.register(StripCell.self, forCellWithReuseIdentifier: "page")
+        collection.dataSource = self
+        collection.delegate = self
+        collection.prefetchDataSource = self
+        collection.frame = bounds
+        collection.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        addSubview(collection)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, bounds.width != laidOutWidth else { return }
+        // A new width changes every page's height: the page showing stays.
+        laidOutWidth = bounds.width
+        let keep = pending ?? page
+        collection.collectionViewLayout.invalidateLayout()
+        collection.layoutIfNeeded()
+        go(to: keep)
+    }
+
+    /// Scrolls page to the top.
+    func go(to page: Int) {
+        guard sizes.indices.contains(page) else { return }
+        guard laidOutWidth > 0 else {
+            pending = page
+            return
+        }
+        pending = nil
+        collection.layoutIfNeeded()
+        if let frame = collection.layoutAttributesForItem(at: IndexPath(item: page, section: 0))?.frame {
+            let bottom = max(0, collection.contentSize.height - collection.bounds.height)
+            collection.setContentOffset(CGPoint(x: 0, y: min(frame.minY, bottom)), animated: false)
+        }
+        self.page = page
+        onPage?(page)
+    }
+
+    private func pixels(_ page: Int) -> Int {
+        let size = sizes[page]
+        let height = bounds.width * size.height / max(size.width, 1)
+        return Int((max(bounds.width, height) * max(1, traitCollection.displayScale)).rounded(.up))
+    }
+
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { sizes.count }
+
+    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "page", for: indexPath) as! StripCell
+        let page = indexPath.item
+        cell.page = page
+        cell.accessibilityLabel = label(page)
+        let maxPixel = pixels(page)
+        if let image = cache.cached(page: page, maxPixel: maxPixel) {
+            cell.imageView.image = image
+            imageArrived()
+        } else {
+            cell.imageView.image = nil
+            Task { [weak self, weak cell] in
+                let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now)
+                guard let cell, cell.page == page else { return }
+                cell.imageView.image = image
+                self?.imageArrived()
+            }
+        }
+        return cell
+    }
+
+    private func imageArrived() {
+        guard !ready else { return }
+        ready = true
+        onReady?()
+    }
+
+    func collectionView(_ collectionView: UICollectionView, layout: UICollectionViewLayout,
+                        sizeForItemAt indexPath: IndexPath) -> CGSize {
+        let size = sizes[indexPath.item]
+        let width = collectionView.bounds.width
+        return CGSize(width: width, height: max(1, (width * size.height / max(size.width, 1)).rounded()))
+    }
+
+    func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+        for indexPath in indexPaths {
+            cache.prefetch(page: indexPath.item, maxPixel: pixels(indexPath.item), need: .soon)
+        }
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard pending == nil, laidOutWidth > 0 else { return }
+        let probe = CGPoint(x: collection.bounds.midX, y: collection.bounds.minY + collection.bounds.height * 0.25)
+        guard let item = collection.indexPathForItem(at: probe)?.item, item != page else { return }
+        page = item
+        onPage?(item)
+    }
+
+    private final class StripCell: UICollectionViewCell {
+        let imageView = UIImageView()
+        var page = -1
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            imageView.contentMode = .scaleAspectFit
+            imageView.frame = contentView.bounds
+            imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            contentView.addSubview(imageView)
+            isAccessibilityElement = true
+            accessibilityTraits = .image
+        }
+
+        required init?(coder: NSCoder) { nil }
+    }
+}

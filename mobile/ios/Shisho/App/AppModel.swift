@@ -79,7 +79,7 @@ final class AppModel {
     var showingPlayer = false
     /// The ebook open in the reader, which records reading whatever the
     /// screen does, as the player records listening.
-    private(set) var reader: ReaderModel?
+    private(set) var reader: OpenReader?
     /// The tab showing, and each tab's navigation: the pages pushed on it.
     var tab: AppTab = .library
     /// The Related tab a Book opened from the Related panel starts on, as
@@ -431,7 +431,8 @@ final class AppModel {
         showingPlayer = true
     }
 
-    /// Opens a Reflowable File in the reader.
+    /// Opens an ebook File in the reader: foliate's for a Reflowable File,
+    /// the image pager for a Page-based one.
     func read(fileID: Int) {
         guard let session else { return }
         let file: ReadingFile?
@@ -444,11 +445,11 @@ final class AppModel {
         guard let file else { return }
         closeReader()
         showingPlayer = false
-        reader = ReaderModel(file: file, session: session) { [weak self] in
-            Task { await self?.syncNow() }
-        } onGone: { [weak self] in
-            self?.closeReader()
-        }
+        let requestSync: @MainActor () -> Void = { [weak self] in Task { await self?.syncNow() } }
+        let onGone: @MainActor () -> Void = { [weak self] in self?.closeReader() }
+        reader = file.isPageBased
+            ? .pages(PageReaderModel(file: file, session: session, requestSync: requestSync, onGone: onGone))
+            : .reflowable(ReaderModel(file: file, session: session, requestSync: requestSync, onGone: onGone))
     }
 
     /// Closes the reader, recording what was read.
@@ -1248,4 +1249,41 @@ enum Route: Hashable {
     case search
     /// The Download settings, from the Downloads tab's toolbar.
     case downloadSettings
+}
+
+/// The File open in a reader, which records reading whatever the screen
+/// does: a Reflowable File in foliate's reader, or a Page-based one in the
+/// image pager.
+@MainActor
+enum OpenReader {
+    case reflowable(ReaderModel)
+    case pages(PageReaderModel)
+
+    var id: Int {
+        switch self {
+        case .reflowable(let model): model.id
+        case .pages(let model): model.id
+        }
+    }
+
+    func background() {
+        switch self {
+        case .reflowable(let model): model.background()
+        case .pages(let model): model.background()
+        }
+    }
+
+    func foreground() {
+        switch self {
+        case .reflowable(let model): model.foreground()
+        case .pages(let model): model.foreground()
+        }
+    }
+
+    func close() {
+        switch self {
+        case .reflowable(let model): model.close()
+        case .pages(let model): model.close()
+        }
+    }
 }

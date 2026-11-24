@@ -26,6 +26,25 @@ protocol PagerSource: AnyObject {
     /// A turn was asked for whose page isn't laid out yet, or the last one
     /// waiting turned or was dropped.
     func pagerWaiting(_ waiting: Bool)
+
+    /// The pages zoom, as images do: a double tap zooms, and a drag takes
+    /// one finger, leaving two for pinching. Read once, when attached.
+    var pagerZooms: Bool { get }
+    /// The current page is zoomed in: every tap waits to see whether it's
+    /// a double tap, which zooms back out.
+    var pagerIsZoomed: Bool { get }
+    /// A double tap at point, in the current page's points.
+    func pagerDoubleTapped(at point: CGPoint)
+    /// Whether a drag starting sideways at velocityX turns, rather than
+    /// panning a zoomed page that hasn't reached its edge that way.
+    func pagerAllowsDrag(velocityX: CGFloat) -> Bool
+}
+
+extension PagerSource {
+    var pagerZooms: Bool { false }
+    var pagerIsZoomed: Bool { false }
+    func pagerDoubleTapped(at point: CGPoint) {}
+    func pagerAllowsDrag(velocityX: CGFloat) -> Bool { true }
 }
 
 /// The one native pager every File is read in (ADR 0026): pages follow the
@@ -74,6 +93,12 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     private(set) var isDragging = false
     private var revealed = false
     private var touchDownAt: TimeInterval = 0
+    /// Where the last touch came down, in the stage's points.
+    private var touchDownPoint: CGPoint = .zero
+    private var tapRecognizer: UITapGestureRecognizer!
+    private var panRecognizer: UIPanGestureRecognizer!
+    /// Only for a source whose pages zoom.
+    private var doubleTapRecognizer: UITapGestureRecognizer?
 
     /// How close to a link a tap goes to the link instead of turning.
     nonisolated static let linkSlop: CGFloat = 24
@@ -105,6 +130,8 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         // (selection, the edit menu) see the same touches.
         stage.addGestureRecognizer(tap)
         stage.addGestureRecognizer(pan)
+        tapRecognizer = tap
+        panRecognizer = pan
     }
 
     /// Takes the source's three pages.
@@ -117,6 +144,14 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
             page.frame = stage.bounds
             page.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             stage.addSubview(page)
+        }
+        if source.pagerZooms, doubleTapRecognizer == nil {
+            let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
+            doubleTap.numberOfTapsRequired = 2
+            doubleTap.delegate = self
+            stage.addGestureRecognizer(doubleTap)
+            doubleTapRecognizer = doubleTap
+            panRecognizer.maximumNumberOfTouches = 1
         }
         updateAccessibility()
     }
@@ -300,16 +335,36 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
 
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         touchDownAt = touch.timestamp
+        touchDownPoint = touch.location(in: stage)
         return true
     }
 
+    /// Whether a tap at point may be the first of a double tap that zooms:
+    /// in the middle third, which only shows the controls, or anywhere on a
+    /// zoomed page. A tap in an edge third turns at once, so quick taps
+    /// turn pages rather than zoom.
+    private func mayZoom(at point: CGPoint) -> Bool {
+        guard let source, source.pagerZooms else { return false }
+        if source.pagerIsZoomed { return true }
+        return PagerZones.tap(at: point.x / max(1, stage.bounds.width), rightToLeft: rightToLeft) == .chrome
+    }
+
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRequireFailureOf other: UIGestureRecognizer) -> Bool {
+        // Asked once per tap, so only a tap that may start a double tap
+        // waits to see whether it does.
+        recognizer === tapRecognizer && other === doubleTapRecognizer && mayZoom(at: touchDownPoint)
+    }
+
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        if recognizer === doubleTapRecognizer { return mayZoom(at: recognizer.location(in: stage)) }
         // A press held still this long is WebKit's: selection, the edit menu.
         let held = ProcessInfo.processInfo.systemUptime - touchDownAt
         if held >= PagerController.longPress { return false }
         guard let pan = recognizer as? UIPanGestureRecognizer else { return true }
         guard source?.pagerBlocksDrag != true else { return false }
         let velocity = pan.velocity(in: stage)
+        // A zoomed page pans to its edge before a drag turns.
+        if abs(velocity.x) > abs(velocity.y), source?.pagerAllowsDrag(velocityX: velocity.x) == false { return false }
         // Scrolled, the page scrolls itself, and only a clearly sideways
         // drag is the pager's: it brings in the section beside, as a turn
         // brings in a page.
@@ -322,6 +377,11 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         // Taps run alongside WebKit's, which clear a selection; a page drag
         // wins and cancels WebKit's touches.
         recognizer is UITapGestureRecognizer
+    }
+
+    @objc private func doubleTapped(_ recognizer: UITapGestureRecognizer) {
+        source?.pagerSawInput()
+        source?.pagerDoubleTapped(at: recognizer.location(in: current))
     }
 
     @objc private func tapped(_ recognizer: UITapGestureRecognizer) {

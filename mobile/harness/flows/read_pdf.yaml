@@ -1,0 +1,45 @@
+# Open a PDF: its pages are drawn on the device, its outline is the
+# contents, through Shisho's chapters, and its last page is the end
+# (#921).
+appId: ${APP_ID}
+name: Read a PDF and go to a chapter from its outline
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Manual
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Getting Started · Page 1 of 6.*"
+    timeout: 30000
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Troubleshooting
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Troubleshooting · Page 5 of 6.*"
+    timeout: 30000
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 6 of 6 · 100%"
+    timeout: 30000
+# Back takes the reader to where the contents left from.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.back
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 1 of 6.*"
+    timeout: 30000

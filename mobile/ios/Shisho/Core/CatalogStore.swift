@@ -362,6 +362,15 @@ final class CatalogStore: Sendable {
                 t.add(column: "word_count", .integer)
             }
         }
+        // Reading comics and PDFs (#921): this installation's place in a
+        // Page-based File is a 0-based page, and so is another device's
+        // place offered instead.
+        migrator.registerMigration("v10: pages") { db in
+            try db.alter(table: "local_positions") { t in
+                t.add(column: "page", .integer)
+                t.add(column: "offer_page", .integer)
+            }
+        }
         return migrator
     }
 

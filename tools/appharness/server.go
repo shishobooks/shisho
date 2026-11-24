@@ -254,7 +254,7 @@ func (s *server) seed(ctx context.Context, library, password string) error {
 		err = json.NewDecoder(resp.Body).Decode(&page)
 		resp.Body.Close()
 		if err == nil && page.Total >= len(fixtures)+len(annexFixtures) {
-			return nil
+			return dateComicsBehind(ctx, filepath.Join(s.dir, "data.sqlite"))
 		}
 		select {
 		case <-ctx.Done():

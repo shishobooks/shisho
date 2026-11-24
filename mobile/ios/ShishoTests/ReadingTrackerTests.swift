@@ -109,4 +109,22 @@ final class ReadingTrackerTests: XCTestCase {
         }.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["duration"] as? Int
         XCTAssertEqual(duration, 8)
     }
+
+    /// A comic's or a PDF's place is a 0-based page: a turn saves it as
+    /// one, and reaching the last page is the end, sent at once (#921).
+    func testPagesAreSavedAsPages() throws {
+        let tracker = tracker()
+        func page(_ n: Int) -> ReadingPlace {
+            ReadingPlace(locator: .page(n), fraction: Double(n) / 4, atEnd: n == 4, screen: String(n))
+        }
+        tracker.opened(page(0))
+        wait(6)
+        tracker.moved(page(4))
+        let payload = try store.pool.read { try Data.fetchOne($0, sql: "SELECT payload FROM journal WHERE type = 'reading_position'") }
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(payload)) as? [String: Any])
+        XCTAssertEqual(sent["page"] as? Int, 4)
+        XCTAssertNil(sent["cfi"])
+        XCTAssertEqual(sent["at_end"] as? Bool, true)
+        XCTAssertEqual(syncs, 1)
+    }
 }

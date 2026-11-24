@@ -122,6 +122,9 @@ struct ServerPlace: Equatable, Sendable {
     /// gave only a percentage.
     var cfi: String?
     var percentage: Double = 0
+    /// The 0-based page in a Page-based File, or nil where the reader that
+    /// left it gave only a percentage.
+    var page: Int?
     /// The Device's name as its user sees it, or nil for the web and for a
     /// Device deleted since.
     var deviceName: String?
@@ -132,7 +135,7 @@ struct ServerPlace: Equatable, Sendable {
     func isSameMove(as other: ServerPlace?) -> Bool {
         guard let other else { return false }
         return seconds == other.seconds && occurredAt == other.occurredAt && source == other.source && cfi == other.cfi
-            && percentage == other.percentage
+            && page == other.page && percentage == other.percentage
     }
 }
 
@@ -152,6 +155,8 @@ struct LocalPlace: Equatable, Sendable {
     /// The place in an ebook's text; seconds is 0 there.
     var cfi: String?
     var percentage: Double = 0
+    /// The 0-based page in a Page-based File.
+    var page: Int?
 }
 
 /// Where a File opens, across devices (#912): the newest synced place when
@@ -177,10 +182,12 @@ enum PlaceRules {
         return Choice(start: decision.useServer ? server?.seconds ?? 0 : local?.seconds ?? 0, offer: decision.offer)
     }
 
-    /// Where an ebook opens: a CFI, or how far through the book when the
-    /// place has only a percentage, or nil for the start.
+    /// Where an ebook opens: a CFI in a Reflowable File, a 0-based page in
+    /// a Page-based one, or how far through the book when the place has
+    /// only a percentage, or nil for the start.
     enum EbookStart: Equatable, Sendable {
         case cfi(String)
+        case page(Int)
         case fraction(Double)
     }
 
@@ -192,25 +199,35 @@ enum PlaceRules {
         let offer: ServerPlace?
     }
 
-    /// The same rules for an ebook, whose places are CFIs.
+    /// The same rules for an ebook, whose places are CFIs, or pages in a
+    /// Page-based File.
     static func openEbook(local: LocalPlace?, server: ServerPlace?, ownDeviceID: String) -> EbookChoice {
         let decision = decide(local: local, server: server, ownDeviceID: ownDeviceID) { server, local in
-            ebookPlacesDiffer((server.cfi, server.percentage), (local.cfi, local.percentage))
+            ebookPlacesDiffer((server.cfi, server.percentage), (local.cfi, local.percentage), pages: (server.page, local.page))
         }
         if decision.useServer, let server {
-            return EbookChoice(start: server.cfi.map(EbookStart.cfi) ?? .fraction(server.percentage), percentage: server.percentage,
-                               offer: decision.offer)
+            return EbookChoice(start: start(cfi: server.cfi, page: server.page, percentage: server.percentage),
+                               percentage: server.percentage, offer: decision.offer)
         }
         guard let local else { return EbookChoice(start: nil, percentage: 0, offer: decision.offer) }
-        return EbookChoice(start: local.cfi.map(EbookStart.cfi) ?? .fraction(local.percentage), percentage: local.percentage,
+        return EbookChoice(start: start(cfi: local.cfi, page: local.page, percentage: local.percentage), percentage: local.percentage,
                            offer: decision.offer)
+    }
+
+    private static func start(cfi: String?, page: Int?, percentage: Double) -> EbookStart {
+        if let page { return .page(page) }
+        return cfi.map(EbookStart.cfi) ?? .fraction(percentage)
     }
 
     /// Ebook places this close are the same place: one page laid out on
     /// two screens has two CFIs.
     static let ebookSameWithin = 0.005
 
-    static func ebookPlacesDiffer(_ a: (cfi: String?, percentage: Double), _ b: (cfi: String?, percentage: Double)) -> Bool {
+    /// pages are each place's page in a Page-based File: two pages are
+    /// the same place only when they're the same page.
+    static func ebookPlacesDiffer(_ a: (cfi: String?, percentage: Double), _ b: (cfi: String?, percentage: Double),
+                                  pages: (Int?, Int?) = (nil, nil)) -> Bool {
+        if let first = pages.0, let second = pages.1 { return first != second }
         if let cfi = a.cfi, cfi == b.cfi { return false }
         return abs(a.percentage - b.percentage) >= ebookSameWithin
     }
@@ -245,11 +262,12 @@ enum PlaceRules {
         return server
     }
 
-    /// The same for an ebook, where the reader is at a CFI.
-    static func offerWhileReading(server: ServerPlace?, at place: (cfi: String?, percentage: Double), known: Date?,
+    /// The same for an ebook, where the reader is at a CFI, or at page in a
+    /// Page-based File.
+    static func offerWhileReading(server: ServerPlace?, at place: (cfi: String?, percentage: Double), page: Int? = nil, known: Date?,
                                   ownDeviceID: String) -> ServerPlace? {
         guard let server, server.deviceID != ownDeviceID, server.occurredAt > (known ?? .distantPast),
-              ebookPlacesDiffer((server.cfi, server.percentage), place)
+              ebookPlacesDiffer((server.cfi, server.percentage), place, pages: (server.page, page))
         else { return nil }
         return server
     }

@@ -1,0 +1,54 @@
+# Open a CBZ, turn a few pages, kill the app, and reopen it at the same
+# page; the server has the place as a 0-based page (#921).
+appId: ${APP_ID}
+name: Read a comic, kill, and reopen at the same page
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Comic
+# No other flow reads this comic, so it opens at its first page.
+- copyTextFrom:
+    id: reader.progress
+- evalScript: ${output.atOpen = maestro.copiedText}
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          direction: LEFT
+- runFlow: subflows/settled_place.yaml
+- evalScript: ${output.beforeKill = output.settledPlace}
+- assertTrue: ${output.beforeKill != output.atOpen}
+- assertTrue: ${/Page [0-9]+ of 8/.test(output.beforeKill)}
+
+# Killed: every turn already saved the page.
+- stopApp
+- launchApp:
+    stopApp: false
+    permissions: {}
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Comic
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 2000
+    optional: true
+- copyTextFrom:
+    id: reader.progress
+- evalScript: ${output.afterRelaunch = maestro.copiedText}
+- assertTrue: ${output.beforeKill == output.afterRelaunch}
+- runScript:
+    file: scripts/assert_page_position.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harness Comic
+      PAGE: ${output.afterRelaunch}
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed

@@ -1,10 +1,13 @@
 # Opens the Book titled ${TITLE} from the Library grid. Not a flow of its
 # own. It scrolls the Book to the middle of the screen first: at the bottom
-# a title can sit under the tab bar, which then takes the tap.
+# a title can sit under the tab bar, which then takes the tap. The Library
+# has more Books than a phone's screen shows, so the scroll is also what
+# finds a Book further down, once the sync brings it.
 appId: ${APP_ID}
 ---
 - extendedWaitUntil:
-    visible: ${TITLE}
+    visible:
+      id: library.grid
     timeout: 30000
 # A Book in the last row can never reach the middle. Maestro then keeps
 # swiping to center it before it settles for the Book being visible, which

@@ -335,7 +335,7 @@ private struct FileCard: View {
     @State private var download: DownloadRow??
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
-    private var isReflowable: Bool { CatalogStore.reflowableTypes.contains(file.fileType) }
+    private var isReadable: Bool { CatalogStore.readableTypes.contains(file.fileType) }
 
     private var readLabel: String {
         String(localized: "Read \(name)")
@@ -481,7 +481,7 @@ private struct FileCard: View {
                 .accessibilityIdentifier("file.listen.\(file.id)")
                 .modifier(NeedsConnection(available: model.canOpen(fileID: file.id)))
             }
-            if isReflowable {
+            if isReadable {
                 // Every ebook File opens from here; the Read button above
                 // opens the one read last.
                 Button { model.read(fileID: file.id) } label: {
