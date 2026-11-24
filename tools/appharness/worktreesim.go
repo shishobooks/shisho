@@ -21,8 +21,15 @@ import (
 const worktreeSimulatorPrefix = "Shisho Worktree"
 
 // worktreePurposes are the simulators each worktree has: one for the unit
-// tests and one for the flows, so the two can run at once.
-var worktreePurposes = []string{"tests", "flows"}
+// tests and one for the flows, so the two can run at once, and one more for
+// each other shard of `ios -parallel` (flowsPurpose).
+var worktreePurposes = func() []string {
+	purposes := []string{"tests"}
+	for shard := 1; shard <= maxParallelShards; shard++ {
+		purposes = append(purposes, flowsPurpose(shard))
+	}
+	return purposes
+}()
 
 // idleSimulatorShutdown is how long another worktree's simulator stays
 // booted unused before a run shuts it down.
@@ -81,7 +88,7 @@ func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runS
 		if !errors.Is(err, errSimulatorBusy) {
 			return sim, err
 		}
-		fmt.Fprintln(os.Stderr, "appharness: another run in this worktree is using its simulator; using a disposable one")
+		fmt.Fprintln(logOut(ctx), "appharness: another run in this worktree is using its simulator; using a disposable one")
 	}
 	clone, err := cloneSimulator(ctx)
 	if err != nil {
@@ -115,9 +122,15 @@ func simulatorStateDir() (string, error) {
 	return dir, errors.WithStack(os.MkdirAll(dir, 0o755))
 }
 
-func worktreeSimulatorPaths(dir, root, purpose string) worktreeSimulatorFiles {
+// worktreeHash names the worktree at root in its simulators' names and
+// files.
+func worktreeHash(root string) string {
 	sum := sha256.Sum256([]byte(root))
-	hash := hex.EncodeToString(sum[:])[:12]
+	return hex.EncodeToString(sum[:])[:12]
+}
+
+func worktreeSimulatorPaths(dir, root, purpose string) worktreeSimulatorFiles {
+	hash := worktreeHash(root)
 	id := purpose + "-" + hash
 	return worktreeSimulatorFiles{
 		state: filepath.Join(dir, id+".json"),
@@ -244,7 +257,7 @@ func worktreeSimulator(ctx context.Context, root, purpose, bundleID string) (*ru
 			unlockFile(lock)
 		}
 	}()
-	pruneWorktreeSimulators(ctx, dir, paths.state)
+	pruneWorktreeSimulators(ctx, dir, root)
 
 	base, err := baseSimulator(ctx)
 	if err != nil {
@@ -259,7 +272,7 @@ func worktreeSimulator(ctx context.Context, root, purpose, bundleID string) (*ru
 	}
 	udid, err := attempt(false)
 	if err != nil && ctx.Err() == nil {
-		fmt.Fprintf(os.Stderr, "appharness: this worktree's simulator failed (%v); replacing it\n", err)
+		fmt.Fprintf(logOut(ctx), "appharness: this worktree's simulator failed (%v); replacing it\n", err)
 		udid, err = attempt(true)
 	}
 	if err != nil {
@@ -298,7 +311,7 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 	now := time.Now()
 	_ = os.Chtimes(paths.state, now, now)
 	if device.State != "Booted" {
-		fmt.Fprintln(os.Stderr, "appharness: booting this worktree's simulator, which stays booted for later runs")
+		fmt.Fprintln(logOut(ctx), "appharness: booting this worktree's simulator, which stays booted for later runs")
 		if _, err := simctl(ctx, "boot", state.UDID); err != nil {
 			return "", err
 		}
@@ -321,6 +334,29 @@ func resetSimulator(ctx context.Context, udid, bundleID string) error {
 
 // discardWorktreeSimulator deletes the worktree's simulator for purpose,
 // unless a run holds it (errSimulatorBusy).
+// shutdownWorktreeSimulator shuts down the worktree's simulator for purpose,
+// unless a run holds it; the next run boots it again.
+func shutdownWorktreeSimulator(ctx context.Context, root, purpose string) {
+	dir, err := simulatorStateDir()
+	if err != nil {
+		return
+	}
+	paths := worktreeSimulatorPaths(dir, root, purpose)
+	// Without a state file there's no simulator, and taking the lock would
+	// leave an empty lock file behind.
+	if _, err := os.Stat(paths.state); err != nil {
+		return
+	}
+	lock, err := lockFile(paths.lock)
+	if err != nil {
+		return
+	}
+	defer unlockFile(lock)
+	if state := readSimulatorState(paths.state); state.UDID != "" {
+		_, _ = simctl(ctx, "shutdown", state.UDID)
+	}
+}
+
 func discardWorktreeSimulator(root, purpose string) error {
 	dir, err := simulatorStateDir()
 	if err != nil {
@@ -371,7 +407,9 @@ func runCleanup(ctx context.Context, root string) error {
 
 // pruneWorktreeSimulators deletes the simulators of worktrees that are gone,
 // and shuts down those unused for idleSimulatorShutdown, skipping any a run
-// holds. except is the state file of the caller's own.
+// holds. It leaves the flows simulators of the worktree at except alone: a
+// parallel run's shards take them at the same moment, and one pruning
+// another's would push it onto a disposable clone.
 func pruneWorktreeSimulators(ctx context.Context, dir, except string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -380,7 +418,7 @@ func pruneWorktreeSimulators(ctx context.Context, dir, except string) {
 	for _, entry := range entries {
 		statePath := filepath.Join(dir, entry.Name())
 		id, ok := strings.CutSuffix(entry.Name(), ".json")
-		if !ok || statePath == except || !prunable(statePath) {
+		if !ok || !prunable(statePath) || (strings.HasPrefix(id, "flows") && except != "" && readSimulatorState(statePath).Root == except) {
 			continue
 		}
 		lock, err := lockFile(filepath.Join(dir, id+".lock"))
@@ -399,14 +437,14 @@ func pruneWorktreeSimulators(ctx context.Context, dir, except string) {
 		}
 		unlockFile(lock)
 	}
-	removeOrphanSimulators(ctx, dir)
+	removeOrphanSimulators(ctx, dir, except)
 }
 
 // removeOrphanSimulators deletes worktree simulators no state file names,
 // such as one whose deletion failed after its state file went. Each is
 // checked under its worktree's lock, which a run holds from cloning a
 // simulator until its state file names it.
-func removeOrphanSimulators(ctx context.Context, dir string) {
+func removeOrphanSimulators(ctx context.Context, dir, except string) {
 	devices, err := listDevices(ctx)
 	if err != nil {
 		return
@@ -417,6 +455,9 @@ func removeOrphanSimulators(ctx context.Context, dir string) {
 			continue
 		}
 		id := strings.ReplaceAll(purposeAndHash, " ", "-")
+		if except != "" && strings.HasPrefix(id, "flows") && strings.HasSuffix(id, "-"+worktreeHash(except)) {
+			continue
+		}
 		lock, err := lockFile(filepath.Join(dir, id+".lock"))
 		if err != nil {
 			continue

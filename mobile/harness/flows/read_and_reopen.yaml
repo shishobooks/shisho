@@ -1,7 +1,10 @@
 # Open an EPUB, turn a few pages, kill the app, and reopen it at the same
-# place; the server has the place as a CFI too (#919).
+# place, its title naming the chapter there; the server has the place as a
+# CFI too. Then read a page for a while, turn, read another, and close the
+# reader: the Reading Session reaches the server with its time counted per
+# page (#919).
 appId: ${APP_ID}
-name: Read, kill, and reopen at the same place
+name: Read, kill, reopen at the same place, and send a Reading Session
 ---
 - runScript:
     file: scripts/go_online.js
@@ -33,6 +36,7 @@ name: Read, kill, and reopen at the same place
 
 # Killed: every turn already saved the place.
 - stopApp
+- evalScript: ${output.relaunchedAt = Date.now()}
 - launchApp:
     stopApp: false
     permissions: {}
@@ -48,10 +52,88 @@ name: Read, kill, and reopen at the same place
     id: reader.progress
 - evalScript: ${output.afterRelaunch = maestro.copiedText}
 - assertTrue: ${output.beforeKill == output.afterRelaunch}
+# The title names the chapter the book reopens in, before any turn: the
+# chapter the place shows.
+- evalScript: ${output.reopenedIn = output.afterRelaunch.split(' · ')[0]}
+- assertTrue:
+    condition: ${output.reopenedIn.startsWith('Chapter ')}
+    label: The place names the chapter it reopened in
+- runFlow: subflows/show_reader_controls.yaml
+- extendedWaitUntil:
+    visible:
+      id: reader.title
+      text: ${output.reopenedIn + '.*'}
+    timeout: 30000
 # Relaunching synced the place the turns saved, where the app showed it.
 # The script polls the server until the sync lands.
 - runScript:
     file: scripts/assert_read_position.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: The Harness Novel
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed
+
+# Each page counts from 5 seconds, and the session needs 10. The page
+# reopened at has shown since the relaunch; the next counts once the turn
+# has landed, so the flow waits for the place to move and settle first.
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 6000
+    optional: true
+# A stall can drop the turn, or land it after the place read as settled,
+# so the flow turns again while the place still reads as the reopened page.
+# Before turning again it waits a stall's length and looks once more, so a
+# late first turn doesn't get a second one queued behind it.
+- evalScript: ${output.secondPage = output.afterRelaunch}
+- evalScript: ${output.turns = 0}
+- repeat:
+    while:
+      true: ${output.secondPage == output.afterRelaunch}
+    times: 3
+    commands:
+      - runFlow:
+          when:
+            true: ${output.turns > 0}
+          commands:
+            - extendedWaitUntil:
+                visible: __never__
+                timeout: 10000
+                optional: true
+            - runFlow: subflows/settled_place.yaml
+            - evalScript: ${output.secondPage = output.settledPlace}
+      - runFlow:
+          when:
+            true: ${output.secondPage == output.afterRelaunch}
+          commands:
+            - swipe:
+                direction: LEFT
+            - evalScript: ${output.turns = output.turns + 1}
+            - runFlow: subflows/settled_place.yaml
+            - evalScript: ${output.secondPage = output.settledPlace}
+- assertTrue:
+    condition: ${output.secondPage != output.afterRelaunch}
+    label: The turn landed on the next page
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 7000
+    optional: true
+- evalScript: ${output.dwellEnded = Date.now()}
+- runFlow: subflows/show_reader_controls.yaml
+# Closing ends the session, which syncs.
+- tapOn:
+    id: reader.close
+- extendedWaitUntil:
+    visible:
+      id: book.read
+    timeout: 30000
+# The script polls the server until the sync lands, for a session that
+# started after the relaunch and ended after the second page's wait (the
+# one from before the kill can reach the server after the place does), with
+# the place on the second page.
+- runScript:
+    file: scripts/assert_read_session.js
     env:
       CONTROL: ${CONTROL}
       TITLE: The Harness Novel

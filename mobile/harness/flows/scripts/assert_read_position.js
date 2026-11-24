@@ -1,5 +1,6 @@
 // The server has the reader's place in TITLE as a CFI from the Shisho app,
-// as far through the book as the app showed after relaunching.
+// as far through the book as the app showed after relaunching, and notes
+// it in output.reopenedCfi.
 // It polls the server until the check passes or 25 s pass, since the sync
 // can land late on a stalled CI simulator, and records "ok", or what's still
 // wrong, in output.serverCheck for the flow's assertTrue.
@@ -35,6 +36,8 @@ function check() {
         "%",
     );
   }
+  // For assert_read_session.js, which checks the place moves on from it.
+  output.reopenedCfi = reading.cfi;
 }
 
 const deadline = Date.now() + 25000;

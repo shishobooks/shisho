@@ -155,8 +155,8 @@ description = "Run JS unit tests"
 run = "pnpm test:unit"
 
 [tasks."test:scripts"]
-description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, doc reference check, tool version check)"
-run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
+description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, the app checks' path filter, doc reference check, tool version check)"
+run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/app-changes_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
 
 [tasks."test:e2e"]
 description = "Run E2E tests"
@@ -382,6 +382,13 @@ description = "Run the Maestro flows against the iOS app on this worktree's simu
 depends = ["ios:build", "ios:simulator"]
 tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
 run = "go run ./tools/appharness ios"
+
+# No depends: the signoff checks the commit before building it, and a
+# commit that already passed here posts without building.
+[tasks."ios:signoff"]
+description = "Run the iOS unit tests and every Maestro flow on this commit, then post the iOS signoff that CI OK waits for on this repo's pull requests (a commit that already passed here only posts)"
+tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
+run = "go run ./tools/appharness signoff"
 
 [tasks."android:test"]
 description = "Run the Android API types' decode tests"

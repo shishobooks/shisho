@@ -128,7 +128,7 @@ func writeFixtures(ctx context.Context, root, dir string) error {
 	}
 	copyCached := func() error {
 		cached, err := fillFixtureCache(cacheRoot, key, func(made string) error {
-			fmt.Fprintln(os.Stderr, "appharness: making the fixtures, cached in", cacheRoot)
+			fmt.Fprintln(logOut(ctx), "appharness: making the fixtures, cached in", cacheRoot)
 			return makeFixtures(ctx, filepath.Join(made, "library"))
 		})
 		if err != nil {

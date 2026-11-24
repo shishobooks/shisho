@@ -1,13 +1,23 @@
 # Pause, and the session so far reaches the server. Then listen while the
-# server is offline and reconnect: the session reaches the server placed at
-# the time it happened, not when it synced (#912).
+# server is offline, add a Bookmark with a note, close the app, and open it
+# once the server is back: the session and the Bookmark reach the server
+# placed at the time they happened, not when they synced (#912, #916). Then
+# listen, kill the app while it plays, and relaunch: it resumes where it
+# was, and the server has the place too (#912).
 appId: ${APP_ID}
-name: Listen offline and sync later
+name: Listen offline and sync later, then kill and resume
 ---
 - runScript:
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
+# The note goes on the first Bookmark in the list, so the Book starts with
+# none: other flows leave theirs on the server.
+- runScript:
+    file: scripts/clear_bookmarks.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
 - runFlow: subflows/launch_signed_in.yaml
 - runScript:
     file: scripts/note_app_sessions.js
@@ -26,15 +36,14 @@ name: Listen offline and sync later
       id: player.position
       text: ".*0:(0[4-9]|[1-5][0-9])"
     timeout: 30000
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.playPause
+- runFlow: subflows/pause_player.yaml
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.onlinePaused = maestro.copiedText}
 - runScript:
-    file: scripts/note_online_pause.js
+    file: scripts/note_listen_target.js
+    env:
+      FROM: ${output.onlinePaused}
 # The pause sends the session so far; the script polls the server until it
 # lands.
 - runScript:
@@ -59,15 +68,21 @@ name: Listen offline and sync later
 - extendedWaitUntil:
     visible:
       id: player.position
-      text: ${output.offlineTarget}
+      text: ${output.listenTarget}
     timeout: 60000
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.playPause
+- runFlow: subflows/pause_player.yaml
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.paused = maestro.copiedText}
+
+# Bookmark adds one where playback is at once, on a paused player. One tap
+# only: a repeat after a late tap would add a second Bookmark.
+- tapOn:
+    id: player.bookmark
+- runFlow:
+    file: subflows/note_first_bookmark.yaml
+    env:
+      NOTE: Noted offline
 
 # The app is closed, which ends the session, and opened once the server is
 # back: what it kept offline syncs.
@@ -90,6 +105,65 @@ name: Listen offline and sync later
 # The script polls the server until the sync lands.
 - runScript:
     file: scripts/assert_offline_session.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The offline session reached the server
+- runScript:
+    file: scripts/assert_bookmark.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+      NOTE: Noted offline
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The offline Bookmark reached the server with its note
+
+# Listening from the chapter's start (at most 0:02) until at least 12 s on,
+# long enough for a save or two: well before the chapter ends at 2:00, where
+# a stall could carry the place into the next chapter's own clock.
+- tapOn:
+    id: miniplayer.open
+- extendedWaitUntil:
+    visible:
+      id: player.position
+    timeout: 30000
+- runFlow: subflows/rewind_harbor_lights.yaml
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: ".*(0:(1[4-9]|[2-5][0-9])|1:[0-5][0-9])"
+    timeout: 60000
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.beforeKill = maestro.copiedText}
+- evalScript: ${output.seenAt = Date.now()}
+
+# Killed while playing: only the saves every five seconds kept the place.
+- stopApp
+- evalScript: ${output.killedAt = Date.now()}
+- launchApp:
+    stopApp: false
+    permissions: {}
+- extendedWaitUntil:
+    visible:
+      id: miniplayer.open
+    timeout: 30000
+- tapOn:
+    id: miniplayer.open
+- extendedWaitUntil:
+    visible:
+      id: player.position
+    timeout: 30000
+- copyTextFrom:
+    id: player.position
+- evalScript: ${output.afterRelaunch = maestro.copiedText}
+# Relaunching syncs what the last save kept; the script polls the server
+# until it lands.
+- runScript:
+    file: scripts/assert_resumed.js
     env:
       CONTROL: ${CONTROL}
       TITLE: Harbor Lights

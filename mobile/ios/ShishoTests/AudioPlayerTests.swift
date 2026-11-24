@@ -20,7 +20,8 @@ final class AudioPlayerTests: XCTestCase {
         {"entries":[{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Audio","cover_aspect_ratio":"audiobook"}},
          {"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Harbor Lights","sort_title":"Harbor Lights",
           "created_at":"2026-01-01T00:00:00Z","cover_version":"1-1","files":[{"id":5,"file_type":"m4b","file_role":"main","size_bytes":10,
-          "audiobook_duration_seconds":600,"chapters":[]},{"id":6,"file_type":"m4b","file_role":"main","size_bytes":10,
+          "audiobook_duration_seconds":600,"chapters":[{"id":10,"title":"The Harbor","start_timestamp_ms":0},
+          {"id":11,"title":"The Lights","start_timestamp_ms":120000},{"id":12,"title":"The Keeper","start_timestamp_ms":300000}]},{"id":6,"file_type":"m4b","file_role":"main","size_bytes":10,
           "audiobook_duration_seconds":300,"chapters":[]}]}}],
          "cursor":2}
         """))
@@ -29,7 +30,9 @@ final class AudioPlayerTests: XCTestCase {
 
     override func tearDown() async throws {
         player.stop()
-        try? FileManager.default.removeItem(at: session.account.folder)
+        // Its folders, and the File last open and the speeds kept in the
+        // app's defaults.
+        AccountData(accountID: session.account.id).remove()
     }
 
     private func page(_ json: String) throws -> Shishoapp.FeedResponse {
@@ -98,6 +101,30 @@ final class AudioPlayerTests: XCTestCase {
         XCTAssertEqual(AudioPlayer.storedRate(accountID: "another-account", fileID: 5), 1)
     }
 
+    /// The speed buttons step it by 0.1, held to the range.
+    func testSpeedSteps() {
+        player.open(fileID: 5, autoplay: false)
+        for _ in 0..<4 { player.stepRate(by: 1) }
+        XCTAssertEqual(player.rate, 1.4)
+        player.stepRate(by: -1)
+        player.stepRate(by: -1)
+        XCTAssertEqual(player.rate, 1.2)
+        player.setRate(4)
+        player.stepRate(by: 1)
+        XCTAssertEqual(player.rate, 4)
+    }
+
+    /// A File's speed comes back with it at the next launch.
+    func testAStoredSpeedIsRestored() {
+        player.open(fileID: 5, autoplay: false)
+        player.setRate(1.4)
+        let next = AudioPlayer(session: session) {}
+        next.restore()
+        XCTAssertEqual(next.file?.fileID, 5)
+        XCTAssertEqual(next.rate, 1.4, accuracy: 0.001)
+        next.stop()
+    }
+
     /// A Bookmark is made where playback is, through the player, so it's kept
     /// with no screen open.
     func testABookmarkIsMadeWherePlaybackIs() throws {
@@ -107,5 +134,25 @@ final class AudioPlayerTests: XCTestCase {
         let bookmarks = try session.store.pool.read { try CatalogStore.bookmarks($0, fileID: 5) }
         XCTAssertEqual(bookmarks.map(\.seconds), [83])
         XCTAssertEqual(bookmarks.map(\.note), ["here"])
+    }
+
+    /// The chapter buttons move by the File's chapters from where playback
+    /// is: Previous goes to the chapter's start, and to the one before just
+    /// after a start; Next stops at the last.
+    func testChapterButtonsMoveByTheFilesChapters() {
+        player.open(fileID: 5, autoplay: false)
+        player.seek(to: 150)
+        player.previousChapter()
+        XCTAssertEqual(player.position, 120)
+        XCTAssertEqual(player.chapterTitle, "The Lights")
+        player.previousChapter()
+        XCTAssertEqual(player.position, 0)
+        XCTAssertEqual(player.chapterTitle, "The Harbor")
+        player.nextChapter()
+        player.nextChapter()
+        XCTAssertEqual(player.position, 300)
+        XCTAssertEqual(player.chapterTitle, "The Keeper")
+        player.nextChapter()
+        XCTAssertEqual(player.position, 300, "Next in the last chapter stays")
     }
 }

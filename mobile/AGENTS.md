@@ -36,7 +36,7 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 - **Simulator builds sign ad hoc with the team** (`CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=-`), as the tasks do. An unsigned build (`CODE_SIGNING_ALLOWED=NO`) can't write the Keychain, so it signs in and then forgets the sign-in on relaunch.
 - **Signing**: `ios/Config/Shisho.xcconfig` sets the maintainer's team and the bundle id. Someone else copies `Signing.local.xcconfig.example` to the gitignored `Signing.local.xcconfig`.
 - **QA against `mise start:qa`**, a throwaway server seeded with the harness's fixtures, never the dev database. It listens on the LAN too, so a phone can reach it.
-- **The checks run on simulators of their own**, cloned by `tools/appharness` from a base it makes once: each worktree keeps one for `mise ios:test` and one for `mise ios:harness` (`tools/appharness/worktreesim.go`). Never boot or change the base, never QA on the worktree's own simulators (they're named `Shisho Worktree`, and the next run resets them), and don't run tests on a simulator you share with another worktree; use the mise tasks. `mise cleanup` deletes the worktree's simulators before the worktree goes.
+- **The checks run on simulators of their own**, cloned by `tools/appharness` from a base it makes once: each worktree keeps one for `mise ios:test`, one for `mise ios:harness`, and one more for the second half of a parallel run (`tools/appharness/worktreesim.go`). Never boot or change the base, never QA on the worktree's own simulators (they're named `Shisho Worktree`, and the next run resets them), and don't run tests on a simulator you share with another worktree; use the mise tasks. `mise cleanup` deletes the worktree's simulators before the worktree goes.
 
 ## Checks
 
@@ -44,8 +44,16 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 
 - Generated types → `mise lint:apptypes`, then `mise ios:test` (decode tests on the host, app tests on a simulator) and `mise android:test`.
 - App code → `mise ios:test`, which builds the app first.
-- Anything a flow covers → `mise ios:harness`, which needs ffmpeg to make its fixtures when they aren't cached. `-- -keep` keeps the server log and Maestro's screenshots. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
+- Anything a flow covers → `mise ios:harness`, which needs ffmpeg to make its fixtures when they aren't cached. `-- -keep` keeps the server log and Maestro's screenshots. `-- -parallel 2` splits the flows across simulators run at once, each with its own server, for running them all. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
 - The too-old paths → start the server with `SHISHO_DEV_APP_PROTOCOLS` set to the range it should accept: a range above the app's protocol makes the app too old, and one below it makes the server too old for it.
+
+## The signoff
+
+Pull requests from this repository's own branches, other than Dependabot's, don't run the iOS unit tests or flows on GitHub's macOS runners, which take several times longer. `CI OK` waits instead for a commit status that `mise ios:signoff` posts from a Mac once every unit test and flow passes on the commit; `scripts/app-changes.sh` decides which pull requests need it: any that change something other than the web app, docs, and the few other paths it rules out.
+
+- **Run it on the pull request's final commit, pushed, with nothing uncommitted.** A new commit, a merge from master included, needs its own.
+- **Only `mise ios:signoff`, or the workflow the `ios-on-github` label runs, posts that status.** Never post it with `gh api` or touch the passes the signoff records: it tells the maintainer every unit test and flow passed on that commit.
+- **When the checks fail on the Mac for a reason outside the change**, such as its audio output breaking, fix the Mac, not the flows. If that can't wait, the `ios-on-github` label runs the pull request's unit tests and flows on GitHub's runners instead, and again on every push until the label comes off. On a busy Mac, `-- -parallel 1` runs one shard at a time.
 
 ## Keeping runs fast
 
@@ -57,13 +65,31 @@ Agents run these checks many times a ticket, so a few seconds in every flow add 
 - **Move through the app's screens rather than relaunching it**, unless the flow checks what survives a relaunch: launches are slow on CI.
 - **Listen only as long as what the flow checks needs.** Listening is real time: Reading Sessions and the periodic saves of the place are timed by the clock, not the place, so playing faster doesn't shorten a flow that checks them. A flow that needs a place reached, not time listened, skips to it.
 
+## What earns a flow
+
+Every flow runs in every signoff and in master's run on GitHub's runners, so each one adds its time to every app pull request, and the suite only grows. Write a Maestro flow only for what needs the whole system at once:
+
+- **The app and the server together**: what the app sends reaching the server (the journal's changes, Reading Sessions, places), what the server changes reaching the app (an access change, a server set up again), and signing in.
+- **What survives the app's own lifecycle**: a kill and relaunch, going offline and back, signing out with changes not yet sent.
+- **iOS itself, where a unit test would have to fake it**: playing audio, importing from Files.
+
+Everything else goes in the app's unit tests (`ShishoTests`, run by `mise ios:test`): what a screen shows for a given state, settings and their limits, the rules behind a control (what Previous does partway into a chapter, how a sleep timer counts down), and parsing and layout math. Put the rule in a type the test can call, not in the view, as `ReaderSettings`, `ListeningRules` and `SleepTimerRules` do. A unit test has to be written again in Kotlin for Android, while a flow runs on both, but that's still far cheaper than a flow every pull request pays for.
+
+Before adding a flow:
+
+- **Extend a flow that already gets there.** A check on a screen an existing flow already reaches costs seconds; a new flow costs a launch, a sign-in and the walk to that screen.
+- **A ticket's QA checklist is not a list of flows.** It's checked by hand once. Only what a later change could break without anyone noticing, and a unit test can't reach, needs a flow.
+- **Delete a flow its unit tests replace**, in the same change.
+
 ## Writing flows
 
-CI's macOS simulators stall now and then: a view hierarchy read or the app's main thread can freeze for around 10 seconds, so a flow that passes locally can still fail there. When a flow fails on CI, read the timestamps in the Maestro logs of the failed job's `harness-output` artifact before treating the failure as an app bug. CI's runners can also have an older iOS than this Mac: the harness uses the newest iOS runtime installed, and the runner image's can lag a release behind (in `setup-ios`, the simulator cache key lists the image's runtimes). To run the flows on that iOS, install its runtime, create an iPhone simulator on it, run `SHISHO_SIMULATOR_BASE=<its UDID> mise ios:harness`, and delete the simulator afterwards. Write flows to tolerate those stalls:
+GitHub's runners still run the flows after every merge to master, and for pull requests from forks and Dependabot. Their macOS simulators stall now and then: a view hierarchy read or the app's main thread can freeze for around 10 seconds, so a flow that passes locally can still fail there. The signoff runs on a fast Mac that rarely stalls, so a passing signoff doesn't show a flow is safe on GitHub's runners: follow these rules even when the signoff passes. Before merging a new or changed flow, add the `ios-on-github` label once to run it on GitHub's runners, then take the label off. Otherwise master's run after the merge is the first place a stall shows; treat a flow that fails there as a flake to fix, not a run to repeat. When a flow fails on CI, read the timestamps in the Maestro logs of the failed job's `harness-output` artifact before treating the failure as an app bug. CI's runners can also have an older iOS, and an Xcode with a different Swift, than this Mac: the harness uses the newest iOS runtime installed, and the runner image's can lag a release behind (in `setup-ios`, the simulator cache key lists the image's runtimes). To run the flows on that iOS, install its runtime, create an iPhone simulator on it, run `SHISHO_SIMULATOR_BASE=<its UDID> mise ios:harness`, and delete the simulator afterwards. Write flows to tolerate those stalls:
 
-- **Never assert a state that lasts only a few seconds**, such as a short chapter or a narrow window of the playback position. Assert a state that stays put (the last chapter once playback stops), or an open-ended one ("at least 0:12", not "0:12 to 0:19"). To listen for a while from a place that varies, build the pattern from that place, as `scripts/note_online_pause.js` does.
+- **Never assert a state that lasts only a few seconds**, such as a short chapter or a narrow window of the playback position. Assert a state that stays put (the last chapter once playback stops), or an open-ended one ("at least 0:12", not "0:12 to 0:19"). To listen for a while from a place that varies, build the pattern from that place, as `scripts/note_listen_target.js` does, and start from a known place (`subflows/rewind_harbor_lights.yaml`) when the listen could otherwise run into the next chapter.
 - **Wait for the UI with `extendedWaitUntil` and a timeout of at least 30 seconds.** A longer timeout costs nothing when the flow passes, and a 10 to 15 second one fails on a single stall.
 - **Signing in can take most of a minute on CI**, where the server can wait that long for CPU. Both sign-in subflows wait until the app is signed in, so a flow's own waits start from a signed-in app.
 - **Check the server with a script that polls it**, then an `assertTrue` on the verdict the script recorded in `output.serverCheck`, as the `assert_*.js` scripts do: each retries its check, waiting between tries on the harness's control endpoint (Maestro's scripts have no sleep), until it passes or its deadline, set to outlast a stall, passes. A check that can't change while it polls, such as what the app showed, runs once first. Never check after a fixed wait, which costs its whole length when the sync lands at once and fails when a stall outlasts it. Not in a `retry` either: Maestro caps it at three retries, and it only retries Maestro's own failures, so a script that throws fails the flow on its first try.
+- **A stall can drop a tap.** When a later step needs the tap's result, such as a screen it opens or a state it toggles, repeat the tap until the result shows, checking the state before each retry so a late first tap and a retry can't undo each other, as `subflows/pause_player.yaml` does. Use `repeat` with `while`, not `retry`, which taps again without checking whether the first tap landed. A tap that's safe to repeat, such as one opening a sheet, can instead take `retryTapIfNoChange: true`, which taps again when the screen doesn't change; Maestro doesn't by default.
+- **A stall can drop typed text, even a whole field.** Wait for what the typing should produce, such as a search result, and when it doesn't come, clear the field and type it again, a bounded number of times. Sign-in screens go through `subflows/finish_sign_in.yaml`, which types every field again when the screen is still there.
 - **Tap a screen that keeps changing**, such as a playing player, through `subflows/tap_player.yaml`. A plain `tapOn` waits for the screen to settle, and while the position ticks it waits out its whole timeout, which can be longer than the state being checked lasts.
 - **`centerElement` on something that can't reach the middle**, such as a title in the last row, keeps swiping before Maestro settles for it being visible. Give that `scrollUntilVisible` a generous timeout.

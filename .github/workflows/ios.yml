@@ -1,0 +1,104 @@
+name: iOS
+
+# The iOS unit tests and Maestro flows on GitHub's macOS runners, what
+# `mise ios:signoff` runs on a Mac. ci.yml calls this for the pull requests
+# that don't pass them by signoff, for pushes to master and for releases;
+# ios-on-github.yml calls it for a pull request labelled to run them here
+# instead.
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: The commit to check out, when not the event's own (a pull request's merge with master).
+        type: string
+        default: ""
+
+jobs:
+  # The unit tests and the Maestro flows each get a runner: one macOS
+  # runner is too small for two simulators, and the flows' driver times out
+  # beside anything else. setup-ios restores what they'd otherwise rebuild,
+  # the base simulator included.
+  tests:
+    name: iOS unit tests
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: jdx/mise-action@v5
+      - id: setup
+        uses: ./.github/actions/setup-ios
+      - run: mise ios:test
+      - uses: ./.github/actions/save-ios-simulator
+        with:
+          key: ${{ steps.setup.outputs.simulator-key }}
+          hit: ${{ steps.setup.outputs.simulator-hit }}
+          name: ${{ steps.setup.outputs.simulator-name }}
+
+  # Two jobs, split by each flow's time (`ios -shard`, `flowSeconds` in
+  # tools/appharness/shard.go): the whole suite no longer fits one job's
+  # deadline on GitHub's runners. Each extra macOS job is another that can
+  # wait for a runner, and the Free plan runs five at once across every pull
+  # request. GitHub adds the shard to the job's name.
+  flows:
+    name: iOS flows
+    runs-on: macos-26
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: jdx/mise-action@v5
+      - id: setup
+        uses: ./.github/actions/setup-ios
+      # Keyed by the harness's own cache key, so a hit here is a hit there
+      # and the run needs no ffmpeg.
+      - name: Name the harness's fixtures
+        id: fixture-key
+        run: |
+          key=$(go run ./tools/appharness fixtures -key)
+          test -n "$key"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+      - name: Restore the harness's fixtures
+        id: fixtures
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/shisho-appharness/fixtures
+          key: appharness-fixtures-${{ steps.fixture-key.outputs.key }}
+      # The harness makes its M4B fixture with ffmpeg. Homebrew skips
+      # updating itself first, which the runner image's Homebrew doesn't need.
+      - name: Install ffmpeg
+        if: steps.fixtures.outputs.cache-hit != 'true'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: brew install ffmpeg
+      # Well inside the job's limit, so a hang still leaves time to upload
+      # the harness output below.
+      - name: Run the Maestro flows
+        timeout-minutes: 50
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/2
+      - uses: ./.github/actions/save-ios-simulator
+        with:
+          key: ${{ steps.setup.outputs.simulator-key }}
+          hit: ${{ steps.setup.outputs.simulator-hit }}
+          name: ${{ steps.setup.outputs.simulator-name }}
+      # The server log and Maestro's own log and screenshots, for a failed
+      # or timed-out run. Uploading them takes most of a minute, so a passing
+      # run skips it.
+      - name: Keep the harness output
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v7
+        with:
+          name: harness-output-${{ matrix.shard }}
+          path: ${{ runner.temp }}/harness
+          if-no-files-found: ignore
+          retention-days: 7
+          # Maestro writes its log and screenshots under .maestro.
+          include-hidden-files: true

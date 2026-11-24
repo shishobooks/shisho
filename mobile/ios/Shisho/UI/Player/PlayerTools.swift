@@ -42,7 +42,7 @@ struct PlayerToolbar: View {
     private var speed: some View {
         VStack(spacing: 5) {
             HStack(spacing: 0) {
-                Button { player.setRate(player.rate - PlaybackSpeed.step) } label: {
+                Button { player.stepRate(by: -1) } label: {
                     Icon(.minus, size: 15, relativeTo: nil).frame(width: 32, height: 30).hitArea(height: 30)
                 }
                 .disabled(player.rate <= PlaybackSpeed.range.lowerBound)
@@ -59,7 +59,7 @@ struct PlayerToolbar: View {
                     .contentTransition(.numericText())
                     .accessibilityLabel("Speed \(PlaybackSpeed.label(player.rate))")
                     .accessibilityIdentifier("player.speed")
-                Button { player.setRate(player.rate + PlaybackSpeed.step) } label: {
+                Button { player.stepRate(by: 1) } label: {
                     Icon(.plus, size: 15, relativeTo: nil).frame(width: 32, height: 30).hitArea(height: 30)
                 }
                 .disabled(player.rate >= PlaybackSpeed.range.upperBound)

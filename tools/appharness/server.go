@@ -50,7 +50,7 @@ func startServer(ctx context.Context, root, dir, host string, port int, env ...s
 	binary := filepath.Join(dir, "shisho")
 	build := exec.CommandContext(ctx, "go", "build", "-o", binary, "./cmd/api")
 	build.Dir = root
-	build.Stdout, build.Stderr = os.Stdout, os.Stderr
+	build.Stdout, build.Stderr = logOut(ctx), logOut(ctx)
 	if err := build.Run(); err != nil {
 		return nil, errors.Wrap(err, "build the server")
 	}
@@ -113,13 +113,40 @@ func (s *server) running() bool {
 	return s.cmd != nil && s.cmd.Process != nil && s.cmd.ProcessState == nil
 }
 
+// handedOut are the ports freePort has given this process's servers, so
+// the shards of a parallel run, starting together, never get the same one.
+var handedOut = struct {
+	sync.Mutex
+	ports map[int]bool
+}{ports: map[int]bool{}}
+
+// freePort returns a port nothing listens on, which the caller then binds;
+// one it gave out before is never given again.
 func freePort(ctx context.Context) (int, error) {
-	listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
-	if err != nil {
-		return 0, errors.WithStack(err)
+	handedOut.Lock()
+	defer handedOut.Unlock()
+	return pickPort(handedOut.ports, func() (int, error) {
+		listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
+		if err != nil {
+			return 0, errors.WithStack(err)
+		}
+		defer listener.Close()
+		return listener.Addr().(*net.TCPAddr).Port, nil
+	})
+}
+
+// pickPort takes ports from next until one isn't in given, and adds it.
+func pickPort(given map[int]bool, next func() (int, error)) (int, error) {
+	for {
+		port, err := next()
+		if err != nil {
+			return 0, err
+		}
+		if !given[port] {
+			given[port] = true
+			return port, nil
+		}
 	}
-	defer listener.Close()
-	return listener.Addr().(*net.TCPAddr).Port, nil
 }
 
 func (s *server) waitHealthy(ctx context.Context) error {
