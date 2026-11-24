@@ -26,6 +26,10 @@ struct RootView: View {
             if let reader = model.reader {
                 ReaderView(model: reader) { model.closeReader() }
                     .id(reader.id)
+                    // Slides in as one piece: without it, the bars and a
+                    // message the reader shows as it opens appear in place
+                    // at once while the page slides up under them.
+                    .geometryGroup()
                     .transition(.move(edge: .bottom))
                     .zIndex(1)
             }

@@ -46,6 +46,8 @@ struct MainTabs: View {
 /// goes back to its first screen, as a native tab bar does.
 struct AppTabBar: View {
     @Environment(AppModel.self) private var model
+    /// Downloads on their way, counted on the Downloads tab.
+    @State private var downloading: Int?
     /// Its height above the bottom safe area, which screens leave clear.
     static let height: CGFloat = 53
 
@@ -66,13 +68,17 @@ struct AppTabBar: View {
             tabs
         }
         .animation(.easeOut(duration: 0.25), value: model.connection)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloading) { db in
+            try CatalogStore.downloadingCount(db)
+        }
     }
 
     private var tabs: some View {
         HStack(spacing: 0) {
             item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
             item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
-            item(.downloads, String(localized: "Downloads"), icon: .download, identifier: "tab.downloads")
+            item(.downloads, String(localized: "Downloads"), icon: .download, identifier: "tab.downloads",
+                 badge: downloading ?? 0)
         }
         .padding(.top, 7)
         .padding(.bottom, 2)
@@ -94,7 +100,7 @@ struct AppTabBar: View {
         .dynamicTypeSize(.large)
     }
 
-    private func item(_ tab: AppTab, _ title: String, icon: Lucide, identifier: String) -> some View {
+    private func item(_ tab: AppTab, _ title: String, icon: Lucide, identifier: String, badge: Int = 0) -> some View {
         let selected = model.tab == tab
         return Button {
             if selected {
@@ -107,6 +113,14 @@ struct AppTabBar: View {
             VStack(spacing: 3) {
                 Icon(icon, size: 24, relativeTo: nil)
                     .frame(height: 26)
+                    .overlay(alignment: .topTrailing) {
+                        if badge > 0 {
+                            TabBadge(count: badge)
+                                .offset(x: 12, y: -4)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: badge > 0)
                 Text(title)
                     .font(.geist(size: 10.5, relativeTo: .caption2, weight: .medium))
             }
@@ -119,8 +133,30 @@ struct AppTabBar: View {
             Label(verbatim: title, menuIcon: icon)
         }
         .accessibilityLabel(title)
+        .accessibilityValue(badge > 0 ? String(localized: "\(badge) downloading") : "")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// The count on a tab, such as Downloads on their way, in the primary
+/// color, as the web app's badges are.
+private struct TabBadge: View {
+    let count: Int
+
+    var body: some View {
+        Text(count > 99 ? "99+" : String(count))
+            .font(.geist(size: 11, relativeTo: .caption2, weight: .semibold))
+            .monospacedDigit()
+            // Geist's digits sit a little low in their line; up to the
+            // circle's middle.
+            .offset(y: -0.5)
+            .foregroundStyle(Theme.primaryForeground)
+            .padding(.horizontal, 5)
+            .frame(minWidth: 18, minHeight: 18)
+            .background(Theme.primary, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.background, lineWidth: 1.5))
+            .accessibilityHidden(true)
     }
 }
 

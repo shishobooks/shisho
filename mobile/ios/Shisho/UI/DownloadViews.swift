@@ -53,6 +53,8 @@ struct DownloadControl: View {
                 .disabled(!supported)
                 .accessibilityLabel(supported ? String(localized: "Download \(label)") : String(localized: "Download \(label), not supported in this version of the app"))
                 .accessibilityValue(DownloadWords.status(status) ?? "")
+                // Downloading needs the server, as listening and reading do.
+                .modifier(NeedsConnection(available: !supported || model.connection == .online))
             case .waiting, .running:
                 Button { model.session?.downloads.remove([fileID]) } label: {
                     DownloadRing(fraction: { if case .running(let fraction) = status { return fraction } else { return nil } }())
@@ -213,12 +215,14 @@ struct DownloadAllButton: View {
         .accessibilityLabel(files.missing == 0 ? String(localized: "All downloaded") : String(localized: "Download All"))
         .accessibilityValue(files.missing == 0 ? "" : String(AttributedString(localized: "^[\(files.missing) file](inflect: true)").characters))
         .accessibilityIdentifier("downloadAll")
+        .modifier(NeedsConnection(available: files.missing == 0 || model.connection == .online))
     }
 }
 
-/// Dims a control for a File that isn't on the device while the server
-/// can't be reached, as music apps grey out what isn't downloaded. A tap
-/// still opens it, to say why it can't play or open.
+/// Turns off a control that needs the server while it can't be reached,
+/// such as Listen for an audiobook that isn't downloaded, in the web app's
+/// disabled style: half opacity, and no taps. The strip above the tabs
+/// says why.
 struct NeedsConnection: ViewModifier {
     let available: Bool
 
@@ -227,8 +231,9 @@ struct NeedsConnection: ViewModifier {
             content
         } else {
             content
-                .opacity(0.45)
-                .accessibilityHint(String(localized: "Not downloaded, and needs a connection"))
+                .disabled(true)
+                .opacity(0.5)
+                .accessibilityHint(String(localized: "Needs a connection to your server"))
         }
     }
 }
@@ -508,7 +513,9 @@ private struct DownloadRowView: View {
         HStack(spacing: 12) {
             Button { model.push(.book(item.book)) } label: {
                 HStack(spacing: 12) {
-                    CoverView(book: item.book, width: item.fileType == "m4b" ? 44 : 34)
+                    // The File's own cover, so the row shows the edition it is.
+                    CoverView(book: item.book, file: CoverFile(id: item.fileID, fileType: item.fileType, coverVersion: item.coverVersion),
+                              width: item.fileType == "m4b" ? 44 : 34)
                         .frame(width: 44)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.book.title)

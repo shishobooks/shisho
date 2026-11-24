@@ -251,9 +251,12 @@ struct DiagnosticsSheet: View {
                 }
                 ToolbarItem(placement: .primaryAction) {
                     if let file {
+                        // Sized as the other bar buttons' icons, so it sits in the
+                        // middle of its circle.
                         ShareLink(item: file) {
-                            Label("Share", menuIcon: .share)
+                            Icon(.share, size: 20, relativeTo: nil)
                         }
+                        .accessibilityLabel("Share")
                         .accessibilityIdentifier("diagnostics.share")
                     }
                 }

@@ -213,6 +213,7 @@ struct FileView: View {
                             Label(verbatim: supported ? String(localized: "Download") : String(localized: "Not supported"), icon: .download)
                         }
                         .disabled(!supported)
+                        .modifier(NeedsConnection(available: !supported || model.connection == .online))
                         .accessibilityLabel(supported ? String(localized: "Download \(file.label)")
                                             : String(localized: "Download \(file.label), not supported in this version of the app"))
                     case .waiting, .running:

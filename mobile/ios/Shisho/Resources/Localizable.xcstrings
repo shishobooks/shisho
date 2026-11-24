@@ -162,6 +162,9 @@
         }
       }
     },
+    "%lld downloading" : {
+
+    },
     "%lld of %lld" : {
       "localizations" : {
         "en" : {
@@ -749,6 +752,9 @@
     "Narrow" : {
 
     },
+    "Needs a connection to your server" : {
+
+    },
     "Never" : {
 
     },
@@ -801,9 +807,6 @@
 
     },
     "No tags found." : {
-
-    },
-    "Not downloaded, and needs a connection" : {
 
     },
     "Not supported" : {

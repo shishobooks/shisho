@@ -36,6 +36,9 @@ struct StoredDownload: Equatable, Identifiable, Sendable {
     let state: DownloadState
     let sizeBytes: Int
     let error: String?
+    /// Keys the File's own cover, which shows its edition; empty when it
+    /// has none and shows its Book's.
+    var coverVersion = ""
 }
 
 extension CatalogStore {
@@ -99,6 +102,11 @@ extension CatalogStore {
             """)
     }
 
+    /// How many Downloads are on their way, for the Downloads tab's badge.
+    static func downloadingCount(_ db: Database) throws -> Int {
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM downloads WHERE state = 'queued'") ?? 0
+    }
+
     /// Downloads whose File isn't in the catalog copy anymore: deleted on
     /// the server, or in a Library the user lost.
     static func orphanedDownloads(_ db: Database) throws -> [Int] {
@@ -109,7 +117,7 @@ extension CatalogStore {
     /// tab.
     static func storedDownloads(_ db: Database) throws -> [StoredDownload] {
         let rows = try Row.fetchAll(db, sql: """
-            SELECT d.file_id, d.file_type, d.state, d.size_bytes, d.error, f.display_name, f.book_id
+            SELECT d.file_id, d.file_type, d.state, d.size_bytes, d.error, f.display_name, f.book_id, f.cover_version
             FROM downloads d JOIN book_files f ON f.id = d.file_id
             ORDER BY d.requested_at DESC, d.file_id
             """)
@@ -124,7 +132,7 @@ extension CatalogStore {
             return StoredDownload(fileID: row["file_id"], book: book, fileType: type,
                                   label: name.isEmpty ? FileTypes.label(type) : name,
                                   state: DownloadState(rawValue: row["state"]) ?? .failed, sizeBytes: row["size_bytes"],
-                                  error: row["error"])
+                                  error: row["error"], coverVersion: row["cover_version"])
         }
     }
 

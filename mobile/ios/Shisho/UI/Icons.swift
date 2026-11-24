@@ -57,7 +57,7 @@ enum Lucide: String, CaseIterable {
     case search
     case server
     case settings
-    case share = "share-2"
+    case share
     case skipBack = "skip-back"
     case skipForward = "skip-forward"
     case square
