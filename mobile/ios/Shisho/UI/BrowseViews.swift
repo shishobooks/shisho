@@ -50,6 +50,7 @@ struct ResourceListView: View {
 
     @State private var items: [ResourceSummary]?
     @State private var filter = ""
+    @Environment(\.appTab) private var tab
 
     private var shown: [ResourceSummary] {
         let all = items ?? []
@@ -86,7 +87,9 @@ struct ResourceListView: View {
                     } else {
                         LazyVStack(spacing: 8) {
                             ForEach(shown) { item in
-                                NavigationLink(value: Route.resource(kind, id: item.id, name: item.name)) {
+                                // Through the model, which closes the filter's search
+                                // first (TabNavigation).
+                                Button { model.push(.resource(kind, id: item.id, name: item.name)) } label: {
                                     ResourceRow(item: item, kind: kind)
                                 }
                                 .buttonStyle(PressableStyle())
@@ -101,7 +104,7 @@ struct ResourceListView: View {
             .miniPlayerClearance()
         }
         .background(Theme.background)
-        .searchable(text: $filter, prompt: Text("Search \(kind.title.lowercased())"))
+        .searchable(text: $filter, isPresented: model.searchActive(on: tab), prompt: Text("Search \(kind.title.lowercased())"))
         .navigationTitle(kind.title)
         .navigationBarTitleDisplayMode(.large)
         .refreshable { await model.syncNow() }
@@ -117,7 +120,7 @@ struct ResourceListView: View {
         let column = GridItem(.fixed(layout.cellWidth), spacing: GridLayout.spacing, alignment: .top)
         return LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(shown) { item in
-                NavigationLink(value: Route.resource(.series, id: item.id, name: item.name)) {
+                Button { model.push(.resource(.series, id: item.id, name: item.name)) } label: {
                     SeriesCard(item: item, width: layout.cellWidth)
                 }
                 .buttonStyle(PressableStyle())
