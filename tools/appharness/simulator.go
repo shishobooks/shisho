@@ -119,7 +119,7 @@ func bootQuietly(ctx context.Context, run simctlFunc, udid string, afterBoot tim
 	ctx, cancel := context.WithTimeout(ctx, afterBoot)
 	defer cancel()
 	if !quietSimulator(ctx, run, udid) {
-		fmt.Fprintln(os.Stderr, "appharness: couldn't stop the simulator's background services; it may download iOS assets")
+		fmt.Fprintln(logOut(ctx), "appharness: couldn't stop the simulator's background services; it may download iOS assets")
 	}
 	return nil
 }
@@ -466,7 +466,7 @@ func takePreparedClone(ctx context.Context) (*simulatorClone, bool) {
 			removeSimulator(udid)
 			return nil, false
 		}
-		fmt.Fprintln(os.Stderr, "appharness: using the simulator booted while the app built")
+		fmt.Fprintln(logOut(ctx), "appharness: using the simulator booted while the app built")
 		return &simulatorClone{UDID: udid}, true
 	}
 	return nil, false

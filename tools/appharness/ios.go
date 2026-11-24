@@ -19,18 +19,33 @@ import (
 	"github.com/pkg/errors"
 )
 
+// defaultFlowsDir is the suite every run takes unless told otherwise.
+const defaultFlowsDir = "mobile/harness/flows"
+
+// iosOptions are `ios`'s flags.
+type iosOptions struct {
+	app, flows, out, shard string
+	keep                   bool
+	parallel               int
+}
+
 func runIOS(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("ios", flag.ExitOnError)
-	app := flags.String("app", defaultAppPath, "the app built for the simulator")
-	flowDir := flags.String("flows", "mobile/harness/flows", "folder of Maestro flows to run")
-	keep := flags.Bool("keep", false, "keep the run's folder (server log, database, Maestro output) for debugging")
-	out := flags.String("out", "", "make the run's folder here, and keep it")
-	shard := flags.String("shard", "", "run only this shard of the flows, as i/n (CI's parallel jobs)")
-	parallel := flags.Int("parallel", 1, fmt.Sprintf("split the flows into this many shards run at once, each with its own simulator and server (at most %d)", maxParallelShards))
+	var o iosOptions
+	flags.StringVar(&o.app, "app", defaultAppPath, "the app built for the simulator")
+	flags.StringVar(&o.flows, "flows", defaultFlowsDir, "folder of Maestro flows to run")
+	flags.BoolVar(&o.keep, "keep", false, "keep the run's folder (server log, database, Maestro output) for debugging")
+	flags.StringVar(&o.out, "out", "", "make the run's folder here, and keep it")
+	flags.StringVar(&o.shard, "shard", "", "run only this shard of the flows, as i/n (CI's parallel jobs)")
+	flags.IntVar(&o.parallel, "parallel", 1, fmt.Sprintf("split the flows into this many shards run at once, each with its own simulator and server (at most %d)", maxParallelShards))
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	shards, err := parallelShards(*parallel, *shard)
+	return runIOSWith(ctx, o)
+}
+
+func runIOSWith(ctx context.Context, o iosOptions) error {
+	shards, err := parallelShards(o.parallel, o.shard)
 	if err != nil {
 		return err
 	}
@@ -38,7 +53,18 @@ func runIOS(ctx context.Context, args []string) error {
 	if err != nil {
 		return errors.WithStack(err)
 	}
-	appPath, err := filepath.Abs(*app)
+	flows, err := filepath.Abs(o.flows)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	// A shard may come up empty, but never the whole suite: Maestro would
+	// then run nothing and pass.
+	if suite, err := topLevelFlows(flows); err != nil {
+		return err
+	} else if len(suite) == 0 {
+		return errors.Errorf("no flows in %s", flows)
+	}
+	appPath, err := filepath.Abs(o.app)
 	if err != nil {
 		return errors.WithStack(err)
 	}
@@ -46,12 +72,8 @@ func runIOS(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	flows, err := filepath.Abs(*flowDir)
-	if err != nil {
-		return errors.WithStack(err)
-	}
 	sweepLeftoverRunDirs()
-	run := flowRun{root: root, appPath: appPath, appID: appID, flows: flows, out: *out, keep: *keep}
+	run := flowRun{root: root, appPath: appPath, appID: appID, flows: flows, out: o.out, keep: o.keep}
 	if len(shards) == 1 {
 		run.shard, run.purpose, run.stdout, run.stderr = shards[0], flowsPurpose(1), os.Stdout, os.Stderr
 		return runFlows(ctx, run)
@@ -69,9 +91,13 @@ type flowRun struct {
 	out            string
 	keep           bool
 	stdout, stderr io.Writer
+	// shutdownAfter shuts the simulator down once the run ends, for one only
+	// a parallel run uses, which would otherwise hold its memory for no one.
+	shutdownAfter bool
 }
 
 func runFlows(ctx context.Context, r flowRun) error {
+	ctx = withLog(ctx, r.stderr)
 	flowArgs := []string{r.flows}
 	if r.shard != "" {
 		var err error
@@ -137,6 +163,10 @@ func runFlows(ctx context.Context, r flowRun) error {
 		return err
 	}
 	defer sim.Release()
+	if r.shutdownAfter {
+		// Runs before Release, so no other run takes it mid-shutdown.
+		defer func() { _, _ = simctl(context.WithoutCancel(ctx), "shutdown", sim.UDID) }()
+	}
 	if _, err := simctl(ctx, "install", sim.UDID, appPath); err != nil {
 		return err
 	}

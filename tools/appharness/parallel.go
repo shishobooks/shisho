@@ -50,14 +50,16 @@ func parallelShards(parallel int, shard string) ([]string, error) {
 // runParallel runs one flowRun per shard at once, each on its own
 // simulator, server, and folder (under r.out, when set, as shard-i), with
 // its output's lines labelled by shard. Every shard runs to the end, so a
-// failure in one still shows the other's results.
+// failure in one still shows the other's results. The first shard's
+// simulator is the worktree's everyday one and stays booted; the others are
+// shut down after.
 func runParallel(ctx context.Context, r flowRun, shards []string) error {
 	var mu sync.Mutex
 	errs := make([]error, len(shards))
 	var wg sync.WaitGroup
 	for i, shard := range shards {
 		run := r
-		run.shard, run.purpose = shard, flowsPurpose(i+1)
+		run.shard, run.purpose, run.shutdownAfter = shard, flowsPurpose(i+1), i > 0
 		if r.out != "" {
 			run.out = filepath.Join(r.out, "shard-"+strconv.Itoa(i+1))
 		}

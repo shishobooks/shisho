@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -13,10 +15,27 @@ func TestEachParallelShardHasItsOwnWorktreeSimulator(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "flows", flowsPurpose(1))
 	assert.Equal(t, "flows-2", flowsPurpose(2))
-	for shard := 1; shard <= maxParallelShards; shard++ {
-		// So `mise cleanup` deletes it too.
-		assert.Contains(t, worktreePurposes, flowsPurpose(shard))
+}
+
+func TestTheShardsOfARunNeverShareAServerPort(t *testing.T) {
+	t.Parallel()
+	seen := map[int]bool{}
+	for range 20 {
+		port, err := freePort(t.Context())
+		require.NoError(t, err)
+		assert.False(t, seen[port], "port %d handed out twice", port)
+		seen[port] = true
 	}
+}
+
+func TestARunRefusesAFolderWithNoFlows(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("flows: []\n"), 0o600))
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "subflows"), 0o755))
+	err := runIOSWith(t.Context(), iosOptions{app: "missing.app", flows: dir, parallel: 1})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no flows in")
 }
 
 func TestParallelShardsLabelEachWholeLine(t *testing.T) {
@@ -53,7 +72,7 @@ func TestALabelWriterFlushesAnUnfinishedLastLine(t *testing.T) {
 	assert.Equal(t, "[1/2] no newline\n", out.String())
 }
 
-func TestParallelRunsRefuseAShard(t *testing.T) {
+func TestParallelShards(t *testing.T) {
 	t.Parallel()
 	_, err := parallelShards(2, "1/2")
 	require.Error(t, err)

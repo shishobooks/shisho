@@ -44,9 +44,16 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 
 - Generated types → `mise lint:apptypes`, then `mise ios:test` (decode tests on the host, app tests on a simulator) and `mise android:test`.
 - App code → `mise ios:test`, which builds the app first.
-- Anything a flow covers → `mise ios:harness`, which needs ffmpeg to make its fixtures when they aren't cached. `-- -keep` keeps the server log and Maestro's screenshots. `-- -parallel 2` splits the flows across two simulators at once, each with its own server, for about half the time when running them all. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
-- Before a pull request merges → `mise ios:signoff` on its final commit, with nothing uncommitted. It runs every flow, split across two simulators, and posts the commit status that `CI OK` waits for: this repository's own pull requests don't run the flows on GitHub's macOS runners, which take several times longer (`app-changes` in `.github/workflows/ci.yml`). `CI OK` waits for it, so run it once the commit is pushed. A run before pushing records the pass here, and running it again after the push posts it without running the flows again. A signoff that lands after `CI OK` gave up waiting reruns it. A new commit, a merge from master included, needs its own signoff.
+- Anything a flow covers → `mise ios:harness`, which needs ffmpeg to make its fixtures when they aren't cached. `-- -keep` keeps the server log and Maestro's screenshots. `-- -parallel 2` splits the flows across simulators run at once, each with its own server, for running them all. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
 - The too-old paths → start the server with `SHISHO_DEV_APP_PROTOCOLS` set to the range it should accept: a range above the app's protocol makes the app too old, and one below it makes the server too old for it.
+
+## The signoff
+
+This repository's own pull requests don't run the flows on GitHub's macOS runners, which take several times longer. `CI OK` waits instead for a commit status that `mise ios:signoff` posts from a Mac once every flow passes on the commit; `app-changes` in `.github/workflows/ci.yml` decides which pull requests need it.
+
+- **Run it on the pull request's final commit, pushed, with nothing uncommitted.** A new commit, a merge from master included, needs its own.
+- **Only `mise ios:signoff` posts that status.** Never post it with `gh api` or touch the passes it records: it tells the maintainer every flow passed on that commit.
+- **When the flows fail on the Mac for a reason outside the change**, such as its audio output breaking, fix the Mac, not the flows. If that can't wait, the `ios-flows-on-github` label runs the pull request's flows on GitHub's runners instead. On a busy Mac, `-- -parallel 1` runs one shard at a time.
 
 ## Keeping runs fast
 

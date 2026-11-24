@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -16,7 +16,7 @@ import (
 
 // The signoff is how a pull request from this repository passes the iOS
 // flows: they run here, on a Mac of the maintainer's, and a commit status
-// on the tested commit says so. `CI OK` (.github/workflows/ci.yml) looks for
+// on the tested commit says so. `CI OK` (.github/workflows/ci.yml) waits for
 // that status instead of running the flows on GitHub's runners, which take
 // several times longer. Nothing reaches this Mac from GitHub: only accounts
 // with write access can post a status, and a fork's pull request still runs
@@ -36,8 +36,11 @@ const signoffPassesKept = 30 * 24 * time.Hour
 // commit that already passed here only posts. Posting also reruns a
 // `CI OK` that failed only for want of the signoff.
 func runSignoff(ctx context.Context, args []string) error {
-	if len(args) > 0 {
-		return errors.New("signoff takes no arguments: it runs every flow")
+	flags := flag.NewFlagSet("signoff", flag.ExitOnError)
+	keep := flags.Bool("keep", false, "keep each shard's folder (server log, database, Maestro output) for debugging")
+	parallel := flags.Int("parallel", maxParallelShards, "how many shards of the flows run at once; 1 on a busy Mac")
+	if err := flags.Parse(args); err != nil {
+		return err
 	}
 	root, err := os.Getwd()
 	if err != nil {
@@ -54,12 +57,18 @@ func runSignoff(ctx context.Context, args []string) error {
 	if hasSignoffPass(passes, sha) {
 		fmt.Fprintf(os.Stderr, "appharness: the flows already passed on %s here\n", short(sha))
 	} else {
-		// Split across simulators, which takes roughly half the time.
-		if err := runIOS(ctx, []string{"-parallel", strconv.Itoa(maxParallelShards)}); err != nil {
+		// Built only now that the commit is known to be clean, so the app
+		// the flows test is the commit's. The simulator boots alongside.
+		if err := runCommand(ctx, root, "mise", "run", "ios:build", ":::", "ios:simulator"); err != nil {
+			return errors.Wrap(err, "build the app")
+		}
+		if err := runIOSWith(ctx, iosOptions{
+			app: defaultAppPath, flows: defaultFlowsDir, keep: *keep, parallel: *parallel,
+		}); err != nil {
 			return err
 		}
 		// The run tested the checkout, so it only vouches for the commit if
-		// nothing changed while it ran.
+		// nothing changed while it built and ran.
 		after, err := cleanHead(ctx, root)
 		if err != nil {
 			return errors.Wrap(err, "the checkout changed during the run")
@@ -99,12 +108,12 @@ func runSignoff(ctx context.Context, args []string) error {
 // or untracked files: the build picks up untracked files too, so a run with
 // either wouldn't be testing the commit the signoff names.
 func cleanHead(ctx context.Context, root string) (string, error) {
-	status, err := git(ctx, root, "status", "--porcelain")
+	status, err := git(ctx, root, "status", "--porcelain", "--untracked-files=normal")
 	if err != nil {
 		return "", err
 	}
 	if strings.TrimSpace(status) != "" {
-		return "", errors.Errorf("commit or remove these first, since the signoff vouches for a commit:\n%s", status)
+		return "", errors.Errorf("the signoff vouches for a commit, so the checkout must hold nothing else. Commit these, or set them aside with a named `git stash push -u -m`; never delete files you didn't make:\n%s", status)
 	}
 	sha, err := git(ctx, root, "rev-parse", "HEAD")
 	if err != nil {
@@ -116,9 +125,11 @@ func cleanHead(ctx context.Context, root string) (string, error) {
 func git(ctx context.Context, root string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = root
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", errors.Wrapf(err, "git %s", strings.Join(args, " "))
+		return "", errors.Wrapf(err, "git %s: %s", strings.Join(args, " "), strings.TrimSpace(stderr.String()))
 	}
 	return string(out), nil
 }
@@ -131,9 +142,17 @@ func gh(ctx context.Context, args ...string) ([]byte, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return out, errors.Errorf("gh %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return out, errors.Wrapf(err, "gh %s: %s", strings.Join(args, " "), strings.TrimSpace(stderr.String()))
 	}
 	return out, nil
+}
+
+// runCommand runs a command in root with its output on this one's.
+func runCommand(ctx context.Context, root, name string, args ...string) error {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Dir = root
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return errors.Wrapf(cmd.Run(), "%s %s", name, strings.Join(args, " "))
 }
 
 // commitOnGitHub reports whether the commit is on a branch pushed to the
@@ -146,9 +165,32 @@ func commitOnGitHub(ctx context.Context, root, sha string) (bool, error) {
 	return strings.TrimSpace(branches) != "", nil
 }
 
+type ciRun struct {
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+	Event      string `json:"event"`
+	Status     string `json:"status"`
+	Conclusion string `json:"conclusion"`
+}
+
 type ciJob struct {
 	Name       string `json:"name"`
 	Conclusion string `json:"conclusion"`
+}
+
+// latestFailedCIRun returns the newest CI run for a pull request among
+// runs, when it has finished and failed. An older run is never rerun: its
+// pull request has moved on, and a rerun would join the pull request's
+// concurrency group and cancel the newer run. One still going finds the
+// signoff itself.
+func latestFailedCIRun(runs []ciRun) (ciRun, bool) {
+	var latest ciRun
+	for _, r := range runs {
+		if r.Name == ciWorkflow && r.Event == "pull_request" && r.ID > latest.ID {
+			latest = r
+		}
+	}
+	return latest, latest.ID != 0 && latest.Status == "completed" && latest.Conclusion == "failure"
 }
 
 // onlyCIOKFailed reports whether a finished run failed only because `CI OK`
@@ -168,46 +210,60 @@ func onlyCIOKFailed(jobs []ciJob) bool {
 	return failed
 }
 
-// rerunCIOK reruns `CI OK` in each finished CI run on sha that failed only
-// there: it ran before the signoff was posted.
+// rerunCIOK reruns `CI OK` when sha heads an open pull request whose newest
+// CI run failed only there: it gave up waiting before the signoff came.
 func rerunCIOK(ctx context.Context, sha string) error {
-	out, err := gh(ctx, "api", "repos/{owner}/{repo}/actions/runs?head_sha="+sha+"&per_page=100")
+	out, err := gh(ctx, "api", "repos/{owner}/{repo}/commits/"+sha+"/pulls")
+	if err != nil {
+		return err
+	}
+	var pulls []struct {
+		State string `json:"state"`
+		Head  struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
+	}
+	if err := json.Unmarshal(out, &pulls); err != nil {
+		return errors.WithStack(err)
+	}
+	heads := false
+	for _, pull := range pulls {
+		heads = heads || (pull.State == "open" && pull.Head.SHA == sha)
+	}
+	if !heads {
+		return nil
+	}
+	out, err = gh(ctx, "api", "repos/{owner}/{repo}/actions/runs?event=pull_request&head_sha="+sha+"&per_page=100")
 	if err != nil {
 		return err
 	}
 	var runs struct {
-		WorkflowRuns []struct {
-			ID         int64  `json:"id"`
-			Name       string `json:"name"`
-			Status     string `json:"status"`
-			Conclusion string `json:"conclusion"`
-		} `json:"workflow_runs"`
+		WorkflowRuns []ciRun `json:"workflow_runs"`
 	}
 	if err := json.Unmarshal(out, &runs); err != nil {
 		return errors.WithStack(err)
 	}
-	for _, run := range runs.WorkflowRuns {
-		if run.Name != ciWorkflow || run.Status != "completed" || run.Conclusion != "failure" {
-			continue
-		}
-		out, err := gh(ctx, "api", fmt.Sprintf("repos/{owner}/{repo}/actions/runs/%d/jobs?filter=latest&per_page=100", run.ID))
-		if err != nil {
-			return err
-		}
-		var jobs struct {
-			Jobs []ciJob `json:"jobs"`
-		}
-		if err := json.Unmarshal(out, &jobs); err != nil {
-			return errors.WithStack(err)
-		}
-		if !onlyCIOKFailed(jobs.Jobs) {
-			continue
-		}
-		if _, err := gh(ctx, "api", "--method", "POST", fmt.Sprintf("repos/{owner}/{repo}/actions/runs/%d/rerun-failed-jobs", run.ID)); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "appharness: reran %s in CI run %d\n", ciOKJob, run.ID)
+	latest, failed := latestFailedCIRun(runs.WorkflowRuns)
+	if !failed {
+		return nil
 	}
+	out, err = gh(ctx, "api", fmt.Sprintf("repos/{owner}/{repo}/actions/runs/%d/jobs?filter=latest&per_page=100", latest.ID))
+	if err != nil {
+		return err
+	}
+	var jobs struct {
+		Jobs []ciJob `json:"jobs"`
+	}
+	if err := json.Unmarshal(out, &jobs); err != nil {
+		return errors.WithStack(err)
+	}
+	if !onlyCIOKFailed(jobs.Jobs) {
+		return nil
+	}
+	if _, err := gh(ctx, "api", "--method", "POST", fmt.Sprintf("repos/{owner}/{repo}/actions/runs/%d/rerun-failed-jobs", latest.ID)); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "appharness: reran %s in CI run %d\n", ciOKJob, latest.ID)
 	return nil
 }
 

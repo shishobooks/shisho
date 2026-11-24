@@ -5,6 +5,8 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+    # labeled and unlabeled for ios-flows-on-github (app-changes below).
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_call:
 
 env:
@@ -460,13 +462,17 @@ jobs:
   # a pull request from this repository's own branches, other than
   # Dependabot's, runs them on a maintainer's Mac with `mise ios:signoff`,
   # several times faster than GitHub's macOS runners. Forks and Dependabot
-  # run them here, and so does every push to master, as the backstop.
+  # run them here, and so does every push to master, as the backstop. The
+  # signoff tests the pull request's own commit, not its merge with master,
+  # so a clash with master's app changes shows only in that backstop run.
+  # The ios-flows-on-github label runs a pull request's flows here instead,
+  # for when the Mac can't (only accounts with write access can label).
   app-changes:
     name: Shisho app changes
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.paths.outputs.changed }}
-      signoff: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}
+      signoff: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' && !contains(github.event.pull_request.labels.*.name, 'ios-flows-on-github') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -486,6 +492,8 @@ jobs:
               pkg/*/types.go | pkg/*/config.go | pkg/*/model.go | pkg/models/* | pkg/mediafile/mediafile.go | \
               pkg/shishoapp/* | pkg/changefeed/* | pkg/devices/* | pkg/migrations/* | \
               pkg/server/* | pkg/auth/* | pkg/worker/* | pkg/books/* | pkg/sortspec/* | \
+              pkg/reading/* | pkg/bookmarks/* | pkg/covers/* | \
+              app/libraries/foliate/* | app/assets/fonts/* | \
               mise.toml | .github/workflows/ci.yml)
                 changed=true
                 ;;
@@ -637,7 +645,8 @@ jobs:
       # commit. A run started after the push often lands after the other
       # jobs, so this waits for it rather than failing, which would send a
       # failure email for nearly every pull request. A signoff that comes
-      # later still reruns this job.
+      # later still reruns this job. Polled once a minute: a signoff takes
+      # far longer, and every job's GITHUB_TOKEN shares one hourly budget.
       - name: Wait for the iOS flows signoff
         if: needs.app-changes.outputs.changed == 'true' && needs.app-changes.outputs.signoff == 'true'
         timeout-minutes: 50
@@ -645,16 +654,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          echo "::notice::Waiting up to 45 minutes for \`mise ios:signoff\` on $SHA, or the ios-flows-on-github label."
           deadline=$((SECONDS + 45 * 60))
           while :; do
-            state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
-              --jq '.statuses[] | select(.context == "iOS flows signoff") | .state' || true)
-            if [ "$state" = success ]; then
-              exit 0
+            if state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
+              --jq '.statuses[] | select(.context == "iOS flows signoff") | .state'); then
+              if [ "$state" = success ]; then
+                exit 0
+              fi
+            else
+              echo "Couldn't read the commit's statuses; trying again."
             fi
             if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::No iOS flows signoff on $SHA. Run \`mise ios:signoff\` on this commit, on a Mac; it posts the signoff and reruns this job."
+              echo "::error::No iOS flows signoff on $SHA. Run \`mise ios:signoff\` on this commit, on a Mac; it posts the signoff and reruns this job. If the Mac can't pass the flows, the ios-flows-on-github label runs them on GitHub's runners."
               exit 1
             fi
-            sleep 30
+            sleep 60
           done
