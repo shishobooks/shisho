@@ -38,6 +38,12 @@ name: Sleep at the end of the chapter
       id: player.chapter
       text: The Lights
     timeout: 30000
+# The list goes to the chapter's start.
+- extendedWaitUntil:
+    visible:
+      id: player.position
+      text: .*0:00
+    timeout: 30000
 - runFlow:
     file: subflows/tap_player.yaml
     env:
