@@ -202,7 +202,8 @@ final class AppModel {
     /// are. iOS doesn't say which of those brought the app back.
     func didBecomeActive() {
         reader?.foreground()
-        if playingInBackground, player?.isPlaying == true, player?.file != nil {
+        // Not over the reader, which was open as the audio played on.
+        if playingInBackground, reader == nil, player?.isPlaying == true, player?.file != nil {
             showingPlayer = true
         }
         playingInBackground = false
