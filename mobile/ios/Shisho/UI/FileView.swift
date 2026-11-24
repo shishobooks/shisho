@@ -221,7 +221,9 @@ struct FileView: View {
                         .accessibilityLabel(String(localized: "Stop downloading \(file.label)"))
                     case .downloaded:
                         Button(role: .destructive) { downloads?.remove([file.id]) } label: {
-                            Label("Remove Download", icon: .trash)
+                            // Short, as it shares the row with Share; the line
+                            // under them says it's downloaded.
+                            Label("Remove", icon: .trash)
                         }
                         .accessibilityLabel(String(localized: "Remove the Download of \(file.label)"))
                     }
@@ -234,8 +236,11 @@ struct FileView: View {
                 }
             }
             DownloadStatusLine(fileID: file.id, row: download ?? nil)
+                .labelStyle(.titleAndIcon)
                 .frame(maxWidth: .infinity, alignment: .center)
         }
+        // The buttons' icons go above their titles at accessibility sizes.
+        .labelStyle(ActionLabelStyle())
         .padding(.top, 20)
     }
 

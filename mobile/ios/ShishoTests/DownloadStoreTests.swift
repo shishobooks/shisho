@@ -196,3 +196,12 @@ final class DownloadRulesTests: XCTestCase {
         }
     }
 }
+
+final class DownloadWordsTests: XCTestCase {
+    /// The stop button says how far a Download has got, or why it waits.
+    func testTheStopButtonsValue() {
+        XCTAssertEqual(DownloadWords.progress(.running(0.42)), 0.42.formatted(.percent.precision(.fractionLength(0))))
+        XCTAssertEqual(DownloadWords.progress(.waiting(.wifi)), "Waiting for Wi-Fi")
+        XCTAssertEqual(DownloadWords.progress(.running(nil)), "Downloading")
+    }
+}

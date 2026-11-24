@@ -4,6 +4,14 @@ import UIKit
 
 /// What a Download is doing, in words, for its status line and VoiceOver.
 enum DownloadWords {
+    /// How far one has got, or why it waits, for its stop button's value.
+    static func progress(_ status: DownloadStatus) -> String {
+        switch status {
+        case .running(let fraction?): fraction.formatted(.percent.precision(.fractionLength(0)))
+        default: Self.status(status) ?? ""
+        }
+    }
+
     static func status(_ status: DownloadStatus) -> String? {
         switch status {
         case .notDownloaded: nil
@@ -51,7 +59,7 @@ struct DownloadControl: View {
                         .controlCircle(tinted: true)
                 }
                 .accessibilityLabel(String(localized: "Stop downloading \(label)"))
-                .accessibilityValue(DownloadWords.status(status) ?? "")
+                .accessibilityValue(DownloadWords.progress(status))
             case .downloaded:
                 Menu {
                     Button(role: .destructive) { model.session?.downloads.remove([fileID]) } label: {
@@ -105,6 +113,35 @@ struct DownloadStatusLine: View {
     private func isFailure(_ status: DownloadStatus) -> Bool {
         if case .failed = status { return true }
         return false
+    }
+}
+
+/// An action button's icon beside its title, or above it at accessibility
+/// text sizes, where a title that wraps beside its icon reads as indented.
+struct ActionLabelStyle: LabelStyle {
+    func makeBody(configuration: LabelStyleConfiguration) -> some View {
+        ActionLabel(configuration: configuration)
+    }
+}
+
+private struct ActionLabel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let configuration: LabelStyleConfiguration
+
+    var body: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(spacing: 6) {
+                configuration.icon
+                configuration.title
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.vertical, 10)
+        } else {
+            HStack(spacing: 8) {
+                configuration.icon
+                configuration.title
+            }
+        }
     }
 }
 
@@ -316,6 +353,7 @@ struct DownloadsView: View {
                                     Label("Remove All Downloads", icon: .trash)
                                 }
                                 .buttonStyle(OutlineButtonStyle(role: .destructive))
+                                .labelStyle(ActionLabelStyle())
                                 .accessibilityIdentifier("downloads.removeAll")
                             }
                             cacheCard
@@ -364,13 +402,18 @@ struct DownloadsView: View {
         let free = (try? URL(fileURLWithPath: NSHomeDirectory())
             .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage) ?? nil
         let count = downloads.filter { $0.state == .done }.count
+        let coming = downloads.filter { $0.state == .queued }.count
+        // The size is what's on the device; ones on their way say so beside
+        // the count, rather than leaving "0 downloads" while one runs.
+        var parts = [Counts.downloads(count)]
+        if coming > 0 { parts.append(String(localized: "\(coming) on the way")) }
+        if let free { parts.append(String(localized: "\(FileFacts.size(Int(free))) free on this device")) }
         return VStack(alignment: .leading, spacing: 4) {
             Text(FileFacts.size(used))
                 .font(.geist(size: 30, relativeTo: .title, weight: .bold))
                 .monospacedDigit()
                 .accessibilityIdentifier("downloads.used")
-            Text(free.map { String(localized: "\(Counts.downloads(count)) · \(FileFacts.size(Int($0))) free on this device") }
-                 ?? Counts.downloads(count))
+            Text(parts.joined(separator: " · "))
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.mutedForeground)
         }
@@ -456,26 +499,36 @@ private struct DownloadSettingsCard: View {
     }
 }
 
-/// A setting's switch beside its name. The identifier is on the switch
-/// alone, so a flow's tap on it lands on the switch rather than the name,
-/// which a toggle's own label doesn't pass on; VoiceOver reads the switch
-/// with its name.
+/// A setting's name and switch as one control: a tap anywhere on the row
+/// flips it, so a flow's tap on its middle works as a finger's on the
+/// switch does, and VoiceOver reads one switch with its name and state.
 private struct SettingToggle: View {
     let title: String
     @Binding var isOn: Bool
     let identifier: String
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text(title)
-                .font(.geist(.subheadline))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityHidden(true)
-            Toggle(title, isOn: $isOn)
-                .labelsHidden()
-                .tint(Theme.primary)
-                .accessibilityIdentifier(identifier)
+        Button { isOn.toggle() } label: {
+            HStack(spacing: 12) {
+                Text(title)
+                    .font(.geist(.subheadline))
+                    .foregroundStyle(Theme.foreground)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Drawn only; the row is the control.
+                Toggle(title, isOn: $isOn)
+                    .labelsHidden()
+                    .tint(Theme.primary)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityValue(isOn ? String(localized: "On") : String(localized: "Off"))
+        .accessibilityAddTraits(.isToggle)
+        .accessibilityIdentifier(identifier)
     }
 }
 
@@ -483,6 +536,7 @@ private struct SettingToggle: View {
 /// Book, with a button to remove it.
 private struct DownloadRowView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let item: StoredDownload
 
     var body: some View {
@@ -501,7 +555,8 @@ private struct DownloadRowView: View {
                         Text(verbatim: "\(item.label) · \(FileTypes.label(item.fileType))")
                             .font(.geist(.footnote))
                             .foregroundStyle(Theme.mutedForeground)
-                            .lineLimit(1)
+                            // Room to wrap at large text, so the format isn't cut off.
+                            .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 1)
                         Text(item.state == .done ? FileFacts.size(item.sizeBytes) : DownloadWords.status(status) ?? "")
                             .font(.geist(.footnote))
                             .foregroundStyle(item.state == .failed ? Theme.destructive : Theme.mutedForeground)
