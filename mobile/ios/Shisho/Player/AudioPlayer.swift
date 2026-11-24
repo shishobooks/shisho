@@ -120,7 +120,7 @@ final class AudioPlayer {
         setUpRemoteCommands()
     }
 
-    private var lastFileKey: String { "player.lastFile.\(session.account.id)" }
+    private var lastFileKey: String { AccountData(accountID: session.account.id).lastFileKey }
 
     /// Picks up where the last launch left off: a sitting it was killed
     /// during becomes a Reading Session, and the last File is loaded,
@@ -889,7 +889,7 @@ final class AudioPlayer {
     // Speed is the File's, since it suits the narrator: a Book's two
     // audiobooks are often read by different people.
     private static func rateKey(accountID: String, fileID: Int) -> String {
-        "player.speed.\(accountID).file.\(fileID)"
+        AccountData(accountID: accountID).speedKey(fileID: fileID)
     }
 
     static func storeRate(_ rate: Double, accountID: String, fileID: Int) {

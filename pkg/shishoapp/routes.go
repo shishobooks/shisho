@@ -39,10 +39,12 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	g.GET("/server", h.server)
 	g.POST("/sign-in", h.signIn)
 	g.DELETE("/device", h.signOut, signedIn)
-	g.GET("/changes", h.changes, signedIn, h.requireProtocol, h.recordAppVersion)
+	// Both ways of syncing check the instance first, so a server set up
+	// again says so rather than only that the Device is unknown.
+	g.GET("/changes", h.changes, h.requireInstance, signedIn, h.requireProtocol, h.recordAppVersion)
 	g.GET("/books/:id/cover", h.cover, signedIn, h.requireProtocol)
 	g.GET("/files/:id/cover", h.fileCover, signedIn, h.requireProtocol)
-	g.POST("/journal", h.journal, signedIn, h.requireProtocol, h.recordAppVersion)
+	g.POST("/journal", h.journal, h.requireInstance, signedIn, h.requireProtocol, h.recordAppVersion)
 	// Original Files (ADR 0022), with Range support so a download resumes
 	// and a stream seeks.
 	g.GET("/files/:id/download", h.download, signedIn, h.requireProtocol)

@@ -42,6 +42,8 @@ type Options struct {
 	// in, as the KOReader plugin is told it.
 	ServerVersion string
 	DemoMode      bool
+	// InstanceID is the server's instance id (pkg/serverinstance).
+	InstanceID string
 	// Thumbnails is the server's one cover thumbnail cache.
 	Thumbnails *covers.ThumbnailCache
 }
@@ -62,7 +64,20 @@ type handler struct {
 }
 
 func (h *handler) info(c echo.Context) ServerInfo {
-	return h.contract.info(requestProtocol(c), h.opts.DemoMode, covers.ThumbnailRenderKey)
+	return h.contract.info(requestProtocol(c), h.opts.DemoMode, covers.ThumbnailRenderKey, h.opts.InstanceID)
+}
+
+// requireInstance refuses a sync for an account made on another instance
+// of the server (HeaderInstance), and tells every sync this one's. An app
+// that names no instance, as one from before instance ids, is let through.
+func (h *handler) requireInstance(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		c.Response().Header().Set(HeaderInstance, h.opts.InstanceID)
+		if named := c.Request().Header.Get(HeaderInstance); named != "" && named != h.opts.InstanceID {
+			return errcodes.ServerReplaced()
+		}
+		return next(c)
+	}
 }
 
 // requireProtocol refuses an app whose protocol the server doesn't accept.

@@ -350,7 +350,7 @@ func validate(c echo.Context, v any) error {
 
 const (
 	refusedFile          = "The File doesn't exist, or you can no longer reach it."
-	refusedBeforeAccount = "The event is from before your account was made, so the device's clock was wrong."
+	refusedBeforeAccount = "The event is from before your account was made, so it was recorded for an earlier server at this address, or the device's clock was wrong."
 )
 
 // readableFile reports whether user can reach fileID.

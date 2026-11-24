@@ -23,6 +23,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/plugins"
+	"github.com/shishobooks/shisho/pkg/shishoapp"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/shishobooks/shisho/pkg/worker"
 	"github.com/stretchr/testify/assert"
@@ -38,16 +39,22 @@ type errorResponse struct {
 	} `json:"error"`
 }
 
-// requestError sends an authenticated admin request and returns the status
-// code and the wire error code and message of the response. It takes the
-// calling test's t, so a subtest's failure stays in that subtest.
-func (f *resourceDeleteFixture) requestError(t *testing.T, method, path, body string) (int, string, string) {
+// requestError sends an authenticated admin request, with any headers
+// given, and returns the status code and the wire error code and message of
+// the response. It takes the calling test's t, so a subtest's failure stays
+// in that subtest.
+func (f *resourceDeleteFixture) requestError(t *testing.T, method, path, body string, headers ...map[string]string) (int, string, string) {
 	t.Helper()
 	token, err := f.authSvc.GenerateToken(f.admin)
 	require.NoError(t, err)
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	if body != "" {
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	}
+	for _, set := range headers {
+		for name, value := range set {
+			req.Header.Set(name, value)
+		}
 	}
 	req.AddCookie(&http.Cookie{Name: auth.CookieName, Value: token})
 	rec := httptest.NewRecorder()
@@ -145,11 +152,19 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 		method string
 		path   string
 		body   string
+		// header, when set, is sent with the request.
+		header map[string]string
 		status int
 		code   string
 		// message, when set, is the expected error message.
 		message string
 	}{
+		{
+			name:   "Shisho app sync for an account made on another server instance",
+			method: http.MethodGet, path: "/mobile/changes?cursor=0",
+			header: map[string]string{shishoapp.HeaderInstance: "another-instance"},
+			status: http.StatusConflict, code: "server_replaced",
+		},
 		{
 			name:   "detecting file types in no folders",
 			method: http.MethodPost, path: "/api/filesystem/detect",
@@ -862,7 +877,7 @@ func TestAPIContract_StatusCodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			status, code, message := f.requestError(t, tt.method, tt.path, tt.body)
+			status, code, message := f.requestError(t, tt.method, tt.path, tt.body, tt.header)
 			assert.Equal(t, tt.status, status)
 			assert.Equal(t, tt.code, code)
 			if tt.message != "" {

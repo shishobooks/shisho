@@ -34,6 +34,13 @@ struct SignInView: View {
                         .foregroundStyle(Theme.mutedForeground)
                         .multilineTextAlignment(.center)
                         .padding(.top, 16)
+                } else if let account = model.signedOutAccount, error == nil, model.serverReplacedAccountID == account.id {
+                    NoticeCard(
+                        text: String(localized: "The server at \(account.serverURL.host() ?? account.serverURL.absoluteString) was set up again since \(account.username) signed in, so it's a different server now. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one."),
+                        icon: .server,
+                        tint: Theme.primary
+                    )
+                    .accessibilityIdentifier("signin.serverReplaced")
                 } else if let account = model.signedOutAccount, error == nil {
                     NoticeCard(
                         text: String(localized: "This device was signed out of \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString). Sign in again to keep syncing. Everything on this device is still here."),

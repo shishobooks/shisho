@@ -20,16 +20,21 @@ final class AccountSession {
     /// thread may read.
     let capabilities: OSAllocatedUnfairLock<[String]>
 
-    init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void) throws {
+    init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void,
+         onInstance: @escaping @Sendable (String) -> Void = { _ in }) throws {
         self.account = account
         let capabilities = OSAllocatedUnfairLock(initialState: account.capabilities)
         self.capabilities = capabilities
-        client = APIClient(baseURL: account.serverURL, credential: credential) { listed in
-            capabilities.withLock { $0 = listed }
-            onCapabilities(listed)
-        }
+        client = APIClient(
+            baseURL: account.serverURL, credential: credential, instanceID: account.instanceID ?? "",
+            onCapabilities: { listed in
+                capabilities.withLock { $0 = listed }
+                onCapabilities(listed)
+            },
+            onInstance: onInstance
+        )
         try FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true)
-        store = try CatalogStore(path: account.folder.appendingPathComponent("catalog.sqlite").path)
+        store = try CatalogStore(path: AccountData(accountID: account.id).catalogPath)
         sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
         ebooks = EbookCache(client: client, accountID: account.id)
@@ -85,7 +90,7 @@ final class AppModel {
     var libraryID = 0 {
         didSet {
             guard let session, libraryID != oldValue else { return }
-            UserDefaults.standard.set(libraryID, forKey: "libraryID.\(session.account.id)")
+            UserDefaults.standard.set(libraryID, forKey: AccountData(accountID: session.account.id).libraryIDKey)
             loadSort()
             // Filters belong to the Library they were picked in, as the web
             // drops them with the Library's address: another Library's
@@ -106,7 +111,7 @@ final class AppModel {
     }
 
     private func sortKey(_ session: AccountSession) -> String {
-        "sort.\(session.account.id).\(libraryID)"
+        AccountData(accountID: session.account.id).sortKey(libraryID: libraryID)
     }
 
     private func loadSort() {
@@ -114,7 +119,7 @@ final class AppModel {
         if spec != sortSpec { sortSpec = spec }
     }
     private let syncs = SyncRunner()
-    var isSyncing: Bool { syncs.isRunning }
+    var isSyncing: Bool { syncs.isRunning || session.map { signingOut.contains($0.account.id) } == true }
     /// False while the device has no network at all, as in airplane mode
     /// without Wi-Fi, so a sync says so at once instead of waiting on a
     /// request that can't go anywhere.
@@ -122,6 +127,9 @@ final class AppModel {
     /// Set when the server ended this installation's sign-in, for the
     /// sign-in screen to explain.
     private(set) var signedOutAccount: Account?
+    /// The account signed out because the server at its address is no longer
+    /// the one it was made on, which the sign-in screen explains instead.
+    private(set) var serverReplacedAccountID: String?
 
     init() {
         ReaderPagePool.loadPreviewSupport()
@@ -170,7 +178,7 @@ final class AppModel {
         listsPath = []
         showingAccount = false
         stopPrefetching()
-        libraryID = session.map { UserDefaults.standard.integer(forKey: "libraryID.\($0.account.id)") } ?? 0
+        libraryID = session.map { UserDefaults.standard.integer(forKey: AccountData(accountID: $0.account.id).libraryIDKey) } ?? 0
         filter = LibraryFilter()
         loadSort()
         if let session {
@@ -390,6 +398,9 @@ final class AppModel {
             throw SignInError(message: Messages.address(problem))
         }
         let client = APIClient(baseURL: address.url, credential: nil)
+        let startedAt = accountsOpened
+        // Closing Add Server cancels a sign-in started there.
+        let addServerClosingsAtStart = addingAccount ? addServerClosings : nil
         let response: Shishoapp.SignInResponse
         do {
             response = try await client.signIn(username: username, password: password, deviceName: Installation.deviceName)
@@ -399,31 +410,110 @@ final class AppModel {
                 offersSettings: error == .localNetworkDenied, retriesWhenActive: Messages.isUnreachable(error)
             )
         }
+        await beginAccountChange()
+        do {
+            try await open(response, at: address, startedAt: startedAt, addServerClosingsAtStart: addServerClosingsAtStart)
+        } catch {
+            endAccountChange()
+            throw error
+        }
+        endAccountChange()
+        await syncNow()
+    }
 
-        let known = accounts.account(serverURL: address.url, userID: response.user.id)
+    /// How many times the Add Server sheet closed, so a sign-in started in it
+    /// can tell it was canceled. It also counts the close that follows a
+    /// sign-in's own success, after which nothing checks.
+    private var addServerClosings = 0
+
+    func addServerClosed() {
+        addServerClosings += 1
+    }
+
+    /// Ends a sign-in that won't open its account: the server forgets the
+    /// Device it made.
+    private func abandon(_ response: Shishoapp.SignInResponse, at address: ServerAddress, saying message: String) -> SignInError {
+        let device = APIClient(baseURL: address.url, credential: response.credential)
+        Task { await device.signOut() }
+        return SignInError(message: message)
+    }
+
+    /// How many accounts sign-ins have opened, and when each last was, so a
+    /// sign-in answered late can tell what opened while it waited.
+    private var accountsOpened = 0
+    private var openedAt: [String: Int] = [:]
+
+    /// Opens the account a sign-in is for, replacing the one for a server
+    /// that was here before, and shows it. Each sign-in matches accounts
+    /// only once those before it have finished, so two can't both replace
+    /// the same account.
+    private func open(_ response: Shishoapp.SignInResponse, at address: ServerAddress, startedAt: Int,
+                      addServerClosingsAtStart: Int?) async throws {
+        // A sign-in from Add Server, canceled since, mustn't replace an
+        // account once the user has turned away from it. Checked again after
+        // the last wait below, before anything is kept.
+        let canceled = { [unowned self] in addServerClosingsAtStart.map { $0 != addServerClosings } ?? false }
+        if canceled() {
+            throw abandon(response, at: address, saying: String(localized: "Signing in was canceled."))
+        }
+        let instanceID = response.server.instanceId
+        let known: Account?
+        var replaced: Account?
+        switch accounts.match(serverURL: address.url, userID: response.user.id, instanceID: instanceID) {
+        case .new: known = nil
+        case .same(let account): known = account
+        case .replaced(let account):
+            known = nil
+            replaced = account
+        }
+        // An account a sign-in opened while this one waited for its answer
+        // is newer than that answer, which may be from a server since
+        // replaced again, so it isn't removed on that answer's word.
+        if let replaced, openedAt[replaced.id, default: 0] > startedAt {
+            throw abandon(response, at: address, saying: String(localized: "Another sign-in to this server finished first. Sign in again to use this one."))
+        }
         var account = known ?? Account(
             id: UUID().uuidString.lowercased(), serverURL: address.url, username: response.user.username,
             userID: response.user.id, deviceID: response.deviceId, serverVersion: response.serverVersion,
             thumbnailRenderKey: response.server.thumbnailRenderKey, capabilities: response.server.capabilities,
             signedOut: false
         )
+        // An account saved before servers had an instance id adopts the
+        // first one it sees; a server too old to send one changes nothing.
+        if !instanceID.isEmpty {
+            account.instanceID = instanceID
+        }
         account.username = response.user.username
         account.deviceID = response.deviceId
         account.serverVersion = response.serverVersion
         account.thumbnailRenderKey = response.server.thumbnailRenderKey
         account.capabilities = response.server.capabilities
         account.signedOut = false
+        // The server was set up again from scratch at this address, so the
+        // account signed in to before is for a server that's gone: its
+        // unsent changes would land on whatever has the same ids here. It's
+        // removed once the new account opens, and the user told what was
+        // lost. If it's still open, what its player and reader hold is
+        // recorded, and its sync stopped, before its changes are counted.
+        if let replaced, session?.account.id == replaced.id {
+            player?.stop()
+            closeReader()
+            syncs.stop()
+        }
+        let removedChanges = if let replaced { await unsentChanges(replaced) } else { 0 }
+        if canceled() {
+            throw abandon(response, at: address, saying: String(localized: "Signing in was canceled."))
+        }
         do {
             try Keychain.setCredential(response.credential, for: account.id)
         } catch {
             // The Device exists on the server, but this installation couldn't
             // keep its credential, so it signs that Device out again.
-            await APIClient(baseURL: address.url, credential: response.credential).signOut()
-            throw SignInError(message: String(localized: "The app couldn't save your sign-in on this device. Try again."))
+            throw abandon(response, at: address, saying: String(localized: "The app couldn't save your sign-in on this device. Try again."))
         }
-        accounts.save(account)
+        let opened: AccountSession
         do {
-            let opened = try openSession(account: account, credential: response.credential)
+            opened = try openSession(account: account, credential: response.credential)
             // A copy kept from an earlier sign-in may be from a server since
             // reinstalled or restored at the same address, whose log has
             // reused its cursor. It downloads again from the start, and stays
@@ -431,53 +521,204 @@ final class AppModel {
             if known != nil {
                 try opened.store.startOverIfNeeded(serverSaidSo: true)
             }
-            // A sync of the account showing until now must not land on this
-            // one, nor sign it out.
-            syncs.stop()
-            syncStatus = .idle
-            session = opened
         } catch {
+            // A new account that couldn't open leaves nothing behind, and an
+            // account it would replace stays until a sign-in succeeds.
+            if known == nil {
+                AccountData(accountID: account.id).remove()
+            }
             throw SignInError(message: String(localized: "The app couldn't open its storage on this device. \(error.localizedDescription)"))
         }
+        if let replaced {
+            // Unsaved, the account it replaces is still the one on disk, so
+            // this sign-in leaves nothing behind.
+            guard accounts.save(account, replacing: replaced) else {
+                AccountData(accountID: account.id).remove()
+                throw abandon(response, at: address, saying: String(localized: "The app couldn't save your sign-in on this device. Try again."))
+            }
+        } else {
+            accounts.save(account)
+        }
+        accountsOpened += 1
+        openedAt[account.id] = accountsOpened
+        // A sync of the account showing until now must not land on this
+        // one, nor sign it out.
+        syncs.stop()
+        syncStatus = .idle
+        session = opened
         signedOutAccount = nil
+        serverReplacedAccountID = nil
         addingAccount = false
-        await syncNow()
+        // Changes that couldn't be counted are said too. Without a
+        // replacement, a notice from an earlier sign-in stays until it's
+        // dismissed, shown only on its own account.
+        if replaced != nil, removedChanges != 0 {
+            replacedAccountNotice = ReplacedAccountNotice(accountID: account.id, removedChanges: removedChanges)
+            // The notice is on the Library, and Add Server opens from any tab.
+            tab = .library
+        }
+        if replaced != nil {
+            await Diagnostics.shared.log(.app, "removed an account whose server was set up again, with \(removedChanges.map(String.init) ?? "an unknown number of") unsent changes")
+        }
     }
 
-    /// Signs this installation out of the current account: the server
-    /// forgets the Device, and the app its credential. The account's copy of
-    /// the catalog stays for signing in again.
-    func signOut() async {
-        guard let session else { return }
-        // Everything here first: the server's answer can take a while, and a
-        // sign-in meanwhile must not be undone when it comes.
-        syncs.stop()
-        Keychain.removeCredential(for: session.account.id)
-        // The account stays in the list, with its data, marked signed out.
-        var account = session.account
-        account.signedOut = true
-        accounts.save(account, makeCurrent: false)
-        accounts.leaveCurrent()
-        self.session = nil
-        signedOutAccount = nil
-        syncStatus = .idle
-        // Another account still signed in takes over.
-        if let next = accounts.accounts.first(where: { !$0.signedOut && $0.id != session.account.id && Keychain.credential(for: $0.id) != nil }) {
-            switchAccount(to: next.id)
+    /// How many changes an account hasn't sent, or nil when its journal
+    /// can't be read.
+    private func unsentChanges(_ account: Account) async -> Int? {
+        do {
+            if let session, session.account.id == account.id {
+                return try await session.store.pool.read(CatalogStore.pendingCount)
+            }
+            let path = AccountData(accountID: account.id).catalogPath
+            guard FileManager.default.fileExists(atPath: path) else { return 0 }
+            return try await CatalogStore(path: path).pool.read(CatalogStore.pendingCount)
+        } catch {
+            await Diagnostics.shared.log(.app, "couldn't count a replaced account's unsent changes: \(Diagnostics.describe(error))")
+            return nil
         }
+    }
+
+    /// Said after signing in to a server set up again from scratch, when
+    /// the account it replaced had changes it never sent.
+    private(set) var replacedAccountNotice: ReplacedAccountNotice?
+
+    func dismissReplacedAccountNotice() {
+        replacedAccountNotice = nil
+    }
+
+    /// The accounts being signed out while their unsent changes go, during
+    /// which they start no sync.
+    private(set) var signingOut: Set<String> = []
+
+    /// Signs this installation out of the current account: it first sends
+    /// what the account hasn't sent, waiting at most signOutSendLimit, then
+    /// the app forgets the credential and the server the Device. The
+    /// account's copy of the catalog, and anything not sent, stay for signing
+    /// in again. It takes its turn with sign-ins (beginAccountChange).
+    func signOut() async {
+        guard let requested = session, !signingOut.contains(requested.account.id) else { return }
+        let accountID = requested.account.id
+        signingOut.insert(accountID)
+        // A sign-in still opening its account finishes first; one started
+        // meanwhile waits, so it isn't undone below. A sign-in that opened the
+        // same account again meanwhile isn't what was signed out of.
+        await beginAccountChange()
+        guard let session, session === requested else {
+            signingOut.remove(accountID)
+            endAccountChange()
+            return
+        }
+        // What the player and reader hold is recorded first, so it's sent
+        // too.
+        player?.stop()
+        closeReader()
+        // Unsent changes go first, so signing in again after the server was
+        // set up from scratch rarely has any to lose. Offline, or with a
+        // server that doesn't answer, the account keeps them.
+        await sendBeforeSigningOut(session)
+        signingOut.remove(accountID)
+        // The account signs out even if another was opened meanwhile.
+        Keychain.removeCredential(for: accountID)
+        // The account stays in the list, with its data, marked signed out.
+        if var account = stored(accountID) {
+            account.signedOut = true
+            accounts.save(account, makeCurrent: false)
+        }
+        if self.session?.account.id == accountID {
+            // All of this before the turn ends and the server is told, which
+            // can take a while.
+            syncs.stop()
+            accounts.leaveCurrent()
+            self.session = nil
+            signedOutAccount = nil
+            syncStatus = .idle
+            // Another account still signed in takes over.
+            if let next = accounts.accounts.first(where: { !$0.signedOut && $0.id != accountID && Keychain.credential(for: $0.id) != nil }) {
+                switchAccount(to: next.id)
+            }
+        }
+        endAccountChange()
         await session.client.signOut()
+    }
+
+    /// Whether a sign-in or sign-out is changing the accounts. Each awaits
+    /// the server or the journal partway, and one that ran in between could
+    /// undo the other's work, so they take turns.
+    private var changingAccounts = false
+    private var accountChangeWaiters: [CheckedContinuation<Void, Never>] = []
+
+    private func beginAccountChange() async {
+        guard changingAccounts else {
+            changingAccounts = true
+            return
+        }
+        // endAccountChange hands its turn straight to this one.
+        await withCheckedContinuation { accountChangeWaiters.append($0) }
+    }
+
+    private func endAccountChange() {
+        if accountChangeWaiters.isEmpty {
+            changingAccounts = false
+        } else {
+            accountChangeWaiters.removeFirst().resume()
+        }
+    }
+
+    /// How long signing out waits for unsent changes to reach the server. A
+    /// debug build the harness launched waits longer, since a CI simulator
+    /// can stall for about ten seconds and the flow checks the send.
+    static var signOutSendLimit: Duration {
+        #if DEBUG
+        if HarnessSignIn.launched != nil {
+            return .seconds(30)
+        }
+        #endif
+        return .seconds(8)
+    }
+
+    /// Sends session's journal once, giving up after signOutSendLimit.
+    private func sendBeforeSigningOut(_ session: AccountSession) async {
+        guard networkAvailable else { return }
+        let pending: Int
+        do {
+            pending = try await session.store.pool.read(CatalogStore.pendingCount)
+        } catch {
+            await Diagnostics.shared.log(.sync, "couldn't count changes before signing out: \(Diagnostics.describe(error))")
+            return
+        }
+        guard pending > 0 else { return }
+        // A sync in flight may be pulling a long feed; only the journal
+        // matters now. Events sent twice are taken once, by their ids.
+        if self.session?.account.id == session.account.id {
+            syncs.stop()
+        }
+        let sync = session.sync
+        let limit = AppModel.signOutSendLimit
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                do {
+                    try await sync.sendJournal()
+                } catch {
+                    await Diagnostics.shared.log(.sync, "changes not sent before signing out: \(Diagnostics.describe(error))")
+                }
+            }
+            group.addTask { try? await Task.sleep(for: limit) }
+            await group.next()
+            group.cancelAll()
+        }
     }
 
     /// The server ended the sign-in of session's account. Its data stays,
     /// waiting for the same user to sign in again.
-    private func handleSignedOut(_ ended: AccountSession) {
+    private func handleSignedOut(_ ended: AccountSession, serverReplaced: Bool = false) {
         guard ended === session else { return }
         syncs.stop()
-        guard var account = session?.account else { return }
+        guard var account = stored(ended.account.id) else { return }
         account.signedOut = true
         Keychain.removeCredential(for: account.id)
         accounts.save(account)
         signedOutAccount = account
+        serverReplacedAccountID = serverReplaced ? account.id : nil
         session = nil
         syncStatus = .idle
     }
@@ -487,7 +728,7 @@ final class AppModel {
     /// Brings the catalog up to date. Failing to reach the server leaves the
     /// copy on the device as it is.
     func syncNow() async {
-        guard let session else { return }
+        guard let session, !signingOut.contains(session.account.id) else { return }
         guard networkAvailable else {
             syncStatus = .offline
             return
@@ -570,6 +811,10 @@ final class AppModel {
         switch error {
         case .signedOut:
             handleSignedOut(session)
+        case .serverReplaced:
+            // The journal holds ids from the server that was here before, so
+            // nothing more goes to this one.
+            handleSignedOut(session, serverReplaced: true)
         case .noAccess:
             // The user's role can't read Books anymore: nothing in the copy
             // is theirs to see. The journal stays, to send if that changes.
@@ -587,12 +832,15 @@ final class AppModel {
         }
     }
 
-    /// The account's session, whose responses keep its capabilities current.
+    /// The account's session, whose responses keep its capabilities current,
+    /// and tell an account from before instance ids its server's.
     private func openSession(account: Account, credential: String) throws -> AccountSession {
         let accountID = account.id
-        return try AccountSession(account: account, credential: credential) { [weak self] listed in
+        return try AccountSession(account: account, credential: credential, onCapabilities: { [weak self] listed in
             Task { @MainActor in self?.recordCapabilities(listed, accountID: accountID) }
-        }
+        }, onInstance: { [weak self] instanceID in
+            Task { @MainActor in self?.recordInstance(instanceID, accountID: accountID) }
+        })
     }
 
     // MARK: - Covers
@@ -600,12 +848,12 @@ final class AppModel {
     /// Whether to download every cover on Wi-Fi, kept for each account. Off
     /// until the user turns it on.
     func prefetchesCovers(_ account: Account) -> Bool {
-        UserDefaults.standard.bool(forKey: "prefetchCovers.\(account.id)")
+        UserDefaults.standard.bool(forKey: AccountData(accountID: account.id).prefetchCoversKey)
     }
 
     func setPrefetchesCovers(_ on: Bool) {
         guard let session else { return }
-        UserDefaults.standard.set(on, forKey: "prefetchCovers.\(session.account.id)")
+        UserDefaults.standard.set(on, forKey: AccountData(accountID: session.account.id).prefetchCoversKey)
         if on {
             prefetchCoversIfWanted(session)
         } else {
@@ -677,12 +925,35 @@ final class AppModel {
     }
 
     private func recordCapabilities(_ listed: [String], accountID: String) {
-        guard var account = session?.account, account.id == accountID else { return }
+        guard session?.account.id == accountID, var account = stored(accountID) else { return }
         player?.capabilitiesChanged(listed)
         guard account.capabilities != listed else { return }
         account.capabilities = listed
-        accounts.save(account)
+        accounts.save(account, makeCurrent: false)
     }
+
+    /// An account saved before servers had an instance id adopts the first
+    /// one its server's responses carry.
+    private func recordInstance(_ instanceID: String, accountID: String) {
+        guard var account = stored(accountID), account.instanceID?.isEmpty ?? true else { return }
+        account.instanceID = instanceID
+        accounts.save(account, makeCurrent: false)
+    }
+
+    /// The account as last saved. A session's account is as it was when the
+    /// session opened, so saving it would undo what's been saved since.
+    private func stored(_ accountID: String) -> Account? {
+        accounts.accounts.first { $0.id == accountID }
+    }
+}
+
+/// An account removed at sign-in because its server was set up again from
+/// scratch, and how many of its changes were never sent.
+struct ReplacedAccountNotice: Equatable {
+    /// The new account, which the notice shows on.
+    let accountID: String
+    /// Nil when the replaced account's journal couldn't be read.
+    let removedChanges: Int?
 }
 
 struct SignInError: LocalizedError {
@@ -733,6 +1004,8 @@ enum Messages {
             return String(localized: "Your account can't read Books on this server. Ask the server's owner for access.")
         case .signedOut:
             return String(localized: "This device was signed out of your account. Sign in again.")
+        case .serverReplaced:
+            return String(localized: "The server at this address was set up again since you signed in, so it's a different server now. Sign in again.")
         case .unreachable(let detail):
             return String(localized: "Couldn't reach the server. Check the address and your connection. (\(detail))")
         case .localNetworkDenied:

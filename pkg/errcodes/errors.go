@@ -284,6 +284,18 @@ func ServerUpdateRequired() error {
 	}
 }
 
+// ServerReplaced returns the 409 for a Shisho app whose account was made on
+// another instance of the server at this address, one since set up again
+// from scratch. The app stops syncing that account and asks the user to sign
+// in again.
+func ServerReplaced() error {
+	return &Error{
+		http.StatusConflict,
+		"This server isn't the one the app signed in to. Sign in again.",
+		"server_replaced",
+	}
+}
+
 // UsernameTaken returns the 422 for a new username another user
 // already has, compared without case. Its own code lets a form flag the
 // username field instead of showing a toast.
