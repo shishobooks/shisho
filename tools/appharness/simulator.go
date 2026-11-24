@@ -178,8 +178,7 @@ func setUp(ctx context.Context, udid string) error {
 	if _, err := simctl(ctx, "boot", udid); err != nil {
 		return err
 	}
-	quietSimulator(ctx, udid)
-	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+	if err := waitForBoot(ctx, udid); err != nil {
 		return err
 	}
 	home, err := simctl(ctx, "getenv", udid, "HOME")
@@ -250,8 +249,7 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 		clone.Remove()
 		return nil, err
 	}
-	quietSimulator(ctx, udid)
-	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+	if err := waitForBoot(ctx, udid); err != nil {
 		clone.Remove()
 		return nil, err
 	}
@@ -285,8 +283,7 @@ func bootPreparedClone(ctx context.Context) error {
 		removeSimulator(udid)
 		return err
 	}
-	quietSimulator(ctx, udid)
-	if _, err := simctl(ctx, "bootstatus", udid, "-b"); err != nil {
+	if err := waitForBoot(ctx, udid); err != nil {
 		removeSimulator(udid)
 		return err
 	}

@@ -104,34 +104,48 @@ func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runS
 //     and needs none of the assets.
 var quietServices = []string{"com.apple.apsd", "com.apple.mobileassetd"}
 
-// quietTimeout is how long quietSimulator keeps trying to stop
-// quietServices while the simulator boots.
-const quietTimeout = time.Minute
+// quietTimeout is how long quietSimulator keeps trying once the simulator
+// has booted, when launchd should take the commands at once.
+const quietTimeout = 30 * time.Second
 
-// quietSimulator stops quietServices in a simulator, booted or booting. Call
-// it right after `simctl boot`, before waiting for the boot to finish, so
-// mobileassetd has little time to start. launchd sends mobileassetd's
-// commands to the user's domain, which a booting simulator may not have yet,
-// so it tries again until launchd lists every service as disabled, or
-// quietTimeout passes. The services stay disabled through the simulator's
-// later boots but not into its clones.
-func quietSimulator(ctx context.Context, udid string) {
-	deadline := time.Now().Add(quietTimeout)
+// waitForBoot waits for a simulator that `simctl boot` started to finish
+// booting, stopping quietServices meanwhile, as soon as launchd takes the
+// commands, so mobileassetd has little time to start. launchd sends
+// mobileassetd's commands to the user's domain, which a booting simulator
+// doesn't have yet: on a CI runner's first boot, not for minutes. It tries
+// once more after the boot, when they always take. The services stay
+// disabled through the simulator's later boots but not into its clones.
+func waitForBoot(ctx context.Context, udid string) error {
+	quietCtx, stopQuieting := context.WithCancel(ctx)
+	quieted := make(chan bool, 1)
+	go func() { quieted <- quietSimulator(quietCtx, udid) }()
+	_, err := simctl(ctx, "bootstatus", udid, "-b")
+	stopQuieting()
+	if <-quieted || err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, quietTimeout)
+	defer cancel()
+	if !quietSimulator(ctx, udid) {
+		fmt.Fprintln(os.Stderr, "appharness: couldn't stop the simulator's background services; it may download iOS assets")
+	}
+	return nil
+}
+
+// quietSimulator stops quietServices in a simulator, trying again until
+// launchd lists every one as disabled or ctx ends, and says whether it did.
+func quietSimulator(ctx context.Context, udid string) bool {
 	for attempt := 0; ; attempt++ {
 		if attempt > 0 {
 			select {
 			case <-ctx.Done():
-				return
-			case <-time.After(250 * time.Millisecond):
+				return false
+			case <-time.After(time.Second):
 			}
 		}
 		out, err := simctl(ctx, "spawn", udid, "launchctl", "print-disabled", "system")
 		if err == nil && allDisabled(out, quietServices) {
-			return
-		}
-		if time.Now().After(deadline) {
-			fmt.Fprintln(os.Stderr, "appharness: couldn't stop the simulator's background services; it may download iOS assets")
-			return
+			return true
 		}
 		// Disabling keeps a service from starting; booting it out stops it
 		// if it already has.
@@ -332,8 +346,7 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 			return "", err
 		}
 	}
-	quietSimulator(ctx, state.UDID)
-	if _, err := simctl(ctx, "bootstatus", state.UDID, "-b"); err != nil {
+	if err := waitForBoot(ctx, state.UDID); err != nil {
 		return "", err
 	}
 	return state.UDID, resetSimulator(ctx, state.UDID, bundleID)
