@@ -247,15 +247,18 @@ struct ReaderView: View {
             .accessibilityLabel(Text("Search"))
             .accessibilityShowsLargeContentViewer()
             .accessibilityIdentifier("reader.search")
-            Button { showingContents = true } label: {
-                Icon(.list, size: 20)
-                    .frame(minWidth: 44, minHeight: 44)
+            // A book with no table of contents has no Contents to show.
+            if !model.contents.isEmpty {
+                Button { showingContents = true } label: {
+                    Icon(.list, size: 20)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                // The book's own controls only once it shows.
+                .disabled(model.phase != .reading)
+                .accessibilityLabel(Text("Contents"))
+                .accessibilityShowsLargeContentViewer()
+                .accessibilityIdentifier("reader.contents")
             }
-            // The book's own controls only once it shows.
-            .disabled(model.contents.isEmpty || model.phase != .reading)
-            .accessibilityLabel(Text("Contents"))
-            .accessibilityShowsLargeContentViewer()
-            .accessibilityIdentifier("reader.contents")
             Button { showingSettings = true } label: {
                 Icon(.settings, size: 20)
                     .frame(minWidth: 44, minHeight: 44)

@@ -358,9 +358,12 @@ final class ImageSource: PagerSource {
     }
 
     func pagerTakesTap(at point: CGPoint, resting: Bool) -> Bool {
+        // Scrolled, a tap that only stopped the column is no tap: the
+        // controls stay as they were, as in the ebook reader.
+        if let strip { return strip.takeStoppedScroll() }
         // Zoomed, a tap anywhere shows the controls rather than turning
         // away from what the reader zoomed into.
-        guard flow == .paginated, current.page.isZoomed else { return false }
+        guard current.page.isZoomed else { return false }
         delegate?.imageSourceToggleChrome()
         return true
     }

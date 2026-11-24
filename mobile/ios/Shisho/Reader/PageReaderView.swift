@@ -100,15 +100,18 @@ struct PageReaderView: View {
 
     private var topBarButtons: some View {
         HStack(spacing: 0) {
-            Button { showingContents = true } label: {
-                Icon(.list, size: 20)
-                    .frame(minWidth: 44, minHeight: 44)
+            // A PDF's outline and a comic's chapters are Shisho's chapters;
+            // a File with none has no Contents to show.
+            if !model.contents.isEmpty {
+                Button { showingContents = true } label: {
+                    Icon(.list, size: 20)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .disabled(model.phase != .reading)
+                .accessibilityLabel(Text("Contents"))
+                .accessibilityShowsLargeContentViewer()
+                .accessibilityIdentifier("reader.contents")
             }
-            // A PDF's outline and a comic's chapters are Shisho's chapters.
-            .disabled(model.contents.isEmpty || model.phase != .reading)
-            .accessibilityLabel(Text("Contents"))
-            .accessibilityShowsLargeContentViewer()
-            .accessibilityIdentifier("reader.contents")
             Button { showingSettings = true } label: {
                 Icon(.settings, size: 20)
                     .frame(minWidth: 44, minHeight: 44)
@@ -253,10 +256,12 @@ private struct PagePreview: View {
     let label: String
     let chapter: String?
     @State private var image: UIImage?
-    @State private var shownPage: Int?
 
     /// The thumbnail's longer side, in points.
     private static let side: CGFloat = 150
+    /// The thumbnail's longer side, in pixels: sharp at three times the
+    /// points, and small enough to decode in a moment.
+    private static let pixels = Int(side * 3)
 
     var body: some View {
         VStack(spacing: 8) {
@@ -290,18 +295,21 @@ private struct PagePreview: View {
         .padding(.horizontal, 24)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         .task(id: page) {
-            // Not for every page a fast drag crosses: only once it rests.
-            if shownPage != nil { try? await Task.sleep(for: .milliseconds(80)) }
-            guard !Task.isCancelled else { return }
-            let pixels = Int(Self.side * 3)
+            // At once: a page decoded already shows the moment the drag
+            // reaches it, and one that isn't decodes first in line, ahead of
+            // pages further off. A page the drag passes on cancels its own.
+            let pixels = Self.pixels
             if let kept = cache.cached(page: page, maxPixel: pixels) {
                 image = kept
             } else {
-                let decoded = await cache.image(page: page, maxPixel: pixels, need: .later)
+                let decoded = await cache.image(page: page, maxPixel: pixels, need: .now)
                 guard !Task.isCancelled else { return }
                 image = decoded
             }
-            shownPage = page
+            // The pages either side, where the drag goes next.
+            for offset in [1, -1, 2, -2, 3, -3] where (0..<cache.source.pageCount).contains(page + offset) {
+                cache.prefetch(page: page + offset, maxPixel: pixels, need: .later)
+            }
         }
     }
 }
