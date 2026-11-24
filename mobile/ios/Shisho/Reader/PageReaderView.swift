@@ -127,11 +127,20 @@ struct PageReaderView: View {
     /// Where the reader is, small under the page while the controls are
     /// hidden.
     private var readout: some View {
+        // The chapter gives way first, so the page and percent always show,
+        // as in the ebook reader.
         HStack(spacing: 4) {
+            if let chapter = model.chapterTitle {
+                Text(chapter)
+                    .lineLimit(1)
+                Text(verbatim: "·")
+            }
             Text(model.pagesLabel())
                 .lineLimit(1)
+                .layoutPriority(1)
             Text(verbatim: "·")
             Text(model.percentShown)
+                .layoutPriority(1)
         }
         .font(.geist(.caption2, weight: .medium))
         .monospacedDigit()

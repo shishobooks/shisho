@@ -91,9 +91,20 @@ enum FileProgressText {
     /// pagesLeft, when known exactly, as the Read card knows it, is said
     /// rather than an estimate from the percentage.
     static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?, wordCount: Int?, pagesLeft: Int? = nil) -> String {
+        let percent = Percent.text(min(1, max(0, progress)))
+        guard let left = left(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount,
+                              pagesLeft: pagesLeft) else {
+            return percent
+        }
+        return String(localized: "\(percent) · \(left)")
+    }
+
+    /// What's left of the File, "1:00:00 left", "4 pages left", or "60K
+    /// words left", or nil at the end or when there's nothing to count it by.
+    static func left(_ progress: Double, durationSeconds: Double?, pageCount: Int?, wordCount: Int?,
+                     pagesLeft: Int? = nil) -> String? {
         let clamped = min(1, max(0, progress))
-        let percent = Percent.text(clamped)
-        guard clamped < 1 else { return percent }
+        guard clamped < 1 else { return nil }
         let rest = 1 - clamped
         // To the second, as the Listen card says it, so the two agree.
         if let seconds = durationSeconds, seconds > 0 {
@@ -101,16 +112,16 @@ enum FileProgressText {
             // second; that's taken as the second, and a real fraction isn't.
             let exact = seconds * rest
             let left = abs(exact - exact.rounded()) < 0.000001 ? exact.rounded() : exact
-            return String(localized: "\(percent) · \(TimeLabels.clock(left)) left")
+            return String(localized: "\(TimeLabels.clock(left)) left")
         }
         if let pages = pageCount, pages > 0 {
             let left = pagesLeft ?? Int((Double(pages) * rest).rounded())
-            return String(localized: "\(percent) · \(FileFacts.pages(left)) left")
+            return String(localized: "\(FileFacts.pages(left)) left")
         }
         if let words = wordCount, words > 0 {
-            return String(localized: "\(percent) · \(FileFacts.words(Int((Double(words) * rest).rounded()))) left")
+            return String(localized: "\(FileFacts.words(Int((Double(words) * rest).rounded()))) left")
         }
-        return percent
+        return nil
     }
 }
 

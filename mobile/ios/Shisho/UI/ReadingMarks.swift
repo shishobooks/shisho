@@ -133,16 +133,26 @@ struct FileProgressLine: View {
     var body: some View {
         let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount,
                                          pagesLeft: pagesLeft)
-        HStack(spacing: 8) {
-            ProgressBar(value: progress)
-                .frame(maxWidth: 150)
-            Text(verbatim: text)
-                .font(.geist(.caption))
-                .monospacedDigit()
-                .foregroundStyle(Theme.mutedForeground)
-                .lineLimit(1)
-                .layoutPriority(1)
+        let left = FileProgressText.left(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount,
+                                         pagesLeft: pagesLeft)
+        // The percent beside the bar, and what's left under it, so a long
+        // time, or an ebook's words, left doesn't squeeze the bar.
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                ProgressBar(value: progress)
+                    .frame(maxWidth: 150)
+                Text(verbatim: Percent.text(min(1, max(0, progress))))
+                    .lineLimit(1)
+                    .layoutPriority(1)
+            }
+            if let left {
+                Text(verbatim: left)
+                    .lineLimit(1)
+            }
         }
+        .font(.geist(.caption))
+        .monospacedDigit()
+        .foregroundStyle(Theme.mutedForeground)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(text)
     }

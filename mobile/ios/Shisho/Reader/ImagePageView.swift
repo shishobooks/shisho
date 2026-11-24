@@ -250,9 +250,11 @@ final class ImagePageView: UIScrollView, UIScrollViewDelegate {
 /// width however tall they are.
 ///
 /// Pinch or double-tap zooms the column as the paginated pages zoom: it sits
-/// in a zooming scroll view, which scales it and pans it in every direction,
-/// while the column itself still scrolls down through the pages. Once a zoom
-/// settles, the pages showing decode sharper for it.
+/// in a zooming scroll view, which scales it and pans it in every direction.
+/// Zoomed, that one view takes every pan, so a drag can't land on the column
+/// while the zoom still coasts, and its moves up and down scroll the column
+/// through the pages. It moves its own window over the column only at the
+/// book's ends. Once a zoom settles, the pages showing decode sharper for it.
 @MainActor
 final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout,
     UICollectionViewDataSourcePrefetching {
@@ -286,6 +288,12 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     private var movedAt: TimeInterval = 0
     /// The last touch came down on a moving column, which it only stopped.
     private var touchStoppedScroll = false
+    /// Where the zoom was at its last move, to carry a pan's move up or
+    /// down on to the column.
+    private var lastZoomOffset: CGPoint = .zero
+    private var lastZoomScale: CGFloat = 1
+    /// The zoom is being moved back, its move given to the column.
+    private var carrying = false
 
     static let maximumZoom: CGFloat = 4
     var zoom: CGFloat { zoomer.zoomScale }
@@ -340,6 +348,8 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         // Laying out again moves the column; the reader didn't.
         positioning = true
         if zoomer.zoomScale != 1 { zoomer.setZoomScale(1, animated: false) }
+        zoomer.isScrollEnabled = false
+        collection.isScrollEnabled = true
         zoomer.frame = bounds
         content.frame = CGRect(origin: .zero, size: bounds.size)
         collection.frame = content.bounds
@@ -423,8 +433,37 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
         guard scrollView === zoomer else { return }
+        // Zoomed, the zoom takes every pan, and carries the column; not, the
+        // column scrolls itself.
         zoomer.isScrollEnabled = isZoomed
+        collection.isScrollEnabled = !isZoomed
         sharpenVisiblePages()
+    }
+
+    /// Gives the zoom's move up or down to the column, as far as the column
+    /// can go, so the zoom only moves its window at the book's ends. A
+    /// zoom's own change of scale, and a bounce already past an end, are
+    /// left as they are.
+    private func carryToColumn() {
+        guard !carrying else { return }
+        let scale = zoomer.zoomScale
+        let last = lastZoomOffset
+        defer {
+            lastZoomOffset = zoomer.contentOffset
+            lastZoomScale = scale
+        }
+        let maxY = max(0, zoomer.contentSize.height - zoomer.bounds.height)
+        guard isZoomed, scale == lastZoomScale, !zoomer.isZooming, !zoomer.isZoomBouncing,
+              last.y >= 0, last.y <= maxY else { return }
+        let y = zoomer.contentOffset.y
+        let column = collection.contentOffset.y
+        let maxColumn = max(0, collection.contentSize.height - collection.bounds.height)
+        let moved = min(max(0, column + (y - last.y) / scale), maxColumn) - column
+        guard moved != 0 else { return }
+        carrying = true
+        collection.contentOffset.y = column + moved
+        zoomer.contentOffset.y = y - moved * scale
+        carrying = false
     }
 
     /// The pages showing, decoded again for the zoom: sharper zoomed in,
@@ -517,7 +556,11 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         movedAt = ProcessInfo.processInfo.systemUptime
-        guard scrollView === collection, !positioning else { return }
+        if scrollView === zoomer {
+            carryToColumn()
+            return
+        }
+        guard !positioning else { return }
         updatePlace()
     }
 

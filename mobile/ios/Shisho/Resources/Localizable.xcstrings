@@ -48,6 +48,9 @@
     "%@ isn't a font Shisho can read." : {
 
     },
+    "%@ left" : {
+
+    },
     "%@ left at %@" : {
       "localizations" : {
         "en" : {
@@ -112,7 +115,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ · %2$@ left"
+            "value" : "%1$@ · %2$@"
           }
         }
       }

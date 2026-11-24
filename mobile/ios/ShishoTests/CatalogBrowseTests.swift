@@ -434,6 +434,16 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil, wordCount: 80321), "25% · 60K words left")
     }
 
+    /// The row shows the percent beside its bar and what's left on the line
+    /// under it, so a long time left doesn't squeeze the bar.
+    func testAFileRowsTimeLeftGoesUnderItsBar() {
+        XCTAssertEqual(FileProgressText.left(0.5, durationSeconds: 7200, pageCount: nil, wordCount: nil), "1:00:00 left")
+        XCTAssertEqual(FileProgressText.left(3.0 / 7, durationSeconds: nil, pageCount: 8, wordCount: nil, pagesLeft: 4), "4 pages left")
+        XCTAssertEqual(FileProgressText.left(0.25, durationSeconds: nil, pageCount: nil, wordCount: 80321), "60K words left")
+        XCTAssertNil(FileProgressText.left(0.25, durationSeconds: nil, pageCount: nil, wordCount: nil))
+        XCTAssertNil(FileProgressText.left(1, durationSeconds: 7200, pageCount: nil, wordCount: nil), "nothing left at the end")
+    }
+
     /// By the server's time for each Read-through underway, not the latest
     /// place, which a link can set without any reading.
     func testLastReadSortsBooksBeingReadByTheirLatestPlace() throws {

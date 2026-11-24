@@ -175,7 +175,7 @@ struct PagerTaps: Sendable {
     /// How soon a second tap has to follow for a double tap, which is also
     /// how long a single tap waits: well under the system's, so a tap that
     /// turns a page doesn't feel slow.
-    static let doubleTapWindow: TimeInterval = 0.2
+    static let doubleTapWindow: TimeInterval = 0.15
     /// How near the first a second tap has to land.
     static let doubleTapReach: CGFloat = 50
     /// How long after a turn a tap that turns still acts at once.
