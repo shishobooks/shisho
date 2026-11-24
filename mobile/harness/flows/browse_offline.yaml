@@ -48,12 +48,33 @@ name: Browse Books offline
 - tapOn:
     id: search.button
 - tapOn: Books, series, people
-- inputText: Ann Auth
-- extendedWaitUntil:
-    visible:
-      id: search.person
-      text: .*Ann Author.*
-    timeout: 30000
+# A stall can drop typed text, so the name is typed again, over what's
+# there, until the person shows. The loop ends on a flag a `when` sets, since
+# a `while` on an element takes about 7 s to give up on it once it shows.
+- evalScript: ${output.personFound = false}
+- repeat:
+    while:
+      true: ${!output.personFound}
+    times: 3
+    commands:
+      - eraseText
+      - inputText: Ann Auth
+      - extendedWaitUntil:
+          visible:
+            id: search.person
+            text: .*Ann Author.*
+          timeout: 30000
+          optional: true
+      - runFlow:
+          when:
+            visible:
+              id: search.person
+              text: .*Ann Author.*
+          commands:
+            - evalScript: ${output.personFound = true}
+- assertVisible:
+    id: search.person
+    text: .*Ann Author.*
 - tapOn:
     id: search.person
 # The person's own grid, which only their page has: the search's results

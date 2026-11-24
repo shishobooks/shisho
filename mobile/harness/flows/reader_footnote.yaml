@@ -118,14 +118,35 @@ name: Open a picture and a footnote, go back, and search the Book
     visible:
       id: reader.search.field
     timeout: 30000
-- inputText: paragraph 9
+# A stall can drop typed text, so the query is typed again, over what's
+# there, until its results show. The loop ends on a flag a `when` sets, since
+# a `while` on an element takes about 7 s to give up on it once it shows.
+- evalScript: ${output.resultsFound = false}
+- repeat:
+    while:
+      true: ${!output.resultsFound}
+    times: 3
+    commands:
+      - eraseText
+      - inputText: paragraph 9
+      - extendedWaitUntil:
+          visible:
+            id: reader.search.status
+            text: 3 results
+          timeout: 30000
+          optional: true
+      - runFlow:
+          when:
+            visible:
+              id: reader.search.status
+              text: 3 results
+          commands:
+            - evalScript: ${output.resultsFound = true}
 - assertVisible:
     id: reader.search.done
-- extendedWaitUntil:
-    visible:
-      id: reader.search.status
-      text: 3 results
-    timeout: 30000
+- assertVisible:
+    id: reader.search.status
+    text: 3 results
 - assertVisible: Chapter Three
 - tapOn:
     id: reader.search.result
