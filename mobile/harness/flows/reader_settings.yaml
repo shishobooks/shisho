@@ -1,7 +1,9 @@
-# Change each kind of display setting: each applies in place without losing
-# the place, and they're kept after the app restarts (#920).
+# Import a font from Files and remove it, change the text size in a run that
+# lands back on its page, and read in scrolled layout (#919, #920). The
+# settings' steps and limits, the values the page gets, and their being kept
+# are ReaderSettingsTests' to check.
 appId: ${APP_ID}
-name: Change the reader's settings and reopen
+name: Import a font, resize in place, and read scrolled
 ---
 - runScript:
     file: scripts/go_online.js
@@ -20,17 +22,44 @@ name: Change the reader's settings and reopen
 - tapOn:
     id: reader.settings
 
-# The font, from its own list, while the row is at the sheet's top: a row
-# scrolled back to sits behind the sheet's edge for a moment.
+# A font imported from Files is chosen. Removed, it's gone, and the book is
+# back in its own font. That it's kept on the device is ReaderFontsTests' to
+# check.
 - tapOn:
     id: reader.font
+- scrollUntilVisible:
+    element:
+      id: reader.font.import
+    direction: DOWN
+    timeout: 30000
 - tapOn:
-    id: reader.font.opendyslexic
+    id: reader.font.import
+- runFlow: subflows/pick_harness_font.yaml
 - extendedWaitUntil:
     visible:
-      id: reader.font.opendyslexic
+      text: Harness Font
       selected: true
     timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: reader.font.remove
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: reader.font.remove
+- extendedWaitUntil:
+    notVisible:
+      id: reader.font.remove
+    timeout: 30000
+- assertNotVisible: Harness Font
+- scrollUntilVisible:
+    element:
+      id: reader.font.book
+    direction: UP
+    timeout: 30000
+- assertVisible:
+    id: reader.font.book
+    selected: true
 - tapOn:
     id: reader.settings.done
 - extendedWaitUntil:
@@ -88,111 +117,75 @@ name: Change the reader's settings and reopen
 - assertTrue:
     condition: ${output.settledPlace == output.beforeRun}
     label: The run of changes ended on the page it started on
+
+# Last, since the layout stays scrolled: switched to scrolled layout and
+# scrolled into the next chapter, the place follows the scroll. A sideways
+# swipe and a pull past a chapter's start go to the chapter beside.
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.settings
-
-# Numbers step with minus and plus, as the web's do.
-- tapOn:
-    id: reader.size.increase
-- tapOn:
-    id: reader.size.increase
-- extendedWaitUntil:
-    visible:
-      id: reader.size.value
-      text: 17 px
-    timeout: 30000
-- tapOn:
-    id: reader.lineSpacing.increase
-- extendedWaitUntil:
-    visible:
-      id: reader.lineSpacing.value
-      text: "1.50"
-    timeout: 30000
+# Below the fold of the half-height sheet.
 - scrollUntilVisible:
     element:
-      id: reader.margins.decrease
+      id: reader.layout.scrolled
     direction: DOWN
     timeout: 30000
 - tapOn:
-    id: reader.margins.decrease
-- extendedWaitUntil:
-    visible:
-      id: reader.margins.value
-      text: 6%
-    timeout: 30000
-- scrollUntilVisible:
-    element:
-      id: reader.pages.one
-    direction: DOWN
-    timeout: 30000
-- tapOn:
-    id: reader.justify
-- tapOn:
-    id: reader.theme.sepia
-- tapOn:
-    id: reader.pages.one
+    id: reader.layout.scrolled
 - tapOn:
     id: reader.settings.done
 - extendedWaitUntil:
     notVisible:
       id: reader.settings.done
     timeout: 30000
-# Every change reflowed the book where it was.
-- extendedWaitUntil:
-    visible:
-      id: reader.progress
-      text: "Chapter Two.*"
-    timeout: 30000
-
-# After a restart, the book is in the same settings, at the same place.
-- stopApp
-- launchApp:
-    stopApp: false
-    permissions: {}
 - runFlow:
-    file: subflows/read.yaml
+    file: subflows/go_to_chapter.yaml
     env:
-      TITLE: The Harness Novel
+      CHAPTER: Chapter One
+- repeat:
+    while:
+      notVisible:
+        id: reader.progress
+        text: "Chapter Two.*"
+    times: 60
+    commands:
+      - swipe:
+          start: "50%,75%"
+          end: "50%,20%"
+          duration: 300
 - extendedWaitUntil:
     visible:
       id: reader.progress
       text: "Chapter Two.*"
     timeout: 30000
-- runFlow: subflows/show_reader_controls.yaml
-# The title names the chapter as the book opens, before any turn.
+# A swipe sideways goes to the chapter beside, and back.
+- swipe:
+    direction: LEFT
 - extendedWaitUntil:
     visible:
-      id: reader.title
+      id: reader.progress
+      text: "Chapter Three.*"
+    timeout: 30000
+- swipe:
+    direction: RIGHT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
       text: "Chapter Two.*"
     timeout: 30000
-- tapOn:
-    id: reader.settings
+# A little way into Chapter Two, one long pull down scrolls back to its
+# start and goes on past it, which brings Chapter One back in, as a pull at
+# the end goes on into the next.
+- swipe:
+    start: "50%,60%"
+    end: "50%,45%"
+    duration: 600
+- swipe:
+    start: "50%,10%"
+    end: "50%,95%"
+    duration: 1500
 - extendedWaitUntil:
     visible:
-      id: reader.font.value
-      text: OpenDyslexic
+      id: reader.progress
+      text: "Chapter One.*"
     timeout: 30000
-- assertVisible:
-    id: reader.size.value
-    text: 17 px
-- assertVisible:
-    id: reader.lineSpacing.value
-    text: "1.50"
-- assertVisible:
-    id: reader.margins.value
-    text: 6%
-- scrollUntilVisible:
-    element:
-      id: reader.pages.one
-    direction: DOWN
-    timeout: 30000
-- assertVisible:
-    id: reader.theme.sepia
-    selected: true
-- assertVisible:
-    id: reader.pages.one
-    selected: true
-- assertVisible:
-    id: reader.justify
-    checked: false
