@@ -20,7 +20,6 @@ var flowSeconds = map[string]float64{
 	"listen_offline.yaml":             159,
 	"listen_to_the_end.yaml":          58,
 	"reader_import_font.yaml":         89,
-	"reader_search.yaml":              93,
 	"reader_settings.yaml":            216,
 	"sign_in_and_browse_offline.yaml": 144,
 	"sleep_timer_end_of_chapter.yaml": 178,

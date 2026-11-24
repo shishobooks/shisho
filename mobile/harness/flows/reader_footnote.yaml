@@ -1,8 +1,10 @@
-# A small note reference opens its note in a card rather than turning
-# the page, and Go to Note goes to the note. A picture opens on its own
-# (#919).
+# A picture opens on its own, and a small note reference opens its note in
+# a card rather than turning the page. Go to Note goes to the note, and Back
+# returns to where it left from (#919). Then search inside the Book, see each
+# result in its sentence under its chapter, open one, and land on it; next
+# and previous step through the rest (#920).
 appId: ${APP_ID}
-name: Open a footnote and a picture
+name: Open a picture and a footnote, go back, and search the Book
 ---
 - runScript:
     file: scripts/go_online.js
@@ -66,4 +68,71 @@ name: Open a footnote and a picture
     visible:
       id: reader.progress
       text: "Notes.*"
+    timeout: 30000
+# Back returns to where the jump left from.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.back
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
+
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.search
+# The field has the keyboard as the sheet opens: the query is typed with
+# no tap on the field, which only lands in a focused one. (Maestro doesn't
+# report focus for it.) The sheet keeps its title and Done while it does.
+# Each chapter has one ninth paragraph.
+- extendedWaitUntil:
+    visible:
+      id: reader.search.field
+    timeout: 30000
+- inputText: paragraph 9
+- assertVisible:
+    id: reader.search.done
+- extendedWaitUntil:
+    visible:
+      id: reader.search.status
+      text: 3 results
+    timeout: 30000
+- assertVisible: Chapter Three
+- tapOn:
+    id: reader.search.result
+    text: "Chapter Three, paragraph 9.*"
+- extendedWaitUntil:
+    visible:
+      id: reader.search.position
+      text: 3 of 3
+    timeout: 30000
+# Landing hides the controls, and the find bar takes the readout's place,
+# so the controls show the place.
+- runFlow: subflows/show_reader_controls.yaml
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Three.*"
+    timeout: 30000
+# Next wraps to the first result, in Chapter One.
+- tapOn:
+    id: reader.search.next
+- extendedWaitUntil:
+    visible:
+      id: reader.search.position
+      text: 1 of 3
+    timeout: 30000
+- runFlow: subflows/show_reader_controls.yaml
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter One.*"
+    timeout: 30000
+# Closing the search takes its bar away.
+- tapOn:
+    id: reader.search.close
+- extendedWaitUntil:
+    notVisible:
+      id: reader.search.position
     timeout: 30000
