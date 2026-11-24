@@ -10,24 +10,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// staleRunDir makes a run folder like one an older harness, which didn't
-// lock its folders, left behind, last changed age ago.
-func staleRunDir(t *testing.T, tmp, name string, age time.Duration) string {
+// killedRunDir makes a run's folder as a run killed outright leaves it: its
+// lock file there, held by no one.
+func killedRunDir(t *testing.T, tmp, prefix string) string {
 	t.Helper()
-	dir := filepath.Join(tmp, name)
-	require.NoError(t, os.MkdirAll(filepath.Join(dir, "library"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "library", "book.epub"), []byte("x"), 0o600))
-	then := time.Now().Add(-age)
-	require.NoError(t, filepath.WalkDir(dir, func(path string, _ os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		return os.Chtimes(path, then, then)
-	}))
-	return dir
+	run, err := makeRunDir(tmp, prefix, false)
+	require.NoError(t, err)
+	unlockFile(run.lock)
+	return run.Path
 }
 
 func noProcesses() ([]process, error) { return nil, nil }
+
+func noKills(t *testing.T) func(int) {
+	return func(pid int) { t.Fatalf("killed process %d", pid) }
+}
 
 func TestSweepRunDirsKeepsARunThatsStillGoing(t *testing.T) {
 	t.Parallel()
@@ -36,32 +33,76 @@ func TestSweepRunDirsKeepsARunThatsStillGoing(t *testing.T) {
 	require.NoError(t, err)
 	defer run.Close()
 
-	removed := sweepRunDirs(tmp, noProcesses, func(int) { t.Fatal("killed a process") })
+	removed := sweepRunDirs(tmp, noProcesses, noKills(t))
 
 	assert.Zero(t, removed)
 	assert.DirExists(t, run.Path)
 }
 
-func TestSweepRunDirsRemovesAKilledRunAndItsServer(t *testing.T) {
+func TestSweepRunDirsRemovesAKilledRunAndItsOrphanedServer(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	run, err := makeRunDir(tmp, qaServerRunPrefix, false)
-	require.NoError(t, err)
-	// A hard kill lets go of the lock without removing anything.
-	unlockFile(run.lock)
-	other := filepath.Join(tmp, "elsewhere", "shisho")
+	dir := killedRunDir(t, tmp, qaServerRunPrefix)
 
 	var killed []int
 	removed := sweepRunDirs(tmp, func() ([]process, error) {
 		return []process{
-			{PID: 41, PPID: 1, Command: filepath.Join(run.Path, "shisho")},
-			{PID: 42, PPID: 1, Command: other},
+			{PID: 41, PPID: 1, Command: filepath.Join(dir, "shisho")},
+			{PID: 42, PPID: 1, Command: filepath.Join(tmp, "elsewhere", "shisho")},
+			{PID: 43, PPID: 1, Command: dir + "0/shisho"},
 		}, nil
 	}, func(pid int) { killed = append(killed, pid) })
 
 	assert.Equal(t, 1, removed)
-	assert.NoDirExists(t, run.Path)
+	assert.NoDirExists(t, dir)
 	assert.Equal(t, []int{41}, killed)
+}
+
+func TestSweepRunDirsListsProcessesAgainForEachFolder(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	killedRunDir(t, tmp, flowsRunPrefix)
+	killedRunDir(t, tmp, qaServerRunPrefix)
+
+	// Not one list for the whole sweep: removing a folder can take seconds,
+	// time enough for a listed PID to go to another process.
+	lists := 0
+	removed := sweepRunDirs(tmp, func() ([]process, error) {
+		lists++
+		return nil, nil
+	}, noKills(t))
+
+	assert.Equal(t, 2, removed)
+	assert.Equal(t, 2, lists)
+}
+
+func TestSweepRunDirsKeepsAKilledRunsFolderWhileALiveProcessRunsFromIt(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	dir := killedRunDir(t, tmp, flowsRunPrefix)
+
+	removed := sweepRunDirs(tmp, func() ([]process, error) {
+		return []process{
+			{PID: 50, PPID: 1, Command: filepath.Join(dir, "shisho")},
+			{PID: 51, PPID: 49, Command: filepath.Join(dir, "tool")},
+		}, nil
+	}, noKills(t))
+
+	assert.Zero(t, removed)
+	assert.DirExists(t, dir)
+}
+
+func TestSweepRunDirsKeepsAKilledRunsFolderWhenProcessesCantBeListed(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	dir := killedRunDir(t, tmp, flowsRunPrefix)
+
+	removed := sweepRunDirs(tmp, func() ([]process, error) {
+		return nil, os.ErrPermission
+	}, noKills(t))
+
+	assert.Zero(t, removed)
+	assert.DirExists(t, dir)
 }
 
 func TestRunDirCloseRemovesItUnlessKept(t *testing.T) {
@@ -78,69 +119,29 @@ func TestRunDirCloseRemovesItUnlessKept(t *testing.T) {
 	assert.NoDirExists(t, run.Path)
 	assert.DirExists(t, kept.Path)
 	// Nor does a sweep remove a kept one, which the developer asked for.
-	assert.Zero(t, sweepRunDirs(tmp, noProcesses, func(int) {}))
+	assert.Zero(t, sweepRunDirs(tmp, noProcesses, noKills(t)))
 	assert.DirExists(t, kept.Path)
 }
 
-func TestSweepRunDirsLeavesFoldersThatArentRuns(t *testing.T) {
+func TestSweepRunDirsLeavesFoldersWithoutALock(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
+	// Folders a harness from before the lock made, which may be a live run,
+	// one kept with -keep, or one named with -out; and folders that aren't
+	// runs at all.
 	var dirs []string
-	for _, name := range []string{"shisho-harness-notes", "shisho-harness-", "something-123", "shisho-qa-server-12a"} {
-		dirs = append(dirs, staleRunDir(t, tmp, name, 48*time.Hour))
+	for _, name := range []string{"shisho-harness-123", "shisho-qa-server-456", "shisho-harness-notes", "shisho-harness-", "something-123"} {
+		dir := filepath.Join(tmp, name)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		old := time.Now().Add(-48 * time.Hour)
+		require.NoError(t, os.Chtimes(dir, old, old))
+		dirs = append(dirs, dir)
 	}
 
-	assert.Zero(t, sweepRunDirs(tmp, noProcesses, func(int) {}))
+	assert.Zero(t, sweepRunDirs(tmp, noProcesses, noKills(t)))
 	for _, dir := range dirs {
 		assert.DirExists(t, dir)
 	}
-}
-
-func TestSweepRunDirsRemovesAnOlderHarnessesFolderOnceIdle(t *testing.T) {
-	t.Parallel()
-	tmp := t.TempDir()
-	idle := staleRunDir(t, tmp, "shisho-harness-123", 2*legacyRunDirIdle)
-	recent := staleRunDir(t, tmp, "shisho-qa-server-456", legacyRunDirIdle/2)
-
-	removed := sweepRunDirs(tmp, noProcesses, func(int) { t.Fatal("killed a process") })
-
-	assert.Equal(t, 1, removed)
-	assert.NoDirExists(t, idle)
-	assert.DirExists(t, recent)
-}
-
-func TestSweepRunDirsKeepsAnOlderHarnessesFolderWhileItsServerHasItsRun(t *testing.T) {
-	t.Parallel()
-	tmp := t.TempDir()
-	// An idle QA server writes nothing for hours, but its harness is alive.
-	live := staleRunDir(t, tmp, "shisho-qa-server-123", 2*legacyRunDirIdle)
-	orphaned := staleRunDir(t, tmp, "shisho-harness-456", 2*legacyRunDirIdle)
-
-	var killed []int
-	removed := sweepRunDirs(tmp, func() ([]process, error) {
-		return []process{
-			{PID: 50, PPID: 49, Command: filepath.Join(live, "shisho")},
-			{PID: 60, PPID: 1, Command: filepath.Join(orphaned, "shisho")},
-		}, nil
-	}, func(pid int) { killed = append(killed, pid) })
-
-	assert.Equal(t, 1, removed)
-	assert.DirExists(t, live)
-	assert.NoDirExists(t, orphaned)
-	assert.Equal(t, []int{60}, killed)
-}
-
-func TestSweepRunDirsRemovesNothingOfAnOlderHarnessWhenProcessesCantBeListed(t *testing.T) {
-	t.Parallel()
-	tmp := t.TempDir()
-	idle := staleRunDir(t, tmp, "shisho-harness-123", 2*legacyRunDirIdle)
-
-	removed := sweepRunDirs(tmp, func() ([]process, error) {
-		return nil, os.ErrPermission
-	}, func(int) { t.Fatal("killed a process") })
-
-	assert.Zero(t, removed)
-	assert.DirExists(t, idle)
 }
 
 func TestParseProcesses(t *testing.T) {

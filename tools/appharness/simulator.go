@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,12 +25,19 @@ import (
 // clone. Runs never boot it again, so a clone always starts from the same
 // device and runs in other worktrees never share one.
 //
-// The number changes when how the harness makes a base does; it deletes a
-// base of an older number and makes a new one. CI caches the base by this
-// name (.github/actions/setup-ios), so keep it on one line as it is.
-const baseSimulatorName = "Shisho Harness Base 5"
+// The number changes when how the harness makes a base does, and the harness
+// makes a new one. A base of another number stays as long as a worktree's
+// simulator was cloned from it, since a worktree on another commit still
+// uses it (unusedBases). CI caches the base by this name
+// (.github/actions/setup-ios), so keep it on one line as it is.
+const baseSimulatorName = "Shisho Base 5"
 
-// oldBaseSimulatorPrefix names every base the harness has made.
+// baseSimulatorPrefix names every base, of any number, since Base 5.
+const baseSimulatorPrefix = "Shisho Base "
+
+// oldBaseSimulatorPrefix names the bases harnesses made before Base 5. Each
+// of those deletes every base under it but its own at every run, so newer
+// bases are named outside it.
 const oldBaseSimulatorPrefix = "Shisho Harness Base"
 
 // iPhoneType matches a plain current iPhone, such as "iPhone 17".
@@ -59,6 +67,120 @@ func simctl(ctx context.Context, args ...string) (string, error) {
 		return "", errors.Wrapf(err, "simctl %s: %s", strings.Join(args, " "), out)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// quietServices are the system services waitForQuietBoot stops, which
+// nothing the app or its tests do needs:
+//
+//   - apsd, Apple's push notification service. On CI runners it reconnects
+//     to Apple's servers several times a second, about 60% of the simulator's
+//     log and, through the logging daemons that carry that log to Maestro,
+//     about 14% of the runner's CPU.
+//   - mobileassetd, which downloads iOS's on-demand assets in the background
+//     after each boot: Siri, speech, and language models, over a gigabyte
+//     of them. A clone throws away what its base had half downloaded and
+//     fetches it again as its own copy, costing disk, CPU, and network while
+//     the flows run. The app bundles its fonts and needs none of the assets.
+var quietServices = []string{"com.apple.apsd", "com.apple.mobileassetd"}
+
+// quietTimeout is how long waitForQuietBoot keeps quieting once the
+// simulator has booted, when launchd should take the commands at once.
+const quietTimeout = 30 * time.Second
+
+// quietRetry is how long quietSimulator waits between tries, going easy on a
+// CI runner busy booting.
+const quietRetry = time.Second
+
+// waitForQuietBoot waits for a simulator that `simctl boot` started to
+// finish booting, stopping quietServices meanwhile, as soon as launchd takes
+// the commands, so mobileassetd has little time to start. launchd sends
+// mobileassetd's commands to the user's domain, which a booting simulator
+// doesn't have yet: on a CI runner's first boot, not for minutes. It quiets
+// once more after the boot, when the commands always take. The services stay
+// disabled through the simulator's later boots but not into its clones.
+func waitForQuietBoot(ctx context.Context, udid string) error {
+	return bootQuietly(ctx, simctl, udid, quietTimeout)
+}
+
+// simctlFunc runs a simctl command, as simctl does.
+type simctlFunc func(ctx context.Context, args ...string) (string, error)
+
+// bootQuietly is waitForQuietBoot with its simctl, and how long it keeps
+// quieting after the boot.
+func bootQuietly(ctx context.Context, run simctlFunc, udid string, afterBoot time.Duration) error {
+	quietCtx, stopQuieting := context.WithCancel(ctx)
+	quieted := make(chan bool, 1)
+	go func() { quieted <- quietSimulator(quietCtx, run, udid) }()
+	_, err := run(ctx, "bootstatus", udid, "-b")
+	stopQuieting()
+	if <-quieted || err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, afterBoot)
+	defer cancel()
+	if !quietSimulator(ctx, run, udid) {
+		fmt.Fprintln(os.Stderr, "appharness: couldn't stop the simulator's background services; it may download iOS assets")
+	}
+	return nil
+}
+
+// quietSimulator disables quietServices and stops them, trying again until
+// launchd lists every one as disabled and none as running, or ctx ends, and
+// says whether it did. Checking both matters: a try cut off between the
+// disable and the bootout leaves a service disabled but running.
+func quietSimulator(ctx context.Context, run simctlFunc, udid string) bool {
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return false
+			case <-time.After(quietRetry):
+			}
+		}
+		disabled, err := run(ctx, "spawn", udid, "launchctl", "print-disabled", "system")
+		if err == nil && allDisabled(disabled, quietServices) {
+			listed, err := run(ctx, "spawn", udid, "launchctl", "list")
+			if err == nil && !anyRunning(listed, quietServices) {
+				return true
+			}
+		}
+		// Disabling keeps a service from starting; booting it out stops it
+		// if it already has.
+		for _, service := range quietServices {
+			_, _ = run(ctx, "spawn", udid, "launchctl", "disable", "system/"+service)
+			_, _ = run(ctx, "spawn", udid, "launchctl", "bootout", "system/"+service)
+		}
+	}
+}
+
+// allDisabled says whether `launchctl print-disabled` printed every one of
+// services as disabled.
+func allDisabled(printed string, services []string) bool {
+	disabled := map[string]bool{}
+	for line := range strings.SplitSeq(printed, "\n") {
+		label, state, ok := strings.Cut(strings.TrimSpace(line), " => ")
+		if ok && state == "disabled" {
+			disabled[strings.Trim(label, `"`)] = true
+		}
+	}
+	for _, service := range services {
+		if !disabled[service] {
+			return false
+		}
+	}
+	return true
+}
+
+// anyRunning says whether `launchctl list`, which prints a PID, a status,
+// and a label on each line, lists one of services with a PID.
+func anyRunning(listed string, services []string) bool {
+	for line := range strings.SplitSeq(listed, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 3 && fields[0] != "-" && slices.Contains(services, fields[2]) {
+			return true
+		}
+	}
+	return false
 }
 
 // baseSimulator returns the base simulator's UDID, making it on the newest
@@ -120,18 +242,16 @@ func findOrMakeBase(ctx context.Context) (string, error) {
 	if err := json.Unmarshal([]byte(out), &listing); err != nil {
 		return "", errors.WithStack(err)
 	}
+	var all []simctlDevice
 	for _, devices := range listing.Devices {
-		for _, d := range devices {
-			if strings.HasPrefix(d.Name, oldBaseSimulatorPrefix) && d.Name != baseSimulatorName {
-				_, _ = simctl(ctx, "delete", d.UDID)
-			}
-		}
+		all = append(all, devices...)
 	}
-	for _, devices := range listing.Devices {
-		for _, d := range devices {
-			if d.Name == baseSimulatorName {
-				return d.UDID, nil
-			}
+	for _, udid := range unusedBases(all, worktreeSimulatorBases()) {
+		_, _ = simctl(ctx, "delete", udid)
+	}
+	for _, d := range all {
+		if d.Name == baseSimulatorName {
+			return d.UDID, nil
 		}
 	}
 
@@ -170,6 +290,20 @@ func findOrMakeBase(ctx context.Context) (string, error) {
 	return "", errors.New("no iOS simulator runtime with an iPhone is installed; install one in Xcode's Components settings")
 }
 
+// unusedBases returns the UDIDs of the bases among devices, other than
+// baseSimulatorName, that no worktree's simulator was cloned from: used
+// holds the bases worktrees' simulators were.
+func unusedBases(devices []simctlDevice, used map[string]bool) []string {
+	var unused []string
+	for _, d := range devices {
+		isBase := strings.HasPrefix(d.Name, baseSimulatorPrefix) || strings.HasPrefix(d.Name, oldBaseSimulatorPrefix)
+		if isBase && d.Name != baseSimulatorName && !used[d.UDID] {
+			unused = append(unused, d.UDID)
+		}
+	}
+	return unused
+}
+
 // setUp boots a new simulator until iOS finishes its first-boot setup, shuts
 // it down, and disallows password AutoFill. It's quieted first, so the base
 // carries no half-downloaded assets for its clones to throw away and fetch
@@ -178,7 +312,7 @@ func setUp(ctx context.Context, udid string) error {
 	if _, err := simctl(ctx, "boot", udid); err != nil {
 		return err
 	}
-	if err := waitForBoot(ctx, udid); err != nil {
+	if err := waitForQuietBoot(ctx, udid); err != nil {
 		return err
 	}
 	home, err := simctl(ctx, "getenv", udid, "HOME")
@@ -249,7 +383,7 @@ func cloneSimulator(ctx context.Context) (*simulatorClone, error) {
 		clone.Remove()
 		return nil, err
 	}
-	if err := waitForBoot(ctx, udid); err != nil {
+	if err := waitForQuietBoot(ctx, udid); err != nil {
 		clone.Remove()
 		return nil, err
 	}
@@ -283,7 +417,7 @@ func bootPreparedClone(ctx context.Context) error {
 		removeSimulator(udid)
 		return err
 	}
-	if err := waitForBoot(ctx, udid); err != nil {
+	if err := waitForQuietBoot(ctx, udid); err != nil {
 		removeSimulator(udid)
 		return err
 	}

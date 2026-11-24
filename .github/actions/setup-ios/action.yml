@@ -76,7 +76,7 @@ runs:
         mv "$RUNNER_TEMP"/ios-base-simulator/* "$devices"/
         xcrun simctl shutdown all >/dev/null 2>&1 || true
         killall -9 com.apple.CoreSimulator.CoreSimulatorService 2>/dev/null || true
-        if xcrun simctl list devices | grep "Shisho Harness Base"; then
+        if xcrun simctl list devices | grep "Shisho Base "; then
           echo "Restored the base simulator."
         else
           echo "::warning::CoreSimulator didn't pick up the restored base simulator; the harness makes a new one."

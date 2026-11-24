@@ -20,7 +20,7 @@ runs:
       if: inputs.hit != 'true'
       shell: bash
       run: |
-        udid=$(xcrun simctl list devices -j | jq -r '.devices[][] | select(.name | startswith("Shisho Harness Base")) | .udid' | head -n 1)
+        udid=$(xcrun simctl list devices -j | jq -r '.devices[][] | select(.name | startswith("Shisho Base ")) | .udid' | head -n 1)
         if [ -z "$udid" ]; then
           echo "No base simulator to save."
           exit 0

@@ -55,20 +55,20 @@ func runIOS(ctx context.Context, args []string) error {
 	sweepLeftoverRunDirs()
 	var dir string
 	if *out != "" {
-		dir, err = filepath.Abs(*out)
-		if err == nil {
-			err = os.MkdirAll(dir, 0o755)
+		if dir, err = filepath.Abs(*out); err != nil {
+			return errors.WithStack(err)
+		}
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return errors.WithStack(err)
 		}
 		*keep = true
 	} else {
-		var run *runDir
-		if run, err = makeRunDir(os.TempDir(), flowsRunPrefix, *keep); err == nil {
-			dir = run.Path
-			defer run.Close()
+		run, err := makeRunDir(os.TempDir(), flowsRunPrefix, *keep)
+		if err != nil {
+			return err
 		}
-	}
-	if err != nil {
-		return errors.WithStack(err)
+		defer run.Close()
+		dir = run.Path
 	}
 	if *keep {
 		fmt.Fprintln(os.Stderr, "appharness: keeping", dir)

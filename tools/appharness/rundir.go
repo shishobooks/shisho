@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,11 +30,6 @@ const (
 // how sweepRunDirs knows the folder is left over.
 const runDirLock = ".appharness.lock"
 
-// legacyRunDirIdle is how long a run folder without runDirLock, made by a
-// harness from before the lock, must go unchanged before sweepRunDirs
-// removes it. Worktrees on an older commit still make those.
-const legacyRunDirIdle = time.Hour
-
 // runDir is a run's temp folder. Close it when the run ends.
 type runDir struct {
 	Path string
@@ -48,7 +42,10 @@ type runDir struct {
 func makeRunDir(tmp, prefix string, keep bool) (*runDir, error) {
 	if keep {
 		dir, err := os.MkdirTemp(tmp, keptRunPrefix)
-		return &runDir{Path: dir, keep: true}, errors.WithStack(err)
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		return &runDir{Path: dir, keep: true}, nil
 	}
 	dir, err := os.MkdirTemp(tmp, prefix)
 	if err != nil {
@@ -133,63 +130,62 @@ func sweepLeftoverRunDirs() {
 	}
 }
 
-// sweepRunDirs removes the folders in tmp of runs that have ended without
-// removing them, and returns how many it removed. A run's server is in a
-// process group of its own, so it outlives a run killed outright, holding
-// the folder's files on disk after they're removed; any process running from
-// a removed folder is killed with kill.
+// sweepRunDirs removes the folders in tmp of runs that ended without
+// removing them, and returns how many it removed. A folder is left over when
+// it has a runDirLock no one holds. One without the lock file is never
+// removed: a harness from before the lock made it, and nothing shows that
+// its run is over or that it wasn't kept with -keep.
 //
-// A folder whose runDirLock no one holds is left over. One without the lock
-// file, made by an older harness, is left over once nothing in it has
-// changed for legacyRunDirIdle and no process runs from it but orphans,
-// whose parent run is gone. An idle QA server changes nothing for hours, so
-// the age alone isn't enough; without the list of processes, none of those
-// is removed.
+// A run's server is in a process group of its own, so it outlives a run
+// killed outright, holding the folder's files on disk after they're removed.
+// An orphan running from the folder, whose parent is launchd (PID 1), is
+// killed with kill. A folder another process still runs from is left, and so
+// is one whose processes can't be listed, so a later sweep can try again.
 func sweepRunDirs(tmp string, processes func() ([]process, error), kill func(pid int)) int {
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
 		return 0
 	}
-	var listed []process
-	var listErr error
-	listOnce := false
-	list := func() ([]process, error) {
-		if !listOnce {
-			listed, listErr = processes()
-			listOnce = true
-		}
-		return listed, listErr
-	}
 	removed := 0
 	for _, entry := range entries {
-		if !entry.IsDir() || !isRunDirName(entry.Name()) {
-			continue
-		}
-		dir := filepath.Join(tmp, entry.Name())
-		lock, err := os.OpenFile(filepath.Join(dir, runDirLock), os.O_RDWR, 0) //nolint:gosec // A run folder of the harness's own.
-		switch {
-		case err == nil:
-			if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
-				_ = lock.Close()
-				continue
-			}
-			running, _ := list()
-			removeRunDir(dir, running, kill)
-			unlockFile(lock)
-			removed++
-		case os.IsNotExist(err):
-			if changedSince(dir, time.Now().Add(-legacyRunDirIdle)) {
-				continue
-			}
-			running, err := list()
-			if err != nil || runDirHasLiveRun(dir, running) {
-				continue
-			}
-			removeRunDir(dir, running, kill)
+		if entry.IsDir() && isRunDirName(entry.Name()) && sweepRunDir(filepath.Join(tmp, entry.Name()), processes, kill) {
 			removed++
 		}
 	}
 	return removed
+}
+
+// sweepRunDir removes dir if its run is over, and says whether it did.
+func sweepRunDir(dir string, processes func() ([]process, error), kill func(pid int)) bool {
+	lock, err := os.OpenFile(filepath.Join(dir, runDirLock), os.O_RDWR, 0) //nolint:gosec // A run folder of the harness's own.
+	if err != nil {
+		return false
+	}
+	defer unlockFile(lock)
+	if syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		return false
+	}
+	// Listed for each folder, just before the kill: removing a folder can
+	// take seconds, time enough for a PID to go to another process.
+	running, err := processes()
+	if err != nil {
+		return false
+	}
+	var orphans []int
+	for _, p := range running {
+		if !runsFrom(p, dir) {
+			continue
+		}
+		if p.PPID != 1 {
+			return false
+		}
+		orphans = append(orphans, p.PID)
+	}
+	for _, pid := range orphans {
+		kill(pid)
+	}
+	_ = os.RemoveAll(dir)
+	return true
 }
 
 // isRunDirName says whether name is a run folder's: a run prefix followed by
@@ -206,40 +202,4 @@ func isRunDirName(name string) bool {
 // runsFrom says whether p's executable is in dir, as a run's server is.
 func runsFrom(p process, dir string) bool {
 	return strings.HasPrefix(p.Command, dir+string(filepath.Separator))
-}
-
-// runDirHasLiveRun says whether a process runs from dir whose parent, the
-// run, is still alive. An orphan's parent is launchd, PID 1.
-func runDirHasLiveRun(dir string, running []process) bool {
-	for _, p := range running {
-		if runsFrom(p, dir) && p.PPID != 1 {
-			return true
-		}
-	}
-	return false
-}
-
-func removeRunDir(dir string, running []process, kill func(pid int)) {
-	for _, p := range running {
-		if runsFrom(p, dir) {
-			kill(p.PID)
-		}
-	}
-	_ = os.RemoveAll(dir)
-}
-
-// changedSince says whether anything in dir changed after since.
-func changedSince(dir string, since time.Time) bool {
-	changed := false
-	_ = filepath.WalkDir(dir, func(_ string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // A file gone mid-walk changed nothing.
-		}
-		if info, err := entry.Info(); err == nil && info.ModTime().After(since) {
-			changed = true
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	return changed
 }
