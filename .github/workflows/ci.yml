@@ -521,15 +521,22 @@ jobs:
           hit: ${{ steps.setup.outputs.simulator-hit }}
           name: ${{ steps.setup.outputs.simulator-name }}
 
-  # One job: splitting the flows (`ios -shard`) saved minutes when GitHub had
-  # macOS capacity, but each extra macOS job is another that can wait for a
-  # runner, and the Free plan runs five at once across every pull request.
+  # Two jobs, split by each flow's time (`ios -shard`, `flowSeconds` in
+  # tools/appharness/shard.go): the whole suite no longer fits one job's
+  # deadline on GitHub's runners. Each extra macOS job is another that can
+  # wait for a runner, and the Free plan runs five at once across every pull
+  # request.
   app-ios-flows:
-    name: iOS flows
+    # Keep this N in sync with the matrix.
+    name: iOS flows (${{ matrix.shard }}/2)
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true'
     runs-on: macos-26
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -561,7 +568,7 @@ jobs:
       # the harness output below.
       - name: Run the Maestro flows
         timeout-minutes: 50
-        run: mise ios:harness -- -out "$RUNNER_TEMP/harness"
+        run: mise ios:harness -- -out "$RUNNER_TEMP/harness" -shard ${{ matrix.shard }}/2
       - uses: ./.github/actions/save-ios-simulator
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
@@ -574,7 +581,7 @@ jobs:
         if: failure() || cancelled()
         uses: actions/upload-artifact@v7
         with:
-          name: harness-output
+          name: harness-output-${{ matrix.shard }}
           path: ${{ runner.temp }}/harness
           if-no-files-found: ignore
           retention-days: 7

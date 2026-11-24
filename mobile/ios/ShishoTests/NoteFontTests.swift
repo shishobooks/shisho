@@ -32,9 +32,17 @@ final class NoteFontTests: XCTestCase {
     /// gives no line height.
     func testANotesLineSpacingFollowsThePage() {
         let font = NoteFont.family("Times New Roman")
-        let spacing = font.lineSpacing(for: 1.45, relativeTo: .callout, base: 16)
+        let spacing = font.lineSpacing(for: 1.45, size: 16)
         XCTAssertGreaterThan(spacing, 3)
         XCTAssertLessThan(spacing, 9)
-        XCTAssertEqual(font.lineSpacing(for: nil, relativeTo: .callout, base: 16), 0)
+        XCTAssertEqual(font.lineSpacing(for: nil, size: 16), 0)
+    }
+
+    /// A note is set at 90% of the reader's font size, to the half point,
+    /// as the web reader's popover is (#920).
+    func testANoteIsSetAtNinetyPercentOfTheReadersSize() {
+        XCTAssertEqual(NoteFont.size(forReaderSize: 16), 14.5)
+        XCTAssertEqual(NoteFont.size(forReaderSize: 20), 18)
+        XCTAssertEqual(NoteFont.size(forReaderSize: 10), 9)
     }
 }

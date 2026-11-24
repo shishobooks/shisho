@@ -8,13 +8,12 @@ struct ReaderView: View {
     let model: ReaderModel
     @State private var showingContents = false
     @State private var showingSettings = false
+    @State private var showingSearch = false
     /// The page's frame on screen.
     @State private var pagerFrame: CGRect = .zero
     /// The readout counts pages left in the book rather than the chapter,
     /// as the bar does.
     @AppStorage(ReaderBottomBar.pagesLeftInBookKey) private var pagesLeftInBook = false
-    /// The settings sheet's height, grown with the text in it.
-    @ScaledMetric(relativeTo: .subheadline) private var settingsHeight: CGFloat = 250
     let close: () -> Void
 
     /// The app's appearance, which the bars and sheets take.
@@ -59,7 +58,16 @@ struct ReaderView: View {
                 // book opens.
                 if model.phase == .reading {
                     if model.chromeVisible {
+                        if showingSearchBar {
+                            searchBar.padding(.bottom, 8)
+                        }
                         ReaderBottomBar(model: model).transition(.move(edge: .bottom).combined(with: .opacity))
+                    } else if showingSearchBar {
+                        // In the readout's place under the page. Paginated,
+                        // that and the band under the text are as tall as
+                        // the bar, so it covers no text; scrolled, text
+                        // passes under its top edge.
+                        searchBar
                     } else {
                         readout
                     }
@@ -90,15 +98,20 @@ struct ReaderView: View {
         .animation(.easeOut(duration: 0.15), value: model.turnWaiting)
         .animation(.easeOut(duration: 0.15), value: model.note)
         .animation(.easeOut(duration: 0.15), value: model.image)
+        .animation(.easeOut(duration: 0.18), value: model.search.current == nil)
         // Hidden while reading, bars or not: the page under it may be in a
         // theme the app's appearance doesn't show on, and showing it with
         // the bars would resize the pages on iPhones whose status bar takes
         // its own room.
         .statusBarHidden(model.phase == .reading)
+        .background { keyboardShortcuts }
         .task {
             model.settings.appDark = appScheme == .dark
             await model.load()
         }
+        // The screen stays on while reading, past the auto-lock time.
+        .onAppear { ScreenAwake.hold() }
+        .onDisappear { ScreenAwake.release() }
         .onChange(of: appScheme) { _, scheme in
             model.settings.appDark = scheme == .dark
         }
@@ -116,11 +129,60 @@ struct ReaderView: View {
             .tint(Theme.primary)
         }
         .sheet(isPresented: $showingSettings) {
+            // Half height first, so the page shows each change beside it.
             ReaderSettingsSheet(settings: Bindable(model).settings) { showingSettings = false }
-                .presentationDetents([.height(settingsHeight)])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.background)
+                .presentationContentInteraction(.scrolls)
         }
+        .sheet(isPresented: $showingSearch) {
+            // Leaving the sheet for a result hides the controls, as a
+            // contents jump does; stepping from the find bar leaves them as
+            // they are, so the bar stays under the finger.
+            ReaderSearchSheet(search: model.search, choose: { index in
+                showingSearch = false
+                model.hideChromeToRead()
+                model.search.goToResult(index)
+            }, step: { forward in
+                showingSearch = false
+                model.hideChromeToRead()
+                if forward { model.search.next() } else { model.search.previous() }
+            }, done: { showingSearch = false })
+            // Full height from the start, as the keyboard comes up with it:
+            // a half-height sheet would grow once the keyboard showed, and
+            // drop back when it went.
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationBackground(Theme.background)
+        }
+    }
+
+    // MARK: - Keyboard
+
+    /// Search from a hardware keyboard, as in the web reader: Command-F
+    /// opens it, Command-G and Shift-Command-G step through the results
+    /// from anywhere in the reader, and Escape closes it. Buttons out of
+    /// sight, so they work with the controls hidden; the shortcuts list
+    /// shows them by name.
+    private var keyboardShortcuts: some View {
+        Group {
+            Button("Search in Book") { showingSearch = true }
+                .keyboardShortcut("f", modifiers: .command)
+                .disabled(model.phase != .reading)
+            Button("Next Result") { model.search.next() }
+                .keyboardShortcut("g", modifiers: .command)
+                .disabled(!model.search.active)
+            Button("Previous Result") { model.search.previous() }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                .disabled(!model.search.active)
+            Button("Close Search") { model.search.close() }
+                .keyboardShortcut(.escape, modifiers: [])
+                .disabled(!model.search.active)
+        }
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
     }
 
     // MARK: - Loading
@@ -156,6 +218,16 @@ struct ReaderView: View {
         }
     }
 
+    /// A chosen search result's bar, while the results are away.
+    private var showingSearchBar: Bool {
+        model.search.current != nil && !showingSearch
+    }
+
+    private var searchBar: some View {
+        ReaderSearchBar(search: model.search) { showingSearch = true }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
     /// A turn waiting for its page to be laid out.
     private var turnSpinner: some View {
         ProgressView()
@@ -179,66 +251,91 @@ struct ReaderView: View {
         Theme.background
     }
 
+    /// The room each side of the title keeps for the buttons, so the title
+    /// stays centered: the three on the right, which don't grow with the
+    /// text size, and are wider than Book on the left.
+    private static let topBarSide: CGFloat = 3 * 44
+
     private var topBar: some View {
-        HStack(spacing: 0) {
-            Button(action: close) {
-                HStack(spacing: 2) {
-                    Icon(.chevronLeft, size: 24, relativeTo: .body)
-                    Text("Book")
-                        .font(.geist(.subheadline, weight: .medium))
-                }
-                .foregroundStyle(Theme.primary)
-                .frame(minWidth: 44, minHeight: 44, alignment: .leading)
-                .padding(.leading, 6)
-            }
-            // Named as it shows, so Voice Control's "Tap Book" works.
-            .accessibilityHint(Text("Closes the book"))
-            .accessibilityInputLabels([Text("Book"), Text("Close")])
-            .accessibilityShowsLargeContentViewer()
-            .accessibilityIdentifier("reader.close")
-            .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(spacing: 1) {
-                Text(model.chapterTitle ?? model.file.book.title)
-                    .font(.geist(.subheadline, weight: .semibold))
-                    .foregroundStyle(Theme.foreground)
-                if model.chapterTitle != nil {
-                    Text(model.file.book.title)
-                        .font(.geist(.caption2))
-                        .foregroundStyle(Theme.mutedForeground)
+        // Centered when the title fits between the buttons' room on both
+        // sides; otherwise it takes all the room between them, a little off
+        // center, as a navigation bar's title does, rather than cutting off.
+        ViewThatFits(in: .horizontal) {
+            ZStack {
+                ReaderTitle(model: model)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, Self.topBarSide)
+                HStack(spacing: 0) {
+                    closeButton
+                    Spacer(minLength: 0)
+                    topBarButtons
                 }
             }
-            .lineLimit(1)
-            .frame(maxWidth: 200)
-            .accessibilityElement(children: .combine)
-            HStack(spacing: 0) {
-                Button { showingContents = true } label: {
-                    Icon(.list, size: 20)
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                // The book's own controls only once it shows.
-                .disabled(model.contents.isEmpty || model.phase != .reading)
-                .accessibilityLabel(Text("Contents"))
-                .accessibilityShowsLargeContentViewer()
-                .accessibilityIdentifier("reader.contents")
-                Button { showingSettings = true } label: {
-                    Icon(.settings, size: 20)
-                        .frame(minWidth: 44, minHeight: 44)
-                }
-                .disabled(model.phase != .reading)
-                .accessibilityLabel(Text("Settings"))
-                .accessibilityShowsLargeContentViewer()
-                .accessibilityIdentifier("reader.settings")
+            HStack(spacing: 4) {
+                closeButton
+                ReaderTitle(model: model)
+                    .frame(maxWidth: .infinity)
+                topBarButtons
             }
-            .foregroundStyle(Theme.foreground)
-            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         // Past this the bar would cover the page; the buttons show large
         // on a long press instead.
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .background(ReaderView.barBackground.ignoresSafeArea(edges: .top))
-        .overlay(alignment: .bottom) { Theme.border.frame(height: 1) }
+        // To the screen's edges in landscape, past the sides' safe areas,
+        // which the buttons stay inside.
+        .background(ReaderView.barBackground.ignoresSafeArea(edges: [.top, .horizontal]))
+        .overlay(alignment: .bottom) { Theme.border.frame(height: 1).ignoresSafeArea(edges: .horizontal) }
+    }
+
+    private var closeButton: some View {
+        Button(action: close) {
+            HStack(spacing: 2) {
+                Icon(.chevronLeft, size: 24, relativeTo: .body)
+                Text("Book")
+                    .font(.geist(.subheadline, weight: .medium))
+            }
+            .foregroundStyle(Theme.primary)
+            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
+            .padding(.leading, 6)
+        }
+        // Named as it shows, so Voice Control's "Tap Book" works.
+        .accessibilityHint(Text("Closes the book"))
+        .accessibilityInputLabels([Text("Book"), Text("Close")])
+        .accessibilityShowsLargeContentViewer()
+        .accessibilityIdentifier("reader.close")
+    }
+
+    private var topBarButtons: some View {
+        HStack(spacing: 0) {
+            Button { showingSearch = true } label: {
+                Icon(.search, size: 20)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .disabled(model.phase != .reading)
+            .accessibilityLabel(Text("Search"))
+            .accessibilityShowsLargeContentViewer()
+            .accessibilityIdentifier("reader.search")
+            Button { showingContents = true } label: {
+                Icon(.list, size: 20)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            // The book's own controls only once it shows.
+            .disabled(model.contents.isEmpty || model.phase != .reading)
+            .accessibilityLabel(Text("Contents"))
+            .accessibilityShowsLargeContentViewer()
+            .accessibilityIdentifier("reader.contents")
+            Button { showingSettings = true } label: {
+                Icon(.settings, size: 20)
+                    .frame(minWidth: 44, minHeight: 44)
+            }
+            .disabled(model.phase != .reading)
+            .accessibilityLabel(Text("Settings"))
+            .accessibilityShowsLargeContentViewer()
+            .accessibilityIdentifier("reader.settings")
+        }
+        .foregroundStyle(Theme.foreground)
     }
 
     private var percentShown: String {
@@ -287,6 +384,45 @@ struct ReaderView: View {
 
     private var readoutLabel: String {
         model.placeLabel(percent: percentShown, pagesLeft: pagesLeftLabel)
+    }
+}
+
+/// Keeps the screen on while any reader is open. Counted, since a reader
+/// that replaces another can appear before the old one disappears.
+@MainActor
+enum ScreenAwake {
+    private static var holds = 0
+
+    static func hold() {
+        holds += 1
+        UIApplication.shared.isIdleTimerDisabled = true
+    }
+
+    static func release() {
+        holds = max(0, holds - 1)
+        UIApplication.shared.isIdleTimerDisabled = holds > 0
+    }
+}
+
+/// The chapter and the book over the page. Its own view, so following
+/// every move redraws only it.
+private struct ReaderTitle: View {
+    let model: ReaderModel
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(model.chapterTitle ?? model.file.book.title)
+                .font(.geist(.subheadline, weight: .semibold))
+                .foregroundStyle(Theme.foreground)
+            if model.chapterTitle != nil {
+                Text(model.file.book.title)
+                    .font(.geist(.caption2))
+                    .foregroundStyle(Theme.mutedForeground)
+            }
+        }
+        .lineLimit(1)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("reader.title")
     }
 }
 
@@ -340,61 +476,101 @@ private struct ReaderBottomBar: View {
         scrubbing == nil ? model.pagesLeftLabel(inBook: pagesLeftInBook) : nil
     }
 
-    var body: some View {
-        VStack(spacing: 4) {
-            // Back and forward through jumps either side of the bar, as the
-            // web reader has them: always there, and disabled when there's
-            // nowhere to go, so they're where the reader looks after paging
-            // around a jump.
-            HStack(spacing: 2) {
-                historyButton(.undo2, label: "Back to previous location", enabled: model.history.canGoBack,
-                              identifier: "reader.back", action: model.goBack)
-                Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
-                    scrubbing = nil
-                    model.go(toFraction: value)
-                }, step: 0.01, onAdjust: { model.go(toFraction: $0, adjusting: true) }, marks: model.marks)
-                .accessibilityLabel(Text("Place in the book"))
-                .accessibilityValue(Text(scrubValue))
-                .accessibilityIdentifier("reader.scrubber")
+    /// Back and forward through jumps either side of the bar, as the web
+    /// reader has them: always there, and disabled when there's nowhere to
+    /// go, so they're where the reader looks after paging around a jump.
+    private var scrubberRow: some View {
+        HStack(spacing: 2) {
+            historyButton(.undo2, label: "Back to previous location", enabled: model.history.canGoBack,
+                          identifier: "reader.back", action: model.goBack)
+            Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
+                scrubbing = nil
+                model.go(toFraction: value)
+            }, step: 0.01, onAdjust: { model.go(toFraction: $0, adjusting: true) }, marks: model.marks)
+            .accessibilityLabel(Text("Place in the book"))
+            .accessibilityValue(Text(scrubValue))
+            .accessibilityIdentifier("reader.scrubber")
 
-                historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
-                              identifier: "reader.forward", action: model.goForward)
-            }
-            HStack(spacing: 6) {
+            historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
+                          identifier: "reader.forward", action: model.goForward)
+        }
+    }
+
+    /// The chapter, pages left, and how far through.
+
+    private func placeRow(showingChapter: Bool) -> some View {
+        let pagesLeftHidden = !showingChapter && scrubbing != nil
+        return HStack(spacing: 6) {
+            if showingChapter {
                 Text((scrubbing.map(model.chapterTitle(at:)) ?? model.chapterTitle) ?? "")
                     .lineLimit(1)
                     // Read with the percentage, as the place.
                     .accessibilityHidden(true)
                 Spacer(minLength: 12)
-                if let pagesLeft = pagesLeftLabel {
-                    Button { pagesLeftInBook.toggle() } label: {
-                        Text(pagesLeft)
-                            .lineLimit(1)
-                            .contentTransition(.numericText())
-                            .frame(minHeight: 32)
-                            .hitArea(height: 32)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
-                    .accessibilityIdentifier("reader.pagesLeft")
-                    Text(verbatim: "·")
+            }
+            // Kept while the scrubber's dragged, hidden, in the one-row bar,
+            // so the scrubber beside it doesn't change width under the drag.
+            if let pagesLeft = showingChapter ? pagesLeftLabel : model.pagesLeftLabel(inBook: pagesLeftInBook) {
+                Button { pagesLeftInBook.toggle() } label: {
+                    Text(pagesLeft)
+                        .lineLimit(1)
+                        .contentTransition(.numericText())
+                        .frame(minHeight: 32)
+                        .hitArea(height: 32)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
+                .accessibilityIdentifier("reader.pagesLeft")
+                .opacity(pagesLeftHidden ? 0 : 1)
+                .accessibilityHidden(pagesLeftHidden)
+                Text(verbatim: "·")
+                    .opacity(pagesLeftHidden ? 0 : 1)
+                    .accessibilityHidden(true)
+            }
+            // In the one-row bar, as wide as 100% whatever it reads, so the
+            // scrubber beside it keeps its width through a drag.
+            ZStack(alignment: .trailing) {
+                if !showingChapter {
+                    Text(1.0.formatted(.percent.precision(.fractionLength(0))))
+                        .hidden()
                         .accessibilityHidden(true)
                 }
                 Text(percentShown)
-                    .monospacedDigit()
                     .accessibilityLabel(Text(place))
                     .accessibilityIdentifier("reader.progress")
             }
-            .font(.geist(.caption))
-            .foregroundStyle(Theme.mutedForeground)
-            .accessibilityElement(children: .contain)
+            .monospacedDigit()
+        }
+        .font(.geist(.caption))
+        .foregroundStyle(Theme.mutedForeground)
+        .accessibilityElement(children: .contain)
+    }
+
+    /// Short, as a phone in landscape: one row, the chapter left to the
+    /// title over the page, so the bar covers less of the page.
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    var body: some View {
+        Group {
+            if verticalSizeClass == .compact {
+                HStack(spacing: 12) {
+                    scrubberRow
+                    placeRow(showingChapter: false)
+                        .fixedSize()
+                }
+            } else {
+                VStack(spacing: 4) {
+                    scrubberRow
+                    placeRow(showingChapter: true)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 6)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .background(ReaderView.barBackground.ignoresSafeArea(edges: .bottom))
-        .overlay(alignment: .top) { Theme.border.frame(height: 1) }
+        .background(ReaderView.barBackground.ignoresSafeArea(edges: [.bottom, .horizontal]))
+        .overlay(alignment: .top) { Theme.border.frame(height: 1).ignoresSafeArea(edges: .horizontal) }
         // Where a drag would go, above the bar where a finger doesn't
         // cover it, so it isn't blind. After the border, so it's in front.
         .overlay(alignment: .top) {
@@ -748,86 +924,6 @@ private struct ContentsSheet: View {
     }
 }
 
-/// The settings this version offers: theme and layout, as the web reader's
-/// settings set them. The rest of its list comes with #920.
-private struct ReaderSettingsSheet: View {
-    @Binding var settings: ReaderSettings
-    let done: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ZStack {
-                Text("Settings")
-                    .font(.geist(.subheadline, weight: .semibold))
-                    .accessibilityAddTraits(.isHeader)
-                HStack {
-                    Spacer()
-                    Button("Done", action: done)
-                        .font(.geist(.subheadline, weight: .semibold))
-                        .foregroundStyle(Theme.primary)
-                        .frame(minHeight: 44)
-                        .accessibilityIdentifier("reader.settings.done")
-                }
-            }
-            .padding(.top, 10)
-            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-            ChoiceSet(title: "Theme", options: ReaderSettings.ThemeChoice.allCases, selection: $settings.themeChoice, label: \.label,
-                      identifier: "reader.theme")
-            ChoiceSet(title: "Layout", options: ReaderSettings.Layout.allCases, selection: $settings.layout, label: \.label,
-                      identifier: "reader.layout")
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(Theme.foreground)
-        .padding(.horizontal, 20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// One setting's choices as the web reader's settings draw them: a row of
-/// buttons, the chosen one filled. Not the player's SegmentedChoice, which
-/// is the web app's tab switch, a different control there.
-private struct ChoiceSet<Option: Hashable & RawRepresentable<String>>: View {
-    let title: LocalizedStringResource
-    let options: [Option]
-    @Binding var selection: Option
-    let label: KeyPath<Option, LocalizedStringResource>
-    let identifier: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.geist(.subheadline, weight: .medium))
-                .foregroundStyle(Theme.foreground)
-                .accessibilityAddTraits(.isHeader)
-            HStack(spacing: 8) {
-                ForEach(options, id: \.self) { option in
-                    let chosen = option == selection
-                    Button { selection = option } label: {
-                        Text(option[keyPath: label])
-                            .font(.geist(.footnote, weight: .medium))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .padding(.horizontal, 6)
-                            .frame(maxWidth: .infinity, minHeight: 36)
-                            .foregroundStyle(chosen ? Theme.primaryForeground : Theme.foreground)
-                            .background(chosen ? Theme.primary : Theme.background,
-                                        in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
-                                .strokeBorder(chosen ? Color.clear : Theme.border))
-                            // The button is drawn at the web's height; it
-                            // takes taps over 44 points.
-                            .padding(.vertical, 4)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(PressableStyle())
-                    .accessibilityAddTraits(chosen ? .isSelected : [])
-                    .accessibilityIdentifier("\(identifier).\(option.rawValue)")
-                }
-            }
-        }
-    }
-}
-
 /// A footnote's card beside its reference, over everything dimmed a
 /// little, with an arrow to the reference. A tap outside closes it.
 private struct NoteOverlay: View {
@@ -910,9 +1006,8 @@ private struct NoteCard: View {
                         Text(paragraph)
                             // The note is the book's text, not the app's,
                             // with the page's spacing between its lines.
-                            .font(note.font.font(relativeTo: .callout))
-                            .lineSpacing(note.font.lineSpacing(for: note.lineHeight, relativeTo: .callout,
-                                                               base: Font.textStyleSize(.callout)))
+                            .font(note.font.font(size: note.size))
+                            .lineSpacing(note.font.lineSpacing(for: note.lineHeight, size: note.size))
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

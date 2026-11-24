@@ -7,7 +7,8 @@
 // JSON string per message.
 //
 // Some rules follow the web reader's, which is TypeScript and can't be
-// imported here: the theme stylesheet (app/libraries/readerSettings.ts),
+// imported here: the display settings' stylesheet (styles.js, checked
+// against app/libraries/readerSettings.ts),
 // footnotes (app/libraries/readerFootnotes.ts), chapter marks
 // (app/libraries/readerChapterMarks.ts), and the end of the book
 // (app/utils/readerEnd.ts). A change there changes these too.
@@ -15,6 +16,7 @@ import "../foliate/view.js";
 
 import { cleanPackage } from "./package.js";
 import { stepPull } from "./pull.js";
+import { bookCSS, bookLayout, recordBookAlignment } from "./styles.js";
 
 const post = (msg) =>
   window.webkit?.messageHandlers?.bridge?.postMessage(JSON.stringify(msg));
@@ -35,40 +37,73 @@ let quiet = true;
 
 // MARK: - Styles
 
-// The text the line spacing applies to.
-const TEXT = "p, li, blockquote, dd";
-
-// The web reader's stylesheet at its default size and spacing; the app's
-// display settings beyond theme and layout come later (#920).
-const css = (s) => {
-  const replaceBookColors = s.link
-    ? `
-      body { color: inherit !important; background: none !important; }
-      body * { color: inherit !important; background-color: transparent !important; }
-      a:any-link, a:any-link * { color: ${s.link} !important; }
-      ${s.theme === "dark" || s.theme === "black" ? "img, svg { background-color: #fff !important; }" : ""}`
-    : "";
-  return `
-      @namespace epub "http://www.idpf.org/2007/ops";
+// The web reader's stylesheet (styles.js), with what only the app's page
+// needs: no tap highlight, and no text inflation on rotation.
+const css = (s) => `
       * { -webkit-tap-highlight-color: transparent; }
-      html { color: ${s.fg} !important; background: ${s.bg} !important; font-size: 16px !important; -webkit-text-size-adjust: 100% !important; }
-      ${replaceBookColors}
-      ${TEXT} { line-height: 1.45 !important; }`;
-};
+      html { -webkit-text-size-adjust: 100% !important; }
+      ${bookCSS(s)}`;
 
-const applyStyles = (s) => {
+// The space above and below the text, inside the page.
+const TEXT_BAND = "16px";
+
+// relayout, for the page showing: a neighbor waits for its fonts before it
+// says it's ready, and a late relayout would move it off its page.
+const applyStyles = (s, relayout = true) => {
   document.documentElement.style.background = s.bg;
   const renderer = view.renderer;
   if (!renderer) return;
   renderer.setStyles?.(css(s));
+  const layout = bookLayout(s);
   // Setting an attribute lays the book out again even when it's unchanged.
   const set = (name, value) => {
-    if (renderer.getAttribute(name) !== value)
-      renderer.setAttribute(name, value);
+    if (renderer.getAttribute(name) === value) return false;
+    renderer.setAttribute(name, value);
+    return true;
   };
-  set("gap", "7%");
-  set("flow", s.layout);
-  set("max-column-count", "2");
+  const gap = set("gap", layout.gap);
+  const flow = set("flow", layout.flow);
+  const columns = set("max-column-count", layout.maxColumnCount);
+  // foliate keeps a band above and below the text for running heads, 48 px
+  // unless told otherwise. The app draws none, and its own readout has room
+  // under the page, so the band shrinks to a little air. (The web reader
+  // keeps it: its search panel hangs into the top band.)
+  const band = set("margin", TEXT_BAND);
+  // The paginator only sets a style for these, which a section already laid
+  // out doesn't notice; a new flow renders itself.
+  if ((gap || columns || band) && !flow) renderer.render?.();
+  if (relayout) relayoutWhenFontLoads(s);
+};
+
+// The place the last settings change pinned, and the page's moves then. A
+// run of changes keeps pinning the same place until the reader moves:
+// pinning each time to the start of the page the last change landed on
+// would walk back a little with each one.
+let pinnedPlace = null;
+
+// A section already on screen lays out before a newly chosen font arrives,
+// so it lays out again once the font is in, as the web reader does. foliate
+// keeps the place across it.
+let fontWait = 0;
+// Bumped each time native moves this page as a neighbor: a font that
+// arrives after leaves it alone.
+let moves = 0;
+const relayoutWhenFontLoads = (s) => {
+  const wait = ++fontWait;
+  const moved = moves;
+  if (!s.font) return;
+  const family = `1em "${s.font.family}"`;
+  for (const { doc } of view.renderer?.getContents?.() ?? []) {
+    if (doc?.fonts?.check?.(family) !== false) continue;
+    doc.fonts
+      .load(family)
+      .then(() => {
+        if (wait === fontWait && moved === moves) view.renderer?.render?.();
+      })
+      .catch(() => {
+        // The page keeps the fallback font it already shows.
+      });
+  }
 };
 
 // MARK: - Where the page is
@@ -360,6 +395,8 @@ view.addEventListener("relocate", (e) => {
   // Laid out again in place, as once fonts or images load: where the
   // chapters fall can move without the page count changing.
   if (reason === "anchor") chapterPages = null;
+  // The reader moved: the next settings change pins the place anew.
+  if (!quiet && reason && reason !== "anchor") pinnedPlace = null;
   const firstScreen =
     reason === "scroll" &&
     currentIndex() === openedSection &&
@@ -839,6 +876,9 @@ const sectionOfDoc = new WeakMap();
 view.addEventListener("load", ({ detail: { doc, index } }) => {
   if (index != null) sectionOfDoc.set(doc, index);
   guardWindow(doc.defaultView, false);
+  // Before the justification setting applies and before layout, so it
+  // reads the book's own alignment.
+  recordBookAlignment(doc);
 });
 
 // MARK: - Neighbors
@@ -1111,6 +1151,165 @@ const openIfNeeded = async () => {
   if (!view.book && lastOpen) await open({ ...lastOpen, idle: true });
 };
 
+// MARK: - Search
+
+// A phrase anywhere in the text, ignoring case and accents, as the web
+// reader searches (SEARCH_OPTIONS in app/hooks/useBookSearch.ts).
+const SEARCH_OPTIONS = {
+  matchCase: false,
+  matchDiacritics: false,
+  matchWholeWords: false,
+};
+
+// Bumped by each search and each cancel, which leaves the last one's
+// results unsent and stops it at its next section.
+let searchRun = 0;
+
+// Searches the whole book, sending each section's matches as they're found
+// and then that the search is done, each under native's token. Only the
+// page that was current runs it; the others mark the chosen result.
+const search = async (query, token) => {
+  const run = ++searchRun;
+  const stale = () => run !== searchRun;
+  try {
+    // A page opening the book again, as after its process ended, searches
+    // once it has.
+    await chain;
+    if (stale()) return;
+    const found = view.search({
+      ...SEARCH_OPTIONS,
+      query,
+      // foliate's own marks only reach this page; native sends the
+      // matches to every page, which shades them (addMatches).
+      draw: () => document.createElementNS(SVG_NS, "g"),
+    });
+    // Leaving the loop stops foliate's search, which reads no further.
+    for await (const item of found) {
+      if (stale()) return;
+      if (item === "done") break;
+      if (!("subitems" in item)) continue;
+      post({
+        type: "searchResults",
+        token,
+        results: item.subitems.map(({ cfi, excerpt, label }) => ({
+          cfi,
+          pre: excerpt.pre,
+          match: excerpt.match,
+          post: excerpt.post,
+          chapter: label ?? item.label ?? "",
+        })),
+      });
+    }
+  } catch (err) {
+    post({ type: "log", message: "search failed: " + err });
+  }
+  if (!stale()) post({ type: "searchDone", token });
+};
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+// The marks the web reader draws (app/libraries/searchMarks.ts): every
+// match lightly shaded, and the one the reader went to in a deeper amber
+// that reaches a little past its text, laid over the shading.
+const drawBoxes = (g, boxes, { color, opacity, pad }) => {
+  const layer = document.createElementNS(SVG_NS, "g");
+  layer.setAttribute("fill", color);
+  layer.style.opacity = String(opacity);
+  for (const { left, top, width, height } of boxes) {
+    if (!width || !height) continue;
+    const rect = document.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", String(left - pad));
+    rect.setAttribute("y", String(top - pad));
+    rect.setAttribute("width", String(width + pad * 2));
+    rect.setAttribute("height", String(height + pad * 2));
+    rect.setAttribute("rx", "3");
+    layer.append(rect);
+  }
+  g.append(layer);
+};
+const MATCH = { color: "#facc15", opacity: 0.3, pad: 0 };
+const CHOSEN = { color: "#f59e0b", opacity: 0.45, pad: 2 };
+const drawMatch = (boxes) => {
+  const g = document.createElementNS(SVG_NS, "g");
+  drawBoxes(g, boxes, MATCH);
+  return g;
+};
+// One annotation per match, so the chosen one draws both marks.
+const drawChosen = (boxes) => {
+  const g = document.createElementNS(SVG_NS, "g");
+  const list = Array.from(boxes);
+  drawBoxes(g, list, MATCH);
+  drawBoxes(g, list, CHOSEN);
+  return g;
+};
+
+// The search's matches by section, which every page shades in the sections
+// it shows, whichever page found them; and the one the reader went to.
+let matches = new Map();
+let matchSet = new Set();
+let chosenResult = null;
+const mark = (cfi) =>
+  Promise.resolve(view.addAnnotation({ value: cfi })).catch(() => {});
+const unmark = (cfi) =>
+  Promise.resolve(view.deleteAnnotation({ value: cfi })).catch(() => {});
+// The sections showing now; the rest are marked as they load.
+const shownSections = () =>
+  new Set((view.renderer?.getContents?.() ?? []).map(({ index }) => index));
+
+// Matches sent before the book opened, as to a page opening again after its
+// process ended, marked once it has.
+let pendingMatches = [];
+
+const addMatches = (cfis) => {
+  if (!view.book) {
+    pendingMatches.push(...cfis);
+    return;
+  }
+  const shown = shownSections();
+  for (const cfi of cfis) {
+    if (matchSet.has(cfi)) continue;
+    let index;
+    try {
+      ({ index } = view.resolveCFI(cfi));
+    } catch {
+      continue;
+    }
+    matchSet.add(cfi);
+    if (!matches.has(index)) matches.set(index, []);
+    matches.get(index).push(cfi);
+    if (shown.has(index)) mark(cfi);
+  }
+};
+
+const clearMatches = () => {
+  for (const cfi of matchSet) unmark(cfi);
+  if (chosenResult && !matchSet.has(chosenResult)) unmark(chosenResult);
+  matches = new Map();
+  matchSet = new Set();
+  pendingMatches = [];
+  chosenResult = null;
+};
+
+// foliate draws an annotation when it's added and again whenever its
+// section loads, which it announces with "create-overlay".
+view.addEventListener("draw-annotation", ({ detail: { draw, annotation } }) => {
+  if (annotation.value === chosenResult) draw(drawChosen);
+  else if (matchSet.has(annotation.value)) draw(drawMatch);
+});
+view.addEventListener("create-overlay", ({ detail: { index } }) => {
+  for (const cfi of matches.get(index) ?? []) mark(cfi);
+  if (chosenResult && !matchSet.has(chosenResult)) mark(chosenResult);
+});
+
+const markResult = (cfi) => {
+  const old = chosenResult;
+  chosenResult = cfi;
+  if (!view.book) return;
+  // Drawn again as a plain match, or taken off when it's no longer one.
+  if (old && old !== cfi) (matchSet.has(old) ? mark : unmark)(old);
+  if (cfi) mark(cfi);
+};
+
 // MARK: - Native calls
 
 window.R = {
@@ -1123,9 +1322,34 @@ window.R = {
     // fails.
     chained("open", () => open(args), args.neighborDir ? args.token : null);
   },
-  apply(s) {
+  // keepPlace, for the page showing, pins the place to the text first, so
+  // the reflow keeps it: a page moved there as a neighbor holds its place
+  // as a share of the section's pages, which a new size changes.
+  apply(s, keepPlace) {
+    // After the jumps sent before it, whose moves would otherwise pass for
+    // this relayout. Taken as it's called, as a jump takes the changes sent
+    // before it, so each waits only for what came first and neither waits
+    // on the other.
+    const jumps = navigation;
     chained("apply", async () => {
-      applyStyles(s);
+      await jumps;
+      // Only a page that shows something: an empty page's CFI is its
+      // section's body, which would go back to the section's start.
+      const shown = view.lastLocation?.range;
+      const here =
+        keepPlace &&
+        !view.isFixedLayout &&
+        landed() &&
+        shown &&
+        !shown.collapsed &&
+        shown.toString().trim()
+          ? view.lastLocation.cfi
+          : null;
+      const place =
+        here && pinnedPlace?.moves === moves ? pinnedPlace.cfi : here;
+      pinnedPlace = place ? { cfi: place, moves } : null;
+      if (place) await goToOrNear(place, null).catch(() => {});
+      applyStyles(s, keepPlace);
       await view.renderer?.settled?.();
       await settle();
       post({ type: "applied", loc: location() });
@@ -1136,6 +1360,7 @@ window.R = {
   // round trip isn't exact, and foliate's next() and prev() hold a lock and
   // relocate twice at a section's edge.
   sync(index, page, pages, dir, token) {
+    moves++;
     chained(
       "sync",
       async () => {
@@ -1148,6 +1373,7 @@ window.R = {
   // A jump a neighbor makes at the same time as the current page: go
   // there, then step one page.
   jump(target, dir, token, fallback) {
+    moves++;
     chained(
       "jump",
       async () => {
@@ -1164,8 +1390,13 @@ window.R = {
   // A jump on the current page. Jumps land in turn, each answering its
   // token once it has, or has failed.
   goTo(target, fallback, token) {
+    pinnedPlace = null;
+    // After the settings changes sent before it, so the landing isn't
+    // reported as their quiet relayout and goes unsaved.
+    const changes = chain;
     navigation = navigation.then(async () => {
       try {
+        await changes;
         await view.renderer?.settled?.();
         await goToOrNear(target, fallback);
       } catch (err) {
@@ -1175,9 +1406,11 @@ window.R = {
     });
   },
   next() {
+    pinnedPlace = null;
     view.renderer?.next();
   },
   prev() {
+    pinnedPlace = null;
     view.renderer?.prev();
   },
   activateLink(id) {
@@ -1212,6 +1445,7 @@ window.R = {
   // have shown it. Not foliate's prev, which lands at the previous section's
   // end, and during the bounce at the top only scrolls back to it.
   pullThrough(dir) {
+    pinnedPlace = null;
     const next = adjacentSection(currentIndex(), dir);
     if (next == null) return;
     Promise.resolve(view.renderer?.goTo({ index: next })).catch(() => {});
@@ -1236,6 +1470,26 @@ window.R = {
   // is showing.
   setOpenedSection(index) {
     openedSection = index;
+  },
+  // Searches the book: the answers come by token, from whichever page this
+  // is by then.
+  search(query, token) {
+    search(query, token);
+  },
+  // Stops a search under way, on the page running it, and takes its marks
+  // off every page.
+  cancelSearch() {
+    searchRun++;
+    view.clearSearch?.();
+    clearMatches();
+  },
+  // Matches the search found, shaded on whichever page shows them.
+  addMatches(cfis) {
+    addMatches(cfis);
+  },
+  // Marks the chosen search result, or none.
+  markResult(cfi) {
+    markResult(cfi);
   },
   // Native accepts the answer from whichever page gives it, by token,
   // since a turn can make this page a neighbor before it answers.
@@ -1386,6 +1640,11 @@ const open = async ({
   // book's own can be a form foliate can't use, as en_US or English.
   if (language && book.metadata) book.metadata.language = language;
   await view.open(book);
+  if (pendingMatches.length) {
+    const cfis = pendingMatches;
+    pendingMatches = [];
+    addMatches(cfis);
+  }
   view.renderer?.addEventListener?.("scroll", noteScroll, { passive: true });
   applyStyles(s);
   post({

@@ -68,6 +68,7 @@ enum Lucide: String, CaseIterable {
     case trash = "trash-2"
     case triangleAlert = "triangle-alert"
     case undo2 = "undo-2"
+    case upload
     case user
     case userX = "user-x"
     case users

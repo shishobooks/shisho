@@ -27,7 +27,19 @@
         }
       }
     },
+    "%@ couldn't be read." : {
+
+    },
+    "%@ couldn't be saved." : {
+
+    },
     "%@ in your Libraries appear here." : {
+
+    },
+    "%@ is too large. Choose a font file under 50 MB." : {
+
+    },
+    "%@ isn't a font Shisho can read." : {
 
     },
     "%@ left at %@" : {
@@ -235,6 +247,12 @@
     "Authors, narrators, and other contributors" : {
 
     },
+    "Auto" : {
+
+    },
+    "Auto shows two pages side by side when the reader is wider than it is tall and has room for both." : {
+
+    },
     "Back %lld Seconds" : {
 
     },
@@ -251,6 +269,9 @@
 
     },
     "Book remaining %@" : {
+
+    },
+    "Book's font" : {
 
     },
     "Bookmark" : {
@@ -319,6 +340,9 @@
     "Check the spelling or try a new search." : {
 
     },
+    "Choose a TTF, OTF, or WOFF2 font file." : {
+
+    },
     "Clear Filters" : {
 
     },
@@ -328,10 +352,19 @@
     "Clear all filters" : {
 
     },
+    "Clear search" : {
+
+    },
     "Close" : {
 
     },
     "Close Player" : {
+
+    },
+    "Close Search" : {
+
+    },
+    "Close search" : {
 
     },
     "Closes the book" : {
@@ -343,10 +376,16 @@
     "Colorist" : {
 
     },
+    "Compact" : {
+
+    },
     "Contents" : {
 
     },
     "Continue reading" : {
+
+    },
+    "Couldn't Import the Font" : {
 
     },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
@@ -374,6 +413,15 @@
 
     },
     "Date released" : {
+
+    },
+    "Decrease font size" : {
+
+    },
+    "Decrease line spacing" : {
+
+    },
+    "Decrease margins" : {
 
     },
     "Delete" : {
@@ -460,6 +508,18 @@
     "Folder" : {
 
     },
+    "Font" : {
+
+    },
+    "Font size" : {
+
+    },
+    "For books that set their own text sizes and ignore the font size." : {
+
+    },
+    "Force font size" : {
+
+    },
     "Format" : {
 
     },
@@ -493,10 +553,31 @@
     "Image" : {
 
     },
+    "Import Font" : {
+
+    },
+    "Imported" : {
+
+    },
     "Include titles" : {
 
     },
+    "Included" : {
+
+    },
+    "Increase font size" : {
+
+    },
+    "Increase line spacing" : {
+
+    },
+    "Increase margins" : {
+
+    },
     "Inker" : {
+
+    },
+    "Justify text" : {
 
     },
     "Language" : {
@@ -533,6 +614,9 @@
 
     },
     "Light" : {
+
+    },
+    "Line spacing" : {
 
     },
     "Listen" : {
@@ -578,6 +662,9 @@
     "Makes the bar span the whole book" : {
 
     },
+    "Margins" : {
+
+    },
     "Modified" : {
 
     },
@@ -596,13 +683,22 @@
     "Narrated by %@" : {
 
     },
+    "Narrow" : {
+
+    },
     "Never" : {
 
     },
     "Next Chapter" : {
 
     },
+    "Next Result" : {
+
+    },
     "Next field" : {
+
+    },
+    "Next result" : {
 
     },
     "No" : {
@@ -630,6 +726,9 @@
 
     },
     "No genres found." : {
+
+    },
+    "No results" : {
 
     },
     "No status" : {
@@ -673,10 +772,19 @@
         }
       }
     },
+    "OK" : {
+
+    },
     "Offline. Showing what's on this device." : {
 
     },
     "On disk" : {
+
+    },
+    "One" : {
+
+    },
+    "Only for Paginated" : {
 
     },
     "Open %@" : {
@@ -745,7 +853,13 @@
     "Previous Chapter" : {
 
     },
+    "Previous Result" : {
+
+    },
     "Previous field" : {
+
+    },
+    "Previous result" : {
 
     },
     "Published" : {
@@ -784,6 +898,9 @@
     "Reference" : {
 
     },
+    "Relaxed" : {
+
+    },
     "Release for %@" : {
 
     },
@@ -806,6 +923,9 @@
 
     },
     "Reset to the saved sort" : {
+
+    },
+    "Results" : {
 
     },
     "Resume listening" : {
@@ -832,10 +952,19 @@
     "Search genres…" : {
 
     },
+    "Search in Book" : {
+
+    },
+    "Search in book" : {
+
+    },
     "Search tags…" : {
 
     },
     "Search your Libraries" : {
+
+    },
+    "Searching…" : {
 
     },
     "Sepia" : {
@@ -980,7 +1109,13 @@
     "System" : {
 
     },
+    "TTF, OTF, or WOFF2. Kept on this device only." : {
+
+    },
     "Tags" : {
+
+    },
+    "Tap Search on the keyboard" : {
 
     },
     "That doesn't look like a server address. Try something like https://shisho.example.com." : {
@@ -990,6 +1125,9 @@
 
     },
     "The app couldn't save your sign-in on this device. Try again." : {
+
+    },
+    "The font couldn't be imported." : {
 
     },
     "The server at %@ was set up again since %@ signed in, so it's a different server now. Sign in again to start fresh on it. Changes this device hadn't sent were for the earlier server, so none go to this one." : {
@@ -1105,6 +1243,9 @@
     "Untitled" : {
 
     },
+    "Untitled section" : {
+
+    },
     "Up to %@ stars" : {
 
     },
@@ -1118,6 +1259,9 @@
 
     },
     "Vol. %@" : {
+
+    },
+    "Wide" : {
 
     },
     "Writer" : {
@@ -1192,6 +1336,9 @@
 
     },
     "^[%lld page](inflect: true) left in chapter" : {
+
+    },
+    "^[%lld result](inflect: true)" : {
 
     },
     "a newer release" : {

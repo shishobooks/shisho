@@ -21,11 +21,15 @@ name: Open a footnote and a picture
 # back to the page. Tapped by where it is, centered under the heading: the
 # iOS 26 simulator gives the picture's element the wrong left edge, which
 # puts its middle in the left third, where a tap turns the page.
+# Once the jump has landed: the book may have opened in Chapter One, which
+# the chapter's wait takes for the jump having landed, and a picture opens
+# only on a page at rest.
+- runFlow: subflows/settled_place.yaml
 - extendedWaitUntil:
     visible: "A drawing in black lines"
     timeout: 30000
 - tapOn:
-    point: "50%,29%"
+    point: "50%,26%"
 - extendedWaitUntil:
     visible:
       id: reader.image.close

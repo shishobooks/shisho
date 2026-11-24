@@ -11,6 +11,11 @@ name: Jump to a chapter from the table of contents
     file: subflows/read.yaml
     env:
       TITLE: The Harness Novel
+# From the start of Chapter One, wherever the flows before left the place.
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter One
 - runFlow: subflows/show_reader_controls.yaml
 # The bar counts the pages left in the chapter, and a tap counts the book's.
 - extendedWaitUntil:

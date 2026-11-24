@@ -12,9 +12,14 @@ name: Read, kill, and reopen at the same place
     file: subflows/read.yaml
     env:
       TITLE: The Harness Novel
-- copyTextFrom:
-    id: reader.progress
-- evalScript: ${output.atOpen = maestro.copiedText}
+# From the start of Chapter One, wherever the flows before left the place.
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter One
+# Once the jump has landed, as the place may have been in Chapter One.
+- runFlow: subflows/settled_place.yaml
+- evalScript: ${output.atOpen = output.settledPlace}
 - repeat:
     times: 3
     commands:

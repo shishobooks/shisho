@@ -44,6 +44,11 @@ targets:
       - path: ../../app/libraries/foliate
         type: folder
         buildPhase: resources
+      # The web reader's bundled fonts, with their licenses, which the
+      # reader's page loads from fonts/ when one is chosen.
+      - path: ../../app/assets/fonts
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: ShishoAPI
       - package: GRDB
@@ -75,6 +80,18 @@ targets:
           - fetch
         BGTaskSchedulerPermittedIdentifiers:
           - $(PRODUCT_BUNDLE_IDENTIFIER).refresh
+        # WOFF2 fonts, which iOS has no type for, so the reader can import
+        # them from Files.
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: org.w3.woff2
+            UTTypeDescription: WOFF2 Font
+            UTTypeConformsTo:
+              - public.font
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - woff2
+              public.mime-type:
+                - font/woff2
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
