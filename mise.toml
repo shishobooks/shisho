@@ -155,8 +155,8 @@ description = "Run JS unit tests"
 run = "pnpm test:unit"
 
 [tasks."test:scripts"]
-description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, doc reference check, tool version check)"
-run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
+description = "Run the script tests (changelog generation, em-dash check, Swift concurrency check, the app checks' path filter, doc reference check, tool version check)"
+run = ["./scripts/changelog_test.sh", "./scripts/check-emdash_test.sh", "./scripts/app-changes_test.sh", "./scripts/check-swift-concurrency_test.sh", "go test ./tools/checkdocrefs ./tools/checkversions"]
 
 [tasks."test:e2e"]
 description = "Run E2E tests"

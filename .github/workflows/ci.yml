@@ -450,11 +450,9 @@ jobs:
           key: koreader-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/koreaderharness/harness.go') }}
       - run: mise test:koreader
 
-  # Whether a pull request touches what the Shisho app's jobs test: the
-  # apps, the harness, the Device surface and the server code under it, or
-  # the API types the apps are generated from (what `mise tygo` reads, per
-  # its sources in mise.toml). Pushes to master and release runs always run
-  # them.
+  # Whether a pull request touches what the Shisho app's jobs test, which
+  # is anything scripts/app-changes.sh doesn't rule out. Pushes to master
+  # and release runs always run them.
   #
   # And whether its iOS flows pass by signoff (tools/appharness/signoff.go):
   # a pull request from this repository's own branches, other than
@@ -483,21 +481,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          changed=false
-          while IFS= read -r path; do
-            case "$path" in
-              mobile/* | tools/apptypes/* | tools/appharness/* | internal/testgen/* | tygo.yaml | \
-              pkg/*/types.go | pkg/*/config.go | pkg/*/model.go | pkg/models/* | pkg/mediafile/mediafile.go | \
-              pkg/shishoapp/* | pkg/changefeed/* | pkg/devices/* | pkg/migrations/* | \
-              pkg/server/* | pkg/auth/* | pkg/worker/* | pkg/books/* | pkg/sortspec/* | \
-              pkg/reading/* | pkg/bookmarks/* | pkg/covers/* | \
-              pkg/epub/* | pkg/fixedlayout/* | pkg/reflowable/* | pkg/mp4/* | \
-              app/libraries/foliate/* | app/assets/fonts/* | \
-              mise.toml | .github/workflows/ci.yml | .github/workflows/ios-flows.yml)
-                changed=true
-                ;;
-            esac
-          done < <(git diff --name-only "origin/$BASE_REF...HEAD")
+          changed=$(git diff --name-only "origin/$BASE_REF...HEAD" | scripts/app-changes.sh)
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
   # The Shisho app's checks: the generated API types' decode tests on both

@@ -80,7 +80,7 @@ While iterating, run only the checks for what you touched. Separate mise tasks w
 - The Shisho app, its Device surface (`pkg/shishoapp`), or API types → also `mise mobile:check` on macOS, which `mise check:quiet` leaves out
 - App E2E flows you touched → `mise e2e:chromium`; documentation theme flows → `mise e2e:docs`
 
-Run `mise check:quiet` once when the work is done, before pushing or opening a PR. A PR whose changed paths match `app-changes` in `.github/workflows/ci.yml` also needs `mise ios:signoff` on its final commit, on macOS: `CI OK` waits for it in its "Wait for the iOS flows signoff" step and fails if none comes. "The signoff" in `mobile/AGENTS.md` covers it.
+Run `mise check:quiet` once when the work is done, before pushing or opening a PR. A PR that changes anything `scripts/app-changes.sh` doesn't rule out (the server included, not just the app) also needs `mise ios:signoff` on its final commit, on macOS: `CI OK` waits for it in its "Wait for the iOS flows signoff" step and fails if none comes. "The signoff" in `mobile/AGENTS.md` covers it.
 
 **`package.json` dependency split is for Docker, not Node semantics**: `dependencies` holds everything `pnpm build` needs, including build tools and `@types/*`; `devDependencies` holds only test and lint tools, so the Dockerfile can `pnpm install --prod`. Place new packages by that rule.
 

@@ -49,7 +49,7 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 
 ## The signoff
 
-This repository's own pull requests don't run the flows on GitHub's macOS runners, which take several times longer. `CI OK` waits instead for a commit status that `mise ios:signoff` posts from a Mac once every flow passes on the commit; `app-changes` in `.github/workflows/ci.yml` decides which pull requests need it.
+This repository's own pull requests don't run the flows on GitHub's macOS runners, which take several times longer. `CI OK` waits instead for a commit status that `mise ios:signoff` posts from a Mac once every flow passes on the commit; `scripts/app-changes.sh` decides which pull requests need it: any that change something other than the web app, docs, and the few other paths it rules out.
 
 - **Run it on the pull request's final commit, pushed, with nothing uncommitted.** A new commit, a merge from master included, needs its own.
 - **Only `mise ios:signoff` posts that status.** Never post it with `gh api` or touch the passes it records: it tells the maintainer every flow passed on that commit.
