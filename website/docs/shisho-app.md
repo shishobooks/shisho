@@ -78,7 +78,7 @@ If the server turns down a change the app made offline, for example listening to
 
 ## Reading
 
-Books with an EPUB, KePub, MOBI, AZW3, CBZ, or PDF file have a **Read** button, which shows an ebook's [word count](./supported-formats.md#word-count) and the file's size before you start, and the chapter you're in and the pages left in the book once you've read on the phone. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. The reader needs the whole book before it can show a page, so opening a book that isn't on the phone [downloads](#downloads) it. It stays on the phone, and opens without a connection, until you remove it.
+Books with an EPUB, KePub, MOBI, AZW3, CBZ, or PDF file have a **Read** button, which shows an ebook's [word count](./supported-formats.md#word-count) or a comic's or PDF's page count, and the file's size, before you start, and once you've started, the chapter you're in and the pages left in the book. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. The reader needs the whole book before it can show a page, so opening a book that isn't on the phone [downloads](#downloads) it. It stays on the phone, and opens without a connection, until you remove it.
 
 A tap on the left or right third of the page turns it, and a tap in the middle shows or hides the controls. A tap on a link follows it, and in the middle of the page so does a tap near one; a tap near a footnote reference opens it anywhere on the page. A tap on a picture in the middle of the page opens it on its own: pinch or double-tap to zoom, and drag down to close it. A footnote opens in a card beside its reference, with **Go to Note** to read it in place. Press and hold to select text and use **Copy**, **Look Up**, and the rest of the system's menu; while text is selected, dragging moves the selection instead of turning the page.
 
@@ -101,9 +101,9 @@ The app saves your place on every page turn, and a book opens at the same place 
 
 ### Comics and PDFs
 
-CBZ and PDF files open in a page reader of their own, which turns pages the same way: tap the left or right third, or swipe, and tap the middle for the controls. Pinch or double-tap to zoom into a panel; a zoomed page pans to its edge before a swipe turns it, and a double-tap zooms back out. Turned sideways, pages show two at a time, with the cover and any wide page (two printed pages scanned as one) on their own.
+CBZ and PDF files open in a page reader of their own, which turns pages the same way: tap the left or right third, or swipe, and tap the middle for the controls. Pinch to zoom into a panel, or double-tap the middle of the page; taps on the sides keep turning pages, however quick. A zoomed page pans to its edge before a swipe turns it, a tap anywhere shows the controls, and a double-tap anywhere zooms back out. Turned sideways, pages show two at a time, with the cover and any wide page (two printed pages scanned as one) on their own. In the **Scrolled** flow, pages fill the screen's width and don't zoom.
 
-The pages come in the same order as in the [Shisho reader](./reading-and-playback.md#cbz-and-pdf-readers), so a page number means the same page in both, and the app keeps your place as a page. A PDF's pages are drawn on the phone from the downloaded file, so they work offline like any other book.
+The pages come in the same order as in the [Shisho reader](./reading-and-playback.md#cbz-and-pdf-readers), so a page number means the same page in both, and the app keeps your place as a page. A comic's or PDF's file page lists its pages in a grid, as on the web; tap one to open the reader there. The grid shows each page's picture once the book is on the phone, from reading it, and its number before that.
 
 The controls have:
 

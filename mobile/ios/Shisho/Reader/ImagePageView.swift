@@ -41,8 +41,16 @@ final class ImagePageView: UIScrollView, UIScrollViewDelegate {
         maximumZoomScale = Self.maximumZoom
         bouncesZoom = true
         addSubview(content)
+        // VoiceOver's swipe up and down zooms, for those who can't pinch.
         isAccessibilityElement = true
-        accessibilityTraits = .image
+        accessibilityTraits = [.image, .adjustable]
+        accessibilityHint = String(localized: "Swipe up or down to zoom")
+    }
+
+    /// How far in the page is zoomed, as VoiceOver says it.
+    override var accessibilityValue: String? {
+        get { Double(zoomScale).formatted(.percent.precision(.fractionLength(0))) }
+        set {}
     }
 
     required init?(coder: NSCoder) { nil }
@@ -238,23 +246,33 @@ final class ImagePageView: UIScrollView, UIScrollViewDelegate {
 }
 
 /// The scrolled Page flow: every page in one column, edge to edge, as a
-/// webtoon is read. Pages decode as they near the screen.
+/// webtoon is read. Pages decode as they near the screen, at the screen's
+/// width however tall they are.
 @MainActor
 final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout,
     UICollectionViewDataSourcePrefetching {
-    /// The page at the top quarter of the screen changed.
-    var onPage: ((Int) -> Void)?
-    /// Called once the first pages on screen have their images.
+    /// The reader scrolled to another page or screen.
+    var onMove: (() -> Void)?
+    /// Called once the page it opened at has its image.
     var onReady: (() -> Void)?
 
     private let collection: UICollectionView
     private let sizes: [CGSize]
     private let cache: PageImageCache
     private let label: (Int) -> String
+    /// The page the reader is on: the one a quarter of the way down the
+    /// screen, or the last once the column is scrolled to its end.
     private(set) var page = 0
+    /// Which screen's worth down the column shows, for timing reading per
+    /// screen as the web reader does: a strip can take several screens, or
+    /// pass in a moment.
+    private(set) var screen = 0
     private var pending: Int?
     private var laidOutWidth: CGFloat = 0
     private var ready = false
+    /// The strip is moving itself, as to a page: that's no scroll of the
+    /// reader's.
+    private var positioning = false
 
     init(sizes: [CGSize], cache: PageImageCache, startPage: Int, label: @escaping (Int) -> String) {
         self.sizes = sizes
@@ -293,7 +311,7 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         go(to: keep)
     }
 
-    /// Scrolls page to the top.
+    /// Scrolls page to the top, or as far as the column goes.
     func go(to page: Int) {
         guard sizes.indices.contains(page) else { return }
         guard laidOutWidth > 0 else {
@@ -301,15 +319,26 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
             return
         }
         pending = nil
+        positioning = true
         collection.layoutIfNeeded()
         if let frame = collection.layoutAttributesForItem(at: IndexPath(item: page, section: 0))?.frame {
             let bottom = max(0, collection.contentSize.height - collection.bounds.height)
             collection.setContentOffset(CGPoint(x: 0, y: min(frame.minY, bottom)), animated: false)
         }
+        positioning = false
+        // The page asked for, even where the column's end stops it short of
+        // the top.
         self.page = page
-        onPage?(page)
+        screen = currentScreen
+        onMove?()
     }
 
+    private var currentScreen: Int {
+        let height = max(1, collection.bounds.height)
+        return Int((collection.contentOffset.y / height).rounded())
+    }
+
+    /// The pixels across the page fills, as its longer side.
     private func pixels(_ page: Int) -> Int {
         let size = sizes[page]
         let height = bounds.width * size.height / max(size.width, 1)
@@ -326,21 +355,21 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         let maxPixel = pixels(page)
         if let image = cache.cached(page: page, maxPixel: maxPixel) {
             cell.imageView.image = image
-            imageArrived()
+            imageArrived(page)
         } else {
             cell.imageView.image = nil
-            Task { [weak self, weak cell] in
+            cell.load = Task { [weak self, weak cell] in
                 let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now)
-                guard let cell, cell.page == page else { return }
+                guard let cell, cell.page == page, !Task.isCancelled else { return }
                 cell.imageView.image = image
-                self?.imageArrived()
+                self?.imageArrived(page)
             }
         }
         return cell
     }
 
-    private func imageArrived() {
-        guard !ready else { return }
+    private func imageArrived(_ page: Int) {
+        guard !ready, page == self.page else { return }
         ready = true
         onReady?()
     }
@@ -359,16 +388,24 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard pending == nil, laidOutWidth > 0 else { return }
-        let probe = CGPoint(x: collection.bounds.midX, y: collection.bounds.minY + collection.bounds.height * 0.25)
-        guard let item = collection.indexPathForItem(at: probe)?.item, item != page else { return }
+        guard !positioning, pending == nil, laidOutWidth > 0 else { return }
+        let bounds = collection.bounds
+        let atEnd = bounds.maxY >= collection.contentSize.height - 1
+        let probe = CGPoint(x: bounds.midX, y: bounds.minY + bounds.height * 0.25)
+        let item = atEnd ? sizes.count - 1 : collection.indexPathForItem(at: probe)?.item ?? page
+        let screen = currentScreen
+        guard item != page || screen != self.screen else { return }
         page = item
-        onPage?(item)
+        self.screen = screen
+        onMove?()
     }
 
     private final class StripCell: UICollectionViewCell {
         let imageView = UIImageView()
         var page = -1
+        /// The page's decode, cancelled when the cell is reused for
+        /// another, so a fling doesn't queue every page it passed.
+        var load: Task<Void, Never>?
 
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -381,5 +418,11 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         }
 
         required init?(coder: NSCoder) { nil }
+
+        override func prepareForReuse() {
+            super.prepareForReuse()
+            load?.cancel()
+            load = nil
+        }
     }
 }

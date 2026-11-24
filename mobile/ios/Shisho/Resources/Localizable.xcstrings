@@ -932,16 +932,6 @@
     "Pages" : {
 
     },
-    "Pages %lld and %lld of %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Pages %1$lld and %2$lld of %3$lld"
-          }
-        }
-      }
-    },
     "Pages %lld–%lld of %lld" : {
       "localizations" : {
         "en" : {
@@ -1188,6 +1178,12 @@
 
     },
     "Shisho isn't allowed on your local network, where this server is. Turn on Local Network for Shisho in Settings." : {
+
+    },
+    "Show all %@" : {
+
+    },
+    "Show fewer" : {
 
     },
     "Show less" : {

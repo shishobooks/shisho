@@ -432,8 +432,9 @@ final class AppModel {
     }
 
     /// Opens an ebook File in the reader: foliate's for a Reflowable File,
-    /// the image pager for a Page-based one.
-    func read(fileID: Int) {
+    /// the image pager for a Page-based one. page opens a Page-based File
+    /// there, as a tile of its page grid does, rather than at its place.
+    func read(fileID: Int, page: Int? = nil) {
         guard let session else { return }
         let file: ReadingFile?
         do {
@@ -448,7 +449,7 @@ final class AppModel {
         let requestSync: @MainActor () -> Void = { [weak self] in Task { await self?.syncNow() } }
         let onGone: @MainActor () -> Void = { [weak self] in self?.closeReader() }
         reader = file.isPageBased
-            ? .pages(PageReaderModel(file: file, session: session, requestSync: requestSync, onGone: onGone))
+            ? .pages(PageReaderModel(file: file, session: session, page: page, requestSync: requestSync, onGone: onGone))
             : .reflowable(ReaderModel(file: file, session: session, requestSync: requestSync, onGone: onGone))
     }
 

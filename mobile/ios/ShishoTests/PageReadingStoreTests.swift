@@ -102,9 +102,16 @@ final class PageReadingStoreTests: XCTestCase {
         XCTAssertEqual(choice.start, .page(1))
     }
 
-    /// The Read card covers a Book whose only ebook is a comic.
-    func testTheBookPageOffersReadingAComic() throws {
-        let progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })
+    /// The Read card covers a comic: its pages before it's read, then the
+    /// pages left and the chapter, exactly, from wherever it was read.
+    func testTheBookPageCountsAComicsPages() throws {
+        var progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })
         XCTAssertEqual(progress.ebookCount, 2)
+        XCTAssertEqual(progress.pageCount, 3)
+        XCTAssertEqual(progress.pagesLeft, 2)
+        try serverPosition(page: 1, percentage: 0.5, at: "2026-05-01T10:00:00Z", device: nil)
+        progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })
+        XCTAssertEqual(progress.pagesLeft, 1)
+        XCTAssertEqual(progress.chapter, "Chapter One")
     }
 }

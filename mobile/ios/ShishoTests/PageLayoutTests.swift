@@ -65,19 +65,24 @@ final class PageLayoutTests: XCTestCase {
         XCTAssertEqual(tall, [CGRect(x: 0, y: 75, width: 300, height: 450)])
     }
 
-    /// The flow chosen for a Book, and whether right-to-left Files turn
-    /// that way, are kept on the device.
+    /// The flow chosen for an account's Book, and whether right-to-left
+    /// Files turn that way, are kept on the device.
     func testSettingsAreKept() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
-        var settings = PageReaderSettings.load(defaults)
+        var settings = PageReaderSettings.load(accountID: "a", defaults)
         XCTAssertTrue(settings.followReadingDirection)
         XCTAssertNil(settings.flow(forBook: 3))
         settings.choose(.scrolled, forBook: 3)
         settings.followReadingDirection = false
         settings.save(defaults)
-        let loaded = PageReaderSettings.load(defaults)
+        let loaded = PageReaderSettings.load(accountID: "a", defaults)
         XCTAssertEqual(loaded.flow(forBook: 3), .scrolled)
         XCTAssertNil(loaded.flow(forBook: 4))
         XCTAssertFalse(loaded.followReadingDirection)
+        // Another account's Book 3 is another Book; the direction is the
+        // device's.
+        let other = PageReaderSettings.load(accountID: "b", defaults)
+        XCTAssertNil(other.flow(forBook: 3))
+        XCTAssertFalse(other.followReadingDirection)
     }
 }

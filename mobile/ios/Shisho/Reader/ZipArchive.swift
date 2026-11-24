@@ -25,8 +25,9 @@ struct ZipArchive: Sendable {
     }
 
     private let data: Data
-    /// The entries by name.
-    let entries: [String: Entry]
+    /// The entries in the central directory's order. Two can share a name,
+    /// as the server keeps them.
+    let entries: [Entry]
 
     init(url: URL) throws {
         try self.init(data: Data(contentsOf: url, options: .alwaysMapped))
@@ -35,26 +36,41 @@ struct ZipArchive: Sendable {
     init(data: Data) throws {
         // From 0, whatever the Data it came as, so offsets index it directly.
         self.data = data.startIndex == 0 ? data : Data(data)
-        let reader = Reader(data: self.data)
-        var entries: [String: Entry] = [:]
-        for entry in try Self.directory(reader) where entries[entry.name] == nil {
-            entries[entry.name] = entry
-        }
-        self.entries = entries
+        entries = try Self.directory(Reader(data: self.data))
     }
 
-    /// The largest entry inflated in one piece, past which an entry is
-    /// treated as damaged: no page image comes near it.
-    static let largestEntry = 512 * 1024 * 1024
+    /// The entries named names, in the order given. A name the archive
+    /// holds more than once takes its entries in the archive's order, one
+    /// for each time it's given, so two pages with one name are still two
+    /// pages, as the server counts them. A name it lacks, or has run out
+    /// of, is nil.
+    func entries(named names: [String]) -> [Entry?] {
+        var byName: [String: [Entry]] = [:]
+        for entry in entries { byName[entry.name, default: []].append(entry) }
+        var used: [String: Int] = [:]
+        return names.map { name in
+            let index = used[name, default: 0]
+            used[name] = index + 1
+            guard let matches = byName[name], index < matches.count else { return nil }
+            return matches[index]
+        }
+    }
+
+    /// The largest entry read in one piece, past which an entry is treated
+    /// as damaged: no page image comes near it, and a page's bytes are held
+    /// in memory while it decodes, two pages at a time in a spread.
+    static let largestEntry = 128 * 1024 * 1024
 
     /// The entry's bytes, inflated when they're deflated.
     func bytes(of entry: Entry) throws -> Data {
         let (start, compressed) = try contents(of: entry)
+        guard entry.uncompressedSize <= Self.largestEntry, compressed.count <= Self.largestEntry else {
+            throw Failure.damaged("\(entry.name) is too large")
+        }
         switch entry.method {
         case 0:
             return Data(compressed)
         case 8:
-            guard entry.uncompressedSize <= Self.largestEntry else { throw Failure.damaged("\(entry.name) is too large") }
             if entry.uncompressedSize == 0 { return Data() }
             var output = Data(count: entry.uncompressedSize)
             let written = output.withUnsafeMutableBytes { out in

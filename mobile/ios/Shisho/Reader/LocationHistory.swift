@@ -13,8 +13,9 @@ import Foundation
 ///   forgets the way forward, as a browser does.
 /// - Going back or forward skips the place the reader is already at.
 ///
-/// Places are CFIs of what the screen shows. The history lasts while the
-/// book is open.
+/// Places are what the reader keeps a place as: CFIs of what the screen
+/// shows in a Reflowable File, page numbers in a Page-based one. The
+/// history lasts while the book is open.
 struct LocationHistory: Equatable {
     private var backStack: [String] = []
     private var forwardStack: [String] = []

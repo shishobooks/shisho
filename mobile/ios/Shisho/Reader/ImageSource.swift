@@ -7,6 +7,9 @@ protocol ImageSourceDelegate: AnyObject {
     func imageSourceShowed(page: Int)
     /// The reader moved to page: a turn, a scroll, a jump.
     func imageSourceMoved(page: Int)
+    /// The pages on screen changed without the reader moving, as when
+    /// rotating pairs pages into spreads.
+    func imageSourceLaidOut()
     /// A page turn is waiting for its page to decode.
     func imageSourceWaiting(_ waiting: Bool)
     func imageSourceSawInput()
@@ -72,8 +75,8 @@ final class ImageSource: PagerSource {
     /// place while its spread shows, so rotating back returns to it rather
     /// than to the spread's first page.
     private var anchorPage: Int?
-    /// The page last told to the delegate.
-    private var reportedPage: Int?
+    /// The place last told to the delegate: its page and screen.
+    private var reportedPlace: (page: Int, screen: String)?
 
     init(pages: PageImageSource, sizes: [CGSize], flow: PageFlow, rightToLeft: Bool, startPage: Int) {
         cache = PageImageCache(source: pages)
@@ -105,6 +108,21 @@ final class ImageSource: PagerSource {
         return PageLayout.place(of: spread, pageCount: pageCount)
     }
 
+    /// Which screen shows, for timing reading per page as the web reader
+    /// does: scrolled, a screen's worth down the column, since a strip can
+    /// take several screens or pass in a moment.
+    var screen: String {
+        if let strip { return "screen \(strip.screen)" }
+        return String(currentPage)
+    }
+
+    /// The page to keep through a change of layout: where a jump or the
+    /// last layout put the reader, rather than the first page of the spread
+    /// that showed it.
+    private var keptPage: Int {
+        strip == nil ? anchorPage ?? currentPage : currentPage
+    }
+
     /// The pages on screen, in reading order.
     var pagesShown: [Int] {
         if let strip { return [strip.page] }
@@ -127,10 +145,19 @@ final class ImageSource: PagerSource {
             return
         }
         guard landscape != twoUp else { return }
-        let keep = currentPage
+        let keep = keptPage
         twoUp = landscape
         spreads = PageLayout.spreads(sizes: sizes, twoUp: twoUp)
-        if flow == .paginated { show(page: keep) }
+        guard flow == .paginated else { return }
+        show(page: keep)
+        laidOut()
+    }
+
+    /// The pages on screen changed in place: the delegate hears it, and a
+    /// spread that now shows the last page is the end.
+    private func laidOut() {
+        delegate?.imageSourceLaidOut()
+        reportMove()
     }
 
     /// Goes to page: every screen is laid out again around it.
@@ -147,8 +174,9 @@ final class ImageSource: PagerSource {
     /// page showed: where the reader opened isn't a move.
     private func reportMove() {
         let page = currentPage
-        guard showedFirst, page != reportedPage else { return }
-        reportedPage = page
+        let screen = screen
+        guard showedFirst, reportedPlace?.page != page || reportedPlace?.screen != screen else { return }
+        reportedPlace = (page, screen)
         delegate?.imageSourceMoved(page: page)
     }
 
@@ -173,7 +201,7 @@ final class ImageSource: PagerSource {
         switch pages.count {
         case 0: ""
         case 1: String(localized: "Page \(pages[0] + 1) of \(pageCount)")
-        default: String(localized: "Pages \(pages[0] + 1) and \(pages[1] + 1) of \(pageCount)")
+        default: String(localized: "Pages \(pages[0] + 1)–\(pages[1] + 1) of \(pageCount)")
         }
     }
 
@@ -185,13 +213,14 @@ final class ImageSource: PagerSource {
     /// A flow or Reading Direction chosen while reading, keeping the page.
     func apply(flow: PageFlow, rightToLeft: Bool) {
         guard flow != self.flow || rightToLeft != self.rightToLeft else { return }
-        let keep = currentPage
+        let keep = keptPage
         self.flow = flow
         self.rightToLeft = rightToLeft
         pager.rightToLeft = rightToLeft
         pager.paging = flow == .paginated
         guard opened else { return }
         show(page: keep)
+        laidOut()
     }
 
     private func showStrip(at page: Int) {
@@ -207,7 +236,7 @@ final class ImageSource: PagerSource {
         }
         strip.frame = current.bounds
         strip.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        strip.onPage = { [weak self] _ in self?.reportMove() }
+        strip.onMove = { [weak self] in self?.reportMove() }
         strip.onReady = { [weak self] in self?.currentShowed() }
         current.addSubview(strip)
         self.strip = strip
@@ -223,7 +252,9 @@ final class ImageSource: PagerSource {
 
     private func pageReady(_ view: ImagePageView) {
         if view === current.page {
-            currentShowed()
+            // Scrolled, the empty page under the column isn't what shows:
+            // the column says when its first page has.
+            if flow == .paginated { currentShowed() }
         } else {
             scheduleReconcile()
         }
@@ -234,7 +265,7 @@ final class ImageSource: PagerSource {
     private func currentShowed() {
         guard !showedFirst else { return }
         showedFirst = true
-        reportedPage = currentPage
+        reportedPlace = (currentPage, screen)
         delegate?.imageSourceShowed(page: currentPage)
     }
 

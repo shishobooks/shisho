@@ -187,35 +187,8 @@ struct ReaderView: View {
 
     // MARK: - Loading
 
-    @ViewBuilder
     private var status: some View {
-        switch model.phase {
-        case .loading:
-            ProgressView()
-                .controlSize(.large)
-                .tint(foreground)
-                .accessibilityLabel(Text("Opening the book"))
-                .accessibilityIdentifier("reader.loading")
-        case .failed(let message):
-            // Over the page, in the reader theme's colors, rather than the
-            // app's NoticeCard, which is drawn for the app's own background.
-            VStack(spacing: 14) {
-                Icon(.triangleAlert, size: 30, relativeTo: .title)
-                Text(message)
-                    .font(.geist(.body))
-                    .multilineTextAlignment(.center)
-                Button("Try Again") { Task { await model.load() } }
-                    .buttonStyle(OutlineButtonStyle())
-                    .frame(maxWidth: 200)
-                    .accessibilityIdentifier("reader.retry")
-            }
-            .foregroundStyle(foreground)
-            .padding(32)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("reader.error")
-        case .reading:
-            EmptyView()
-        }
+        ReaderStatus(phase: model.phase, foreground: foreground) { Task { await model.load() } }
     }
 
     /// A chosen search result's bar, while the results are away.
@@ -251,60 +224,17 @@ struct ReaderView: View {
         Theme.background
     }
 
-    /// The room each side of the title keeps for the buttons, so the title
-    /// stays centered: the three on the right, which don't grow with the
-    /// text size, and are wider than Book on the left.
+    /// The room each side of the title keeps for the buttons: the three on
+    /// the right, which don't grow with the text size, and are wider than
+    /// Book on the left.
     private static let topBarSide: CGFloat = 3 * 44
 
     private var topBar: some View {
-        // Centered when the title fits between the buttons' room on both
-        // sides; otherwise it takes all the room between them, a little off
-        // center, as a navigation bar's title does, rather than cutting off.
-        ViewThatFits(in: .horizontal) {
-            ZStack {
-                ReaderTitle(model: model)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, Self.topBarSide)
-                HStack(spacing: 0) {
-                    closeButton
-                    Spacer(minLength: 0)
-                    topBarButtons
-                }
-            }
-            HStack(spacing: 4) {
-                closeButton
-                ReaderTitle(model: model)
-                    .frame(maxWidth: .infinity)
-                topBarButtons
-            }
+        ReaderTopBar(sideRoom: Self.topBarSide, close: close) {
+            ReaderTitle(model: model)
+        } buttons: {
+            topBarButtons
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        // Past this the bar would cover the page; the buttons show large
-        // on a long press instead.
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        // To the screen's edges in landscape, past the sides' safe areas,
-        // which the buttons stay inside.
-        .background(ReaderView.barBackground.ignoresSafeArea(edges: [.top, .horizontal]))
-        .overlay(alignment: .bottom) { Theme.border.frame(height: 1).ignoresSafeArea(edges: .horizontal) }
-    }
-
-    private var closeButton: some View {
-        Button(action: close) {
-            HStack(spacing: 2) {
-                Icon(.chevronLeft, size: 24, relativeTo: .body)
-                Text("Book")
-                    .font(.geist(.subheadline, weight: .medium))
-            }
-            .foregroundStyle(Theme.primary)
-            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
-            .padding(.leading, 6)
-        }
-        // Named as it shows, so Voice Control's "Tap Book" works.
-        .accessibilityHint(Text("Closes the book"))
-        .accessibilityInputLabels([Text("Book"), Text("Close")])
-        .accessibilityShowsLargeContentViewer()
-        .accessibilityIdentifier("reader.close")
     }
 
     private var topBarButtons: some View {
@@ -410,19 +340,7 @@ private struct ReaderTitle: View {
     let model: ReaderModel
 
     var body: some View {
-        VStack(spacing: 1) {
-            Text(model.chapterTitle ?? model.file.book.title)
-                .font(.geist(.subheadline, weight: .semibold))
-                .foregroundStyle(Theme.foreground)
-            if model.chapterTitle != nil {
-                Text(model.file.book.title)
-                    .font(.geist(.caption2))
-                    .foregroundStyle(Theme.mutedForeground)
-            }
-        }
-        .lineLimit(1)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("reader.title")
+        ReaderTitleText(chapter: model.chapterTitle, book: model.file.book.title)
     }
 }
 
@@ -454,34 +372,15 @@ private struct ReaderBottomBar: View {
         model.placeLabel(percent: percentShown, pagesLeft: pagesLeftLabel)
     }
 
-    private func historyButton(_ icon: Lucide, label: LocalizedStringKey, enabled: Bool, identifier: String,
-                               action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Icon(icon, size: 18)
-                .frame(width: 36, height: 44)
-                // 44 points wide to tap, a little into the scrubber's ends,
-                // which only its handle moves.
-                .contentShape(Rectangle().inset(by: -4))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Theme.foreground.opacity(enabled ? 0.85 : 0.3))
-        .disabled(!enabled)
-        .accessibilityLabel(Text(label))
-        .accessibilityShowsLargeContentViewer()
-        .accessibilityIdentifier(identifier)
-    }
-
     /// While the scrubber rests.
     private var pagesLeftLabel: AttributedString? {
         scrubbing == nil ? model.pagesLeftLabel(inBook: pagesLeftInBook) : nil
     }
 
-    /// Back and forward through jumps either side of the bar, as the web
-    /// reader has them: always there, and disabled when there's nowhere to
-    /// go, so they're where the reader looks after paging around a jump.
+    /// Back and forward through jumps either side of the bar.
     private var scrubberRow: some View {
         HStack(spacing: 2) {
-            historyButton(.undo2, label: "Back to previous location", enabled: model.history.canGoBack,
+            ReaderHistoryButton(icon: .undo2, label: "Back to previous location", enabled: model.history.canGoBack,
                           identifier: "reader.back", action: model.goBack)
             Scrubber(value: scrubbing ?? model.fraction, length: 1, onDrag: { scrubbing = $0 }, onCommit: { value in
                 scrubbing = nil
@@ -491,7 +390,7 @@ private struct ReaderBottomBar: View {
             .accessibilityValue(Text(scrubValue))
             .accessibilityIdentifier("reader.scrubber")
 
-            historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
+            ReaderHistoryButton(icon: .redo2, label: "Forward to next location", enabled: model.history.canGoForward,
                           identifier: "reader.forward", action: model.goForward)
         }
     }
@@ -590,7 +489,7 @@ private struct ReaderBottomBar: View {
 
 /// The chapter and place a scrubber drag would go to, in a pill centered
 /// over the bar, in the brand color so it catches the eye.
-struct ScrubLabel: View {
+private struct ScrubLabel: View {
     let chapter: String?
     let percent: String
 

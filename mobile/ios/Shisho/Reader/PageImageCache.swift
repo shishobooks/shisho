@@ -43,7 +43,16 @@ final class PageImageCache {
     /// The most bytes of decoded pages kept.
     let limit: Int
     private var images: [Key: Entry] = [:]
-    private var inFlight: [Key: (task: Task<CGImage?, Never>, need: Need)] = [:]
+    private struct Decode {
+        let task: Task<CGImage?, Never>
+        var need: Need
+        /// The requests waiting on it: when the last is cancelled, as a
+        /// preview the scrubber moved past or a cell scrolled away, the
+        /// decode is too, so it doesn't hold up the page landed on.
+        var waiters: Set<UUID>
+    }
+
+    private var inFlight: [Key: Decode] = [:]
     private(set) var cost = 0
     private var clock = 0
 
@@ -77,22 +86,42 @@ final class PageImageCache {
     func image(page: Int, maxPixel: Int, need: Need, keep: Bool = true) async -> UIImage? {
         if let image = cached(page: page, maxPixel: maxPixel) { return image }
         let key = Key(page: page, bucket: Self.bucket(maxPixel))
+        let waiter = UUID()
         let task: Task<CGImage?, Never>
-        if let running = inFlight[key] {
+        if var running = inFlight[key] {
             task = running.task
-            if need.priority > running.need.priority { inFlight[key] = (task, need) }
+            if need.priority > running.need.priority { running.need = need }
+            running.waiters.insert(waiter)
+            inFlight[key] = running
         } else {
             let source = source
             task = Task.detached(priority: need.priority) { await source.image(page: page, maxPixel: key.bucket) }
-            inFlight[key] = (task, need)
+            inFlight[key] = Decode(task: task, need: need, waiters: [waiter])
         }
-        let decoded = await task.value
+        let decoded = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.leave(key, waiter: waiter, task: task) }
+        }
         if inFlight[key]?.task == task { inFlight[key] = nil }
-        guard let decoded else { return nil }
+        guard let decoded, !Task.isCancelled else { return nil }
         if let kept = images[key]?.image { return kept }
         let image = UIImage(cgImage: decoded)
         if keep { store(image, cost: decoded.bytesPerRow * decoded.height, for: key) }
         return image
+    }
+
+    /// A cancelled request stops waiting; the decode stops too once no
+    /// request waits on it.
+    private func leave(_ key: Key, waiter: UUID, task: Task<CGImage?, Never>) {
+        guard var running = inFlight[key], running.task == task else { return }
+        running.waiters.remove(waiter)
+        if running.waiters.isEmpty {
+            task.cancel()
+            inFlight[key] = nil
+        } else {
+            inFlight[key] = running
+        }
     }
 
     /// Starts decoding a page that's about to be needed, without waiting.

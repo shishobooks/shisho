@@ -61,13 +61,18 @@ struct ReadProgress: Equatable, Sendable {
     /// How long and how big the File is, said before it's been read.
     var wordCount: Int?
     var sizeBytes = 0
+    /// A Page-based File's pages, said before it's been read, and what
+    /// pages left counts from.
+    var pageCount: Int?
 
-    /// What the Read card says before the book's been read: how long it is
-    /// and how big, as the Listen card says it of an audiobook.
+    /// What the Read card says before the book's been read: how long it is,
+    /// in pages for a comic or PDF and in words for an ebook, and how big,
+    /// as the Listen card says it of an audiobook.
     var unstartedFacts: String? {
-        let words = (wordCount ?? 0) > 0 ? [FileFacts.words(wordCount ?? 0)] : []
+        let length = pageCount.map { [FileFacts.pages($0)] }
+            ?? ((wordCount ?? 0) > 0 ? [FileFacts.words(wordCount ?? 0)] : [])
         let size = sizeBytes > 0 ? [FileFacts.size(sizeBytes)] : []
-        let facts = words + size
+        let facts = length + size
         return facts.isEmpty ? nil : facts.joined(separator: " · ")
     }
 }
@@ -140,16 +145,34 @@ extension CatalogStore {
         guard let fileID = try ebookFileID(db, bookID: bookID) else { return nil }
         let local = try localPlace(db, fileID: fileID)
         let server = try serverPlace(db, fileID: fileID)
-        let percentage = PlaceRules.openEbook(local: local, server: server, ownDeviceID: ownDeviceID).percentage
+        let choice = PlaceRules.openEbook(local: local, server: server, ownDeviceID: ownDeviceID)
+        let percentage = choice.percentage
         let underway = try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM read_throughs WHERE book_id = ? AND outcome = 'underway')",
                                          arguments: [bookID]) ?? false
         let ebooks = try Int.fetchOne(db, sql: """
             SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type IN (\(readableList)) AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
-        let file = try Row.fetchOne(db, sql: "SELECT display_name, word_count, size_bytes FROM book_files WHERE id = ?", arguments: [fileID])
+        let file = try Row.fetchOne(db, sql: "SELECT display_name, word_count, size_bytes, file_type, page_count, pages FROM book_files WHERE id = ?",
+                                    arguments: [fileID])
         var progress = ReadProgress(fileID: fileID, percentage: min(1, max(0, percentage)), underway: underway,
                                     fileName: file?["display_name"] ?? "", ebookCount: ebooks,
                                     wordCount: file?["word_count"], sizeBytes: file?["size_bytes"] ?? 0)
+        if let file, pageBasedTypes.contains(file["file_type"] as String) {
+            // A CBZ's own page list is the count the reader pages through.
+            let listed = names(file["pages"]).count
+            let count: Int? = listed > 0 ? listed : file["page_count"]
+            guard let count, count > 0 else { return progress }
+            progress.pageCount = count
+            // Pages left, exactly, from the place it opens at, wherever it
+            // was read.
+            let page: Int = switch choice.start {
+            case .page(let page): min(max(0, page), count - 1)
+            default: PageLayout.page(at: percentage, pageCount: count)
+            }
+            progress.pagesLeft = count - 1 - page
+            progress.chapter = try readerChapters(db, fileID: fileID).last { ($0.startPage ?? Int.max) <= page }?.title
+            return progress
+        }
         if let place = try Row.fetchOne(db, sql: "SELECT chapter, pages_left, percentage FROM reader_places WHERE file_id = ?",
                                         arguments: [fileID]),
            abs((place["percentage"] as Double) - progress.percentage) < 0.005 {

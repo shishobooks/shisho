@@ -24,7 +24,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     @ObservationIgnored private var turnWait: Task<Void, Never>?
     /// Another device's place, offered without jumping.
     private(set) var offer: ServerPlace?
-    private(set) var settings = PageReaderSettings.load()
+    private(set) var settings: PageReaderSettings
     /// The places jumps left from, as pages.
     private(set) var history = LocationHistory()
     private(set) var source: ImageSource?
@@ -32,8 +32,6 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// one the pages' shapes picked.
     var flowChosen: Bool { settings.flow(forBook: file.book.id) != nil }
     var flow: PageFlow { source?.flow ?? .paginated }
-    /// The File runs right to left, followed or not.
-    var fileRightToLeft: Bool { file.rightToLeft }
     var rightToLeft: Bool { source?.rightToLeft ?? false }
 
     @ObservationIgnored private let session: AccountSession
@@ -49,12 +47,19 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// When the last run of VoiceOver adjustments to the scrubber was.
     @ObservationIgnored private var lastAdjustment: Date?
 
-    init(file: ReadingFile, session: AccountSession, requestSync: @escaping @MainActor () -> Void,
+    /// The page a tile of the File's page grid opened, rather than the
+    /// place, and the place it would have opened at.
+    @ObservationIgnored private let askedPage: Int?
+    @ObservationIgnored private var placePage: Int?
+
+    init(file: ReadingFile, session: AccountSession, page: Int? = nil, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
         self.file = file
         self.session = session
+        askedPage = page
         self.onGone = onGone
         shownChapters = file.chapters
+        settings = PageReaderSettings.load(accountID: session.account.id)
         tracker = ReadingTracker(fileID: file.fileID, store: session.store, requestSync: requestSync)
     }
 
@@ -126,8 +131,12 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         } catch {
             guard !closed else { return }
             log("couldn't open the File: \(Diagnostics.describe(error))")
-            // A copy that won't open is fetched again on Try Again.
-            session.ebooks.discard(file)
+            // A copy that won't open is fetched again on Try Again, unless
+            // fetching it again can't help: a CBZ whose pages the server
+            // couldn't read, or a PDF with a password.
+            if error as? CBZPages.Failure != .noPages, error as? PDFPages.Failure != .locked {
+                session.ebooks.discard(file)
+            }
             phase = .failed(String(localized: "This book couldn't be opened."))
             return
         }
@@ -147,7 +156,9 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         guard !closed else { return }
         knownServerAt = choice?.1
         offer = choice?.0.offer
-        let start = startPage(choice?.0)
+        let place = startPage(choice?.0)
+        placePage = place
+        let start = askedPage.map { min(max(0, $0), pageCount - 1) } ?? place
         page = start
         pagesShown = [start]
         contents = entries(shownChapters)
@@ -188,10 +199,6 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     }
 
     // MARK: - Moving
-
-    func turn(_ direction: TurnDirection) {
-        source?.pager.turn(direction)
-    }
 
     func go(to entry: ContentsEntry) {
         guard case .page(let page) = entry.target else { return }
@@ -344,7 +351,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
 
     private func place(_ page: Int) -> ReadingPlace {
         ReadingPlace(locator: .page(page), fraction: PageLayout.fraction(of: page, pageCount: pageCount),
-                     atEnd: page == pageCount - 1, screen: String(page))
+                     atEnd: page == pageCount - 1, screen: source?.screen ?? String(page))
     }
 
     func imageSourceShowed(page: Int) {
@@ -352,7 +359,14 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         pagesShown = source?.pagesShown ?? [page]
         guard phase != .reading else { return }
         phase = .reading
-        tracker.opened(place(page))
+        // A page opened from the grid moves the place there, as a link to a
+        // page does on the web; opening at the place isn't reading.
+        if let placePage, placePage != page {
+            tracker.opened(place(placePage))
+            tracker.moved(place(page))
+        } else {
+            tracker.opened(place(page))
+        }
     }
 
     func imageSourceMoved(page: Int) {
@@ -360,6 +374,11 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         pagesShown = source?.pagesShown ?? [page]
         guard phase == .reading else { return }
         tracker.moved(place(page))
+    }
+
+    func imageSourceLaidOut() {
+        page = source?.currentPage ?? page
+        pagesShown = source?.pagesShown ?? [page]
     }
 
     func imageSourceWaiting(_ waiting: Bool) {
@@ -399,25 +418,5 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     private func log(_ message: String) {
         let fileID = file.fileID
         Task { await Diagnostics.shared.log(.reader, "file \(fileID): \(message)") }
-    }
-}
-
-/// The app's own memory, as iOS counts it against the limit past which it
-/// ends the app.
-enum MemoryFootprint {
-    static var bytes: Int {
-        var info = task_vm_info_data_t()
-        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
-        let result = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
-            }
-        }
-        return result == KERN_SUCCESS ? Int(info.phys_footprint) : -1
-    }
-
-    static var megabytes: Int {
-        let bytes = bytes
-        return bytes < 0 ? -1 : bytes / 1_048_576
     }
 }

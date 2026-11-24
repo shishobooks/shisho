@@ -5,8 +5,7 @@ import SwiftUI
 /// it sits on disk. It's all in the device's copy, so it works offline.
 ///
 /// Left out from the web's page: the Book's other Files, a step back on the
-/// Book page; a comic's or PDF's page grid, which waits for the reader's page
-/// images (#921); and links out from identifiers, whose pages plugins define.
+/// Book page, and links out from identifiers, whose pages plugins define.
 struct FileView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -115,6 +114,12 @@ struct FileView: View {
             if !edition.isEmpty {
                 LabelRows(rows: edition)
                     .padding(.top, 24)
+            }
+            if CatalogStore.pageBasedTypes.contains(file.fileType), let pages = file.pageCount, pages > 0 {
+                // Between the Book's other Files, which the web lists here,
+                // and the chapters, as the web places it.
+                FileSectionHeading(text: FileFacts.pages(pages))
+                FilePageGrid(fileID: file.id, pageCount: pages)
             }
             chaptersSection(file)
             FileSectionHeading(text: String(localized: "On disk"))

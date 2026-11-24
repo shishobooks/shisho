@@ -67,9 +67,10 @@ final class PageImagesTests: XCTestCase {
     func testStoredAndDeflatedEntriesRead() throws {
         let text = Data(String(repeating: "Shisho ", count: 500).utf8)
         let archive = try ZipArchive(data: Self.zip([("a.txt", text, false), ("dir/b.txt", text, true)]))
-        XCTAssertEqual(Set(archive.entries.keys), ["a.txt", "dir/b.txt"])
-        XCTAssertEqual(try archive.bytes(of: XCTUnwrap(archive.entries["a.txt"])), text)
-        let deflated = try XCTUnwrap(archive.entries["dir/b.txt"])
+        XCTAssertEqual(archive.entries.map(\.name), ["a.txt", "dir/b.txt"])
+        let entries = archive.entries(named: ["a.txt", "dir/b.txt"])
+        XCTAssertEqual(try archive.bytes(of: XCTUnwrap(entries[0])), text)
+        let deflated = try XCTUnwrap(entries[1])
         XCTAssertLessThan(deflated.compressedSize, text.count)
         XCTAssertEqual(try archive.bytes(of: deflated), text)
         XCTAssertEqual(try archive.prefix(of: deflated, limit: 10), text.prefix(10))
@@ -80,7 +81,7 @@ final class PageImagesTests: XCTestCase {
         XCTAssertThrowsError(try ZipArchive(data: Data("not a zip at all, not even close to one".utf8)))
         let whole = Self.zip([("a.png", Self.png(width: 4, height: 4), false)])
         let archive = try ZipArchive(data: whole)
-        let entry = try XCTUnwrap(archive.entries["a.png"])
+        let entry = try XCTUnwrap(archive.entries.first)
         // The same directory over a file cut short.
         let cut = whole.prefix(20) + whole.suffix(from: whole.count - 22 - 46 - 5)
         XCTAssertThrowsError(try ZipArchive(data: Data(cut)).bytes(of: entry))
@@ -115,6 +116,18 @@ final class PageImagesTests: XCTestCase {
         XCTAssertEqual(image?.width, 200)
     }
 
+    /// Two entries with one name are two pages, each its own image, as the
+    /// server counts them.
+    func testPagesSharingANameAreEachTheirOwn() async throws {
+        let archive = try ZipArchive(data: Self.zip([
+            ("page.png", Self.png(width: 20, height: 30), false),
+            ("page.png", Self.png(width: 40, height: 30), false),
+        ]))
+        let pages = try CBZPages(archive: archive, pageNames: ["page.png", "page.png"])
+        let sizes = await pages.pageSizes()
+        XCTAssertEqual(sizes, [CGSize(width: 20, height: 30), CGSize(width: 40, height: 30)])
+    }
+
     func testAComicWithNoPagesDoesntOpen() throws {
         let archive = try ZipArchive(data: Self.zip([("a.png", Self.png(width: 4, height: 4), false)]))
         XCTAssertThrowsError(try CBZPages(archive: archive, pageNames: [])) { error in
@@ -127,7 +140,9 @@ final class PageImagesTests: XCTestCase {
     /// A PDF of pageCount pages, each a different photo-like scan of
     /// width by height pixels, as a scanned book's pages are.
     static func scannedPDF(pageCount: Int, width: Int, height: Int) throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("scan-\(pageCount)-\(width).pdf")
+        // Named for everything that shapes it, so a copy left by an earlier
+        // version of this generator isn't taken for it.
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("scan-v1-\(pageCount)-\(width)x\(height).pdf")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         let pageRect = CGRect(x: 0, y: 0, width: 612, height: 612 * CGFloat(height) / CGFloat(width))
         let format = UIGraphicsImageRendererFormat()
@@ -151,7 +166,7 @@ final class PageImagesTests: XCTestCase {
                 image.draw(in: pageRect)
             }
         }
-        try data.write(to: url)
+        try data.write(to: url, options: .atomic)
         return url
     }
 

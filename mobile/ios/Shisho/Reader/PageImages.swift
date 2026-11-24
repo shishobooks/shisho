@@ -11,15 +11,27 @@ protocol PageImageSource: Sendable {
     /// shown (rotation applied). A page that can't be read is portrait.
     func pageSizes() async -> [CGSize]
     /// The page at most maxPixel on its longer side, or nil when it can't be
-    /// read. A page is never drawn larger than it is, nor past
-    /// largestPixel.
+    /// read. A page is never drawn larger than it is, nor past largestArea.
     func image(page: Int, maxPixel: Int) async -> CGImage?
 }
 
 enum PageImages {
-    /// The longest side a page is ever decoded at, zoomed in or not: past
-    /// this a scan's every pixel would cost more memory than it shows.
-    static let largestPixel = 4096
+    /// The most pixels a page is ever decoded at, zoomed in or not: past
+    /// this a scan's every pixel would cost more memory than it shows. By
+    /// area rather than side, so a webtoon's tall strip still decodes at
+    /// the screen's width.
+    static let largestArea = 4096 * 4096
+    /// The longest side a request can ask for: a strip many screens tall.
+    static let largestPixel = 16384
+
+    /// The longer side to decode a page of size at, for a request of
+    /// maxPixel: no more than its pixels fit under largestArea.
+    static func side(for size: CGSize, maxPixel: Int) -> Int {
+        let long = max(size.width, size.height)
+        let short = max(1, min(size.width, size.height))
+        let byArea = Int((Double(largestArea) * Double(long / short)).squareRoot())
+        return max(1, min(maxPixel, largestPixel, byArea))
+    }
     /// A page's shape when it can't be read: portrait, as most are.
     static let unknownSize = CGSize(width: 2, height: 3)
 
@@ -55,7 +67,7 @@ struct CBZPages: PageImageSource {
     init(archive: ZipArchive, pageNames: [String]) throws {
         guard !pageNames.isEmpty else { throw Failure.noPages }
         self.archive = archive
-        entries = pageNames.map { archive.entries[$0] }
+        entries = archive.entries(named: pageNames)
     }
 
     /// The bytes an image's header is read from: most formats put the size
@@ -88,14 +100,17 @@ struct CBZPages: PageImageSource {
     func image(page: Int, maxPixel: Int) async -> CGImage? {
         guard entries.indices.contains(page), let entry = entries[page], !Task.isCancelled,
               let bytes = try? archive.bytes(of: entry),
-              let source = CGImageSourceCreateWithData(bytes as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+              let source = CGImageSourceCreateWithData(bytes as CFData, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int
         else { return nil }
         // Downsampled as it's decoded, so the full-size pixels never exist.
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: max(1, min(maxPixel, PageImages.largestPixel)),
+            kCGImageSourceThumbnailMaxPixelSize: PageImages.side(for: CGSize(width: width, height: height), maxPixel: maxPixel),
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
@@ -121,8 +136,10 @@ actor PDFPages: PageImageSource {
     private let url: URL
     private var document: CGPDFDocument
     private var drawnSinceOpening = 0
-    /// Pages drawn before the document is opened again.
+    /// Pages drawn at a screen's size before the document is opened again.
     static let pagesPerOpening = 8
+    /// The size past which a page drawn counts toward opening it again.
+    static let screenSize = 1000
 
     init(url: URL) throws {
         guard let document = CGPDFDocument(url as CFURL) else { throw Failure.unreadable }
@@ -150,7 +167,9 @@ actor PDFPages: PageImageSource {
     func image(page index: Int, maxPixel: Int) async -> CGImage? {
         // A page the reader has since moved away from isn't drawn.
         guard index >= 0, index < pageCount, !Task.isCancelled else { return nil }
-        drawnSinceOpening += 1
+        // Thumbnails decode a scan's images too, but small, so only pages
+        // drawn at a screen's size count toward opening it again.
+        if maxPixel >= Self.screenSize { drawnSinceOpening += 1 }
         if drawnSinceOpening > Self.pagesPerOpening, let fresh = CGPDFDocument(url as CFURL) {
             document = fresh
             drawnSinceOpening = 1
@@ -161,7 +180,7 @@ actor PDFPages: PageImageSource {
 
     private static func draw(_ page: CGPDFPage, maxPixel: Int) -> CGImage? {
         let size = uprightSize(page)
-        let scale = CGFloat(max(1, min(maxPixel, PageImages.largestPixel))) / max(size.width, size.height)
+        let scale = CGFloat(PageImages.side(for: size, maxPixel: maxPixel)) / max(size.width, size.height)
         let width = max(1, Int((size.width * scale).rounded()))
         let height = max(1, Int((size.height * scale).rounded()))
         guard let space = CGColorSpace(name: CGColorSpace.sRGB),

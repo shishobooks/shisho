@@ -55,7 +55,6 @@ struct PageReaderView: View {
         .animation(.easeOut(duration: 0.2), value: model.offer)
         .animation(.easeOut(duration: 0.15), value: model.turnWaiting)
         .statusBarHidden(model.phase == .reading)
-        // The bars and sheets take the app's look; the pages stay on black.
         .task { await model.load() }
         .onAppear { ScreenAwake.hold() }
         .onDisappear { ScreenAwake.release() }
@@ -80,96 +79,23 @@ struct PageReaderView: View {
         }
     }
 
-    @ViewBuilder
     private var status: some View {
-        switch model.phase {
-        case .loading:
-            ProgressView()
-                .controlSize(.large)
-                .tint(Self.pageForeground)
-                .accessibilityLabel(Text("Opening the book"))
-                .accessibilityIdentifier("reader.loading")
-        case .failed(let message):
-            VStack(spacing: 14) {
-                Icon(.triangleAlert, size: 30, relativeTo: .title)
-                Text(message)
-                    .font(.geist(.body))
-                    .multilineTextAlignment(.center)
-                Button("Try Again") { Task { await model.load() } }
-                    .buttonStyle(OutlineButtonStyle())
-                    .frame(maxWidth: 200)
-                    .accessibilityIdentifier("reader.retry")
-            }
-            .foregroundStyle(Self.pageForeground)
-            .padding(32)
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("reader.error")
-        case .reading:
-            EmptyView()
-        }
+        ReaderStatus(phase: model.phase, foreground: Self.pageForeground) { Task { await model.load() } }
     }
 
     // MARK: - Controls
 
-    /// The room each side of the title keeps for the buttons, so it stays
-    /// centered.
+    /// The room each side of the title keeps for the buttons: the two on
+    /// the right, which don't grow with the text size.
     private static let topBarSide: CGFloat = 2 * 44 + 8
 
-    private var title: some View {
-        VStack(spacing: 1) {
-            Text(model.chapterTitle ?? model.file.book.title)
-                .font(.geist(.subheadline, weight: .semibold))
-                .foregroundStyle(Theme.foreground)
-            if model.chapterTitle != nil {
-                Text(model.file.book.title)
-                    .font(.geist(.caption2))
-                    .foregroundStyle(Theme.mutedForeground)
-            }
-        }
-        .lineLimit(1)
-        .accessibilityElement(children: .combine)
-    }
-
+    /// The bars and sheets take the app's look; the pages stay on black.
     private var topBar: some View {
-        ViewThatFits(in: .horizontal) {
-            ZStack {
-                title
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, Self.topBarSide)
-                HStack(spacing: 0) {
-                    closeButton
-                    Spacer(minLength: 0)
-                    topBarButtons
-                }
-            }
-            HStack(spacing: 4) {
-                closeButton
-                title.frame(maxWidth: .infinity)
-                topBarButtons
-            }
+        ReaderTopBar(sideRoom: Self.topBarSide, close: close) {
+            PageReaderTitle(model: model)
+        } buttons: {
+            topBarButtons
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .background(ReaderView.barBackground.ignoresSafeArea(edges: [.top, .horizontal]))
-        .overlay(alignment: .bottom) { Theme.border.frame(height: 1).ignoresSafeArea(edges: .horizontal) }
-    }
-
-    private var closeButton: some View {
-        Button(action: close) {
-            HStack(spacing: 2) {
-                Icon(.chevronLeft, size: 24, relativeTo: .body)
-                Text("Book")
-                    .font(.geist(.subheadline, weight: .medium))
-            }
-            .foregroundStyle(Theme.primary)
-            .frame(minWidth: 44, minHeight: 44, alignment: .leading)
-            .padding(.leading, 6)
-        }
-        .accessibilityHint(Text("Closes the book"))
-        .accessibilityInputLabels([Text("Book"), Text("Close")])
-        .accessibilityShowsLargeContentViewer()
-        .accessibilityIdentifier("reader.close")
     }
 
     private var topBarButtons: some View {
@@ -215,6 +141,16 @@ struct PageReaderView: View {
     }
 }
 
+/// The chapter and the book over the page. Its own view, so following
+/// every turn redraws only it.
+private struct PageReaderTitle: View {
+    let model: PageReaderModel
+
+    var body: some View {
+        ReaderTitleText(chapter: model.chapterTitle, book: model.file.book.title)
+    }
+}
+
 /// The bar under the pages: back and forward through jumps, the thumbnail
 /// scrubber, and the page and how far through. The scrubber runs the way
 /// the pages turn: right to left in a right-to-left File.
@@ -226,21 +162,6 @@ private struct PageReaderBottomBar: View {
 
     private var lastPage: Int { max(0, model.pageCount - 1) }
 
-    private func historyButton(_ icon: Lucide, label: LocalizedStringKey, enabled: Bool, identifier: String,
-                               action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Icon(icon, size: 18)
-                .frame(width: 36, height: 44)
-                .contentShape(Rectangle().inset(by: -4))
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(Theme.foreground.opacity(enabled ? 0.85 : 0.3))
-        .disabled(!enabled)
-        .accessibilityLabel(Text(label))
-        .accessibilityShowsLargeContentViewer()
-        .accessibilityIdentifier(identifier)
-    }
-
     private var scrubValue: String {
         let page = scrubbing ?? model.page
         return [model.chapterTitle(atPage: page), model.pagesLabel([page])].compactMap { $0 }.joined(separator: ", ")
@@ -248,7 +169,7 @@ private struct PageReaderBottomBar: View {
 
     private var scrubberRow: some View {
         HStack(spacing: 2) {
-            historyButton(.undo2, label: "Back to previous location", enabled: model.history.canGoBack,
+            ReaderHistoryButton(icon: .undo2, label: "Back to previous location", enabled: model.history.canGoBack,
                           identifier: "reader.back", action: model.goBack)
             Scrubber(value: Double(scrubbing ?? model.page), length: Double(lastPage), onDrag: { value in
                 scrubbing = value.map { min(lastPage, max(0, Int($0.rounded()))) }
@@ -263,7 +184,7 @@ private struct PageReaderBottomBar: View {
             .accessibilityLabel(Text("Place in the book"))
             .accessibilityValue(Text(scrubValue))
             .accessibilityIdentifier("reader.scrubber")
-            historyButton(.redo2, label: "Forward to next location", enabled: model.history.canGoForward,
+            ReaderHistoryButton(icon: .redo2, label: "Forward to next location", enabled: model.history.canGoForward,
                           identifier: "reader.forward", action: model.goForward)
         }
     }
