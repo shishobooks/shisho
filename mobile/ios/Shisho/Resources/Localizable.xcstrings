@@ -33,7 +33,13 @@
     "%@ couldn't be saved." : {
 
     },
+    "%@ free on this device" : {
+
+    },
     "%@ in your Libraries appear here." : {
+
+    },
+    "%@ is downloaded" : {
 
     },
     "%@ is too large. Choose a font file under 50 MB." : {
@@ -166,6 +172,9 @@
         }
       }
     },
+    "%lld on the way" : {
+
+    },
     "%lld selected" : {
 
     },
@@ -176,6 +185,9 @@
 
     },
     "1 star" : {
+
+    },
+    "A Download is removed once you listen to or read it to the end." : {
 
     },
     "A change made on this device couldn't be saved on the server: %@" : {
@@ -215,6 +227,9 @@
 
     },
     "All Libraries" : {
+
+    },
+    "All downloaded" : {
 
     },
     "Also known as %@" : {
@@ -343,6 +358,9 @@
     "Choose a TTF, OTF, or WOFF2 font file." : {
 
     },
+    "Clear" : {
+
+    },
     "Clear Filters" : {
 
     },
@@ -350,6 +368,9 @@
 
     },
     "Clear all filters" : {
+
+    },
+    "Clear ebooks opened without downloading" : {
 
     },
     "Clear search" : {
@@ -389,6 +410,9 @@
 
     },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
+
+    },
+    "Couldn't share this File" : {
 
     },
     "Counts pages left in the book" : {
@@ -445,13 +469,52 @@
     "Done" : {
 
     },
+    "Download" : {
+
+    },
+    "Download %@" : {
+
+    },
+    "Download %@, not supported in this version of the app" : {
+
+    },
+    "Download All" : {
+
+    },
     "Download all covers on Wi-Fi" : {
+
+    },
+    "Download audiobooks and ebooks from a Book's page to listen and read offline." : {
+
+    },
+    "Download failed: %@" : {
+
+    },
+    "Download on Wi-Fi only" : {
+
+    },
+    "Downloaded" : {
+
+    },
+    "Downloading" : {
 
     },
     "Downloading your library…" : {
 
     },
+    "Downloading · %@" : {
+
+    },
+    "Downloads" : {
+
+    },
+    "Downloads wait until you're on Wi-Fi." : {
+
+    },
     "Duration" : {
+
+    },
+    "Ebooks opened without downloading" : {
 
     },
     "Edit Note" : {
@@ -577,7 +640,13 @@
     "Inker" : {
 
     },
+    "It kept stopping. Check your connection and try again." : {
+
+    },
     "Justify text" : {
+
+    },
+    "Keeps Downloads off cellular data and Low Data Mode." : {
 
     },
     "Language" : {
@@ -713,6 +782,9 @@
     "No Books yet" : {
 
     },
+    "No Downloads" : {
+
+    },
     "No Lists yet" : {
 
     },
@@ -735,6 +807,9 @@
 
     },
     "No tags found." : {
+
+    },
+    "Not supported" : {
 
     },
     "Not supported in this version of the app" : {
@@ -775,7 +850,13 @@
     "OK" : {
 
     },
+    "Off" : {
+
+    },
     "Offline. Showing what's on this device." : {
+
+    },
+    "On" : {
 
     },
     "On disk" : {
@@ -794,6 +875,9 @@
 
     },
     "Opening the book" : {
+
+    },
+    "Opens the Book" : {
 
     },
     "Opens the File's page" : {
@@ -848,6 +932,12 @@
 
     },
     "Position in chapter" : {
+
+    },
+    "Preparing %@ to share. Cancel" : {
+
+    },
+    "Preparing…" : {
 
     },
     "Previous Chapter" : {
@@ -913,10 +1003,38 @@
     "Released" : {
 
     },
+    "Remove" : {
+
+    },
     "Remove %@" : {
 
     },
     "Remove %@ sort level" : {
+
+    },
+    "Remove All Downloads" : {
+
+    },
+    "Remove Download" : {
+
+    },
+    "Remove every Download from this device?" : {
+
+    },
+    "Remove the Download of %@" : {
+
+    },
+    "Remove the Download of %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove the Download of %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "Remove when finished" : {
 
     },
     "Reset" : {
@@ -991,6 +1109,9 @@
     "Share" : {
 
     },
+    "Share %@" : {
+
+    },
     "Shared by %@" : {
 
     },
@@ -1007,6 +1128,9 @@
 
     },
     "Show more" : {
+
+    },
+    "Shows a menu to remove the Download" : {
 
     },
     "Shows the chapters" : {
@@ -1091,6 +1215,22 @@
     "Stay Here" : {
 
     },
+    "Stop Download" : {
+
+    },
+    "Stop downloading %@" : {
+
+    },
+    "Stop downloading %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Stop downloading %1$@, %2$@"
+          }
+        }
+      }
+    },
     "Supplement" : {
 
     },
@@ -1143,10 +1283,16 @@
     "The server at this address was set up again since you signed in, so it's a different server now. Sign in again." : {
 
     },
+    "The server doesn't have this File anymore." : {
+
+    },
     "The server kept asking to download the library again. Try syncing later." : {
 
     },
     "The server sends the app to another server (%@), which it doesn't follow with your sign-in. Sign in with that address instead." : {
+
+    },
+    "The server sent it to another address, which the app doesn't follow with your sign-in." : {
 
     },
     "Theme" : {
@@ -1156,6 +1302,9 @@
 
     },
     "Then by…" : {
+
+    },
+    "They stay in your library, to download again." : {
 
     },
     "This Book isn't in your Libraries anymore" : {
@@ -1231,6 +1380,9 @@
     "Try Again" : {
 
     },
+    "Try again." : {
+
+    },
     "Turn Off Timer" : {
 
     },
@@ -1259,6 +1411,15 @@
 
     },
     "Vol. %@" : {
+
+    },
+    "Waiting for Wi-Fi" : {
+
+    },
+    "Waiting for a connection" : {
+
+    },
+    "Waiting to download" : {
 
     },
     "Wide" : {
@@ -1321,6 +1482,9 @@
 
     },
     "^[%lld chapter](inflect: true)" : {
+
+    },
+    "^[%lld download](inflect: true)" : {
 
     },
     "^[%lld file](inflect: true)" : {
