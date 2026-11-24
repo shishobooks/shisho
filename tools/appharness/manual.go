@@ -9,8 +9,8 @@ import (
 )
 
 // manualChapters are the PDF fixture's outline, which Shisho keeps as the
-// File's chapters, and the 0-based page each starts on. The flows go to
-// them by title.
+// File's chapters, and the 0-based page each starts on, for trying the page
+// reader's contents by hand against `mise start:qa`.
 var manualChapters = []struct {
 	Title string
 	Page  int
@@ -23,7 +23,7 @@ var manualChapters = []struct {
 // manualPages is how many pages the PDF fixture has.
 const manualPages = 6
 
-// writeManual writes the PDF the page reader's flows read: numbered pages,
+// writeManual writes the PDF for trying the page reader: numbered pages,
 // each saying its chapter in large type, with an outline of
 // manualChapters. Hand-written, as the smallest PDF that has text and an
 // outline: Helvetica is one of the fonts every PDF reader has.

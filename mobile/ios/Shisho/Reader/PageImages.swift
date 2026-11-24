@@ -271,6 +271,25 @@ enum PageLayout {
         }
     }
 
+    /// Shisho's chapters as the contents, a PDF's outline among them: each
+    /// goes to the page it starts on, kept within the File, and is placed
+    /// along the scrubber there. A heading with no page goes nowhere.
+    static func contents(_ chapters: [ReaderChapter], pageCount: Int) -> [ContentsEntry] {
+        chapters.enumerated().map { index, chapter in
+            let start = chapter.startPage.map { min(max(0, $0), max(0, pageCount - 1)) }
+            return ContentsEntry(id: index, title: chapter.title, depth: chapter.depth, target: start.map(ReaderTarget.page),
+                                 position: start.map { fraction(of: $0, pageCount: pageCount) })
+        }
+    }
+
+    /// The chapter page is in: the last that starts on or before it.
+    static func entry(atPage page: Int, in contents: [ContentsEntry]) -> ContentsEntry? {
+        contents.last { entry in
+            if case .page(let start) = entry.target { return start <= page }
+            return false
+        }
+    }
+
     /// How far through the File page is, as the web reader counts it: the
     /// first page is 0 and the last 1.
     static func fraction(of page: Int, pageCount: Int) -> Double {

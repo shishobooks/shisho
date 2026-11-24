@@ -76,21 +76,13 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
 
     /// The chapter the reader is in: the last starting at or before the
     /// page.
-    var currentEntry: ContentsEntry? {
-        contents.last { entry in
-            if case .page(let start) = entry.target { return start <= page }
-            return false
-        }
-    }
+    var currentEntry: ContentsEntry? { PageLayout.entry(atPage: page, in: contents) }
 
     var chapterTitle: String? { currentEntry?.title }
 
     /// The chapter page is in, as the scrubber names where it goes.
     func chapterTitle(atPage page: Int) -> String? {
-        contents.last { entry in
-            if case .page(let start) = entry.target { return start <= page }
-            return false
-        }?.title
+        PageLayout.entry(atPage: page, in: contents)?.title
     }
 
     /// Where the chapters start, as fractions, for the scrubber's marks.
@@ -199,11 +191,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     }
 
     private func entries(_ chapters: [ReaderChapter]) -> [ContentsEntry] {
-        chapters.enumerated().map { index, chapter in
-            let start = chapter.startPage.map { min(max(0, $0), max(0, pageCount - 1)) }
-            return ContentsEntry(id: index, title: chapter.title, depth: chapter.depth, target: start.map(ReaderTarget.page),
-                                 position: start.map { PageLayout.fraction(of: $0, pageCount: pageCount) })
-        }
+        PageLayout.contents(chapters, pageCount: pageCount)
     }
 
     // MARK: - Moving

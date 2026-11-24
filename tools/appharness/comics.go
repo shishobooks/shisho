@@ -13,7 +13,8 @@ import (
 )
 
 // comicKind is the shape of a fixture comic's pages, for the page reader's
-// flows and for trying it by hand against `mise start:qa`.
+// flow (the printed comic) and for trying it by hand against `mise
+// start:qa`.
 type comicKind int
 
 const (

@@ -74,4 +74,32 @@ final class PageLayoutTests: XCTestCase {
         settings.save(defaults)
         XCTAssertFalse(PageReaderSettings.load(defaults).followReadingDirection)
     }
+
+    /// A right-to-left File, as manga, turns right to left while Follow
+    /// Reading Direction is on, and left to right once it's off; any other
+    /// File always turns left to right.
+    func testFollowingReadingDirection() {
+        var settings = PageReaderSettings()
+        XCTAssertTrue(settings.rightToLeft(fileRunsRightToLeft: true))
+        XCTAssertFalse(settings.rightToLeft(fileRunsRightToLeft: false))
+        settings.followReadingDirection = false
+        XCTAssertFalse(settings.rightToLeft(fileRunsRightToLeft: true))
+    }
+
+    /// A PDF's outline, as Shisho's chapters, is the contents: each entry
+    /// goes to the page it starts on, placed along the book, and the chapter
+    /// showing is the last starting on or before the page.
+    func testAnOutlineIsTheContents() {
+        let chapters = [
+            ReaderChapter(title: "Getting Started", href: nil, depth: 0, startPage: 0),
+            ReaderChapter(title: "Part", href: nil, depth: 0),
+            ReaderChapter(title: "Troubleshooting", href: nil, depth: 1, startPage: 4),
+            ReaderChapter(title: "Past the end", href: nil, depth: 0, startPage: 40),
+        ]
+        let contents = PageLayout.contents(chapters, pageCount: 6)
+        XCTAssertEqual(contents.map(\.target), [.page(0), nil, .page(4), .page(5)])
+        XCTAssertEqual(contents.map(\.position), [0, nil, 0.8, 1])
+        XCTAssertEqual(PageLayout.entry(atPage: 3, in: contents)?.title, "Getting Started")
+        XCTAssertEqual(PageLayout.entry(atPage: 4, in: contents)?.title, "Troubleshooting")
+    }
 }

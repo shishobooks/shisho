@@ -11,9 +11,14 @@ struct PageReaderSettings: Equatable, Sendable {
     /// turns left to right.
     var followReadingDirection = true
 
-    /// Whether a File with readingDirection turns right to left.
+    /// Whether a File turns right to left: its own Reading Direction, while
+    /// it's followed.
     func rightToLeft(_ file: ReadingFile) -> Bool {
-        followReadingDirection && file.rightToLeft
+        rightToLeft(fileRunsRightToLeft: file.rightToLeft)
+    }
+
+    func rightToLeft(fileRunsRightToLeft: Bool) -> Bool {
+        followReadingDirection && fileRunsRightToLeft
     }
 
     static func load(_ defaults: UserDefaults = .standard) -> PageReaderSettings {

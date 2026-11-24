@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The page reader's flows turn the comic to page 4 of 8 and turn the manga
-// right to left, so Shisho has to read them that way.
-func TestComicsAreReadAsTheFlowsTurnThem(t *testing.T) {
+// The flow turns the comic to page 4 of 8, and the manga is there to try
+// reading right to left, so Shisho has to read them that way.
+func TestComicsAreReadAsTheyreMade(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -35,8 +35,8 @@ func TestComicsAreReadAsTheFlowsTurnThem(t *testing.T) {
 	assert.Equal(t, models.ReadingDirectionRTL, *parsed.ReadingDirection)
 }
 
-// The PDF flow goes to the manual's chapters by title, so its outline has
-// to become chapters starting on the pages the flow expects.
+// The manual's outline has to become chapters starting on its pages, to try
+// the page reader's contents with.
 func TestManualOutlineIsItsChapters(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "manual.pdf")
