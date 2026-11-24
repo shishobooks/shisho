@@ -16,7 +16,6 @@ import (
 var flowSeconds = map[string]float64{
 	"access_change.yaml":              66,
 	"bookmark_offline.yaml":           104,
-	"chapter_navigation.yaml":         102,
 	"listen_and_resume.yaml":          180,
 	"listen_offline.yaml":             159,
 	"listen_to_the_end.yaml":          58,

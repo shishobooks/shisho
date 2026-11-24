@@ -1,7 +1,8 @@
 # A sleep timer set to the end of the chapter stops playback there, ready
-# to play the next chapter from its start (#916). It plays the last 30
-# seconds of Harbor Lights' first chapter, so a stall on CI can't carry
-# playback past the next boundary before the timer sees this one.
+# to play the next chapter from its start, and the chapter buttons move from
+# there (#916). It plays the last 30 seconds of Harbor Lights' first chapter,
+# so a stall on CI can't carry playback past the next boundary before the
+# timer sees this one.
 appId: ${APP_ID}
 name: Sleep at the end of the chapter
 ---
@@ -68,6 +69,27 @@ name: Sleep at the end of the chapter
 - assertVisible:
     id: player.position
     text: .*0:00
+
+# Stopped at a chapter's start, the chapter buttons move through the File's
+# chapters: Previous goes to the one before, and Next comes back.
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.prevChapter
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: The Harbor
+    timeout: 30000
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.nextChapter
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: The Lights
+    timeout: 30000
 
 # Playing again goes on into the next chapter.
 - runFlow:
