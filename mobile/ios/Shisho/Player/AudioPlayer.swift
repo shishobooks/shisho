@@ -1194,12 +1194,16 @@ final class AudioPlayer {
     }
 
     /// The lock screen's artwork: the File's own cover, or its Book's.
+    /// The cover's size in pixels for the lock screen and Now Playing, which
+    /// downloading every cover fetches each File's own at.
+    nonisolated static let artworkSize = 512
+
     private func loadArtwork(_ loaded: ListeningFile) {
         let covers = session.covers
         let (owner, version): (CoverCache.Owner, String) = loaded.coverVersion.isEmpty
             ? (.book(loaded.book.id), loaded.book.coverVersion) : (.file(loaded.fileID), loaded.coverVersion)
         Task { [weak self] in
-            let image = await covers.image(owner, version: version, size: 512)
+            let image = await covers.image(owner, version: version, size: AudioPlayer.artworkSize)
             guard let self, self.file?.fileID == loaded.fileID else { return }
             self.artwork = image
             self.updateNowPlaying()

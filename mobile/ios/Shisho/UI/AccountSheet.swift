@@ -9,7 +9,6 @@ struct AccountSheet: View {
     @State private var confirmingSignOut = false
     @State private var showingDiagnostics = false
     @State private var syncState: SyncState?
-    @State private var prefetchCovers = false
 
     var body: some View {
         NavigationStack {
@@ -19,7 +18,6 @@ struct AccountSheet: View {
                         identity(account)
                         accountsCard(account)
                         detailsCard(account)
-                        coversCard
                         actions
                         Text("Signing out removes this device from your account on the server. The library on it stays until you sign in again.")
                             .font(.geist(.footnote))
@@ -59,11 +57,6 @@ struct AccountSheet: View {
         .presentationCornerRadius(24)
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $syncState) { db in
             try CatalogStore.syncState(db)
-        }
-        .task(id: model.session?.account.id) {
-            if let account = model.session?.account {
-                prefetchCovers = model.prefetchesCovers(account)
-            }
         }
     }
 
@@ -122,23 +115,6 @@ struct AccountSheet: View {
             .foregroundStyle(Theme.primary)
             .accessibilityIdentifier("account.add")
         }
-        .cardStyle()
-    }
-
-    /// Covers download as they're first shown; this downloads all of them
-    /// on Wi-Fi, for browsing offline.
-    private var coversCard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle("Download all covers on Wi-Fi", isOn: $prefetchCovers)
-                .font(.geist(.subheadline))
-                .tint(Theme.primary)
-                .accessibilityIdentifier("account.prefetchCovers")
-                .onChange(of: prefetchCovers) { _, on in model.setPrefetchesCovers(on) }
-            Text("Every cover in your Libraries shows offline. Otherwise covers download as you browse.")
-                .font(.geist(.footnote))
-                .foregroundStyle(Theme.mutedForeground)
-        }
-        .padding(16)
         .cardStyle()
     }
 
@@ -248,13 +224,11 @@ struct DiagnosticsSheet: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 14) {
-                Toggle("Include titles", isOn: $includeTitles)
-                    .font(.geist(.body))
-                    .tint(Theme.primary)
-                    .accessibilityIdentifier("diagnostics.includeTitles")
-                Text("Server addresses and sign-in details are always removed. Books and Files are named by id unless you include titles.")
-                    .font(.geist(.footnote))
-                    .foregroundStyle(Theme.mutedForeground)
+                SettingsCard {
+                    SettingToggle(title: "Include titles",
+                                  description: "Server addresses and sign-in details are always removed. Books and Files are named by id unless you include titles.",
+                                  isOn: $includeTitles, identifier: "diagnostics.includeTitles")
+                }
                 ScrollView {
                     Text(text ?? "")
                         .font(.geistMono(.caption))

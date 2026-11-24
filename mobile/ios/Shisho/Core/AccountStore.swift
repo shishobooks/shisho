@@ -66,7 +66,9 @@ struct AccountData {
     /// The order picked for a Library, or 0 for every Library.
     func sortKey(libraryID: Int) -> String { sortKeyPrefix + String(libraryID) }
     private var sortKeyPrefix: String { "sort.\(accountID)." }
-    /// Downloading every cover on Wi-Fi.
+    /// Downloading every cover on Wi-Fi, from before the setting applied to
+    /// every account: read once to carry it over, and removed with the
+    /// account.
     var prefetchCoversKey: String { "prefetchCovers.\(accountID)" }
     /// The audiobook File the player had open.
     var lastFileKey: String { "player.lastFile.\(accountID)" }

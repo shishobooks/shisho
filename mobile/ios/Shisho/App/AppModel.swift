@@ -886,20 +886,34 @@ final class AppModel {
 
     // MARK: - Covers
 
-    /// Whether to download every cover on Wi-Fi, kept for each account. Off
-    /// until the user turns it on.
-    func prefetchesCovers(_ account: Account) -> Bool {
-        UserDefaults.standard.bool(forKey: AccountData(accountID: account.id).prefetchCoversKey)
+    /// Whether to download every cover on Wi-Fi, for every account on this
+    /// device. Off until the user turns it on.
+    var prefetchesCovers = AppModel.storedPrefetchesCovers {
+        didSet {
+            guard prefetchesCovers != oldValue else { return }
+            UserDefaults.standard.set(prefetchesCovers, forKey: AppModel.prefetchCoversKey)
+            if prefetchesCovers, let session {
+                prefetchCoversIfWanted(session)
+            } else {
+                stopPrefetching()
+            }
+        }
     }
 
-    func setPrefetchesCovers(_ on: Bool) {
-        guard let session else { return }
-        UserDefaults.standard.set(on, forKey: AccountData(accountID: session.account.id).prefetchCoversKey)
-        if on {
-            prefetchCoversIfWanted(session)
-        } else {
-            stopPrefetching()
+    private static let prefetchCoversKey = "prefetchCovers"
+
+    /// The setting, or, before it applied to every account, on when any
+    /// account had it on.
+    private static var storedPrefetchesCovers: Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: prefetchCoversKey) != nil {
+            return defaults.bool(forKey: prefetchCoversKey)
         }
+        let before = defaults.dictionaryRepresentation().contains { key, value in
+            key.hasPrefix(prefetchCoversKey + ".") && (value as? Bool) == true
+        }
+        defaults.set(before, forKey: prefetchCoversKey)
+        return before
     }
 
     @ObservationIgnored private var onWiFi = false
@@ -919,11 +933,12 @@ final class AppModel {
         prefetchRun += 1
     }
 
-    /// Downloads every cover the account's Library shows that isn't on the
-    /// device yet, at the grid's size, while on Wi-Fi, so browsing offline
-    /// shows them all.
+    /// Downloads every cover that isn't on the device yet while on Wi-Fi, so
+    /// browsing and listening offline show them all: each Book's at the
+    /// grid's size, and each File's own, at the size Now Playing shows it.
+    /// Other sizes of a cover kept show offline in their place.
     private func prefetchCoversIfWanted(_ session: AccountSession) {
-        guard prefetchesCovers(session.account), onWiFi else { return }
+        guard prefetchesCovers, onWiFi else { return }
         guard prefetching == nil else {
             prefetchAgain = true
             return
@@ -936,7 +951,8 @@ final class AppModel {
             let versions = (try? session.store.coverVersions()) ?? []
             for cover in versions {
                 guard !Task.isCancelled, self?.session === session, self?.onWiFi == true else { break }
-                _ = await session.covers.image(bookID: cover.bookID, version: cover.version, size: size)
+                _ = await session.covers.image(cover.owner, version: cover.version,
+                                               size: cover.owner.isFile ? AudioPlayer.artworkSize : size)
             }
             guard let self, prefetchRun == run else { return }
             prefetching = nil

@@ -472,63 +472,27 @@ struct DownloadsView: View {
 
 /// Wi-Fi only and Remove when finished, for every account on the device.
 private struct DownloadSettingsCard: View {
+    @Environment(AppModel.self) private var model
     @Bindable var downloads: DownloadManager
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                SettingToggle(title: String(localized: "Download on Wi-Fi only"), isOn: $downloads.wifiOnly, identifier: "downloads.wifiOnly")
-                Text(downloads.wifiOnly && downloads.wait == .wifi
-                     ? String(localized: "Downloads wait until you're on Wi-Fi.")
-                     : String(localized: "Keeps Downloads off cellular data and Low Data Mode."))
-                    .font(.geist(.footnote))
-                    .foregroundStyle(downloads.wait == .wifi ? Theme.foreground : Theme.mutedForeground)
-                    .accessibilityIdentifier("downloads.wifiOnly.note")
-            }
-            .padding(16)
-            Divider().overlay(Theme.border)
-            VStack(alignment: .leading, spacing: 6) {
-                SettingToggle(title: String(localized: "Remove when finished"), isOn: $downloads.removeWhenFinished, identifier: "downloads.removeWhenFinished")
-                Text("A Download is removed once you listen to or read it to the end.")
-                    .font(.geist(.footnote))
-                    .foregroundStyle(Theme.mutedForeground)
-            }
-            .padding(16)
+        @Bindable var model = model
+        SettingsCard {
+            SettingToggle(title: "Download on Wi-Fi only",
+                          description: downloads.wifiOnly && downloads.wait == .wifi
+                              ? "Downloads wait until you're on Wi-Fi."
+                              : "Keeps Downloads off cellular data and Low Data Mode.",
+                          isOn: $downloads.wifiOnly, identifier: "downloads.wifiOnly",
+                          emphasized: downloads.wifiOnly && downloads.wait == .wifi)
+            SettingsDivider()
+            SettingToggle(title: "Remove when finished",
+                          description: "A Download is removed once you listen to or read it to the end.",
+                          isOn: $downloads.removeWhenFinished, identifier: "downloads.removeWhenFinished")
+            SettingsDivider()
+            SettingToggle(title: "Download all covers on Wi-Fi",
+                          description: "Every cover in your Libraries shows offline. Otherwise covers download as you browse.",
+                          isOn: $model.prefetchesCovers, identifier: "downloads.prefetchCovers")
         }
-        .cardStyle()
-    }
-}
-
-/// A setting's name and switch as one control: a tap anywhere on the row
-/// flips it, so a flow's tap on its middle works as a finger's on the
-/// switch does, and VoiceOver reads one switch with its name and state.
-private struct SettingToggle: View {
-    let title: String
-    @Binding var isOn: Bool
-    let identifier: String
-
-    var body: some View {
-        Button { isOn.toggle() } label: {
-            HStack(spacing: 12) {
-                Text(title)
-                    .font(.geist(.subheadline))
-                    .foregroundStyle(Theme.foreground)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                // Drawn only; the row is the control.
-                Toggle(title, isOn: $isOn)
-                    .labelsHidden()
-                    .tint(Theme.primary)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(title)
-        .accessibilityValue(isOn ? String(localized: "On") : String(localized: "Off"))
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityIdentifier(identifier)
     }
 }
 
