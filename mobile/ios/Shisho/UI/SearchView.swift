@@ -19,7 +19,7 @@ struct SearchView: View {
                     SectionHeading(title: String(localized: "Books"))
                     VStack(spacing: 8) {
                         ForEach(results.books) { book in
-                            NavigationLink(value: Route.book(book)) {
+                            Button { open(.book(book)) } label: {
                                 SearchBookRow(book: book)
                             }
                             .buttonStyle(PressableStyle())
@@ -61,13 +61,22 @@ struct SearchView: View {
         }
     }
 
+    /// Opens a result with the search closed first, so no screen ever sits
+    /// over an active search: on iOS 26 a stack with one under its top screen
+    /// ignores being emptied, as tapping the tab again does, and stays put
+    /// while its path says it's back at the first screen.
+    private func open(_ route: Route) {
+        searching = false
+        model.push(route)
+    }
+
     @ViewBuilder
     private func section(_ title: String, _ kind: ResourceKind, _ items: [ResourceSummary]) -> some View {
         if !items.isEmpty {
             SectionHeading(title: title)
             VStack(spacing: 8) {
                 ForEach(items) { item in
-                    NavigationLink(value: Route.resource(kind, id: item.id, name: item.name)) {
+                    Button { open(.resource(kind, id: item.id, name: item.name)) } label: {
                         ResourceRow(item: item, kind: kind)
                     }
                     .buttonStyle(PressableStyle())
