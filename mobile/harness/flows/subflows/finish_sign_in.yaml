@@ -9,13 +9,15 @@ appId: ${APP_ID}
       id: signin.server
     timeout: 90000
     optional: true
-# A busy CI runner can drop a typed character, which shows as an error: the
-# wrong username or password, or a server that can't be reached. Then every
-# field is typed again, once. Any other failure still fails the flow below.
+# A busy CI runner can drop typed characters. Some dropped show as an error:
+# the wrong username or password, or a server that can't be reached. A whole
+# field dropped leaves Sign In disabled and no error at all. Either way the
+# sign-in screen is still here, so every field is typed again, once. Any
+# other failure still fails the flow below.
 - runFlow:
     when:
       visible:
-        id: signin.error
+        id: signin.server
     commands:
       - tapOn:
           id: signin.server

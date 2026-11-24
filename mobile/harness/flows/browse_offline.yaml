@@ -63,12 +63,24 @@ name: Browse Books offline
       id: resource.grid
     timeout: 30000
 - assertVisible: Harbor Lights
-- tapOn:
-    id: tab.library
-- extendedWaitUntil:
-    visible:
-      id: library.grid
-    timeout: 30000
+# A stalled CI simulator can drop the tap, so it's tapped again until the
+# Library shows. A tap that lands on the Library itself only scrolls it to
+# its top.
+- repeat:
+    while:
+      notVisible:
+        id: library.grid
+    times: 3
+    commands:
+      - tapOn:
+          id: tab.library
+      - extendedWaitUntil:
+          visible:
+            id: library.grid
+          timeout: 30000
+          optional: true
+- assertVisible:
+    id: library.grid
 
 - runFlow:
     file: subflows/open_book.yaml
