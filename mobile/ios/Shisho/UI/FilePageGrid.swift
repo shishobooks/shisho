@@ -5,12 +5,15 @@ import SwiftUI
 /// tile opening the reader on its page.
 ///
 /// The pages are drawn on the device (ADR 0025), so a tile shows its page
-/// once the File is on the phone, from reading it; before that it shows its
-/// number. Showing the File page never downloads the File.
+/// once the File is downloaded, by Download or by reading it; before that
+/// it shows its number. Showing the File page never downloads the File.
 struct FilePageGrid: View {
     @Environment(AppModel.self) private var model
     let fileID: Int
     let pageCount: Int
+    /// Whether the File is on the device, so the pages show as soon as a
+    /// Download finishes, and go when it's removed.
+    let downloaded: Bool
     @State private var expanded = false
     @State private var cache: PageImageCache?
     @State private var width: CGFloat = 0
@@ -33,6 +36,8 @@ struct FilePageGrid: View {
                     PageTile(page: page, cache: cache) { model.read(fileID: fileID, page: page) }
                 }
             }
+            // Opening a page downloads the File, which needs the server.
+            .modifier(NeedsConnection(available: model.canOpen(fileID: fileID)))
             .onGeometryChange(for: CGFloat.self, of: \.size.width) { width = $0 }
             .mask {
                 if overflows && !expanded {
@@ -58,8 +63,11 @@ struct FilePageGrid: View {
                 .accessibilityIdentifier("file.pages.toggle")
             }
         }
-        // Again once the reader closes, which may have downloaded the File.
-        .task(id: model.reader == nil) {
+        .task(id: downloaded) {
+            guard downloaded else {
+                cache = nil
+                return
+            }
             guard cache == nil else { return }
             await openPages()
         }
@@ -69,7 +77,7 @@ struct FilePageGrid: View {
     private func openPages() async {
         guard let session = model.session,
               let file = try? await session.store.pool.read({ try CatalogStore.readingFile($0, fileID: fileID) }),
-              let url = session.ebooks.kept(fileID: file.fileID, sizeBytes: file.sizeBytes, fileType: file.fileType)
+              let url = session.downloads.localFile(fileID: file.fileID)
         else { return }
         let pages = await Task.detached(priority: .utility) { () -> PageImageSource? in
             if file.fileType == "pdf" { return try? PDFPages(url: url) }

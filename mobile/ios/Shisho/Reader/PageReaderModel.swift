@@ -50,6 +50,14 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     @ObservationIgnored private let onGone: @MainActor () -> Void
     @ObservationIgnored private let requestSync: @MainActor () -> Void
     @ObservationIgnored private var closed = false
+    /// The File couldn't open for want of a connection: it opens once the
+    /// connection is back.
+    @ObservationIgnored private var waitingForConnection = false
+    /// The last page showed, which finishes the Read-through.
+    @ObservationIgnored private var readToEnd = false
+    /// This open downloaded the File, so a copy that won't open can go, to
+    /// be downloaded again on Try Again.
+    @ObservationIgnored private var fetchedToOpen = false
     @ObservationIgnored private var shownChapters: [ReaderChapter]
     /// When the last run of VoiceOver adjustments to the scrubber was.
     @ObservationIgnored private var lastAdjustment: Date?
@@ -108,20 +116,43 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
 
     // MARK: - Opening
 
-    /// Fetches the File if it isn't on the device, then opens it where the
-    /// reader left off, here or on another device.
+    /// Downloads the File if it isn't on the device, then opens it where
+    /// the reader left off, here or on another device.
     func load() async {
         phase = .loading
         placeWatch?.cancel()
         fileWatch?.cancel()
         source = nil
+        waitingForConnection = false
+        fetchedToOpen = false
         let url: URL
         do {
-            url = try await session.ebooks.file(file)
+            if let downloaded = session.downloads.localFile(fileID: file.fileID) {
+                url = downloaded
+            } else if !session.client.reachability.allowsRequests {
+                // Not on the device and no connection: say so at once, and
+                // open by itself once the connection is back.
+                waitingForConnection = true
+                phase = .failed(ConnectionRules.book(session.client.reachability.connection))
+                return
+            } else {
+                // The pages are drawn from the whole File, so opening one
+                // downloads it, as a Download like any other.
+                let fetch = try await session.downloads.fetchNow(fileID: file.fileID)
+                url = fetch.url
+                // One a background transfer finished meanwhile is a Download
+                // like any other, kept if it won't open.
+                fetchedToOpen = fetch.fetched
+            }
         } catch {
             guard !closed else { return }
             log("couldn't fetch the File: \(Diagnostics.describe(error))")
-            phase = .failed(String(localized: "This book couldn't be downloaded. Check your connection to the server and try again."))
+            if !session.client.reachability.allowsRequests {
+                waitingForConnection = true
+                phase = .failed(ConnectionRules.book(session.client.reachability.connection))
+            } else {
+                phase = .failed(String(localized: "This book couldn't be downloaded. Check your connection to the server and try again."))
+            }
             return
         }
         let opened: (pages: PageImageSource, sizes: [CGSize])
@@ -130,11 +161,13 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         } catch {
             guard !closed else { return }
             log("couldn't open the File: \(Diagnostics.describe(error))")
-            // A copy that won't open is fetched again on Try Again, unless
-            // fetching it again can't help: a CBZ whose pages the server
-            // couldn't read, or a PDF with a password.
-            if error as? CBZPages.Failure != .noPages, error as? PDFPages.Failure != .locked {
-                session.ebooks.discard(file)
+            // A copy this open just downloaded that won't open is downloaded
+            // again on Try Again, unless that can't help: a CBZ whose pages
+            // the server couldn't read, or a PDF with a password. One
+            // downloaded before stays: failing under memory pressure, say
+            // on a plane, mustn't cost the only copy.
+            if fetchedToOpen, error as? CBZPages.Failure != .noPages, error as? PDFPages.Failure != .locked {
+                session.downloads.remove([file.fileID])
             }
             phase = .failed(String(localized: "This book couldn't be opened."))
             return
@@ -296,8 +329,19 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         logMemory("memory warning")
     }
 
+    /// The connection came back: a File that couldn't open for want of it
+    /// opens now.
+    func connectionChanged(_ connection: Connection) {
+        guard connection == .online, waitingForConnection, !closed else { return }
+        waitingForConnection = false
+        Task { await load() }
+    }
+
     func close() {
         noteReaderPlace()
+        if !closed {
+            session.downloads.released(fileID: file.fileID)
+        }
         closed = true
         turnWait?.cancel()
         tracker.close()
@@ -381,7 +425,18 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         self.page = page
         pagesShown = source?.pagesShown ?? [page]
         guard phase == .reading else { return }
-        tracker.moved(place(page))
+        let place = place(page)
+        tracker.moved(place)
+        if place.atEnd, !readToEnd {
+            readToEnd = true
+            // The pages are read from the File as they show, so it goes
+            // once the reader closes, or at the next launch.
+            session.downloads.finished(fileID: file.fileID, holding: true)
+        } else if !place.atEnd, readToEnd {
+            // Back from the end, which undoes an automatic finish.
+            readToEnd = false
+            session.downloads.unfinished(fileID: file.fileID)
+        }
     }
 
     func imageSourceLaidOut() {

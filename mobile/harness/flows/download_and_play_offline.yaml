@@ -1,8 +1,8 @@
-# Download an ebook and an audiobook and share the audiobook's File, then
-# take the server offline and relaunch the app, so nothing streamed is left
-# in memory: the audiobook plays from its Download to its end, which removes
-# the Download with Remove when finished on, and the ebook opens from its
-# Download (#915).
+# Download an ebook, a comic, and an audiobook and share the audiobook's
+# File, then take the server offline and relaunch the app, so nothing
+# streamed is left in memory: the audiobook plays from its Download to its
+# end, which removes the Download with Remove when finished on, and the
+# comic and the ebook open from their Downloads (#915, #921).
 appId: ${APP_ID}
 name: Download, share, then listen and read offline
 ---
@@ -29,6 +29,12 @@ name: Download, share, then listen and read offline
     file: subflows/download_book.yaml
     env:
       TITLE: The Harness Novel
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/download_book.yaml
+    env:
+      TITLE: Harness Comic
 # Back to the Library's grid, then the audiobook.
 - tapOn:
     id: tab.library
@@ -124,3 +130,20 @@ name: Download, share, then listen and read offline
     file: subflows/read.yaml
     env:
       TITLE: The Harness Novel
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.close
+
+# The comic opens offline too: its pages are drawn from the Download. It's
+# below the novel in the Library, which open_book scrolls down to find.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Comic
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page [0-9]+ of 8.*"
+    timeout: 30000

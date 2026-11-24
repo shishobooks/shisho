@@ -1287,4 +1287,11 @@ enum OpenReader {
         case .pages(let model): model.close()
         }
     }
+
+    func connectionChanged(_ connection: Connection) {
+        switch self {
+        case .reflowable(let model): model.connectionChanged(connection)
+        case .pages(let model): model.connectionChanged(connection)
+        }
+    }
 }

@@ -124,7 +124,10 @@ struct FileView: View {
                 // Between the Book's other Files, which the web lists here,
                 // and the chapters, as the web places it.
                 FileSectionHeading(text: FileFacts.pages(pages))
-                FilePageGrid(fileID: file.id, pageCount: pages)
+                // A replaced File's old copy still opens while the new one
+                // downloads.
+                FilePageGrid(fileID: file.id, pageCount: pages,
+                             downloaded: (download ?? nil).map { $0.state == .done || $0.replacing } ?? false)
             }
             chaptersSection(file)
             FileSectionHeading(text: String(localized: "On disk"))
