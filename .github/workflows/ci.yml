@@ -455,11 +455,18 @@ jobs:
   # the API types the apps are generated from (what `mise tygo` reads, per
   # its sources in mise.toml). Pushes to master and release runs always run
   # them.
+  #
+  # And whether its iOS flows pass by signoff (tools/appharness/signoff.go):
+  # a pull request from this repository's own branches, other than
+  # Dependabot's, runs them on a maintainer's Mac with `mise ios:signoff`,
+  # several times faster than GitHub's macOS runners. Forks and Dependabot
+  # run them here, and so does every push to master, as the backstop.
   app-changes:
     name: Shisho app changes
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.paths.outputs.changed }}
+      signoff: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -530,7 +537,7 @@ jobs:
     # Keep this N in sync with the matrix.
     name: iOS flows (${{ matrix.shard }}/2)
     needs: app-changes
-    if: needs.app-changes.outputs.changed == 'true'
+    if: needs.app-changes.outputs.changed == 'true' && needs.app-changes.outputs.signoff != 'true'
     runs-on: macos-26
     timeout-minutes: 60
     strategy:
@@ -611,14 +618,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Every job must succeed, except that the Shisho app's are skipped
-      # when a pull request doesn't touch what they test.
+      # when a pull request doesn't touch what they test, and the iOS flows
+      # when they pass by signoff instead.
       - name: Fail unless every needed job succeeded
         env:
           NEEDS: ${{ toJSON(needs) }}
           APP_CHANGED: ${{ needs.app-changes.outputs.changed }}
+          SIGNOFF: ${{ needs.app-changes.outputs.signoff }}
         run: |
-          jq -e --arg app "$APP_CHANGED" '
+          jq -e --arg app "$APP_CHANGED" --arg signoff "$SIGNOFF" '
             to_entries | all(
               .value.result == "success"
               or (.value.result == "skipped" and $app == "false" and (.key | startswith("app-")) and .key != "app-changes")
+              or (.value.result == "skipped" and $signoff == "true" and .key == "app-ios-flows")
             )' <<< "$NEEDS"
+      # `mise ios:signoff` posts this status once every flow passes on the
+      # commit, and reruns this job if it already failed for want of it.
+      - name: Check the iOS flows signoff
+        if: needs.app-changes.outputs.changed == 'true' && needs.app-changes.outputs.signoff == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
+            --jq '.statuses[] | select(.context == "iOS flows signoff") | .state')
+          if [ "$state" != success ]; then
+            echo "::error::No iOS flows signoff on $SHA. Run \`mise ios:signoff\` on this commit, on a Mac; it posts the signoff and reruns this job."
+            exit 1
+          fi

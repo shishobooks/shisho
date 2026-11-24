@@ -383,6 +383,12 @@ depends = ["ios:build", "ios:simulator"]
 tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
 run = "go run ./tools/appharness ios"
 
+[tasks."ios:signoff"]
+description = "Run every Maestro flow on this commit, then post the iOS flows signoff that CI OK waits for on this repo's pull requests (a commit that already passed here only posts)"
+depends = ["ios:build", "ios:simulator"]
+tools = { maestro = "cli-2.12.1", java = "temurin-21.0.13+9.0.LTS" }
+run = "go run ./tools/appharness signoff"
+
 [tasks."android:test"]
 description = "Run the Android API types' decode tests"
 depends = ["tygo"]

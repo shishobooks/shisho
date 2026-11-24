@@ -1,0 +1,252 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/pkg/errors"
+)
+
+// The signoff is how a pull request from this repository passes the iOS
+// flows: they run here, on a Mac of the maintainer's, and a commit status
+// on the tested commit says so. `CI OK` (.github/workflows/ci.yml) looks for
+// that status instead of running the flows on GitHub's runners, which take
+// several times longer. Nothing reaches this Mac from GitHub: only accounts
+// with write access can post a status, and a fork's pull request still runs
+// the flows on GitHub's runners.
+const (
+	signoffContext = "iOS flows signoff"
+	ciWorkflow     = "CI"
+	ciOKJob        = "CI OK"
+)
+
+// signoffPassesKept is how long a recorded pass is kept, so the signoff can
+// be posted after the commit is pushed without running the flows again.
+const signoffPassesKept = 30 * 24 * time.Hour
+
+// runSignoff runs every flow on HEAD, which must have nothing uncommitted,
+// records the pass, and posts the signoff once the commit is on GitHub. A
+// commit that already passed here only posts. Posting also reruns a
+// `CI OK` that failed only for want of the signoff.
+func runSignoff(ctx context.Context, args []string) error {
+	if len(args) > 0 {
+		return errors.New("signoff takes no arguments: it runs every flow")
+	}
+	root, err := os.Getwd()
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	sha, err := cleanHead(ctx, root)
+	if err != nil {
+		return err
+	}
+	passes, err := signoffPassDir()
+	if err != nil {
+		return err
+	}
+	if hasSignoffPass(passes, sha) {
+		fmt.Fprintf(os.Stderr, "appharness: the flows already passed on %s here\n", short(sha))
+	} else {
+		if err := runIOS(ctx, nil); err != nil {
+			return err
+		}
+		// The run tested the checkout, so it only vouches for the commit if
+		// nothing changed while it ran.
+		after, err := cleanHead(ctx, root)
+		if err != nil {
+			return errors.Wrap(err, "the checkout changed during the run")
+		}
+		if after != sha {
+			return errors.Errorf("HEAD moved from %s to %s during the run", short(sha), short(after))
+		}
+		if err := recordSignoffPass(passes, sha, time.Now()); err != nil {
+			return err
+		}
+	}
+
+	pushed, err := commitOnGitHub(ctx, sha)
+	if err != nil {
+		return err
+	}
+	if !pushed {
+		fmt.Fprintf(os.Stderr, "appharness: the flows passed on %s, which isn't on GitHub yet; push it, then run `mise ios:signoff` again to post the signoff without running them again\n", short(sha))
+		return nil
+	}
+	if _, err := gh(ctx, "api", "--method", "POST", "repos/{owner}/{repo}/statuses/"+sha,
+		"-f", "state=success",
+		"-f", "context="+signoffContext,
+		"-f", "description=Every Maestro flow passed on a maintainer's Mac (mise ios:signoff)",
+	); err != nil {
+		return errors.Wrap(err, "post the signoff")
+	}
+	fmt.Fprintf(os.Stderr, "appharness: posted the signoff on %s\n", short(sha))
+	if err := rerunCIOK(ctx, sha); err != nil {
+		// The signoff is posted; rerunning the check by hand still works.
+		fmt.Fprintf(os.Stderr, "appharness: couldn't rerun %s: %v\n", ciOKJob, err)
+	}
+	return nil
+}
+
+// cleanHead returns HEAD's commit, or an error when the checkout has changes
+// or untracked files: the build picks up untracked files too, so a run with
+// either wouldn't be testing the commit the signoff names.
+func cleanHead(ctx context.Context, root string) (string, error) {
+	status, err := git(ctx, root, "status", "--porcelain")
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(status) != "" {
+		return "", errors.Errorf("commit or remove these first, since the signoff vouches for a commit:\n%s", status)
+	}
+	sha, err := git(ctx, root, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(sha), nil
+}
+
+func git(ctx context.Context, root string, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = root
+	out, err := cmd.Output()
+	if err != nil {
+		return "", errors.Wrapf(err, "git %s", strings.Join(args, " "))
+	}
+	return string(out), nil
+}
+
+// gh runs the GitHub CLI, whose `{owner}/{repo}` placeholders name the
+// repository the checkout's remote points at.
+func gh(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "gh", args...)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return out, errors.Errorf("gh %s: %v: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return out, nil
+}
+
+// commitOnGitHub reports whether GitHub has the commit, which a status
+// needs.
+func commitOnGitHub(ctx context.Context, sha string) (bool, error) {
+	_, err := gh(ctx, "api", "repos/{owner}/{repo}/commits/"+sha, "--silent")
+	if err == nil {
+		return true, nil
+	}
+	if strings.Contains(err.Error(), "No commit found") || strings.Contains(err.Error(), "HTTP 422") {
+		return false, nil
+	}
+	return false, errors.Wrap(err, "check the commit is on GitHub")
+}
+
+type ciJob struct {
+	Name       string `json:"name"`
+	Conclusion string `json:"conclusion"`
+}
+
+// onlyCIOKFailed reports whether a finished run failed only because `CI OK`
+// found no signoff, so rerunning that one job passes it now.
+func onlyCIOKFailed(jobs []ciJob) bool {
+	failed := false
+	for _, job := range jobs {
+		switch {
+		case job.Name == ciOKJob && job.Conclusion == "failure":
+			failed = true
+		case job.Name == ciOKJob:
+			return false
+		case job.Conclusion != "success" && job.Conclusion != "skipped":
+			return false
+		}
+	}
+	return failed
+}
+
+// rerunCIOK reruns `CI OK` in each finished CI run on sha that failed only
+// there: it ran before the signoff was posted.
+func rerunCIOK(ctx context.Context, sha string) error {
+	out, err := gh(ctx, "api", "repos/{owner}/{repo}/actions/runs?head_sha="+sha+"&per_page=100")
+	if err != nil {
+		return err
+	}
+	var runs struct {
+		WorkflowRuns []struct {
+			ID         int64  `json:"id"`
+			Name       string `json:"name"`
+			Status     string `json:"status"`
+			Conclusion string `json:"conclusion"`
+		} `json:"workflow_runs"`
+	}
+	if err := json.Unmarshal(out, &runs); err != nil {
+		return errors.WithStack(err)
+	}
+	for _, run := range runs.WorkflowRuns {
+		if run.Name != ciWorkflow || run.Status != "completed" || run.Conclusion != "failure" {
+			continue
+		}
+		out, err := gh(ctx, "api", fmt.Sprintf("repos/{owner}/{repo}/actions/runs/%d/jobs?filter=latest&per_page=100", run.ID))
+		if err != nil {
+			return err
+		}
+		var jobs struct {
+			Jobs []ciJob `json:"jobs"`
+		}
+		if err := json.Unmarshal(out, &jobs); err != nil {
+			return errors.WithStack(err)
+		}
+		if !onlyCIOKFailed(jobs.Jobs) {
+			continue
+		}
+		if _, err := gh(ctx, "api", "--method", "POST", fmt.Sprintf("repos/{owner}/{repo}/actions/runs/%d/rerun-failed-jobs", run.ID)); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "appharness: reran %s in CI run %d\n", ciOKJob, run.ID)
+	}
+	return nil
+}
+
+// signoffPassDir is the folder of recorded passes, one empty file per
+// commit.
+func signoffPassDir() (string, error) {
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return "", errors.WithStack(err)
+	}
+	return filepath.Join(cache, "shisho-appharness", "signoffs"), nil
+}
+
+func hasSignoffPass(dir, sha string) bool {
+	_, err := os.Stat(filepath.Join(dir, sha))
+	return err == nil
+}
+
+// recordSignoffPass records that every flow passed on sha, and forgets
+// passes older than signoffPassesKept.
+func recordSignoffPass(dir, sha string, now time.Time) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return errors.WithStack(err)
+	}
+	if entries, err := os.ReadDir(dir); err == nil {
+		for _, entry := range entries {
+			info, err := entry.Info()
+			if err == nil && now.Sub(info.ModTime()) > signoffPassesKept {
+				_ = os.Remove(filepath.Join(dir, entry.Name()))
+			}
+		}
+	}
+	return errors.WithStack(os.WriteFile(filepath.Join(dir, sha), nil, 0o600))
+}
+
+func short(sha string) string {
+	if len(sha) > 12 {
+		return sha[:12]
+	}
+	return sha
+}

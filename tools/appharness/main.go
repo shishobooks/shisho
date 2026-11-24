@@ -3,6 +3,7 @@
 // Shisho server seeded with small fixtures made for the run.
 //
 //	go run ./tools/appharness ios [-app Shisho.app] [-flows dir] [-keep]
+//	go run ./tools/appharness signoff
 //	go run ./tools/appharness serve
 //	go run ./tools/appharness base
 //	go run ./tools/appharness fixtures DIR | -key
@@ -17,6 +18,8 @@
 // SIMULATOR_UDID. Each worktree's simulators are its own, cloned from a base
 // once and kept booted between runs (worktreesim.go), and the fixtures are
 // cached between runs (fixtures.go); SHISHO_HARNESS_FRESH=1 reuses neither.
+// `signoff` runs every flow on a committed checkout and posts the commit
+// status this repository's pull requests merge on (signoff.go).
 // `fixtures -key` prints the cache's key, and `cleanup` deletes the
 // worktree's simulators (`mise cleanup`). `ios`, `serve`, and `cleanup`
 // remove the temp folders of runs that were killed outright (rundir.go).
@@ -44,6 +47,8 @@ func main() {
 	switch os.Args[1] {
 	case "ios":
 		err = runIOS(ctx, os.Args[2:])
+	case "signoff":
+		err = runSignoff(ctx, os.Args[2:])
 	case "serve":
 		err = runServe(ctx)
 	case "base":
@@ -90,7 +95,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | serve | base | fixtures DIR | fixtures -key | cleanup | simulator [-app Shisho.app] -- COMMAND...")
+	fmt.Fprintln(os.Stderr, "usage: appharness ios [flags] | signoff | serve | base | fixtures DIR | fixtures -key | cleanup | simulator [-app Shisho.app] -- COMMAND...")
 	flag.PrintDefaults()
 	os.Exit(2)
 }
