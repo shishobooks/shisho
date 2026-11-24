@@ -35,6 +35,9 @@ func WordCount(ctx context.Context, path string) (int, error) {
 // countWords counts the words in an open EPUB's spine, after checking that
 // its content isn't encrypted, which would count noise as words.
 func countWords(ctx context.Context, zr *zip.Reader, result *ParseOPFResult) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, errors.WithStack(err)
+	}
 	protected, err := declaresDRM(zr)
 	if err != nil {
 		return 0, err

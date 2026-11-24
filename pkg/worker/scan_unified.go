@@ -1978,15 +1978,19 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
-	// Update word count (reflowable ebooks) - always comes from file
+	// Update word count (main reflowable ebooks) - always comes from file
 	// metadata, so a parse that couldn't count the content clears the count
-	// the File's old content had. It's written apart from the other columns,
-	// since a count alone isn't an edit that should move updated_at.
-	if models.IsReflowableFileType(file.FileType) && !sameWordCount(file, metadata.WordCount) {
+	// the File's old content had; the next scan tries again unless the
+	// content is at fault. It's written apart from the other columns, since
+	// a count alone isn't an edit that should move updated_at, and only to a
+	// File still main: a supplement's text isn't counted.
+	failed := metadata.WordCount == nil && metadata.WordCountFailed
+	if file.FileRole == models.FileRoleMain && models.IsReflowableFileType(file.FileType) &&
+		!sameWordCount(file, metadata.WordCount, failed) {
 		if metadata.WordCount == nil {
 			logWarn("could not count words", logger.Data{"filepath": file.Filepath})
 		}
-		if err := w.storeWordCount(ctx, file, metadata.WordCount, ""); err != nil {
+		if err := w.storeWordCount(ctx, file, metadata.WordCount, failed, "file_role = 'main'"); err != nil {
 			return nil, errors.Wrap(err, "failed to update word count")
 		}
 	}
@@ -3742,6 +3746,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 	enrichedMeta.Codec = metadata.Codec
 	enrichedMeta.PageCount = metadata.PageCount
 	enrichedMeta.WordCount = metadata.WordCount
+	enrichedMeta.WordCountFailed = metadata.WordCountFailed
 
 	// Use file parser's DataSource as fallback if no enricher modified anything
 	if !modified {

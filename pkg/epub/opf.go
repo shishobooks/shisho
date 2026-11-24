@@ -16,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/wordcount"
 )
 
 type OPF struct {
@@ -142,6 +143,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	// still good, and the next scan tries the file again.
 	if n, err := countWords(context.Background(), zipReader, result); err == nil {
 		metadata.WordCount = &n
+	} else {
+		metadata.WordCountFailed = !wordcount.Retryable(err)
 	}
 	return metadata, nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/wordcount"
 )
 
 // ErrDRMProtected is returned by Parse for a file whose text is encrypted.
@@ -57,6 +58,8 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	// still good, and the next scan tries the file again.
 	if n, err := countWords(context.Background(), f, stat.Size()); err == nil {
 		meta.WordCount = &n
+	} else {
+		meta.WordCountFailed = !wordcount.Retryable(err)
 	}
 	return meta, nil
 }

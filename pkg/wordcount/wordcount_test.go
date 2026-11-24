@@ -95,6 +95,16 @@ func TestHTML(t *testing.T) {
 			3,
 		},
 		{
+			"a head left open ends at the first element of the body",
+			`<html><head><title>T</title><meta charset="utf-8"/><p>one two</p></html>`,
+			2,
+		},
+		{
+			"an image in a ruby annotation doesn't end it",
+			`<p><ruby>漢<rt><img src="m.png" alt="">かな</rt></ruby></p>`,
+			1,
+		},
+		{
 			"a ruby annotation left open ends with its ruby",
 			`<p><ruby>漢<rt>かん</ruby>字</p><p>one two three</p>`,
 			5,

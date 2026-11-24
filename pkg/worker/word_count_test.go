@@ -222,3 +222,55 @@ func TestCountUnchangedFileWords_LeavesAFileDemotedMeanwhile(t *testing.T) {
 
 	assert.Nil(t, tc.fileByPath(path).WordCount, "supplements have no word count")
 }
+
+func TestScan_RetriesAFileItCouldNotOpen(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a file whatever its mode")
+	}
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	path := testgen.GenerateEPUB(t, testgen.CreateSubDir(t, libraryPath, "Prose"), "prose.epub", testgen.EPUBOptions{Title: "Prose"})
+	require.NoError(t, tc.runScan())
+	tc.clearWordCounts()
+
+	// A permission or network share that fails for a while is no fault of
+	// the book's content.
+	require.NoError(t, os.Chmod(path, 0o000))
+	require.NoError(t, tc.runScan())
+	require.NoError(t, os.Chmod(path, 0o644))
+	require.Nil(t, tc.fileByPath(path).WordCount)
+
+	require.NoError(t, tc.runScan())
+	got := tc.fileByPath(path).WordCount
+	require.NotNil(t, got, "the next scan tries again")
+	assert.Equal(t, generatedChapterWords, *got)
+}
+
+func TestResync_LeavesASupplementWithoutACount(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	path := testgen.GenerateEPUB(t, testgen.CreateSubDir(t, libraryPath, "Prose"), "prose.epub", testgen.EPUBOptions{Title: "Prose"})
+	require.NoError(t, tc.runScan())
+	file := tc.fileByPath(path)
+	_, err := tc.db.NewUpdate().Table("files").
+		Set("file_role = ?", models.FileRoleSupplement).Set("word_count = NULL").
+		Where("id = ?", file.ID).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	_, err = tc.worker.scanInternal(tc.ctx, ScanOptions{FileID: file.ID, ForceRefresh: true}, nil)
+	require.NoError(t, err)
+
+	var row struct {
+		WordCount *int `bun:"word_count"`
+		Failed    bool `bun:"word_count_failed"`
+	}
+	require.NoError(t, tc.db.NewSelect().Table("files").Column("word_count", "word_count_failed").Where("id = ?", file.ID).Scan(tc.ctx, &row))
+	assert.Nil(t, row.WordCount)
+	assert.False(t, row.Failed, "a supplement's text isn't counted, so it hasn't failed")
+}

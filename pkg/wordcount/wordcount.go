@@ -8,7 +8,9 @@
 package wordcount
 
 import (
+	"context"
 	"io"
+	"io/fs"
 	"unicode"
 
 	"github.com/pkg/errors"
@@ -21,6 +23,15 @@ import (
 // file can't make the count hold an unbounded document in memory. A whole
 // long book in one document is a few megabytes.
 const maxDocumentBytes = 64 << 20
+
+// Retryable reports whether a count that failed with err might succeed if
+// tried again on the same file: the file couldn't be read, as when a share
+// drops out or a permission is fixed, or the count was canceled. Any other
+// failure is the content's, and trying again changes nothing.
+func Retryable(err error) bool {
+	var pathErr *fs.PathError
+	return errors.As(err, &pathErr) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
 
 // Text counts the words in plain text.
 func Text(s string) int {
@@ -90,8 +101,9 @@ func HTML(r io.Reader) (int, error) {
 
 // skipState tracks whether text is in an element a reader doesn't read: the
 // head, code run by the page, or the pronunciation ruby prints over its base
-// text. HTML lets a page leave out the end tags of head, rt, and rp, so each
-// also ends where what follows it starts.
+// text. HTML lets a page leave out the end tags of head, rt, and rp, so a
+// head also ends at the first element that can't be in it, and an rt or rp
+// at the next one, its ruby's end, or the next block.
 type skipState struct {
 	// raw counts the open elements whose content the tokenizer reads as raw
 	// text, which it always ends at their end tag.
@@ -112,18 +124,19 @@ var rawSkipped = map[string]bool{
 func (s *skipState) skipping() bool { return s.raw > 0 || s.head || s.annotation }
 
 func (s *skipState) start(name string) {
+	if s.head && !headContent[name] {
+		s.head = false
+	}
 	switch name {
 	case "head":
 		s.head = true
-	case "body":
-		s.head = false
 	case "rt", "rp":
 		s.annotation = true
 	default:
 		if rawSkipped[name] {
 			s.raw++
 		}
-		if !inline[name] {
+		if block[name] {
 			s.annotation = false
 		}
 	}
@@ -139,10 +152,27 @@ func (s *skipState) end(name string) {
 		if rawSkipped[name] && s.raw > 0 {
 			s.raw--
 		}
-		if !inline[name] {
+		if block[name] {
 			s.annotation = false
 		}
 	}
+}
+
+// headContent are the elements a head holds; any other starts the body.
+var headContent = map[string]bool{
+	"head": true, "title": true, "meta": true, "link": true, "style": true,
+	"script": true, "base": true, "noscript": true, "template": true,
+}
+
+// block are the elements that can't sit in a ruby, so one starting or
+// ending closes an rt or rp left open.
+var block = map[string]bool{
+	"address": true, "article": true, "aside": true, "blockquote": true,
+	"body": true, "dd": true, "div": true, "dl": true, "dt": true,
+	"figcaption": true, "figure": true, "footer": true, "h1": true, "h2": true,
+	"h3": true, "h4": true, "h5": true, "h6": true, "header": true, "hr": true,
+	"li": true, "main": true, "nav": true, "ol": true, "p": true, "pre": true,
+	"section": true, "table": true, "td": true, "th": true, "tr": true, "ul": true,
 }
 
 // inline are the elements that can sit inside a word without splitting it.

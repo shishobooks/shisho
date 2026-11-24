@@ -12,6 +12,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/mediafile"
+	"github.com/shishobooks/shisho/pkg/wordcount"
 )
 
 // ParseKePub reads a KePub's metadata the way Parse reads an EPUB's, and
@@ -39,6 +40,8 @@ func ParseKePub(path string) (*mediafile.ParsedMetadata, error) {
 			// Left off on an error, as Parse leaves it.
 			if n, err := countSpine(context.Background(), &zr.Reader, result, maxBookTextBytes); err == nil {
 				metadata.WordCount = &n
+			} else {
+				metadata.WordCountFailed = !wordcount.Retryable(err)
 			}
 			return metadata, nil
 		}

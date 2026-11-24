@@ -41,3 +41,26 @@ func TestAddFileWordCount_QueuesAScanToCountExistingFiles(t *testing.T) {
 		assert.Empty(t, scanJobStatuses(t, false))
 	})
 }
+
+// Bun records a migration after it commits, so a server stopped between the
+// two runs it again on the next start.
+func TestAddFileWordCount_RunsAgainAfterAnInterruptedRecord(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := openMigrationTestDB(t)
+	migrator := migrateToBefore(ctx, t, db, "20261124190606")
+	_, err := db.ExecContext(ctx, `INSERT INTO libraries (id, name, cover_aspect_ratio, created_at, updated_at)
+		VALUES (41, 'One', 'book', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`)
+	require.NoError(t, err)
+	_, err = migrator.Migrate(ctx)
+	require.NoError(t, err)
+
+	_, err = db.ExecContext(ctx, `DELETE FROM bun_migrations WHERE name = '20261124190606'`)
+	require.NoError(t, err)
+	_, err = migrator.Migrate(ctx)
+	require.NoError(t, err)
+
+	var scans int
+	require.NoError(t, db.NewRaw("SELECT COUNT(*) FROM jobs WHERE type = ? AND status = ?", models.JobTypeScan, models.JobStatusPending).Scan(ctx, &scans))
+	assert.Equal(t, 1, scans, "the scan isn't queued twice")
+}

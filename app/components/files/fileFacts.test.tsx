@@ -74,9 +74,12 @@ describe("word count", () => {
     word_count: 95312,
   });
 
-  it("is a rounded fact under the name, exact for a screen reader", () => {
+  it("is a rounded fact under the name, only exact for a screen reader", () => {
     render(<FactsLine facts={fileHeaderFacts(epub)} />);
-    expect(screen.getByText("95K words")).toBeInTheDocument();
+    expect(screen.getByText("95K words")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
     expect(screen.getByText("95,312 words")).toHaveClass("sr-only");
   });
 
