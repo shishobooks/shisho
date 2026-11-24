@@ -217,7 +217,7 @@ struct PagerTaps: Sendable {
         return pending?.point
     }
 
-    /// A page turned, by a tap or a drag.
+    /// A tap turned a page.
     mutating func turned(at time: TimeInterval) {
         lastTurn = time
     }

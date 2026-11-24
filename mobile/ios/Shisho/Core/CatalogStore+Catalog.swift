@@ -265,6 +265,8 @@ extension CatalogStore {
                         reference = excluded.reference, page_flow = excluded.page_flow, generation = excluded.generation
                     """, arguments: [record.bookId, record.rating, record.toReadPosition, record.reference,
                                      record.pageFlow.flatMap { PageFlow(rawValue: $0.rawValue) }?.rawValue, generation])
+                // The server's answer to a flow chosen here has arrived.
+                try db.execute(sql: "DELETE FROM chosen_page_flows WHERE book_id = ? AND accepted", arguments: [record.bookId])
             }
         case .list:
             if entry.deleted {

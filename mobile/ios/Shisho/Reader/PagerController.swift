@@ -160,7 +160,15 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     func reset() {
         finishAnimation()
         turns.reset()
+        dropWaitingTap()
         settle()
+    }
+
+    /// Forgets a tap waiting to see whether it's a double tap, which meant
+    /// the page before a jump.
+    private func dropWaitingTap() {
+        tapWait?.cancel()
+        _ = taps.expired()
     }
 
     // MARK: - Turning
@@ -175,6 +183,7 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     /// VoiceOver's scroll: a page paginated, the section beside scrolled,
     /// as a sideways drag brings in. False when there's nowhere to go yet.
     func accessibilityTurn(_ direction: TurnDirection) -> Bool {
+        dropWaitingTap()
         guard paging else { return slide(direction) }
         turn(direction)
         return true
@@ -291,7 +300,6 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
             (back, current, forward) = (forward, back, old)
         }
         turns.committed(direction)
-        taps.turned(at: ProcessInfo.processInfo.systemUptime)
         updateAccessibility()
         source?.pagerDidRotate(direction)
     }
@@ -398,8 +406,14 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     /// shows the controls.
     func tap(atFraction fraction: CGFloat) {
         switch PagerZones.tap(at: fraction, rightToLeft: rightToLeft) {
-        case .turn(let direction): turn(direction)
-        case .chrome: source?.pagerToggleChrome()
+        case .turn(let direction):
+            // A run of taps through the pages, which then turn at once. Not
+            // a swipe's turn, nor a tap at the book's end, which turns
+            // nothing: a double tap there still zooms.
+            if turns.state(direction) != .edge { taps.turned(at: ProcessInfo.processInfo.systemUptime) }
+            turn(direction)
+        case .chrome:
+            source?.pagerToggleChrome()
         }
     }
 

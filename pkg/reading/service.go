@@ -939,6 +939,7 @@ func MergeBooks(ctx context.Context, db bun.IDB, sourceBookID, targetBookID int)
 			SET rating_updated_at = CASE WHEN t.rating IS NULL THEN s.rating_updated_at ELSE t.rating_updated_at END,
 				rating = COALESCE(t.rating, s.rating),
 				to_read_position = COALESCE(t.to_read_position, s.to_read_position),
+				page_flow_updated_at = CASE WHEN t.page_flow IS NULL THEN s.page_flow_updated_at ELSE t.page_flow_updated_at END,
 				page_flow = COALESCE(t.page_flow, s.page_flow),
 				reference = CASE WHEN ` + sourceChoiceLater + ` THEN s.reference ELSE t.reference END,
 				status_chosen_at = CASE WHEN ` + sourceChoiceLater + ` THEN s.status_chosen_at ELSE t.status_chosen_at END

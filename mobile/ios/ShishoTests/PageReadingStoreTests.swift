@@ -132,11 +132,13 @@ final class PageReadingStoreTests: XCTestCase {
     }
 
     /// A flow chosen here shows at once and is queued for the server, one
-    /// per Book; the feed doesn't undo it while it waits, and once the
-    /// server answers, the feed's is the Book's.
-    func testAFlowChosenHereWaitsForTheServer() throws {
-        try store.choosePageFlow(.paginated, bookID: 1, at: now)
-        try store.choosePageFlow(.scrolled, bookID: 1, at: now)
+    /// per Book. The feed doesn't undo it while it waits, nor once the
+    /// server took it in but before the feed brings the Book's record back:
+    /// then the feed's is the Book's, as the server kept it.
+    func testAFlowChosenHereShowsUntilTheFeedBringsItBack() throws {
+        func flow() throws -> PageFlow? { try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) } }
+        try store.choosePageFlow(.paginated, bookID: 1, at: now, sync: true)
+        try store.choosePageFlow(.scrolled, bookID: 1, at: now, sync: true)
         XCTAssertEqual(try journalTypes(), ["page_flow"])
         let payload = try store.pool.read { try Data.fetchOne($0, sql: "SELECT payload FROM journal") }
         let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(payload)) as? [String: Any])
@@ -146,10 +148,30 @@ final class PageReadingStoreTests: XCTestCase {
         try store.apply(page("""
         {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"paginated"}}],"cursor":6}
         """))
-        XCTAssertEqual(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) }, .scrolled)
+        XCTAssertEqual(try flow(), .scrolled)
 
         let rows = try store.pendingJournal(capabilities: "", limit: 10)
         try store.applyJournalResults([Shishoapp.JournalResult(id: rows[0].eventID, result: .accepted)], sent: rows, capabilities: "")
-        XCTAssertEqual(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) }, .paginated)
+        XCTAssertEqual(try flow(), .scrolled)
+        try store.apply(page("""
+        {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"scrolled"}}],"cursor":7}
+        """))
+        XCTAssertEqual(try flow(), .scrolled)
+        // Chosen on the web since: the feed's is the Book's again.
+        try store.apply(page("""
+        {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"paginated"}}],"cursor":8}
+        """))
+        XCTAssertEqual(try flow(), .paginated)
+    }
+
+    /// A server that can't keep the flow gets no event for it: the choice
+    /// stays on the device, whatever the feed says.
+    func testAFlowAServerCantKeepStaysOnTheDevice() throws {
+        try store.choosePageFlow(.scrolled, bookID: 1, at: now, sync: false)
+        XCTAssertEqual(try journalTypes(), [])
+        try store.apply(page("""
+        {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"paginated"}}],"cursor":6}
+        """))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) }, .scrolled)
     }
 }

@@ -25,6 +25,10 @@ func init() {
 
 	statements := []string{
 		`ALTER TABLE user_books ADD COLUMN page_flow_updated_at TIMESTAMP`,
+		// A flow chosen before this was chosen no later than its record last
+		// changed, so a choice an app made earlier and sends late doesn't
+		// replace it.
+		`UPDATE user_books SET page_flow_updated_at = updated_at WHERE page_flow IS NOT NULL`,
 		`DROP TRIGGER IF EXISTS change_log_user_books_update`,
 		updateTrigger(before + ` OR OLD.page_flow IS NOT NEW.page_flow`),
 		// Every record with a flow moves, so an installation that already

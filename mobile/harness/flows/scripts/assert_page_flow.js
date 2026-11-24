@@ -17,7 +17,10 @@ function check() {
   console.log(JSON.stringify(reading));
   if (reading.page_flow !== FLOW) {
     throw new Error(
-      "the Book's flow is " + JSON.stringify(reading.page_flow) + ", not " + FLOW,
+      "the Book's flow is " +
+        JSON.stringify(reading.page_flow) +
+        ", not " +
+        FLOW,
     );
   }
 }

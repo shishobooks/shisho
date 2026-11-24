@@ -375,8 +375,9 @@ extension CatalogStore {
                 switch result.result {
                 case .accepted, .duplicate:
                     try CatalogStore.finishBookmarkChange(eventID: result.id, duplicate: result.result == .duplicate, in: db)
-                    // The feed brings the Book's flow as the server kept it.
-                    try db.execute(sql: "DELETE FROM chosen_page_flows WHERE event_id = ?", arguments: [result.id])
+                    // Kept until the feed brings the Book's flow as the
+                    // server kept it.
+                    try db.execute(sql: "UPDATE chosen_page_flows SET accepted = TRUE WHERE event_id = ?", arguments: [result.id])
                     try db.execute(sql: "DELETE FROM journal WHERE event_id = ?", arguments: [result.id])
                 case .refused:
                     try CatalogStore.undoRefusedBookmarkChange(eventID: result.id, in: db)

@@ -274,8 +274,13 @@ final class ImageSource: PagerSource {
     private func currentShowed() {
         guard !showedFirst else { return }
         showedFirst = true
-        reportedPlace = (currentPage, screen)
-        delegate?.imageSourceShowed(page: currentPage)
+        // It opened at the page it was asked for, which isn't reading. A
+        // spread that also shows the last page shows the end, as turning
+        // there does: that's a move.
+        let opened = strip == nil ? anchorPage ?? currentPage : currentPage
+        reportedPlace = (opened, screen)
+        delegate?.imageSourceShowed(page: opened)
+        reportMove()
     }
 
     /// Tells the pager where each neighbor stands, after the current change

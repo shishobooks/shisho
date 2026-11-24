@@ -390,7 +390,9 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         collection.reloadData()
         collection.layoutIfNeeded()
         positioning = false
-        screen = currentScreen
+        // Zooming can bring another page under the reader's eye, or the
+        // column's end into view, as scrolling would.
+        updatePlace()
     }
 
     /// A double tap at point: zooms in there, or back out when zoomed.
@@ -406,11 +408,15 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         let scale = min(Self.maximumZoom / zoom, max(1 / zoom, recognizer.scale))
         switch recognizer.state {
         case .changed:
-            let center = CGPoint(x: bounds.midX, y: bounds.midY)
-            panner.transform = CGAffineTransform(translationX: (1 - scale) * (anchor.x - center.x),
-                                                 y: (1 - scale) * (anchor.y - center.y)).scaledBy(x: scale, y: scale)
+            // The column scales inside the panner, which keeps the screen's
+            // frame and clips it, so pinching out never shows a smaller
+            // window onto it.
+            let point = convert(anchor, to: panner)
+            let center = CGPoint(x: collection.frame.midX, y: collection.frame.midY)
+            collection.transform = CGAffineTransform(translationX: (1 - scale) * (point.x - center.x),
+                                                     y: (1 - scale) * (point.y - center.y)).scaledBy(x: scale, y: scale)
         case .ended, .cancelled, .failed:
-            panner.transform = .identity
+            collection.transform = .identity
             setZoom(zoom * scale, anchor: anchor)
         default:
             break
@@ -419,10 +425,11 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
 
     // MARK: - Pages
 
-    /// The pixels across the page fills, as its longer side.
-    private func pixels(_ page: Int) -> Int {
+    /// The pixels the page fills, as its longer side, at zoom: the
+    /// column's own by default.
+    private func pixels(_ page: Int, zoom: CGFloat? = nil) -> Int {
         let size = sizes[page]
-        let width = collection.bounds.width
+        let width = bounds.width * (zoom ?? self.zoom)
         let height = width * size.height / max(size.width, 1)
         return Int((max(width, height) * max(1, traitCollection.displayScale)).rounded(.up))
     }
@@ -447,15 +454,19 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
             },
         ]
         let maxPixel = pixels(page)
-        if let image = cache.cached(page: page, maxPixel: maxPixel) {
+        // Zoomed, a page is held only by its cell, as a zoomed page in the
+        // paginated flow is: at four times the width, a few would fill the
+        // cache.
+        let keep = !isZoomed
+        if keep, let image = cache.cached(page: page, maxPixel: maxPixel) {
             cell.imageView.image = image
             imageArrived(page)
         } else {
-            // A smaller copy, as from before a zoom, shows until the sharper
-            // one decodes, rather than nothing.
-            cell.imageView.image = cache.cached(page: page, maxPixel: 1)
+            // The page at the column's unzoomed width, when it's kept, shows
+            // until the sharper one decodes, rather than nothing.
+            cell.imageView.image = cache.cached(page: page, maxPixel: pixels(page, zoom: 1))
             cell.load = Task { [weak self, weak cell] in
-                let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now)
+                let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now, keep: keep)
                 guard let cell, cell.page == page, !Task.isCancelled, let image else { return }
                 cell.imageView.image = image
                 self?.imageArrived(page)
@@ -478,13 +489,20 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     }
 
     func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+        // At the unzoomed width: the cells decode sharper ones once shown.
         for indexPath in indexPaths {
-            cache.prefetch(page: indexPath.item, maxPixel: pixels(indexPath.item), need: .soon)
+            cache.prefetch(page: indexPath.item, maxPixel: pixels(indexPath.item, zoom: 1), need: .soon)
         }
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard scrollView === collection, !positioning, pending == nil, laidOutSize.width > 0 else { return }
+        guard scrollView === collection, !positioning else { return }
+        updatePlace()
+    }
+
+    /// Finds the page and screen showing, and tells of a change.
+    private func updatePlace() {
+        guard pending == nil, laidOutSize.width > 0 else { return }
         let bounds = collection.bounds
         let atEnd = bounds.maxY >= collection.contentSize.height - 1
         let probe = CGPoint(x: bounds.midX, y: bounds.minY + bounds.height * 0.25)

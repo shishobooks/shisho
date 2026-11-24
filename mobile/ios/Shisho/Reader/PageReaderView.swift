@@ -314,8 +314,8 @@ private struct PageReaderSettingsSheet: View {
     let done: () -> Void
 
     private var flowHint: LocalizedStringResource {
-        if model.flowChosen { return "Saved for this book." }
-        return "Picked from the page shapes until you choose."
+        guard model.flowChosen else { return "Picked from the page shapes until you choose." }
+        return model.flowSyncs ? "Saved for this book." : "Saved for this book on this device."
     }
 
     var body: some View {
