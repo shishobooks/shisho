@@ -29,7 +29,14 @@ type Download struct {
 	// building is set instead of Path for a Generated File that is still
 	// being built: Serve streams it as it grows.
 	building *downloadcache.Generated
+	// gone, when set, is what Serve returns, before sending anything, when
+	// the file at Path is gone, in place of a 404.
+	gone error
 }
+
+// errPreparedGone is Serve's answer for a prepared Generated File the
+// cache's cleanup removed before it was opened.
+var errPreparedGone = errors.New("the prepared file left the download cache")
 
 // OriginalDownload is the file as it is on disk, named the way a Generated
 // File is (downloadcache.OriginalFilenames) with the file's own extension.
@@ -104,7 +111,69 @@ const CannotDecryptMessage = "This file is password-protected or encrypted in a 
 // GeneratedDownload. The web app's download routes do not fall back either:
 // a browser user sees the error and has Download unmodified file.
 func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
+	return resolveOwnType(c.Request().Context(), book, file, func() (*Download, error) {
+		return GeneratedDownload(c, cache, book, file, file.FileType)
+	})
+}
+
+// ResolvePreparedDownload returns what the Shisho app gets to share a file
+// out of itself as its own File Type (ADR 0022): the Generated File, built
+// into the download cache before anything is sent, so it goes out with its
+// size and Range support even on its first build, and an interrupted
+// transfer resumes. Nothing is sent until the build ends, which suits only a
+// client that waits that long for its first byte; other devices stream the
+// file while it's built (ResolveFallbackDownload). A cache that can't take
+// the build, full or read-only, streams it the same way. The Original File
+// stands in as it does for ResolveFallbackDownload.
+//
+// ServePreparedDownload serves it.
+func ResolvePreparedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) (*Download, error) {
 	ctx := c.Request().Context()
+	return resolveOwnType(ctx, book, file, func() (*Download, error) {
+		path, _, err := cache.GetOrGenerate(ctx, book, file, file.FileType)
+		if err == nil {
+			name, ascii := downloadcache.DownloadFilenames(book, file, file.FileType)
+			return &Download{Path: path, Filename: name, ASCIIFilename: ascii, ContentType: models.FileTypeMimeType(file.FileType), gone: errPreparedGone}, nil
+		}
+		if isGenerationFallback(err) || ctx.Err() != nil {
+			return nil, err
+		}
+		logger.FromContext(ctx).Warn("couldn't build the file into the download cache, streaming it instead", logger.Data{
+			"file_id":   file.ID,
+			"file_type": file.FileType,
+			"error":     err.Error(),
+		})
+		return GeneratedDownload(c, cache, book, file, file.FileType)
+	})
+}
+
+// ServePreparedDownload sends ResolvePreparedDownload's file. A Generated File
+// larger than the cache's limit can be cleaned out of the cache between its
+// build and its opening; it's streamed instead, as other devices get it.
+func ServePreparedDownload(c echo.Context, cache *downloadcache.Cache, book *models.Book, file *models.File) error {
+	download, err := ResolvePreparedDownload(c, cache, book, file)
+	if err != nil {
+		return err
+	}
+	if err := download.Serve(c); !errors.Is(err, errPreparedGone) {
+		return err
+	}
+	logger.FromContext(c.Request().Context()).Warn("the prepared file left the download cache, streaming it instead", logger.Data{
+		"file_id":   file.ID,
+		"file_type": file.FileType,
+	})
+	download, err = ResolveFallbackDownload(c, cache, book, file)
+	if err != nil {
+		return err
+	}
+	return download.Serve(c)
+}
+
+// resolveOwnType returns generate's Generated File for the file as its own
+// File Type, or the Original File in its place: for a supplement, a File
+// Type with no generator, and a generation failure the original can stand
+// in for (isGenerationFallback).
+func resolveOwnType(ctx context.Context, book *models.Book, file *models.File, generate func() (*Download, error)) (*Download, error) {
 	if file.FileRole == models.FileRoleSupplement {
 		return fallbackOriginal(book, file), nil
 	}
@@ -114,7 +183,7 @@ func ResolveFallbackDownload(c echo.Context, cache *downloadcache.Cache, book *m
 		return fallbackOriginal(book, file), nil
 	}
 
-	download, err := GeneratedDownload(c, cache, book, file, file.FileType)
+	download, err := generate()
 	switch {
 	case err == nil:
 		return download, nil
@@ -207,5 +276,9 @@ func (d *Download) Serve(c echo.Context, opts ...httputil.ServeOption) error {
 		}
 		return httputil.ServeStream(c, body, d.building.Size, opts...)
 	}
-	return httputil.ServeFile(c, d.Path, errcodes.NotFound("File"), opts...)
+	notFound := errcodes.NotFound("File")
+	if d.gone != nil {
+		notFound = d.gone
+	}
+	return httputil.ServeFile(c, d.Path, notFound, opts...)
 }

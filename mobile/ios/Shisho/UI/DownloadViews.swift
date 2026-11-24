@@ -1,0 +1,542 @@
+import SwiftUI
+import UIKit
+
+/// What a Download is doing, in words, for its status line and VoiceOver.
+enum DownloadWords {
+    static func status(_ status: DownloadStatus) -> String? {
+        switch status {
+        case .notDownloaded: nil
+        case .waiting(.wifi): String(localized: "Waiting for Wi-Fi")
+        case .waiting(.connection): String(localized: "Waiting for a connection")
+        case .waiting(.turn): String(localized: "Waiting to download")
+        case .running(let fraction?): String(localized: "Downloading · \(fraction.formatted(.percent.precision(.fractionLength(0))))")
+        case .running(nil): String(localized: "Downloading")
+        case .downloaded: String(localized: "Downloaded")
+        case .failed(let message): String(localized: "Download failed: \(message)")
+        }
+    }
+}
+
+/// A File's Download button, beside Listen and Read on its Book's page:
+/// Download, a ring that fills while it downloads and stops it when
+/// tapped, or a check with a menu to remove it. A File Type this version
+/// doesn't know can't be downloaded.
+struct DownloadControl: View {
+    @Environment(AppModel.self) private var model
+    let fileID: Int
+    let label: String
+    let supported: Bool
+    let row: DownloadRow?
+
+    private var status: DownloadStatus {
+        model.session?.downloads.status(row) ?? .notDownloaded
+    }
+
+    var body: some View {
+        Group {
+            switch status {
+            case .notDownloaded, .failed:
+                Button { model.session?.downloads.download([fileID]) } label: {
+                    Icon(.download, size: 18, relativeTo: nil)
+                        .foregroundStyle(supported ? Theme.primary : Theme.mutedForeground)
+                        .controlCircle(tinted: supported)
+                }
+                .disabled(!supported)
+                .accessibilityLabel(supported ? String(localized: "Download \(label)") : String(localized: "Download \(label), not supported in this version of the app"))
+                .accessibilityValue(DownloadWords.status(status) ?? "")
+            case .waiting, .running:
+                Button { model.session?.downloads.remove([fileID]) } label: {
+                    DownloadRing(fraction: { if case .running(let fraction) = status { return fraction } else { return nil } }())
+                        .controlCircle(tinted: true)
+                }
+                .accessibilityLabel(String(localized: "Stop downloading \(label)"))
+                .accessibilityValue(DownloadWords.status(status) ?? "")
+            case .downloaded:
+                Menu {
+                    Button(role: .destructive) { model.session?.downloads.remove([fileID]) } label: {
+                        Label("Remove Download", menuIcon: .trash)
+                    }
+                    .accessibilityIdentifier("file.removeDownload")
+                } label: {
+                    Icon(.check, size: 18, relativeTo: nil)
+                        .foregroundStyle(Theme.primary)
+                        .controlCircle(tinted: true)
+                }
+                .accessibilityLabel(String(localized: "\(label) is downloaded"))
+                .accessibilityHint(String(localized: "Shows a menu to remove the Download"))
+            }
+        }
+        .buttonStyle(PlayerControlStyle())
+        // Editions can share a name, so the File's id tells them apart.
+        .accessibilityIdentifier("file.download.\(fileID)")
+    }
+}
+
+/// A line saying where a File's Download stands, under its facts. Nothing
+/// without one.
+struct DownloadStatusLine: View {
+    @Environment(AppModel.self) private var model
+    let fileID: Int
+    let row: DownloadRow?
+
+    var body: some View {
+        let status = model.session?.downloads.status(row) ?? .notDownloaded
+        if let words = DownloadWords.status(status) {
+            Label(verbatim: words, icon: icon(status), size: 13, relativeTo: .footnote)
+                .font(.geist(.footnote, weight: .medium))
+                .foregroundStyle(isFailure(status) ? Theme.destructive : Theme.mutedForeground)
+                .lineLimit(3)
+                .monospacedDigit()
+                .accessibilityIdentifier("file.downloadStatus.\(fileID)")
+        }
+    }
+
+    private func icon(_ status: DownloadStatus) -> Lucide {
+        switch status {
+        case .downloaded: .check
+        case .failed: .circleAlert
+        case .waiting(.wifi): .wifi
+        case .waiting(.connection): .wifiOff
+        default: .download
+        }
+    }
+
+    private func isFailure(_ status: DownloadStatus) -> Bool {
+        if case .failed = status { return true }
+        return false
+    }
+}
+
+/// A ring that fills as a Download goes, around a stop square; it turns
+/// while the size isn't known or the Download waits.
+struct DownloadRing: View {
+    let fraction: Double?
+    @State private var turning = false
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Theme.primary.opacity(0.2), lineWidth: 2.5)
+            Circle()
+                .trim(from: 0, to: fraction.map { max(0.02, $0) } ?? 0.25)
+                .stroke(Theme.primary, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(fraction == nil && turning ? 270 : -90))
+                .animation(fraction == nil ? .linear(duration: 1).repeatForever(autoreverses: false) : .easeOut(duration: 0.2),
+                           value: fraction == nil && turning)
+                .animation(.easeOut(duration: 0.2), value: fraction)
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Theme.primary)
+                .frame(width: 7, height: 7)
+        }
+        .frame(width: 20, height: 20)
+        .onAppear { turning = true }
+        .accessibilityHidden(true)
+    }
+}
+
+private extension View {
+    /// The round-cornered square the Book page's File actions sit in.
+    func controlCircle(tinted: Bool) -> some View {
+        frame(width: 40, height: 40)
+            .background((tinted ? Theme.primary : Theme.mutedForeground).opacity(0.12),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+    }
+}
+
+/// Download All for a Series or a List, in its toolbar: one tap downloads
+/// the main Files of every Book in it. It says when they're all downloaded.
+struct DownloadAllButton: View {
+    struct Files: Equatable, Sendable {
+        let fileIDs: [Int]
+        /// How many have no Download, or one that failed.
+        let missing: Int
+    }
+
+    @Environment(AppModel.self) private var model
+    var seriesID: Int?
+    var listID: Int?
+    @State private var files: Files?
+
+    var body: some View {
+        Group {
+            if let files, !files.fileIDs.isEmpty {
+                Button {
+                    model.session?.downloads.download(files.fileIDs)
+                } label: {
+                    Icon(files.missing == 0 ? .check : .download, size: 20, relativeTo: nil)
+                        .foregroundStyle(files.missing == 0 ? Theme.mutedForeground : Theme.foreground)
+                }
+                .disabled(files.missing == 0)
+                .accessibilityLabel(files.missing == 0 ? String(localized: "All downloaded") : String(localized: "Download All"))
+                .accessibilityValue(files.missing == 0 ? "" : String(AttributedString(localized: "^[\(files.missing) file](inflect: true)").characters))
+                .accessibilityIdentifier("downloadAll")
+            }
+        }
+        .observing(model.session?.store, id: "\(seriesID ?? 0)-\(listID ?? 0)", into: $files) { [seriesID, listID] db in
+            let ids = try CatalogStore.downloadableFiles(db, seriesID: seriesID, listID: listID)
+            return Files(fileIDs: ids, missing: try CatalogStore.notDownloaded(db, fileIDs: ids))
+        }
+    }
+}
+
+// MARK: - Sharing
+
+/// Shares a File out of the app through the system share sheet, as its
+/// Generated File, so the copy carries Shisho's current metadata (ADR
+/// 0022). The server builds it first, which can take a while for a large
+/// File, so it says it's preparing and can be cancelled.
+struct ShareFileButton: View {
+    @Environment(AppModel.self) private var model
+    let fileID: Int
+    let label: String
+    @State private var preparing: Task<Void, Never>?
+    /// Which share is current, so a cancelled one that ends late doesn't
+    /// clear the one after it.
+    @State private var attempt = 0
+    @State private var failure: String?
+
+    var body: some View {
+        Button {
+            if let preparing {
+                preparing.cancel()
+                self.preparing = nil
+            } else {
+                share()
+            }
+        } label: {
+            if preparing != nil {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Preparing…")
+                }
+            } else {
+                Label("Share", icon: .share)
+            }
+        }
+        .buttonStyle(OutlineButtonStyle())
+        .accessibilityLabel(preparing != nil ? String(localized: "Preparing \(label) to share. Cancel") : String(localized: "Share \(label)"))
+        .accessibilityIdentifier("file.share")
+        // A share still preparing when the page goes, or another account
+        // takes over, is dropped rather than shown over another screen.
+        .onDisappear {
+            preparing?.cancel()
+            preparing = nil
+        }
+        .alert(String(localized: "Couldn't share this File"), isPresented: Binding(get: { failure != nil }, set: { if !$0 { failure = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(failure ?? "")
+        }
+    }
+
+    private func share() {
+        guard let session = model.session else { return }
+        failure = nil
+        attempt += 1
+        let current = attempt
+        preparing = Task {
+            defer { if attempt == current { preparing = nil } }
+            do {
+                let file = try await session.client.shareFile(fileID: fileID)
+                guard !Task.isCancelled, model.session === session else {
+                    try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+                    return
+                }
+                SharePresenter.present(file)
+            } catch is CancellationError {
+            } catch {
+                await Diagnostics.shared.log(.downloads, "file \(fileID): couldn't share it: \(Diagnostics.describe(error))")
+                // Not for a share cancelled, or replaced, meanwhile.
+                guard !Task.isCancelled, attempt == current, model.session === session else { return }
+                failure = (error as? APIError).map { Messages.signIn($0) } ?? error.localizedDescription
+            }
+        }
+    }
+}
+
+/// Presents the system share sheet for a file from wherever the app is,
+/// and deletes the file's folder once the sheet closes.
+@MainActor
+enum SharePresenter {
+    static func present(_ file: URL) {
+        let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+        sheet.completionWithItemsHandler = { _, _, _, _ in
+            try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+        }
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first,
+              let window = scene.windows.first(where: \.isKeyWindow) ?? scene.windows.first,
+              var top = window.rootViewController
+        else {
+            try? FileManager.default.removeItem(at: file.deletingLastPathComponent())
+            return
+        }
+        while let presented = top.presentedViewController { top = presented }
+        // On iPad the sheet is a popover, which needs somewhere to point.
+        if let popover = sheet.popoverPresentationController {
+            popover.sourceView = window
+            popover.sourceRect = CGRect(x: window.bounds.midX, y: window.bounds.midY, width: 0, height: 0)
+            popover.permittedArrowDirections = []
+        }
+        top.present(sheet, animated: true)
+    }
+}
+
+// MARK: - The Downloads tab
+
+/// Everything downloaded and on its way, the space it takes, and the
+/// Download settings: the Storage screen, as the prototype's Downloads tab
+/// (variant E). Removing a Download frees its space at once.
+struct DownloadsView: View {
+    @Environment(AppModel.self) private var model
+    @State private var downloads: [StoredDownload]?
+    @State private var cacheSize: Int?
+    @State private var confirmingRemoveAll = false
+
+    var body: some View {
+        @Bindable var model = model
+        NavigationStack(path: $model.downloadsPath) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        Color.clear.frame(height: 0).id(ScrollTop.anchor)
+                        if let downloads {
+                            summary(downloads)
+                            if let manager = model.session?.downloads {
+                                DownloadSettingsCard(downloads: manager)
+                            }
+                            if downloads.isEmpty {
+                                EmptyNotice(title: String(localized: "No Downloads"),
+                                            message: String(localized: "Download audiobooks and ebooks from a Book's page to listen and read offline."),
+                                            icon: .download)
+                                    .accessibilityIdentifier("downloads.empty")
+                            } else {
+                                section(String(localized: "Downloading"), downloads.filter { $0.state != .done })
+                                section(String(localized: "Downloaded"), downloads.filter { $0.state == .done })
+                                Button(role: .destructive) { confirmingRemoveAll = true } label: {
+                                    Label("Remove All Downloads", icon: .trash)
+                                }
+                                .buttonStyle(OutlineButtonStyle(role: .destructive))
+                                .accessibilityIdentifier("downloads.removeAll")
+                            }
+                            cacheCard
+                        }
+                    }
+                    .padding(.horizontal, GridLayout.margin)
+                    .padding(.bottom, 32)
+                    .frame(maxWidth: 680)
+                    .frame(maxWidth: .infinity)
+                }
+                .miniPlayerClearance()
+                .onChange(of: model.scrollToTop[.downloads]) { _, _ in
+                    withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
+                }
+            }
+            .background(Theme.background)
+            .navigationTitle("Downloads")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar { RootToolbar() }
+            .routeDestinations()
+            .confirmationDialog(String(localized: "Remove every Download from this device?"), isPresented: $confirmingRemoveAll,
+                                titleVisibility: .visible) {
+                Button("Remove All Downloads", role: .destructive) { model.session?.downloads.removeAll() }
+                    .accessibilityIdentifier("downloads.removeAll.confirm")
+            } message: {
+                Text("They stay in your library, to download again.")
+            }
+        }
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloads) { db in
+            try CatalogStore.storedDownloads(db)
+        }
+        .task(id: model.session?.account.id) { refreshCacheSize() }
+    }
+
+    private func refreshCacheSize() {
+        guard let ebooks = model.session?.ebooks else { return }
+        Task.detached {
+            let size = ebooks.size()
+            await MainActor.run { cacheSize = size }
+        }
+    }
+
+    /// The space Downloads take, and what's left on the device.
+    private func summary(_ downloads: [StoredDownload]) -> some View {
+        let used = DownloadManager.totalSize(downloads)
+        let free = (try? URL(fileURLWithPath: NSHomeDirectory())
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage) ?? nil
+        let count = downloads.filter { $0.state == .done }.count
+        return VStack(alignment: .leading, spacing: 4) {
+            Text(FileFacts.size(used))
+                .font(.geist(size: 30, relativeTo: .title, weight: .bold))
+                .monospacedDigit()
+                .accessibilityIdentifier("downloads.used")
+            Text(free.map { String(localized: "\(Counts.downloads(count)) · \(FileFacts.size(Int($0))) free on this device") }
+                 ?? Counts.downloads(count))
+                .font(.geist(.subheadline))
+                .foregroundStyle(Theme.mutedForeground)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, _ items: [StoredDownload]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .font(.geist(.subheadline))
+                    .foregroundStyle(Theme.mutedForeground)
+                    .accessibilityAddTraits(.isHeader)
+                VStack(spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 { Divider().overlay(Theme.border) }
+                        DownloadRowView(item: item)
+                    }
+                }
+                .cardStyle()
+            }
+        }
+    }
+
+    /// Ebooks opened without downloading are kept for a while in a cache iOS
+    /// can clear; this clears it now.
+    @ViewBuilder
+    private var cacheCard: some View {
+        if let cacheSize, cacheSize > 0 {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ebooks opened without downloading")
+                        .font(.geist(.subheadline))
+                    Text(FileFacts.size(cacheSize))
+                        .font(.geist(.footnote))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .monospacedDigit()
+                }
+                Spacer(minLength: 8)
+                Button("Clear") {
+                    model.session?.ebooks.clear()
+                    refreshCacheSize()
+                }
+                .buttonStyle(SmallOutlineStyle())
+                .accessibilityLabel(String(localized: "Clear ebooks opened without downloading"))
+                .accessibilityIdentifier("downloads.clearCache")
+            }
+            .padding(16)
+            .cardStyle()
+            .accessibilityElement(children: .contain)
+        }
+    }
+}
+
+/// Wi-Fi only and Remove when finished, for every account on the device.
+private struct DownloadSettingsCard: View {
+    @Bindable var downloads: DownloadManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                SettingToggle(title: String(localized: "Download on Wi-Fi only"), isOn: $downloads.wifiOnly, identifier: "downloads.wifiOnly")
+                Text(downloads.wifiOnly && downloads.wait == .wifi
+                     ? String(localized: "Downloads wait until you're on Wi-Fi.")
+                     : String(localized: "Keeps Downloads off cellular data and Low Data Mode."))
+                    .font(.geist(.footnote))
+                    .foregroundStyle(downloads.wait == .wifi ? Theme.foreground : Theme.mutedForeground)
+                    .accessibilityIdentifier("downloads.wifiOnly.note")
+            }
+            .padding(16)
+            Divider().overlay(Theme.border)
+            VStack(alignment: .leading, spacing: 6) {
+                SettingToggle(title: String(localized: "Remove when finished"), isOn: $downloads.removeWhenFinished, identifier: "downloads.removeWhenFinished")
+                Text("A Download is removed once you listen to or read it to the end.")
+                    .font(.geist(.footnote))
+                    .foregroundStyle(Theme.mutedForeground)
+            }
+            .padding(16)
+        }
+        .cardStyle()
+    }
+}
+
+/// A setting's switch beside its name. The identifier is on the switch
+/// alone, so a flow's tap on it lands on the switch rather than the name,
+/// which a toggle's own label doesn't pass on; VoiceOver reads the switch
+/// with its name.
+private struct SettingToggle: View {
+    let title: String
+    @Binding var isOn: Bool
+    let identifier: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .font(.geist(.subheadline))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityHidden(true)
+            Toggle(title, isOn: $isOn)
+                .labelsHidden()
+                .tint(Theme.primary)
+                .accessibilityIdentifier(identifier)
+        }
+    }
+}
+
+/// One Download: its cover, Book, File, and size or progress, opening its
+/// Book, with a button to remove it.
+private struct DownloadRowView: View {
+    @Environment(AppModel.self) private var model
+    let item: StoredDownload
+
+    var body: some View {
+        let row = DownloadRow(fileID: item.fileID, fileType: item.fileType, state: item.state, sizeBytes: item.sizeBytes,
+                              error: item.error)
+        let status = model.session?.downloads.status(row) ?? .downloaded
+        HStack(spacing: 12) {
+            Button { model.push(.book(item.book)) } label: {
+                HStack(spacing: 12) {
+                    CoverView(book: item.book, width: item.fileType == "m4b" ? 44 : 34)
+                        .frame(width: 44)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(item.book.title)
+                            .font(.geist(.subheadline, weight: .semibold))
+                            .lineLimit(2)
+                        Text(verbatim: "\(item.label) · \(FileTypes.label(item.fileType))")
+                            .font(.geist(.footnote))
+                            .foregroundStyle(Theme.mutedForeground)
+                            .lineLimit(1)
+                        Text(item.state == .done ? FileFacts.size(item.sizeBytes) : DownloadWords.status(status) ?? "")
+                            .font(.geist(.footnote))
+                            .foregroundStyle(item.state == .failed ? Theme.destructive : Theme.mutedForeground)
+                            .monospacedDigit()
+                            .lineLimit(3)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(String(localized: "Opens the Book"))
+            .accessibilityIdentifier("downloads.row")
+
+            Button { model.session?.downloads.remove([item.fileID]) } label: {
+                Icon(item.state == .done ? .trash : .x, size: 18, relativeTo: nil)
+                    .foregroundStyle(Theme.mutedForeground)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(item.state == .done
+                                ? String(localized: "Remove the Download of \(item.book.title), \(item.label)")
+                                : String(localized: "Stop downloading \(item.book.title), \(item.label)"))
+            .accessibilityIdentifier("downloads.remove")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .contextMenu {
+            Button(role: .destructive) { model.session?.downloads.remove([item.fileID]) } label: {
+                Label(item.state == .done ? "Remove Download" : "Stop Download", menuIcon: .trash)
+            }
+        }
+    }
+}

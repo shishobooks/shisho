@@ -1,0 +1,51 @@
+# With Remove when finished on, listening to a downloaded audiobook to its
+# end removes its Download (#915).
+appId: ${APP_ID}
+name: Remove a Download when it's finished
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- tapOn:
+    id: tab.downloads
+- tapOn:
+    id: downloads.removeWhenFinished
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/download_book.yaml
+    env:
+      TITLE: Quiet Lighthouse
+
+# Playing at the end starts over, so it plays to its end wherever another
+# flow left it.
+- scrollUntilVisible:
+    element:
+      id: book.listen
+    direction: UP
+    timeout: 60000
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: book.listen
+- extendedWaitUntil:
+    visible:
+      id: player.chapter
+      text: Chapter 3
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
+- tapOn:
+    id: player.close
+
+- tapOn:
+    id: tab.downloads
+- extendedWaitUntil:
+    visible:
+      id: downloads.empty
+    timeout: 30000

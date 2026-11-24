@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The signed-in app: the Library and Lists tabs of the prototype's native
+/// The signed-in app: the Library, Lists, and Downloads tabs of the prototype's native
 /// structure (variant E), each with its own navigation, the mini player
 /// above the tab bar on every one, and the Account sheet any tab opens.
 struct MainTabs: View {
@@ -19,6 +19,9 @@ struct MainTabs: View {
             ListsView()
                 .withMiniPlayer()
                 .tag(AppTab.lists)
+            DownloadsView()
+                .withMiniPlayer()
+                .tag(AppTab.downloads)
         }
         // Over the screens, which leave room for it at the end of their
         // scrolling (miniPlayerClearance), as the prototype's bar is.
@@ -50,6 +53,7 @@ struct AppTabBar: View {
         HStack(spacing: 0) {
             item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
             item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
+            item(.downloads, String(localized: "Downloads"), icon: .download, identifier: "tab.downloads")
         }
         .padding(.top, 7)
         .padding(.bottom, 2)

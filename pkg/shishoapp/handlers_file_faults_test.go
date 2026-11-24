@@ -43,8 +43,9 @@ func TestCover_FaultsAreServerErrors(t *testing.T) {
 	}
 }
 
-// The same for Original File downloads and streams: an unreadable file and
-// a failing database are server faults, never a 404 or a partial file.
+// The same for Original File downloads and streams, and a File shared out:
+// an unreadable file and a failing database are server faults, never a 404
+// or a partial file.
 func TestFiles_FaultsAreServerErrors(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -56,7 +57,7 @@ func TestFiles_FaultsAreServerErrors(t *testing.T) {
 	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (1, 1, 1, ?, 'm4b', 5)`, audio)
 	f.addUser()
 	credential := f.signIn()
-	paths := []string{"/mobile/files/1/download", "/mobile/files/1/stream"}
+	paths := []string{"/mobile/files/1/download", "/mobile/files/1/stream", "/mobile/files/1/share"}
 
 	if os.Geteuid() != 0 {
 		require.NoError(t, os.Chmod(audio, 0o000))

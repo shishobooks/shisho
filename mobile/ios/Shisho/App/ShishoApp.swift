@@ -35,5 +35,9 @@ struct ShishoApp: App {
         .backgroundTask(.appRefresh(AppModel.refreshTaskID)) {
             await model.backgroundRefresh()
         }
+        // Downloads finished or stopped while the app wasn't running.
+        .backgroundTask(.urlSession) { identifier in
+            await model.backgroundDownloads(identifier: identifier)
+        }
     }
 }

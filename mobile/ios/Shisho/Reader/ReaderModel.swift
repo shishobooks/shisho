@@ -118,6 +118,10 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     @ObservationIgnored private var chaptersFromShisho = false
     /// The reader closed, so a load still running stops where it is.
     @ObservationIgnored private var closed = false
+    /// The book opened from its Download rather than the cache.
+    @ObservationIgnored private var fromDownload = false
+    /// A page at the end showed, which finishes the Read-through.
+    @ObservationIgnored private var readToEnd = false
 
     init(file: ReadingFile, session: AccountSession, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
@@ -225,7 +229,13 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         fileWatch?.cancel()
         let bookFile: URL
         do {
-            bookFile = try await session.ebooks.file(file)
+            if let downloaded = session.downloads.localFile(fileID: file.fileID) {
+                bookFile = downloaded
+                fromDownload = true
+            } else {
+                bookFile = try await session.ebooks.file(file)
+                fromDownload = false
+            }
         } catch {
             guard !closed else { return }
             log("couldn't fetch the File: \(Diagnostics.describe(error))")
@@ -481,6 +491,9 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
 
     func close() {
         noteReaderPlace()
+        if !closed {
+            session.downloads.released(fileID: file.fileID)
+        }
         closed = true
         turnWait?.cancel()
         tracker.close()
@@ -576,6 +589,12 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         noteSection(location)
         fraction = location.fraction ?? fraction
         tracker.moved(location)
+        if location.atEnd == true, !readToEnd {
+            readToEnd = true
+            // The pages read the file as they open, so it goes once the
+            // reader closes, or at the next launch.
+            session.downloads.finished(fileID: file.fileID, holding: true)
+        }
     }
 
     func foliateLaidOut(_ location: PageLocation) {
@@ -629,7 +648,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
 
     func foliateFailed() {
         guard phase == .loading || source != nil else { return }
-        if phase == .loading {
+        if phase == .loading, !fromDownload {
             // A copy that won't open is fetched again on Try Again.
             session.ebooks.discard(file)
         }

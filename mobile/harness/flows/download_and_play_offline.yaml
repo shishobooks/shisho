@@ -1,0 +1,72 @@
+# Download an audiobook and an ebook, then take the server offline and
+# relaunch the app, so nothing streamed is left in memory: the audiobook
+# plays and the ebook opens from their Downloads (#915).
+appId: ${APP_ID}
+name: Download, then listen and read offline
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/download_book.yaml
+    env:
+      TITLE: Quiet Lighthouse
+# Back to the Library's grid, then the ebook.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/download_book.yaml
+    env:
+      TITLE: The Harness Novel
+
+- stopApp
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    stopApp: false
+    permissions: {}
+- extendedWaitUntil:
+    visible:
+      id: account.button
+    timeout: 30000
+
+# Both are listed with the space they take.
+- tapOn:
+    id: tab.downloads
+- extendedWaitUntil:
+    visible: Quiet Lighthouse
+    timeout: 30000
+- assertVisible: The Harness Novel
+
+# The audiobook plays to its end offline. Playing at the end starts over,
+# so this holds wherever another flow left it.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Quiet Lighthouse
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
+- assertVisible:
+    id: player.chapter
+    text: Chapter 3
+- assertNotVisible:
+    id: player.error
+- tapOn:
+    id: player.close
+
+# The ebook opens offline.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel

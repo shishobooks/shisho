@@ -27,6 +27,12 @@ struct HarnessSignIn: Equatable {
         self.password = password
     }
 
+    /// The harness can't put the Simulator on cellular, so `-harnessNetwork
+    /// cellular` says to treat any network as cellular, to check Wi-Fi only.
+    static var cellular: Bool {
+        UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["harnessNetwork"] as? String == "cellular"
+    }
+
     /// The account this launch's arguments name, never one kept in the
     /// app's settings.
     static var launched: HarnessSignIn? {

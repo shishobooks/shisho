@@ -21,7 +21,7 @@ final class EbookCache: Sendable {
 
     /// Where the File's bytes are on the device, fetching them first when
     /// they aren't. A File whose size changed on the server is fetched
-    /// again. Downloads (#915) will be used instead when there is one.
+    /// again. The reader uses the File's Download instead when there is one.
     func file(_ file: ReadingFile) async throws -> URL {
         let name = "\(file.fileID)-\(file.sizeBytes).\(file.fileType)"
         let kept = folder.appendingPathComponent(name)
@@ -40,6 +40,17 @@ final class EbookCache: Sendable {
         try? fileManager.removeItem(at: kept)
         try fileManager.moveItem(at: downloaded, to: kept)
         return kept
+    }
+
+    /// The bytes every kept copy takes.
+    func size() -> Int {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey])) ?? []
+        return files.reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) }
+    }
+
+    /// Forgets every kept copy. Downloads aren't touched.
+    func clear() {
+        try? FileManager.default.removeItem(at: folder)
     }
 
     /// Forgets the kept copy of a File, as when it wouldn't open.

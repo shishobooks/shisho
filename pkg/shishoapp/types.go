@@ -38,10 +38,13 @@ type ServerInfo struct {
 // X-Shisho-Capabilities header). An app turns a feature on for a server only
 // when it lists the feature's capability.
 const (
-	//tygo:emit export type Capability = typeof CapabilityBookmarks;
+	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles;
 	// CapabilityBookmarks is the Bookmark events in the journal and
 	// Bookmarks in the feed.
 	CapabilityBookmarks = "bookmarks"
+	// CapabilityShareFiles is the route that sends a File's Generated File
+	// for the app to share out of itself (ADR 0022).
+	CapabilityShareFiles = "share_files"
 )
 
 // SignInPayload signs an installation in with the user's username and

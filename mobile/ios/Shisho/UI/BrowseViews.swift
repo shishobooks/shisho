@@ -178,6 +178,14 @@ struct ResourceView: View {
         .refreshable { await model.syncNow() }
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            // A whole Series downloads in one tap, for a trip.
+            if kind == .series {
+                ToolbarItem(placement: .topBarTrailing) {
+                    DownloadAllButton(seriesID: id)
+                }
+            }
+        }
         .observing(model.session?.store, id: "\(kind)-\(id)", into: $detail) { [kind, id] db in
             try CatalogStore.resource(db, kind: kind, id: id)
         }

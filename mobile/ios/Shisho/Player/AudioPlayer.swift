@@ -111,6 +111,8 @@ final class AudioPlayer {
     /// back over a chapter start without changing which chapter is playing.
     @ObservationIgnored private var sleepTarget: Double?
     @ObservationIgnored private let shake = ShakeDetector()
+    /// The item playing is the File's Download, not a stream.
+    @ObservationIgnored private var playingDownload = false
 
     init(session: AccountSession, requestSync: @escaping @MainActor () -> Void) {
         self.session = session
@@ -204,14 +206,22 @@ final class AudioPlayer {
     /// out of range still leaves this much to play.
     private static let forwardBuffer: TimeInterval = 10 * 60
 
-    /// Starts streaming the open File, the first time it plays.
+    /// Starts playing the open File, the first time it plays: from its
+    /// Download when there is one, or else streamed.
     private func prepareItem() {
         guard let file, player == nil else { return }
-        // AVPlayer makes its own range requests rather than going through
-        // APIClient, and takes cookies but no headers, so the credential goes
-        // as a cookie the stream route reads.
-        let asset = AVURLAsset(url: session.client.streamURL(fileID: file.fileID),
+        let asset: AVURLAsset
+        if let local = session.downloads.localFile(fileID: file.fileID) {
+            asset = AVURLAsset(url: local)
+            playingDownload = true
+        } else {
+            // AVPlayer makes its own range requests rather than going through
+            // APIClient, and takes cookies but no headers, so the credential
+            // goes as a cookie the stream route reads.
+            asset = AVURLAsset(url: session.client.streamURL(fileID: file.fileID),
                                options: [AVURLAssetHTTPCookiesKey: session.client.streamCookies])
+            playingDownload = false
+        }
         let item = AVPlayerItem(asset: asset)
         item.audioTimePitchAlgorithm = .timeDomain
         item.preferredForwardBufferDuration = AudioPlayer.forwardBuffer
@@ -281,6 +291,12 @@ final class AudioPlayer {
             // A failed stream is tried again from where it was.
             error = nil
             pendingSeek = position
+            teardownItem()
+        }
+        // A stream loaded before its File finished downloading gives way to
+        // the Download, from the same place.
+        if player != nil, !isPlaying, !playingDownload, session.downloads.localFile(fileID: file.fileID) != nil {
+            pendingSeek = currentPosition()
             teardownItem()
         }
         if player == nil {
@@ -741,6 +757,20 @@ final class AudioPlayer {
         stopSitting(at: Date())
         updateNowPlaying()
         requestSync()
+        session.downloads.finished(fileID: file.fileID)
+    }
+
+    /// A File's Download arrived or went. The open File, while it isn't
+    /// playing, lets go of what it loaded, so it plays from the Download, or
+    /// streams once the Download is gone. Playing on, it keeps what it has:
+    /// a stream already buffered, or a removed Download's file, which stays
+    /// readable while it's open.
+    func downloadChanged(fileID: Int) {
+        guard file?.fileID == fileID, player != nil, !isPlaying else { return }
+        let hasDownload = session.downloads.localFile(fileID: fileID) != nil
+        guard hasDownload != playingDownload else { return }
+        teardownItem()
+        pendingSeek = position
     }
 
     /// Follows the open File in the catalog: an edit, such as renamed

@@ -25,6 +25,7 @@ enum Lucide: String, CaseIterable {
     case circleAlert = "circle-alert"
     case clock
     case clockArrowUp = "clock-arrow-up"
+    case download
     case ellipsis
     case file
     case fileSearch = "file-search"
@@ -72,6 +73,7 @@ enum Lucide: String, CaseIterable {
     case user
     case userX = "user-x"
     case users
+    case wifi
     case wifiOff = "wifi-off"
     case x
 

@@ -8,6 +8,11 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
+	"github.com/shishobooks/shisho/pkg/filegen"
+	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
+	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -141,4 +146,87 @@ func TestFiles_CoverIsTheFilesOwn(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/6/cover?v=1", credential: credential}).Code)
 	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/7/cover?v=1", credential: credential}).Code)
 	assert.Equal(t, http.StatusUnauthorized, f.do(call{path: "/mobile/files/5/cover?v=1"}).Code)
+}
+
+// Sharing a File out of the app sends its Generated File, so the copy
+// carries Shisho's current metadata (ADR 0022). The server builds it into
+// the download cache before sending anything, so even the first request
+// for a generator that can't tell its size up front gets the size, and a
+// Range gets the bytes it asked for.
+func TestShare_PreparesTheGeneratedFileAndServesRanges(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, downloadcache.WithGenerators(func(string, string) (filegen.StreamGenerator, error) {
+		return filegentest.Copy{UnknownSize: true}, nil
+	}))
+	dir := t.TempDir()
+	ebook := filepath.Join(dir, "dune.epub")
+	other := filepath.Join(dir, "emma.epub")
+	require.NoError(t, os.WriteFile(ebook, []byte(filegentest.CopyMagic+"epub"), 0o600))
+	require.NoError(t, os.WriteFile(other, []byte(filegentest.CopyMagic+"epub"), 0o600))
+	f.addLibrary(1, "Mine")
+	f.addLibrary(2, "Theirs")
+	f.addBook(1, 1, "Dune")
+	f.addBook(2, 2, "Emma")
+	f.addBook(3, 1, "Emma")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES
+		(6, 1, 1, ?, 'epub', 8), (7, 2, 2, ?, 'epub', 8), (8, 1, 3, ?, 'epub', 8)`, ebook, ebook, other)
+	f.addUser(1)
+	credential := f.signIn()
+	generated := filegentest.CopyHeader + filegentest.CopyMagic + "epub"
+	size := strconv.Itoa(len(generated))
+
+	// The first request, before anything was built, asks for a Range.
+	rec := f.rangeCall(http.MethodGet, "/mobile/files/6/share", credential, "bytes=10-")
+	require.Equal(t, http.StatusPartialContent, rec.Code, rec.Body.String())
+	assert.Equal(t, generated[10:], rec.Body.String())
+	assert.Equal(t, "bytes 10-"+strconv.Itoa(len(generated)-1)+"/"+size, rec.Header().Get("Content-Range"))
+
+	rec = f.rangeCall(http.MethodGet, "/mobile/files/6/share", credential, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, generated, rec.Body.String())
+	assert.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
+	assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
+	assert.Contains(t, rec.Header().Get("Content-Disposition"), "attachment")
+	assert.Contains(t, rec.Header().Get(HeaderCapabilities), CapabilityShareFiles)
+
+	// A HEAD before anything was built prepares the file and knows its size.
+	rec = f.rangeCall(http.MethodHead, "/mobile/files/8/share", credential, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, size, rec.Header().Get("Content-Length"))
+	assert.Equal(t, "bytes", rec.Header().Get("Accept-Ranges"))
+
+	// Another Library's File, one that doesn't exist, and no credential.
+	assert.Equal(t, http.StatusNotFound, f.rangeCall(http.MethodGet, "/mobile/files/7/share", credential, "").Code)
+	assert.Equal(t, http.StatusNotFound, f.rangeCall(http.MethodGet, "/mobile/files/99/share", credential, "").Code)
+	assert.Equal(t, http.StatusUnauthorized, f.rangeCall(http.MethodGet, "/mobile/files/6/share", "", "").Code)
+}
+
+// A File that can't be generated as itself is shared as its Original File,
+// as a device's download is: a supplement, and a build that fails.
+func TestShare_FallsBackToTheOriginal(t *testing.T) {
+	t.Parallel()
+	failing := filegentest.NewPausing("", "")
+	failing.PrepareErr = filegen.NewGenerationError(models.FileTypeEPUB, errors.New("unreadable"), "the file can't be read")
+	f := newFixture(t, downloadcache.WithGenerators(func(string, string) (filegen.StreamGenerator, error) {
+		return failing, nil
+	}))
+	dir := t.TempDir()
+	supplement := filepath.Join(dir, "extras.pdf")
+	broken := filepath.Join(dir, "broken.epub")
+	require.NoError(t, os.WriteFile(supplement, []byte(filegentest.CopyMagic+"pdf"), 0o600))
+	require.NoError(t, os.WriteFile(broken, []byte("no magic"), 0o600))
+	f.addLibrary(1, "Mine")
+	f.addBook(1, 1, "Dune")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, file_role, filesize_bytes) VALUES
+		(6, 1, 1, ?, 'pdf', 'supplement', 7), (7, 1, 1, ?, 'epub', 'main', 8)`, supplement, broken)
+	f.addUser()
+	credential := f.signIn()
+
+	rec := f.rangeCall(http.MethodGet, "/mobile/files/6/share", credential, "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, filegentest.CopyMagic+"pdf", rec.Body.String())
+
+	rec = f.rangeCall(http.MethodGet, "/mobile/files/7/share", credential, "bytes=3-")
+	require.Equal(t, http.StatusPartialContent, rec.Code, rec.Body.String())
+	assert.Equal(t, "magic", rec.Body.String())
 }

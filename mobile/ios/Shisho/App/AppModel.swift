@@ -15,11 +15,13 @@ final class AccountSession {
     let sync: SyncEngine
     let covers: CoverCache
     let ebooks: EbookCache
+    let downloads: DownloadManager
 
     /// The capabilities the server listed in its last response, which any
     /// thread may read.
     let capabilities: OSAllocatedUnfairLock<[String]>
 
+    @MainActor
     init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void,
          onInstance: @escaping @Sendable (String) -> Void = { _ in }) throws {
         self.account = account
@@ -38,6 +40,12 @@ final class AccountSession {
         sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
         ebooks = EbookCache(client: client, accountID: account.id)
+        downloads = DownloadManager(account: account, client: client, store: store)
+    }
+
+    /// The server lists sharing a File out with its current metadata.
+    var sharesFiles: Bool {
+        capabilities.withLock { $0.contains(Shishoapp.Capability.shareFiles.rawValue) }
     }
 }
 
@@ -81,6 +89,7 @@ final class AppModel {
     var relatedTabForNextBook: String?
     var libraryPath: [Route] = []
     var listsPath: [Route] = []
+    var downloadsPath: [Route] = []
     /// The Account sheet is open.
     var showingAccount = false
     /// The sign-in sheet for adding another account is open.
@@ -174,8 +183,12 @@ final class AppModel {
         player = nil
         showingPlayer = false
         closeReader()
+        // Another account's transfers stop where they are, and carry on
+        // when it's back.
+        old?.downloads.stop()
         libraryPath = []
         listsPath = []
+        downloadsPath = []
         showingAccount = false
         stopPrefetching()
         libraryID = session.map { UserDefaults.standard.integer(forKey: AccountData(accountID: $0.account.id).libraryIDKey) } ?? 0
@@ -187,6 +200,13 @@ final class AppModel {
             }
             self.player = player
             player.restore()
+            session.downloads.onChange = { [weak self] fileID in
+                self?.player?.downloadChanged(fileID: fileID)
+            }
+            #if DEBUG
+            session.downloads.simulatesNetwork = HarnessSignIn.cellular
+            #endif
+            session.downloads.networkChanged(to: downloadNetwork)
         }
     }
 
@@ -210,6 +230,7 @@ final class AppModel {
     /// are. iOS doesn't say which of those brought the app back.
     func didBecomeActive() {
         reader?.foreground()
+        session?.downloads.resume()
         // Not over the reader, which was open as the audio played on.
         if playingInBackground, reader == nil, player?.isPlaying == true, player?.file != nil {
             showingPlayer = true
@@ -227,11 +248,12 @@ final class AppModel {
     /// Opens a Book from one of its own pages, such as a File's: back to it
     /// when it's the screen before, rather than a second copy on top.
     func returnToBook(_ book: BookSummary) {
-        let path = tab == .library ? libraryPath : listsPath
+        let path = self.path(tab)
         if path.count >= 2, case .book(let previous) = path[path.count - 2], previous.id == book.id {
             switch tab {
             case .library: libraryPath.removeLast()
             case .lists: listsPath.removeLast()
+            case .downloads: downloadsPath.removeLast()
             }
         } else {
             push(.book(book))
@@ -242,6 +264,16 @@ final class AppModel {
         switch tab {
         case .library: libraryPath = []
         case .lists: listsPath = []
+        case .downloads: downloadsPath = []
+        }
+    }
+
+    /// The pages pushed on tab.
+    private func path(_ tab: AppTab) -> [Route] {
+        switch tab {
+        case .library: libraryPath
+        case .lists: listsPath
+        case .downloads: downloadsPath
         }
     }
 
@@ -252,11 +284,7 @@ final class AppModel {
     /// The tab showing, tapped again: back to its first screen, or on it,
     /// back to its top, as a native tab bar does.
     func reselect(_ tab: AppTab) {
-        let atRoot = switch tab {
-        case .library: libraryPath.isEmpty
-        case .lists: listsPath.isEmpty
-        }
-        if atRoot {
+        if path(tab).isEmpty {
             scrollToTop[tab, default: 0] += 1
         } else {
             popToRoot(tab)
@@ -267,8 +295,7 @@ final class AppModel {
     /// unless it's the page under the player.
     func showFromPlayer(_ route: Route) {
         showingPlayer = false
-        let path = tab == .library ? libraryPath : listsPath
-        if path.last.map({ !$0.isSamePage(as: route) }) ?? true {
+        if path(tab).last.map({ !$0.isSamePage(as: route) }) ?? true {
             push(route)
         }
     }
@@ -278,6 +305,7 @@ final class AppModel {
         switch tab {
         case .library: libraryPath.append(route)
         case .lists: listsPath.append(route)
+        case .downloads: downloadsPath.append(route)
         }
     }
 
@@ -776,6 +804,14 @@ final class AppModel {
         }
     }
 
+    /// iOS launched the app in the background for Downloads' transfers:
+    /// the session they belong to is made again to take their events.
+    /// Another account's wait until it's showing.
+    func backgroundDownloads(identifier: String) async {
+        guard let session, DownloadManager.isSession(identifier, accountID: session.account.id) else { return }
+        await session.downloads.backgroundEvents(identifier: identifier)
+    }
+
     /// A background refresh: sync once, and ask for the next.
     func backgroundRefresh() async {
         scheduleBackgroundRefresh()
@@ -793,6 +829,8 @@ final class AppModel {
             try await session.sync.run()
             guard isCurrent() else { return }
             syncStatus = .idle
+            // Caught up, so a File missing from the copy has left the library.
+            session.downloads.dropOrphans()
             prefetchCoversIfWanted(session)
         } catch {
             await Diagnostics.shared.log(.sync, "sync failed: \(Diagnostics.describe(error))")
@@ -819,6 +857,7 @@ final class AppModel {
             // The user's role can't read Books anymore: nothing in the copy
             // is theirs to see. The journal stays, to send if that changes.
             try? session.store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [], listIds: []), force: true)
+            session.downloads.dropOrphans()
             syncStatus = .failed(Messages.signIn(error))
         case .unreachable:
             syncStatus = .offline
@@ -862,6 +901,8 @@ final class AppModel {
     }
 
     @ObservationIgnored private var onWiFi = false
+    /// The network as Downloads weigh it.
+    @ObservationIgnored private var downloadNetwork: DownloadNetwork = .wifi
     @ObservationIgnored private var prefetching: Task<Void, Never>?
     /// Which prefetch is current, so one that ends late doesn't clear a newer
     /// one's handle.
@@ -906,6 +947,14 @@ final class AppModel {
     /// Coming back online syncs; going offline says so without waiting for
     /// a request to fail.
     private func networkChanged(available: Bool, wifi: Bool = false) {
+        downloadNetwork = !available ? .offline : wifi ? .wifi : .cellular
+        #if DEBUG
+        if available, HarnessSignIn.cellular {
+            downloadNetwork = .cellular
+            session?.downloads.simulatesNetwork = true
+        }
+        #endif
+        session?.downloads.networkChanged(to: downloadNetwork)
         let wasOnWiFi = onWiFi
         onWiFi = wifi
         if !wifi {
@@ -1034,7 +1083,7 @@ enum Messages {
 
 /// The app's tabs.
 enum AppTab: Hashable {
-    case library, lists
+    case library, lists, downloads
 }
 
 /// A page pushed on a tab's navigation.

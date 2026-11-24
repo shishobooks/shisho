@@ -346,6 +346,9 @@ final class CatalogStore: Sendable {
                 t.column("percentage", .double).notNull()
             }
         }
+        // Downloads (#915): the Files kept on the device to listen to and
+        // read offline, and those on their way.
+        migrator.registerMigration("v8: downloads", migrate: CatalogStore.createDownloads)
         return migrator
     }
 

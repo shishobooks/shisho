@@ -153,6 +153,11 @@ struct ListDetailView: View {
         .refreshable { await model.syncNow() }
         .navigationTitle((list ?? nil)?.name ?? initialName)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                DownloadAllButton(listID: listID)
+            }
+        }
         .observing(model.session?.store, id: listID, into: $list) { [listID] db in
             try CatalogStore.list(db, id: listID)
         }

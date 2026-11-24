@@ -17,11 +17,14 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shishobooks/shisho/pkg/appsettings"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/bookmarks"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/devices"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
@@ -45,12 +48,26 @@ type fixture struct {
 	password string
 }
 
-func newFixture(t *testing.T) *fixture {
+// newFixture serves the Device surface. opts configure its download cache,
+// whose generators are the real ones without them.
+func newFixture(t *testing.T, opts ...downloadcache.Option) *fixture {
 	t.Helper()
-	return newFixtureWith(t, newContract(ProtocolMin, Protocol))
+	return newFixtureWith(t, newContract(ProtocolMin, Protocol), opts...)
 }
 
-func newFixtureWith(t *testing.T, contract *Contract) *fixture {
+func newFixtureWith(t *testing.T, contract *Contract, opts ...downloadcache.Option) *fixture {
+	t.Helper()
+	return newFixtureFull(t, contract, downloadcache.NewCache(t.TempDir(), 1<<30, opts...))
+}
+
+// newFixtureWithCache serves the Device surface with cache as its download
+// cache.
+func newFixtureWithCache(t *testing.T, cache *downloadcache.Cache) *fixture {
+	t.Helper()
+	return newFixtureFull(t, newContract(ProtocolMin, Protocol), cache)
+}
+
+func newFixtureFull(t *testing.T, contract *Contract, cache *downloadcache.Cache) *fixture {
 	t.Helper()
 	db := testdb.New(t)
 	e := echo.New()
@@ -63,8 +80,12 @@ func newFixtureWith(t *testing.T, contract *Contract) *fixture {
 	hash, err := bcrypt.GenerateFromPassword([]byte(testPassword), bcrypt.MinCost)
 	require.NoError(t, err)
 	deviceService := devices.NewService(db)
+	// Builds run outside requests; they end before the directories go.
+	t.Cleanup(cache.Wait)
 	h := &handler{
 		db:        db,
+		books:     books.NewService(db, appsettings.NewService(db)),
+		downloads: cache,
 		auth:      auth.NewService(db, "secret", time.Hour),
 		devices:   deviceService,
 		feed:      changefeed.NewService(db),

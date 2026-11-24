@@ -54,7 +54,7 @@ The app can be signed in to several servers, or several accounts on one server, 
 
 ## Listening
 
-Books with an M4B audiobook have a **Listen** button that plays it from your server. Before you start, it shows the audiobook's length and size. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app. Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
+Books with an M4B audiobook have a **Listen** button that streams it from your server, or plays it from the phone once it's [downloaded](#downloads). Before you start, it shows the audiobook's length and size. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app. Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
 
 The chapters are the ones Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. Tap the chapter's name under the title, or **Chapters** under the player, to list them and go to one. Tap the time left under the position bar, which is at your current speed, to switch the bar between the chapter and the whole book.
 
@@ -74,7 +74,7 @@ If the server turns down a change the app made offline, for example listening to
 
 ## Reading
 
-Books with an EPUB, KePub, MOBI, or AZW3 file have a **Read** button, which shows the file's size before you start, and the chapter you're in and the pages left in the book once you've read on the phone. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. A book you open is downloaded from your server the first time and kept on the phone for a while, so it opens again without a connection. iOS may clear it to free space, and the next open downloads it again.
+Books with an EPUB, KePub, MOBI, or AZW3 file have a **Read** button, which shows the file's size before you start, and the chapter you're in and the pages left in the book once you've read on the phone. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. A book you open is fetched from your server the first time and kept on the phone for a while, so it opens again without a connection. iOS may clear it to free space, and the next open fetches it again. To keep a book on the phone until you remove it, [download](#downloads) it.
 
 A tap on the left or right third of the page turns it, and a tap in the middle shows or hides the controls. A tap on a link follows it, and in the middle of the page so does a tap near one; a tap near a footnote reference opens it anywhere on the page. A tap on a picture in the middle of the page opens it on its own: pinch or double-tap to zoom, and drag down to close it. A footnote opens in a card beside its reference, with **Go to Note** to read it in place. Press and hold to select text and use **Copy**, **Look Up**, and the rest of the system's menu; while text is selected, dragging moves the selection instead of turning the page.
 
@@ -95,9 +95,30 @@ Under the page, with or without the controls, are the chapter and how far throug
 
 The app saves your place on every page turn, and a book opens at the same place in the app and the [Shisho reader](./reading-and-playback.md#epub-mobi-and-azw3-reader). Reading time is counted as the [Shisho reader counts it](./reading-tracking.md#reading-time-from-devices), and reading starts and finishes a book's Read-through by the same [rules](./reading-tracking.md#starting-and-finishing-automatically). Places and reading time reach your server when the app syncs, such as when you close the book or open the app; reading done offline counts at the time you read. Opening a book follows the same rule as listening: your latest place from any device, unless you've also read on this phone since it last synced, when the other place is offered instead.
 
+## Downloads
+
+Each file in a book's list of files has a download button, so you can keep a book's audiobook without its ebook, or the other way round. The download button at the top of a series or a list downloads the main files of every book in it in one tap; supplements download one at a time. A file type this version of the app doesn't support shows as not supported, with its download button turned off.
+
+Downloads go on in the background when you switch to another app or lock the phone. One that's interrupted, by losing the connection or by the app closing, carries on from where it stopped instead of starting over. A downloaded audiobook plays, and a downloaded book opens, without a connection.
+
+The app downloads each file as it is in your library. Titles, authors, covers, and chapters always come from the app's copy of your library, so an edit on the web shows in the app at its next sync without downloading anything again.
+
+The **Downloads** tab lists what's downloaded and what's on its way, with the space they take and what's left on the phone. Tap a download's remove button, or **Remove All Downloads**, to free the space; tapping a download opens its book. **Clear**, beside **Ebooks opened without downloading**, frees the space the books you opened without downloading take, which the phone keeps for a while.
+
+Two settings on the **Downloads** tab apply to every account on the phone, and both start off:
+
+- **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi.
+- **Remove when finished**: a download is removed once you listen to or read it to the end, which finishes its Read-through. A book in the reader is removed when you close it.
+
+A downloaded file that's deleted from your library, or is in a library you lose access to, is removed from the phone at the next sync.
+
+### Sharing a File
+
+**Share**, on a file's page, sends the file out of the app through the share sheet, such as to **Files** or another app. The copy carries the metadata Shisho has for the book now, as a download from the web does. Your server prepares that copy before sending it, which can take a while for a large audiobook the first time; it's kept in the server's [download cache](./deployment-and-maintenance.md#maintain-server-caches), so sharing it again is quick. A file Shisho can't add its metadata to, such as a supplement, is shared as it is in your library. Sharing needs a connection to your server.
+
 ## Diagnostics
 
-**Account > Export Diagnostics** shows the app's log of syncs, playback problems, and books that wouldn't open, with the app, iOS, and server versions, and shares it as a text file. Server addresses and sign-in details are always removed. Books and files are named by id unless you turn on **Include titles**. Read it before you send it anywhere.
+**Account > Export Diagnostics** shows the app's log of syncs, playback problems, books that wouldn't open, and downloads that failed, with the app, iOS, and server versions, and shares it as a text file. Server addresses and sign-in details are always removed. Books and files are named by id unless you turn on **Include titles**. Read it before you send it anywhere.
 
 ## Paths the App Uses
 
@@ -105,7 +126,7 @@ The app calls these paths on your server. A reverse proxy has to pass them, as [
 
 | Path | Used for |
 |------|----------|
-| `/mobile/*` | Signing in, syncing the library, your lists, and your reading and listening, covers, downloading books to read, and playing audiobooks |
+| `/mobile/*` | Signing in, syncing the library, your lists, and your reading and listening, covers, downloads, sharing files, and playing audiobooks |
 
 ## Local Network and Certificates
 
@@ -134,6 +155,26 @@ A server with a certificate from your own certificate authority works once the a
 **Verify:** Open the same book in the web reader.
 
 **Fix:** Reconnect and tap **Try Again**. A file the web reader can't open either needs a [rescan](./libraries.md) or restoring on disk.
+
+### A Download Doesn't Start
+
+**Symptom:** A download says it's waiting for Wi-Fi or for a connection.
+
+**Likely cause:** **Download on Wi-Fi only** is on and the phone is on cellular or a limited network, or the phone can't reach the server.
+
+**Verify:** Check the **Downloads** tab, which says why downloads are waiting, and open the server's address in the phone's browser.
+
+**Fix:** Join Wi-Fi, turn off **Download on Wi-Fi only**, or reconnect. A download that failed shows why under the file; tap its download button to try again.
+
+### Sharing a File Fails
+
+**Symptom:** Sharing a large audiobook says the server couldn't be reached, or answers with an error, after a minute or two.
+
+**Likely cause:** A reverse proxy in front of Shisho gave up waiting while the server prepared the file. Shisho finishes preparing it anyway.
+
+**Verify:** Check the proxy's timeout for responses, which is often 60 or 100 seconds.
+
+**Fix:** Share it again once the server has had time to finish, which is quick, or raise the proxy's timeout for `/mobile/*`.
 
 ### The Server Is Too Old for the App
 
