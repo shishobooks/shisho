@@ -80,6 +80,13 @@ if [[ "$got" != true ]]; then
     FAILURES=$((FAILURES + 1))
 fi
 
+# A diff that fails must fail the script, not read as no changes and skip
+# the app's checks.
+if got=$(cd "$REPO" && "$FILTER" no-such-base 2>/dev/null); then
+    echo "FAIL: a missing base: want a failure, got $got" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 if [[ $FAILURES -gt 0 ]]; then
     echo "$FAILURES failure(s)" >&2
     exit 1

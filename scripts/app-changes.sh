@@ -13,7 +13,10 @@
 set -euo pipefail
 
 if [ $# -gt 0 ]; then
-    exec < <(git diff --name-only --no-renames "$1...HEAD")
+    # Into a variable first: a failed diff inside <(...) would pass for an
+    # empty one, and skip the app's checks.
+    paths=$(git diff --name-only --no-renames "$1...HEAD")
+    exec <<<"$paths"
 fi
 
 changed=false
