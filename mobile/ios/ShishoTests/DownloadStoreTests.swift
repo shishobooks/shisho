@@ -205,3 +205,66 @@ final class DownloadWordsTests: XCTestCase {
         XCTAssertEqual(DownloadWords.progress(.running(nil)), "Downloading")
     }
 }
+
+/// Remove when finished, which the Maestro flow reaches only through the
+/// player: the reader's finish waits until it lets go of the file.
+@MainActor
+final class RemoveWhenFinishedTests: XCTestCase {
+    private var session: AccountSession!
+    private var removeWhenFinished = false
+
+    override func setUp() async throws {
+        removeWhenFinished = DownloadSettings.removeWhenFinished
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("no-server-\(UUID().uuidString)", isDirectory: true)
+        let account = Account(id: "test-\(UUID().uuidString)", serverURL: missing, username: "u", userID: 1,
+                              deviceID: "me", serverVersion: "dev", thumbnailRenderKey: "", capabilities: [], signedOut: false)
+        session = try AccountSession(account: account, credential: "credential") { _ in }
+        try session.store.startOverIfNeeded()
+        try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""
+        {"entries":[{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Fiction","cover_aspect_ratio":"book"}},
+         {"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Book","sort_title":"Book","created_at":"2026-01-01T00:00:00Z",
+          "cover_version":"1-1","files":[{"id":10,"file_type":"m4b","file_role":"main","size_bytes":3},{"id":11,"file_type":"epub","file_role":"main","size_bytes":3}]}}],
+         "cursor":2}
+        """.utf8)))
+    }
+
+    override func tearDown() async throws {
+        DownloadSettings.removeWhenFinished = removeWhenFinished
+        session.downloads.stop()
+        AccountData(accountID: session.account.id).remove()
+    }
+
+    /// A finished Download on the device, as a transfer leaves it.
+    private func downloaded(_ fileID: Int, _ fileType: String) throws -> URL {
+        try session.store.queueDownloads([fileID])
+        XCTAssertTrue(try session.store.markDownloaded(fileID: fileID, sizeBytes: 3))
+        let url = session.downloads.location(fileID: fileID, fileType: fileType)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("abc".utf8).write(to: url)
+        return url
+    }
+
+    func testAFinishedFileIsRemovedOnlyWithTheSettingOn() throws {
+        let audiobook = try downloaded(10, "m4b")
+        session.downloads.removeWhenFinished = false
+        session.downloads.finished(fileID: 10)
+        XCTAssertNotNil(session.downloads.localFile(fileID: 10), "kept with the setting off")
+
+        session.downloads.removeWhenFinished = true
+        session.downloads.finished(fileID: 10)
+        XCTAssertNil(session.downloads.localFile(fileID: 10))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: audiobook.path))
+        XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 10) })
+    }
+
+    func testABookFinishedInTheReaderGoesWhenTheReaderLetsGo() throws {
+        let ebook = try downloaded(11, "epub")
+        session.downloads.removeWhenFinished = true
+        session.downloads.finished(fileID: 11, holding: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ebook.path), "the reader's pages still read it")
+
+        session.downloads.released(fileID: 11)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: ebook.path))
+        XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) })
+    }
+}

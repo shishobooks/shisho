@@ -203,9 +203,6 @@ final class AppModel {
             session.downloads.onChange = { [weak self] fileID in
                 self?.player?.downloadChanged(fileID: fileID)
             }
-            #if DEBUG
-            session.downloads.simulatesNetwork = HarnessSignIn.cellular
-            #endif
             session.downloads.networkChanged(to: downloadNetwork)
             // The account's server: reachable until a request or a check
             // says not, on whatever network the device has.
@@ -1053,12 +1050,6 @@ final class AppModel {
     /// a request to fail.
     private func networkChanged(available: Bool, wifi: Bool = false) {
         downloadNetwork = !available ? .offline : wifi ? .wifi : .cellular
-        #if DEBUG
-        if available, HarnessSignIn.cellular {
-            downloadNetwork = .cellular
-            session?.downloads.simulatesNetwork = true
-        }
-        #endif
         session?.downloads.networkChanged(to: downloadNetwork)
         let wasOnWiFi = onWiFi
         onWiFi = wifi

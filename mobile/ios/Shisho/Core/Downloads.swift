@@ -218,9 +218,6 @@ final class DownloadManager {
     /// Sessions whose background events were all handed over before
     /// anything waited for them.
     @ObservationIgnored private var backgroundEventsArrived: Set<String> = []
-    /// The network is the harness's stand-in, which iOS knows nothing of,
-    /// so queued Downloads wait in the app rather than in a session.
-    @ObservationIgnored var simulatesNetwork = false
     @ObservationIgnored private var stopped = false
     /// Called when a File's Download arrives or goes, so the player can
     /// switch to it or back to streaming.
@@ -510,9 +507,8 @@ final class DownloadManager {
         guard !stopped else { return }
         let rows = ((try? store.pool.read { try CatalogStore.downloads($0) }) ?? []).filter { $0.state == .queued }
         guard !rows.isEmpty else { return }
-        // Otherwise a Download goes to iOS even while it waits for Wi-Fi or a
+        // A Download goes to iOS even while it waits for Wi-Fi or a
         // connection, so it starts once there's one, with the app suspended.
-        guard !(simulatesNetwork && wait != nil) else { return }
         ensureSessions()
         guard attached, let session = sessions[wifiOnly] else { return }
         let now = Date()

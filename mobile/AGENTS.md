@@ -48,7 +48,6 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 - App code → `mise ios:test`, which builds the app first.
 - Anything a flow covers → `mise ios:harness`, which needs ffmpeg to make its fixtures when they aren't cached. `-- -keep` keeps the server log and Maestro's screenshots. `-- -parallel 2` splits the flows across simulators run at once, each with its own server, for running them all. A flow that changes the world around the app, such as taking the server offline, calls the harness's control endpoint (`tools/appharness/ios.go`).
 - The too-old paths → start the server with `SHISHO_DEV_APP_PROTOCOLS` set to the range it should accept: a range above the app's protocol makes the app too old, and one below it makes the server too old for it.
-- Cellular → the Simulator is never on cellular, so a debug build launched with the argument `harnessNetwork: cellular` treats its network as cellular (`download_wifi_only.yaml`).
 
 ## The signoff
 
