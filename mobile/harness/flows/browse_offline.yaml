@@ -56,9 +56,13 @@ name: Browse Books offline
     timeout: 30000
 - tapOn:
     id: search.person
+# The person's own grid, which only their page has: the search's results
+# list their Books too.
 - extendedWaitUntil:
-    visible: Harbor Lights
+    visible:
+      id: resource.grid
     timeout: 30000
+- assertVisible: Harbor Lights
 - tapOn:
     id: tab.library
 - extendedWaitUntil:
