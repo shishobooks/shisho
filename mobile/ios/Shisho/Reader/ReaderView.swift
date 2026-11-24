@@ -232,16 +232,29 @@ struct ReaderView: View {
     }
 
     /// The room each side of the title keeps for the buttons, so the title
-    /// stays centered.
-    @ScaledMetric(relativeTo: .body) private var topBarSide: CGFloat = 138
+    /// stays centered: the three on the right, which don't grow with the
+    /// text size, and are wider than Book on the left.
+    private static let topBarSide: CGFloat = 3 * 44
 
     private var topBar: some View {
-        ZStack {
-            ReaderTitle(model: model)
-                .padding(.horizontal, min(topBarSide, 170))
-            HStack(spacing: 0) {
+        // Centered when the title fits between the buttons' room on both
+        // sides; otherwise it takes all the room between them, a little off
+        // center, as a navigation bar's title does, rather than cutting off.
+        ViewThatFits(in: .horizontal) {
+            ZStack {
+                ReaderTitle(model: model)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .padding(.horizontal, Self.topBarSide)
+                HStack(spacing: 0) {
+                    closeButton
+                    Spacer(minLength: 0)
+                    topBarButtons
+                }
+            }
+            HStack(spacing: 4) {
                 closeButton
-                Spacer(minLength: 0)
+                ReaderTitle(model: model)
+                    .frame(maxWidth: .infinity)
                 topBarButtons
             }
         }

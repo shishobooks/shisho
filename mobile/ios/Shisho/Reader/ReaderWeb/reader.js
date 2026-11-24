@@ -70,6 +70,12 @@ const applyStyles = (s, relayout = true) => {
 // A section already on screen lays out before a newly chosen font arrives,
 // so it lays out again once the font is in, as the web reader does. foliate
 // keeps the place across it.
+// The place the last settings change pinned, and the page's moves then. A
+// run of changes keeps pinning the same place until the reader moves:
+// pinning each time to the start of the page the last change landed on
+// would walk back a little with each one.
+let pinnedPlace = null;
+
 let fontWait = 0;
 // Bumped each time native moves this page as a neighbor: a font that
 // arrives after leaves it alone.
@@ -381,6 +387,8 @@ view.addEventListener("relocate", (e) => {
   // Laid out again in place, as once fonts or images load: where the
   // chapters fall can move without the page count changing.
   if (reason === "anchor") chapterPages = null;
+  // The reader moved: the next settings change pins the place anew.
+  if (!quiet && reason && reason !== "anchor") pinnedPlace = null;
   const firstScreen =
     reason === "scroll" &&
     currentIndex() === openedSection &&
@@ -1317,7 +1325,7 @@ window.R = {
       // Only a page that shows something: an empty page's CFI is its
       // section's body, which would go back to the section's start.
       const shown = view.lastLocation?.range;
-      const place =
+      const here =
         keepPlace &&
         !view.isFixedLayout &&
         landed() &&
@@ -1326,6 +1334,9 @@ window.R = {
         shown.toString().trim()
           ? view.lastLocation.cfi
           : null;
+      const place =
+        here && pinnedPlace?.moves === moves ? pinnedPlace.cfi : here;
+      pinnedPlace = place ? { cfi: place, moves } : null;
       if (place) await goToOrNear(place, null).catch(() => {});
       applyStyles(s, keepPlace);
       await view.renderer?.settled?.();

@@ -71,7 +71,9 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     private(set) var marks: [Double] = []
     /// The placed chapters' starts in order along the book, so the chapter
     /// showing is found by halving rather than by reading every entry.
-    @ObservationIgnored private var starts: [(position: Double, index: Int)] = []
+    /// Observed, so the chapter shown follows the contents being placed
+    /// after the first page shows.
+    private var starts: [(position: Double, index: Int)] = []
     private(set) var note: OpenNote?
     /// An image open on its own, to zoom into.
     var image: OpenImage?
