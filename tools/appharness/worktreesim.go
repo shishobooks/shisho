@@ -134,21 +134,46 @@ func readSimulatorState(path string) worktreeSimulatorState {
 	return state
 }
 
-// worktreeSimulatorBases returns the bases worktrees' simulators were
-// cloned from, as their state files say.
-func worktreeSimulatorBases() map[string]bool {
-	bases := map[string]bool{}
-	dir, err := simulatorStateDir()
+// worktreeSimulatorBases returns the bases the worktrees' simulators in dir
+// were cloned from, as their state files say. A state file it can't read
+// might name any base, so it fails rather than leave one out.
+func worktreeSimulatorBases(dir string) (map[string]bool, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
-		return bases
+		return nil, errors.WithStack(err)
 	}
-	paths, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	bases := map[string]bool{}
 	for _, path := range paths {
-		if base := readSimulatorState(path).Base; base != "" {
-			bases[base] = true
+		data, err := os.ReadFile(path) //nolint:gosec // The harness's own state folder.
+		if os.IsNotExist(err) {
+			continue // Its worktree was cleaned up meanwhile.
+		}
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		var state worktreeSimulatorState
+		if err := json.Unmarshal(data, &state); err != nil {
+			return nil, errors.Wrapf(err, "read %s", path)
+		}
+		if state.Base != "" {
+			bases[state.Base] = true
 		}
 	}
-	return bases
+	return bases, nil
+}
+
+// writeSimulatorState writes a simulator's state file whole, so a reader
+// never finds it half written.
+func writeSimulatorState(path string, state worktreeSimulatorState) error {
+	data, err := json.Marshal(state)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	pending := path + ".new"
+	if err := os.WriteFile(pending, data, 0o600); err != nil {
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(os.Rename(pending, path))
 }
 
 // lockFile takes path's exclusive lock without waiting. The lock ends with
@@ -263,10 +288,9 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 			return "", err
 		}
 		state = worktreeSimulatorState{UDID: udid, Base: cloned, Root: root}
-		data, _ := json.Marshal(state)
-		if err := os.WriteFile(paths.state, data, 0o600); err != nil {
+		if err := writeSimulatorState(paths.state, state); err != nil {
 			removeSimulator(udid)
-			return "", errors.WithStack(err)
+			return "", err
 		}
 		device = simctlDevice{UDID: udid, State: "Shutdown"}
 	}

@@ -184,8 +184,27 @@ func sweepRunDir(dir string, processes func() ([]process, error), kill func(pid 
 	for _, pid := range orphans {
 		kill(pid)
 	}
-	_ = os.RemoveAll(dir)
-	return true
+	return removeKeepingLock(dir)
+}
+
+// removeKeepingLock removes dir's contents, then its runDirLock and dir
+// itself, and says whether it all went. The lock file goes last: a folder
+// that keeps some of its contents keeps its lock too, so a later sweep finds
+// it and tries again.
+func removeKeepingLock(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if entry.Name() == runDirLock {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return false
+		}
+	}
+	return os.RemoveAll(dir) == nil
 }
 
 // isRunDirName says whether name is a run folder's: a run prefix followed by

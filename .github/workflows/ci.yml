@@ -519,6 +519,7 @@ jobs:
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
           hit: ${{ steps.setup.outputs.simulator-hit }}
+          name: ${{ steps.setup.outputs.simulator-name }}
 
   # One job: splitting the flows (`ios -shard`) saved minutes when GitHub had
   # macOS capacity, but each extra macOS job is another that can wait for a
@@ -565,6 +566,7 @@ jobs:
         with:
           key: ${{ steps.setup.outputs.simulator-key }}
           hit: ${{ steps.setup.outputs.simulator-hit }}
+          name: ${{ steps.setup.outputs.simulator-name }}
       # The server log and Maestro's own log and screenshots, for a failed
       # or timed-out run. Uploading them takes most of a minute, so a passing
       # run skips it.

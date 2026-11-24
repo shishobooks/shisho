@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -52,6 +54,7 @@ func TestUnusedBases(t *testing.T) {
 		{UDID: "newer-unused", Name: baseSimulatorPrefix + "98"},
 		{UDID: "worktree", Name: "Shisho Worktree flows abc"},
 		{UDID: "someone-elses", Name: "Shisho iOS 26.5 base"},
+		{UDID: "hand-made", Name: baseSimulatorPrefix + "QA"},
 	}
 	used := map[string]bool{"old-used": true, "newer-used": true, "worktree": true}
 
@@ -82,6 +85,10 @@ type fakeLaunchd struct {
 	neverReady bool
 	boot       chan struct{}
 	bootErr    error
+	// bootOnRefusal finishes the boot once launchctl first refuses a
+	// command, so the quieting during the boot is sure to have failed.
+	bootOnRefusal bool
+	refused       bool
 }
 
 func newFakeLaunchd() *fakeLaunchd {
@@ -104,9 +111,16 @@ func (f *fakeLaunchd) simctl(ctx context.Context, args ...string) (string, error
 		f.mu.Unlock()
 		return "", f.bootErr
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if !f.ready || f.neverReady {
+		if f.bootOnRefusal && !f.refused {
+			close(f.boot)
+		}
+		f.refused = true
 		return "", errors.New("launchctl: no user domain yet")
 	}
 	launchctl := args[3:]
@@ -147,13 +161,13 @@ func TestBootQuietlyQuietsWhileTheSimulatorBoots(t *testing.T) {
 	go func() {
 		// The boot finishes only once the services are quiet, so they were
 		// quieted during it.
-		for !f.quiet() {
+		for deadline := time.Now().Add(10 * time.Second); !f.quiet() && time.Now().Before(deadline); {
 			time.Sleep(10 * time.Millisecond)
 		}
 		close(f.boot)
 	}()
 
-	require.NoError(t, bootQuietly(context.Background(), f.simctl, "udid", time.Second))
+	require.NoError(t, bootQuietly(context.Background(), f.simctl, "udid", time.Millisecond))
 	assert.True(t, f.quiet())
 }
 
@@ -161,7 +175,7 @@ func TestBootQuietlyQuietsAfterTheBootWhenLaunchdWasntReady(t *testing.T) {
 	t.Parallel()
 	f := newFakeLaunchd()
 	f.readyAtBoot = true
-	close(f.boot)
+	f.bootOnRefusal = true
 
 	require.NoError(t, bootQuietly(context.Background(), f.simctl, "udid", 5*time.Second))
 	assert.True(t, f.quiet())
@@ -198,4 +212,21 @@ func TestBootQuietlyReturnsTheBootsError(t *testing.T) {
 	close(f.boot)
 
 	assert.ErrorIs(t, bootQuietly(context.Background(), f.simctl, "udid", time.Minute), f.bootErr)
+}
+
+func TestWorktreeSimulatorBases(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, writeSimulatorState(filepath.Join(dir, "flows-a.json"), worktreeSimulatorState{UDID: "sim-a", Base: "base-4"}))
+	require.NoError(t, writeSimulatorState(filepath.Join(dir, "tests-b.json"), worktreeSimulatorState{UDID: "sim-b", Base: "base-5"}))
+
+	bases, err := worktreeSimulatorBases(dir)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{"base-4": true, "base-5": true}, bases)
+
+	// A state file that can't be read might name any base, so none is
+	// known to be unused.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "flows-c.json"), []byte(`{"udid":`), 0o600))
+	_, err = worktreeSimulatorBases(dir)
+	assert.Error(t, err)
 }

@@ -105,6 +105,24 @@ func TestSweepRunDirsKeepsAKilledRunsFolderWhenProcessesCantBeListed(t *testing.
 	assert.DirExists(t, dir)
 }
 
+func TestSweepRunDirsKeepsTheLockUntilTheFolderIsGone(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	dir := killedRunDir(t, tmp, flowsRunPrefix)
+	stuck := filepath.Join(dir, "maestro")
+	require.NoError(t, os.MkdirAll(stuck, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stuck, "screenshot.png"), []byte("x"), 0o600))
+	require.NoError(t, os.Chmod(stuck, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(stuck, 0o755) })
+
+	assert.Zero(t, sweepRunDirs(tmp, noProcesses, noKills(t)))
+	assert.FileExists(t, filepath.Join(dir, runDirLock), "a later sweep finds the folder by its lock")
+
+	require.NoError(t, os.Chmod(stuck, 0o755))
+	assert.Equal(t, 1, sweepRunDirs(tmp, noProcesses, noKills(t)))
+	assert.NoDirExists(t, dir)
+}
+
 func TestRunDirCloseRemovesItUnlessKept(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()

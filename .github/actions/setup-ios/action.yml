@@ -13,6 +13,9 @@ outputs:
   simulator-hit:
     description: Whether the base simulator came from the cache.
     value: ${{ steps.simulator.outputs.cache-hit }}
+  simulator-name:
+    description: The base simulator's name, for save-ios-simulator.
+    value: ${{ steps.keys.outputs.base }}
 
 runs:
   using: composite
@@ -35,6 +38,7 @@ runs:
           exit 1
         fi
         echo "simulator=ios-base-simulator-$xcode-$runtimes-${base// /-}" >> "$GITHUB_OUTPUT"
+        echo "base=$base" >> "$GITHUB_OUTPUT"
         echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
         echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
         echo "goversion=$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
@@ -70,13 +74,15 @@ runs:
     - name: Register the base simulator
       if: steps.simulator.outputs.cache-hit == 'true'
       shell: bash
+      env:
+        BASE: ${{ steps.keys.outputs.base }}
       run: |
         devices="$HOME/Library/Developer/CoreSimulator/Devices"
         mkdir -p "$devices"
         mv "$RUNNER_TEMP"/ios-base-simulator/* "$devices"/
         xcrun simctl shutdown all >/dev/null 2>&1 || true
         killall -9 com.apple.CoreSimulator.CoreSimulatorService 2>/dev/null || true
-        if xcrun simctl list devices | grep "Shisho Base "; then
+        if xcrun simctl list devices | grep -F "$BASE ("; then
           echo "Restored the base simulator."
         else
           echo "::warning::CoreSimulator didn't pick up the restored base simulator; the harness makes a new one."

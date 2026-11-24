@@ -246,8 +246,13 @@ func findOrMakeBase(ctx context.Context) (string, error) {
 	for _, devices := range listing.Devices {
 		all = append(all, devices...)
 	}
-	for _, udid := range unusedBases(all, worktreeSimulatorBases()) {
-		_, _ = simctl(ctx, "delete", udid)
+	// Without every worktree's state, no base is known to be unused.
+	if dir, err := simulatorStateDir(); err == nil {
+		if used, err := worktreeSimulatorBases(dir); err == nil {
+			for _, udid := range unusedBases(all, used) {
+				_, _ = simctl(ctx, "delete", udid)
+			}
+		}
 	}
 	for _, d := range all {
 		if d.Name == baseSimulatorName {
@@ -292,16 +297,26 @@ func findOrMakeBase(ctx context.Context) (string, error) {
 
 // unusedBases returns the UDIDs of the bases among devices, other than
 // baseSimulatorName, that no worktree's simulator was cloned from: used
-// holds the bases worktrees' simulators were.
+// holds the bases worktrees' simulators were. A base is named by one of the
+// base prefixes and a number, so a simulator someone named "Shisho Base QA"
+// isn't one.
 func unusedBases(devices []simctlDevice, used map[string]bool) []string {
 	var unused []string
 	for _, d := range devices {
-		isBase := strings.HasPrefix(d.Name, baseSimulatorPrefix) || strings.HasPrefix(d.Name, oldBaseSimulatorPrefix)
-		if isBase && d.Name != baseSimulatorName && !used[d.UDID] {
+		if isBaseName(d.Name) && d.Name != baseSimulatorName && !used[d.UDID] {
 			unused = append(unused, d.UDID)
 		}
 	}
 	return unused
+}
+
+func isBaseName(name string) bool {
+	for _, prefix := range []string{baseSimulatorPrefix, oldBaseSimulatorPrefix + " "} {
+		if number, ok := strings.CutPrefix(name, prefix); ok && number != "" && strings.Trim(number, "0123456789") == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // setUp boots a new simulator until iOS finishes its first-boot setup, shuts
