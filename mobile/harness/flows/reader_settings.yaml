@@ -138,6 +138,12 @@ name: Import a font, resize in place, and read scrolled
     notVisible:
       id: reader.settings.done
     timeout: 30000
+# Switching the layout keeps the place.
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
 - runFlow:
     file: subflows/go_to_chapter.yaml
     env:
