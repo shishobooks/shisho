@@ -44,17 +44,17 @@ extension CatalogStore {
     /// `books b`: the Reading Status as the server derives it, the Rating,
     /// and how far through the Book a Read-through underway is: the furthest
     /// place in its main Files, this device's own when it has one.
-    /// Progress here is the synced place only: the player saves its own
-    /// every few seconds, and reading that table would run every list and
-    /// grid that shows these again each time, all through a listen. The
-    /// device's own listening shows once it syncs, and the Book page reads
-    /// the live place.
+    /// This device's place comes from local_progress, not local_positions:
+    /// the player saves its place every few seconds, and reading that table
+    /// would run every list and grid that shows these again each time, all
+    /// through a listen.
     static let readingColumns = """
         \(statusExpression("b.id")) AS status,
         (SELECT rating FROM user_books WHERE book_id = b.id) AS rating,
         CASE WHEN EXISTS (SELECT 1 FROM read_throughs WHERE book_id = b.id AND outcome = 'underway') THEN (
-            SELECT MAX(rp.percentage) FROM book_files f
-            JOIN reading_positions rp ON rp.file_id = f.id
+            SELECT MAX(COALESCE(lp.percentage, rp.percentage)) FROM book_files f
+            LEFT JOIN local_progress lp ON lp.file_id = f.id
+            LEFT JOIN reading_positions rp ON rp.file_id = f.id
             WHERE f.book_id = b.id AND f.file_role = 'main'
         ) END AS progress
         """

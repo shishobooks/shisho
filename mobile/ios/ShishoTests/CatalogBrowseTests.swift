@@ -1,3 +1,4 @@
+import os
 import GRDB
 import ShishoAPI
 import XCTest
@@ -284,6 +285,35 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(try filtered(LibraryFilter(fileTypes: ["m4b"])), [])
         let sorted = try store.pool.read { try CatalogStore.books($0, libraryID: nil, sort: "title:desc") }.map(\.title)
         XCTAssertEqual(sorted, ["Dune Messiah", "Dune"])
+    }
+
+    /// A cover's progress follows this device's own place, offline too, but
+    /// the player saving its place every few seconds doesn't run every grid
+    /// again: only a change in the whole percent the cover shows does.
+    func testSummariesFollowThisDevicesPlaceByWholePercent() throws {
+        try catalog()
+        try store.apply(page(#"{"entries":[{"kind":"read_through","id":5,"read_through":{"id":5,"book_id":2,"outcome":"underway","paused":false}},{"kind":"reading_position","id":20,"reading_position":{"file_id":20,"percentage":0.4,"occurred_at":"2026-01-01T00:00:00Z","source":"web_reader"}}],"cursor":10}"#))
+        let changes = OSAllocatedUnfairLock(initialState: 0)
+        let observation = DatabaseRegionObservation(tracking: SQLRequest<Row>(sql: "SELECT \(CatalogStore.readingColumns) FROM books b"))
+        let cancellable = try observation.start(in: store.pool, onError: { XCTFail("\($0)") },
+                                                onChange: { _ in changes.withLock { $0 += 1 } })
+        defer { cancellable.cancel() }
+        let progress = { try self.store.books(libraryID: nil).first { $0.id == 2 }?.progress }
+        let move = { (percentage: Double) in
+            try self.store.recordPosition(fileID: 20, seconds: 0, percentage: percentage, at: Date(), atEnd: false, sitting: nil)
+        }
+
+        try move(0.501)
+        XCTAssertEqual(try progress(), 0.5, "this device's place, not the server's")
+        try move(0.502)
+        try move(0.504)
+        XCTAssertEqual(changes.withLock { $0 }, 1, "moves within one percent don't change what covers show")
+        try move(0.51)
+        XCTAssertEqual(try progress(), 0.51)
+        XCTAssertEqual(changes.withLock { $0 }, 2)
+
+        try store.pool.write { try $0.execute(sql: "DELETE FROM local_positions") }
+        XCTAssertEqual(try progress(), 0.4, "the server's place again once this device's goes")
     }
 
     func testTheSortSheetWorksOnLevelsAsTheWebDoes() {

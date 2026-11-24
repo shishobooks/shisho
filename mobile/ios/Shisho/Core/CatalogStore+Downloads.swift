@@ -129,7 +129,7 @@ extension CatalogStore {
     static func storedDownloads(_ db: Database) throws -> [StoredDownload] {
         let rows = try Row.fetchAll(db, sql: """
             SELECT d.file_id, d.file_type, d.state, d.size_bytes, d.error, f.display_name, f.book_id, f.cover_version,
-                COALESCE((SELECT percentage FROM local_positions WHERE file_id = d.file_id),
+                COALESCE((SELECT percentage FROM local_progress WHERE file_id = d.file_id),
                     (SELECT percentage FROM reading_positions WHERE file_id = d.file_id)) AS progress
             FROM downloads d JOIN book_files f ON f.id = d.file_id
             ORDER BY d.requested_at DESC, d.file_id
