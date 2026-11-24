@@ -2,6 +2,7 @@ package shishoapp
 
 import (
 	"database/sql"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -116,6 +117,20 @@ func (h *handler) fileCover(c echo.Context) error {
 		cacheControl = covers.CacheControlImmutable
 	}
 	return covers.ServeFileCover(c, file, cacheControl, "Cover", h.opts.Thumbnails)
+}
+
+// page serves one of a CBZ's or PDF's pages, 0-based, or with a size its
+// thumbnail, from the user's Libraries (CapabilityPageImages).
+func (h *handler) page(c echo.Context) error {
+	file, err := h.requireFile(c, false)
+	if err != nil {
+		return err
+	}
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		return errcodes.ValidationError("Invalid page number")
+	}
+	return h.opts.Pages.Serve(c, file, page)
 }
 
 // download serves an Original File as it sits in the library (ADR 0022),

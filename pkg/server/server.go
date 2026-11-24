@@ -230,6 +230,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		Thumbnails:    svcs.coverCache,
 		Books:         svcs.books,
 		Downloads:     svcs.dlCache,
+		Pages:         books.PageImages{Pages: svcs.cbzCache, PDFPages: svcs.pdfCache, Thumbnails: svcs.coverCache},
 	})
 
 	// Register protected API routes

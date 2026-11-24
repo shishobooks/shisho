@@ -4,19 +4,28 @@ import SwiftUI
 /// `FilePageGrid`: two rows, the second fading out above Show all, and each
 /// tile opening the reader on its page.
 ///
-/// The pages are drawn on the device (ADR 0025), so a tile shows its page
-/// once the File is downloaded, by Download or by reading it; before that
-/// it shows its number. Showing the File page never downloads the File.
+/// A downloaded File's pages are drawn on the device (ADR 0025). One that
+/// isn't downloaded shows the server's thumbnails, as the web's grid does,
+/// while the server can be reached; without it, each tile shows its number.
+/// Showing the File page never downloads the File.
 struct FilePageGrid: View {
     @Environment(AppModel.self) private var model
     let fileID: Int
     let pageCount: Int
-    /// Whether the File is on the device, so the pages show as soon as a
-    /// Download finishes, and go when it's removed.
+    /// Whether the File is on the device, so the pages are drawn from it as
+    /// soon as a Download finishes.
     let downloaded: Bool
     @State private var expanded = false
-    @State private var cache: PageImageCache?
+    @State private var pages: TilePages?
     @State private var width: CGFloat = 0
+
+    /// Where the tiles come from now: changes as the File downloads or the
+    /// server comes and goes.
+    private var source: TileSource {
+        if downloaded { return .downloaded }
+        guard model.connection == .online, model.session?.sendsPageImages == true else { return .none }
+        return .server
+    }
 
     private static let tileMinimum: CGFloat = 96
     private static let gap: CGFloat = 12
@@ -33,7 +42,7 @@ struct FilePageGrid: View {
         VStack(alignment: .leading, spacing: 4) {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: Self.gap), count: columns), spacing: Self.gap) {
                 ForEach(0..<shown, id: \.self) { page in
-                    PageTile(page: page, cache: cache) { model.read(fileID: fileID, page: page) }
+                    PageTile(page: page, pages: pages) { model.read(fileID: fileID, page: page) }
                 }
             }
             // Opening a page downloads the File, which needs the server.
@@ -63,37 +72,85 @@ struct FilePageGrid: View {
                 .accessibilityIdentifier("file.pages.toggle")
             }
         }
-        .task(id: downloaded) {
-            guard downloaded else {
-                cache = nil
-                return
-            }
-            guard cache == nil else { return }
-            await openPages()
+        .task(id: source) {
+            // Server thumbnails already shown stay when the connection goes,
+            // rather than turning back into numbers.
+            if source == .none, pages?.fromServer == true { return }
+            pages = await openPages(source)
         }
     }
 
-    /// The File's pages, when it's on the device.
-    private func openPages() async {
-        guard let session = model.session,
-              let file = try? await session.store.pool.read({ try CatalogStore.readingFile($0, fileID: fileID) }),
-              let url = session.downloads.localFile(fileID: file.fileID)
-        else { return }
-        let pages = await Task.detached(priority: .utility) { () -> PageImageSource? in
-            if file.fileType == "pdf" { return try? PDFPages(url: url) }
-            return try? CBZPages(url: url, pageNames: file.pages)
-        }.value
-        guard let pages, !Task.isCancelled else { return }
-        // Small: thumbnails, kept while the page is open.
-        cache = PageImageCache(source: pages, limit: 24 * 1024 * 1024)
+    private func openPages(_ source: TileSource) async -> TilePages? {
+        guard let session = model.session else { return nil }
+        switch source {
+        case .none:
+            return nil
+        case .server:
+            return TilePages(server: session.client, fileID: fileID)
+        case .downloaded:
+            guard let file = try? await session.store.pool.read({ try CatalogStore.readingFile($0, fileID: fileID) }),
+                  let url = session.downloads.localFile(fileID: file.fileID)
+            else { return nil }
+            let opened = await Task.detached(priority: .utility) { () -> PageImageSource? in
+                if file.fileType == "pdf" { return try? PDFPages(url: url) }
+                return try? CBZPages(url: url, pageNames: file.pages)
+            }.value
+            guard let opened, !Task.isCancelled else { return nil }
+            // Small: thumbnails, kept while the page is open.
+            return TilePages(cache: PageImageCache(source: opened, limit: 24 * 1024 * 1024))
+        }
     }
 }
 
-/// One page's tile: its thumbnail, or a blank page until the File is on
-/// the device, with its number under it.
+private enum TileSource: Hashable {
+    case none, server, downloaded
+}
+
+/// The tiles' pictures: drawn from the downloaded File, or the server's
+/// thumbnails, kept while the File's page is open so a tile scrolled back
+/// to doesn't fetch again.
+@MainActor
+private final class TilePages {
+    private let cache: PageImageCache?
+    private let server: APIClient?
+    private let fileID: Int
+    private var fetched: [Int: UIImage] = [:]
+
+    var fromServer: Bool { server != nil }
+
+    /// The server's thumbnail tier for a tile: its longer side is about
+    /// 170 points, at three pixels a point.
+    private static let thumbnailSize = 512
+
+    init(cache: PageImageCache) {
+        self.cache = cache
+        server = nil
+        fileID = 0
+    }
+
+    init(server: APIClient, fileID: Int) {
+        cache = nil
+        self.server = server
+        self.fileID = fileID
+    }
+
+    func image(page: Int) async -> UIImage? {
+        if let cache { return await cache.image(page: page, maxPixel: 300, need: .later) }
+        if let image = fetched[page] { return image }
+        guard let server,
+              let data = try? await server.pageThumbnail(fileID: fileID, page: page, size: Self.thumbnailSize),
+              let image = UIImage(data: data)
+        else { return nil }
+        fetched[page] = image
+        return image
+    }
+}
+
+/// One page's tile: its thumbnail, or a blank page without one, with its
+/// number under it.
 private struct PageTile: View {
     let page: Int
-    let cache: PageImageCache?
+    let pages: TilePages?
     let open: () -> Void
     @State private var image: UIImage?
     @ScaledMetric(relativeTo: .caption) private var numberHeight: CGFloat = 16
@@ -124,10 +181,16 @@ private struct PageTile: View {
         .buttonStyle(PressableStyle())
         .accessibilityLabel(Text("Page \(page + 1)"))
         .accessibilityIdentifier("file.page.\(page)")
-        .task(id: cache.map(ObjectIdentifier.init)) {
-            // Cancelled when the tile scrolls away, which stops its decode.
-            guard let cache else { return }
-            image = await cache.image(page: page, maxPixel: 300, need: .later)
+        .task(id: pages.map(ObjectIdentifier.init)) {
+            // Cancelled when the tile scrolls away, which stops its decode
+            // or fetch.
+            guard let pages else {
+                image = nil
+                return
+            }
+            let shown = await pages.image(page: page)
+            guard !Task.isCancelled else { return }
+            image = shown
         }
     }
 }

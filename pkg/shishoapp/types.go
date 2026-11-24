@@ -38,7 +38,7 @@ type ServerInfo struct {
 // X-Shisho-Capabilities header). An app turns a feature on for a server only
 // when it lists the feature's capability.
 const (
-	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow;
+	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow | typeof CapabilityPageImages;
 	// CapabilityBookmarks is the Bookmark events in the journal and
 	// Bookmarks in the feed.
 	CapabilityBookmarks = "bookmarks"
@@ -48,6 +48,9 @@ const (
 	// CapabilityPageFlow is the Page flow event in the journal, which saves
 	// the flow the app chose for a Book.
 	CapabilityPageFlow = "page_flow"
+	// CapabilityPageImages is the route that sends a CBZ's or PDF's pages
+	// as thumbnails, for the app's page grid before the File is downloaded.
+	CapabilityPageImages = "page_images"
 )
 
 // SignInPayload signs an installation in with the user's username and

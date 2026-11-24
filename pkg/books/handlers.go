@@ -1988,6 +1988,30 @@ func (h *handler) getPage(c echo.Context) error {
 		return err
 	}
 
+	return h.pageImages().Serve(c, file, pageNum)
+}
+
+func (h *handler) pageImages() PageImages {
+	return PageImages{Pages: h.pageCache, PDFPages: h.pdfPageCache, Thumbnails: h.coverCache}
+}
+
+// PageImages serves a CBZ's or PDF's pages as images, for the web reader,
+// and as thumbnails, for page grids on the web and in the Shisho app.
+type PageImages struct {
+	Pages    *cbzpages.Cache
+	PDFPages *pdfpages.Cache
+	// Thumbnails is the shared cover thumbnail cache, which a CBZ page's
+	// thumbnail is resized into. Without it (some tests) the whole page is
+	// served.
+	Thumbnails *covers.ThumbnailCache
+}
+
+// Serve serves file's page pageNum, 0-based, to someone already allowed
+// it. A size query asks for a thumbnail, in the tiers cover URLs use.
+func (p PageImages) Serve(c echo.Context, file *models.File, pageNum int) error {
+	ctx := c.Request().Context()
+	var err error
+
 	// Only CBZ and PDF files have pages
 	if file.FileType != models.FileTypeCBZ && file.FileType != models.FileTypePDF {
 		return errcodes.InvalidState("Only CBZ and PDF files have pages")
@@ -2024,12 +2048,12 @@ func (h *handler) getPage(c echo.Context) error {
 	var cachedPath, mimeType string
 	switch {
 	case file.FileType == models.FileTypeCBZ:
-		cachedPath, mimeType, err = h.pageCache.GetPage(file.Filepath, file.ID, pageNum)
+		cachedPath, mimeType, err = p.Pages.GetPage(file.Filepath, file.ID, pageNum)
 	case thumbSize > 0:
-		cachedPath, err = h.pdfPageCache.GetThumbnailPage(file.Filepath, file.ID, pageNum, thumbSize)
+		cachedPath, err = p.PDFPages.GetThumbnailPage(file.Filepath, file.ID, pageNum, thumbSize)
 		mimeType = "image/jpeg"
 	default:
-		cachedPath, mimeType, err = h.pdfPageCache.GetPage(file.Filepath, file.ID, pageNum)
+		cachedPath, mimeType, err = p.PDFPages.GetPage(file.Filepath, file.ID, pageNum)
 	}
 	// The stored page count can be missing, so the cache may be the first
 	// to find that the page does not exist.
@@ -2050,7 +2074,7 @@ func (h *handler) getPage(c echo.Context) error {
 	// cached.
 	currentKey := cbzpages.CBZPageKey
 	if file.FileType == models.FileTypePDF {
-		currentKey = h.pdfPageCache.RenderKey()
+		currentKey = p.PDFPages.RenderKey()
 	}
 	if thumbSize > 0 {
 		currentKey = covers.PageThumbnailKey(currentKey)
@@ -2063,13 +2087,13 @@ func (h *handler) getPage(c echo.Context) error {
 	// A CBZ page's thumbnail comes from the shared thumbnail cache, resized
 	// from the extracted page. Without that cache (some tests) the whole page
 	// is served.
-	if thumbSize > 0 && file.FileType == models.FileTypeCBZ && h.coverCache != nil {
+	if thumbSize > 0 && file.FileType == models.FileTypeCBZ && p.Thumbnails != nil {
 		source := covers.PageSource{Path: file.Filepath, Key: cbzpages.CBZPageKey}
-		thumb, err := h.coverCache.GetForPage(ctx, file.ID, pageNum, source, cachedPath, thumbSize)
+		thumb, err := p.Thumbnails.GetForPage(ctx, file.ID, pageNum, source, cachedPath, thumbSize)
 		if errors.Is(err, os.ErrNotExist) {
 			// The page cache evicted its copy since GetPage; extract it again.
-			if cachedPath, mimeType, err = h.pageCache.GetPage(file.Filepath, file.ID, pageNum); err == nil {
-				thumb, err = h.coverCache.GetForPage(ctx, file.ID, pageNum, source, cachedPath, thumbSize)
+			if cachedPath, mimeType, err = p.Pages.GetPage(file.Filepath, file.ID, pageNum); err == nil {
+				thumb, err = p.Thumbnails.GetForPage(ctx, file.ID, pageNum, source, cachedPath, thumbSize)
 			}
 		}
 		switch {

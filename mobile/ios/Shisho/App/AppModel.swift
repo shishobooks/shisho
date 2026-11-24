@@ -46,6 +46,11 @@ final class AccountSession {
     var sharesFiles: Bool {
         capabilities.withLock { $0.contains(Shishoapp.Capability.shareFiles.rawValue) }
     }
+
+    /// The server sends a comic's or PDF's pages as thumbnails.
+    var sendsPageImages: Bool {
+        capabilities.withLock { $0.contains(Shishoapp.Capability.pageImages.rawValue) }
+    }
 }
 
 /// What the last sync found, shown above the Library until the next one

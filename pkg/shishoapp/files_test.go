@@ -1,6 +1,10 @@
 package shishoapp
 
 import (
+	"bytes"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/pkg/errors"
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/filegen"
 	"github.com/shishobooks/shisho/pkg/filegen/filegentest"
@@ -229,4 +234,39 @@ func TestShare_FallsBackToTheOriginal(t *testing.T) {
 	rec = f.rangeCall(http.MethodGet, "/mobile/files/7/share", credential, "bytes=3-")
 	require.Equal(t, http.StatusPartialContent, rec.Code, rec.Body.String())
 	assert.Equal(t, "magic", rec.Body.String())
+}
+
+// A comic's or PDF's pages come as thumbnails, sized as covers are, for the
+// app's page grid before the File is downloaded (CapabilityPageImages), and
+// only from the user's Libraries.
+func TestFiles_PageThumbnailsForTheGrid(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	dir := t.TempDir()
+	comic := testgen.GenerateCBZ(t, dir, "comic.cbz", testgen.CBZOptions{PageCount: 3})
+	manual := testgen.GeneratePDF(t, dir, "manual.pdf", testgen.PDFOptions{PageCount: 2})
+	f.addLibrary(1, "Mine")
+	f.addLibrary(2, "Theirs")
+	f.addBook(1, 1, "Comic")
+	f.addBook(2, 2, "Theirs")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, page_count) VALUES
+		(5, 1, 1, ?, 'cbz', 1, 3), (6, 1, 1, ?, 'pdf', 1, 2), (7, 2, 2, ?, 'cbz', 1, 3), (8, 1, 1, ?, 'epub', 1, NULL)`,
+		comic, manual, comic, filepath.Join(dir, "novel.epub"))
+	f.addUser(1)
+	credential := f.signIn()
+
+	for _, path := range []string{"/mobile/files/5/pages/1?size=256", "/mobile/files/6/pages/1?size=256"} {
+		rec := f.do(call{path: path, credential: credential})
+		require.Equal(t, http.StatusOK, rec.Code, path+": "+rec.Body.String())
+		img, _, err := image.DecodeConfig(bytes.NewReader(rec.Body.Bytes()))
+		require.NoError(t, err, path)
+		assert.LessOrEqual(t, max(img.Width, img.Height), 256, path)
+	}
+	assert.Contains(t, f.do(call{path: "/mobile/server", credential: credential}).Header().Get(HeaderCapabilities), CapabilityPageImages)
+	// A page past the end, another user's Library, a File without pages,
+	// and no credential.
+	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/5/pages/3?size=256", credential: credential}).Code)
+	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/7/pages/0?size=256", credential: credential}).Code)
+	assert.NotEqual(t, http.StatusOK, f.do(call{path: "/mobile/files/8/pages/0?size=256", credential: credential}).Code)
+	assert.Equal(t, http.StatusUnauthorized, f.do(call{path: "/mobile/files/5/pages/0?size=256"}).Code)
 }
