@@ -26,7 +26,6 @@ var flowSeconds = map[string]float64{
 	"search_offline.yaml":             62,
 	"sign_in_and_browse_offline.yaml": 144,
 	"sleep_timer_end_of_chapter.yaml": 178,
-	"speed_per_file.yaml":             265,
 	"switch_accounts.yaml":            75,
 }
 

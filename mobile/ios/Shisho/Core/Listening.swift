@@ -317,6 +317,12 @@ enum PlaybackSpeed {
     static func label(_ rate: Double) -> String {
         String(format: "%.1fx", rate)
     }
+
+    /// How long playing from seconds to end takes at rate, never below
+    /// nothing, as the player's time left shows it.
+    static func timeLeft(from seconds: Double, to end: Double, at rate: Double) -> Double {
+        max(0, end - seconds) / rate
+    }
 }
 
 enum TimeLabels {

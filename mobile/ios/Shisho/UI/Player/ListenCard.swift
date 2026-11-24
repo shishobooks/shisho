@@ -65,7 +65,7 @@ struct ListenCard: View {
             let size = progress.sizeBytes > 0 ? [FileFacts.size(progress.sizeBytes)] : []
             return (length + size).joined(separator: " · ")
         }
-        return String(localized: "\(TimeLabels.clock(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))")
+        return String(localized: "\(TimeLabels.clock(PlaybackSpeed.timeLeft(from: seconds, to: progress.duration, at: rate))) left at \(PlaybackSpeed.label(rate))")
     }
 
     private var icon: some View {

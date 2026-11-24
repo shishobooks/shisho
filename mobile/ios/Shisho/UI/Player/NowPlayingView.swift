@@ -291,7 +291,7 @@ struct NowPlayingView: View {
         let length = max(1, bounds.end - bounds.start)
         let shown = scrubbing ?? player.position
         let elapsed = min(length, max(0, shown - bounds.start))
-        let left = max(0, bounds.end - shown) / player.rate
+        let left = PlaybackSpeed.timeLeft(from: shown, to: bounds.end, at: player.rate)
         return VStack(spacing: 6) {
             Scrubber(value: elapsed, length: length) { dragged in
                 if let dragged {

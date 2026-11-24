@@ -165,4 +165,12 @@ final class AudioChaptersTests: XCTestCase {
         XCTAssertEqual(TimeLabels.clock(65), "1:05")
         XCTAssertEqual(TimeLabels.clock(21.9), "0:21")
     }
+
+    /// The time left is at the speed playing, and never below nothing.
+    func testTimeLeftIsAtTheSpeed() {
+        XCTAssertEqual(PlaybackSpeed.timeLeft(from: 30, to: 100, at: 1.4), 50, accuracy: 0.001)
+        XCTAssertEqual(PlaybackSpeed.timeLeft(from: 30, to: 100, at: 1), 70)
+        XCTAssertEqual(PlaybackSpeed.timeLeft(from: 30, to: 100, at: 0.5), 140)
+        XCTAssertEqual(PlaybackSpeed.timeLeft(from: 120, to: 100, at: 1.4), 0, "past the end")
+    }
 }
