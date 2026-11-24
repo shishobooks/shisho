@@ -40,4 +40,17 @@ final class TabNavigationTests: XCTestCase {
         XCTAssertEqual(navigation.path(.downloads), [.search])
         XCTAssertEqual(navigation.searchActive, [])
     }
+
+    /// The stack's own Back sets a shorter path, which closes the search as
+    /// popLast does, so the next screen with one doesn't open it active.
+    func testGoingBackThroughTheStackClosesTheSearch() {
+        var navigation = TabNavigation()
+        navigation.push(.search, on: .library)
+        navigation.searchActive = [.library]
+
+        navigation.setPath([], on: .library)
+
+        XCTAssertEqual(navigation.path(.library), [])
+        XCTAssertEqual(navigation.searchActive, [])
+    }
 }

@@ -1197,8 +1197,12 @@ struct TabNavigation: Equatable {
         paths[tab] ?? []
     }
 
-    /// Sets tab's pages, as its NavigationStack does when going back.
+    /// Sets tab's pages, as its NavigationStack does when going back, which
+    /// closes the search as popLast does.
     mutating func setPath(_ path: [Route], on tab: AppTab) {
+        if path.count < self.path(tab).count {
+            searchActive.remove(tab)
+        }
         paths[tab] = path
     }
 
