@@ -11,6 +11,9 @@ inputs:
   hit:
     description: setup-ios's simulator-hit output.
     required: true
+  name:
+    description: setup-ios's simulator-name output.
+    required: true
 
 runs:
   using: composite
@@ -19,8 +22,10 @@ runs:
       id: copy
       if: inputs.hit != 'true'
       shell: bash
+      env:
+        BASE: ${{ inputs.name }}
       run: |
-        udid=$(xcrun simctl list devices -j | jq -r '.devices[][] | select(.name | startswith("Shisho Harness Base")) | .udid' | head -n 1)
+        udid=$(xcrun simctl list devices -j | jq -r --arg name "$BASE" '.devices[][] | select(.name == $name) | .udid' | head -n 1)
         if [ -z "$udid" ]; then
           echo "No base simulator to save."
           exit 0

@@ -16,7 +16,8 @@ import (
 )
 
 // worktreeSimulatorPrefix names every worktree's simulator. It mustn't start
-// with oldBaseSimulatorPrefix, which baseSimulator deletes.
+// with baseSimulatorPrefix or oldBaseSimulatorPrefix, whose simulators
+// baseSimulator deletes.
 const worktreeSimulatorPrefix = "Shisho Worktree"
 
 // worktreePurposes are the simulators each worktree has: one for the unit
@@ -86,19 +87,7 @@ func simulatorForRun(ctx context.Context, root, purpose, bundleID string) (*runS
 	if err != nil {
 		return nil, err
 	}
-	quietSimulator(ctx, clone.UDID)
 	return &runSimulator{UDID: clone.UDID, release: clone.Remove}, nil
-}
-
-// quietSimulator stops apsd, Apple's push notification service, which
-// nothing the app or its tests do needs. On CI runners it reconnects to
-// Apple's servers several times a second, about 60% of the simulator's log
-// and, through the logging daemons that carry that log to Maestro, about 14%
-// of the runner's CPU. The service may already be stopped in a simulator the
-// worktree kept, so errors are ignored.
-func quietSimulator(ctx context.Context, udid string) {
-	_, _ = simctl(ctx, "spawn", udid, "launchctl", "disable", "system/com.apple.apsd")
-	_, _ = simctl(ctx, "spawn", udid, "launchctl", "bootout", "system/com.apple.apsd")
 }
 
 // worktreeSimulatorState is what the harness keeps of a worktree's
@@ -143,6 +132,48 @@ func readSimulatorState(path string) worktreeSimulatorState {
 		_ = json.Unmarshal(data, &state)
 	}
 	return state
+}
+
+// worktreeSimulatorBases returns the bases the worktrees' simulators in dir
+// were cloned from, as their state files say. A state file it can't read
+// might name any base, so it fails rather than leave one out.
+func worktreeSimulatorBases(dir string) (map[string]bool, error) {
+	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	bases := map[string]bool{}
+	for _, path := range paths {
+		data, err := os.ReadFile(path) //nolint:gosec // The harness's own state folder.
+		if os.IsNotExist(err) {
+			continue // Its worktree was cleaned up meanwhile.
+		}
+		if err != nil {
+			return nil, errors.WithStack(err)
+		}
+		var state worktreeSimulatorState
+		if err := json.Unmarshal(data, &state); err != nil {
+			return nil, errors.Wrapf(err, "read %s", path)
+		}
+		if state.Base != "" {
+			bases[state.Base] = true
+		}
+	}
+	return bases, nil
+}
+
+// writeSimulatorState writes a simulator's state file whole, so a reader
+// never finds it half written.
+func writeSimulatorState(path string, state worktreeSimulatorState) error {
+	data, err := json.Marshal(state)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	pending := path + ".new"
+	if err := os.WriteFile(pending, data, 0o600); err != nil {
+		return errors.WithStack(err)
+	}
+	return errors.WithStack(os.Rename(pending, path))
 }
 
 // lockFile takes path's exclusive lock without waiting. The lock ends with
@@ -257,10 +288,9 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 			return "", err
 		}
 		state = worktreeSimulatorState{UDID: udid, Base: cloned, Root: root}
-		data, _ := json.Marshal(state)
-		if err := os.WriteFile(paths.state, data, 0o600); err != nil {
+		if err := writeSimulatorState(paths.state, state); err != nil {
 			removeSimulator(udid)
-			return "", errors.WithStack(err)
+			return "", err
 		}
 		device = simctlDevice{UDID: udid, State: "Shutdown"}
 	}
@@ -273,10 +303,9 @@ func readyWorktreeSimulator(ctx context.Context, paths worktreeSimulatorFiles, r
 			return "", err
 		}
 	}
-	if _, err := simctl(ctx, "bootstatus", state.UDID, "-b"); err != nil {
+	if err := waitForQuietBoot(ctx, state.UDID); err != nil {
 		return "", err
 	}
-	quietSimulator(ctx, state.UDID)
 	return state.UDID, resetSimulator(ctx, state.UDID, bundleID)
 }
 
@@ -317,8 +346,9 @@ func discardWorktreeSimulator(root, purpose string) error {
 }
 
 // runCleanup deletes the simulators of the worktree at root, and of
-// worktrees that are gone, for when a worktree is put away
-// (`mise cleanup`). It leaves the fixture cache, which worktrees share.
+// worktrees that are gone, and the temp folders of runs that were killed
+// (rundir.go), for when a worktree is put away (`mise cleanup`). It leaves
+// the fixture cache, which worktrees share.
 func runCleanup(ctx context.Context, root string) error {
 	for _, purpose := range worktreePurposes {
 		err := discardWorktreeSimulator(root, purpose)
@@ -335,6 +365,7 @@ func runCleanup(ctx context.Context, root string) error {
 		return err
 	}
 	pruneWorktreeSimulators(ctx, dir, "")
+	sweepLeftoverRunDirs()
 	return nil
 }
 
