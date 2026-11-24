@@ -62,7 +62,12 @@ final class ReaderModelTests: XCTestCase {
 
     /// A setting changed in one book is kept, and the next book opens in it.
     func testAChangedSettingIsKeptForTheNextBook() {
+        // Kept settings other than the ones the test sets, so it can't pass
+        // on what an earlier run left.
+        ReaderSettings().save()
         let first = model()
+        XCTAssertNotEqual(first.settings.size, 21)
+        XCTAssertNotEqual(first.settings.layout, .scrolled)
         first.settings.size = 21
         first.settings.layout = .scrolled
         let next = model()

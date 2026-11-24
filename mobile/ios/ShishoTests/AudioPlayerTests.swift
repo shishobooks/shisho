@@ -31,6 +31,8 @@ final class AudioPlayerTests: XCTestCase {
     override func tearDown() async throws {
         player.stop()
         try? FileManager.default.removeItem(at: session.account.folder)
+        // The File last open and the speeds, kept in the app's defaults.
+        AccountData(accountID: session.account.id).removeCredentialAndSettings()
     }
 
     private func page(_ json: String) throws -> Shishoapp.FeedResponse {
