@@ -49,7 +49,26 @@ struct AppTabBar: View {
     /// Its height above the bottom safe area, which screens leave clear.
     static let height: CGFloat = 53
 
+    /// The strip above the tabs that says the server can't be reached.
+    static let connectionHeight: CGFloat = 30
+
+    /// The room screens leave for the bar, with the strip when it shows.
+    static func room(_ connection: Connection) -> CGFloat {
+        height + (connection == .online ? 0 : connectionHeight)
+    }
+
     var body: some View {
+        VStack(spacing: 0) {
+            if model.connection != .online {
+                ConnectionStrip(connection: model.connection)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            tabs
+        }
+        .animation(.easeOut(duration: 0.25), value: model.connection)
+    }
+
+    private var tabs: some View {
         HStack(spacing: 0) {
             item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
             item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
@@ -102,6 +121,32 @@ struct AppTabBar: View {
         .accessibilityLabel(title)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// Says, across the app, that the account's server can't be reached, and
+/// why, while what's on the device keeps working.
+private struct ConnectionStrip: View {
+    let connection: Connection
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Icon(.wifiOff, size: 13, relativeTo: nil)
+            Text(connection == .offline ? String(localized: "Offline") : String(localized: "Can't reach your server"))
+                .font(.geist(size: 12, relativeTo: .caption, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Theme.mutedForeground)
+        .frame(maxWidth: .infinity, minHeight: AppTabBar.connectionHeight)
+        .background(Theme.muted)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.border).frame(height: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(connection == .offline
+            ? String(localized: "Offline. What's downloaded still works.")
+            : String(localized: "Your server can't be reached. What's downloaded still works."))
+        .accessibilityIdentifier("connection.bar")
     }
 }
 
@@ -186,7 +231,7 @@ private struct MiniPlayerOverlay: ViewModifier {
                 .overlay(alignment: .bottom) {
                     MiniPlayer()
                         .frame(maxWidth: 680)
-                        .padding(.bottom, AppTabBar.height)
+                        .padding(.bottom, AppTabBar.room(model.connection))
                         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
                 }
         }

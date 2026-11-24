@@ -108,6 +108,7 @@ struct FileView: View {
             fileActions(file)
             if let progress = listen ?? nil {
                 ListenCard(progress: progress, bookID: book.summary.id)
+                    .modifier(NeedsConnection(available: model.canOpen(fileID: progress.fileID)))
                     .padding(.top, 22)
             }
             let edition = editionRows(file)
@@ -233,6 +234,9 @@ struct FileView: View {
                 .accessibilityIdentifier("file.download")
                 if supported, model.session?.sharesFiles == true {
                     ShareFileButton(fileID: file.id, label: file.label)
+                        // The server makes the copy it shares.
+                        .disabled(model.connection != .online)
+                        .modifier(NeedsConnection(available: model.connection == .online))
                 }
             }
             DownloadStatusLine(fileID: file.id, row: download ?? nil)

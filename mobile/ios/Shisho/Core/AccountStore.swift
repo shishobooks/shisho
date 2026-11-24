@@ -54,9 +54,17 @@ struct AccountData {
         folder.appendingPathComponent("catalog.sqlite").path
     }
 
+    /// Where ebooks opened without downloading were kept, before opening one
+    /// made it a Download: deleted when the account opens or is removed.
+    var legacyEbookFolder: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Ebooks", isDirectory: true)
+            .appendingPathComponent(accountID, isDirectory: true)
+    }
+
     /// Every folder kept for the account: its database and its caches.
     var folders: [URL] {
-        [folder, CoverCache.folder(accountID: accountID), EbookCache.folder(accountID: accountID)]
+        [folder, CoverCache.folder(accountID: accountID), legacyEbookFolder]
     }
 
     // The account's settings on this device, by key.

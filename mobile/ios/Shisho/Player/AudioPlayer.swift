@@ -113,6 +113,11 @@ final class AudioPlayer {
     @ObservationIgnored private let shake = ShakeDetector()
     /// The item playing is the File's Download, not a stream.
     @ObservationIgnored private var playingDownload = false
+    /// Playback stopped, or couldn't start, for want of a connection: the
+    /// message goes when the connection comes back.
+    @ObservationIgnored private var waitingForConnection = false
+    /// The server was checked during the current wait for the stream.
+    @ObservationIgnored private var checkedWhileWaiting = false
 
     init(session: AccountSession, requestSync: @escaping @MainActor () -> Void) {
         self.session = session
@@ -179,6 +184,7 @@ final class AudioPlayer {
 
         file = loaded
         error = nil
+        waitingForConnection = false
         offer = choice.offer
         dismissedOffer = nil
         knownServerAt = places?.server?.occurredAt
@@ -269,6 +275,30 @@ final class AudioPlayer {
 
     /// Shows that the stream failed. Playing again builds a new one from
     /// where it was.
+    /// The connection changed: back, the message that it's needed goes; gone
+    /// while a stream waits for more, playback stops and says why.
+    func connectionChanged(_ connection: Connection) {
+        if connection == .online {
+            if waitingForConnection {
+                waitingForConnection = false
+                error = nil
+            }
+        } else if isPlaying, isBuffering, player != nil, !playingDownload {
+            player?.pause()
+            showNeedsConnection(connection)
+        }
+    }
+
+    private func showNeedsConnection(_ connection: Connection) {
+        isPlaying = false
+        isBuffering = false
+        waitingForConnection = true
+        error = ConnectionRules.audiobook(connection)
+        log("file \(file?.fileID ?? 0): no connection, \(connection == .offline ? "offline" : "the server can't be reached")")
+        stopSitting(at: Date())
+        updateNowPlaying()
+    }
+
     private func couldNotPlay(_ failure: String) {
         isPlaying = false
         isBuffering = false
@@ -290,6 +320,7 @@ final class AudioPlayer {
         if error != nil {
             // A failed stream is tried again from where it was.
             error = nil
+            waitingForConnection = false
             pendingSeek = position
             teardownItem()
         }
@@ -298,6 +329,13 @@ final class AudioPlayer {
         if player != nil, !isPlaying, !playingDownload, session.downloads.localFile(fileID: file.fileID) != nil {
             pendingSeek = currentPosition()
             teardownItem()
+        }
+        // Not on the device and no connection: say so at once rather than
+        // wait for a stream that can't come. One already loaded plays what
+        // it has.
+        if player == nil, session.downloads.localFile(fileID: file.fileID) == nil, !session.client.reachability.allowsRequests {
+            showNeedsConnection(session.client.reachability.connection)
+            return
         }
         if player == nil {
             prepareItem()
@@ -679,12 +717,21 @@ final class AudioPlayer {
         if waiting {
             let since = waitingSince ?? now
             waitingSince = since
+            // A stream that keeps waiting may have lost the server, which
+            // the system player doesn't say: a quick check finds out, and
+            // if it's gone, playback stops and says so.
+            if !checkedWhileWaiting, !playingDownload, now.timeIntervalSince(since) >= 5 {
+                checkedWhileWaiting = true
+                let client = session.client
+                Task { await client.checkServer() }
+            }
             if !waitingLogged, now.timeIntervalSince(since) >= 3 {
                 waitingLogged = true
                 log("file \(file.fileID): waiting to play for 3 s, \(AudioPlayer.describeWaiting(player, at: currentPosition()))")
             }
         } else if let since = waitingSince {
             waitingSince = nil
+            checkedWhileWaiting = false
             if waitingLogged {
                 waitingLogged = false
                 let how = isPlaying ? "playing" : "paused"

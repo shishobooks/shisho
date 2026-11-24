@@ -152,6 +152,6 @@ private struct MiniPlayerClearance: ViewModifier {
         // The bar's height at the largest size it grows to, and its margin,
         // over the tab bar.
         let room: CGFloat = dynamicTypeSize >= .xxLarge ? 96 : 80
-        content.contentMargins(.bottom, (showing ? room : 0) + AppTabBar.height, for: .scrollContent)
+        content.contentMargins(.bottom, (showing ? room : 0) + AppTabBar.room(model.connection), for: .scrollContent)
     }
 }

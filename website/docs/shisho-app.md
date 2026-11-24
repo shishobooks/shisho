@@ -46,7 +46,11 @@ Search, from the magnifying glass at the top of the **Library** and **Lists** ta
 
 Edits on the web reach the app the next time it syncs. When an admin changes which libraries a user can access, or a list is shared or unshared, the app follows on its next sync: a library you lose leaves the device, and one you gain downloads in the background. A user whose role can no longer read books keeps nothing from the server on the device.
 
-Covers download as you browse. To have every cover on the device before going offline, turn on **Account > Download all covers on Wi-Fi**.
+Covers download as you browse. To have every cover on the device before going offline, including the covers of files that have their own, such as an audiobook's, turn on **Downloads > Download all covers on Wi-Fi**. It applies to every account on the phone.
+
+### When the Server Can't Be Reached
+
+The app knows when the phone has no network, and when it has one but your server doesn't answer, as with a home server when you're away from home. A bar above the tabs says **Offline** or **Can't reach your server**, and everything on the phone keeps working: browsing, searching, and your downloads. Listening to or reading something that isn't downloaded shows that it needs a connection, and its button looks dimmed, rather than waiting for a server that won't answer. When the server can be reached again, the bar goes, and a book you tried to open opens.
 
 ## Accounts
 
@@ -74,7 +78,7 @@ If the server turns down a change the app made offline, for example listening to
 
 ## Reading
 
-Books with an EPUB, KePub, MOBI, or AZW3 file have a **Read** button, which shows the file's size before you start, and the chapter you're in and the pages left in the book once you've read on the phone. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. A book you open is fetched from your server the first time and kept on the phone for a while, so it opens again without a connection. iOS may clear it to free space, and the next open fetches it again. To keep a book on the phone until you remove it, [download](#downloads) it.
+Books with an EPUB, KePub, MOBI, or AZW3 file have a **Read** button, which shows the file's size before you start, and the chapter you're in and the pages left in the book once you've read on the phone. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. The reader needs the whole book before it can show a page, so opening a book that isn't on the phone [downloads](#downloads) it. It stays on the phone, and opens without a connection, until you remove it.
 
 A tap on the left or right third of the page turns it, and a tap in the middle shows or hides the controls. A tap on a link follows it, and in the middle of the page so does a tap near one; a tap near a footnote reference opens it anywhere on the page. A tap on a picture in the middle of the page opens it on its own: pinch or double-tap to zoom, and drag down to close it. A footnote opens in a card beside its reference, with **Go to Note** to read it in place. Press and hold to select text and use **Copy**, **Look Up**, and the rest of the system's menu; while text is selected, dragging moves the selection instead of turning the page.
 
@@ -103,7 +107,7 @@ Downloads go on in the background when you switch to another app or lock the pho
 
 The app downloads each file as it is in your library. Titles, authors, covers, and chapters always come from the app's copy of your library, so an edit on the web shows in the app at its next sync without downloading anything again.
 
-The **Downloads** tab lists what's downloaded and what's on its way, with the space they take and what's left on the phone. Tap a download's remove button, or **Remove All Downloads**, to free the space; tapping a download opens its book. **Clear**, beside **Ebooks opened without downloading**, frees the space the books you opened without downloading take, which the phone keeps for a while.
+The **Downloads** tab lists what's downloaded and what's on its way, with the space they take and what's left on the phone. Tap a download's remove button, or **Remove All Downloads**, to free the space; tapping a download opens its book. Books you've opened in the reader are listed too, since opening one downloads it.
 
 Two settings on the **Downloads** tab apply to every account on the phone, and both start off:
 

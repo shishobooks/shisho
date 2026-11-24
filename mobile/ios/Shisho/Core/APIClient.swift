@@ -54,6 +54,9 @@ final class APIClient: Sendable {
     private let instance: OSAllocatedUnfairLock<String>
     /// Called once with the instance an account without one learns.
     private let onInstance: (@Sendable (String) -> Void)?
+    /// Whether the server can be reached, which every request reads and
+    /// updates.
+    let reachability = ServerReachability()
 
     /// protocolClasses answer requests before the network, for tests.
     init(baseURL: URL, credential: String?, instanceID: String = "",
@@ -92,6 +95,19 @@ final class APIClient: Sendable {
             throw APIError.serverPredatesApp
         } catch APIError.signedOut {
             throw APIError.wrongPassword
+        }
+    }
+
+    /// Whether the server answers now, asked quickly: a few seconds at most,
+    /// so finding the server again never keeps a screen waiting. It's how a
+    /// server marked unreachable is found again.
+    @discardableResult
+    func checkServer() async -> Bool {
+        do {
+            _ = try await data("mobile/server", readsCapabilities: false, timeout: 5, check: true)
+            return true
+        } catch {
+            return reachability.allowsRequests
         }
     }
 
@@ -313,13 +329,16 @@ final class APIClient: Sendable {
     }
 
     private func fetchFile(_ request: URLRequest, session: URLSession) async throws -> (URL, URLResponse) {
+        guard reachability.allowsRequests else { throw APIError.unreachable("offline") }
         let file: URL
         let response: URLResponse
         do {
             (file, response) = try await session.download(for: request)
         } catch {
+            reachability.failed(error)
             throw APIClient.transportError(error)
         }
+        reachability.answered()
         do {
             try APIClient.checkDownloaded(file, response: response)
         } catch {
@@ -408,16 +427,22 @@ final class APIClient: Sendable {
     }
 
     private func data(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil,
-                      readsCapabilities: Bool = true) async throws -> Data {
-        let request = self.request(path, method: method, query: query, body: body)
+                      readsCapabilities: Bool = true, timeout: TimeInterval? = nil, check: Bool = false) async throws -> Data {
+        // Known not to answer: fail at once rather than wait out a timeout.
+        // A check is how it's found again.
+        guard check || reachability.allowsRequests else { throw APIError.unreachable("offline") }
+        var request = self.request(path, method: method, query: query, body: body)
+        if let timeout { request.timeoutInterval = timeout }
 
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            reachability.failed(error)
             throw APIClient.transportError(error)
         }
+        reachability.answered()
         guard let http = response as? HTTPURLResponse else {
             throw APIError.unreachable("No response")
         }

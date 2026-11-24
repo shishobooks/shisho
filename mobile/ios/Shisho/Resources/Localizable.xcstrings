@@ -331,6 +331,9 @@
     "Browse tags in your library" : {
 
     },
+    "Can't reach your server" : {
+
+    },
     "Cancel" : {
 
     },
@@ -358,9 +361,6 @@
     "Choose a TTF, OTF, or WOFF2 font file." : {
 
     },
-    "Clear" : {
-
-    },
     "Clear Filters" : {
 
     },
@@ -368,9 +368,6 @@
 
     },
     "Clear all filters" : {
-
-    },
-    "Clear ebooks opened without downloading" : {
 
     },
     "Clear search" : {
@@ -512,9 +509,6 @@
 
     },
     "Duration" : {
-
-    },
-    "Ebooks opened without downloading" : {
 
     },
     "Edit Note" : {
@@ -806,6 +800,9 @@
     "No tags found." : {
 
     },
+    "Not downloaded, and needs a connection" : {
+
+    },
     "Not supported" : {
 
     },
@@ -847,7 +844,10 @@
     "OK" : {
 
     },
-    "Offline. Showing what's on this device." : {
+    "Offline" : {
+
+    },
+    "Offline. What's downloaded still works." : {
 
     },
     "On disk" : {
@@ -1457,6 +1457,12 @@
     "You read up to %@ on the web." : {
 
     },
+    "You're offline, and this audiobook isn't downloaded. Download it to listen without a connection." : {
+
+    },
+    "You're offline, and this book isn't downloaded. Download it to read without a connection." : {
+
+    },
     "Your account can't read Books on this server. Ask the server's owner for access." : {
 
     },
@@ -1464,6 +1470,15 @@
 
     },
     "Your password has to be changed before you can sign in. Sign in on the web to change it, then try again." : {
+
+    },
+    "Your server can't be reached, and this audiobook isn't downloaded. Download it to listen without a connection." : {
+
+    },
+    "Your server can't be reached, and this book isn't downloaded. Download it to read without a connection." : {
+
+    },
+    "Your server can't be reached. What's downloaded still works." : {
 
     },
     "^[%lld book](inflect: true)" : {

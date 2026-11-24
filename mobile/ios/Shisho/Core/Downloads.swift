@@ -312,6 +312,38 @@ final class DownloadManager {
         pump()
     }
 
+    /// Downloads a File now, in front of the user, as opening an ebook that
+    /// isn't on the device does: the reader needs all of it before it can
+    /// show a page. It becomes a Download like any other, listed, removed by
+    /// the user, and by Remove when finished. A background transfer of it
+    /// already under way isn't needed after this.
+    func fetchNow(fileID: Int) async throws -> URL {
+        if let local = localFile(fileID: fileID) { return local }
+        let fetched = try await client.download(fileID: fileID)
+        defer { try? FileManager.default.removeItem(at: fetched) }
+        try store.queueDownloads([fileID])
+        // One finished whose file is gone counts as wanted again.
+        try store.requeueDownloads([fileID])
+        guard let row = try await store.pool.read({ try CatalogStore.download($0, fileID: fileID) }) else {
+            throw APIError.server(status: 404, message: String(localized: "The server doesn't have this File anymore."))
+        }
+        if let id = transfers.drop(fileID: fileID) {
+            tasks.removeValue(forKey: id)?.cancel()
+        }
+        running.remove(fileID)
+        progress[fileID] = nil
+        DownloadResume.drop(fileID: fileID, in: folder)
+        try DownloadSessionDelegate.prepare(folder)
+        let destination = location(fileID: fileID, fileType: row.fileType)
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: fetched, to: destination)
+        let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? row.sizeBytes
+        _ = try store.markDownloaded(fileID: fileID, sizeBytes: size)
+        log("file \(fileID): downloaded to open it")
+        onChange?(fileID)
+        return destination
+    }
+
     /// Stops a transfer and removes Downloads, freeing their space.
     func remove(_ fileIDs: [Int]) {
         guard !fileIDs.isEmpty else { return }

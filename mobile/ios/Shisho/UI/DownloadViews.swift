@@ -216,6 +216,23 @@ struct DownloadAllButton: View {
     }
 }
 
+/// Dims a control for a File that isn't on the device while the server
+/// can't be reached, as music apps grey out what isn't downloaded. A tap
+/// still opens it, to say why it can't play or open.
+struct NeedsConnection: ViewModifier {
+    let available: Bool
+
+    func body(content: Content) -> some View {
+        if available {
+            content
+        } else {
+            content
+                .opacity(0.45)
+                .accessibilityHint(String(localized: "Not downloaded, and needs a connection"))
+        }
+    }
+}
+
 // MARK: - Sharing
 
 /// Shares a File out of the app through the system share sheet, as its
@@ -326,7 +343,6 @@ enum SharePresenter {
 struct DownloadsView: View {
     @Environment(AppModel.self) private var model
     @State private var downloads: [StoredDownload]?
-    @State private var cacheSize: Int?
     @State private var confirmingRemoveAll = false
 
     var body: some View {
@@ -356,7 +372,6 @@ struct DownloadsView: View {
                                 .labelStyle(ActionLabelStyle())
                                 .accessibilityIdentifier("downloads.removeAll")
                             }
-                            cacheCard
                         }
                     }
                     .padding(.horizontal, GridLayout.margin)
@@ -384,15 +399,6 @@ struct DownloadsView: View {
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloads) { db in
             try CatalogStore.storedDownloads(db)
-        }
-        .task(id: model.session?.account.id) { refreshCacheSize() }
-    }
-
-    private func refreshCacheSize() {
-        guard let ebooks = model.session?.ebooks else { return }
-        Task.detached {
-            let size = ebooks.size()
-            await MainActor.run { cacheSize = size }
         }
     }
 
@@ -437,35 +443,6 @@ struct DownloadsView: View {
                 }
                 .cardStyle()
             }
-        }
-    }
-
-    /// Ebooks opened without downloading are kept for a while in a cache iOS
-    /// can clear; this clears it now.
-    @ViewBuilder
-    private var cacheCard: some View {
-        if let cacheSize, cacheSize > 0 {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Ebooks opened without downloading")
-                        .font(.geist(.subheadline))
-                    Text(FileFacts.size(cacheSize))
-                        .font(.geist(.footnote))
-                        .foregroundStyle(Theme.mutedForeground)
-                        .monospacedDigit()
-                }
-                Spacer(minLength: 8)
-                Button("Clear") {
-                    model.session?.ebooks.clear()
-                    refreshCacheSize()
-                }
-                .buttonStyle(SmallOutlineStyle())
-                .accessibilityLabel(String(localized: "Clear ebooks opened without downloading"))
-                .accessibilityIdentifier("downloads.clearCache")
-            }
-            .padding(16)
-            .cardStyle()
-            .accessibilityElement(children: .contain)
         }
     }
 }

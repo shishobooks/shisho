@@ -386,10 +386,9 @@ struct SyncBanner: View {
     var body: some View {
         Group {
             switch model.syncStatus {
-            case .idle:
+            // Being offline shows across the app, above the tab bar.
+            case .idle, .offline:
                 EmptyView()
-            case .offline:
-                NoticeCard(text: String(localized: "Offline. Showing what's on this device."), icon: .wifiOff)
             case .localNetworkDenied:
                 NoticeCard(text: Messages.localNetworkDenied, icon: .triangleAlert, tint: Theme.destructive) {
                     SettingsLink()

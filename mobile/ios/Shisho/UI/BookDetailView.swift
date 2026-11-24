@@ -36,11 +36,13 @@ struct BookDetailView: View {
                     hero
                     if let progress = listen ?? nil {
                         ListenCard(progress: progress, bookID: bookID)
+                            .modifier(NeedsConnection(available: model.canOpen(fileID: progress.fileID)))
                             .padding(.top, 22)
                             .frame(maxWidth: 520)
                     }
                     if let progress = read ?? nil {
                         ReadCard(progress: progress)
+                            .modifier(NeedsConnection(available: model.canOpen(fileID: progress.fileID)))
                             // The reader opens on pages booted while the
                             // Book's page shows.
                             .onAppear { ReaderPagePool.shared.prewarm() }
@@ -477,6 +479,7 @@ private struct FileCard: View {
                 .accessibilityLabel(listenLabel)
                 // Editions can share a name, so the File's id tells them apart.
                 .accessibilityIdentifier("file.listen.\(file.id)")
+                .modifier(NeedsConnection(available: model.canOpen(fileID: file.id)))
             }
             if isReflowable {
                 // Every ebook File opens from here; the Read button above
@@ -490,6 +493,7 @@ private struct FileCard: View {
                 .buttonStyle(PlayerControlStyle())
                 .accessibilityLabel(readLabel)
                 .accessibilityIdentifier("file.read.\(file.id)")
+                .modifier(NeedsConnection(available: model.canOpen(fileID: file.id)))
             }
             // Every File downloads on its own, so the space goes only to
             // what the user wants offline. One this version doesn't know

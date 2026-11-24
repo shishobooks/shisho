@@ -14,7 +14,6 @@ final class AccountSession {
     let store: CatalogStore
     let sync: SyncEngine
     let covers: CoverCache
-    let ebooks: EbookCache
     let downloads: DownloadManager
 
     /// The capabilities the server listed in its last response, which any
@@ -39,7 +38,7 @@ final class AccountSession {
         store = try CatalogStore(path: AccountData(accountID: account.id).catalogPath)
         sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
-        ebooks = EbookCache(client: client, accountID: account.id)
+        try? FileManager.default.removeItem(at: AccountData(accountID: account.id).legacyEbookFolder)
         downloads = DownloadManager(account: account, client: client, store: store)
     }
 
@@ -191,6 +190,7 @@ final class AppModel {
         downloadsPath = []
         showingAccount = false
         stopPrefetching()
+        stopChecking()
         libraryID = session.map { UserDefaults.standard.integer(forKey: AccountData(accountID: $0.account.id).libraryIDKey) } ?? 0
         filter = LibraryFilter()
         loadSort()
@@ -207,7 +207,86 @@ final class AppModel {
             session.downloads.simulatesNetwork = HarnessSignIn.cellular
             #endif
             session.downloads.networkChanged(to: downloadNetwork)
+            // The account's server: reachable until a request or a check
+            // says not, on whatever network the device has.
+            session.client.reachability.networkChanged(available: networkAvailable)
+            let opened = ObjectIdentifier(session)
+            session.client.reachability.observe { [weak self] connection in
+                Task { @MainActor in
+                    // Not for an account since switched away from.
+                    guard let self, let current = self.session, ObjectIdentifier(current) == opened else { return }
+                    self.connectionChanged(to: connection)
+                }
+            }
+            connection = session.client.reachability.connection
+        } else {
+            connection = networkAvailable ? .online : .offline
         }
+    }
+
+    // MARK: - Connection
+
+    /// Whether the account's server can be reached, which every screen
+    /// shows: things not on the device say at once that they need a
+    /// connection rather than trying and waiting.
+    private(set) var connection: Connection = .online
+    /// Checks the server every so often while it can't be reached.
+    @ObservationIgnored private var checking: Task<Void, Never>?
+    @ObservationIgnored private var active = true
+
+    private func connectionChanged(to new: Connection) {
+        let old = connection
+        connection = new
+        player?.connectionChanged(new)
+        reader?.connectionChanged(new)
+        switch new {
+        case .online:
+            stopChecking()
+            // Back: what waited goes now.
+            if old != .online { Task { await syncNow() } }
+        case .offline:
+            stopChecking()
+            // A sync in flight can't finish; it would only time out.
+            syncs.stop()
+            syncStatus = .offline
+        case .unreachable:
+            syncs.stop()
+            syncStatus = .offline
+            startChecking()
+        }
+    }
+
+    /// Whether a File can be listened to or read now: it's on the device, or
+    /// the server can be reached, or it's already playing.
+    func canOpen(fileID: Int) -> Bool {
+        if connection == .online { return true }
+        if player?.file?.fileID == fileID, player?.isPlaying == true { return true }
+        return session?.downloads.localFile(fileID: fileID) != nil
+    }
+
+    /// Asks the server whether it answers now, quickly.
+    private func checkServer() {
+        guard let session else { return }
+        Task { await session.client.checkServer() }
+    }
+
+    /// While the server can't be reached and the app is in front, asks it
+    /// again every so often, so the app notices it's back without anyone
+    /// waiting on a request.
+    private func startChecking() {
+        guard checking == nil, active, let session else { return }
+        checking = Task { [weak self] in
+            while !Task.isCancelled {
+                if await session.client.checkServer() { break }
+                try? await Task.sleep(for: .seconds(20))
+            }
+            self?.checking = nil
+        }
+    }
+
+    private func stopChecking() {
+        checking?.cancel()
+        checking = nil
     }
 
     /// Audio was playing when the app went to the background.
@@ -216,6 +295,8 @@ final class AppModel {
     func didEnterBackground() {
         playingInBackground = player?.isPlaying == true
         reader?.background()
+        active = false
+        stopChecking()
     }
 
     /// The app is leaving the screen, perhaps to be swiped away, which skips
@@ -231,6 +312,12 @@ final class AppModel {
     func didBecomeActive() {
         reader?.foreground()
         session?.downloads.resume()
+        active = true
+        // The network may have changed while the app was away.
+        if connection != .online {
+            checkServer()
+            if connection == .unreachable { startChecking() }
+        }
         // Not over the reader, which was open as the audio played on.
         if playingInBackground, reader == nil, player?.isPlaying == true, player?.file != nil {
             showingPlayer = true
@@ -980,15 +1067,20 @@ final class AppModel {
         } else if !wasOnWiFi, let session {
             prefetchCoversIfWanted(session)
         }
-        guard available != networkAvailable else { return }
-        networkAvailable = available
-        if available {
-            Task { await syncNow() }
-        } else if session != nil {
-            // The sync in flight can't finish; it would only time out.
-            syncs.stop()
-            syncStatus = .offline
+        guard available != networkAvailable else {
+            // Another network, as from Wi-Fi to cellular, may reach the
+            // server where the last one didn't, or not.
+            if available { checkServer() }
+            return
         }
+        networkAvailable = available
+        session?.client.reachability.networkChanged(available: available)
+        if session == nil {
+            connection = available ? .online : .offline
+        }
+        // A quick check says at once whether this network reaches the
+        // server, rather than the first request finding out the slow way.
+        if available { checkServer() }
     }
 
     private func recordCapabilities(_ listed: [String], accountID: String) {
