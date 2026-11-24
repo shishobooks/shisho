@@ -1142,11 +1142,12 @@ describe("BookDetailBody file progress", () => {
     const row = screen
       .getByRole("link", { name: "Ebook" })
       .closest(".border") as HTMLElement;
-    expect(row).toHaveTextContent("25% · 60K words left");
-    expect(within(row).getByText("80K words")).toHaveAttribute(
-      "title",
-      "80,321 words",
-    );
+    // The exact counts follow for a screen reader.
+    expect(row).toHaveTextContent("25% · 60K words");
+    expect(row).toHaveTextContent("words left");
+    expect(within(row).getByText("80K words")).toBeInTheDocument();
+    expect(within(row).getByText("80,321 words")).toHaveClass("sr-only");
+    expect(within(row).getByText("60,241 words")).toHaveClass("sr-only");
   });
 
   it.each([

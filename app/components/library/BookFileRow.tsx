@@ -67,7 +67,6 @@ import {
   formatDuration,
   formatFileSize,
   formatPageCount,
-  formatWordCount,
   formatYear,
   getFilename,
 } from "@/utils/format";
@@ -159,7 +158,7 @@ const rowFacts = (file: File): ReactNode[] =>
  * How much of the file is left at progress: time for an audiobook, else
  * pages, else words.
  */
-const leftLabel = (file: File, progress: number): string | null => {
+const leftLabel = (file: File, progress: number): ReactNode => {
   const rest = Math.max(0, 1 - progress);
   if (file.audiobook_duration_seconds) {
     return `${formatDuration(file.audiobook_duration_seconds * rest)} left`;
@@ -168,7 +167,11 @@ const leftLabel = (file: File, progress: number): string | null => {
     return `${formatPageCount(Math.round(file.page_count * rest))} left`;
   }
   if (file.word_count) {
-    return `${formatWordCount(Math.round(file.word_count * rest))} left`;
+    return (
+      <>
+        <WordCount count={Math.round(file.word_count * rest)} /> left
+      </>
+    );
   }
   return null;
 };
@@ -189,7 +192,7 @@ const FileProgress = ({ file, progress }: { file: File; progress: number }) => {
         value={Math.round(progress * 100)}
       />
       <span className="shrink-0">
-        {[percent, left].filter(Boolean).join(" · ")}
+        <FactsLine facts={left ? [percent, left] : [percent]} />
       </span>
     </div>
   );

@@ -74,19 +74,17 @@ describe("word count", () => {
     word_count: 95312,
   });
 
-  it("is a rounded fact under the name, exact on hover", () => {
+  it("is a rounded fact under the name, exact for a screen reader", () => {
     render(<FactsLine facts={fileHeaderFacts(epub)} />);
-    const words = screen.getByText("95K words");
-    expect(words).toHaveAttribute("title", "95,312 words");
+    expect(screen.getByText("95K words")).toBeInTheDocument();
+    expect(screen.getByText("95,312 words")).toHaveClass("sr-only");
   });
 
-  it("has a row with the format's facts, exact on hover", () => {
+  it("has a row with the format's facts", () => {
     const row = fileDiskRows(epub).find((r) => r.label === "Words");
     render(<>{row?.value}</>);
-    expect(screen.getByText("95K words")).toHaveAttribute(
-      "title",
-      "95,312 words",
-    );
+    expect(screen.getByText("95K words")).toBeInTheDocument();
+    expect(screen.getByText("95,312 words")).toHaveClass("sr-only");
   });
 
   it("is left out until the words are counted", () => {

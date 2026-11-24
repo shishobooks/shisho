@@ -2,6 +2,7 @@ package epub
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/xml"
 	"io"
 	"os"
@@ -139,7 +140,7 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	}
 	// A count is left off rather than failing the parse: the metadata is
 	// still good, and the next scan tries the file again.
-	if n, err := countWords(zipReader, result); err == nil {
+	if n, err := countWords(context.Background(), zipReader, result); err == nil {
 		metadata.WordCount = &n
 	}
 	return metadata, nil

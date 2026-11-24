@@ -312,7 +312,7 @@ export function IdentifyBookDialog({
                             <span>{formatPageCount(file.page_count)}</span>
                           </>
                         )}
-                        {file.word_count != null && (
+                        {!!file.word_count && (
                           <>
                             <span className="text-muted-foreground/50">·</span>
                             <WordCount count={file.word_count} />

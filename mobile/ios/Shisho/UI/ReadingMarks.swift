@@ -127,7 +127,7 @@ struct FileProgressLine: View {
     let progress: Double
     let durationSeconds: Double?
     let pageCount: Int?
-    var wordCount: Int?
+    let wordCount: Int?
 
     var body: some View {
         let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount)

@@ -37,6 +37,9 @@ func init() {
 			// How many words a reflowable ebook's text holds. NULL until
 			// it's counted, and for every other kind of File.
 			`ALTER TABLE files ADD COLUMN word_count INTEGER`,
+			// Whether the File's current content couldn't be counted, so a
+			// scan that skips the unchanged File doesn't try again.
+			`ALTER TABLE files ADD COLUMN word_count_failed BOOLEAN NOT NULL DEFAULT FALSE`,
 
 			// The Shisho app shows it beside a File's pages or duration,
 			// so a count moves the File's Book in the change feed.
@@ -50,12 +53,17 @@ func init() {
 				SELECT 'scan', 'pending', '{}', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
 				WHERE EXISTS (SELECT 1 FROM libraries)`,
 		}
-		for _, statement := range statements {
-			if _, err := db.ExecContext(ctx, statement); err != nil {
-				return errors.WithStack(err)
+		// All or nothing, so a server stopped partway doesn't come back
+		// without the change feed's trigger and fail the next try on the
+		// column it already added.
+		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			for _, statement := range statements {
+				if _, err := tx.ExecContext(ctx, statement); err != nil {
+					return errors.Wrapf(err, "run %s", statement)
+				}
 			}
-		}
-		return nil
+			return nil
+		})
 	}
 
 	down := func(ctx context.Context, db *bun.DB) error {
@@ -64,14 +72,17 @@ func init() {
 			// trigger reads.
 			`DROP TRIGGER change_log_files_update`,
 			filesUpdateTrigger(comparedBefore...),
+			`ALTER TABLE files DROP COLUMN word_count_failed`,
 			`ALTER TABLE files DROP COLUMN word_count`,
 		}
-		for _, statement := range statements {
-			if _, err := db.ExecContext(ctx, statement); err != nil {
-				return errors.WithStack(err)
+		return db.RunInTx(ctx, nil, func(ctx context.Context, tx bun.Tx) error {
+			for _, statement := range statements {
+				if _, err := tx.ExecContext(ctx, statement); err != nil {
+					return errors.Wrapf(err, "run %s", statement)
+				}
 			}
-		}
-		return nil
+			return nil
+		})
 	}
 
 	Migrations.MustRegister(up, down)

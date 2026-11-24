@@ -3,6 +3,7 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/xml"
 	"io"
 	"net/url"
@@ -36,7 +37,7 @@ func ParseKePub(path string) (*mediafile.ParsedMetadata, error) {
 		}
 		if !protected {
 			// Left off on an error, as Parse leaves it.
-			if n, err := countSpine(&zr.Reader, result); err == nil {
+			if n, err := countSpine(context.Background(), &zr.Reader, result, maxBookTextBytes); err == nil {
 				metadata.WordCount = &n
 			}
 			return metadata, nil

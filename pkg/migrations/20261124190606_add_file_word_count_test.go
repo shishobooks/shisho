@@ -12,7 +12,7 @@ import (
 func TestAddFileWordCount_QueuesAScanToCountExistingFiles(t *testing.T) {
 	t.Parallel()
 
-	countScanJobs := func(t *testing.T, withLibrary bool) []string {
+	scanJobStatuses := func(t *testing.T, withLibrary bool) []string {
 		t.Helper()
 		ctx := context.Background()
 		db := openMigrationTestDB(t)
@@ -33,11 +33,11 @@ func TestAddFileWordCount_QueuesAScanToCountExistingFiles(t *testing.T) {
 
 	t.Run("one scan of every library", func(t *testing.T) {
 		t.Parallel()
-		assert.Equal(t, []string{models.JobStatusPending}, countScanJobs(t, true))
+		assert.Equal(t, []string{models.JobStatusPending}, scanJobStatuses(t, true))
 	})
 
 	t.Run("none on a server with no library yet", func(t *testing.T) {
 		t.Parallel()
-		assert.Empty(t, countScanJobs(t, false))
+		assert.Empty(t, scanJobStatuses(t, false))
 	})
 }

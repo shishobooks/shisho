@@ -195,7 +195,8 @@ type File struct {
 	NameSource               *string           `json:"name_source" tstype:"DataSource"`
 	PageCount                *int              `json:"page_count"` // Number of pages for CBZ/PDF files, NULL for EPUB/M4B
 	AudiobookDurationSeconds *float64          `json:"audiobook_duration_seconds"`
-	WordCount                *int              `json:"word_count"` // Words in a reflowable ebook's text (EPUB, KePub, MOBI, AZW3), NULL until counted and for other file types
+	WordCount                *int              `json:"word_count"`       // Words in a reflowable ebook's text (EPUB, KePub, MOBI, AZW3), NULL until counted and for other file types
+	WordCountFailed          bool              `bun:",notnull" json:"-"` // The file's current content couldn't be counted, so scans don't try again until it changes
 	AudiobookBitrateBps      *int              `json:"audiobook_bitrate_bps"`
 	AudiobookCodec           *string           `json:"audiobook_codec"`
 	Narrators                []*Narrator       `bun:"rel:has-many,join:id=file_id" json:"narrators,omitempty" tstype:"Narrator[]"`
@@ -318,6 +319,17 @@ func FileTypeMimeType(fileType string) string {
 // external sources (plugins, uploads).
 func IsPageBasedFileType(fileType string) bool {
 	return fileType == FileTypeCBZ || fileType == FileTypePDF
+}
+
+// IsReflowableFileType reports whether a file type is an ebook whose text
+// flows to fit the screen (EPUB, KePub, MOBI, AZW3): the types with a word
+// count.
+func IsReflowableFileType(fileType string) bool {
+	switch fileType {
+	case FileTypeEPUB, FileTypeKePub, FileTypeMOBI, FileTypeAZW3:
+		return true
+	}
+	return false
 }
 
 // AfterScanRow is a Bun hook that resolves DisplayName and

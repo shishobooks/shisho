@@ -88,7 +88,7 @@ enum FileFacts {
 /// How far through a File the user is, as its row says it under its
 /// facts: the percentage, and the time, pages, or words left.
 enum FileProgressText {
-    static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?, wordCount: Int? = nil) -> String {
+    static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?, wordCount: Int?) -> String {
         let clamped = min(1, max(0, progress))
         let percent = Percent.text(clamped)
         guard clamped < 1 else { return percent }

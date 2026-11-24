@@ -18,9 +18,9 @@ import (
 )
 
 // maxDocumentBytes bounds how much of one document is read, so a crafted
-// file can't make the count hold an unbounded document in memory. The
-// longest books are tens of megabytes in all.
-const maxDocumentBytes = 256 << 20
+// file can't make the count hold an unbounded document in memory. A whole
+// long book in one document is a few megabytes.
+const maxDocumentBytes = 64 << 20
 
 // Text counts the words in plain text.
 func Text(s string) int {
@@ -52,28 +52,24 @@ func HTML(r io.Reader) (int, error) {
 	}
 
 	var c counter
-	skipping := 0
+	var skip skipState
 	// The KePub converter's tokenizer setup reads XHTML as a reader does:
 	// CDATA is text, and a self-closed script or title ends where it opens.
 	err = kepub.EachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
 		switch tt {
 		case html.TextToken:
-			if skipping == 0 {
+			if !skip.skipping() {
 				c.add(string(z.Text()))
 			}
 		case html.StartTagToken:
 			name, _ := z.TagName()
-			if skipped[string(name)] {
-				skipping++
-			}
+			skip.start(string(name))
 			if !inline[string(name)] {
 				c.boundary()
 			}
 		case html.EndTagToken:
 			name, _ := z.TagName()
-			if skipped[string(name)] && skipping > 0 {
-				skipping--
-			}
+			skip.end(string(name))
 			if !inline[string(name)] {
 				c.boundary()
 			}
@@ -92,17 +88,61 @@ func HTML(r io.Reader) (int, error) {
 	return c.n, nil
 }
 
-// skipped are the elements whose text isn't read: the head and title, code
-// run by the page, and the pronunciation ruby prints over its base text.
-var skipped = map[string]bool{
-	"head":     true,
+// skipState tracks whether text is in an element a reader doesn't read: the
+// head, code run by the page, or the pronunciation ruby prints over its base
+// text. HTML lets a page leave out the end tags of head, rt, and rp, so each
+// also ends where what follows it starts.
+type skipState struct {
+	// raw counts the open elements whose content the tokenizer reads as raw
+	// text, which it always ends at their end tag.
+	raw        int
+	head       bool
+	annotation bool
+}
+
+// rawSkipped are the skipped elements other than head, rt, and rp.
+var rawSkipped = map[string]bool{
 	"title":    true,
 	"script":   true,
 	"style":    true,
 	"template": true,
 	"noscript": true,
-	"rt":       true,
-	"rp":       true,
+}
+
+func (s *skipState) skipping() bool { return s.raw > 0 || s.head || s.annotation }
+
+func (s *skipState) start(name string) {
+	switch name {
+	case "head":
+		s.head = true
+	case "body":
+		s.head = false
+	case "rt", "rp":
+		s.annotation = true
+	default:
+		if rawSkipped[name] {
+			s.raw++
+		}
+		if !inline[name] {
+			s.annotation = false
+		}
+	}
+}
+
+func (s *skipState) end(name string) {
+	switch name {
+	case "head":
+		s.head = false
+	case "rt", "rp", "ruby":
+		s.annotation = false
+	default:
+		if rawSkipped[name] && s.raw > 0 {
+			s.raw--
+		}
+		if !inline[name] {
+			s.annotation = false
+		}
+	}
 }
 
 // inline are the elements that can sit inside a word without splitting it.

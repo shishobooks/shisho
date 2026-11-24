@@ -40,7 +40,7 @@ func (tc *testContext) fileByPath(path string) *models.File {
 // clearWordCounts leaves every File as a scan before word counts left it.
 func (tc *testContext) clearWordCounts() {
 	tc.t.Helper()
-	_, err := tc.db.NewUpdate().Table("files").Set("word_count = NULL").Where("1 = 1").Exec(tc.ctx)
+	_, err := tc.db.NewUpdate().Table("files").Set("word_count = NULL").Set("word_count_failed = FALSE").Where("1 = 1").Exec(tc.ctx)
 	require.NoError(tc.t, err)
 }
 
@@ -128,10 +128,97 @@ func TestScan_LeavesFilesItCannotCountWithoutACount(t *testing.T) {
 	require.NoError(t, tc.runScan())
 	tc.clearWordCounts()
 
-	require.NoError(t, tc.runScan(), "a File it can't count doesn't fail the scan")
-
+	logs := tc.runScanWithJob()
+	assert.Len(t, warningsFor(logs, locked), 1, "a File it can't count is named, and doesn't fail the scan")
 	assert.Nil(t, tc.fileByPath(locked).WordCount)
 	counted := tc.fileByPath(open)
 	require.NotNil(t, counted.WordCount, "one File it can't count doesn't stop the rest")
 	assert.Equal(t, generatedChapterWords, *counted.WordCount)
+
+	logs = tc.runScanWithJob()
+	assert.Empty(t, warningsFor(logs, locked), "an unchanged File that couldn't be counted isn't tried again")
+}
+
+func TestScan_KeepsACountedFilesCount(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	path := testgen.GenerateEPUB(t, testgen.CreateSubDir(t, libraryPath, "Prose"), "prose.epub", testgen.EPUBOptions{Title: "Prose"})
+	require.NoError(t, tc.runScan())
+	_, err := tc.db.NewUpdate().Table("files").Set("word_count = 12345").Where("1 = 1").Exec(tc.ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, tc.runScan())
+
+	got := tc.fileByPath(path).WordCount
+	require.NotNil(t, got)
+	assert.Equal(t, 12345, *got, "a scan that skips an unchanged File doesn't count it again")
+}
+
+func TestScan_DropsTheCountOfAReplacementItCannotCount(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	bookDir := testgen.CreateSubDir(t, libraryPath, "Prose")
+	path := testgen.GenerateEPUB(t, bookDir, "prose.epub", testgen.EPUBOptions{Title: "Prose"})
+	require.NoError(t, tc.runScan())
+	require.NotNil(t, tc.fileByPath(path).WordCount)
+
+	testgen.GenerateEPUB(t, bookDir, "prose.epub", testgen.EPUBOptions{
+		Title:        "Prose",
+		ExtraEntries: map[string]string{"META-INF/rights.xml": "<rights/>"},
+	})
+	later := time.Now().Add(time.Hour)
+	require.NoError(t, os.Chtimes(path, later, later))
+	require.NoError(t, tc.runScan())
+
+	assert.Nil(t, tc.fileByPath(path).WordCount, "the old edition's count isn't the new one's")
+}
+
+func TestScan_ScanForNewMetadataCountsWithoutChangingCoverURLs(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	path := testgen.GenerateEPUB(t, testgen.CreateSubDir(t, libraryPath, "Prose"), "prose.epub", testgen.EPUBOptions{Title: "Prose"})
+	require.NoError(t, tc.runScan())
+	tc.clearWordCounts()
+	before := tc.fileByPath(path)
+
+	libraryID := before.LibraryID
+	require.NoError(t, tc.runScanJob(&models.Job{
+		Type:       models.JobTypeScan,
+		LibraryID:  &libraryID,
+		DataParsed: &models.JobScanData{ScanForNewMetadata: true},
+	}))
+
+	after := tc.fileByPath(path)
+	require.NotNil(t, after.WordCount)
+	assert.Equal(t, generatedChapterWords, *after.WordCount)
+	assert.Equal(t, before.UpdatedAt, after.UpdatedAt, "a count isn't an edit, and updated_at keys the cover URLs")
+}
+
+func TestCountUnchangedFileWords_LeavesAFileDemotedMeanwhile(t *testing.T) {
+	t.Parallel()
+	tc := newTestContext(t)
+
+	libraryPath := testgen.TempLibraryDir(t)
+	tc.createLibrary([]string{libraryPath})
+	path := testgen.GenerateEPUB(t, testgen.CreateSubDir(t, libraryPath, "Prose"), "prose.epub", testgen.EPUBOptions{Title: "Prose"})
+	require.NoError(t, tc.runScan())
+	tc.clearWordCounts()
+	// The scan loaded the File as a main File with no count...
+	stale := tc.fileByPath(path)
+	// ...and it was made a supplement before the count was written.
+	_, err := tc.db.NewUpdate().Table("files").Set("file_role = ?", models.FileRoleSupplement).Where("id = ?", stale.ID).Exec(tc.ctx)
+	require.NoError(t, err)
+
+	tc.worker.countUnchangedFileWords(tc.ctx, stale, ScanOptions{})
+
+	assert.Nil(t, tc.fileByPath(path).WordCount, "supplements have no word count")
 }

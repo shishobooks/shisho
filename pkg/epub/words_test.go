@@ -1,8 +1,11 @@
 package epub
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/shishobooks/shisho/internal/testgen"
@@ -70,7 +73,7 @@ func TestWordCount(t *testing.T) {
 			Title:   "Book",
 			Chapter: []byte(`<html><body><h1>One</h1><p>Two <i>three</i> four.</p></body></html>`),
 		})
-		n, err := WordCount(path)
+		n, err := WordCount(context.Background(), path)
 		require.NoError(t, err)
 		assert.Equal(t, 4, n)
 	})
@@ -80,7 +83,7 @@ func TestWordCount(t *testing.T) {
 		path := testgen.GenerateEPUB(t, t.TempDir(), "book.kepub.epub", testgen.EPUBOptions{
 			Title: "Locked", KoboMarkup: true, KoboDRM: true,
 		})
-		_, err := WordCount(path)
+		_, err := WordCount(context.Background(), path)
 		assert.ErrorIs(t, err, mediafile.ErrDRMProtected)
 	})
 }
@@ -99,4 +102,71 @@ func TestParseKePub_WordCountOfConvertedEPUB(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, metadata.WordCount)
 	assert.Equal(t, generatedChapterWords, *metadata.WordCount)
+}
+
+// openEPUB builds an EPUB in memory whose spine lists idrefs in order, with
+// each manifest item a chapter holding text.
+func openEPUB(t *testing.T, chapters map[string]string, idrefs ...string) (*zip.Reader, *ParseOPFResult) {
+	t.Helper()
+	var manifest, spine strings.Builder
+	for id := range chapters {
+		manifest.WriteString(`<item id="` + id + `" href="` + id + `.xhtml" media-type="application/xhtml+xml"/>`)
+	}
+	for _, id := range idrefs {
+		spine.WriteString(`<itemref idref="` + id + `"/>`)
+	}
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	write := func(name, body string) {
+		w, err := zw.Create(name)
+		require.NoError(t, err)
+		_, err = w.Write([]byte(body))
+		require.NoError(t, err)
+	}
+	write("OEBPS/content.opf", `<?xml version="1.0"?><package xmlns="http://www.idpf.org/2007/opf" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>T</dc:title></metadata><manifest>`+manifest.String()+`</manifest><spine>`+spine.String()+`</spine></package>`)
+	for id, text := range chapters {
+		write("OEBPS/"+id+".xhtml", `<html><body><p>`+text+`</p></body></html>`)
+	}
+	require.NoError(t, zw.Close())
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	require.NoError(t, err)
+	result, err := findOPF(zr)
+	require.NoError(t, err)
+	return zr, result
+}
+
+func TestCountSpine(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("a document the spine lists twice counts once", func(t *testing.T) {
+		t.Parallel()
+		zr, result := openEPUB(t, map[string]string{"a": "one two", "b": "three"}, "a", "b", "a", "a")
+		n, err := countSpine(ctx, zr, result, maxBookTextBytes)
+		require.NoError(t, err)
+		assert.Equal(t, 3, n)
+	})
+
+	t.Run("a spine naming no document in the book is no count, not zero", func(t *testing.T) {
+		t.Parallel()
+		zr, result := openEPUB(t, map[string]string{"a": "one"}, "missing")
+		_, err := countSpine(ctx, zr, result, maxBookTextBytes)
+		assert.Error(t, err)
+	})
+
+	t.Run("a book whose text runs past the limit has no count", func(t *testing.T) {
+		t.Parallel()
+		zr, result := openEPUB(t, map[string]string{"a": strings.Repeat("word ", 40), "b": strings.Repeat("word ", 40)}, "a", "b")
+		_, err := countSpine(ctx, zr, result, 300)
+		assert.Error(t, err)
+	})
+
+	t.Run("a canceled count stops", func(t *testing.T) {
+		t.Parallel()
+		zr, result := openEPUB(t, map[string]string{"a": "one"}, "a")
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
+		_, err := countSpine(canceled, zr, result, maxBookTextBytes)
+		assert.ErrorIs(t, err, context.Canceled)
+	})
 }

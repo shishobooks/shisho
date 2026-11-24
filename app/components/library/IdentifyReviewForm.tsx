@@ -1139,7 +1139,7 @@ export function IdentifyReviewForm({
     if (file.page_count != null) {
       parts.push(formatPageCount(file.page_count));
     }
-    if (file.word_count != null) {
+    if (file.word_count) {
       parts.push(<WordCount count={file.word_count} />);
     }
     return <FactsLine facts={parts} />;

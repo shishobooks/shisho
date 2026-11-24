@@ -81,7 +81,7 @@ EPUB, KePub, MOBI, and AZW3 files show how many words they hold wherever an audi
 
 Only the text a reader reads is counted: the book's documents in reading order, without their scripts, styles, or the pronunciation guides printed over Chinese and Japanese text. Words are split at spaces and dashes, so a hyphenated word or a contraction counts once, and punctuation on its own doesn't count. Chinese and Japanese don't put spaces between words, so each of their characters counts as one word.
 
-A file with no count yet, such as one scanned by an older version of Shisho, is counted by the next scan even though the file hasn't changed, reading only its text. Upgrading to a version that counts words starts a scan of every library, so existing files are counted without waiting for the scheduled one. A file whose content is encrypted, or that Shisho can't read, has no word count, and each scan's job log names it.
+A file with no count yet, such as one scanned by an older version of Shisho, is counted by the next scan even though the file hasn't changed, reading only its text. Upgrading to a version that counts words starts a scan of every library, so existing files are counted without waiting for the scheduled one. A file whose text Shisho can't read, such as an EPUB with Adobe DRM, has no word count: the scan that finds this names the file in its job log, and later scans don't try it again until the file changes.
 
 ## CBZ Page Images
 

@@ -1979,12 +1979,15 @@ func (w *Worker) scanFileCore(
 	}
 
 	// Update word count (reflowable ebooks) - always comes from file
-	// metadata. A count the parser couldn't make keeps the last one; the
-	// next scan tries again for a File that has none.
-	if metadata.WordCount != nil {
-		if file.WordCount == nil || *file.WordCount != *metadata.WordCount {
-			file.WordCount = metadata.WordCount
-			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "word_count")
+	// metadata, so a parse that couldn't count the content clears the count
+	// the File's old content had. It's written apart from the other columns,
+	// since a count alone isn't an edit that should move updated_at.
+	if models.IsReflowableFileType(file.FileType) && !sameWordCount(file, metadata.WordCount) {
+		if metadata.WordCount == nil {
+			logWarn("could not count words", logger.Data{"filepath": file.Filepath})
+		}
+		if err := w.storeWordCount(ctx, file, metadata.WordCount, ""); err != nil {
+			return nil, errors.Wrap(err, "failed to update word count")
 		}
 	}
 

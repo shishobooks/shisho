@@ -90,6 +90,21 @@ func TestHTML(t *testing.T) {
 			4,
 		},
 		{
+			"a head left open ends where the body starts",
+			`<html><head><title>T</title><body><p>one two three</p></body></html>`,
+			3,
+		},
+		{
+			"a ruby annotation left open ends with its ruby",
+			`<p><ruby>漢<rt>かん</ruby>字</p><p>one two three</p>`,
+			5,
+		},
+		{
+			"a ruby annotation left open ends at the next one",
+			`<p><ruby>漢<rp>(<rt>かん<rp>)</ruby></p><p>one</p>`,
+			2,
+		},
+		{
 			"entities decode",
 			`<p>Tom&nbsp;&amp;&nbsp;Jerry&#8212;friends</p>`,
 			3,
