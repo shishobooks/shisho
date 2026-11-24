@@ -14,12 +14,13 @@ final class AccountSession {
     let store: CatalogStore
     let sync: SyncEngine
     let covers: CoverCache
-    let ebooks: EbookCache
+    let downloads: DownloadManager
 
     /// The capabilities the server listed in its last response, which any
     /// thread may read.
     let capabilities: OSAllocatedUnfairLock<[String]>
 
+    @MainActor
     init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void,
          onInstance: @escaping @Sendable (String) -> Void = { _ in }) throws {
         self.account = account
@@ -37,7 +38,13 @@ final class AccountSession {
         store = try CatalogStore(path: AccountData(accountID: account.id).catalogPath)
         sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
-        ebooks = EbookCache(client: client, accountID: account.id)
+        try? FileManager.default.removeItem(at: AccountData(accountID: account.id).legacyEbookFolder)
+        downloads = DownloadManager(account: account, client: client, store: store)
+    }
+
+    /// The server lists sharing a File out with its current metadata.
+    var sharesFiles: Bool {
+        capabilities.withLock { $0.contains(Shishoapp.Capability.shareFiles.rawValue) }
     }
 }
 
@@ -81,6 +88,7 @@ final class AppModel {
     var relatedTabForNextBook: String?
     var libraryPath: [Route] = []
     var listsPath: [Route] = []
+    var downloadsPath: [Route] = []
     /// The Account sheet is open.
     var showingAccount = false
     /// The sign-in sheet for adding another account is open.
@@ -174,10 +182,15 @@ final class AppModel {
         player = nil
         showingPlayer = false
         closeReader()
+        // Another account's transfers stop where they are, and carry on
+        // when it's back.
+        old?.downloads.stop()
         libraryPath = []
         listsPath = []
+        downloadsPath = []
         showingAccount = false
         stopPrefetching()
+        stopChecking()
         libraryID = session.map { UserDefaults.standard.integer(forKey: AccountData(accountID: $0.account.id).libraryIDKey) } ?? 0
         filter = LibraryFilter()
         loadSort()
@@ -187,7 +200,90 @@ final class AppModel {
             }
             self.player = player
             player.restore()
+            session.downloads.onChange = { [weak self] fileID in
+                self?.player?.downloadChanged(fileID: fileID)
+            }
+            session.downloads.networkChanged(to: downloadNetwork)
+            // The account's server: reachable until a request or a check
+            // says not, on whatever network the device has.
+            session.client.reachability.networkChanged(available: networkAvailable)
+            let opened = ObjectIdentifier(session)
+            session.client.reachability.observe { [weak self] connection in
+                Task { @MainActor in
+                    // Not for an account since switched away from.
+                    guard let self, let current = self.session, ObjectIdentifier(current) == opened else { return }
+                    self.connectionChanged(to: connection)
+                }
+            }
+            connection = session.client.reachability.connection
+        } else {
+            connection = networkAvailable ? .online : .offline
         }
+    }
+
+    // MARK: - Connection
+
+    /// Whether the account's server can be reached, which every screen
+    /// shows: things not on the device say at once that they need a
+    /// connection rather than trying and waiting.
+    private(set) var connection: Connection = .online
+    /// Checks the server every so often while it can't be reached.
+    @ObservationIgnored private var checking: Task<Void, Never>?
+    @ObservationIgnored private var active = true
+
+    private func connectionChanged(to new: Connection) {
+        let old = connection
+        connection = new
+        player?.connectionChanged(new)
+        reader?.connectionChanged(new)
+        switch new {
+        case .online:
+            stopChecking()
+            // Back: what waited goes now.
+            if old != .online { Task { await syncNow() } }
+        case .offline:
+            stopChecking()
+            // A sync in flight can't finish; it would only time out.
+            syncs.stop()
+            syncStatus = .offline
+        case .unreachable:
+            syncs.stop()
+            syncStatus = .offline
+            startChecking()
+        }
+    }
+
+    /// Whether a File can be listened to or read now: it's on the device, or
+    /// the server can be reached, or it's already playing.
+    func canOpen(fileID: Int) -> Bool {
+        ConnectionRules.canOpen(connection: connection,
+                                downloaded: connection != .online && session?.downloads.localFile(fileID: fileID) != nil,
+                                playing: player?.file?.fileID == fileID && player?.isPlaying == true)
+    }
+
+    /// Asks the server whether it answers now, quickly.
+    private func checkServer() {
+        guard let session else { return }
+        Task { await session.client.checkServer() }
+    }
+
+    /// While the server can't be reached and the app is in front, asks it
+    /// again every so often, so the app notices it's back without anyone
+    /// waiting on a request.
+    private func startChecking() {
+        guard checking == nil, active, let session else { return }
+        checking = Task { [weak self] in
+            while !Task.isCancelled {
+                if await session.client.checkServer() { break }
+                try? await Task.sleep(for: .seconds(20))
+            }
+            self?.checking = nil
+        }
+    }
+
+    private func stopChecking() {
+        checking?.cancel()
+        checking = nil
     }
 
     /// Audio was playing when the app went to the background.
@@ -196,6 +292,8 @@ final class AppModel {
     func didEnterBackground() {
         playingInBackground = player?.isPlaying == true
         reader?.background()
+        active = false
+        stopChecking()
     }
 
     /// The app is leaving the screen, perhaps to be swiped away, which skips
@@ -210,6 +308,13 @@ final class AppModel {
     /// are. iOS doesn't say which of those brought the app back.
     func didBecomeActive() {
         reader?.foreground()
+        session?.downloads.resume()
+        active = true
+        // The network may have changed while the app was away.
+        if connection != .online {
+            checkServer()
+            if connection == .unreachable { startChecking() }
+        }
         // Not over the reader, which was open as the audio played on.
         if playingInBackground, reader == nil, player?.isPlaying == true, player?.file != nil {
             showingPlayer = true
@@ -227,11 +332,12 @@ final class AppModel {
     /// Opens a Book from one of its own pages, such as a File's: back to it
     /// when it's the screen before, rather than a second copy on top.
     func returnToBook(_ book: BookSummary) {
-        let path = tab == .library ? libraryPath : listsPath
+        let path = self.path(tab)
         if path.count >= 2, case .book(let previous) = path[path.count - 2], previous.id == book.id {
             switch tab {
             case .library: libraryPath.removeLast()
             case .lists: listsPath.removeLast()
+            case .downloads: downloadsPath.removeLast()
             }
         } else {
             push(.book(book))
@@ -242,6 +348,16 @@ final class AppModel {
         switch tab {
         case .library: libraryPath = []
         case .lists: listsPath = []
+        case .downloads: downloadsPath = []
+        }
+    }
+
+    /// The pages pushed on tab.
+    private func path(_ tab: AppTab) -> [Route] {
+        switch tab {
+        case .library: libraryPath
+        case .lists: listsPath
+        case .downloads: downloadsPath
         }
     }
 
@@ -252,11 +368,7 @@ final class AppModel {
     /// The tab showing, tapped again: back to its first screen, or on it,
     /// back to its top, as a native tab bar does.
     func reselect(_ tab: AppTab) {
-        let atRoot = switch tab {
-        case .library: libraryPath.isEmpty
-        case .lists: listsPath.isEmpty
-        }
-        if atRoot {
+        if path(tab).isEmpty {
             scrollToTop[tab, default: 0] += 1
         } else {
             popToRoot(tab)
@@ -267,8 +379,7 @@ final class AppModel {
     /// unless it's the page under the player.
     func showFromPlayer(_ route: Route) {
         showingPlayer = false
-        let path = tab == .library ? libraryPath : listsPath
-        if path.last.map({ !$0.isSamePage(as: route) }) ?? true {
+        if path(tab).last.map({ !$0.isSamePage(as: route) }) ?? true {
             push(route)
         }
     }
@@ -278,6 +389,7 @@ final class AppModel {
         switch tab {
         case .library: libraryPath.append(route)
         case .lists: listsPath.append(route)
+        case .downloads: downloadsPath.append(route)
         }
     }
 
@@ -776,6 +888,14 @@ final class AppModel {
         }
     }
 
+    /// iOS launched the app in the background for Downloads' transfers:
+    /// the session they belong to is made again to take their events.
+    /// Another account's wait until it's showing.
+    func backgroundDownloads(identifier: String) async {
+        guard let session, DownloadManager.isSession(identifier, accountID: session.account.id) else { return }
+        await session.downloads.backgroundEvents(identifier: identifier)
+    }
+
     /// A background refresh: sync once, and ask for the next.
     func backgroundRefresh() async {
         scheduleBackgroundRefresh()
@@ -789,10 +909,20 @@ final class AppModel {
             syncStatus = .offline
             return
         }
+        // Last heard not to answer: asked once first, since a sync from a
+        // pause or a background refresh may be what finds it back, with
+        // nothing else checking.
+        if !session.client.reachability.allowsRequests {
+            _ = await session.client.checkServer()
+        }
         do {
             try await session.sync.run()
             guard isCurrent() else { return }
             syncStatus = .idle
+            // Caught up, so a File missing from the copy has left the library,
+            // and one with a new size was replaced.
+            session.downloads.dropOrphans()
+            session.downloads.refreshReplaced()
             prefetchCoversIfWanted(session)
         } catch {
             await Diagnostics.shared.log(.sync, "sync failed: \(Diagnostics.describe(error))")
@@ -819,6 +949,7 @@ final class AppModel {
             // The user's role can't read Books anymore: nothing in the copy
             // is theirs to see. The journal stays, to send if that changes.
             try? session.store.reconcileAccess(Shishoapp.FeedAccess(libraryIds: [], listIds: []), force: true)
+            session.downloads.dropOrphans()
             syncStatus = .failed(Messages.signIn(error))
         case .unreachable:
             syncStatus = .offline
@@ -845,23 +976,39 @@ final class AppModel {
 
     // MARK: - Covers
 
-    /// Whether to download every cover on Wi-Fi, kept for each account. Off
-    /// until the user turns it on.
-    func prefetchesCovers(_ account: Account) -> Bool {
-        UserDefaults.standard.bool(forKey: AccountData(accountID: account.id).prefetchCoversKey)
-    }
-
-    func setPrefetchesCovers(_ on: Bool) {
-        guard let session else { return }
-        UserDefaults.standard.set(on, forKey: AccountData(accountID: session.account.id).prefetchCoversKey)
-        if on {
-            prefetchCoversIfWanted(session)
-        } else {
-            stopPrefetching()
+    /// Whether to download every cover on Wi-Fi, for every account on this
+    /// device. Off until the user turns it on.
+    var prefetchesCovers = AppModel.storedPrefetchesCovers {
+        didSet {
+            guard prefetchesCovers != oldValue else { return }
+            UserDefaults.standard.set(prefetchesCovers, forKey: AppModel.prefetchCoversKey)
+            if prefetchesCovers, let session {
+                prefetchCoversIfWanted(session)
+            } else {
+                stopPrefetching()
+            }
         }
     }
 
+    private static let prefetchCoversKey = "prefetchCovers"
+
+    /// The setting, or, before it applied to every account, on when any
+    /// account had it on.
+    private static var storedPrefetchesCovers: Bool {
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: prefetchCoversKey) != nil {
+            return defaults.bool(forKey: prefetchCoversKey)
+        }
+        let before = defaults.dictionaryRepresentation().contains { key, value in
+            key.hasPrefix(prefetchCoversKey + ".") && (value as? Bool) == true
+        }
+        defaults.set(before, forKey: prefetchCoversKey)
+        return before
+    }
+
     @ObservationIgnored private var onWiFi = false
+    /// The network as Downloads weigh it.
+    @ObservationIgnored private var downloadNetwork: DownloadNetwork = .wifi
     @ObservationIgnored private var prefetching: Task<Void, Never>?
     /// Which prefetch is current, so one that ends late doesn't clear a newer
     /// one's handle.
@@ -876,11 +1023,12 @@ final class AppModel {
         prefetchRun += 1
     }
 
-    /// Downloads every cover the account's Library shows that isn't on the
-    /// device yet, at the grid's size, while on Wi-Fi, so browsing offline
-    /// shows them all.
+    /// Downloads every cover that isn't on the device yet while on Wi-Fi, so
+    /// browsing and listening offline show them all: each Book's at the
+    /// grid's size, and each File's own, at the size Now Playing shows it.
+    /// Other sizes of a cover kept show offline in their place.
     private func prefetchCoversIfWanted(_ session: AccountSession) {
-        guard prefetchesCovers(session.account), onWiFi else { return }
+        guard prefetchesCovers, onWiFi else { return }
         guard prefetching == nil else {
             prefetchAgain = true
             return
@@ -893,7 +1041,8 @@ final class AppModel {
             let versions = (try? session.store.coverVersions()) ?? []
             for cover in versions {
                 guard !Task.isCancelled, self?.session === session, self?.onWiFi == true else { break }
-                _ = await session.covers.image(bookID: cover.bookID, version: cover.version, size: size)
+                _ = await session.covers.image(cover.owner, version: cover.version,
+                                               size: cover.owner.isFile ? AudioPlayer.artworkSize : size)
             }
             guard let self, prefetchRun == run else { return }
             prefetching = nil
@@ -906,6 +1055,8 @@ final class AppModel {
     /// Coming back online syncs; going offline says so without waiting for
     /// a request to fail.
     private func networkChanged(available: Bool, wifi: Bool = false) {
+        downloadNetwork = !available ? .offline : wifi ? .wifi : .cellular
+        session?.downloads.networkChanged(to: downloadNetwork)
         let wasOnWiFi = onWiFi
         onWiFi = wifi
         if !wifi {
@@ -913,15 +1064,20 @@ final class AppModel {
         } else if !wasOnWiFi, let session {
             prefetchCoversIfWanted(session)
         }
-        guard available != networkAvailable else { return }
-        networkAvailable = available
-        if available {
-            Task { await syncNow() }
-        } else if session != nil {
-            // The sync in flight can't finish; it would only time out.
-            syncs.stop()
-            syncStatus = .offline
+        guard available != networkAvailable else {
+            // Another network, as from Wi-Fi to cellular, may reach the
+            // server where the last one didn't, or not.
+            if available { checkServer() }
+            return
         }
+        networkAvailable = available
+        session?.client.reachability.networkChanged(available: available)
+        if session == nil {
+            connection = available ? .online : .offline
+        }
+        // A quick check says at once whether this network reaches the
+        // server, rather than the first request finding out the slow way.
+        if available { checkServer() }
     }
 
     private func recordCapabilities(_ listed: [String], accountID: String) {
@@ -1034,7 +1190,7 @@ enum Messages {
 
 /// The app's tabs.
 enum AppTab: Hashable {
-    case library, lists
+    case library, lists, downloads
 }
 
 /// A page pushed on a tab's navigation.
@@ -1061,4 +1217,6 @@ enum Route: Hashable {
     case file(bookID: Int, fileID: Int)
     /// Search over the device's copy, opened from a tab's toolbar.
     case search
+    /// The Download settings, from the Downloads tab's toolbar.
+    case downloadSettings
 }

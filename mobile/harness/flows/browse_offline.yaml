@@ -40,7 +40,7 @@ name: Browse Books offline
 - assertVisible: Quiet Lighthouse
 - extendedWaitUntil:
     visible:
-      id: sync.banner
+      id: connection.bar
     timeout: 30000
 
 # Search finds a person in the device's own index, and their page lists

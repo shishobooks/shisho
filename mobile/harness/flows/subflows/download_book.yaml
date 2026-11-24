@@ -1,0 +1,21 @@
+# Opens the Book titled ${TITLE} from the Library, downloads its first File,
+# and waits until it's on the device. Not a flow of its own.
+appId: ${APP_ID}
+---
+- runFlow:
+    file: open_book.yaml
+    env:
+      TITLE: ${TITLE}
+- scrollUntilVisible:
+    element:
+      id: file\.download\.[0-9]+
+    direction: DOWN
+    centerElement: true
+    timeout: 60000
+- tapOn:
+    id: file\.download\.[0-9]+
+- extendedWaitUntil:
+    visible:
+      id: file\.downloadStatus\.[0-9]+
+      text: Downloaded
+    timeout: 60000

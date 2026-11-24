@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The signed-in app: the Library and Lists tabs of the prototype's native
+/// The signed-in app: the Library, Lists, and Downloads tabs of the prototype's native
 /// structure (variant E), each with its own navigation, the mini player
 /// above the tab bar on every one, and the Account sheet any tab opens.
 struct MainTabs: View {
@@ -19,6 +19,9 @@ struct MainTabs: View {
             ListsView()
                 .withMiniPlayer()
                 .tag(AppTab.lists)
+            DownloadsView()
+                .withMiniPlayer()
+                .tag(AppTab.downloads)
         }
         // Over the screens, which leave room for it at the end of their
         // scrolling (miniPlayerClearance), as the prototype's bar is.
@@ -43,13 +46,39 @@ struct MainTabs: View {
 /// goes back to its first screen, as a native tab bar does.
 struct AppTabBar: View {
     @Environment(AppModel.self) private var model
+    /// Downloads on their way, counted on the Downloads tab.
+    @State private var downloading: Int?
     /// Its height above the bottom safe area, which screens leave clear.
     static let height: CGFloat = 53
 
+    /// The strip above the tabs that says the server can't be reached.
+    static let connectionHeight: CGFloat = 30
+
+    /// The room screens leave for the bar, with the strip when it shows.
+    static func room(_ connection: Connection) -> CGFloat {
+        height + (connection == .online ? 0 : connectionHeight)
+    }
+
     var body: some View {
+        VStack(spacing: 0) {
+            if model.connection != .online {
+                ConnectionStrip(connection: model.connection)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            tabs
+        }
+        .animation(.easeOut(duration: 0.25), value: model.connection)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloading) { db in
+            try CatalogStore.downloadingCount(db)
+        }
+    }
+
+    private var tabs: some View {
         HStack(spacing: 0) {
             item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
             item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
+            item(.downloads, String(localized: "Downloads"), icon: .download, identifier: "tab.downloads",
+                 badge: downloading ?? 0)
         }
         .padding(.top, 7)
         .padding(.bottom, 2)
@@ -71,7 +100,7 @@ struct AppTabBar: View {
         .dynamicTypeSize(.large)
     }
 
-    private func item(_ tab: AppTab, _ title: String, icon: Lucide, identifier: String) -> some View {
+    private func item(_ tab: AppTab, _ title: String, icon: Lucide, identifier: String, badge: Int = 0) -> some View {
         let selected = model.tab == tab
         return Button {
             if selected {
@@ -84,6 +113,14 @@ struct AppTabBar: View {
             VStack(spacing: 3) {
                 Icon(icon, size: 24, relativeTo: nil)
                     .frame(height: 26)
+                    .overlay(alignment: .topTrailing) {
+                        if badge > 0 {
+                            TabBadge(count: badge)
+                                .offset(x: 12, y: -4)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.7), value: badge > 0)
                 Text(title)
                     .font(.geist(size: 10.5, relativeTo: .caption2, weight: .medium))
             }
@@ -96,8 +133,56 @@ struct AppTabBar: View {
             Label(verbatim: title, menuIcon: icon)
         }
         .accessibilityLabel(title)
+        .accessibilityValue(badge > 0 ? String(localized: "\(badge) downloading") : "")
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityIdentifier(identifier)
+    }
+}
+
+/// The count on a tab, such as Downloads on their way, in the primary
+/// color, as the web app's badges are.
+private struct TabBadge: View {
+    let count: Int
+
+    var body: some View {
+        Text(count > 99 ? "99+" : String(count))
+            .font(.geist(size: 11, relativeTo: .caption2, weight: .semibold))
+            .monospacedDigit()
+            // Geist's digits sit a little low in their line; up to the
+            // circle's middle.
+            .offset(y: -0.5)
+            .foregroundStyle(Theme.primaryForeground)
+            .padding(.horizontal, 5)
+            .frame(minWidth: 18, minHeight: 18)
+            .background(Theme.primary, in: Capsule())
+            .overlay(Capsule().strokeBorder(Theme.background, lineWidth: 1.5))
+            .accessibilityHidden(true)
+    }
+}
+
+/// Says, across the app, that the account's server can't be reached, and
+/// why, while what's on the device keeps working.
+private struct ConnectionStrip: View {
+    let connection: Connection
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Icon(.wifiOff, size: 13, relativeTo: nil)
+            Text(connection == .offline ? String(localized: "Offline") : String(localized: "Can't reach your server"))
+                .font(.geist(size: 12, relativeTo: .caption, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(Theme.mutedForeground)
+        .frame(maxWidth: .infinity, minHeight: AppTabBar.connectionHeight)
+        .background(Theme.muted)
+        .overlay(alignment: .top) {
+            Rectangle().fill(Theme.border).frame(height: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(connection == .offline
+            ? String(localized: "Offline. What's downloaded still works.")
+            : String(localized: "Your server can't be reached. What's downloaded still works."))
+        .accessibilityIdentifier("connection.bar")
     }
 }
 
@@ -114,9 +199,19 @@ private struct TabPressStyle: ButtonStyle {
 /// search, which opens on top of the tab, and the account.
 struct RootToolbar: ToolbarContent {
     @Environment(AppModel.self) private var model
+    /// The Downloads tab's: its settings, rarely changed, behind a gear.
+    var downloadSettings = false
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
+            if downloadSettings {
+                NavigationLink(value: Route.downloadSettings) {
+                    Icon(.settings, size: 20, relativeTo: nil)
+                        .foregroundStyle(Theme.foreground)
+                }
+                .accessibilityLabel("Download Settings")
+                .accessibilityIdentifier("downloads.settings")
+            }
             NavigationLink(value: Route.search) {
                 Icon(.search, size: 20, relativeTo: nil)
                     .foregroundStyle(Theme.foreground)
@@ -167,6 +262,8 @@ private struct RouteDestination: View {
             FileView(bookID: bookID, fileID: fileID)
         case .search:
             SearchView()
+        case .downloadSettings:
+            DownloadSettingsView()
         }
     }
 }
@@ -182,7 +279,7 @@ private struct MiniPlayerOverlay: ViewModifier {
                 .overlay(alignment: .bottom) {
                     MiniPlayer()
                         .frame(maxWidth: 680)
-                        .padding(.bottom, AppTabBar.height)
+                        .padding(.bottom, AppTabBar.room(model.connection))
                         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.player?.file?.fileID)
                 }
         }
@@ -192,27 +289,43 @@ private struct MiniPlayerOverlay: ViewModifier {
 /// Books in a grid, as the Library shows them: as many columns as fit, each
 /// opening its Book. badges are Series Numbers to show inline with titles.
 struct BookGrid: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let books: [BookSummary]
     let width: CGFloat
     var badges: [Int: (Double, Double?)] = [:]
     var identifier = "library.grid"
+    /// The Books with a File on the device.
+    @State private var downloaded: Set<Int>?
 
     var body: some View {
         let layout = GridLayout(width: width, regular: sizeClass == .regular,
                                 accessibility: dynamicTypeSize.isAccessibilitySize)
         let column = GridItem(.fixed(layout.cellWidth), spacing: GridLayout.spacing, alignment: .top)
+        // Read here in body: a lazy grid builds its cells outside body, so
+        // state read only in a cell doesn't redraw it when it changes.
+        let connection = model.connection
+        let downloaded = downloaded
         LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(books) { book in
+                let onDevice = !ConnectionRules.dimmed(bookID: book.id, connection: connection, downloaded: downloaded)
                 NavigationLink(value: Route.book(book)) {
                     BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id])
+                        // Without the server, a Book with nothing downloaded
+                        // can't be listened to or read: dimmed, though its
+                        // page still opens.
+                        .opacity(onDevice ? 1 : 0.5)
                 }
                 .buttonStyle(PressableStyle())
+                .accessibilityHint(onDevice ? "" : String(localized: "Not downloaded"))
             }
         }
         .padding(.horizontal, GridLayout.margin)
         .accessibilityIdentifier(identifier)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloaded) { db in
+            try CatalogStore.downloadedBookIDs(db)
+        }
     }
 }
 

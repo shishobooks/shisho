@@ -20,6 +20,8 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authService *auth.Service, broker 
 	deviceService := devices.NewService(db)
 	h := &handler{
 		db:        db,
+		books:     opts.Books,
+		downloads: opts.Downloads,
 		auth:      authService,
 		devices:   deviceService,
 		feed:      changefeed.NewService(db),
@@ -51,4 +53,8 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	g.HEAD("/files/:id/download", h.download, signedIn, h.requireProtocol)
 	g.GET("/files/:id/stream", h.stream, streamCookies, signedIn, h.requireProtocol)
 	g.HEAD("/files/:id/stream", h.stream, streamCookies, signedIn, h.requireProtocol)
+	// A File's Generated File, for sharing out of the app with Shisho's
+	// current metadata (CapabilityShareFiles).
+	g.GET("/files/:id/share", h.share, signedIn, h.requireProtocol)
+	g.HEAD("/files/:id/share", h.share, signedIn, h.requireProtocol)
 }

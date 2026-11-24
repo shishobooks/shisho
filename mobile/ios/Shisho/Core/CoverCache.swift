@@ -36,6 +36,11 @@ final class CoverCache: Sendable {
         case book(Int)
         case file(Int)
 
+        var isFile: Bool {
+            if case .file = self { return true }
+            return false
+        }
+
         /// The folder that holds the owner's covers, and starts their names.
         fileprivate var name: String {
             switch self {

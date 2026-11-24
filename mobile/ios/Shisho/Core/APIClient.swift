@@ -54,6 +54,9 @@ final class APIClient: Sendable {
     private let instance: OSAllocatedUnfairLock<String>
     /// Called once with the instance an account without one learns.
     private let onInstance: (@Sendable (String) -> Void)?
+    /// Whether the server can be reached, which every request reads and
+    /// updates.
+    let reachability = ServerReachability()
 
     /// protocolClasses answer requests before the network, for tests.
     init(baseURL: URL, credential: String?, instanceID: String = "",
@@ -95,10 +98,26 @@ final class APIClient: Sendable {
         }
     }
 
+    /// Whether the server answers now, asked quickly: a few seconds at most,
+    /// so finding the server again never keeps a screen waiting. It's how a
+    /// server marked unreachable is found again.
+    @discardableResult
+    func checkServer() async -> Bool {
+        do {
+            _ = try await data("mobile/server", readsCapabilities: false, timeout: 5, check: true)
+            return true
+        } catch {
+            return reachability.allowsRequests
+        }
+    }
+
     /// Signs the Device out on the server, so its credential stops working.
     /// It's best effort: a sign-out offline still forgets the credential.
+    /// It's tried whatever was last heard of the server, which may be out of
+    /// date, since a credential left valid on a server that's back is worse
+    /// than a request that fails.
     func signOut() async {
-        _ = try? await data("mobile/device", method: "DELETE")
+        _ = try? await data("mobile/device", method: "DELETE", check: true)
     }
 
     /// One page of the feed, and what the user can access now, when the
@@ -285,31 +304,104 @@ final class APIClient: Sendable {
     /// A File's Original File (ADR 0022), downloaded to a temporary file
     /// the caller moves where it keeps it.
     func download(fileID: Int) async throws -> URL {
-        let request = self.request("mobile/files/\(fileID)/download", accept: "*/*")
+        try await fetchFile(request("mobile/files/\(fileID)/download", accept: "*/*"), session: session).0
+    }
+
+    /// A File's Generated File, which carries Shisho's current metadata, for
+    /// sharing out of the app (ADR 0022), downloaded to a temporary file.
+    /// The server builds it before it answers, which can take minutes for a
+    /// large audiobook, so the wait for the first byte is long.
+    /// It's named as the server names it, in a folder of its own the
+    /// caller deletes when done.
+    func shareFile(fileID: Int) async throws -> URL {
+        var request = request("mobile/files/\(fileID)/share", accept: "*/*")
+        request.timeoutInterval = 15 * 60
+        let (file, response) = try await fetchFile(request, session: session)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("Share-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let name = response.suggestedFilename.flatMap { $0.isEmpty ? nil : $0 } ?? "File \(fileID)"
+            let named = folder.appendingPathComponent(name.replacingOccurrences(of: "/", with: "-"))
+            try FileManager.default.moveItem(at: file, to: named)
+            return named
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            try? FileManager.default.removeItem(at: folder)
+            throw error
+        }
+    }
+
+    private func fetchFile(_ request: URLRequest, session: URLSession) async throws -> (URL, URLResponse) {
+        guard reachability.allowsRequests else { throw APIError.unreachable("offline") }
         let file: URL
         let response: URLResponse
         do {
             (file, response) = try await session.download(for: request)
         } catch {
+            reachability.failed(error)
             throw APIClient.transportError(error)
         }
-        guard let http = response as? HTTPURLResponse else {
+        reachability.answered()
+        do {
+            try APIClient.checkDownloaded(file, response: response)
+        } catch {
             try? FileManager.default.removeItem(at: file)
+            throw error
+        }
+        return (file, response)
+    }
+
+    /// Checks that a finished transfer is the file asked for: a success, not
+    /// a login page from something in front of the server, and not cut off
+    /// partway. A failure's body, which the server sends as JSON, says why.
+    static func checkDownloaded(_ file: URL, response: URLResponse?) throws {
+        guard let http = response as? HTTPURLResponse else {
             throw APIError.unreachable("No response")
         }
         guard (200..<300).contains(http.statusCode) else {
             let body = (try? Data(contentsOf: file)) ?? Data()
-            try? FileManager.default.removeItem(at: file)
             throw APIClient.error(status: http.statusCode, response: http, body: body)
         }
-        // A login page from something in front of the server, or a download
-        // cut off partway, isn't the File.
         let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int64) ?? -1
-        if http.mimeType == "text/html" || (http.expectedContentLength >= 0 && size != http.expectedContentLength) {
-            try? FileManager.default.removeItem(at: file)
-            throw http.mimeType == "text/html" ? APIError.blockedByProxy : APIError.unreachable("The download stopped partway")
+        if http.mimeType == "text/html" {
+            throw APIError.blockedByProxy
         }
-        return file
+        // A resumed transfer's response is the 206 for the rest, whose
+        // length is less than the whole file.
+        if http.statusCode == 200, http.expectedContentLength >= 0, size != http.expectedContentLength {
+            throw APIError.unreachable("The download stopped partway")
+        }
+    }
+
+    // MARK: - Downloads
+
+    /// A session that transfers Downloads in the background, outside the app
+    /// and across its relaunches (ADR 0022). It's configured as this
+    /// client's is, and its requests come from `downloadRequest`, so they
+    /// carry the same headers. iOS hands its events to delegate, and on a
+    /// relaunch to the session made again with the same identifier. One
+    /// that's wifiOnly is kept off cellular and any network iOS calls
+    /// expensive or constrained, even while the app is suspended, and so is
+    /// a transfer carried on in it from one that started in another.
+    func backgroundSession(identifier: String, wifiOnly: Bool, delegate: URLSessionDelegate) -> URLSession {
+        let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
+        configuration.allowsCellularAccess = !wifiOnly
+        configuration.allowsExpensiveNetworkAccess = !wifiOnly
+        configuration.allowsConstrainedNetworkAccess = !wifiOnly
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.httpCookieStorage = nil
+        configuration.sessionSendsLaunchEvents = true
+        // Not left for when iOS finds it convenient: the user asked for it.
+        configuration.isDiscretionary = false
+        configuration.httpMaximumConnectionsPerHost = 2
+        return URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
+    }
+
+    /// The request for a File's Original File in a background session,
+    /// whose own configuration says which networks it may use.
+    func downloadRequest(fileID: Int) -> URLRequest {
+        request("mobile/files/\(fileID)/download", accept: "*/*")
     }
 
     private func request(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil,
@@ -338,16 +430,22 @@ final class APIClient: Sendable {
     }
 
     private func data(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil,
-                      readsCapabilities: Bool = true) async throws -> Data {
-        let request = self.request(path, method: method, query: query, body: body)
+                      readsCapabilities: Bool = true, timeout: TimeInterval? = nil, check: Bool = false) async throws -> Data {
+        // Known not to answer: fail at once rather than wait out a timeout.
+        // A check is how it's found again.
+        guard check || reachability.allowsRequests else { throw APIError.unreachable("offline") }
+        var request = self.request(path, method: method, query: query, body: body)
+        if let timeout { request.timeoutInterval = timeout }
 
         let data: Data
         let response: URLResponse
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            reachability.failed(error)
             throw APIClient.transportError(error)
         }
+        reachability.answered()
         guard let http = response as? HTTPURLResponse else {
             throw APIError.unreachable("No response")
         }

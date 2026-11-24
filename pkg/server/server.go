@@ -228,6 +228,8 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		DemoMode:      cfg.DemoMode,
 		InstanceID:    instanceID,
 		Thumbnails:    svcs.coverCache,
+		Books:         svcs.books,
+		Downloads:     svcs.dlCache,
 	})
 
 	// Register protected API routes

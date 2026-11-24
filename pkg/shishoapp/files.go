@@ -128,6 +128,31 @@ func (h *handler) download(c echo.Context) error {
 	return books.OriginalDownload(file.Book, file).Serve(c)
 }
 
+// share serves a File's Generated File, so a copy the app shares out of
+// itself carries Shisho's current metadata (ADR 0022). It's built into the
+// download cache before anything is sent, so even a first build goes out
+// with its size and Range support, and an interrupted transfer resumes. A
+// HEAD builds it too, so its size is known.
+func (h *handler) share(c echo.Context) error {
+	file, err := h.requireFile(c, false)
+	if err != nil {
+		return err
+	}
+	book, err := h.books.RetrieveBook(c.Request().Context(), books.RetrieveBookOptions{ID: &file.BookID})
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	// The Book's copy of the File carries the relations its fingerprint
+	// and metadata are built from.
+	for _, f := range book.Files {
+		if f.ID == file.ID {
+			file = f
+			break
+		}
+	}
+	return books.ServePreparedDownload(c, h.downloads, book, file)
+}
+
 // stream serves an audiobook File for playback, with Range support so the
 // player can seek. Only audiobooks stream; anything else downloads.
 func (h *handler) stream(c echo.Context) error {

@@ -141,6 +141,7 @@ struct ResourceView: View {
     @State private var books: [BookSummary]?
     @State private var narrated: [BookSummary]?
     @State private var numbers: SeriesNumberMap?
+    @State private var downloadable: DownloadAllButton.Files?
 
     private var name: String { (detail ?? nil)?.name ?? initialName }
 
@@ -178,6 +179,17 @@ struct ResourceView: View {
         .refreshable { await model.syncNow() }
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            // A whole Series downloads in one tap, for a trip.
+            if kind == .series, let downloadable, !downloadable.fileIDs.isEmpty {
+                ToolbarItem(placement: .topBarTrailing) {
+                    DownloadAllButton(files: downloadable)
+                }
+            }
+        }
+        .observing(model.session?.store, id: "\(kind)-\(id)", into: $downloadable) { [kind, id] db in
+            kind == .series ? try DownloadAllButton.Files.fetch(db, seriesID: id) : DownloadAllButton.Files(fileIDs: [], missing: 0)
+        }
         .observing(model.session?.store, id: "\(kind)-\(id)", into: $detail) { [kind, id] db in
             try CatalogStore.resource(db, kind: kind, id: id)
         }

@@ -10,6 +10,7 @@ import SwiftUI
 struct FileView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let bookID: Int
     let fileID: Int
 
@@ -18,6 +19,7 @@ struct FileView: View {
     @State private var listen: ListenProgress??
     @State private var tint: Color?
     @State private var scrolled = false
+    @State private var download: DownloadRow??
 
     private var file: BookDetail.File? { (book ?? nil)?.files.first { $0.id == fileID } }
 
@@ -73,6 +75,9 @@ struct FileView: View {
         .observing(model.session?.store, id: fileID, into: $chapters) { [fileID] db in
             try CatalogStore.fileChapters(db, fileID: fileID)
         }
+        .observing(model.session?.store, id: fileID, into: $download) { [fileID] db in
+            try CatalogStore.download(db, fileID: fileID)
+        }
         .observing(model.session?.store, id: fileID, into: $listen) { [bookID, fileID, deviceID = model.session?.account.deviceID ?? ""] db in
             // Only an audiobook has a place to listen from.
             let type = try String.fetchOne(db, sql: "SELECT file_type FROM book_files WHERE id = ?", arguments: [fileID])
@@ -100,8 +105,10 @@ struct FileView: View {
     private func content(_ book: BookDetail, _ file: BookDetail.File) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             hero(book, file)
+            fileActions(file)
             if let progress = listen ?? nil {
                 ListenCard(progress: progress, bookID: book.summary.id)
+                    .modifier(NeedsConnection(available: model.canOpen(fileID: progress.fileID)))
                     .padding(.top, 22)
             }
             let edition = editionRows(file)
@@ -183,6 +190,62 @@ struct FileView: View {
                 + Byline.links(authors.map { (Route.resource(.person, id: $0.personID, name: $0.name), $0.name) })
         }
         return line
+    }
+
+    // MARK: - Download and share
+
+    /// Download, or where its Download stands, and Share, which sends the
+    /// File out with Shisho's current metadata when the server offers it.
+    @ViewBuilder
+    private func fileActions(_ file: BookDetail.File) -> some View {
+        let supported = FileTypes.isKnown(file.fileType)
+        let downloads = model.session?.downloads
+        let status = downloads?.status(download ?? nil) ?? .notDownloaded
+        // Side by side, or one over the other at accessibility text sizes.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
+        VStack(spacing: 10) {
+            layout {
+                Group {
+                    switch status {
+                    case .notDownloaded, .failed:
+                        Button { downloads?.download([file.id]) } label: {
+                            Label(verbatim: supported ? String(localized: "Download") : String(localized: "Not supported"), icon: .download)
+                        }
+                        .disabled(!supported)
+                        .modifier(NeedsConnection(available: !supported || model.connection == .online))
+                        .accessibilityLabel(supported ? String(localized: "Download \(file.label)")
+                                            : String(localized: "Download \(file.label), not supported in this version of the app"))
+                    case .waiting, .running:
+                        Button { downloads?.remove([file.id]) } label: {
+                            Label("Stop Download", icon: .x)
+                        }
+                        .accessibilityLabel(String(localized: "Stop downloading \(file.label)"))
+                    case .downloaded:
+                        Button(role: .destructive) { downloads?.remove([file.id]) } label: {
+                            // Short, as it shares the row with Share; the line
+                            // under them says it's downloaded.
+                            Label("Remove", icon: .trash)
+                        }
+                        .accessibilityLabel(String(localized: "Remove the Download of \(file.label)"))
+                    }
+                }
+                .buttonStyle(OutlineButtonStyle(role: status == .downloaded ? .destructive : nil))
+                .accessibilityValue(DownloadWords.status(status) ?? "")
+                .accessibilityIdentifier("file.download")
+                if supported, model.session?.sharesFiles == true {
+                    ShareFileButton(fileID: file.id, label: file.label)
+                        // The server makes the copy it shares.
+                        .modifier(NeedsConnection(available: model.connection == .online))
+                }
+            }
+            DownloadStatusLine(fileID: file.id, row: download ?? nil)
+                .labelStyle(.titleAndIcon)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        // The buttons' icons go above their titles at accessibility sizes.
+        .labelStyle(ActionLabelStyle())
+        .padding(.top, 20)
     }
 
     // MARK: - Chapters

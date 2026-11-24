@@ -27,6 +27,9 @@
         }
       }
     },
+    "%@ available" : {
+
+    },
     "%@ couldn't be read." : {
 
     },
@@ -34,6 +37,9 @@
 
     },
     "%@ in your Libraries appear here." : {
+
+    },
+    "%@ is downloaded" : {
 
     },
     "%@ is too large. Choose a font file under 50 MB." : {
@@ -156,6 +162,9 @@
         }
       }
     },
+    "%lld downloading" : {
+
+    },
     "%lld of %lld" : {
       "localizations" : {
         "en" : {
@@ -165,6 +174,9 @@
           }
         }
       }
+    },
+    "%lld on the way" : {
+
     },
     "%lld selected" : {
 
@@ -176,6 +188,9 @@
 
     },
     "1 star" : {
+
+    },
+    "A Download is removed once you listen to or read it to the end." : {
 
     },
     "A change made on this device couldn't be saved on the server: %@" : {
@@ -215,6 +230,9 @@
 
     },
     "All Libraries" : {
+
+    },
+    "All downloaded or on their way" : {
 
     },
     "Also known as %@" : {
@@ -304,6 +322,9 @@
     "Books in the Libraries you can access appear here." : {
 
     },
+    "Books with a file on this device." : {
+
+    },
     "Books, series, people" : {
 
     },
@@ -314,6 +335,9 @@
 
     },
     "Browse tags in your library" : {
+
+    },
+    "Can't reach your server" : {
 
     },
     "Cancel" : {
@@ -391,6 +415,9 @@
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
 
     },
+    "Couldn't share this File" : {
+
+    },
     "Counts pages left in the book" : {
 
     },
@@ -445,10 +472,52 @@
     "Done" : {
 
     },
+    "Download" : {
+
+    },
+    "Download %@" : {
+
+    },
+    "Download %@, not supported in this version of the app" : {
+
+    },
+    "Download All" : {
+
+    },
+    "Download Settings" : {
+
+    },
     "Download all covers on Wi-Fi" : {
 
     },
+    "Download audiobooks and ebooks from a Book's page to listen and read offline." : {
+
+    },
+    "Download failed: %@" : {
+
+    },
+    "Download on Wi-Fi only" : {
+
+    },
+    "Downloaded" : {
+
+    },
+    "Downloaded only" : {
+
+    },
+    "Downloading" : {
+
+    },
     "Downloading your library…" : {
+
+    },
+    "Downloading · %@" : {
+
+    },
+    "Downloads" : {
+
+    },
+    "Downloads wait until you're on Wi-Fi." : {
 
     },
     "Duration" : {
@@ -577,6 +646,9 @@
     "Inker" : {
 
     },
+    "It kept stopping. Check your connection and try again." : {
+
+    },
     "Justify text" : {
 
     },
@@ -641,6 +713,9 @@
     "Listening" : {
 
     },
+    "Listening %@" : {
+
+    },
     "Lists" : {
 
     },
@@ -686,6 +761,9 @@
     "Narrow" : {
 
     },
+    "Needs a connection to your server" : {
+
+    },
     "Never" : {
 
     },
@@ -713,6 +791,9 @@
     "No Books yet" : {
 
     },
+    "No Downloads" : {
+
+    },
     "No Lists yet" : {
 
     },
@@ -735,6 +816,15 @@
 
     },
     "No tags found." : {
+
+    },
+    "Not downloaded" : {
+
+    },
+    "Not started" : {
+
+    },
+    "Not supported" : {
 
     },
     "Not supported in this version of the app" : {
@@ -775,7 +865,10 @@
     "OK" : {
 
     },
-    "Offline. Showing what's on this device." : {
+    "Offline" : {
+
+    },
+    "Offline. What's downloaded still works." : {
 
     },
     "On disk" : {
@@ -794,6 +887,9 @@
 
     },
     "Opening the book" : {
+
+    },
+    "Opens the Book" : {
 
     },
     "Opens the File's page" : {
@@ -850,6 +946,12 @@
     "Position in chapter" : {
 
     },
+    "Preparing %@ to share. Cancel" : {
+
+    },
+    "Preparing…" : {
+
+    },
     "Previous Chapter" : {
 
     },
@@ -889,6 +991,9 @@
     "Read again" : {
 
     },
+    "Reading %@" : {
+
+    },
     "Reading Direction" : {
 
     },
@@ -913,10 +1018,38 @@
     "Released" : {
 
     },
+    "Remove" : {
+
+    },
     "Remove %@" : {
 
     },
     "Remove %@ sort level" : {
+
+    },
+    "Remove All Downloads" : {
+
+    },
+    "Remove Download" : {
+
+    },
+    "Remove every Download from this device?" : {
+
+    },
+    "Remove the Download of %@" : {
+
+    },
+    "Remove the Download of %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Remove the Download of %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "Remove when finished" : {
 
     },
     "Reset" : {
@@ -991,6 +1124,9 @@
     "Share" : {
 
     },
+    "Share %@" : {
+
+    },
     "Shared by %@" : {
 
     },
@@ -1007,6 +1143,9 @@
 
     },
     "Show more" : {
+
+    },
+    "Shows a menu to remove the Download" : {
 
     },
     "Shows the chapters" : {
@@ -1091,6 +1230,22 @@
     "Stay Here" : {
 
     },
+    "Stop Download" : {
+
+    },
+    "Stop downloading %@" : {
+
+    },
+    "Stop downloading %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Stop downloading %1$@, %2$@"
+          }
+        }
+      }
+    },
     "Supplement" : {
 
     },
@@ -1143,10 +1298,16 @@
     "The server at this address was set up again since you signed in, so it's a different server now. Sign in again." : {
 
     },
+    "The server doesn't have this File anymore." : {
+
+    },
     "The server kept asking to download the library again. Try syncing later." : {
 
     },
     "The server sends the app to another server (%@), which it doesn't follow with your sign-in. Sign in with that address instead." : {
+
+    },
+    "The server sent it to another address, which the app doesn't follow with your sign-in." : {
 
     },
     "Theme" : {
@@ -1156,6 +1317,9 @@
 
     },
     "Then by…" : {
+
+    },
+    "They stay in your library, and you can redownload them later." : {
 
     },
     "This Book isn't in your Libraries anymore" : {
@@ -1231,6 +1395,9 @@
     "Try Again" : {
 
     },
+    "Try again." : {
+
+    },
     "Turn Off Timer" : {
 
     },
@@ -1259,6 +1426,15 @@
 
     },
     "Vol. %@" : {
+
+    },
+    "Waiting for Wi-Fi" : {
+
+    },
+    "Waiting for a connection" : {
+
+    },
+    "Waiting to download" : {
 
     },
     "Wide" : {
@@ -1305,6 +1481,12 @@
     "You read up to %@ on the web." : {
 
     },
+    "You're offline, and this audiobook isn't downloaded. Download it to listen without a connection." : {
+
+    },
+    "You're offline, and this book isn't downloaded. Download it to read without a connection." : {
+
+    },
     "Your account can't read Books on this server. Ask the server's owner for access." : {
 
     },
@@ -1314,6 +1496,15 @@
     "Your password has to be changed before you can sign in. Sign in on the web to change it, then try again." : {
 
     },
+    "Your server can't be reached, and this audiobook isn't downloaded. Download it to listen without a connection." : {
+
+    },
+    "Your server can't be reached, and this book isn't downloaded. Download it to read without a connection." : {
+
+    },
+    "Your server can't be reached. What's downloaded still works." : {
+
+    },
     "^[%lld book](inflect: true)" : {
 
     },
@@ -1321,6 +1512,9 @@
 
     },
     "^[%lld chapter](inflect: true)" : {
+
+    },
+    "^[%lld download](inflect: true)" : {
 
     },
     "^[%lld file](inflect: true)" : {

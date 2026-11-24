@@ -10,6 +10,11 @@ struct NowPlayingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var tint: Color?
+    /// Every author and narrator shows, in a box of its own.
+    @State private var showingAllPeople = false
+    /// How tall the box of every author and narrator grows before it
+    /// scrolls, so a long cast never pushes the controls down.
+    @ScaledMetric(relativeTo: .subheadline) private var peopleBoxHeight: CGFloat = 72
     /// Where the scrubber is while it's dragged, in seconds into the File.
     @State private var scrubbing: Double?
     /// The chapter the scrubber spans for the whole of a drag, so playing
@@ -194,50 +199,93 @@ struct NowPlayingView: View {
                 .foregroundStyle(Theme.foreground)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("player.title")
-            if let byline = byline(file) {
-                Text(byline)
+            if let byline = byline(file, all: showingAllPeople) {
+                let text = Text(byline)
                     .font(.geist(.subheadline))
                     .foregroundStyle(Theme.foreground.opacity(0.7))
-                    // However long, so no name's link is cut off; the page
-                    // scrolls when it doesn't fit.
+                    // However long, so no name's link is cut off.
                     .fixedSize(horizontal: false, vertical: true)
-                    // A name goes to its Person's page, under the player.
-                    .environment(\.openURL, OpenURLAction { url in
-                        guard let route = LinkedText.route(url) else { return .systemAction }
-                        model.showFromPlayer(route)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Group {
+                    if showingAllPeople {
+                        // In a box that scrolls on its own, so the controls
+                        // stay where they are.
+                        ScrollView { text }
+                            .frame(maxHeight: peopleBoxHeight)
+                            .scrollBounceBehavior(.basedOnSize)
+                    } else {
+                        text
+                    }
+                }
+                // A name goes to its Person's page, under the player; "more"
+                // and "less" show every name or the first few.
+                .environment(\.openURL, OpenURLAction { url in
+                    if url == Self.morePeople || url == Self.fewerPeople {
+                        withAnimation(.easeOut(duration: 0.2)) { showingAllPeople = url == Self.morePeople }
                         return .handled
-                    })
-                    .accessibilityIdentifier("player.byline")
+                    }
+                    guard let route = LinkedText.route(url) else { return .systemAction }
+                    model.showFromPlayer(route)
+                    return .handled
+                })
+                .onChange(of: file.fileID) { _, _ in showingAllPeople = false }
+                .accessibilityIdentifier("player.byline")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 22)
     }
 
+    /// Links in the byline that show every author and narrator, or the
+    /// first few again.
+    private static let morePeople = URL(string: "shisho-player:more-people")!
+    private static let fewerPeople = URL(string: "shisho-player:fewer-people")!
+
     /// "Author · Narrated by Narrator", whichever there are, each name
-    /// linked to its Person's page as on the Book's page.
-    private func byline(_ file: ListeningFile) -> AttributedString? {
+    /// linked to its Person's page as on the Book's page. Unless all, at
+    /// most two of each, then how many more there are, which shows them.
+    private func byline(_ file: ListeningFile, all: Bool) -> AttributedString? {
         // Each Person once, though they may have several roles.
         var seen: Set<Int> = []
         let authors = file.authors.filter { seen.insert($0.personID).inserted }
             .map { (Route.resource(.person, id: $0.personID, name: $0.name), $0.name) }
+        // Their Persons can be missing while a catalog downloads again, as
+        // after an app update: the names show without links then.
+        let linked = file.narratorIDs.count == file.narrators.count
+        let narrators: [(Route?, String)] = file.narrators.enumerated().map { index, name in
+            (linked ? Route.resource(.person, id: file.narratorIDs[index], name: name) : nil, name)
+        }
+        let cut = PlayerPeople.cut(authors: authors.count, narrators: narrators.count, all: all)
+        let limit = cut.limit
         var parts: [AttributedString] = []
         if !authors.isEmpty {
-            parts.append(Byline.links(authors))
+            parts.append(Byline.links(Array(authors.prefix(limit))))
         }
-        if !file.narrators.isEmpty {
-            // Their Persons can be missing while a catalog downloads again,
-            // as after an app update: the names show without links then.
-            let narrators = file.narratorIDs.count == file.narrators.count
-                ? Byline.links(zip(file.narratorIDs, file.narrators).map { (Route.resource(.person, id: $0.0, name: $0.1), $0.1) })
-                : AttributedString(file.narrators.joined(separator: ", "))
-            parts.append(LinkedText.muted(String(localized: "Narrated by ")) + narrators)
+        if !narrators.isEmpty {
+            var names = AttributedString()
+            for (index, narrator) in narrators.prefix(limit).enumerated() {
+                if index > 0 { names += LinkedText.muted(", ") }
+                names += narrator.0.map { LinkedText.link(narrator.1, to: $0) } ?? AttributedString(narrator.1)
+            }
+            parts.append(LinkedText.muted(String(localized: "Narrated by ")) + names)
         }
         guard var text = parts.first else { return nil }
         for part in parts.dropFirst() {
             text += LinkedText.muted(" · ") + part
         }
+        if cut.hidden > 0 {
+            text += LinkedText.muted(" ") + Self.toggleLink(String(localized: "+\(cut.hidden) more"), Self.morePeople)
+        } else if cut.collapsible {
+            text += LinkedText.muted(" ") + Self.toggleLink(String(localized: "Show less"), Self.fewerPeople)
+        }
         return text
+    }
+
+    private static func toggleLink(_ title: String, _ url: URL) -> AttributedString {
+        var link = AttributedString(title)
+        link.link = url
+        link.foregroundColor = Theme.primary
+        return link
     }
 
     // MARK: - Chapter and position
@@ -473,5 +521,27 @@ struct RoundIcon: View {
             .foregroundStyle(Theme.foreground)
             .frame(width: 40, height: 40)
             .background(Theme.background.opacity(0.4), in: Circle())
+    }
+}
+
+/// How many of a File's authors and narrators the player names before
+/// "+N more": two of each, unless the user asked for everyone.
+enum PlayerPeople {
+    static let shown = 2
+
+    struct Cut: Equatable {
+        /// How many authors, and how many narrators, show.
+        let limit: Int
+        /// How many more there are, which "+N more" shows.
+        let hidden: Int
+        /// Everyone shows, and there are more than the first few: "Show
+        /// less" cuts them again.
+        let collapsible: Bool
+    }
+
+    static func cut(authors: Int, narrators: Int, all: Bool) -> Cut {
+        let limit = all ? Int.max : shown
+        return Cut(limit: limit, hidden: max(0, authors - limit) + max(0, narrators - limit),
+                   collapsible: all && (authors > shown || narrators > shown))
     }
 }

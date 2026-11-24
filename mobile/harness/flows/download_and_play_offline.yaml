@@ -1,0 +1,126 @@
+# Download an ebook and an audiobook and share the audiobook's File, then
+# take the server offline and relaunch the app, so nothing streamed is left
+# in memory: the audiobook plays from its Download to its end, which removes
+# the Download with Remove when finished on, and the ebook opens from its
+# Download (#915).
+appId: ${APP_ID}
+name: Download, share, then listen and read offline
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+
+# Remove when finished on, from the Downloads tab's settings. Tapping the
+# tab showing goes back to its first screen, the list.
+- tapOn:
+    id: tab.downloads
+- tapOn:
+    id: downloads.settings
+- tapOn:
+    id: downloads.removeWhenFinished
+- tapOn:
+    id: tab.downloads
+- tapOn:
+    id: tab.library
+
+- runFlow:
+    file: subflows/download_book.yaml
+    env:
+      TITLE: The Harness Novel
+# Back to the Library's grid, then the audiobook.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/download_book.yaml
+    env:
+      TITLE: Quiet Lighthouse
+
+# Sharing asks the server for the copy it prepares with Shisho's current
+# metadata, and the system share sheet opens with it. What's in the file is
+# covered by the server's handler tests.
+- scrollUntilVisible:
+    element:
+      id: file\.open\.[0-9]+
+    direction: DOWN
+    centerElement: true
+    timeout: 60000
+- tapOn:
+    id: file\.open\.[0-9]+
+- extendedWaitUntil:
+    visible:
+      id: file.share
+    timeout: 30000
+- tapOn:
+    id: file.share
+- extendedWaitUntil:
+    visible: Save to Files
+    timeout: 60000
+
+- stopApp
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    stopApp: false
+    permissions: {}
+- extendedWaitUntil:
+    visible:
+      id: account.button
+    timeout: 30000
+
+# Both are listed with the space they take.
+- tapOn:
+    id: tab.downloads
+- extendedWaitUntil:
+    visible:
+      id: downloads.row
+      text: Quiet Lighthouse.*
+    timeout: 30000
+- assertVisible:
+    id: downloads.row
+    text: The Harness Novel.*
+
+# The audiobook plays to its end offline. Playing at the end starts over,
+# so this holds wherever another flow left it.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Quiet Lighthouse
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
+- assertVisible:
+    id: player.chapter
+    text: Chapter 3
+- tapOn:
+    id: player.close
+# Back to the Library's grid, for the ebook after the Downloads tab.
+- tapOn:
+    id: tab.library
+
+# Finished, so its Download is gone; the ebook's stays.
+- tapOn:
+    id: tab.downloads
+- extendedWaitUntil:
+    notVisible:
+      id: downloads.row
+      text: Quiet Lighthouse.*
+    timeout: 30000
+- assertVisible:
+    id: downloads.row
+    text: The Harness Novel.*
+
+# The ebook opens offline.
+- tapOn:
+    id: tab.library
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel

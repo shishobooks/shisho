@@ -71,7 +71,7 @@ const (
 // position and session events. A journal event type added later is a
 // capability (ADR 0024).
 var capabilities = map[int][]string{
-	1: {CapabilityBookmarks},
+	1: {CapabilityBookmarks, CapabilityShareFiles},
 }
 
 // Contract is the range of app protocols this server accepts and what it

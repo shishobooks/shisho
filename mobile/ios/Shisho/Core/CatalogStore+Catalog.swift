@@ -898,10 +898,15 @@ extension CatalogStore {
 
     /// Every cover the Library grid shows, for downloading them all ahead
     /// of going offline.
-    func coverVersions() throws -> [(bookID: Int, version: String)] {
+    func coverVersions() throws -> [(owner: CoverCache.Owner, version: String)] {
         try pool.read { db in
-            try Row.fetchAll(db, sql: "SELECT id, cover_version FROM books WHERE cover_version != '' ORDER BY id")
-                .map { (bookID: $0["id"], version: $0["cover_version"]) }
+            let books = try Row.fetchAll(db, sql: "SELECT id, cover_version FROM books WHERE cover_version != '' ORDER BY id")
+                .map { (owner: CoverCache.Owner.book($0["id"]), version: $0["cover_version"] as String) }
+            // A File's own cover, which its row, its page, and Now Playing
+            // show in place of its Book's.
+            let files = try Row.fetchAll(db, sql: "SELECT id, cover_version FROM book_files WHERE cover_version != '' ORDER BY id")
+                .map { (owner: CoverCache.Owner.file($0["id"]), version: $0["cover_version"] as String) }
+            return books + files
         }
     }
 }

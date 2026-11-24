@@ -91,7 +91,7 @@ Shisho's own app for phones and tablets. A user signs in with the same username 
 _Avoid_: mobile app, client, companion app
 
 **Download**:
-A copy of a **File** kept on a **Shisho app** installation so it can be read or listened to offline, kept until the user removes it, a rule they turned on removes it, or the File leaves the Libraries the user can access. A File opened without being downloaded may also be kept for a while, but that copy can be cleared at any time and is not a Download.
+A copy of a **File** kept on a **Shisho app** installation so it can be read or listened to offline, kept until the user removes it, a rule they turned on removes it, or the File leaves the Libraries the user can access. Opening an ebook that isn't downloaded downloads it, since the reader needs the whole File, and that copy is a Download like any other; an audiobook streamed without downloading isn't one.
 _Avoid_: offline copy
 
 **Unrecognized book**:

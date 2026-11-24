@@ -56,7 +56,7 @@ private struct ChangedDot: View {
 /// What a filter narrows by, with the icon and color the web marks its
 /// section and chips with.
 enum FilterKind {
-    case readingStatus, rating, fileType, genre, tag, language
+    case readingStatus, rating, fileType, genre, tag, language, downloaded
 
     var icon: Lucide {
         switch self {
@@ -66,6 +66,7 @@ enum FilterKind {
         case .genre: .bookmark
         case .tag: .tags
         case .language: .languages
+        case .downloaded: .download
         }
     }
 
@@ -76,6 +77,7 @@ enum FilterKind {
         case .fileType, .language: Theme.chart5
         case .genre: Theme.primary
         case .tag: Theme.chart2
+        case .downloaded: Theme.primary
         }
     }
 }
@@ -157,6 +159,9 @@ struct ActiveFilterChips: View {
                 }
                 if let language = model.filter.language {
                     FilterChip(kind: .language, label: FilterChoices.languageName(language)) { model.filter.language = nil }
+                }
+                if model.filter.downloaded {
+                    FilterChip(kind: .downloaded, label: String(localized: "Downloaded")) { model.filter.downloaded = false }
                 }
                 Button("clear all") { model.filter = LibraryFilter() }
                     .font(.geist(.caption))
@@ -341,6 +346,13 @@ private struct FilterSheet: View {
                 }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 26) {
+                        // What's on the device first: offline, it's what can
+                        // be read and listened to.
+                        FilterSection(kind: .downloaded, title: "Downloads") {
+                            SettingToggle(title: "Downloaded only",
+                                          description: "Books with a file on this device.",
+                                          isOn: $model.filter.downloaded, identifier: "filters.downloaded")
+                        }
                         statusSection
                         FilterSection(kind: .rating, title: "Rating") {
                             RatingRangeSlider(min: $model.filter.minRating, max: $model.filter.maxRating)

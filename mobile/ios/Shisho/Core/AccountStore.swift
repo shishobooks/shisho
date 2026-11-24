@@ -54,9 +54,17 @@ struct AccountData {
         folder.appendingPathComponent("catalog.sqlite").path
     }
 
+    /// Where ebooks opened without downloading were kept, before opening one
+    /// made it a Download: deleted when the account opens or is removed.
+    var legacyEbookFolder: URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Ebooks", isDirectory: true)
+            .appendingPathComponent(accountID, isDirectory: true)
+    }
+
     /// Every folder kept for the account: its database and its caches.
     var folders: [URL] {
-        [folder, CoverCache.folder(accountID: accountID), EbookCache.folder(accountID: accountID)]
+        [folder, CoverCache.folder(accountID: accountID), legacyEbookFolder]
     }
 
     // The account's settings on this device, by key.
@@ -66,7 +74,9 @@ struct AccountData {
     /// The order picked for a Library, or 0 for every Library.
     func sortKey(libraryID: Int) -> String { sortKeyPrefix + String(libraryID) }
     private var sortKeyPrefix: String { "sort.\(accountID)." }
-    /// Downloading every cover on Wi-Fi.
+    /// Downloading every cover on Wi-Fi, from before the setting applied to
+    /// every account: read once to carry it over, and removed with the
+    /// account.
     var prefetchCoversKey: String { "prefetchCovers.\(accountID)" }
     /// The audiobook File the player had open.
     var lastFileKey: String { "player.lastFile.\(accountID)" }

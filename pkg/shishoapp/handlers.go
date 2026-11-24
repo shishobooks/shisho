@@ -11,9 +11,11 @@ import (
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/auth"
 	"github.com/shishobooks/shisho/pkg/bookmarks"
+	"github.com/shishobooks/shisho/pkg/books"
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/devices"
+	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
 	"github.com/shishobooks/shisho/pkg/models"
@@ -46,10 +48,16 @@ type Options struct {
 	InstanceID string
 	// Thumbnails is the server's one cover thumbnail cache.
 	Thumbnails *covers.ThumbnailCache
+	// Books loads a Book with everything its Generated File is built from,
+	// and Downloads is the server's one download cache, which builds it.
+	Books     *books.Service
+	Downloads *downloadcache.Cache
 }
 
 type handler struct {
 	db        *bun.DB
+	books     *books.Service
+	downloads *downloadcache.Cache
 	auth      *auth.Service
 	devices   *devices.Service
 	feed      *changefeed.Service

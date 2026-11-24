@@ -36,11 +36,13 @@ struct BookDetailView: View {
                     hero
                     if let progress = listen ?? nil {
                         ListenCard(progress: progress, bookID: bookID)
+                            .modifier(NeedsConnection(available: model.canOpen(fileID: progress.fileID)))
                             .padding(.top, 22)
                             .frame(maxWidth: 520)
                     }
                     if let progress = read ?? nil {
                         ReadCard(progress: progress)
+                            .modifier(NeedsConnection(available: model.canOpen(fileID: progress.fileID)))
                             // The reader opens on pages booted while the
                             // Book's page shows.
                             .onAppear { ReaderPagePool.shared.prewarm() }
@@ -330,6 +332,7 @@ private struct FileCard: View {
     /// The Listen card's progress, which this row matches when it's for
     /// this File, so the two never show different numbers.
     var listen: ListenProgress?
+    @State private var download: DownloadRow??
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
     private var isReflowable: Bool { CatalogStore.reflowableTypes.contains(file.fileType) }
@@ -425,6 +428,7 @@ private struct FileCard: View {
                             FileProgressLine(progress: progress, durationSeconds: listeningLength, pageCount: file.pageCount)
                                 .padding(.top, 3)
                         }
+                        DownloadStatusLine(fileID: file.id, row: download ?? nil)
                     } else {
                         Label("Not supported in this version of the app", icon: .circleAlert, size: 14, relativeTo: .footnote)
                             .font(.geist(.footnote))
@@ -449,6 +453,9 @@ private struct FileCard: View {
         .padding(12)
         .cardStyle()
         .accessibilityElement(children: .contain)
+        .observing(model.session?.store, id: file.id, into: $download) { [fileID = file.id] db in
+            try CatalogStore.download(db, fileID: fileID)
+        }
     }
 
     private var actions: some View {
@@ -472,6 +479,7 @@ private struct FileCard: View {
                 .accessibilityLabel(listenLabel)
                 // Editions can share a name, so the File's id tells them apart.
                 .accessibilityIdentifier("file.listen.\(file.id)")
+                .modifier(NeedsConnection(available: model.canOpen(fileID: file.id)))
             }
             if isReflowable {
                 // Every ebook File opens from here; the Read button above
@@ -485,7 +493,12 @@ private struct FileCard: View {
                 .buttonStyle(PlayerControlStyle())
                 .accessibilityLabel(readLabel)
                 .accessibilityIdentifier("file.read.\(file.id)")
+                .modifier(NeedsConnection(available: model.canOpen(fileID: file.id)))
             }
+            // Every File downloads on its own, so the space goes only to
+            // what the user wants offline. One this version doesn't know
+            // shows Download, disabled.
+            DownloadControl(fileID: file.id, label: name, supported: FileTypes.isKnown(file.fileType), row: download ?? nil)
         }
     }
 

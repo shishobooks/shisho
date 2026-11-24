@@ -15,12 +15,9 @@ struct ReaderSettingsSheet: View {
                 VStack(alignment: .leading, spacing: 22) {
                     fontRow
                     NumberSetting(setting: .size, value: $settings.size)
-                    VStack(alignment: .leading, spacing: 4) {
-                        SettingToggle(title: "Force font size", isOn: $settings.forceFontSize, identifier: "reader.forceFontSize")
-                        Text("For books that set their own text sizes and ignore the font size.")
-                            .font(.geist(.footnote))
-                            .foregroundStyle(Theme.mutedForeground)
-                    }
+                    SettingToggle(title: "Force font size",
+                                  description: "For books that set their own text sizes and ignore the font size.",
+                                  isOn: $settings.forceFontSize, identifier: "reader.forceFontSize")
                     NumberSetting(setting: .lineSpacing, value: $settings.lineSpacing)
                     NumberSetting(setting: .margins, value: $settings.margins)
                     SettingToggle(title: "Justify text", isOn: $settings.justify, identifier: "reader.justify")
@@ -91,38 +88,6 @@ struct ReaderSettingsSheet: View {
 }
 
 private struct FontListRoute: Hashable {}
-
-/// A setting that's on or off. The whole row flips it, not only the
-/// switch, and it reads as a switch does: a toggle whose value is 1 or 0.
-private struct SettingToggle: View {
-    let title: LocalizedStringResource
-    @Binding var isOn: Bool
-    let identifier: String
-
-    var body: some View {
-        Button { isOn.toggle() } label: {
-            HStack {
-                Text(title)
-                    .font(.geist(.subheadline, weight: .medium))
-                    .foregroundStyle(Theme.foreground)
-                Spacer(minLength: 8)
-                // Drawn only: the row takes the tap.
-                Toggle(isOn: $isOn) { Text(title) }
-                    .labelsHidden()
-                    .tint(Theme.primary)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
-            .frame(minHeight: 44)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(title))
-        .accessibilityValue(Text(verbatim: isOn ? "1" : "0"))
-        .accessibilityAddTraits(.isToggle)
-        .accessibilityIdentifier(identifier)
-    }
-}
 
 /// A setting set by number: a slider for big moves and minus and plus for
 /// one step, with the value shown, so a reader can set an exact value. The

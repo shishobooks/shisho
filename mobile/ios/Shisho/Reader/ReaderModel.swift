@@ -118,6 +118,14 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     @ObservationIgnored private var chaptersFromShisho = false
     /// The reader closed, so a load still running stops where it is.
     @ObservationIgnored private var closed = false
+    /// The book couldn't open for want of a connection: it opens once the
+    /// connection is back.
+    @ObservationIgnored private var waitingForConnection = false
+    /// A page at the end showed, which finishes the Read-through.
+    @ObservationIgnored private var readToEnd = false
+    /// This open downloaded the book, so a copy that won't open can go, to
+    /// be downloaded again on Try Again.
+    @ObservationIgnored private var fetchedToOpen = false
 
     init(file: ReadingFile, session: AccountSession, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
@@ -224,12 +232,35 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         placeWatch?.cancel()
         fileWatch?.cancel()
         let bookFile: URL
+        waitingForConnection = false
+        fetchedToOpen = false
         do {
-            bookFile = try await session.ebooks.file(file)
+            if let downloaded = session.downloads.localFile(fileID: file.fileID) {
+                bookFile = downloaded
+            } else if !session.client.reachability.allowsRequests {
+                // Not on the device and no connection: say so at once, and
+                // open by itself once the connection is back.
+                waitingForConnection = true
+                phase = .failed(ConnectionRules.book(session.client.reachability.connection))
+                return
+            } else {
+                // The reader needs all of a book before it can show a page,
+                // so opening one downloads it, as a Download like any other.
+                let fetch = try await session.downloads.fetchNow(fileID: file.fileID)
+                bookFile = fetch.url
+                // One a background transfer finished meanwhile is a Download
+                // like any other, kept if it won't open.
+                fetchedToOpen = fetch.fetched
+            }
         } catch {
             guard !closed else { return }
             log("couldn't fetch the File: \(Diagnostics.describe(error))")
-            phase = .failed(String(localized: "This book couldn't be downloaded. Check your connection to the server and try again."))
+            if !session.client.reachability.allowsRequests {
+                waitingForConnection = true
+                phase = .failed(ConnectionRules.book(session.client.reachability.connection))
+            } else {
+                phase = .failed(String(localized: "This book couldn't be downloaded. Check your connection to the server and try again."))
+            }
             return
         }
         let fileID = file.fileID
@@ -475,12 +506,23 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         tracker.foreground()
     }
 
+    /// The connection came back: a book that couldn't open for want of it
+    /// opens now.
+    func connectionChanged(_ connection: Connection) {
+        guard connection == .online, waitingForConnection, !closed else { return }
+        waitingForConnection = false
+        Task { await load() }
+    }
+
     func memoryWarning() {
         logMemory("memory warning")
     }
 
     func close() {
         noteReaderPlace()
+        if !closed {
+            session.downloads.released(fileID: file.fileID)
+        }
         closed = true
         turnWait?.cancel()
         tracker.close()
@@ -576,6 +618,16 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         noteSection(location)
         fraction = location.fraction ?? fraction
         tracker.moved(location)
+        if location.atEnd == true, !readToEnd {
+            readToEnd = true
+            // The pages read the file as they open, so it goes once the
+            // reader closes, or at the next launch.
+            session.downloads.finished(fileID: file.fileID, holding: true)
+        } else if location.atEnd != true, readToEnd {
+            // Back from the end, which undoes an automatic finish.
+            readToEnd = false
+            session.downloads.unfinished(fileID: file.fileID)
+        }
     }
 
     func foliateLaidOut(_ location: PageLocation) {
@@ -629,9 +681,11 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
 
     func foliateFailed() {
         guard phase == .loading || source != nil else { return }
-        if phase == .loading {
-            // A copy that won't open is fetched again on Try Again.
-            session.ebooks.discard(file)
+        // A copy this open just downloaded that won't open is downloaded
+        // again on Try Again. One downloaded before stays: a page that fails
+        // under memory pressure, say on a plane, mustn't cost the only copy.
+        if phase == .loading, fetchedToOpen {
+            session.downloads.remove([file.fileID])
         }
         phase = .failed(String(localized: "This book couldn't be opened."))
         // The session ends with the page; time on the error screen isn't
