@@ -35,7 +35,7 @@ final class SyncEngine: Sendable {
         var feedError: Error?
         do {
             try await pullFeed()
-        } catch let error as APIError where error == .noAccess || error == .signedOut {
+        } catch let error as APIError where error == .noAccess || error == .signedOut || error == .serverReplaced {
             // The server refused the account itself; the journal would be
             // refused too, and a failure sending it mustn't hide why.
             throw error

@@ -36,7 +36,7 @@ struct RootView: View {
         .sheet(isPresented: $model.showingPlayer) {
             NowPlayingView()
         }
-        .sheet(isPresented: $model.addingAccount) {
+        .sheet(isPresented: $model.addingAccount, onDismiss: model.addServerClosed) {
             // A sheet of its own, with a bar to cancel from.
             NavigationStack {
                 SignInView(addingAccount: true)

@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import os
 import ShishoAPI
 
 /// Why a request to a Shisho server didn't succeed, in the terms the app
@@ -21,6 +22,9 @@ enum APIError: Error, Equatable {
     case noAccess
     /// The Device was revoked, or its user deactivated: sign in again.
     case signedOut
+    /// The server at the account's address isn't the one the account was
+    /// made on, such as one set up again from scratch: sign in again.
+    case serverReplaced
     /// Something in front of the server, such as an authentication proxy,
     /// refused the request. The credential is still good.
     case blockedByProxy
@@ -44,13 +48,22 @@ final class APIClient: Sendable {
     /// Called with each capability list a server response carries. It's
     /// fixed at creation, since requests on any thread read it.
     private let onCapabilities: (@Sendable ([String]) -> Void)?
+    /// The server instance the account was made on, which every request
+    /// names so a server set up again refuses to sync it. Empty for an
+    /// account from before servers had one, until a response says.
+    private let instance: OSAllocatedUnfairLock<String>
+    /// Called once with the instance an account without one learns.
+    private let onInstance: (@Sendable (String) -> Void)?
 
     /// protocolClasses answer requests before the network, for tests.
-    init(baseURL: URL, credential: String?, onCapabilities: (@Sendable ([String]) -> Void)? = nil,
+    init(baseURL: URL, credential: String?, instanceID: String = "",
+         onCapabilities: (@Sendable ([String]) -> Void)? = nil, onInstance: (@Sendable (String) -> Void)? = nil,
          protocolClasses: [AnyClass] = []) {
         self.baseURL = baseURL
         self.credential = credential
         self.onCapabilities = onCapabilities
+        instance = OSAllocatedUnfairLock(initialState: instanceID)
+        self.onInstance = onInstance
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -313,6 +326,10 @@ final class APIClient: Sendable {
         if let credential {
             request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
         }
+        let instance = instance.withLock { $0 }
+        if !instance.isEmpty {
+            request.setValue(instance, forHTTPHeaderField: "X-Shisho-Instance")
+        }
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -336,6 +353,29 @@ final class APIClient: Sendable {
         }
         if readsCapabilities, let listed = http.value(forHTTPHeaderField: "X-Shisho-Capabilities") {
             onCapabilities?(listed.split(separator: ",").map(String.init))
+        }
+        if let served = http.value(forHTTPHeaderField: "X-Shisho-Instance"), !served.isEmpty {
+            // The server refuses a request naming another instance, but
+            // something in front of it may drop the header, so an answer
+            // from another instance is refused here too, before anything
+            // reads it.
+            let ok = (200..<300).contains(http.statusCode)
+            let (other, adopted) = instance.withLock { known -> (Bool, Bool) in
+                if !known.isEmpty {
+                    return (known != served, false)
+                }
+                // Only an answer that took the credential is from the
+                // account's server: one set up again refuses it.
+                guard ok else { return (false, false) }
+                known = served
+                return (false, true)
+            }
+            if other {
+                throw APIError.serverReplaced
+            }
+            if adopted {
+                onInstance?(served)
+            }
         }
         if (200..<300).contains(http.statusCode) {
             return data
@@ -386,6 +426,8 @@ final class APIClient: Sendable {
         switch (status, code) {
         case (403, "demo_mode"):
             return .demoMode
+        case (409, "server_replaced"):
+            return .serverReplaced
         case (426, "server_update_required"):
             return .serverTooOld(serverVersion: serverVersion)
         case (426, _):

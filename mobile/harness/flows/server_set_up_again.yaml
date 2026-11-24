@@ -1,0 +1,90 @@
+# A change made offline was for the server the account was made on. When a
+# server set up again from scratch replaces it at the same address, signing
+# in again makes a new account, says the change was removed, and sends the
+# new server nothing (#967).
+appId: ${APP_ID}
+name: Sign in to a server set up again
+# The seeded server comes back even when a step fails, so later flows don't
+# find the fresh one.
+onFlowComplete:
+  - runScript:
+      file: scripts/go_online.js
+      env:
+        CONTROL: ${CONTROL}
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/listen_to.yaml
+    env:
+      TITLE: Harbor Lights
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.playPause
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000
+
+# A Bookmark made offline waits in the journal.
+- runScript:
+    file: scripts/go_offline.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.bookmark
+
+# The fresh server refuses to sync the old account when the app opens
+# again, as a server other than the one it was made on.
+- stopApp
+- runScript:
+    file: scripts/fresh_server.js
+    env:
+      CONTROL: ${CONTROL}
+- launchApp:
+    stopApp: false
+    permissions: {}
+- extendedWaitUntil:
+    visible:
+      id: signin.serverReplaced
+    timeout: 60000
+
+# The sign-in screen keeps the server and username; only the password is
+# typed.
+- tapOn:
+    id: signin.password
+- inputText: ${PASSWORD}
+- pressKey: Enter
+- runFlow: subflows/finish_sign_in.yaml
+- extendedWaitUntil:
+    visible:
+      id: account.replaced
+    timeout: 30000
+# The fresh server has no Books, so the Library says so only once the first
+# sync, journal included, has finished. A failed sync says so too, so the
+# sync banner must be empty.
+- extendedWaitUntil:
+    visible: No Books yet
+    timeout: 60000
+- assertNotVisible:
+    id: sync.banner
+- assertNotVisible:
+    id: journal.notes
+- runScript:
+    file: scripts/assert_fresh_server_untouched.js
+    env:
+      CONTROL: ${CONTROL}
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The fresh server got nothing
+- tapOn:
+    id: account.replaced.dismiss
+- assertNotVisible:
+    id: account.replaced

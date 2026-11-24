@@ -44,18 +44,19 @@ func setReaderAccess(ctx context.Context, path string, access bool) error {
 	return errors.WithStack(tx.Commit())
 }
 
-// cheapenPasswords re-hashes the flows' two accounts' passwords at bcrypt's
-// lowest cost, in the server's database. The server reads the cost from the
-// hash, so signing in still checks the password, but in a millisecond rather
-// than the quarter second the server's own cost takes here, which a CI runner
-// short of CPU stretches past the app's 30 s request timeout.
-func cheapenPasswords(ctx context.Context, path string) error {
+// cheapenPasswords re-hashes the given accounts' passwords, by username, at
+// bcrypt's lowest cost, in the server's database. The server reads the cost
+// from the hash, so signing in still checks the password, but in a
+// millisecond rather than the quarter second the server's own cost takes
+// here, which a CI runner short of CPU stretches past the app's 30 s request
+// timeout.
+func cheapenPasswords(ctx context.Context, path string, passwords map[string]string) error {
 	db, err := openServerDB(path)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	for username, password := range map[string]string{harnessUsername: harnessPassword, readerUsername: readerPassword} {
+	for username, password := range passwords {
 		hash, err := cheapPasswordHash(password)
 		if err != nil {
 			return err

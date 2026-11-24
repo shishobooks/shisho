@@ -54,6 +54,11 @@ struct LibraryView: View {
                         SyncBanner()
                             .padding(.horizontal, GridLayout.margin)
                             .padding(.top, 14)
+                        if let notice = model.replacedAccountNotice, notice.accountID == model.session?.account.id {
+                            ReplacedAccountBanner(removedChanges: notice.removedChanges) { model.dismissReplacedAccountNotice() }
+                                .padding(.horizontal, GridLayout.margin)
+                                .padding(.top, 10)
+                        }
                         if let notes, !notes.isEmpty {
                             JournalNotesBanner(notes: notes) { model.dismissJournalNotes() }
                                 .padding(.horizontal, GridLayout.margin)
@@ -425,6 +430,42 @@ struct JournalNotesBanner: View {
                 .accessibilityIdentifier("journal.notes.dismiss")
         }
         .accessibilityIdentifier("journal.notes")
+    }
+}
+
+/// Signing in found the server set up again from scratch since the last
+/// sign-in, so the account on this device was for a server that's gone. It
+/// was removed with the changes it hadn't sent; this says how many until
+/// the user dismisses it.
+struct ReplacedAccountBanner: View {
+    /// Nil when they couldn't be counted.
+    let removedChanges: Int?
+    let dismiss: () -> Void
+
+    var body: some View {
+        NoticeCard(
+            text: text,
+            icon: .messageCircleWarning,
+            tint: Theme.destructive
+        ) {
+            Button("Dismiss", action: dismiss)
+                .font(.geist(.subheadline, weight: .semibold))
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("account.replaced.dismiss")
+        }
+        .accessibilityIdentifier("account.replaced")
+    }
+
+    private var text: String {
+        switch removedChanges {
+        case 1:
+            String(localized: "This server was set up again since you last signed in, so this is a new account. A change made on the earlier server wasn't sent and was removed.")
+        case let count?:
+            String(localized: "This server was set up again since you last signed in, so this is a new account. \(count) changes made on the earlier server weren't sent and were removed.")
+        case nil:
+            String(localized: "This server was set up again since you last signed in, so this is a new account. Changes made on the earlier server that weren't sent were removed.")
+        }
     }
 }
 

@@ -95,7 +95,7 @@ tygo mechanics:
 
 ## Runtime settings
 
-`app_settings` (`pkg/appsettings`) holds admin-editable policy as one JSON document per key; deployment facts go in `config.Config`. A domain package owns its key, its struct, and load and save helpers that fall back to defaults when no row exists (`pkg/books/review` is the pattern). A feature switch that carries companion policy and a warning the admin must read belongs in the admin UI with no config field or env var (ADR 0008). Writes require `config:write`.
+`app_settings` (`pkg/appsettings`) holds admin-editable policy as one JSON document per key; deployment facts go in `config.Config`. The one exception is the server's instance id (`pkg/serverinstance`), written once and never edited. A domain package owns its key, its struct, and load and save helpers that fall back to defaults when no row exists (`pkg/books/review` is the pattern). A feature switch that carries companion policy and a warning the admin must read belongs in the admin UI with no config field or env var (ADR 0008). Writes require `config:write`.
 
 ## Adding things
 

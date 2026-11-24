@@ -86,7 +86,9 @@ func runIOS(ctx context.Context, args []string) error {
 	if err := srv.seed(ctx, library, harnessPassword); err != nil {
 		return err
 	}
-	if err := cheapenPasswords(ctx, filepath.Join(dir, "data.sqlite")); err != nil {
+	if err := cheapenPasswords(ctx, filepath.Join(dir, "data.sqlite"), map[string]string{
+		harnessUsername: harnessPassword, readerUsername: readerPassword,
+	}); err != nil {
 		return err
 	}
 
@@ -160,10 +162,11 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})
-	// The server comes back on the same address and data. A flow that needs
-	// the server calls it first, in case an earlier flow left it offline.
+	// The server comes back on the same address and seeded data. A flow that
+	// needs the server calls it first, in case an earlier flow left it
+	// offline or on a fresh database.
 	mux.HandleFunc("POST /online", func(w http.ResponseWriter, r *http.Request) {
-		if err := srv.Start(r.Context()); err != nil {
+		if err := srv.seededDatabase(r.Context()); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -171,6 +174,39 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		onlineAt = time.Now()
 		mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
+	})
+	// A server set up again from scratch at the same address: an empty
+	// database, with only the harness account, made again as the first
+	// admin. POST /online brings the seeded one back.
+	var freshLogStart int64 = -1
+	mux.HandleFunc("POST /fresh-server", func(w http.ResponseWriter, r *http.Request) {
+		logStart, err := srv.freshDatabase(r.Context())
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		mu.Lock()
+		freshLogStart = logStart
+		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// How many journal requests reached the fresh server, from its log, to
+	// check the app sent it nothing meant for the server it replaced.
+	mux.HandleFunc("GET /fresh-server/journal-requests", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		logStart := freshLogStart
+		mu.Unlock()
+		if logStart < 0 {
+			http.Error(w, "no fresh server was started", http.StatusConflict)
+			return
+		}
+		count, err := journalRequests(filepath.Join(srv.dir, "server.log"), logStart)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(journalRequestCount{Count: count})
 	})
 	// The second account loses, or gets back, access to the harness's
 	// Library, as an admin would change it on the web.
@@ -206,6 +242,15 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(bookmarks)
+	})
+	// Deletes the Bookmarks in the Book titled ?title=, for a flow that
+	// checks the ones it makes.
+	mux.HandleFunc("POST /bookmarks/clear", func(w http.ResponseWriter, r *http.Request) {
+		if err := clearBookmarks(r.Context(), filepath.Join(srv.dir, "data.sqlite"), r.URL.Query().Get("title")); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 	// Answers after ?ms= milliseconds, at most 5 s: Maestro's scripts have no
 	// sleep, so the assert_*.js scripts wait here between polls.

@@ -48,3 +48,18 @@ func (svc *Service) SetJSON(ctx context.Context, key string, value interface{}) 
 		Exec(ctx)
 	return errors.WithStack(err)
 }
+
+// InsertJSONIfAbsent stores the JSON-encoded value at key only when no row
+// holds key yet, leaving an existing value as it is.
+func (svc *Service) InsertJSONIfAbsent(ctx context.Context, key string, value interface{}) error {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	row := &models.AppSetting{Key: key, Value: string(encoded)}
+	_, err = svc.db.NewInsert().
+		Model(row).
+		On("CONFLICT (key) DO NOTHING").
+		Exec(ctx)
+	return errors.WithStack(err)
+}

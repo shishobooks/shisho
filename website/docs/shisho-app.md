@@ -30,6 +30,14 @@ The app stays signed in until one of these happens:
 
 Changing your password doesn't sign the app out. A signed-out app asks you to sign in again and keeps what's on the device until you do.
 
+Signing out in the app first sends changes it hasn't sent yet, such as listening done offline, when it can reach the server. Offline, it signs out at once and keeps those changes to send when you sign in again.
+
+## Setting Up a Server Again
+
+The app tells a server apart from one set up again from scratch at the same address, such as a fresh install with a new database. An app still signed in finds out at its next sync: it sends that server nothing and asks you to sign in again. Signing in to that server again makes a new account in the app. The account the app had for the same user on the earlier server is removed with its copy of the libraries and any changes made in the app that hadn't reached that server yet, since they belong to a server that's gone. The app says how many changes were removed.
+
+Restoring a [backup](./deployment-and-maintenance.md#restore-a-backup) taken since the app first signed in keeps the server's identity, so the app carries on as the same account and sends what it hasn't sent. A backup from a Shisho release before the app could tell servers apart has no identity yet, so an app that has synced with the server since it was upgraded treats the restored server as one set up again.
+
 ## Browsing and Searching Offline
 
 Everything in the libraries you can access is on the device: books with their descriptions, series, authors and narrators, genres, tags, and files, plus your [lists](./lists.md) and the lists shared with you. The **Library** tab browses it by series, people, genres, and tags, and the **Lists** tab shows your lists. **Filter** narrows the library by reading status, a range of ratings, file type, genres, tags, and language, as on the web, and **Sort** orders it by several fields, each ascending or descending. Sort starts from the sort you [saved for the library on the web](./gallery-sort.md); a sort you pick in the app stays on that device, and **reset to default** goes back to the saved one. Each book shows your [reading status](./reading-tracking.md#reading-status) and rating, which you change on the web, and tapping a file opens its page, as on the web, with its edition details, chapters, and where it sits on disk. Tapping an audiobook's chapter there plays from that chapter. At the bottom of a book, the **Series**, **Author**, and **Lists** tabs show the books around it, as on the web. A list shows who it's shared with to its owner and anyone who can manage it, as on the web.

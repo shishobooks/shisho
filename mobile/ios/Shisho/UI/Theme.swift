@@ -280,7 +280,7 @@ struct NoticeCard<Action: View>: View {
     @ViewBuilder var action: () -> Action
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        let card = HStack(alignment: .top, spacing: 12) {
             Icon(icon, size: 19)
                 .foregroundStyle(tint)
                 .padding(.top, 1)
@@ -295,7 +295,16 @@ struct NoticeCard<Action: View>: View {
         }
         .padding(14)
         .cardStyle()
-        .accessibilityElement(children: .combine)
+        // Combined, an action would be a button inside a button, which
+        // VoiceOver and the harness can't press reliably, so a card with one
+        // keeps its text and its action apart. It goes by the action's type,
+        // so one built with an `if` stays apart even when nothing shows,
+        // which VoiceOver reads the same way.
+        if Action.self == EmptyView.self {
+            card.accessibilityElement(children: .combine)
+        } else {
+            card.accessibilityElement(children: .contain)
+        }
     }
 }
 

@@ -9,7 +9,12 @@ final class EbookCache: Sendable {
 
     init(client: APIClient, accountID: String) {
         self.client = client
-        folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        folder = EbookCache.folder(accountID: accountID)
+    }
+
+    /// The folder an account's ebooks are kept in.
+    static func folder(accountID: String) -> URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Ebooks", isDirectory: true)
             .appendingPathComponent(accountID, isDirectory: true)
     }

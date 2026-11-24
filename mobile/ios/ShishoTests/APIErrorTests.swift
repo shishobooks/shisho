@@ -13,6 +13,7 @@ final class APIErrorTests: XCTestCase {
         XCTAssertEqual(error(426, "app_update_required", headers: ["X-Shisho-Server-Version": "v0.12.0"]), .appTooOld(serverVersion: "v0.12.0"))
         XCTAssertEqual(error(426, "server_update_required"), .serverTooOld(serverVersion: nil))
         XCTAssertEqual(error(401, "unauthorized"), .signedOut)
+        XCTAssertEqual(error(409, "server_replaced"), .serverReplaced)
         XCTAssertEqual(error(403, "password_reset_required"), .passwordResetRequired)
         XCTAssertEqual(error(500, "internal_server_error"), .server(status: 500, message: "m"))
     }
