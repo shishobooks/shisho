@@ -534,8 +534,9 @@ jobs:
   # wait for a runner, and the Free plan runs five at once across every pull
   # request.
   app-ios-flows:
-    # Keep this N in sync with the matrix.
-    name: iOS flows (${{ matrix.shard }}/2)
+    # GitHub adds the shard to the name. Naming it here leaves the job's
+    # name unexpanded when it's skipped for a signoff.
+    name: iOS flows
     needs: app-changes
     if: needs.app-changes.outputs.changed == 'true' && needs.app-changes.outputs.signoff != 'true'
     runs-on: macos-26
@@ -633,16 +634,27 @@ jobs:
               or (.value.result == "skipped" and $signoff == "true" and .key == "app-ios-flows")
             )' <<< "$NEEDS"
       # `mise ios:signoff` posts this status once every flow passes on the
-      # commit, and reruns this job if it already failed for want of it.
-      - name: Check the iOS flows signoff
+      # commit. A run started after the push often lands after the other
+      # jobs, so this waits for it rather than failing, which would send a
+      # failure email for nearly every pull request. A signoff that comes
+      # later still reruns this job.
+      - name: Wait for the iOS flows signoff
         if: needs.app-changes.outputs.changed == 'true' && needs.app-changes.outputs.signoff == 'true'
+        timeout-minutes: 50
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
-            --jq '.statuses[] | select(.context == "iOS flows signoff") | .state')
-          if [ "$state" != success ]; then
-            echo "::error::No iOS flows signoff on $SHA. Run \`mise ios:signoff\` on this commit, on a Mac; it posts the signoff and reruns this job."
-            exit 1
-          fi
+          deadline=$((SECONDS + 45 * 60))
+          while :; do
+            state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
+              --jq '.statuses[] | select(.context == "iOS flows signoff") | .state' || true)
+            if [ "$state" = success ]; then
+              exit 0
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::No iOS flows signoff on $SHA. Run \`mise ios:signoff\` on this commit, on a Mac; it posts the signoff and reruns this job."
+              exit 1
+            fi
+            sleep 30
+          done
