@@ -806,15 +806,22 @@ final class AudioPlayer {
     }
 
     private func serverPlaceChanged(_ place: ServerPlace?) {
+        if let place {
+            if place.isSameMove(as: dismissedOffer) { return }
+            // A renamed Device sends its place again: the offer shown takes
+            // the new name.
+            if place.isSameMove(as: offer) {
+                if place != offer { offer = place }
+                return
+            }
+        }
         // Loaded but not being listened to, the File is as good as unopened,
         // including when the server's place was reset.
         guard sitting != nil || isPlaying else {
-            if place == nil || place != dismissedOffer && place != offer {
-                applyNewestPlace()
-            }
+            applyNewestPlace()
             return
         }
-        guard let place, place != dismissedOffer, place != offer else { return }
+        guard let place else { return }
         if let offered = PlaceRules.offerDuringListening(server: place, at: currentPosition(), known: knownServerAt,
                                                          ownDeviceID: session.account.deviceID) {
             offer = offered
@@ -833,7 +840,7 @@ final class AudioPlayer {
         }) else { return }
         let choice = PlaceRules.open(local: places.local, server: places.server, ownDeviceID: ownDevice)
         knownServerAt = places.server?.occurredAt
-        if let other = choice.offer, other != dismissedOffer {
+        if let other = choice.offer, !other.isSameMove(as: dismissedOffer) {
             offer = other
         } else if abs(choice.start - currentPosition()) > 1 {
             move(to: choice.start)

@@ -1,0 +1,82 @@
+# Switch to scrolled layout and scroll into the next chapter: the place
+# follows the scroll. A sideways swipe and a pull past a chapter's start go
+# to the chapter beside (#919).
+appId: ${APP_ID}
+name: Read in scrolled layout
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter One
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- tapOn:
+    id: reader.layout.scrolled
+- tapOn:
+    id: reader.settings.done
+- extendedWaitUntil:
+    notVisible:
+      id: reader.settings.done
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter One.*"
+    timeout: 30000
+- repeat:
+    while:
+      notVisible:
+        id: reader.progress
+        text: "Chapter Two.*"
+    times: 60
+    commands:
+      - swipe:
+          start: "50%,75%"
+          end: "50%,20%"
+          duration: 300
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
+# A swipe sideways goes to the chapter beside, and back.
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Three.*"
+    timeout: 30000
+- swipe:
+    direction: RIGHT
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
+# A little way into Chapter Two, one long pull down scrolls back to its
+# start and goes on past it, which brings Chapter One back in, as a pull at
+# the end goes on into the next.
+- swipe:
+    start: "50%,60%"
+    end: "50%,45%"
+    duration: 600
+- swipe:
+    start: "50%,10%"
+    end: "50%,95%"
+    duration: 1500
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter One.*"
+    timeout: 30000

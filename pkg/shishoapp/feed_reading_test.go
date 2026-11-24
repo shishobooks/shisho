@@ -97,6 +97,55 @@ func TestFeed_PositionNamesItsDevice(t *testing.T) {
 	assert.Equal(t, "shisho_app", position.Source)
 }
 
+// A position names the Device that sent it as its user sees it, so the app
+// can say where the place came from. Renaming the Device moves its
+// positions with the new name; deleting it moves them with no Device.
+func TestFeed_PositionCarriesItsDevicesName(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.addLibrary(1, "Books")
+	f.addBook(1, 1, "Dune")
+	f.addBook(2, 1, "Emma")
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (5, 1, 1, '/dune.epub', 'epub', 1)`)
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (6, 1, 2, '/emma.epub', 'epub', 1)`)
+	userID := f.addUser()
+	credential := f.signIn()
+	f.exec(`INSERT INTO devices (id, user_id, name, device_type, credential, created_at, updated_at)
+		VALUES ('kobo-1', ?, 'Robin''s Kobo', 'kobo', 'kobo-credential', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`, userID)
+	f.exec(`INSERT INTO reading_positions (user_id, file_id, percentage, source, source_device_id, occurred_at) VALUES (?, 5, 0.54, 'kobo', 'kobo-1', '2026-05-01 10:00:00')`, userID)
+	f.exec(`INSERT INTO reading_positions (user_id, file_id, percentage, source, occurred_at) VALUES (?, 6, 0.2, 'web_reader', '2026-05-01 10:00:00')`, userID)
+
+	resp := f.changes(credential, 0, 0)
+	positions := map[int]*FeedReadingPosition{}
+	for _, entry := range resp.Entries {
+		if entry.ReadingPosition != nil {
+			positions[entry.ID] = entry.ReadingPosition
+		}
+	}
+	require.Len(t, positions, 2)
+	require.NotNil(t, positions[5].DeviceName)
+	assert.Equal(t, "Robin's Kobo", *positions[5].DeviceName)
+	assert.Nil(t, positions[6].DeviceName, "the web has no Device")
+
+	// A rename moves the Device's positions, and nothing else.
+	f.exec(`UPDATE devices SET name = 'Study Kobo' WHERE id = 'kobo-1'`)
+	renamed := f.changes(credential, resp.Cursor, 0)
+	require.Equal(t, []string{"reading_position:5"}, summary(renamed))
+	assert.Equal(t, "Study Kobo", *renamed.Entries[0].ReadingPosition.DeviceName)
+
+	// Writes to a Device that leave its name alone record nothing.
+	f.exec(`UPDATE devices SET last_accessed_at = CURRENT_TIMESTAMP, updated_at = '2030-01-01 00:00:00' WHERE id = 'kobo-1'`)
+	assert.Empty(t, f.changes(credential, renamed.Cursor, 0).Entries)
+
+	// Deleting the Device leaves the position with no Device to name.
+	f.exec(`DELETE FROM devices WHERE id = 'kobo-1'`)
+	deleted := f.changes(credential, renamed.Cursor, 0)
+	require.Equal(t, []string{"reading_position:5"}, summary(deleted))
+	assert.Nil(t, deleted.Entries[0].ReadingPosition.DeviceID)
+	assert.Nil(t, deleted.Entries[0].ReadingPosition.DeviceName)
+	assert.Equal(t, "kobo", deleted.Entries[0].ReadingPosition.Source)
+}
+
 // A File carries Shisho's chapters, and editing one moves its Book.
 func TestFeed_FileCarriesItsChapters(t *testing.T) {
 	t.Parallel()

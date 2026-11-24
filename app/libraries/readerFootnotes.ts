@@ -4,6 +4,10 @@
 //
 // Elements here come from the book's frame, another realm, so nothing uses
 // `instanceof`.
+//
+// The Shisho app's reader repeats these rules in
+// mobile/ios/Shisho/Reader/ReaderWeb/reader.js, which can't import
+// TypeScript: change both.
 
 const EPUB_NS = "http://www.idpf.org/2007/ops";
 

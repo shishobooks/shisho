@@ -111,12 +111,29 @@ enum ListeningRules {
     }
 }
 
-/// A place in an audiobook, as the server last said.
+/// A place in a File, as the server last said: seconds in an audiobook,
+/// or a CFI and how far through in an ebook.
 struct ServerPlace: Equatable, Sendable {
     let seconds: Double
     let occurredAt: Date
     let deviceID: String?
     let source: String
+    /// The place in an ebook's text, or nil where the reader that left it
+    /// gave only a percentage.
+    var cfi: String?
+    var percentage: Double = 0
+    /// The Device's name as its user sees it, or nil for the web and for a
+    /// Device deleted since.
+    var deviceName: String?
+
+    /// Whether other is this same move, whatever its Device is called now:
+    /// renaming or deleting a Device sends its places again, changed only
+    /// in the Device, and a place dismissed stays dismissed.
+    func isSameMove(as other: ServerPlace?) -> Bool {
+        guard let other else { return false }
+        return seconds == other.seconds && occurredAt == other.occurredAt && source == other.source && cfi == other.cfi
+            && percentage == other.percentage
+    }
 }
 
 /// This installation's own place in a File.
@@ -132,6 +149,9 @@ struct LocalPlace: Equatable, Sendable {
     /// own to send, kept until the user picks one: once both sent theirs,
     /// the server holds only the newer.
     var offer: ServerPlace?
+    /// The place in an ebook's text; seconds is 0 there.
+    var cfi: String?
+    var percentage: Double = 0
 }
 
 /// Where a File opens, across devices (#912): the newest synced place when
@@ -151,20 +171,68 @@ enum PlaceRules {
     /// when it began moving (`LocalPlace.base`), never by the phone's clock
     /// against the server's.
     static func open(local: LocalPlace?, server: ServerPlace?, ownDeviceID: String) -> Choice {
-        guard let server else { return Choice(start: local?.seconds ?? 0, offer: local?.offer) }
-        guard let local else { return Choice(start: server.seconds, offer: nil) }
+        let decision = decide(local: local, server: server, ownDeviceID: ownDeviceID) { server, local in
+            abs(server.seconds - local.seconds) > sameWithin
+        }
+        return Choice(start: decision.useServer ? server?.seconds ?? 0 : local?.seconds ?? 0, offer: decision.offer)
+    }
+
+    /// Where an ebook opens: a CFI, or how far through the book when the
+    /// place has only a percentage, or nil for the start.
+    enum EbookStart: Equatable, Sendable {
+        case cfi(String)
+        case fraction(Double)
+    }
+
+    struct EbookChoice: Equatable, Sendable {
+        let start: EbookStart?
+        /// How far through the book start is, which is where it opens when
+        /// this copy of the book can't find the CFI.
+        let percentage: Double
+        let offer: ServerPlace?
+    }
+
+    /// The same rules for an ebook, whose places are CFIs.
+    static func openEbook(local: LocalPlace?, server: ServerPlace?, ownDeviceID: String) -> EbookChoice {
+        let decision = decide(local: local, server: server, ownDeviceID: ownDeviceID) { server, local in
+            ebookPlacesDiffer((server.cfi, server.percentage), (local.cfi, local.percentage))
+        }
+        if decision.useServer, let server {
+            return EbookChoice(start: server.cfi.map(EbookStart.cfi) ?? .fraction(server.percentage), percentage: server.percentage,
+                               offer: decision.offer)
+        }
+        guard let local else { return EbookChoice(start: nil, percentage: 0, offer: decision.offer) }
+        return EbookChoice(start: local.cfi.map(EbookStart.cfi) ?? .fraction(local.percentage), percentage: local.percentage,
+                           offer: decision.offer)
+    }
+
+    /// Ebook places this close are the same place: one page laid out on
+    /// two screens has two CFIs.
+    static let ebookSameWithin = 0.005
+
+    static func ebookPlacesDiffer(_ a: (cfi: String?, percentage: Double), _ b: (cfi: String?, percentage: Double)) -> Bool {
+        if let cfi = a.cfi, cfi == b.cfi { return false }
+        return abs(a.percentage - b.percentage) >= ebookSameWithin
+    }
+
+    /// Which side's place a File opens at, and the other device's place to
+    /// offer instead. differs says whether a server place and a local one
+    /// are different places.
+    private static func decide(local: LocalPlace?, server: ServerPlace?, ownDeviceID: String,
+                               differs: (ServerPlace, LocalPlace) -> Bool) -> (useServer: Bool, offer: ServerPlace?) {
+        guard let server else { return (false, local?.offer) }
+        guard let local else { return (true, nil) }
         if let offer = local.offer {
-            return Choice(start: local.seconds, offer: abs(offer.seconds - local.seconds) > sameWithin ? offer : nil)
+            return (false, differs(offer, local) ? offer : nil)
         }
         // Another device moved since this one began moving. A place this
         // device already knew is older than its own moves, as when the feed
         // hasn't brought back its last move yet.
         let movedElsewhere = server.deviceID != ownDeviceID && server.occurredAt > (local.base ?? .distantPast)
         if !local.pending {
-            return Choice(start: movedElsewhere ? server.seconds : local.seconds, offer: nil)
+            return (movedElsewhere, nil)
         }
-        let differs = abs(server.seconds - local.seconds) > sameWithin
-        return Choice(start: local.seconds, offer: movedElsewhere && differs ? server : nil)
+        return (false, movedElsewhere && differs(server, local) ? server : nil)
     }
 
     /// A place that arrives while listening is only ever offered: when
@@ -173,6 +241,15 @@ enum PlaceRules {
     static func offerDuringListening(server: ServerPlace?, at seconds: Double, known: Date?, ownDeviceID: String) -> ServerPlace? {
         guard let server, server.deviceID != ownDeviceID, server.occurredAt > (known ?? .distantPast),
               abs(server.seconds - seconds) > sameWithin
+        else { return nil }
+        return server
+    }
+
+    /// The same for an ebook, where the reader is at a CFI.
+    static func offerWhileReading(server: ServerPlace?, at place: (cfi: String?, percentage: Double), known: Date?,
+                                  ownDeviceID: String) -> ServerPlace? {
+        guard let server, server.deviceID != ownDeviceID, server.occurredAt > (known ?? .distantPast),
+              ebookPlacesDiffer((server.cfi, server.percentage), place)
         else { return nil }
         return server
     }

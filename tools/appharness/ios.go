@@ -181,8 +181,9 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
-	// What the server holds of the harness user's listening to the Book
-	// titled ?title=, read from its database, which works offline too.
+	// What the server holds of the harness user's reading or listening to
+	// the Book titled ?title=, read from its database, which works offline
+	// too.
 	mux.HandleFunc("GET /reading", func(w http.ResponseWriter, r *http.Request) {
 		state, err := readReading(r.Context(), filepath.Join(srv.dir, "data.sqlite"), r.URL.Query().Get("title"))
 		if err != nil {

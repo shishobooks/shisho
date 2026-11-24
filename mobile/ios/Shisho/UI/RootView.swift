@@ -12,12 +12,26 @@ struct RootView: View {
                     // the last one's rows while its own load.
                     .id(model.session?.account.id)
                     .transition(.opacity.combined(with: .scale(scale: 1.02)))
+                    // Under the reader, out of VoiceOver's way.
+                    .accessibilityHidden(model.reader != nil)
             } else {
                 SignInView()
                     .transition(.opacity)
             }
+            // Over everything, as a full-screen cover would be, but not one:
+            // iOS 26 leaves a sheet with detents, as the reader's contents
+            // and settings, out of the accessibility tree when it's over a
+            // full-screen cover, so VoiceOver couldn't reach them. Sheets
+            // from here present as the player's do.
+            if let reader = model.reader {
+                ReaderView(model: reader) { model.closeReader() }
+                    .id(reader.id)
+                    .transition(.move(edge: .bottom))
+                    .zIndex(1)
+            }
         }
         .animation(.easeInOut(duration: 0.3), value: model.session != nil)
+        .animation(.easeInOut(duration: 0.3), value: model.reader?.id)
         .background(Theme.background)
         .sheet(isPresented: $model.showingPlayer) {
             NowPlayingView()

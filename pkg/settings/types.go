@@ -1,6 +1,8 @@
 package settings
 
 import (
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/shishobooks/shisho/pkg/httputil"
@@ -59,13 +61,32 @@ func IsValidFitMode(mode string) bool {
 	return false
 }
 
+// ValidReflowableThemes returns every Reflowable reader theme, in the order
+// the readers offer them.
+func ValidReflowableThemes() []string {
+	return []string{
+		models.ReflowableThemeSystem,
+		models.ReflowableThemeLight,
+		models.ReflowableThemeSepia,
+		models.ReflowableThemeDark,
+		models.ReflowableThemeBlack,
+	}
+}
+
 // IsValidReflowableTheme returns true if the theme is a supported Reflowable reader theme.
 func IsValidReflowableTheme(theme string) bool {
-	switch theme {
-	case models.ReflowableThemeLight, models.ReflowableThemeDark, models.ReflowableThemeSepia:
-		return true
+	return slices.Contains(ValidReflowableThemes(), theme)
+}
+
+// reflowableThemeError names every valid theme, so it can't fall behind the list.
+func reflowableThemeError() string {
+	themes := ValidReflowableThemes()
+	quoted := make([]string, len(themes))
+	for i, theme := range themes {
+		quoted[i] = "'" + theme + "'"
 	}
-	return false
+	last := len(quoted) - 1
+	return "viewer_reflowable_theme must be " + strings.Join(quoted[:last], ", ") + ", or " + quoted[last]
 }
 
 // IsValidReflowableFlow returns true if the flow is a supported Reflowable reader flow mode.

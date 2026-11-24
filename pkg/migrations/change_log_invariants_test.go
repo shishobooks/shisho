@@ -68,6 +68,9 @@ var feedTables = map[string][]string{
 	"reading_position_updates": {"INSERT", "UPDATE", "DELETE"},
 	"user_books":               {"INSERT", "UPDATE", "DELETE"},
 	"bookmarks":                {"INSERT", "UPDATE", "DELETE"},
+	// A Reading Position names the Device that sent it. A deleted Device
+	// clears the position's source_device_id, which its own trigger sees.
+	"devices": {"UPDATE"},
 }
 
 const (
@@ -75,7 +78,9 @@ const (
 	reasonBookkeep   = "bookkeeping the app doesn't show"
 	reasonSource     = "provenance, which the app doesn't show"
 	reasonNotYet     = "not in the app's documents yet"
-	reasonLibrary    = "the Library is read from the Book"
+	// reasonDeviceOnlyName: a Reading Position carries only its Device's name.
+	reasonDeviceOnlyName = "a Reading Position carries only its Device's name"
+	reasonLibrary        = "the Library is read from the Book"
 	// An alias belongs to its parent's Library, which never changes.
 	reasonAliasLibrary = "the Library is its parent's"
 )
@@ -228,6 +233,24 @@ var columnsNotCompared = map[string]string{
 
 	"bookmarks.id":         reasonPrimaryKey,
 	"bookmarks.updated_at": "when the note last changed, which only the server compares",
+
+	"devices.id":                       reasonPrimaryKey,
+	"devices.user_id":                  "a Device never moves between users",
+	"devices.device_type":              reasonDeviceOnlyName,
+	"devices.credential":               reasonDeviceOnlyName,
+	"devices.scope_type":               reasonDeviceOnlyName,
+	"devices.scope_library_id":         reasonDeviceOnlyName,
+	"devices.scope_list_id":            reasonDeviceOnlyName,
+	"devices.url_scope_pending":        reasonDeviceOnlyName,
+	"devices.created_at":               reasonDeviceOnlyName,
+	"devices.updated_at":               reasonDeviceOnlyName,
+	"devices.last_accessed_at":         reasonDeviceOnlyName,
+	"devices.delivery_rules_mode":      reasonDeviceOnlyName,
+	"devices.plugin_last_connected_at": reasonDeviceOnlyName,
+	"devices.plugin_version":           reasonDeviceOnlyName,
+	"devices.plugin_last_synced_at":    reasonDeviceOnlyName,
+	"devices.installation_id":          reasonDeviceOnlyName,
+	"devices.app_version":              reasonDeviceOnlyName,
 }
 
 const (
@@ -264,7 +287,6 @@ var tablesNotInFeed = map[string]string{
 	"library_plugin_customizations": reasonPlugins,
 	"library_plugin_field_settings": reasonPlugins,
 	"library_plugin_hook_configs":   reasonPlugins,
-	"devices":                       reasonDevices,
 	"device_delivery_rules":         reasonDevices,
 	"device_short_urls":             reasonDevices,
 	"kobo_sync_entries":             reasonDevices,

@@ -23,6 +23,8 @@ struct ShishoApp: App {
             case .active:
                 model.didBecomeActive()
                 Task { await model.syncNow() }
+            case .inactive:
+                model.didResignActive()
             case .background:
                 model.didEnterBackground()
                 model.scheduleBackgroundRefresh()

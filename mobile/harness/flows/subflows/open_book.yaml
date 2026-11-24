@@ -16,3 +16,26 @@ appId: ${APP_ID}
     centerElement: true
     timeout: 60000
 - tapOn: ${TITLE}
+# Maestro counts a title under the Library's header as visible, and a tap
+# there lands on the header: when the Book's page hasn't opened, the title
+# is centered again and tapped once more.
+- extendedWaitUntil:
+    visible:
+      id: book.detail.title
+    timeout: 10000
+    optional: true
+- runFlow:
+    when:
+      notVisible:
+        id: book.detail.title
+    commands:
+      - scrollUntilVisible:
+          element: ${TITLE}
+          direction: UP
+          centerElement: true
+          timeout: 60000
+      - tapOn: ${TITLE}
+- extendedWaitUntil:
+    visible:
+      id: book.detail.title
+    timeout: 30000

@@ -1,0 +1,25 @@
+# Waits for the reader's place to stop moving, as after turns queued behind
+# a page being laid out, and keeps it in output.settledPlace. Not a flow of
+# its own.
+appId: ${APP_ID}
+---
+- retry:
+    maxRetries: 5
+    commands:
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 1500
+          optional: true
+      - copyTextFrom:
+          id: reader.progress
+      - evalScript: ${output.placeBefore = maestro.copiedText}
+      - extendedWaitUntil:
+          visible: __never__
+          timeout: 1500
+          optional: true
+      - copyTextFrom:
+          id: reader.progress
+      - evalScript: ${output.settledPlace = maestro.copiedText}
+      - assertTrue:
+          condition: ${output.settledPlace == output.placeBefore}
+          label: The place stopped moving

@@ -7,6 +7,7 @@ import SwiftUI
 /// raw value ending in "-fill" is the icon filled.
 enum Lucide: String, CaseIterable {
     case arrowDown = "arrow-down"
+    case arrowDownRight = "arrow-down-right"
     case arrowDownUp = "arrow-down-up"
     case arrowUp = "arrow-up"
     case arrowUpRight = "arrow-up-right"
@@ -17,6 +18,7 @@ enum Lucide: String, CaseIterable {
     case bookmarkPlus = "bookmark-plus"
     case check
     case chevronDown = "chevron-down"
+    case chevronLeft = "chevron-left"
     case chevronRight = "chevron-right"
     case chevronUp = "chevron-up"
     case chevronsUpDown = "chevrons-up-down"
@@ -48,10 +50,12 @@ enum Lucide: String, CaseIterable {
     case playFill = "play-fill"
     case plus
     case refresh = "refresh-cw"
+    case redo2 = "redo-2"
     case rotateCcw = "rotate-ccw"
     case rotateCw = "rotate-cw"
     case search
     case server
+    case settings
     case share = "share-2"
     case skipBack = "skip-back"
     case skipForward = "skip-forward"
@@ -63,6 +67,7 @@ enum Lucide: String, CaseIterable {
     case tags
     case trash = "trash-2"
     case triangleAlert = "triangle-alert"
+    case undo2 = "undo-2"
     case user
     case userX = "user-x"
     case users

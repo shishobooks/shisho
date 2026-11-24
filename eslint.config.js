@@ -232,6 +232,12 @@ export default tseslint.config(
     ],
   },
   {
+    // The Shisho app's reader runs this in its WebViews, beside the web
+    // reader's foliate-js.
+    files: ["mobile/ios/Shisho/Reader/ReaderWeb/**/*.js"],
+    languageOptions: { globals: globals.browser },
+  },
+  {
     // Maestro runs the flows' scripts with its own globals.
     files: ["mobile/harness/**/*.js"],
     languageOptions: {

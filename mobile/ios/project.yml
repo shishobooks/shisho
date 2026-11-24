@@ -33,6 +33,17 @@ targets:
     platform: iOS
     sources:
       - path: Shisho
+        excludes:
+          - Reader/ReaderWeb
+      # The reader's page and script, and the web reader's vendored
+      # foliate-js, which lays out Reflowable Files (ADR 0026). Both are
+      # folders in the bundle, so the script imports ../foliate/view.js.
+      - path: Shisho/Reader/ReaderWeb
+        type: folder
+        buildPhase: resources
+      - path: ../../app/libraries/foliate
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: ShishoAPI
       - package: GRDB

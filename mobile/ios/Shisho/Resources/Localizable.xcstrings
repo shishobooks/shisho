@@ -235,7 +235,16 @@
     "Back %lld Seconds" : {
 
     },
+    "Back to previous location" : {
+
+    },
     "Bitrate" : {
+
+    },
+    "Black" : {
+
+    },
+    "Book" : {
 
     },
     "Book remaining %@" : {
@@ -316,7 +325,13 @@
     "Clear all filters" : {
 
     },
+    "Close" : {
+
+    },
     "Close Player" : {
+
+    },
+    "Closes the book" : {
 
     },
     "Codec" : {
@@ -325,13 +340,28 @@
     "Colorist" : {
 
     },
+    "Contents" : {
+
+    },
+    "Continue reading" : {
+
+    },
     "Couldn't reach the server. Check the address and your connection. (%@)" : {
+
+    },
+    "Counts pages left in the book" : {
+
+    },
+    "Counts pages left in the chapter" : {
 
     },
     "Cover Artist" : {
 
     },
     "Currently Reading" : {
+
+    },
+    "Dark" : {
 
     },
     "Date added" : {
@@ -433,6 +463,9 @@
     "Forward %lld Seconds" : {
 
     },
+    "Forward to next location" : {
+
+    },
     "From " : {
 
     },
@@ -445,10 +478,16 @@
     "Go to %@" : {
 
     },
+    "Go to Note" : {
+
+    },
     "Goes to this moment" : {
 
     },
     "Highest rating" : {
+
+    },
+    "Image" : {
 
     },
     "Include titles" : {
@@ -460,10 +499,19 @@
     "Language" : {
 
     },
+    "Last page in book" : {
+
+    },
+    "Last page in chapter" : {
+
+    },
     "Last read" : {
 
     },
     "Last synced" : {
+
+    },
+    "Layout" : {
 
     },
     "Leave it empty to remove the note." : {
@@ -479,6 +527,9 @@
 
     },
     "Library: %@" : {
+
+    },
+    "Light" : {
 
     },
     "Listen" : {
@@ -510,6 +561,9 @@
 
     },
     "Loading" : {
+
+    },
+    "Loading the next page" : {
 
     },
     "Lowest rating" : {
@@ -628,6 +682,9 @@
     "Open Settings" : {
 
     },
+    "Opening the book" : {
+
+    },
     "Opens the File's page" : {
 
     },
@@ -646,6 +703,9 @@
     "Pages" : {
 
     },
+    "Paginated" : {
+
+    },
     "Password" : {
 
     },
@@ -659,6 +719,9 @@
 
     },
     "People" : {
+
+    },
+    "Place in the book" : {
 
     },
     "Plain HTTP only works for servers on your local network. Use the server's https:// address." : {
@@ -688,6 +751,12 @@
     "Publisher" : {
 
     },
+    "Pull for next chapter" : {
+
+    },
+    "Pull for previous chapter" : {
+
+    },
     "Rated %@ of 5 stars" : {
 
     },
@@ -697,6 +766,12 @@
     "Read" : {
 
     },
+    "Read %@" : {
+
+    },
+    "Read again" : {
+
+    },
     "Reading Direction" : {
 
     },
@@ -704,6 +779,15 @@
 
     },
     "Reference" : {
+
+    },
+    "Release for %@" : {
+
+    },
+    "Release for next chapter" : {
+
+    },
+    "Release for previous chapter" : {
 
     },
     "Released" : {
@@ -733,6 +817,9 @@
     "Save" : {
 
     },
+    "Scrolled" : {
+
+    },
     "Search" : {
 
     },
@@ -748,6 +835,9 @@
     "Search your Libraries" : {
 
     },
+    "Sepia" : {
+
+    },
     "Series" : {
 
     },
@@ -761,6 +851,9 @@
 
     },
     "Server version" : {
+
+    },
+    "Settings" : {
 
     },
     "Share" : {
@@ -869,10 +962,16 @@
     "Supplement to " : {
 
     },
+    "Swipe up or down to zoom" : {
+
+    },
     "Switches to this account" : {
 
     },
     "Sync Now" : {
+
+    },
+    "System" : {
 
     },
     "Tags" : {
@@ -891,6 +990,9 @@
 
     },
     "The server sends the app to another server (%@), which it doesn't follow with your sign-in. Sign in with that address instead." : {
+
+    },
+    "Theme" : {
 
     },
     "Then by %@" : {
@@ -912,6 +1014,12 @@
 
     },
     "This book" : {
+
+    },
+    "This book couldn't be downloaded. Check your connection to the server and try again." : {
+
+    },
+    "This book couldn't be opened." : {
 
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
@@ -954,6 +1062,9 @@
     "Translator" : {
 
     },
+    "Try Again" : {
+
+    },
     "Turn Off Timer" : {
 
     },
@@ -961,6 +1072,9 @@
 
     },
     "Unknown" : {
+
+    },
+    "Untitled" : {
 
     },
     "Up to %@ stars" : {
@@ -987,10 +1101,36 @@
     "Yes" : {
 
     },
+    "You listened up to %@ on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You listened up to %1$@ on %2$@."
+          }
+        }
+      }
+    },
     "You listened up to %@ on another device." : {
 
     },
     "You listened up to %@ on the web." : {
+
+    },
+    "You read up to %@ on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "You read up to %1$@ on %2$@."
+          }
+        }
+      }
+    },
+    "You read up to %@ on another device." : {
+
+    },
+    "You read up to %@ on the web." : {
 
     },
     "Your account can't read Books on this server. Ask the server's owner for access." : {
@@ -1018,6 +1158,12 @@
 
     },
     "^[%lld page](inflect: true)" : {
+
+    },
+    "^[%lld page](inflect: true) left in book" : {
+
+    },
+    "^[%lld page](inflect: true) left in chapter" : {
 
     },
     "a newer release" : {

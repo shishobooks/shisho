@@ -14,6 +14,7 @@ import {
   vi,
 } from "vitest";
 
+import { ThemeContext } from "@/components/contexts/Theme/context";
 import { useReflowableBook } from "@/hooks/queries/reflowable";
 import {
   useUpdateUserSettings,
@@ -336,7 +337,7 @@ describe("ReflowableReader", () => {
     }
   });
 
-  it("shows progress to a tenth of a percent", async () => {
+  it("shows progress as a whole percent, with the bar to the page", async () => {
     vi.mocked(useReflowableBook).mockReturnValue({
       data: new Blob(["x"], { type: "application/epub+zip" }),
       isLoading: false,
@@ -356,9 +357,11 @@ describe("ReflowableReader", () => {
         );
     });
 
-    expect(progress).toHaveAttribute("aria-valuenow", "23.5");
-    expect(progress).toHaveAttribute("aria-valuetext", "23.5%");
-    expect(screen.getByText("23.5%")).toBeInTheDocument();
+    expect(progress).toHaveAttribute("aria-valuenow", "23");
+    expect(progress).toHaveAttribute("aria-valuetext", "23%");
+    expect(screen.getByText("23%")).toBeInTheDocument();
+    // The bar still moves with each page.
+    expect(progress.firstElementChild).toHaveStyle({ width: "23.45%" });
   });
 
   it("lists headings in the chapter menu without making them selectable", async () => {
@@ -2204,6 +2207,48 @@ describe("ReflowableReader display settings", () => {
       );
     });
     expect(css(renderer)).toContain("background: #1a1a1a !important");
+  });
+
+  it("offers System first and uses it until a theme is chosen", async () => {
+    await openBook();
+    await openSettings();
+    const themes = within(screen.getByRole("group", { name: "Theme" }))
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+    expect(themes).toEqual(["System", "Light", "Sepia", "Dark", "Black"]);
+    expect(screen.getByRole("button", { name: "System" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("draws the System page as Light or Dark, following the app", async () => {
+    const tree = (resolvedTheme: "light" | "dark") => (
+      <ThemeContext.Provider
+        value={{ theme: "system", resolvedTheme, setTheme: () => {} }}
+      >
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <ReflowableReader
+              bookTitle="Test Book"
+              file={{ id: 7, book_id: 3, file_type: "epub" } as never}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      </ThemeContext.Provider>
+    );
+    const client = new QueryClient();
+    const { container, rerender } = render(tree("light"));
+    const view = container.querySelector("foliate-view") as unknown as {
+      renderer: MockRenderer;
+    };
+    await vi.waitFor(() => expect(view.renderer.setStyles).toHaveBeenCalled());
+    expect(css(view.renderer)).toContain("background: #ffffff !important");
+
+    rerender(tree("dark"));
+    expect(css(view.renderer)).toContain("background: #1a1a1a !important");
+    // Still System: the page follows the app, the setting doesn't change.
+    expect(localStorage.getItem(READER_SETTINGS_KEY)).toBeNull();
   });
 
   const fontFile = (name: string) =>

@@ -1,0 +1,16 @@
+# Shows the reader's controls, which a page turn hides: a tap in the middle
+# of the page, the zone that shows them on every platform. Not a flow of its
+# own.
+appId: ${APP_ID}
+---
+- runFlow:
+    when:
+      notVisible:
+        id: reader.close
+    commands:
+      - tapOn:
+          point: "50%,50%"
+- extendedWaitUntil:
+    visible:
+      id: reader.close
+    timeout: 30000

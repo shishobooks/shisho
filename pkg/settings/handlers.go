@@ -78,7 +78,7 @@ func (h *handler) updateUserSettings(c echo.Context) error {
 		return errcodes.ValidationError("viewer_reflowable_font_size must be between 50 and 200")
 	}
 	if payload.ReflowableTheme != nil && !IsValidReflowableTheme(*payload.ReflowableTheme) {
-		return errcodes.ValidationError("viewer_reflowable_theme must be 'light', 'dark', or 'sepia'")
+		return errcodes.ValidationError(reflowableThemeError())
 	}
 	if payload.ReflowableFlow != nil && !IsValidReflowableFlow(*payload.ReflowableFlow) {
 		return errcodes.ValidationError("viewer_reflowable_flow must be 'paginated' or 'scrolled'")

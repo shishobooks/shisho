@@ -9,11 +9,16 @@ import (
 	"github.com/shishobooks/shisho/pkg/sqliteconn"
 )
 
-// readingState is what the server holds of listening to one Book, for the
-// flows to check against what the app showed. Times are seconds since 1970.
+// readingState is what the server holds of reading or listening to one
+// Book, for the flows to check against what the app showed. Times are
+// seconds since 1970.
 type readingState struct {
-	// Seconds and Source are the Reading Position, Seconds -1 without one.
+	// Seconds, CFI, Percentage, and Source are the Reading Position: Seconds
+	// -1 without one or in an ebook, CFI empty without one or in an
+	// audiobook.
 	Seconds    float64          `json:"seconds"`
+	CFI        string           `json:"cfi"`
+	Percentage float64          `json:"percentage"`
 	Source     string           `json:"source"`
 	OccurredAt int64            `json:"occurred_at"`
 	Sessions   []readingSession `json:"sessions"`
@@ -41,7 +46,7 @@ func unixOrZero(t time.Time) int64 {
 	return t.Unix()
 }
 
-// readReading reads the harness user's listening to the Book titled title
+// readReading reads the harness user's reading of the Book titled title
 // from the server's database, read-only.
 func readReading(ctx context.Context, path, title string) (*readingState, error) {
 	connector, err := sqliteconn.NewConnector("file:"+path+"?mode=ro", "PRAGMA busy_timeout = 5000")
@@ -53,9 +58,10 @@ func readReading(ctx context.Context, path, title string) (*readingState, error)
 
 	state := &readingState{Seconds: -1, Sessions: []readingSession{}}
 	err = db.QueryRowContext(ctx, `
-		SELECT COALESCE(rp.seconds, -1), rp.source, CAST(strftime('%s', rp.occurred_at) AS INTEGER)
+		SELECT COALESCE(rp.seconds, -1), COALESCE(rp.cfi, ''), rp.percentage, rp.source,
+			CAST(strftime('%s', rp.occurred_at) AS INTEGER)
 		FROM reading_positions rp JOIN files f ON f.id = rp.file_id JOIN books b ON b.id = f.book_id
-		WHERE b.title = ?`, title).Scan(&state.Seconds, &state.Source, &state.OccurredAt)
+		WHERE b.title = ?`, title).Scan(&state.Seconds, &state.CFI, &state.Percentage, &state.Source, &state.OccurredAt)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.WithStack(err)
 	}

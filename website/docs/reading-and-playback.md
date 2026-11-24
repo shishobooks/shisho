@@ -43,7 +43,7 @@ In fixed-layout books, search finds matches and goes to their page but doesn't h
 
 ### Going Back After a Jump
 
-Following a link, choosing a chapter from the menu, selecting a spot or a chapter mark on the progress bar, selecting **Go to note** in a footnote, and going to a search result are jumps. To return to where you were before a jump, select **Back to previous location**, the arrow at the left of the reader's header. It returns there however many pages you've turned since. **Forward to next location**, beside it, returns to where you were when you went back.
+Following a link, choosing a chapter from the menu, selecting a spot or a chapter mark on the progress bar, selecting **Go to note** in a footnote, and going to a search result are jumps. To return to where you were before a jump, select **Back to previous location**, the arrow at the left end of the progress bar. It returns there however many pages you've turned since. **Forward to next location**, at the right end, returns to where you were when you went back.
 
 Turning pages is never a jump, even into the next chapter. In Paginated layout, neither is going to a place on the page you're already on. A search counts as one jump however many results you step through, so going back returns to the page you were on when a result first took you off it. The places to go back and forward to start over each time you open the book.
 
@@ -59,7 +59,7 @@ Use the **Settings** button inside the reader to change how books look:
 | **Line spacing** | 1.00 to 2.50 times the font size, in steps of 0.05, from compact to relaxed |
 | **Margins** | 1% to 15% of the page's width on each side, in steps of 1%, from narrow to wide. When two pages show side by side, the same space separates them. |
 | **Justify text** | On justifies and hyphenates paragraphs; off aligns them to the start of the line. Text the book centers or aligns right, such as scene breaks, keeps its alignment either way. |
-| **Theme** | **Light**, **Sepia**, **Dark**, or **Black**. Light keeps the book's own text and background colors; the others replace them. In Dark and Black, images get a white background so transparent images stay visible. |
+| **Theme** | **System** (the default), **Light**, **Sepia**, **Dark**, or **Black**. System matches Shisho's own appearance, set under **Preferences > Appearance**: it looks exactly like Light while Shisho is light and like Dark while Shisho is dark, and switches as soon as that changes. Light keeps the book's own text and background colors; the others replace them. In Dark and Black, images get a white background so transparent images stay visible. |
 | **Layout** | **Paginated** or **Scrolled** |
 | **Pages** | **Auto** shows two pages side by side when the reader is wider than it is tall and has room for both. **One** always shows a single page, which stops widening at about 720 px so lines stay a comfortable length. Applies only to **Paginated**. |
 

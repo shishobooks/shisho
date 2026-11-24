@@ -1,0 +1,65 @@
+# A small note reference opens its note in a card rather than turning
+# the page, and Go to Note goes to the note. A picture opens on its own
+# (#919).
+appId: ${APP_ID}
+name: Open a footnote and a picture
+---
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: The Harness Novel
+- runFlow:
+    file: subflows/go_to_chapter.yaml
+    env:
+      CHAPTER: Chapter One
+# The picture under Chapter One's heading opens on its own, and Close goes
+# back to the page. Tapped by where it is, centered under the heading: the
+# iOS 26 simulator gives the picture's element the wrong left edge, which
+# puts its middle in the left third, where a tap turns the page.
+- extendedWaitUntil:
+    visible: "A drawing in black lines"
+    timeout: 30000
+- tapOn:
+    point: "50%,29%"
+- extendedWaitUntil:
+    visible:
+      id: reader.image.close
+    timeout: 30000
+- tapOn:
+    id: reader.image.close
+- extendedWaitUntil:
+    notVisible:
+      id: reader.image.close
+    timeout: 30000
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.contents
+# A chapter can be tapped once the reader has found it in the book.
+- extendedWaitUntil:
+    visible:
+      text: Chapter Two
+      enabled: true
+    timeout: 30000
+- tapOn: Chapter Two
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Chapter Two.*"
+    timeout: 30000
+# The note reference, a link in the book's text.
+- tapOn: "\\[1\\]"
+- extendedWaitUntil:
+    visible: ".*The footnote's text.*"
+    timeout: 30000
+- tapOn:
+    id: reader.note.go
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: "Notes.*"
+    timeout: 30000

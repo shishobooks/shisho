@@ -10,8 +10,18 @@ import type { UserSettingsResponse } from "@/types";
 // desktop want different sizes. Nothing here reaches the server, so Reading
 // Positions are unaffected.
 
-export const READER_THEMES = ["light", "sepia", "dark", "black"] as const;
+// System draws the page exactly as Light or Dark, whichever the app is in
+// (`pageSettingsFor`).
+export const READER_THEMES = [
+  "system",
+  "light",
+  "sepia",
+  "dark",
+  "black",
+] as const;
 export type ReaderTheme = (typeof READER_THEMES)[number];
+// The themes a page is drawn in.
+export type PageTheme = Exclude<ReaderTheme, "system">;
 
 export const READER_LAYOUTS = ["paginated", "scrolled"] as const;
 export type ReaderLayout = (typeof READER_LAYOUTS)[number];
@@ -73,7 +83,7 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   lineSpacing: 1.45,
   margins: 7,
   justify: true,
-  theme: "light",
+  theme: "system",
   layout: "paginated",
   pages: "auto",
 };
@@ -189,10 +199,22 @@ export const readerSettingsFrom = (
   };
 };
 
+// The settings a page is drawn with: System replaced by the theme it draws.
+export type PageSettings = Omit<ReaderSettings, "theme"> & { theme: PageTheme };
+
+// `appearance` is the app's resolved light or dark mode.
+export const pageSettingsFor = (
+  settings: ReaderSettings,
+  appearance: "light" | "dark",
+): PageSettings => ({
+  ...settings,
+  theme: settings.theme === "system" ? appearance : settings.theme,
+});
+
 // `link` replaces the book's link colors on the page (Light keeps them);
 // `noteLink` is the link in a footnote popover.
 const THEME_COLORS: Record<
-  ReaderTheme,
+  PageTheme,
   { fg: string; bg: string; link: string | null; noteLink: string }
 > = {
   light: { fg: "#111111", bg: "#ffffff", link: null, noteLink: "#0645ad" },
@@ -208,9 +230,11 @@ export interface ReaderFontFace {
   faces: string;
 }
 
-// The stylesheet foliate injects into each section of the book.
+// The stylesheet foliate injects into each section of the book. The Shisho
+// app's reader repeats it, and the theme colors, in
+// mobile/ios/Shisho/Reader/ReaderWeb/reader.js and ReaderSettings.swift.
 export const readerCSS = (
-  settings: ReaderSettings,
+  settings: PageSettings,
   fontFace?: ReaderFontFace,
 ): string => {
   const { fg, bg, link } = THEME_COLORS[settings.theme];
@@ -345,7 +369,7 @@ export const readerLayout = (settings: ReaderSettings) => ({
 // type, the text a little smaller as books set notes. `bookFontFamily` is the
 // family the book itself uses around the reference.
 export const footnoteStyle = (
-  settings: ReaderSettings,
+  settings: PageSettings,
   fontFace: ReaderFontFace | undefined,
   bookFontFamily: string,
 ): { style: CSSProperties; link: string } => {

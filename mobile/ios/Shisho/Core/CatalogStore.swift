@@ -123,7 +123,7 @@ final class CatalogStore: Sendable {
     /// The kinds and fields of the feed this version understands. When an
     /// app update understands more, raise it, and the catalog downloads
     /// again from the start in the background.
-    static let feedVersion = 4
+    static let feedVersion = 5
 
     let pool: DatabasePool
 
@@ -313,6 +313,37 @@ final class CatalogStore: Sendable {
             }
             try db.alter(table: "journal") { t in
                 t.add(column: "bookmark_id", .text).indexed()
+            }
+        }
+        // Reading ebooks (#919): this installation's place in an ebook is a
+        // CFI, and so is another device's place offered instead. seconds
+        // stays an audiobook's, 0 for an ebook.
+        migrator.registerMigration("v5: reading") { db in
+            try db.alter(table: "local_positions") { t in
+                t.add(column: "cfi", .text)
+                t.add(column: "offer_cfi", .text)
+                t.add(column: "offer_percentage", .double)
+            }
+        }
+        // The name of the Device a place came from, so an offer can say
+        // where it's from. Raising feedVersion downloads names for places
+        // already synced.
+        migrator.registerMigration("v6: device names") { db in
+            try db.alter(table: "reading_positions") { t in
+                t.add(column: "device_name", .text)
+            }
+            try db.alter(table: "local_positions") { t in
+                t.add(column: "offer_device_name", .text)
+            }
+        }
+        // The chapter and pages left the reader last showed in a File, for
+        // its Book's page, which can't work them out without the book.
+        migrator.registerMigration("v7: reader places") { db in
+            try db.create(table: "reader_places") { t in
+                t.primaryKey("file_id", .integer)
+                t.column("chapter", .text)
+                t.column("pages_left", .integer)
+                t.column("percentage", .double).notNull()
             }
         }
         return migrator
@@ -575,14 +606,15 @@ final class CatalogStore: Sendable {
         guard let occurredAt = CatalogStore.timestamp(position.occurredAt) else { return }
         try db.execute(
             sql: """
-            INSERT INTO reading_positions (file_id, cfi, page, seconds, percentage, occurred_at, source, device_id, generation)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO reading_positions (file_id, cfi, page, seconds, percentage, occurred_at, source, device_id, device_name,
+                generation)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (file_id) DO UPDATE SET cfi = excluded.cfi, page = excluded.page, seconds = excluded.seconds,
                 percentage = excluded.percentage, occurred_at = excluded.occurred_at, source = excluded.source,
-                device_id = excluded.device_id, generation = excluded.generation
+                device_id = excluded.device_id, device_name = excluded.device_name, generation = excluded.generation
             """,
             arguments: [position.fileId, position.cfi, position.page, position.seconds, position.percentage, occurredAt,
-                        position.source.rawValue, position.deviceId, generation]
+                        position.source.rawValue, position.deviceId, position.deviceName, generation]
         )
     }
 

@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { useTheme } from "@/components/contexts/Theme/context";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import ProgressMarks from "@/components/library/ProgressMarks";
 import ReaderChapterSelect from "@/components/library/ReaderChapterSelect";
@@ -65,6 +66,7 @@ import { footnoteText, isFootnoteReference } from "@/libraries/readerFootnotes";
 import {
   footnoteStyle,
   IMPORTED_FONT_PREFIX,
+  pageSettingsFor,
   readerCSS,
   readerLayout,
   recordBookAlignment,
@@ -253,6 +255,13 @@ export default function ReflowableReader({
   // Display settings are kept in this browser; only auto-hide is saved to
   // the account, since the other readers share it.
   const [readerSettings, updateReaderSettings] = useReaderSettings(settings);
+  // What the page is drawn with: System follows the app's light or dark mode
+  // as it changes.
+  const { resolvedTheme } = useTheme();
+  const pageSettings = useMemo(
+    () => pageSettingsFor(readerSettings, resolvedTheme),
+    [readerSettings, resolvedTheme],
+  );
   const flow = readerSettings.layout;
   const hideChrome = settings?.viewer_hide_chrome ?? false;
 
@@ -389,7 +398,7 @@ export default function ReflowableReader({
   // An open footnote is part of the book, so it looks like the page.
   const noteStyle =
     footnote &&
-    footnoteStyle(readerSettings, noteFontFace, footnote.bookFontFamily);
+    footnoteStyle(pageSettings, noteFontFace, footnote.bookFontFamily);
 
   // Load the book into foliate once both it and the saved location are
   // available.
@@ -1055,8 +1064,8 @@ export default function ReflowableReader({
     const renderer = view?.renderer;
     if (!renderer) return;
 
-    renderer.setStyles?.(readerCSS(readerSettings, fontFace));
-    const layout = readerLayout(readerSettings);
+    renderer.setStyles?.(readerCSS(pageSettings, fontFace));
+    const layout = readerLayout(pageSettings);
     // Setting an attribute lays the book out again even when it's unchanged.
     const set = (name: string, value: string) => {
       if (renderer.getAttribute?.(name) !== value) {
@@ -1088,7 +1097,7 @@ export default function ReflowableReader({
     return () => {
       stale = true;
     };
-  }, [bookReady, fontPending, readerSettings, fontFace]);
+  }, [bookReady, fontPending, pageSettings, fontFace]);
 
   // The menu value for the current location. Entries are keyed by place in
   // the menu, since a book can list one href twice. foliate reports a heading
@@ -1122,12 +1131,9 @@ export default function ReflowableReader({
     jumpTo(() => view?.goToFraction?.(e.key === "Home" ? 0 : 1));
   };
 
-  // To a tenth of a percent, so the bar and the number move with each page
-  // in all but the longest books.
-  const progressPercent = useMemo(
-    () => Math.round(fraction * 1000) / 10,
-    [fraction],
-  );
+  // The number is a whole percent; the bar moves with each page.
+  const progressPercent = useMemo(() => Math.round(fraction * 100), [fraction]);
+  const progressWidth = fraction * 100;
 
   // A failed background refetch keeps an open book on screen, but not one
   // whose reads failed.
@@ -1162,33 +1168,13 @@ export default function ReflowableReader({
     <div className="fixed inset-x-0 bottom-0 top-[var(--banner-height,0px)] bg-background flex flex-col">
       <header
         className={cn(
-          "flex items-center justify-between gap-2 px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          "flex items-center justify-end gap-2 px-4 py-2 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
           overlayChrome &&
             "fixed top-[var(--banner-height,0px)] inset-x-0 z-20 transition-transform duration-300",
           overlayChrome && !chromeVisible && "-translate-y-full",
         )}
         ref={headerRef}
       >
-        {/* Always shown, and disabled when there's nowhere to go, so they're
-            where the reader expects them after paging around a jump. */}
-        <div className="flex items-center">
-          <LocationButton
-            disabled={!bookReady || !locations.canGoBack}
-            hint="Back to where you were before a jump, such as a link, a chapter, or a search result"
-            label="Back to previous location"
-            onClick={locations.goBack}
-          >
-            <Undo2 className="h-4 w-4" />
-          </LocationButton>
-          <LocationButton
-            disabled={!bookReady || !locations.canGoForward}
-            hint="Forward to where you were when you went back"
-            label="Forward to next location"
-            onClick={locations.goForward}
-          >
-            <Redo2 className="h-4 w-4" />
-          </LocationButton>
-        </div>
         <div className="flex min-w-0 items-center gap-2">
           {toc.length > 0 && (
             <ReaderChapterSelect
@@ -1359,14 +1345,26 @@ export default function ReflowableReader({
       >
         {/* The window's arrow-key handler already turns pages, so the bar
             adds only Home and End for keyboard seeking. */}
-        <div className="px-4 pt-3">
+        {/* Back and forward through jumps either side of the bar, as the
+            Shisho app has them. Always shown, and disabled when there's
+            nowhere to go, so they're where the reader expects them after
+            paging around a jump. */}
+        <div className="flex items-center gap-1 px-2 pt-2">
+          <LocationButton
+            disabled={!bookReady || !locations.canGoBack}
+            hint="Back to where you were before a jump, such as a link, a chapter, or a search result"
+            label="Back to previous location"
+            onClick={locations.goBack}
+          >
+            <Undo2 className="h-4 w-4" />
+          </LocationButton>
           <div
             aria-label="Reading progress"
             aria-valuemax={100}
             aria-valuemin={0}
             aria-valuenow={progressPercent}
-            aria-valuetext={`${progressPercent.toFixed(1)}%`}
-            className="relative h-1.5 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            aria-valuetext={`${progressPercent}%`}
+            className="relative h-1.5 flex-1 bg-muted rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             onClick={handleProgressClick}
             onKeyDown={handleProgressKeyDown}
             role="slider"
@@ -1374,16 +1372,24 @@ export default function ReflowableReader({
           >
             <div
               className="absolute inset-y-0 left-0 bg-primary rounded-full"
-              style={{ width: `${progressPercent}%` }}
+              style={{ width: `${progressWidth}%` }}
             />
             <ProgressMarks marks={progressMarks} />
           </div>
-          {currentTocLabel && (
-            <div className="text-xs text-muted-foreground mt-1">
-              {currentTocLabel}
-            </div>
-          )}
+          <LocationButton
+            disabled={!bookReady || !locations.canGoForward}
+            hint="Forward to where you were when you went back"
+            label="Forward to next location"
+            onClick={locations.goForward}
+          >
+            <Redo2 className="h-4 w-4" />
+          </LocationButton>
         </div>
+        {currentTocLabel && (
+          <div className="px-4 text-xs text-muted-foreground">
+            {currentTocLabel}
+          </div>
+        )}
 
         <div className="flex items-center justify-between px-4 py-2">
           <Button
@@ -1396,7 +1402,7 @@ export default function ReflowableReader({
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <span className="text-sm text-muted-foreground tabular-nums">
-            {progressPercent.toFixed(1)}%
+            {progressPercent}%
           </span>
           <Button
             aria-label={rtl ? "Previous page" : "Next page"}

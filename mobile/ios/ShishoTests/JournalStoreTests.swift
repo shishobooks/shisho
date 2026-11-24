@@ -155,6 +155,64 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
     }
 
+    /// A place from a Device names it, and an offer kept from it keeps the
+    /// name, so the banner can say where the place came from.
+    func testAnotherDevicesPlaceKeepsItsName() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+          "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":"kobo-1","device_name":"Robin's Kobo"}}],"cursor":4}
+        """), ownDeviceID: "me")
+
+        let server = try XCTUnwrap(store.pool.read { try CatalogStore.serverPlace($0, fileID: 5) })
+        XCTAssertEqual(server.deviceName, "Robin's Kobo")
+        let offer = try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+        XCTAssertEqual(offer.deviceName, "Robin's Kobo")
+
+        // The Device was deleted: its place stays, with no name.
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+          "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":null,"device_name":null}}],"cursor":6}
+        """), ownDeviceID: "me")
+        XCTAssertNil(try XCTUnwrap(store.pool.read { try CatalogStore.serverPlace($0, fileID: 5) }).deviceName)
+        XCTAssertNil(try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer).deviceName)
+
+        try store.resolveOffer(fileID: 5)
+        XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+    }
+
+    /// A renamed Device sends its place again, the same move: an offer kept
+    /// from it takes the new name.
+    func testAKeptOfferTakesARenamedDevicesName() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        for (name, cursor) in [("Robin's Kobo", 4), ("Study Kobo", 6)] {
+            try store.apply(page("""
+            {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+              "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":"kobo-1","device_name":"\(name)"}}],"cursor":\(cursor)}
+            """), ownDeviceID: "me")
+        }
+        let offer = try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+        XCTAssertEqual(offer.deviceName, "Study Kobo")
+        XCTAssertEqual(offer.percentage, 0.6)
+    }
+
+    /// Another Device's move at the same moment is a different move: the
+    /// offer kept stays the first, with its own Device's name.
+    func testAMoveAtTheSameMomentFromAnotherDeviceKeepsTheOffersName() throws {
+        try store.recordPosition(fileID: 5, seconds: 30, percentage: 0.05, at: now, atEnd: false, sitting: nil)
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":400,"percentage":0.6,
+          "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":"kobo-1","device_name":"Kobo One"}}],"cursor":4}
+        """), ownDeviceID: "me")
+        try store.apply(page("""
+        {"entries":[{"kind":"reading_position","id":5,"reading_position":{"file_id":5,"seconds":800,"percentage":0.8,
+          "occurred_at":"2030-05-02T10:00:00Z","source":"kobo","device_id":"kobo-2","device_name":"Kobo Two"}}],"cursor":6}
+        """), ownDeviceID: "me")
+        let offer = try XCTUnwrap(store.pool.read { try CatalogStore.localPlace($0, fileID: 5) }?.offer)
+        XCTAssertEqual(offer.percentage, 0.6)
+        XCTAssertEqual(offer.deviceName, "Kobo One")
+    }
+
     /// Staying put dismisses the offer for good: the next open doesn't jump
     /// to the place the user just declined, even though it's still the
     /// server's newest.

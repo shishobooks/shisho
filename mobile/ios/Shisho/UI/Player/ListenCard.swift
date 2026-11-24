@@ -49,13 +49,21 @@ struct ListenCard: View {
     /// it has none. It has a line of its own, so a long name can't push the
     /// time left out of view.
     private var chapter: String? {
-        guard !(finished && !playing), let index = AudioChapters.index(at: seconds, in: progress.chapters) else { return nil }
+        // Not before it's started, as the read bar shows no chapter then.
+        guard seconds > 1 || playing, !(finished && !playing),
+              let index = AudioChapters.index(at: seconds, in: progress.chapters) else { return nil }
         return AudioChapters.name(of: index, in: progress.chapters)
     }
 
     private var detail: String {
         if finished && !playing {
             return String(localized: "Finished")
+        }
+        // Before it's started: how long it is and how big, not time left.
+        if seconds <= 1 && !playing {
+            let length = progress.duration > 0 ? [FileFacts.duration(progress.duration)] : []
+            let size = progress.sizeBytes > 0 ? [FileFacts.size(progress.sizeBytes)] : []
+            return (length + size).joined(separator: " · ")
         }
         return String(localized: "\(TimeLabels.clock(max(0, progress.duration - seconds) / rate)) left at \(PlaybackSpeed.label(rate))")
     }

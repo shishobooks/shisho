@@ -486,7 +486,7 @@ struct PlayerListSheet: View {
 }
 
 /// A list row that shades while pressed, as the web's rows do on hover.
-private struct RowPressStyle: ButtonStyle {
+struct RowPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(configuration.isPressed ? Theme.muted : Color.clear)

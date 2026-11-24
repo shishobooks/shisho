@@ -54,17 +54,41 @@ struct PlayerControlStyle: ButtonStyle {
     }
 }
 
-/// Offers another device's place without jumping to it (#912).
+/// Offers another device's place without jumping to it (#912), in the
+/// player or the reader.
 struct PlaceOfferBanner: View {
+    enum Kind {
+        case listening, reading
+
+        /// Starts the banner's identifiers, the same on every platform.
+        var prefix: String { self == .listening ? "player" : "reader" }
+    }
+
     let offer: ServerPlace
+    var kind = Kind.listening
     let accept: () -> Void
     let dismiss: () -> Void
 
-    private var message: String {
-        let time = TimeLabels.clock(offer.seconds)
-        return offer.source == "web_reader"
-            ? String(localized: "You listened up to \(time) on the web.")
-            : String(localized: "You listened up to \(time) on another device.")
+    private var message: String { PlaceOfferBanner.message(for: offer, kind: kind) }
+
+    /// What the banner says about offer, which VoiceOver reads too: where
+    /// the place came from, by the Device's name when it has one.
+    nonisolated static func message(for offer: ServerPlace, kind: Kind) -> String {
+        let web = offer.source == "web_reader"
+        var device = offer.deviceName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if device?.isEmpty == true { device = nil }
+        switch kind {
+        case .listening:
+            let time = TimeLabels.clock(offer.seconds)
+            if web { return String(localized: "You listened up to \(time) on the web.") }
+            if let device { return String(localized: "You listened up to \(time) on \(device).") }
+            return String(localized: "You listened up to \(time) on another device.")
+        case .reading:
+            let percent = offer.percentage.formatted(.percent.precision(.fractionLength(0)))
+            if web { return String(localized: "You read up to \(percent) on the web.") }
+            if let device { return String(localized: "You read up to \(percent) on \(device).") }
+            return String(localized: "You read up to \(percent) on another device.")
+        }
     }
 
     var body: some View {
@@ -79,20 +103,20 @@ struct PlaceOfferBanner: View {
             Button("Go There", action: accept)
                 .font(.geist(.subheadline, weight: .semibold))
                 .foregroundStyle(Theme.primary)
-                .accessibilityIdentifier("player.offer.accept")
+                .accessibilityIdentifier("\(kind.prefix).offer.accept")
             Button(action: dismiss) {
                 Icon(.x, size: 16, relativeTo: .footnote)
                     .foregroundStyle(Theme.mutedForeground)
                     .frame(width: 28, height: 28)
             }
             .accessibilityLabel("Stay Here")
-            .accessibilityIdentifier("player.offer.dismiss")
+            .accessibilityIdentifier("\(kind.prefix).offer.dismiss")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .cardStyle()
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("player.offer")
+        .accessibilityIdentifier("\(kind.prefix).offer")
     }
 }
 
@@ -111,6 +135,12 @@ struct Scrubber: View {
     let onCommit: (Double) -> Void
     /// What VoiceOver's swipe up and down moves by.
     var step: Double = 15
+    /// Called for each of VoiceOver's swipes up and down instead of
+    /// onCommit, for a bar that treats a run of them as one move.
+    var onAdjust: ((Double) -> Void)?
+    /// Places marked on the bar, such as where each chapter starts, in the
+    /// same units as value.
+    var marks: [Double] = []
 
     /// Where a drag began, and where the handle is now, in seconds.
     @State private var dragStart: Double?
@@ -136,6 +166,20 @@ struct Scrubber: View {
                 Capsule()
                     .fill(Theme.primary)
                     .frame(width: min(width, x + Scrubber.thumb / 2), height: Scrubber.track)
+                // One drawing for every mark, rather than a view each: a
+                // book can have a hundred chapters.
+                if !marks.isEmpty {
+                    Canvas { context, size in
+                        for mark in marks {
+                            let centre = Scrubber.thumb / 2 + travel * min(1, max(0, length > 0 ? mark / length : 0))
+                            let tick = CGRect(x: centre - 0.75, y: (size.height - 12) / 2, width: 1.5, height: 12)
+                            context.fill(Capsule().path(in: tick), with: .color(Theme.foreground.opacity(0.3)))
+                        }
+                    }
+                    .frame(width: width, height: 12)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
                 // White in both appearances, as the system slider's handle
                 // is, ringed in the brand color.
                 Circle()
@@ -189,8 +233,8 @@ struct Scrubber: View {
         .accessibilityAddTraits(.updatesFrequently)
         .accessibilityAdjustableAction { direction in
             switch direction {
-            case .increment: onCommit(min(length, value + step))
-            case .decrement: onCommit(max(0, value - step))
+            case .increment: (onAdjust ?? onCommit)(min(length, value + step))
+            case .decrement: (onAdjust ?? onCommit)(max(0, value - step))
             @unknown default: break
             }
         }

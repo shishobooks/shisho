@@ -1,0 +1,28 @@
+# Opens the Book titled ${TITLE} from the Library in the reader, and waits
+# for its first page, with its chapters found. Not a flow of its own.
+appId: ${APP_ID}
+---
+- runFlow:
+    file: open_book.yaml
+    env:
+      TITLE: ${TITLE}
+- scrollUntilVisible:
+    element:
+      id: book.read
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: book.read
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+    timeout: 30000
+- extendedWaitUntil:
+    notVisible:
+      id: reader.loading
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".+ · [0-9]+%"
+    timeout: 30000

@@ -276,8 +276,14 @@ struct NowPlayingView: View {
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
+    /// The chapter playing, or while the bar spans the whole book and is
+    /// dragged, the chapter the drag is over, so it isn't blind.
     private func chapterLabel(_ player: AudioPlayer) -> String {
-        player.chapterTitle ?? String(localized: "No chapters")
+        if wholeBook, let scrubbing, let chapters = player.file?.chapters,
+           let index = AudioChapters.index(at: scrubbing, in: chapters) {
+            return AudioChapters.name(of: index, in: chapters)
+        }
+        return player.chapterTitle ?? String(localized: "No chapters")
     }
 
     private func scrubber(_ player: AudioPlayer, _ file: ListeningFile) -> some View {

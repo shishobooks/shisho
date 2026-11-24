@@ -46,7 +46,7 @@ The app can be signed in to several servers, or several accounts on one server, 
 
 ## Listening
 
-Books with an M4B audiobook have a **Listen** button that plays it from your server. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app. Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
+Books with an M4B audiobook have a **Listen** button that plays it from your server. Before you start, it shows the audiobook's length and size. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app. Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
 
 The chapters are the ones Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. Tap the chapter's name under the title, or **Chapters** under the player, to list them and go to one. Tap the time left under the position bar, which is at your current speed, to switch the bar between the chapter and the whole book.
 
@@ -56,7 +56,7 @@ Speed moves in steps of 0.1, from 0.5x to 4x, and is kept for each audiobook fil
 
 The app saves your place every few seconds while playing and when you pause, and sends it, with your listening time, the next time it reaches your server. Listening done offline, such as on a plane, counts at the time you listened, not when it synced: [Reading History](./reading-tracking.md#reading-history) and [Reading Stats](./reading-stats.md) show it on the right day, under the phone's Device. Listening starts and finishes a book's Read-through by the same rules as the [web player](./reading-tracking.md#starting-and-finishing-automatically).
 
-Opening a book takes you to your latest place from any device, unless you've also listened on this phone since it last synced. Then it stays where the phone was and offers the other place, without jumping. A place that arrives while you listen is only offered too.
+Opening an audiobook takes you to your latest place from any device, unless you've also listened on this phone since it last synced. Then it stays where the phone was and offers the other place, without jumping. The offer names the [Device](./users-and-permissions.md#devices) the place came from, or says it's from the web. A place that arrives while you listen is only offered too.
 
 If the server turns down a change the app made offline, for example listening to a book that has since been deleted, the app drops it and says so in the library.
 
@@ -64,9 +64,27 @@ If the server turns down a change the app made offline, for example listening to
 
 **Bookmark** under the player adds a [bookmark](./reading-and-playback.md#bookmarks) at the current moment; tap **Add Note** in the message that follows to write a note. The **Bookmarks** tab beside **Chapters**, also in the **…** menu, lists them in time order: tap one to go to its moment, or use its buttons to edit its note or delete it. Bookmarks work offline and sync with your account, so ones you add on the web show in the app after it syncs, and ones you add in the app show on the web. If a note was edited in two places, the later edit wins, and a deleted bookmark stays deleted.
 
+## Reading
+
+Books with an EPUB, KePub, MOBI, or AZW3 file have a **Read** button, which shows the file's size before you start, and the chapter you're in and the pages left in the book once you've read on the phone. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. A book you open is downloaded from your server the first time and kept on the phone for a while, so it opens again without a connection. iOS may clear it to free space, and the next open downloads it again.
+
+A tap on the left or right third of the page turns it, and a tap in the middle shows or hides the controls. A tap on a link follows it, and in the middle of the page so does a tap near one; a tap near a footnote reference opens it anywhere on the page. A tap on a picture in the middle of the page opens it on its own: pinch or double-tap to zoom, and drag down to close it. A footnote opens in a card beside its reference, with **Go to Note** to read it in place. Press and hold to select text and use **Copy**, **Look Up**, and the rest of the system's menu; while text is selected, dragging moves the selection instead of turning the page.
+
+In **Scrolled** layout, swipe left or right to go to the next or previous chapter, or pull past the end of a chapter and let go to go on to the next, or past its start for the one before.
+
+The controls have:
+
+- **Contents**, the book's chapters. For EPUB and KePub books these are the chapters Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too; a file Shisho has no chapters for uses the table of contents inside it. MOBI and AZW3 books use the table of contents inside the file.
+- A bar across the bottom to move through the book, with a mark where each chapter starts, and at its ends, [back and forward](./reading-and-playback.md#going-back-after-a-jump) to where you were before a jump. In the app, going to another device's place is a jump too.
+- **Settings**: the [theme](./reading-and-playback.md#display-settings) and **Paginated** or **Scrolled** layout, kept on each phone or tablet. The theme starts on **System**, which is Light or Dark to match the app's appearance; choose another theme to keep it whatever the appearance. Fixed-layout books always turn page by page, whatever the layout setting, as in the Shisho reader.
+
+Under the page, with or without the controls, are the chapter and how far through the book you are, and in Paginated layout, the pages left in the chapter. Tap the pages left to count the pages left in the book instead. Where the contents don't say where the chapter ends, the count is the book's. Pages past the chapter showing are estimated from the pages read so far, so the count settles as you read.
+
+The app saves your place on every page turn, and a book opens at the same place in the app and the [Shisho reader](./reading-and-playback.md#epub-mobi-and-azw3-reader). Reading time is counted as the [Shisho reader counts it](./reading-tracking.md#reading-time-from-devices), and reading starts and finishes a book's Read-through by the same [rules](./reading-tracking.md#starting-and-finishing-automatically). Places and reading time reach your server when the app syncs, such as when you close the book or open the app; reading done offline counts at the time you read. Opening a book follows the same rule as listening: your latest place from any device, unless you've also read on this phone since it last synced, when the other place is offered instead.
+
 ## Diagnostics
 
-**Account > Export Diagnostics** shows the app's log of syncs and playback problems, with the app, iOS, and server versions, and shares it as a text file. Server addresses and sign-in details are always removed. Books and files are named by id unless you turn on **Include titles**. Read it before you send it anywhere.
+**Account > Export Diagnostics** shows the app's log of syncs, playback problems, and books that wouldn't open, with the app, iOS, and server versions, and shares it as a text file. Server addresses and sign-in details are always removed. Books and files are named by id unless you turn on **Include titles**. Read it before you send it anywhere.
 
 ## Paths the App Uses
 
@@ -74,7 +92,7 @@ The app calls these paths on your server. A reverse proxy has to pass them, as [
 
 | Path | Used for |
 |------|----------|
-| `/mobile/*` | Signing in, syncing the library, your lists, and your listening, covers, and playing audiobooks |
+| `/mobile/*` | Signing in, syncing the library, your lists, and your reading and listening, covers, downloading books to read, and playing audiobooks |
 
 ## Local Network and Certificates
 
@@ -93,6 +111,16 @@ A server with a certificate from your own certificate authority works once the a
 **Verify:** Play the same book in the web player.
 
 **Fix:** Reconnect and press play again. A file the web player can't play either needs a [rescan](./libraries.md) or restoring on disk.
+
+### A Book Won't Open
+
+**Symptom:** The reader says the book couldn't be downloaded.
+
+**Likely cause:** The phone can't reach the server to download a book it hasn't kept yet, or the file is missing from the library on disk.
+
+**Verify:** Open the same book in the web reader.
+
+**Fix:** Reconnect and tap **Try Again**. A file the web reader can't open either needs a [rescan](./libraries.md) or restoring on disk.
 
 ### The Server Is Too Old for the App
 

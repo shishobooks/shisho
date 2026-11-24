@@ -45,7 +45,9 @@ final class APIClient: Sendable {
     /// fixed at creation, since requests on any thread read it.
     private let onCapabilities: (@Sendable ([String]) -> Void)?
 
-    init(baseURL: URL, credential: String?, onCapabilities: (@Sendable ([String]) -> Void)? = nil) {
+    /// protocolClasses answer requests before the network, for tests.
+    init(baseURL: URL, credential: String?, onCapabilities: (@Sendable ([String]) -> Void)? = nil,
+         protocolClasses: [AnyClass] = []) {
         self.baseURL = baseURL
         self.credential = credential
         self.onCapabilities = onCapabilities
@@ -55,6 +57,7 @@ final class APIClient: Sendable {
         configuration.httpCookieStorage = nil
         configuration.timeoutIntervalForRequest = 30
         configuration.waitsForConnectivity = false
+        configuration.protocolClasses = protocolClasses + (configuration.protocolClasses ?? [])
         session = URLSession(configuration: configuration, delegate: RedirectPolicy(), delegateQueue: nil)
     }
 
@@ -266,8 +269,38 @@ final class APIClient: Sendable {
 
     // MARK: - Plumbing
 
-    private func data(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil,
-                      readsCapabilities: Bool = true) async throws -> Data {
+    /// A File's Original File (ADR 0022), downloaded to a temporary file
+    /// the caller moves where it keeps it.
+    func download(fileID: Int) async throws -> URL {
+        let request = self.request("mobile/files/\(fileID)/download", accept: "*/*")
+        let file: URL
+        let response: URLResponse
+        do {
+            (file, response) = try await session.download(for: request)
+        } catch {
+            throw APIClient.transportError(error)
+        }
+        guard let http = response as? HTTPURLResponse else {
+            try? FileManager.default.removeItem(at: file)
+            throw APIError.unreachable("No response")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let body = (try? Data(contentsOf: file)) ?? Data()
+            try? FileManager.default.removeItem(at: file)
+            throw APIClient.error(status: http.statusCode, response: http, body: body)
+        }
+        // A login page from something in front of the server, or a download
+        // cut off partway, isn't the File.
+        let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int64) ?? -1
+        if http.mimeType == "text/html" || (http.expectedContentLength >= 0 && size != http.expectedContentLength) {
+            try? FileManager.default.removeItem(at: file)
+            throw http.mimeType == "text/html" ? APIError.blockedByProxy : APIError.unreachable("The download stopped partway")
+        }
+        return file
+    }
+
+    private func request(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil,
+                         accept: String = "application/json") -> URLRequest {
         var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         if !query.isEmpty {
             components.queryItems = query
@@ -276,7 +309,7 @@ final class APIClient: Sendable {
         request.httpMethod = method
         request.setValue(String(Installation.appProtocol), forHTTPHeaderField: "X-Shisho-App-Protocol")
         request.setValue(Installation.appVersion, forHTTPHeaderField: "X-Shisho-App-Version")
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue(accept, forHTTPHeaderField: "Accept")
         if let credential {
             request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
         }
@@ -284,6 +317,12 @@ final class APIClient: Sendable {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         }
+        return request
+    }
+
+    private func data(_ path: String, method: String = "GET", query: [URLQueryItem] = [], body: Data? = nil,
+                      readsCapabilities: Bool = true) async throws -> Data {
+        let request = self.request(path, method: method, query: query, body: body)
 
         let data: Data
         let response: URLResponse

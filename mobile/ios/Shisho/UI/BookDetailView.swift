@@ -12,6 +12,7 @@ struct BookDetailView: View {
 
     @State private var book: BookDetail??
     @State private var listen: ListenProgress??
+    @State private var read: ReadProgress??
     @State private var tint: Color?
     @State private var scrolled = false
     @State private var standing: BookStanding?
@@ -36,6 +37,14 @@ struct BookDetailView: View {
                     if let progress = listen ?? nil {
                         ListenCard(progress: progress, bookID: bookID)
                             .padding(.top, 22)
+                            .frame(maxWidth: 520)
+                    }
+                    if let progress = read ?? nil {
+                        ReadCard(progress: progress)
+                            // The reader opens on pages booted while the
+                            // Book's page shows.
+                            .onAppear { ReaderPagePool.shared.prewarm() }
+                            .padding(.top, (listen ?? nil) == nil ? 22 : 10)
                             .frame(maxWidth: 520)
                     }
                     if let detail = book ?? nil {
@@ -89,6 +98,9 @@ struct BookDetailView: View {
         }
         .observing(model.session?.store, id: bookID, into: $listen) { [bookID, deviceID = model.session?.account.deviceID ?? ""] db in
             try CatalogStore.listenProgress(db, bookID: bookID, ownDeviceID: deviceID)
+        }
+        .observing(model.session?.store, id: bookID, into: $read) { [bookID, deviceID = model.session?.account.deviceID ?? ""] db in
+            try CatalogStore.readProgress(db, bookID: bookID, ownDeviceID: deviceID)
         }
     }
 
@@ -320,6 +332,11 @@ private struct FileCard: View {
     var listen: ListenProgress?
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
+    private var isReflowable: Bool { CatalogStore.reflowableTypes.contains(file.fileType) }
+
+    private var readLabel: String {
+        String(localized: "Read \(name)")
+    }
 
     /// How far through the File the user is: for the audiobook the Listen
     /// card is about, the card's own place, live while it plays, so both say
@@ -455,6 +472,19 @@ private struct FileCard: View {
                 .accessibilityLabel(listenLabel)
                 // Editions can share a name, so the File's id tells them apart.
                 .accessibilityIdentifier("file.listen.\(file.id)")
+            }
+            if isReflowable {
+                // Every ebook File opens from here; the Read button above
+                // opens the one read last.
+                Button { model.read(fileID: file.id) } label: {
+                    Icon(.bookOpen, size: 18, relativeTo: nil)
+                        .foregroundStyle(Theme.primary)
+                        .frame(width: 40, height: 40)
+                        .background(Theme.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(PlayerControlStyle())
+                .accessibilityLabel(readLabel)
+                .accessibilityIdentifier("file.read.\(file.id)")
             }
         }
     }

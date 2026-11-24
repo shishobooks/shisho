@@ -94,7 +94,9 @@ extension Font {
         .custom(Theme.Fonts.geistMono, size: textStyleSize(style), relativeTo: style).weight(weight)
     }
 
-    private static func textStyleSize(_ style: Font.TextStyle) -> CGFloat {
+    /// A text style's size at the default text size, which Dynamic Type
+    /// scales from.
+    static func textStyleSize(_ style: Font.TextStyle) -> CGFloat {
         switch style {
         case .largeTitle: 34
         case .title: 28
