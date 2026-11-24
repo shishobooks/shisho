@@ -1,8 +1,9 @@
 # Pause, and the session so far reaches the server. Then listen while the
-# server is offline and reconnect: the session reaches the server placed at
-# the time it happened, not when it synced. Then listen, kill the app while
-# it plays, and relaunch: it resumes where it was, and the server has the
-# place too (#912).
+# server is offline, add a Bookmark with a note, close the app, and open it
+# once the server is back: the session and the Bookmark reach the server
+# placed at the time they happened, not when they synced (#912, #916). Then
+# listen, kill the app while it plays, and relaunch: it resumes where it
+# was, and the server has the place too (#912).
 appId: ${APP_ID}
 name: Listen offline and sync later, then kill and resume
 ---
@@ -10,6 +11,13 @@ name: Listen offline and sync later, then kill and resume
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
+# The note goes on the first Bookmark in the list, so the Book starts with
+# none: other flows leave theirs on the server.
+- runScript:
+    file: scripts/clear_bookmarks.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
 - runFlow: subflows/launch_signed_in.yaml
 - runScript:
     file: scripts/note_app_sessions.js
@@ -73,6 +81,34 @@ name: Listen offline and sync later, then kill and resume
     id: player.position
 - evalScript: ${output.paused = maestro.copiedText}
 
+# Bookmark adds one where playback is at once. Its note is added from the
+# list, a tab of the chapters sheet, rather than the message offering one,
+# which a stall could outlast.
+- tapOn:
+    id: player.bookmark
+- tapOn:
+    id: player.chapters
+- tapOn:
+    id: list.bookmarks
+- extendedWaitUntil:
+    visible:
+      id: bookmarks.editNote
+    timeout: 30000
+- tapOn:
+    id: bookmarks.editNote
+# The note's field is in an alert, found by what it says.
+- extendedWaitUntil:
+    visible: Edit Note
+    timeout: 30000
+- tapOn: Note
+- inputText: Noted offline
+- tapOn: Save
+- extendedWaitUntil:
+    visible: .*Noted offline.*
+    timeout: 30000
+- tapOn:
+    id: list.done
+
 # The app is closed, which ends the session, and opened once the server is
 # back: what it kept offline syncs.
 - stopApp
@@ -99,29 +135,31 @@ name: Listen offline and sync later, then kill and resume
       TITLE: Harbor Lights
 - assertTrue:
     condition: ${output.serverCheck == "ok"}
-    label: The server check passed
+    label: The offline session reached the server
+- runScript:
+    file: scripts/assert_bookmark.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harbor Lights
+      NOTE: Noted offline
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The offline Bookmark reached the server with its note
 
-# Listening on from where it paused offline, long enough for a save or two.
+# Listening from the chapter's start (at most 0:02) until at least 12 s on,
+# long enough for a save or two: well before the chapter ends at 2:00, where
+# a stall could carry the place into the next chapter's own clock.
 - tapOn:
     id: miniplayer.open
 - extendedWaitUntil:
     visible:
       id: player.position
     timeout: 30000
-- copyTextFrom:
-    id: player.position
-- runScript:
-    file: scripts/note_listen_target.js
-    env:
-      FROM: ${maestro.copiedText}
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.playPause
+- runFlow: subflows/rewind_harbor_lights.yaml
 - extendedWaitUntil:
     visible:
       id: player.position
-      text: ${output.listenTarget}
+      text: ".*(0:(1[4-9]|[2-5][0-9])|1:[0-5][0-9])"
     timeout: 60000
 - copyTextFrom:
     id: player.position
