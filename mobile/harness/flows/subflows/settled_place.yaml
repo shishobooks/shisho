@@ -1,14 +1,19 @@
 # Waits for the reader's place to stop moving, as after turns queued behind
-# a page being laid out, and keeps it in output.settledPlace: the place read
-# twice, 1.5 s apart, reads the same. Not a flow of its own.
+# a page being laid out or a jump that lands late, and keeps it in
+# output.settledPlace: the place read 1.5 s apart reads the same twice in a
+# row, the first read 1.5 s after the subflow starts. A loop rather than a
+# retry, which Maestro caps at three tries: it reads for up to 30 s. Not a
+# flow of its own.
 appId: ${APP_ID}
 ---
-- retry:
-    maxRetries: 5
+- evalScript: ${output.placeBefore = null}
+- evalScript: ${output.settledPlace = null}
+- repeat:
+    while:
+      true: ${output.placeBefore === null || output.settledPlace !== output.placeBefore}
+    times: 20
     commands:
-      - copyTextFrom:
-          id: reader.progress
-      - evalScript: ${output.placeBefore = maestro.copiedText}
+      - evalScript: ${output.placeBefore = output.settledPlace}
       - extendedWaitUntil:
           visible: __never__
           timeout: 1500
@@ -16,6 +21,6 @@ appId: ${APP_ID}
       - copyTextFrom:
           id: reader.progress
       - evalScript: ${output.settledPlace = maestro.copiedText}
-      - assertTrue:
-          condition: ${output.settledPlace == output.placeBefore}
-          label: The place stopped moving
+- assertTrue:
+    condition: ${output.settledPlace === output.placeBefore}
+    label: The place stopped moving
