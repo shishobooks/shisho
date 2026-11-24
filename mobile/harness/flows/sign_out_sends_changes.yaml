@@ -1,7 +1,8 @@
 # Signing out sends what the app hasn't sent yet first, so signing in again
-# after the server was set up from scratch rarely has anything to lose. With
-# the server unreachable, signing out doesn't wait on it, and signing in
-# again sends what it kept (#967).
+# after the server was set up from scratch rarely has anything to lose: a
+# Bookmark made offline, with a note, reaches the server placed when it was
+# made (#916). With the server unreachable, signing out doesn't wait on it,
+# and signing in again sends what it kept (#967).
 appId: ${APP_ID}
 name: Sign out sends unsent changes
 onFlowComplete:
@@ -14,8 +15,10 @@ onFlowComplete:
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
+# The note goes on the first Bookmark in the list, so the Book starts with
+# none: other flows leave theirs on the server.
 - runScript:
-    file: scripts/note_bookmarks.js
+    file: scripts/clear_bookmarks.js
     env:
       CONTROL: ${CONTROL}
       TITLE: Harbor Lights
@@ -35,13 +38,38 @@ onFlowComplete:
     timeout: 30000
 
 # A Bookmark made while the server is unreachable waits in the journal, and
-# coming back starts no sync, so only signing out sends it.
+# coming back starts no sync, so only signing out sends it. Bookmark adds one
+# where playback is at once. Its note is added from the list, a tab of the
+# chapters sheet, rather than the message offering one, which a stall could
+# outlast.
 - runScript:
     file: scripts/go_offline.js
     env:
       CONTROL: ${CONTROL}
 - tapOn:
     id: player.bookmark
+- tapOn:
+    id: player.chapters
+- tapOn:
+    id: list.bookmarks
+- extendedWaitUntil:
+    visible:
+      id: bookmarks.editNote
+    timeout: 30000
+- tapOn:
+    id: bookmarks.editNote
+# The note's field is in an alert, found by what it says.
+- extendedWaitUntil:
+    visible: Edit Note
+    timeout: 30000
+- tapOn: Note
+- inputText: Made offline
+- tapOn: Save
+- extendedWaitUntil:
+    visible: .*Made offline.*
+    timeout: 30000
+- tapOn:
+    id: list.done
 - runScript:
     file: scripts/go_online.js
     env:
@@ -69,10 +97,11 @@ onFlowComplete:
       id: signin.server
     timeout: 60000
 - runScript:
-    file: scripts/assert_new_bookmark.js
+    file: scripts/assert_bookmark.js
     env:
       CONTROL: ${CONTROL}
       TITLE: Harbor Lights
+      NOTE: Made offline
 - assertTrue:
     condition: ${output.serverCheck == "ok"}
     label: The Bookmark reached the server before signing out
