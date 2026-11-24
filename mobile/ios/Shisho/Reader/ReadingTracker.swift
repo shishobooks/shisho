@@ -93,6 +93,7 @@ final class ReadingTracker {
         self.location = location
         let at = now()
         let percentage = location.fraction
+        let earlierScreen = session?.page
         if let current = session {
             session = ReadingRules.turned(current, to: location.screen, percentage: percentage, at: at)
         } else {
@@ -100,7 +101,18 @@ final class ReadingTracker {
         }
         guard let locator = location.locator, let current = session else { return }
         let atEnd = location.atEnd
-        if let saved, saved.locator == locator, saved.atEnd == atEnd { return }
+        if let saved, saved.locator == locator, saved.atEnd == atEnd {
+            // Another screen of the same page, as down a webtoon's tall
+            // strip: the time it counted is kept, so a kill can't lose it.
+            if earlierScreen != location.screen, let snapshot = ReadingRules.snapshot(current, at: at) {
+                do {
+                    try store.recordReading(session: snapshot)
+                } catch {
+                    log("couldn't save the session: \(Diagnostics.describe(error))")
+                }
+            }
+            return
+        }
         saved = (locator, atEnd)
         let (cfi, page): (String?, Int?) = switch locator {
         case .cfi(let cfi): (cfi, nil)

@@ -205,4 +205,21 @@ final class PageImagesTests: XCTestCase {
         XCTAssertLessThan(last - settled, 40 * megabyte, "memory grew from \(settled / megabyte) MB to \(last / megabyte) MB")
         XCTAssertLessThan(peak - settled, 60 * megabyte, "memory peaked at \(peak / megabyte) MB from \(settled / megabyte) MB")
     }
+
+    /// The File page's grid of the same scan, its thumbnails small but each
+    /// decoding a whole page's scan, keeps memory flat too.
+    @MainActor
+    func testThumbnailsOfALargeScanKeepMemoryFlat() async throws {
+        let url = try Self.scannedPDF(pageCount: 60, width: 2400, height: 3300)
+        let cache = PageImageCache(source: try PDFPages(url: url), limit: 24 * 1024 * 1024)
+        var footprints: [Int] = []
+        for page in 0..<60 {
+            _ = await cache.image(page: page, maxPixel: 300, need: .later)
+            footprints.append(MemoryFootprint.bytes)
+        }
+        let settled = footprints[19]
+        let last = footprints[59]
+        let megabyte = 1_048_576
+        XCTAssertLessThan(last - settled, 30 * megabyte, "memory grew from \(settled / megabyte) MB to \(last / megabyte) MB")
+    }
 }

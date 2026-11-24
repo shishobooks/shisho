@@ -360,10 +360,14 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         guard phase != .reading else { return }
         phase = .reading
         // A page opened from the grid moves the place there, as a link to a
-        // page does on the web; opening at the place isn't reading.
+        // page does on the web; opening at the place isn't reading. As on
+        // the web, it's never the end, even on the last page: finishing
+        // takes reading there.
         if let placePage, placePage != page {
             tracker.opened(place(placePage))
-            tracker.moved(place(page))
+            var opened = place(page)
+            opened.atEnd = false
+            tracker.moved(opened)
         } else {
             tracker.opened(place(page))
         }

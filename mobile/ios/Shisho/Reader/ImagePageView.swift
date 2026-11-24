@@ -306,13 +306,17 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         // A new width changes every page's height: the page showing stays.
         laidOutWidth = bounds.width
         let keep = pending ?? page
+        // Laying out again moves the column; the reader didn't.
+        positioning = true
         collection.collectionViewLayout.invalidateLayout()
         collection.layoutIfNeeded()
-        go(to: keep)
+        positioning = false
+        go(to: keep, reporting: false)
     }
 
-    /// Scrolls page to the top, or as far as the column goes.
-    func go(to page: Int) {
+    /// Scrolls page to the top, or as far as the column goes. reporting is
+    /// false when the reader stays where they were, as on rotation.
+    func go(to page: Int, reporting: Bool = true) {
         guard sizes.indices.contains(page) else { return }
         guard laidOutWidth > 0 else {
             pending = page
@@ -330,7 +334,7 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         // the top.
         self.page = page
         screen = currentScreen
-        onMove?()
+        if reporting { onMove?() }
     }
 
     private var currentScreen: Int {

@@ -58,7 +58,11 @@ struct FilePageGrid: View {
                 .accessibilityIdentifier("file.pages.toggle")
             }
         }
-        .task(id: fileID) { await openPages() }
+        // Again once the reader closes, which may have downloaded the File.
+        .task(id: model.reader == nil) {
+            guard cache == nil else { return }
+            await openPages()
+        }
     }
 
     /// The File's pages, when it's on the device.

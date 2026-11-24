@@ -44,14 +44,17 @@ struct ZipArchive: Sendable {
     /// for each time it's given, so two pages with one name are still two
     /// pages, as the server counts them. A name it lacks, or has run out
     /// of, is nil.
+    /// Names are compared by their bytes, as the server compares them: two
+    /// spellings of é that Swift counts as one string are two names.
     func entries(named names: [String]) -> [Entry?] {
-        var byName: [String: [Entry]] = [:]
-        for entry in entries { byName[entry.name, default: []].append(entry) }
-        var used: [String: Int] = [:]
+        var byName: [[UInt8]: [Entry]] = [:]
+        for entry in entries { byName[Array(entry.name.utf8), default: []].append(entry) }
+        var used: [[UInt8]: Int] = [:]
         return names.map { name in
-            let index = used[name, default: 0]
-            used[name] = index + 1
-            guard let matches = byName[name], index < matches.count else { return nil }
+            let key = Array(name.utf8)
+            let index = used[key, default: 0]
+            used[key] = index + 1
+            guard let matches = byName[key], index < matches.count else { return nil }
             return matches[index]
         }
     }

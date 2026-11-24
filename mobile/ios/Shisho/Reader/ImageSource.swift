@@ -98,13 +98,14 @@ final class ImageSource: PagerSource {
         pager.attach(self)
     }
 
-    /// The page the reader is on: a spread's first, or the last page when
-    /// the spread shows it.
+    /// The page the reader is on: the one a jump or a layout change kept,
+    /// while its spread shows; otherwise a spread's first, or the last page
+    /// when the spread shows it, so turning to the last spread is the end.
     var currentPage: Int {
         if let strip { return strip.page }
         guard spreads.indices.contains(spreadIndex) else { return startPage }
         let spread = spreads[spreadIndex]
-        if let anchorPage, spread.contains(anchorPage), !spread.contains(pageCount - 1) { return anchorPage }
+        if let anchorPage, spread.contains(anchorPage) { return anchorPage }
         return PageLayout.place(of: spread, pageCount: pageCount)
     }
 
@@ -153,11 +154,12 @@ final class ImageSource: PagerSource {
         laidOut()
     }
 
-    /// The pages on screen changed in place: the delegate hears it, and a
-    /// spread that now shows the last page is the end.
+    /// The pages on screen changed in place: the delegate hears it, but the
+    /// reader didn't move, so nothing is saved. The page kept is the one
+    /// the reader was on, even in a spread that also shows the last.
     private func laidOut() {
         delegate?.imageSourceLaidOut()
-        reportMove()
+        reportedPlace = (currentPage, screen)
     }
 
     /// Goes to page: every screen is laid out again around it.

@@ -84,6 +84,7 @@ final class PageImageCache {
     /// The page at maxPixel, decoding it when it isn't kept. keep is false
     /// for a full-resolution page, which its view holds only while zoomed.
     func image(page: Int, maxPixel: Int, need: Need, keep: Bool = true) async -> UIImage? {
+        guard !Task.isCancelled else { return nil }
         if let image = cached(page: page, maxPixel: maxPixel) { return image }
         let key = Key(page: page, bucket: Self.bucket(maxPixel))
         let waiter = UUID()

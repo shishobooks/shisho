@@ -15,7 +15,12 @@ struct ReadCard: View {
         if let pages = progress.pageCount, let left = progress.pagesLeft { return left < pages - 1 }
         return progress.percentage > 0.001
     }
-    private var finished: Bool { progress.percentage >= 0.999 }
+    /// On the last page of a comic or PDF, which in a long one can be under
+    /// a tenth of a percent from the one before.
+    private var finished: Bool {
+        if progress.pageCount != nil, let left = progress.pagesLeft { return left == 0 }
+        return progress.percentage >= 0.999
+    }
     private var percent: String { progress.percentage.formatted(.percent.precision(.fractionLength(0))) }
 
     private var title: LocalizedStringKey {

@@ -138,7 +138,8 @@ actor PDFPages: PageImageSource {
     private var drawnSinceOpening = 0
     /// Pages drawn at a screen's size before the document is opened again.
     static let pagesPerOpening = 8
-    /// The size past which a page drawn counts toward opening it again.
+    /// The size from which a page drawn counts fully toward opening it
+    /// again.
     static let screenSize = 1000
 
     init(url: URL) throws {
@@ -167,12 +168,12 @@ actor PDFPages: PageImageSource {
     func image(page index: Int, maxPixel: Int) async -> CGImage? {
         // A page the reader has since moved away from isn't drawn.
         guard index >= 0, index < pageCount, !Task.isCancelled else { return nil }
-        // Thumbnails decode a scan's images too, but small, so only pages
-        // drawn at a screen's size count toward opening it again.
-        if maxPixel >= Self.screenSize { drawnSinceOpening += 1 }
-        if drawnSinceOpening > Self.pagesPerOpening, let fresh = CGPDFDocument(url as CFURL) {
+        // Thumbnails decode a scan's images too, so they count toward
+        // opening it again, half as much as a page drawn at a screen's size.
+        drawnSinceOpening += maxPixel >= Self.screenSize ? 2 : 1
+        if drawnSinceOpening > Self.pagesPerOpening * 2, let fresh = CGPDFDocument(url as CFURL) {
             document = fresh
-            drawnSinceOpening = 1
+            drawnSinceOpening = 0
         }
         guard let page = document.page(at: index + 1) else { return nil }
         return autoreleasepool { Self.draw(page, maxPixel: maxPixel) }
