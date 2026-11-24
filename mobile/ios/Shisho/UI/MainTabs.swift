@@ -15,12 +15,15 @@ struct MainTabs: View {
         TabView(selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
             LibraryView()
                 .withMiniPlayer()
+                .environment(\.appTab, .library)
                 .tag(AppTab.library)
             ListsView()
                 .withMiniPlayer()
+                .environment(\.appTab, .lists)
                 .tag(AppTab.lists)
             DownloadsView()
                 .withMiniPlayer()
+                .environment(\.appTab, .downloads)
                 .tag(AppTab.downloads)
         }
         // Over the screens, which leave room for it at the end of their
@@ -520,4 +523,25 @@ struct SeriesCard: View {
 /// tapped again.
 enum ScrollTop {
     static let anchor = "scroll.top"
+}
+
+extension EnvironmentValues {
+    /// The tab a screen is on, which a screen with a search needs for its
+    /// state in `TabNavigation`.
+    @Entry var appTab: AppTab = .library
+}
+
+extension AppModel {
+    /// Whether the search on tab's screen is active, for its `.searchable`.
+    func searchActive(on tab: AppTab) -> Binding<Bool> {
+        Binding {
+            self.navigation.searchActive.contains(tab)
+        } set: { active in
+            if active {
+                self.navigation.searchActive.insert(tab)
+            } else {
+                self.navigation.searchActive.remove(tab)
+            }
+        }
+    }
 }

@@ -10,7 +10,9 @@ struct SearchView: View {
     @Environment(AppModel.self) private var model
     @State private var text = ""
     @State private var results = SearchResults()
-    @State private var searching = true
+    @Environment(\.appTab) private var tab
+    /// The search opens active, ready to type in, the first time only.
+    @State private var opened = false
 
     var body: some View {
         ScrollView {
@@ -19,7 +21,7 @@ struct SearchView: View {
                     SectionHeading(title: String(localized: "Books"))
                     VStack(spacing: 8) {
                         ForEach(results.books) { book in
-                            NavigationLink(value: Route.book(book)) {
+                            Button { model.push(.book(book)) } label: {
                                 SearchBookRow(book: book)
                             }
                             .buttonStyle(PressableStyle())
@@ -52,12 +54,17 @@ struct SearchView: View {
         .miniPlayerClearance()
         .navigationTitle("Search")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: $text, isPresented: $searching, placement: .navigationBarDrawer(displayMode: .always),
+        .searchable(text: $text, isPresented: model.searchActive(on: tab), placement: .navigationBarDrawer(displayMode: .always),
                     prompt: Text("Books, series, people"))
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
         .task(id: "\(model.session?.account.id ?? "")|\(model.libraryID)|\(text)") {
             await search()
+        }
+        .onAppear {
+            guard !opened else { return }
+            opened = true
+            model.searchActive(on: tab).wrappedValue = true
         }
     }
 
@@ -67,7 +74,7 @@ struct SearchView: View {
             SectionHeading(title: title)
             VStack(spacing: 8) {
                 ForEach(items) { item in
-                    NavigationLink(value: Route.resource(kind, id: item.id, name: item.name)) {
+                    Button { model.push(.resource(kind, id: item.id, name: item.name)) } label: {
                         ResourceRow(item: item, kind: kind)
                     }
                     .buttonStyle(PressableStyle())

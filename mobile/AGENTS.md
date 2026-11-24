@@ -4,6 +4,7 @@ The Shisho app for iPhone and iPad (`ios/`), and one suite of Maestro flows (`ha
 
 ## Rules every change needs
 
+- **A screen with `.searchable` on a tab's own stack binds the search's `isPresented` to `model.searchActive(on:)` and opens pages with `model.push`, never `NavigationLink(value:)`.** A sheet with its own stack, such as the filters' pickers, keeps its own state. On iOS 26 a stack with a page over an active search can't be emptied, and `TabNavigation` closes the search on every push and pop.
 - **Every screen reads the account's own SQLite database; the network only updates it.** A screen never shows a server response directly, so everything shown works offline. Each account has its own database under its folder, owned by native code. On iOS it's GRDB: screens observe it with `observing(...)` (`ios/Shisho/UI/Observed.swift`) rather than refetching after a sync.
 - **A change the user makes goes into the account's journal, never straight to the server** (ADR 0024): write it through `CatalogStore` (`ios/Shisho/Core/CatalogStore+Listening.swift`) and the sync sends it. Record it where the work happens, such as `AudioPlayer` or `ReadingTracker`, never in a view, so it's kept with the screen closed, the phone locked, or from CarPlay. A new kind of change is a new event type in `pkg/shishoapp/types.go`, sent only to servers that list its capability.
 - **Anything kept per account is named in `AccountData`** (`ios/Shisho/Core/AccountStore.swift`): a new per-account settings key, folder, or cache goes there, so removing the account, as signing in to a server set up again does, removes it too.
@@ -61,6 +62,7 @@ Pull requests from this repository's own branches, other than Dependabot's, don'
 
 Agents run these checks many times a ticket, so a few seconds in every flow add up to minutes.
 
+- **A new flow needs a time in `flowSeconds`** (`tools/appharness/shard.go`), which splits the flows into shards; `TestFlowSecondsNameEveryFlow` fails until it has one, and says how to pick it.
 - **What's reused between runs**: the worktree's simulators, kept booted, each run removing the app and its Keychain first; and the harness's fixtures, cached under the user's cache folder and keyed by the files they're made from (`fixtureSources` in `tools/appharness/fixtures.go`), so neither needs clearing when something changes. `SHISHO_HARNESS_FRESH=1` reuses neither, for a run from a clean slate. CI clones a fresh simulator each run and caches the fixtures by the same key.
 - **Sign in with `subflows/launch_signed_in.yaml`**, which signs a debug build in as it launches, not with the sign-in screen, which costs each flow around 20 seconds of typing. Only flows about the sign-in screen itself use `subflows/sign_in.yaml`. The shortcut is `#if DEBUG` (`HarnessSignIn`), so release builds don't have it.
 - **Launch as the other flows do**: without `permissions: {}` Maestro grants the app every permission on each launch, which is slow on CI. `TestFlowLaunchesSkipPermissionsAndASecondStop` (`tools/appharness`) checks every flow's launches.

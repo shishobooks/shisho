@@ -117,14 +117,17 @@ func TestFlowLaunchesSkipPermissionsAndASecondStop(t *testing.T) {
 	assert.Positive(t, launches)
 }
 
-// flowSeconds names only flows that exist: a renamed flow would otherwise
-// count as the median and unbalance the shards.
-func TestFlowSecondsNameRealFlows(t *testing.T) {
+// flowSeconds names every flow, and only flows that exist: a flow missing
+// from it, or renamed, counts as the median and unbalances the shards.
+func TestFlowSecondsNameEveryFlow(t *testing.T) {
 	t.Parallel()
 	flows, err := topLevelFlows(flowsDir)
 	require.NoError(t, err)
 	for name := range flowSeconds {
-		assert.Contains(t, flows, name)
+		assert.Contains(t, flows, name, "flowSeconds in tools/appharness/shard.go names %s, which isn't a flow; rename or remove it", name)
+	}
+	for _, name := range flows {
+		assert.Contains(t, flowSeconds, name, "%s has no time in flowSeconds in tools/appharness/shard.go: add it, estimated from its local time until CI times it, then replace the estimate with its [Passed] time from a CI run on GitHub's runners", name)
 	}
 }
 

@@ -86,9 +86,20 @@ final class AppModel {
     /// the web carries its tab along the panel's links. The Book's page takes
     /// it when it opens.
     var relatedTabForNextBook: String?
-    var libraryPath: [Route] = []
-    var listsPath: [Route] = []
-    var downloadsPath: [Route] = []
+    /// Each tab's pages, and which tabs' searches are active.
+    var navigation = TabNavigation()
+    var libraryPath: [Route] {
+        get { navigation.path(.library) }
+        set { navigation.setPath(newValue, on: .library) }
+    }
+    var listsPath: [Route] {
+        get { navigation.path(.lists) }
+        set { navigation.setPath(newValue, on: .lists) }
+    }
+    var downloadsPath: [Route] {
+        get { navigation.path(.downloads) }
+        set { navigation.setPath(newValue, on: .downloads) }
+    }
     /// The Account sheet is open.
     var showingAccount = false
     /// The sign-in sheet for adding another account is open.
@@ -185,9 +196,7 @@ final class AppModel {
         // Another account's transfers stop where they are, and carry on
         // when it's back.
         old?.downloads.stop()
-        libraryPath = []
-        listsPath = []
-        downloadsPath = []
+        navigation = TabNavigation()
         showingAccount = false
         stopPrefetching()
         stopChecking()
@@ -332,33 +341,16 @@ final class AppModel {
     /// Opens a Book from one of its own pages, such as a File's: back to it
     /// when it's the screen before, rather than a second copy on top.
     func returnToBook(_ book: BookSummary) {
-        let path = self.path(tab)
+        let path = navigation.path(tab)
         if path.count >= 2, case .book(let previous) = path[path.count - 2], previous.id == book.id {
-            switch tab {
-            case .library: libraryPath.removeLast()
-            case .lists: listsPath.removeLast()
-            case .downloads: downloadsPath.removeLast()
-            }
+            navigation.popLast(tab)
         } else {
             push(.book(book))
         }
     }
 
     func popToRoot(_ tab: AppTab) {
-        switch tab {
-        case .library: libraryPath = []
-        case .lists: listsPath = []
-        case .downloads: downloadsPath = []
-        }
-    }
-
-    /// The pages pushed on tab.
-    private func path(_ tab: AppTab) -> [Route] {
-        switch tab {
-        case .library: libraryPath
-        case .lists: listsPath
-        case .downloads: downloadsPath
-        }
+        navigation.popToRoot(tab)
     }
 
     /// Asks a tab's first screen to scroll to its top; each ask is a new
@@ -368,7 +360,7 @@ final class AppModel {
     /// The tab showing, tapped again: back to its first screen, or on it,
     /// back to its top, as a native tab bar does.
     func reselect(_ tab: AppTab) {
-        if path(tab).isEmpty {
+        if navigation.path(tab).isEmpty {
             scrollToTop[tab, default: 0] += 1
         } else {
             popToRoot(tab)
@@ -379,18 +371,14 @@ final class AppModel {
     /// unless it's the page under the player.
     func showFromPlayer(_ route: Route) {
         showingPlayer = false
-        if path(tab).last.map({ !$0.isSamePage(as: route) }) ?? true {
+        if navigation.path(tab).last.map({ !$0.isSamePage(as: route) }) ?? true {
             push(route)
         }
     }
 
     /// Opens route on the tab showing.
     func push(_ route: Route) {
-        switch tab {
-        case .library: libraryPath.append(route)
-        case .lists: listsPath.append(route)
-        case .downloads: downloadsPath.append(route)
-        }
+        navigation.push(route, on: tab)
     }
 
     // MARK: - Accounts
@@ -1191,6 +1179,47 @@ enum Messages {
 /// The app's tabs.
 enum AppTab: Hashable {
     case library, lists, downloads
+}
+
+/// Each tab's pages, and which tabs' searches are active. Every change to a
+/// tab's pages through it closes that tab's search in the same update: on
+/// iOS 26 a stack with a page over an active search ignores being emptied,
+/// as tapping the tab again does, and keeps showing its pages while its path
+/// says it's back at the first screen. A screen with `.searchable` binds its
+/// `isPresented` to `searchActive` and opens pages with `AppModel.push`,
+/// never `NavigationLink(value:)`, which changes the path behind its back.
+struct TabNavigation: Equatable {
+    private var paths: [AppTab: [Route]] = [:]
+    var searchActive: Set<AppTab> = []
+
+    /// The pages pushed on tab.
+    func path(_ tab: AppTab) -> [Route] {
+        paths[tab] ?? []
+    }
+
+    /// Sets tab's pages, as its NavigationStack does when going back, which
+    /// closes the search as popLast does.
+    mutating func setPath(_ path: [Route], on tab: AppTab) {
+        if path.count < self.path(tab).count {
+            searchActive.remove(tab)
+        }
+        paths[tab] = path
+    }
+
+    mutating func push(_ route: Route, on tab: AppTab) {
+        searchActive.remove(tab)
+        paths[tab, default: []].append(route)
+    }
+
+    mutating func popLast(_ tab: AppTab) {
+        searchActive.remove(tab)
+        paths[tab]?.removeLast()
+    }
+
+    mutating func popToRoot(_ tab: AppTab) {
+        searchActive.remove(tab)
+        paths[tab] = []
+    }
 }
 
 /// A page pushed on a tab's navigation.

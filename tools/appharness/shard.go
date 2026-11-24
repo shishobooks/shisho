@@ -10,13 +10,17 @@ import (
 )
 
 // flowSeconds is about how long each flow takes on a CI runner, to balance
-// the flows when they're split across jobs (`ios -shard`). A flow missing here
-// counts as the median, so a new one still runs; add it once CI has timed it
-// (the `[Passed]` lines in the job's log). Flows that changed since CI last
-// timed them are estimates until it times them again.
+// the flows when they're split into shards (`ios -shard` on GitHub's runners,
+// `ios -parallel` in the signoff). A new flow gets an entry in the same
+// change, which TestFlowSecondsNameEveryFlow checks. It starts as an
+// estimate: scale its local time by how a flow already here compares with
+// its local time, since that ratio moves with the runners. Estimates, and
+// flows that changed since CI last timed them, last until CI times them (the
+// `[Passed]` lines in the job's log).
 var flowSeconds = map[string]float64{
 	"access_change.yaml":              92,
 	"browse_offline.yaml":             85,
+	"download_and_play_offline.yaml":  188,
 	"listen_offline.yaml":             280,
 	"listen_to_the_end.yaml":          98,
 	"read_and_reopen.yaml":            160,
