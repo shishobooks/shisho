@@ -1,0 +1,28 @@
+# Pauses the open player and waits until it reads Play, so what follows
+# sees a place that holds still. A tap on a slow CI simulator can be lost or
+# take effect late, so each tap waits for the pause before trying again. Not
+# a flow of its own.
+appId: ${APP_ID}
+---
+- repeat:
+    times: 3
+    while:
+      visible:
+        id: player.playPause
+        text: Pause
+    commands:
+      - runFlow:
+          file: tap_player.yaml
+          env:
+            CONTROL_ID: player.playPause
+      - extendedWaitUntil:
+          visible:
+            id: player.playPause
+            text: Play
+          timeout: 30000
+          optional: true
+- extendedWaitUntil:
+    visible:
+      id: player.playPause
+      text: Play
+    timeout: 30000

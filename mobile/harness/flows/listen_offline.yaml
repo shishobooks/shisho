@@ -36,10 +36,7 @@ name: Listen offline and sync later, then kill and resume
       id: player.position
       text: ".*0:(0[4-9]|[1-5][0-9])"
     timeout: 30000
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.playPause
+- runFlow: subflows/pause_player.yaml
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.onlinePaused = maestro.copiedText}
@@ -73,10 +70,7 @@ name: Listen offline and sync later, then kill and resume
       id: player.position
       text: ${output.listenTarget}
     timeout: 60000
-- runFlow:
-    file: subflows/tap_player.yaml
-    env:
-      CONTROL_ID: player.playPause
+- runFlow: subflows/pause_player.yaml
 - copyTextFrom:
     id: player.position
 - evalScript: ${output.paused = maestro.copiedText}
@@ -84,10 +78,14 @@ name: Listen offline and sync later, then kill and resume
 # Bookmark adds one where playback is at once. Its note is added from the
 # list, a tab of the chapters sheet, rather than the message offering one,
 # which a stall could outlast.
-- tapOn:
-    id: player.bookmark
-- tapOn:
-    id: player.chapters
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.bookmark
+- runFlow:
+    file: subflows/tap_player.yaml
+    env:
+      CONTROL_ID: player.chapters
 - tapOn:
     id: list.bookmarks
 - extendedWaitUntil:
