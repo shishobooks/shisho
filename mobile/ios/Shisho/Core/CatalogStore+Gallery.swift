@@ -113,7 +113,7 @@ extension CatalogStore {
         }
         if filter.downloaded {
             sql.append("""
-                EXISTS (SELECT 1 FROM downloads d JOIN book_files f ON f.id = d.file_id WHERE f.book_id = b.id AND d.state = 'done')
+                EXISTS (SELECT 1 FROM downloads d JOIN book_files f ON f.id = d.file_id WHERE f.book_id = b.id AND (d.state = 'done' OR d.replacing))
                 """)
         }
         return (sql, arguments)

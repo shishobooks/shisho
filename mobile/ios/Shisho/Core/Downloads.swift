@@ -217,6 +217,10 @@ final class DownloadManager {
     /// Transfers carried on from what an earlier one left, which start over
     /// if the server turns them down.
     @ObservationIgnored private var resumed: Set<TransferID> = []
+    /// When each transfer this launch started began, so a late stop's resume
+    /// data replaces only one that has barely started.
+    @ObservationIgnored private var startedAt: [TransferID: Date] = [:]
+    private static let freshTransfer: TimeInterval = 10
     /// Transfers that failed in a row without finishing, by File, so one
     /// that keeps failing stops being tried.
     @ObservationIgnored private var failures: [Int: Int] = [:]
@@ -300,10 +304,9 @@ final class DownloadManager {
 
     /// The File's Download on the device, or nil without a finished one.
     /// A File the server replaced is queued again with its old copy still
-    /// here, which is used until the new one arrives: only a finished
-    /// transfer is ever moved into place.
+    /// here, which is used until the new one arrives.
     nonisolated func localFile(fileID: Int) -> URL? {
-        guard let row = try? store.pool.read({ try CatalogStore.download($0, fileID: fileID) }) else {
+        guard let row = try? store.pool.read({ try CatalogStore.download($0, fileID: fileID) }), row.state == .done || row.replacing else {
             return nil
         }
         let url = location(fileID: fileID, fileType: row.fileType)
@@ -333,13 +336,14 @@ final class DownloadManager {
     /// isn't on the device does: the reader needs all of it before it can
     /// show a page. It becomes a Download like any other, listed, removed by
     /// the user, and by Remove when finished. A background transfer of it
-    /// already under way isn't needed after this.
-    func fetchNow(fileID: Int) async throws -> URL {
-        if let local = localFile(fileID: fileID) { return local }
+    /// already under way isn't needed after this. fetched says whether this
+    /// call put the file there, rather than finding it on the device.
+    func fetchNow(fileID: Int) async throws -> (url: URL, fetched: Bool) {
+        if let local = localFile(fileID: fileID) { return (local, false) }
         let fetched = try await client.download(fileID: fileID)
         defer { try? FileManager.default.removeItem(at: fetched) }
         // A background transfer of it may have finished meanwhile.
-        if let local = localFile(fileID: fileID) { return local }
+        if let local = localFile(fileID: fileID) { return (local, false) }
         try store.queueDownloads([fileID])
         // One finished whose file is gone counts as wanted again.
         try store.requeueDownloads([fileID])
@@ -355,12 +359,19 @@ final class DownloadManager {
         try DownloadSessionDelegate.prepare(folder)
         let destination = location(fileID: fileID, fileType: row.fileType)
         try? FileManager.default.removeItem(at: destination)
-        try FileManager.default.moveItem(at: fetched, to: destination)
+        do {
+            try FileManager.default.moveItem(at: fetched, to: destination)
+        } catch {
+            // A background transfer finishing at the same moment put the
+            // same File there first.
+            if let local = localFile(fileID: fileID) { return (local, false) }
+            throw error
+        }
         let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? row.sizeBytes
         _ = try store.markDownloaded(fileID: fileID, sizeBytes: size)
         log("file \(fileID): downloaded to open it")
         onChange?(fileID)
-        return destination
+        return (destination, true)
     }
 
     /// Stops a transfer and removes Downloads, freeing their space.
@@ -568,6 +579,7 @@ final class DownloadManager {
             task.taskDescription = String(row.fileID)
             task.countOfBytesClientExpectsToReceive = Int64(row.sizeBytes)
             let id = TransferID(task, in: session)
+            startedAt[id] = Date()
             transfers.started(fileID: row.fileID, id: id)
             tasks[id] = task
             keptOffCellular[id] = wifiOnly
@@ -657,9 +669,11 @@ final class DownloadManager {
             settle(fileID: fileID, id: id, ending: ending)
             if ending == .stale {
                 // A transfer from before this launch, ended late, after
-                // one started over from nothing: it carries on from here
-                // instead.
-                if let resumeData, let current = transfers.id(fileID: fileID), !resumed.contains(current) {
+                // one started over from nothing moments ago: it carries on
+                // from here instead. One that has had longer may be further
+                // along, and goes on.
+                if let resumeData, let current = transfers.id(fileID: fileID), !resumed.contains(current),
+                   startedAt[current].map({ Date().timeIntervalSince($0) < DownloadManager.freshTransfer }) == true {
                     _ = transfers.drop(fileID: fileID)
                     tasks.removeValue(forKey: current)?.cancel()
                     settle(fileID: fileID, id: current, ending: .current)
@@ -696,6 +710,7 @@ final class DownloadManager {
     /// Forgets a transfer that ended.
     private func settle(fileID: Int, id: TransferID, ending: Transfers<TransferID>.Ending) {
         tasks[id] = nil
+        startedAt[id] = nil
         keptOffCellular[id] = nil
         resumed.remove(id)
         if ending == .current {

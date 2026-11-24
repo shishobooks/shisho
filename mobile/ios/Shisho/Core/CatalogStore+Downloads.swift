@@ -23,6 +23,9 @@ struct DownloadRow: Equatable, Sendable {
     /// device once done.
     let sizeBytes: Int
     let error: String?
+    /// Queued again because the server replaced its File, with the old copy
+    /// still on the device, used until the new one arrives.
+    var replacing = false
 }
 
 /// One Download, as the Downloads tab lists it.
@@ -66,6 +69,8 @@ extension CatalogStore {
             // still had it open: it goes once the reader lets go of it, or
             // at the next launch.
             t.column("remove_pending", .boolean).notNull().defaults(to: false)
+            // Queued again for a replaced File, its old copy still here.
+            t.column("replacing", .boolean).notNull().defaults(to: false)
             t.column("requested_at", .double).notNull()
         }
     }
@@ -80,19 +85,20 @@ extension CatalogStore {
 
     static func downloads(_ db: Database) throws -> [DownloadRow] {
         try Row.fetchAll(db, sql: """
-            SELECT file_id, file_type, state, size_bytes, error FROM downloads ORDER BY requested_at, file_id
+            SELECT file_id, file_type, state, size_bytes, error, replacing FROM downloads ORDER BY requested_at, file_id
             """).map(downloadRow)
     }
 
     static func download(_ db: Database, fileID: Int) throws -> DownloadRow? {
         try Row.fetchOne(db, sql: """
-            SELECT file_id, file_type, state, size_bytes, error FROM downloads WHERE file_id = ?
+            SELECT file_id, file_type, state, size_bytes, error, replacing FROM downloads WHERE file_id = ?
             """, arguments: [fileID]).map(downloadRow)
     }
 
     private static func downloadRow(_ row: Row) -> DownloadRow {
         DownloadRow(fileID: row["file_id"], fileType: row["file_type"],
-                    state: DownloadState(rawValue: row["state"]) ?? .failed, sizeBytes: row["size_bytes"], error: row["error"])
+                    state: DownloadState(rawValue: row["state"]) ?? .failed, sizeBytes: row["size_bytes"], error: row["error"],
+                    replacing: row["replacing"])
     }
 
     /// Finished Downloads whose File was replaced on the server, which the
@@ -109,7 +115,7 @@ extension CatalogStore {
     /// are while the server can't be reached, and the rest dimmed.
     static func downloadedBookIDs(_ db: Database) throws -> Set<Int> {
         Set(try Int.fetchAll(db, sql: """
-            SELECT DISTINCT f.book_id FROM downloads d JOIN book_files f ON f.id = d.file_id WHERE d.state = 'done'
+            SELECT DISTINCT f.book_id FROM downloads d JOIN book_files f ON f.id = d.file_id WHERE (d.state = 'done' OR d.replacing)
             """))
     }
 
@@ -215,7 +221,7 @@ extension CatalogStore {
     func markDownloaded(fileID: Int, sizeBytes: Int) throws -> Bool {
         try pool.write { db in
             try db.execute(sql: """
-                UPDATE downloads SET state = 'done', size_bytes = ?, error = NULL
+                UPDATE downloads SET state = 'done', size_bytes = ?, error = NULL, replacing = 0
                 WHERE file_id = ? AND state = 'queued'
                 """, arguments: [sizeBytes, fileID])
             return db.changesCount > 0
@@ -247,7 +253,7 @@ extension CatalogStore {
             let replaced = try CatalogStore.replacedDownloads(db)
             for fileID in replaced {
                 try db.execute(sql: """
-                    UPDATE downloads SET state = 'queued', error = NULL, remove_pending = 0,
+                    UPDATE downloads SET state = 'queued', error = NULL, remove_pending = 0, replacing = 1,
                         size_bytes = (SELECT size_bytes FROM book_files WHERE id = downloads.file_id),
                         catalog_size = (SELECT size_bytes FROM book_files WHERE id = downloads.file_id)
                     WHERE file_id = ?
@@ -260,7 +266,8 @@ extension CatalogStore {
     /// Marks a Download to go once the reader lets go of it.
     func markRemovePending(fileID: Int) throws {
         try pool.write { db in
-            try db.execute(sql: "UPDATE downloads SET remove_pending = 1 WHERE file_id = ? AND state = 'done'", arguments: [fileID])
+            try db.execute(sql: "UPDATE downloads SET remove_pending = 1 WHERE file_id = ? AND (state = 'done' OR replacing)",
+                           arguments: [fileID])
         }
     }
 

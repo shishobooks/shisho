@@ -246,8 +246,11 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
             } else {
                 // The reader needs all of a book before it can show a page,
                 // so opening one downloads it, as a Download like any other.
-                bookFile = try await session.downloads.fetchNow(fileID: file.fileID)
-                fetchedToOpen = true
+                let fetch = try await session.downloads.fetchNow(fileID: file.fileID)
+                bookFile = fetch.url
+                // One a background transfer finished meanwhile is a Download
+                // like any other, kept if it won't open.
+                fetchedToOpen = fetch.fetched
             }
         } catch {
             guard !closed else { return }

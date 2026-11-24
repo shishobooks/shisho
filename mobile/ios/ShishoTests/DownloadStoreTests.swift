@@ -344,5 +344,25 @@ final class DownloadManagerTests: XCTestCase {
         """.utf8)))
         XCTAssertEqual(try session.store.requeueReplaced(), [10])
         XCTAssertNotNil(session.downloads.localFile(fileID: 10))
+        // Still on the device for the Library's filter and dimming.
+        XCTAssertEqual(try session.store.pool.read(CatalogStore.downloadedBookIDs), [1])
+
+        // Finished in the reader meanwhile, with Remove when finished on, it
+        // goes when the reader lets go, replacement and all.
+        session.downloads.removeWhenFinished = true
+        session.downloads.finished(fileID: 10, holding: true)
+        session.downloads.released(fileID: 10)
+        XCTAssertNil(session.downloads.localFile(fileID: 10))
+        XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 10) })
+    }
+
+    /// A Download that was never finished has no copy to use, whatever is in
+    /// its place on disk.
+    func testAQueuedDownloadHasNoCopyYet() throws {
+        try session.store.queueDownloads([11])
+        let url = session.downloads.location(fileID: 11, fileType: "epub")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("abc".utf8).write(to: url)
+        XCTAssertNil(session.downloads.localFile(fileID: 11))
     }
 }
