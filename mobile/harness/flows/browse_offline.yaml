@@ -1,14 +1,15 @@
-# Sign in, see a Book, go offline, and still see it (#911). The harness
-# passes APP_ID, SERVER (as the device reaches the Shisho server), USERNAME,
-# PASSWORD, and CONTROL (the harness's own endpoint). The flow runs
-# unchanged on every platform's app.
+# See the Library, go offline, and still see it, a Book's page, and a
+# File's page (#911). The harness passes APP_ID, SERVER (as the device
+# reaches the Shisho server), USERNAME, PASSWORD, and CONTROL (the harness's
+# own endpoint). The flow runs unchanged on every platform's app.
 appId: ${APP_ID}
-name: Sign in and browse Books offline
+name: Browse Books offline
 ---
-- launchApp:
-    clearState: true
-    permissions: {}
-- runFlow: subflows/sign_in.yaml
+- runScript:
+    file: scripts/go_online.js
+    env:
+      CONTROL: ${CONTROL}
+- runFlow: subflows/launch_signed_in.yaml
 
 # The Library comes from the device's copy of the catalog.
 - extendedWaitUntil:
@@ -19,19 +20,6 @@ name: Sign in and browse Books offline
     visible: The Harness Novel
     timeout: 30000
 - assertVisible: Quiet Lighthouse
-
-# Book detail
-- runFlow:
-    file: subflows/open_book.yaml
-    env:
-      TITLE: The Harness Novel
-- assertVisible:
-    id: book.detail.title
-    text: The Harness Novel
-- assertVisible:
-    id: book.detail.authors
-    text: .*Ada Writer.*
-- back
 
 # Offline: the server goes away, the app is closed and opened again, and
 # the Library is still there.
