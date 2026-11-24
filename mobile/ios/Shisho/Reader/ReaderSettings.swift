@@ -205,6 +205,16 @@ extension ReaderSettings {
     var pageScript: String {
         script(font: ReaderFonts.face(for: font, imported: ImportedFontStore.shared.fonts))
     }
+
+    /// Whether the page looks different after a change from old. The app's
+    /// appearance changing under a chosen theme changes nothing on it. A
+    /// new font always does: an imported font removed as it's unchosen is
+    /// already gone from the fonts, so both scripts would leave it out.
+    func restyles(from old: ReaderSettings, imported: [ImportedFont]) -> Bool {
+        font != old.font
+            || script(font: ReaderFonts.face(for: font, imported: imported))
+            != old.script(font: ReaderFonts.face(for: old.font, imported: imported))
+    }
 }
 
 extension ReaderSettings.Theme {

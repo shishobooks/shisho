@@ -31,7 +31,7 @@ struct ReaderSettingsSheet: View {
                     ChoiceSet(title: "Pages", options: ReaderSettings.Pages.allCases, selection: $settings.pages, label: \.label,
                               identifier: "reader.pages",
                               disabledReason: settings.layout == .scrolled ? "Only for Paginated" : nil,
-                              hint: "Auto shows two pages side by side when the screen is wider than it is tall and has room for both.")
+                              hint: "Auto shows two pages side by side when the reader is wider than it is tall and has room for both.")
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 8)

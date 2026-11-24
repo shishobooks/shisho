@@ -37,6 +37,57 @@ name: Change the reader's settings and reopen
     notVisible:
       id: reader.settings.done
     timeout: 30000
+
+# A few pages in, a run of changes that ends at the size it started at
+# lands on the page it started on: each change keeps the place the first
+# one pinned, rather than walking back a little at a time.
+- swipe:
+    direction: LEFT
+- swipe:
+    direction: LEFT
+- runFlow: subflows/settled_place.yaml
+- evalScript: ${output.beforeRun = output.settledPlace}
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- tapOn:
+    id: reader.size.increase
+- extendedWaitUntil:
+    visible:
+      id: reader.size.value
+      text: 16.5 px
+    timeout: 30000
+- tapOn:
+    id: reader.size.increase
+- extendedWaitUntil:
+    visible:
+      id: reader.size.value
+      text: 17 px
+    timeout: 30000
+- tapOn:
+    id: reader.size.decrease
+- extendedWaitUntil:
+    visible:
+      id: reader.size.value
+      text: 16.5 px
+    timeout: 30000
+- tapOn:
+    id: reader.size.decrease
+- extendedWaitUntil:
+    visible:
+      id: reader.size.value
+      text: 16 px
+    timeout: 30000
+- tapOn:
+    id: reader.settings.done
+- extendedWaitUntil:
+    notVisible:
+      id: reader.settings.done
+    timeout: 30000
+- runFlow: subflows/settled_place.yaml
+- assertTrue:
+    condition: ${output.settledPlace == output.beforeRun}
+    label: The run of changes ended on the page it started on
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.settings
@@ -109,6 +160,12 @@ name: Change the reader's settings and reopen
       text: "Chapter Two.*"
     timeout: 30000
 - runFlow: subflows/show_reader_controls.yaml
+# The title names the chapter as the book opens, before any turn.
+- extendedWaitUntil:
+    visible:
+      id: reader.title
+      text: "Chapter Two.*"
+    timeout: 30000
 - tapOn:
     id: reader.settings
 - extendedWaitUntil:

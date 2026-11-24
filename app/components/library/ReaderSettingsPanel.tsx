@@ -390,7 +390,7 @@ export default function ReaderSettingsPanel({
         disabledReason={
           settings.layout === "scrolled" ? "Only for Paginated" : undefined
         }
-        hint="Auto shows two pages side by side when the window is wider than it is tall and has room for both."
+        hint="Auto shows two pages side by side when the reader is wider than it is tall and has room for both."
         label="Pages"
         onChange={(pages) => onChange({ pages })}
         options={READER_PAGES}

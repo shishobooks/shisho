@@ -176,4 +176,28 @@ final class ReaderSettingsTests: XCTestCase {
         let bookFont = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(ReaderSettings().script(font: nil).utf8)) as? [String: Any])
         XCTAssertTrue(bookFont["font"] is NSNull)
     }
+
+    /// A change restyles the page when the page would look different: not
+    /// for the app's appearance under a chosen theme, but always for a new
+    /// font, even an imported one removed as it's unchosen, which is gone
+    /// from the fonts both before and after (#920).
+    func testWhatRestylesThePage() {
+        var dark = ReaderSettings()
+        dark.themeChoice = .sepia
+        var light = dark
+        light.appDark = true
+        XCTAssertFalse(light.restyles(from: dark, imported: []))
+
+        var system = ReaderSettings()
+        system.appDark = true
+        XCTAssertTrue(system.restyles(from: ReaderSettings(), imported: []))
+
+        var removed = ReaderSettings()
+        removed.font = .imported(3)
+        XCTAssertTrue(ReaderSettings().restyles(from: removed, imported: []))
+
+        var bigger = ReaderSettings()
+        bigger.size = 18
+        XCTAssertTrue(bigger.restyles(from: ReaderSettings(), imported: []))
+    }
 }

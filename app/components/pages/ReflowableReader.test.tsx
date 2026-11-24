@@ -2172,7 +2172,7 @@ describe("ReflowableReader display settings", () => {
     expect(
       screen.getByRole("group", { name: "Pages" }),
     ).toHaveAccessibleDescription(
-      "Auto shows two pages side by side when the window is wider than it is tall and has room for both.",
+      "Auto shows two pages side by side when the reader is wider than it is tall and has room for both.",
     );
   });
 

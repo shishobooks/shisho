@@ -20,10 +20,15 @@ name: Search inside the Book and jump to a result
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.search
-- tapOn:
-    id: reader.search.field
-# Each chapter has one ninth paragraph.
+# The field has the keyboard as the sheet opens, and the sheet keeps its
+# title and Done while it does. Each chapter has one ninth paragraph.
+- extendedWaitUntil:
+    visible:
+      id: reader.search.field
+    timeout: 30000
 - inputText: paragraph 9
+- assertVisible:
+    id: reader.search.done
 - extendedWaitUntil:
     visible:
       id: reader.search.status
@@ -38,6 +43,9 @@ name: Search inside the Book and jump to a result
       id: reader.search.position
       text: 3 of 3
     timeout: 30000
+# Landing hides the controls, and the find bar takes the readout's place,
+# so the controls show the place.
+- runFlow: subflows/show_reader_controls.yaml
 - extendedWaitUntil:
     visible:
       id: reader.progress
@@ -51,6 +59,7 @@ name: Search inside the Book and jump to a result
       id: reader.search.position
       text: 1 of 3
     timeout: 30000
+- runFlow: subflows/show_reader_controls.yaml
 - extendedWaitUntil:
     visible:
       id: reader.progress

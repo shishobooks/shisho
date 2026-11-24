@@ -75,15 +75,15 @@ const applyStyles = (s, relayout = true) => {
   if (relayout) relayoutWhenFontLoads(s);
 };
 
-// A section already on screen lays out before a newly chosen font arrives,
-// so it lays out again once the font is in, as the web reader does. foliate
-// keeps the place across it.
 // The place the last settings change pinned, and the page's moves then. A
 // run of changes keeps pinning the same place until the reader moves:
 // pinning each time to the start of the page the last change landed on
 // would walk back a little with each one.
 let pinnedPlace = null;
 
+// A section already on screen lays out before a newly chosen font arrives,
+// so it lays out again once the font is in, as the web reader does. foliate
+// keeps the place across it.
 let fontWait = 0;
 // Bumped each time native moves this page as a neighbor: a font that
 // arrives after leaves it alone.
@@ -1387,6 +1387,9 @@ window.R = {
   // A jump on the current page. Jumps land in turn, each answering its
   // token once it has, or has failed.
   goTo(target, fallback, token) {
+    // A jump moves the reader, even one landing while a settings change
+    // settles, when its move passes for the relayout's.
+    pinnedPlace = null;
     navigation = navigation.then(async () => {
       try {
         await view.renderer?.settled?.();
@@ -1398,9 +1401,11 @@ window.R = {
     });
   },
   next() {
+    pinnedPlace = null;
     view.renderer?.next();
   },
   prev() {
+    pinnedPlace = null;
     view.renderer?.prev();
   },
   activateLink(id) {
@@ -1435,6 +1440,7 @@ window.R = {
   // have shown it. Not foliate's prev, which lands at the previous section's
   // end, and during the bounce at the top only scrolls back to it.
   pullThrough(dir) {
+    pinnedPlace = null;
     const next = adjacentSection(currentIndex(), dir);
     if (next == null) return;
     Promise.resolve(view.renderer?.goTo({ index: next })).catch(() => {});

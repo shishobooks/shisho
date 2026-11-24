@@ -92,11 +92,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         didSet {
             guard settings != oldValue else { return }
             settings.save()
-            // The app's appearance changing under a chosen theme changes
-            // nothing on the page. A font change always does: an imported
-            // font removed as it's unchosen is already gone from both
-            // scripts.
-            guard settings.pageScript != oldValue.pageScript || settings.font != oldValue.font else { return }
+            guard settings.restyles(from: oldValue, imported: ImportedFontStore.shared.fonts) else { return }
             source?.apply(settings)
         }
     }
@@ -274,7 +270,16 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     func go(to entry: ContentsEntry) {
         guard let target = entry.target else { return }
         recordJump()
+        hideChromeToRead()
         source?.jump(to: target)
+    }
+
+    /// After a jump from a sheet, the page shows clear of the bars, which
+    /// would otherwise cover its first and last lines. With VoiceOver they
+    /// stay, as on a turn, so they don't move out from under its focus.
+    private func hideChromeToRead() {
+        guard !UIAccessibility.isVoiceOverRunning else { return }
+        chromeVisible = false
     }
 
     // MARK: - Back and forward
@@ -444,6 +449,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
 
     func goToResult(_ cfi: String, group: Int) {
         recordJump(group: group)
+        hideChromeToRead()
         source?.jump(to: .cfi(cfi))
     }
 

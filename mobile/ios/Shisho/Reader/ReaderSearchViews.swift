@@ -110,6 +110,7 @@ struct ReaderSearchSheet: View {
                 .onSubmit { search.submit() }
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .accessibilityAddTraits(.isSearchField)
                 .accessibilityIdentifier("reader.search.field")
             if !search.query.isEmpty {
                 Button {

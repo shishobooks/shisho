@@ -63,8 +63,10 @@ struct ReaderView: View {
                         }
                         ReaderBottomBar(model: model).transition(.move(edge: .bottom).combined(with: .opacity))
                     } else if showingSearchBar {
-                        // In the readout's place under the page, which is
-                        // as tall as the bar, so it covers no text.
+                        // In the readout's place under the page. Paginated,
+                        // that and the band under the text are as tall as
+                        // the bar, so it covers no text; scrolled, text
+                        // passes under its top edge.
                         searchBar
                     } else {
                         readout
@@ -416,6 +418,7 @@ private struct ReaderTitle: View {
         }
         .lineLimit(1)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("reader.title")
     }
 }
 
@@ -491,7 +494,8 @@ private struct ReaderBottomBar: View {
 
     /// The chapter, pages left, and how far through.
     private func placeRow(showingChapter: Bool) -> some View {
-        HStack(spacing: 6) {
+        let pagesLeftHidden = !showingChapter && scrubbing != nil
+        return HStack(spacing: 6) {
             if showingChapter {
                 Text((scrubbing.map(model.chapterTitle(at:)) ?? model.chapterTitle) ?? "")
                     .lineLimit(1)
@@ -499,7 +503,9 @@ private struct ReaderBottomBar: View {
                     .accessibilityHidden(true)
                 Spacer(minLength: 12)
             }
-            if let pagesLeft = pagesLeftLabel {
+            // Kept while the scrubber's dragged, hidden, in the one-row bar,
+            // so the scrubber beside it doesn't change width under the drag.
+            if let pagesLeft = showingChapter ? pagesLeftLabel : model.pagesLeftLabel(inBook: pagesLeftInBook) {
                 Button { pagesLeftInBook.toggle() } label: {
                     Text(pagesLeft)
                         .lineLimit(1)
@@ -510,7 +516,10 @@ private struct ReaderBottomBar: View {
                 .buttonStyle(.plain)
                 .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
                 .accessibilityIdentifier("reader.pagesLeft")
+                .opacity(pagesLeftHidden ? 0 : 1)
+                .accessibilityHidden(pagesLeftHidden)
                 Text(verbatim: "·")
+                    .opacity(pagesLeftHidden ? 0 : 1)
                     .accessibilityHidden(true)
             }
             Text(percentShown)

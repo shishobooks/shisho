@@ -31,6 +31,11 @@ func seedFiles(ctx context.Context, root, udid string) error {
 	if !ok {
 		return errors.New("the simulator has no Files storage on the device")
 	}
+	// The group's own folder must be there already: one made here would be
+	// somewhere Files never reads.
+	if _, err := os.Stat(filepath.Dir(dir)); err != nil {
+		return errors.Wrap(err, "the simulator's Files storage isn't where its listing says")
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return errors.WithStack(err)
 	}
