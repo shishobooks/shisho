@@ -10,8 +10,10 @@ on:
 env:
   SHARD_TOTAL: 2
 
+# A rerun's attempt gets a group of its own, so rerunning an old run (as
+# `mise ios:signoff` reruns CI OK) never cancels a newer push's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.run_attempt }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -457,12 +459,12 @@ jobs:
   # And whether its iOS unit tests and flows pass by signoff
   # (tools/appharness/signoff.go): a pull request from this repository's own
   # branches, other than Dependabot's, runs them on a maintainer's Mac with
-  # `mise ios:signoff`, several times faster than GitHub's macOS runners. Forks and Dependabot
-  # run them here, and so does every push to master, as the backstop. The
-  # signoff tests the pull request's own commit, not its merge with master,
-  # so a clash with master's app changes shows only in that backstop run.
-  # The ios-on-github label stands in for the signoff when the Mac can't
-  # run the iOS checks (ios-on-github.yml).
+  # `mise ios:signoff`, several times faster than GitHub's macOS runners.
+  # Forks and Dependabot run them here, and so does every push to master, as
+  # the backstop. The signoff tests the pull request's own commit, not its
+  # merge with master, so a clash with master's app changes shows only in
+  # that backstop run. The ios-on-github label stands in for the signoff
+  # when the Mac can't run the iOS checks (ios-on-github.yml).
   app-changes:
     name: Shisho app changes
     runs-on: ubuntu-latest
@@ -481,7 +483,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          changed=$(git diff --name-only "origin/$BASE_REF...HEAD" | scripts/app-changes.sh)
+          changed=$(scripts/app-changes.sh "origin/$BASE_REF")
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
   # The Shisho app's checks: the generated API types' decode tests on both
@@ -542,9 +544,9 @@ jobs:
               or (.value.result == "skipped" and $signoff == "true" and .key == "app-ios")
             )' <<< "$NEEDS"
       # `mise ios:signoff` posts this status once every unit test and flow
-      # passes on the commit. A run started after the push often lands after the other
-      # jobs, so this waits for it rather than failing, which would send a
-      # failure email for nearly every pull request. A signoff that comes
+      # passes on the commit. A run started after the push often lands after
+      # the other jobs, so this waits for it rather than failing, which would
+      # send a failure email for nearly every pull request. A signoff that comes
       # later still reruns this job. Polled once a minute: a signoff takes
       # far longer, and every job's GITHUB_TOKEN shares one hourly budget.
       - name: Wait for the iOS signoff

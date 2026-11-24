@@ -46,6 +46,40 @@ expect true "web and server together" "app/components/Foo.tsx
 website/docs/x.md
 pkg/reading/positions.go"
 
+# Tooling none of the app's checks use.
+expect false "a lint tool" "tools/checkdocrefs/main.go"
+expect false "the Go lint config" ".golangci.yml"
+expect false "the JS lint config" "eslint.config.js"
+expect false "a repo script" "scripts/check-emdash.sh"
+expect false "the web's CI setup" ".github/actions/setup-js/action.yml"
+expect true "the iOS CI setup" ".github/actions/setup-ios/action.yml"
+
+# Given the base branch, the script lists the pull request's changes itself.
+# A rename must count its old path too: moving foliate out of the folder the
+# iOS app bundles leaves a new path that's ruled out.
+REPO=$(mktemp -d)
+trap 'rm -rf "$REPO"' EXIT
+(
+    cd "$REPO"
+    git init -q -b master .
+    git config user.email test@example.com
+    git config user.name test
+    git config commit.gpgsign false
+    mkdir -p app/libraries/foliate
+    printf 'export const view = 1\n' >app/libraries/foliate/view.js
+    git add -A
+    git commit -q -m base
+    git checkout -q -b moved
+    mkdir -p app/vendor
+    git mv app/libraries/foliate/view.js app/vendor/view.js
+    git commit -q -m moved
+)
+got=$(cd "$REPO" && "$FILTER" master)
+if [[ "$got" != true ]]; then
+    echo "FAIL: a rename out of the bundled folder: want true, got $got" >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
 if [[ $FAILURES -gt 0 ]]; then
     echo "$FAILURES failure(s)" >&2
     exit 1

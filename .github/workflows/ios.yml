@@ -8,6 +8,11 @@ name: iOS
 
 on:
   workflow_call:
+    inputs:
+      ref:
+        description: The commit to check out, when not the event's own (a pull request's merge with master).
+        type: string
+        default: ""
 
 jobs:
   # The unit tests and the Maestro flows each get a runner: one macOS
@@ -20,6 +25,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: jdx/mise-action@v5
       - id: setup
         uses: ./.github/actions/setup-ios
@@ -45,6 +52,8 @@ jobs:
         shard: [1, 2]
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
       - uses: jdx/mise-action@v5
       - id: setup
         uses: ./.github/actions/setup-ios

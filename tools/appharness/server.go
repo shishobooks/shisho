@@ -125,15 +125,25 @@ var handedOut = struct {
 func freePort(ctx context.Context) (int, error) {
 	handedOut.Lock()
 	defer handedOut.Unlock()
-	for {
+	return pickPort(handedOut.ports, func() (int, error) {
 		listener, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 		if err != nil {
 			return 0, errors.WithStack(err)
 		}
-		port := listener.Addr().(*net.TCPAddr).Port
-		_ = listener.Close()
-		if !handedOut.ports[port] {
-			handedOut.ports[port] = true
+		defer listener.Close()
+		return listener.Addr().(*net.TCPAddr).Port, nil
+	})
+}
+
+// pickPort takes ports from next until one isn't in given, and adds it.
+func pickPort(given map[int]bool, next func() (int, error)) (int, error) {
+	for {
+		port, err := next()
+		if err != nil {
+			return 0, err
+		}
+		if !given[port] {
+			given[port] = true
 			return port, nil
 		}
 	}

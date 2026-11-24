@@ -334,6 +334,29 @@ func resetSimulator(ctx context.Context, udid, bundleID string) error {
 
 // discardWorktreeSimulator deletes the worktree's simulator for purpose,
 // unless a run holds it (errSimulatorBusy).
+// shutdownWorktreeSimulator shuts down the worktree's simulator for purpose,
+// unless a run holds it; the next run boots it again.
+func shutdownWorktreeSimulator(ctx context.Context, root, purpose string) {
+	dir, err := simulatorStateDir()
+	if err != nil {
+		return
+	}
+	paths := worktreeSimulatorPaths(dir, root, purpose)
+	// Without a state file there's no simulator, and taking the lock would
+	// leave an empty lock file behind.
+	if _, err := os.Stat(paths.state); err != nil {
+		return
+	}
+	lock, err := lockFile(paths.lock)
+	if err != nil {
+		return
+	}
+	defer unlockFile(lock)
+	if state := readSimulatorState(paths.state); state.UDID != "" {
+		_, _ = simctl(ctx, "shutdown", state.UDID)
+	}
+}
+
 func discardWorktreeSimulator(root, purpose string) error {
 	dir, err := simulatorStateDir()
 	if err != nil {

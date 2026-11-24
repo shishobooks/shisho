@@ -3,9 +3,11 @@ name: iOS on GitHub
 # For a pull request labelled ios-on-github: runs the iOS unit tests and
 # flows on GitHub's runners and posts the "iOS signoff" status that CI OK
 # (ci.yml) waits for, in place of `mise ios:signoff`, for when a
-# maintainer's Mac can't run them. Only accounts with write access can
-# label, and a fork's token can't post the status. A workflow of its own so
-# that other labels don't restart CI.
+# maintainer's Mac can't run them. They check the pull request's own commit,
+# which the status names, as the signoff does. Only accounts with write
+# access can label; forks and Dependabot run the checks in CI already, so
+# the label does nothing for them. A workflow of its own so that other
+# labels don't restart CI.
 
 on:
   pull_request:
@@ -22,8 +24,12 @@ jobs:
   checks:
     if: >-
       contains(github.event.pull_request.labels.*.name, 'ios-on-github') &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
       (github.event.action != 'labeled' || github.event.label.name == 'ios-on-github')
     uses: ./.github/workflows/ios.yml
+    with:
+      ref: ${{ github.event.pull_request.head.sha }}
 
   signoff:
     name: Post the iOS signoff
@@ -33,6 +39,7 @@ jobs:
       contents: read
       statuses: write
       actions: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
       - uses: jdx/mise-action@v5
@@ -48,4 +55,6 @@ jobs:
             -f state=success \
             -f context="iOS signoff" \
             -f description="Every iOS unit test and Maestro flow passed on GitHub's runners (ios-on-github)"
-          go run ./tools/appharness rerun-ci-ok "$SHA"
+          # The status is posted; CI OK can still be rerun by hand.
+          go run ./tools/appharness rerun-ci-ok "$SHA" ||
+            echo "::warning::Couldn't rerun CI OK; rerun it by hand if it gave up waiting."

@@ -28,13 +28,13 @@ const (
 )
 
 // signoffPassesKept is how long a recorded pass is kept, so the signoff can
-// be posted after the commit is pushed without running the flows again.
+// be posted after the commit is pushed without running the checks again.
 const signoffPassesKept = 30 * 24 * time.Hour
 
 // runSignoff runs the unit tests and every flow on HEAD, which must have
 // nothing uncommitted, records the pass, and posts the signoff once the
-// commit is on GitHub. A commit that already passed here only posts. Posting also reruns a
-// `CI OK` that failed only for want of the signoff.
+// commit is on GitHub. A commit that already passed here only posts.
+// Posting also reruns a `CI OK` that failed only for want of the signoff.
 func runSignoff(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("signoff", flag.ExitOnError)
 	keep := flags.Bool("keep", false, "keep each shard's folder (server log, database, Maestro output) for debugging")
@@ -50,6 +50,11 @@ func runSignoff(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The signoff tests the commit, not its merge with master, which GitHub's
+	// runners did, so say when master has moved on.
+	if behind, err := behindBase(ctx, root, "origin/master"); err == nil && behind {
+		fmt.Fprintln(os.Stderr, "appharness: origin/master has commits this branch doesn't, and the signoff tests this commit, not its merge with them; merge master first if they touch the app")
+	}
 	passes, err := signoffPassDir()
 	if err != nil {
 		return err
@@ -63,6 +68,9 @@ func runSignoff(ctx context.Context, args []string) error {
 		if err := runCommand(ctx, root, "mise", "run", "ios:test"); err != nil {
 			return errors.Wrap(err, "the unit tests")
 		}
+		// Its simulator stays booted for later runs, but the flows boot two
+		// more, and three at once is the memory pressure that brings stalls.
+		shutdownWorktreeSimulator(ctx, root, "tests")
 		if err := runIOSWith(ctx, iosOptions{
 			app: defaultAppPath, flows: defaultFlowsDir, keep: *keep, parallel: *parallel,
 		}); err != nil {
@@ -154,6 +162,22 @@ func runCommand(ctx context.Context, root, name string, args ...string) error {
 	cmd.Dir = root
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return errors.Wrapf(cmd.Run(), "%s %s", name, strings.Join(args, " "))
+}
+
+// behindBase reports whether base has commits HEAD doesn't. A checkout
+// without base isn't behind it.
+func behindBase(ctx context.Context, root, base string) (bool, error) {
+	if _, err := git(ctx, root, "rev-parse", "--verify", "--quiet", base+"^{commit}"); err != nil {
+		return false, nil //nolint:nilerr // No base to be behind.
+	}
+	cmd := exec.CommandContext(ctx, "git", "merge-base", "--is-ancestor", base, "HEAD")
+	cmd.Dir = root
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return true, nil
+	}
+	return false, errors.Wrap(err, "git merge-base")
 }
 
 // commitOnGitHub reports whether the commit is on a branch pushed to the
@@ -296,7 +320,7 @@ func hasSignoffPass(dir, sha string) bool {
 	return err == nil
 }
 
-// recordSignoffPass records that every flow passed on sha, and forgets
+// recordSignoffPass records that the checks passed on sha, and forgets
 // passes older than signoffPassesKept.
 func recordSignoffPass(dir, sha string, now time.Time) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {

@@ -19,13 +19,21 @@ func TestEachParallelShardHasItsOwnWorktreeSimulator(t *testing.T) {
 
 func TestTheShardsOfARunNeverShareAServerPort(t *testing.T) {
 	t.Parallel()
-	seen := map[int]bool{}
-	for range 20 {
-		port, err := freePort(t.Context())
-		require.NoError(t, err)
-		assert.False(t, seen[port], "port %d handed out twice", port)
-		seen[port] = true
+	// The kernel can offer a port again once its listener closes, as a
+	// second shard's start may see before the first's server binds it.
+	offered := []int{5001, 5001, 5002}
+	next := func() (int, error) {
+		port := offered[0]
+		offered = offered[1:]
+		return port, nil
 	}
+	given := map[int]bool{}
+	first, err := pickPort(given, next)
+	require.NoError(t, err)
+	second, err := pickPort(given, next)
+	require.NoError(t, err)
+	assert.Equal(t, 5001, first)
+	assert.Equal(t, 5002, second)
 }
 
 func TestARunRefusesAFolderWithNoFlows(t *testing.T) {

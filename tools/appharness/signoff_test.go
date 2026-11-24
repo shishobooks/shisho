@@ -34,6 +34,39 @@ func TestRecordingASignoffPassPrunesOldOnes(t *testing.T) {
 	assert.True(t, hasSignoffPass(dir, "new"))
 }
 
+func TestASignoffSaysWhenMasterHasMovedOn(t *testing.T) {
+	t.Parallel()
+	repo := t.TempDir()
+	gitIn := func(args ...string) {
+		t.Helper()
+		_, err := git(t.Context(), repo, args...)
+		require.NoError(t, err)
+	}
+	gitIn("init", "-q", "-b", "master", ".")
+	gitIn("config", "user.email", "test@example.com")
+	gitIn("config", "user.name", "test")
+	gitIn("config", "commit.gpgsign", "false")
+	gitIn("commit", "-q", "--allow-empty", "-m", "base")
+	gitIn("checkout", "-q", "-b", "feature")
+	gitIn("commit", "-q", "--allow-empty", "-m", "feature")
+
+	behind, err := behindBase(t.Context(), repo, "master")
+	require.NoError(t, err)
+	assert.False(t, behind)
+
+	gitIn("checkout", "-q", "master")
+	gitIn("commit", "-q", "--allow-empty", "-m", "master moved")
+	gitIn("checkout", "-q", "feature")
+	behind, err = behindBase(t.Context(), repo, "master")
+	require.NoError(t, err)
+	assert.True(t, behind)
+
+	// A checkout without the base, as one with no remote, isn't behind it.
+	behind, err = behindBase(t.Context(), repo, "origin/master")
+	require.NoError(t, err)
+	assert.False(t, behind)
+}
+
 func TestCIOKIsRerunOnlyWhenItAloneFailed(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

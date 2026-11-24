@@ -17,17 +17,17 @@
 // each with its own simulator and server (parallel.go). `serve` runs the
 // same seeded server until interrupted, for QA without touching real data
 // (`mise start:qa`). `simulator` runs a command against the worktree's
-// simulator for tests, its UDID in SIMULATOR_UDID. Each worktree's simulators are its own, cloned from a base
-// once and kept booted between runs (worktreesim.go), and the fixtures are
-// cached between runs (fixtures.go); SHISHO_HARNESS_FRESH=1 reuses neither.
-// `signoff` runs the unit tests and every flow on a committed checkout and
-// posts the commit status this repository's pull requests merge on
-// (signoff.go), and
+// simulator for tests, its UDID in SIMULATOR_UDID. Each worktree's
+// simulators are its own, cloned from a base once and kept booted between
+// runs (worktreesim.go), and the fixtures are cached between runs
+// (fixtures.go); SHISHO_HARNESS_FRESH=1 reuses neither. `signoff` runs the
+// unit tests and every flow on a committed checkout and posts the commit
+// status this repository's pull requests merge on (signoff.go), and
 // `rerun-ci-ok` reruns a CI OK that gave up waiting for it, for
-// ios-on-github.yml.
-// `fixtures -key` prints the cache's key, and `cleanup` deletes the
-// worktree's simulators (`mise cleanup`). `ios`, `serve`, and `cleanup`
-// remove the temp folders of runs that were killed outright (rundir.go).
+// ios-on-github.yml. `fixtures -key` prints the cache's key, and `cleanup`
+// deletes the worktree's simulators (`mise cleanup`). `ios`, `serve`, and
+// `cleanup` remove the temp folders of runs that were killed outright
+// (rundir.go).
 // Use the mise tasks (`mise ios:harness`, `mise ios:test`), which build what
 // these need first.
 package main
