@@ -1,7 +1,8 @@
-# See the Library, go offline, and still see it, a Book's page, and a
-# File's page (#911). The harness passes APP_ID, SERVER (as the device
-# reaches the Shisho server), USERNAME, PASSWORD, and CONTROL (the harness's
-# own endpoint). The flow runs unchanged on every platform's app.
+# See the Library, go offline, and still see it, search it for a person,
+# and open a Book's page and a File's page (#911, #914). The harness passes
+# APP_ID, SERVER (as the device reaches the Shisho server), USERNAME,
+# PASSWORD, and CONTROL (the harness's own endpoint). The flow runs
+# unchanged on every platform's app.
 appId: ${APP_ID}
 name: Browse Books offline
 ---
@@ -41,6 +42,30 @@ name: Browse Books offline
     visible:
       id: sync.banner
     timeout: 30000
+
+# Search finds a person in the device's own index, and their page lists
+# their Books. Choosing the Library's tab again goes back to its top.
+- tapOn:
+    id: search.button
+- tapOn: Books, series, people
+- inputText: Ann Auth
+- extendedWaitUntil:
+    visible:
+      id: search.person
+      text: .*Ann Author.*
+    timeout: 30000
+- tapOn:
+    id: search.person
+- extendedWaitUntil:
+    visible: Harbor Lights
+    timeout: 30000
+- tapOn:
+    id: tab.library
+- extendedWaitUntil:
+    visible:
+      id: library.grid
+    timeout: 30000
+
 - runFlow:
     file: subflows/open_book.yaml
     env:
