@@ -1,7 +1,9 @@
 # Open an EPUB, turn a few pages, kill the app, and reopen it at the same
-# place; the server has the place as a CFI too (#919).
+# place; the server has the place as a CFI too. Then read a page for a
+# while, turn, read another, and close the reader: the Reading Session
+# reaches the server with its time counted per page (#919).
 appId: ${APP_ID}
-name: Read, kill, and reopen at the same place
+name: Read, kill, reopen at the same place, and send a Reading Session
 ---
 - runScript:
     file: scripts/go_online.js
@@ -52,6 +54,42 @@ name: Read, kill, and reopen at the same place
 # The script polls the server until the sync lands.
 - runScript:
     file: scripts/assert_read_position.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: The Harness Novel
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server check passed
+
+# The session from before the kill synced with the place, so the sessions
+# are counted now, while the one since reopening is still open.
+- runScript:
+    file: scripts/note_app_sessions.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: The Harness Novel
+# Each page counts from 5 seconds, and the session needs 10.
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 6000
+    optional: true
+- swipe:
+    direction: LEFT
+- extendedWaitUntil:
+    visible: __never__
+    timeout: 6000
+    optional: true
+- runFlow: subflows/show_reader_controls.yaml
+# Closing ends the session, which syncs.
+- tapOn:
+    id: reader.close
+- extendedWaitUntil:
+    visible:
+      id: book.read
+    timeout: 30000
+# The script polls the server until the sync lands.
+- runScript:
+    file: scripts/assert_read_session.js
     env:
       CONTROL: ${CONTROL}
       TITLE: The Harness Novel
