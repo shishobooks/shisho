@@ -27,6 +27,11 @@ type ServerInfo struct {
 	// ThumbnailRenderKey goes in cover URLs as r, so covers resized by an
 	// older renderer aren't kept once the renderer changes.
 	ThumbnailRenderKey string `json:"thumbnail_render_key"`
+	// InstanceID tells this server apart from another set up again from
+	// scratch at the same address, which hands out the same ids. The app
+	// treats a sign-in with a different one as a different account. A
+	// restore from backup keeps it.
+	InstanceID string `json:"instance_id"`
 }
 
 // The capabilities a server can list (ServerInfo.Capabilities, and the

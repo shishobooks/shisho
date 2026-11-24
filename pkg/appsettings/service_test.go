@@ -61,3 +61,20 @@ func TestSetJSON_Overwrite(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"b"}, got.BookFields)
 }
+
+func TestInsertJSONIfAbsent_KeepsAnExistingValue(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	db := testdb.New(t)
+	svc := NewService(db)
+
+	require.NoError(t, svc.InsertJSONIfAbsent(ctx, "instance", "first"))
+	require.NoError(t, svc.InsertJSONIfAbsent(ctx, "instance", "second"))
+
+	var got string
+	ok, err := svc.GetJSON(ctx, "instance", &got)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, "first", got)
+}

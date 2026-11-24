@@ -130,3 +130,18 @@ func readBookmarks(ctx context.Context, path, title string) ([]bookmark, error) 
 	}
 	return out, errors.WithStack(rows.Err())
 }
+
+// clearBookmarks deletes the Bookmarks in the Book titled title, so a flow
+// that checks the ones it makes starts without any an earlier flow left.
+// The change log's triggers record the deletions, so the feed sends them.
+func clearBookmarks(ctx context.Context, path, title string) error {
+	db, err := openServerDB(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	_, err = db.ExecContext(ctx, `
+		DELETE FROM bookmarks WHERE file_id IN (
+			SELECT f.id FROM files f JOIN books b ON b.id = f.book_id WHERE b.title = ?)`, title)
+	return errors.WithStack(err)
+}

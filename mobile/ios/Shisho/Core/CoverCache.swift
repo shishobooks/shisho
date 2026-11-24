@@ -14,7 +14,12 @@ final class CoverCache: Sendable {
     init(client: APIClient, accountID: String, renderKey: String) {
         self.client = client
         self.renderKey = renderKey
-        folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        folder = CoverCache.folder(accountID: accountID)
+    }
+
+    /// The folder an account's covers are kept in.
+    static func folder(accountID: String) -> URL {
+        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Covers", isDirectory: true)
             .appendingPathComponent(accountID, isDirectory: true)
     }

@@ -39,6 +39,8 @@ type server struct {
 	mu  sync.Mutex
 	cmd *exec.Cmd
 	log *os.File
+	// swap keeps one change of database at a time (fresh.go).
+	swap sync.Mutex
 }
 
 // startServer builds the server from this checkout and starts it on dir's
@@ -164,26 +166,29 @@ func (s *server) stopLocked() {
 	}
 }
 
+// post sends body as JSON to the server's path, with client's cookies.
+func (s *server) post(ctx context.Context, client *http.Client, path string, body any) error {
+	data, _ := json.Marshal(body)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, s.URL+path, bytes.NewReader(data))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return errors.WithStack(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		text, _ := io.ReadAll(resp.Body)
+		return errors.Errorf("POST %s: %s: %s", path, resp.Status, text)
+	}
+	return nil
+}
+
 // seed makes the first admin, a Library on the fixtures, and waits for the
 // scan to find every fixture.
 func (s *server) seed(ctx context.Context, library, password string) error {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar, Timeout: 30 * time.Second}
-	post := func(path string, body any) error {
-		data, _ := json.Marshal(body)
-		req, _ := http.NewRequestWithContext(ctx, http.MethodPost, s.URL+path, bytes.NewReader(data))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := client.Do(req)
-		if err != nil {
-			return errors.WithStack(err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 300 {
-			text, _ := io.ReadAll(resp.Body)
-			return errors.Errorf("POST %s: %s: %s", path, resp.Status, text)
-		}
-		return nil
-	}
+	post := func(path string, body any) error { return s.post(ctx, client, path, body) }
 	if err := post("/api/auth/setup", map[string]string{"username": harnessUsername, "password": password}); err != nil {
 		return err
 	}

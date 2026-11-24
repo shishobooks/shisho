@@ -31,7 +31,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const testPassword = "correct horse"
+const (
+	testPassword   = "correct horse"
+	testInstanceID = "instance-1"
+)
 
 type fixture struct {
 	t        *testing.T
@@ -68,7 +71,7 @@ func newFixtureWith(t *testing.T, contract *Contract) *fixture {
 		reading:   reading.NewService(db),
 		bookmarks: bookmarks.NewService(db),
 		contract:  contract,
-		opts:      Options{Contract: contract, ServerVersion: "v0.10.0"},
+		opts:      Options{Contract: contract, ServerVersion: "v0.10.0", InstanceID: testInstanceID},
 	}
 	registerRoutes(e, h, devices.NewMiddleware(deviceService, nil))
 	return &fixture{t: t, ctx: context.Background(), db: db, e: e, h: h, password: string(hash)}
@@ -116,6 +119,7 @@ type call struct {
 	credential string
 	protocol   string
 	version    string
+	instance   string
 }
 
 func (f *fixture) do(r call) *httptest.ResponseRecorder {
@@ -140,6 +144,9 @@ func (f *fixture) do(r call) *httptest.ResponseRecorder {
 	}
 	if r.credential != "" {
 		req.Header.Set(echo.HeaderAuthorization, "Bearer "+r.credential)
+	}
+	if r.instance != "" {
+		req.Header.Set(HeaderInstance, r.instance)
 	}
 	rec := httptest.NewRecorder()
 	f.e.ServeHTTP(rec, req)
@@ -219,6 +226,7 @@ func TestSignIn_CreatesAnAppDevice(t *testing.T) {
 	assert.Equal(t, "v0.10.0", resp.ServerVersion)
 	assert.Equal(t, 1, resp.Server.ProtocolMin)
 	assert.Equal(t, 1, resp.Server.ProtocolMax)
+	assert.Equal(t, testInstanceID, resp.Server.InstanceID)
 
 	device, err := f.h.devices.Retrieve(f.ctx, userID, resp.DeviceID)
 	require.NoError(t, err)
@@ -349,6 +357,7 @@ func TestProtocol_OutsideTheRangeIs426(t *testing.T) {
 		assert.Equal(t, 2, info.ProtocolMin)
 		assert.Equal(t, 2, info.ProtocolMax)
 		assert.Empty(t, info.Capabilities)
+		assert.Equal(t, testInstanceID, info.InstanceID)
 		assert.Empty(t, rec.Header().Get(HeaderServerVersion))
 	})
 }

@@ -458,3 +458,41 @@ func TestJournal_ASnapshotIsBoundedByItsOwnSpan(t *testing.T) {
 	require.NoError(t, f.db.QueryRowContext(f.ctx, `SELECT duration FROM reading_sessions`).Scan(&duration))
 	assert.Equal(t, 40, duration)
 }
+
+func TestSync_AnAccountFromAnotherInstanceIsRefused(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.audiobook()
+	userID := f.addUser(1)
+	now := time.Now()
+	f.accountSince(userID, now.Add(-time.Hour))
+	credential := f.signIn()
+	body, err := json.Marshal(map[string]any{
+		"clock":  now.Format(time.RFC3339Nano),
+		"events": []any{event("e1", JournalEventReadingPosition, now, position(5, 30, 0.05))},
+	})
+	require.NoError(t, err)
+
+	// A request naming another instance is refused before its Device is
+	// looked at, so its journal never runs.
+	rec := f.do(call{method: http.MethodPost, path: "/mobile/journal", body: string(body), credential: credential, instance: "another-instance"})
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	assert.Equal(t, "server_replaced", errorCode(t, rec))
+	assert.Equal(t, testInstanceID, rec.Header().Get(HeaderInstance))
+	assert.Zero(t, f.count(`SELECT COUNT(*) FROM reading_positions`))
+
+	rec = f.do(call{path: "/mobile/changes?cursor=0", credential: credential, instance: "another-instance"})
+	require.Equal(t, http.StatusConflict, rec.Code, rec.Body.String())
+	assert.Equal(t, "server_replaced", errorCode(t, rec))
+
+	// An app that names this instance, or none yet, syncs, and learns the
+	// instance from the answer.
+	for _, instance := range []string{testInstanceID, ""} {
+		rec = f.do(call{path: "/mobile/changes?cursor=0", credential: credential, instance: instance})
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Equal(t, testInstanceID, rec.Header().Get(HeaderInstance))
+	}
+	rec = f.do(call{method: http.MethodPost, path: "/mobile/journal", body: string(body), credential: credential, instance: testInstanceID})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM reading_positions`))
+}

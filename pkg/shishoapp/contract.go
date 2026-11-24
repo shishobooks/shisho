@@ -30,6 +30,13 @@ const (
 	// use the same header for their own list.
 	HeaderCapabilities = "X-Shisho-Capabilities"
 
+	// HeaderInstance carries the server's instance id (pkg/serverinstance)
+	// on every sync response, so an account made before servers had one
+	// learns it. On a sync request it names the instance the app's account
+	// was made on, and a server whose own differs refuses the request: the
+	// account's journal holds ids from another server's database.
+	HeaderInstance = "X-Shisho-Instance"
+
 	// CookieCredential and CookieProtocol carry the Device credential and
 	// the app's protocol to an audiobook stream, since the system player
 	// makes its own requests and takes cookies but no headers. Only the
@@ -119,13 +126,14 @@ func (k *Contract) Capabilities(protocol int) []string {
 }
 
 // info is the server info for a request naming protocol.
-func (k *Contract) info(protocol int, demoMode bool, renderKey string) ServerInfo {
+func (k *Contract) info(protocol int, demoMode bool, renderKey, instanceID string) ServerInfo {
 	return ServerInfo{
 		ProtocolMin:        k.Min,
 		ProtocolMax:        k.Max,
 		Capabilities:       k.Capabilities(protocol),
 		DemoMode:           demoMode,
 		ThumbnailRenderKey: renderKey,
+		InstanceID:         instanceID,
 	}
 }
 

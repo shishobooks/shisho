@@ -57,6 +57,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/roles"
 	"github.com/shishobooks/shisho/pkg/search"
 	"github.com/shishobooks/shisho/pkg/series"
+	"github.com/shishobooks/shisho/pkg/serverinstance"
 	"github.com/shishobooks/shisho/pkg/serverstats"
 	"github.com/shishobooks/shisho/pkg/settings"
 	"github.com/shishobooks/shisho/pkg/sharelinks"
@@ -165,6 +166,10 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 	if err := startupLimits.Apply(cacheSettings); err != nil {
 		logger.New().Warn("failed to apply cache limits", logger.Data{"error": err.Error()})
 	}
+	instanceID, err := serverinstance.Load(context.Background(), appSettingsSvc)
+	if err != nil {
+		return nil, err
+	}
 	svcs := sharedServices{
 		appSettings: appSettingsSvc,
 		plugins:     pluginService,
@@ -221,6 +226,7 @@ func New(cfg *config.Config, db *bun.DB, w *worker.Worker, pluginService *plugin
 		Contract:      appContract,
 		ServerVersion: version.Version,
 		DemoMode:      cfg.DemoMode,
+		InstanceID:    instanceID,
 		Thumbnails:    svcs.coverCache,
 	})
 
