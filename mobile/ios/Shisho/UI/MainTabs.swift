@@ -303,9 +303,13 @@ struct BookGrid: View {
         let layout = GridLayout(width: width, regular: sizeClass == .regular,
                                 accessibility: dynamicTypeSize.isAccessibilitySize)
         let column = GridItem(.fixed(layout.cellWidth), spacing: GridLayout.spacing, alignment: .top)
+        // Without the server, the Books with a File on the device. Read here
+        // in body: a lazy grid builds its cells outside body, so state read
+        // only in a cell doesn't redraw it when it changes.
+        let onDevice: Set<Int>? = model.connection == .online ? nil : downloaded ?? []
         LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(books) { book in
-                let onDevice = model.connection == .online || downloaded?.contains(book.id) == true
+                let onDevice = onDevice?.contains(book.id) ?? true
                 NavigationLink(value: Route.book(book)) {
                     BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id])
                         // Without the server, a Book with nothing downloaded
