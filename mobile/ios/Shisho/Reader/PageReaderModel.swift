@@ -88,6 +88,21 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
 
     var chapterTitle: String? { currentEntry?.title }
 
+    /// Pages left in the chapter, or the book, as the ebook reader says
+    /// it. Without chapters, the book's count stands in.
+    func pagesLeftLabel(inBook: Bool) -> AttributedString? {
+        guard pageCount > 0 else { return nil }
+        let left = PageLayout.pagesLeft(shown: pagesShown, pageCount: pageCount, contents: contents)
+        guard !inBook, let chapter = left.chapter else {
+            return left.book == 0
+                ? AttributedString(localized: "Last page in book")
+                : AttributedString(localized: "^[\(left.book) page](inflect: true) left in book")
+        }
+        return chapter == 0
+            ? AttributedString(localized: "Last page in chapter")
+            : AttributedString(localized: "^[\(chapter) page](inflect: true) left in chapter")
+    }
+
     /// The chapter page is in, as the scrubber names where it goes.
     func chapterTitle(atPage page: Int) -> String? {
         PageLayout.entry(atPage: page, in: contents)?.title

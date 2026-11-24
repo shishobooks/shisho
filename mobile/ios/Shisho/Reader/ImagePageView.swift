@@ -466,6 +466,26 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         carrying = false
     }
 
+    /// The column or its zoom is moving, by a drag or its momentum.
+    private var isMoving: Bool {
+        zoomer.isDragging || zoomer.isDecelerating || collection.isDragging || collection.isDecelerating
+    }
+
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { settled() }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        settled()
+    }
+
+    /// Zoomed, the pages that came on screen while it moved show at the
+    /// column's size; once it rests, they're drawn sharp for the zoom.
+    private func settled() {
+        guard isZoomed, !isMoving else { return }
+        sharpenVisiblePages()
+    }
+
     /// The pages showing, decoded again for the zoom: sharper zoomed in,
     /// and back to the screen's size zoomed out.
     private func sharpenVisiblePages() {
@@ -510,14 +530,21 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
 
     /// Puts page's image in cell at the zoom's size. Zoomed, a page is held
     /// only by its cell, as a zoomed page in the paginated flow is: at four
-    /// times the width, a few would fill the cache. keepingShown leaves the
+    /// times the width, a few would fill the cache. While the column moves,
+    /// a page coming on screen shows at the column's size, which is quick
+    /// and kept, rather than decoding a whole scan for the zoom mid-pan;
+    /// settled() sharpens it once the column rests. keepingShown leaves the
     /// image showing until the new one decodes.
     private func load(_ cell: StripCell, page: Int, keepingShown: Bool) {
+        let sharp = isZoomed && !isMoving
+        let maxPixel = pixels(page, zoom: sharp ? nil : 1)
+        // Already drawn at this size: nothing to do.
+        if keepingShown, cell.page == page, cell.shownPixel == maxPixel, cell.imageView.image != nil { return }
         cell.load?.cancel()
-        let maxPixel = pixels(page)
-        let keep = !isZoomed
+        let keep = !sharp
         if keep, let image = cache.cached(page: page, maxPixel: maxPixel) {
             cell.imageView.image = image
+            cell.shownPixel = maxPixel
             imageArrived(page)
             return
         }
@@ -525,11 +552,13 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
             // The page at the column's unzoomed width, when it's kept,
             // shows until the sharper one decodes, rather than nothing.
             cell.imageView.image = cache.cached(page: page, maxPixel: pixels(page, zoom: 1))
+            cell.shownPixel = 0
         }
         cell.load = Task { [weak self, weak cell] in
             let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now, keep: keep)
             guard let cell, cell.page == page, !Task.isCancelled, let image else { return }
             cell.imageView.image = image
+            cell.shownPixel = maxPixel
             self?.imageArrived(page)
         }
     }
@@ -581,6 +610,8 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     private final class StripCell: UICollectionViewCell {
         let imageView = UIImageView()
         var page = -1
+        /// The size, in pixels, the image showing was decoded at.
+        var shownPixel = 0
         /// The page's decode, cancelled when the cell is reused for
         /// another, so a fling doesn't queue every page it passed.
         var load: Task<Void, Never>?
@@ -601,6 +632,7 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
             super.prepareForReuse()
             load?.cancel()
             load = nil
+            shownPixel = 0
         }
     }
 }

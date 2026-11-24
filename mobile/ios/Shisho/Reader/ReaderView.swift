@@ -350,7 +350,7 @@ private struct ReaderTitle: View {
 /// The bar under the page: the scrubber, the chapter, pages left, and how
 /// far through. Its own view, so a drag on the scrubber redraws only it.
 private struct ReaderBottomBar: View {
-    static let pagesLeftInBookKey = "reader.pagesLeftInBook"
+    static let pagesLeftInBookKey = ReaderPagesLeft.inBookKey
 
     let model: ReaderModel
     /// The scrubber's place while it's being dragged.

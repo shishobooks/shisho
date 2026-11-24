@@ -8,6 +8,9 @@ struct PageReaderView: View {
     let model: PageReaderModel
     @State private var showingContents = false
     @State private var showingSettings = false
+    /// Counts pages left in the book rather than the chapter, as the ebook
+    /// reader does, and kept with its choice.
+    @AppStorage(ReaderPagesLeft.inBookKey) private var pagesLeftInBook = false
     let close: () -> Void
 
     private static let pageForeground = Color.white
@@ -127,28 +130,38 @@ struct PageReaderView: View {
     /// Where the reader is, small under the page while the controls are
     /// hidden.
     private var readout: some View {
-        // The chapter gives way first, so the page and percent always show,
-        // as in the ebook reader.
-        HStack(spacing: 4) {
-            if let chapter = model.chapterTitle {
-                Text(chapter)
-                    .lineLimit(1)
-                Text(verbatim: "·")
+        // As the ebook reader's: the chapter, which gives way first so the
+        // counts always show, the pages left, and how far through. A tap
+        // counts the book's pages rather than the chapter's.
+        let pagesLeft = model.pagesLeftLabel(inBook: pagesLeftInBook)
+        return Button { pagesLeftInBook.toggle() } label: {
+            HStack(spacing: 4) {
+                if let chapter = model.chapterTitle {
+                    Text(chapter)
+                        .lineLimit(1)
+                    Text(verbatim: "·")
+                }
+                if let pagesLeft {
+                    Text(pagesLeft)
+                        .lineLimit(1)
+                        .layoutPriority(1)
+                    Text(verbatim: "·")
+                }
+                Text(model.percentShown)
+                    .layoutPriority(1)
             }
-            Text(model.pagesLabel())
-                .lineLimit(1)
-                .layoutPriority(1)
-            Text(verbatim: "·")
-            Text(model.percentShown)
-                .layoutPriority(1)
+            .font(.geist(.caption2, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(Self.pageForeground.opacity(0.55))
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, minHeight: 22)
+            .hitArea(height: 22)
         }
-        .font(.geist(.caption2, weight: .medium))
-        .monospacedDigit()
-        .foregroundStyle(Self.pageForeground.opacity(0.55))
-        .padding(.horizontal, 24)
-        .frame(maxWidth: .infinity, minHeight: 22)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(model.placeLabel))
+        .buttonStyle(.plain)
+        .disabled(pagesLeft == nil)
+        // The page as well, which the readout leaves to the bar.
+        .accessibilityLabel(Text([model.placeLabel, pagesLeft.map { String($0.characters) }].compactMap { $0 }.joined(separator: " · ")))
+        .accessibilityHint(pagesLeftInBook ? Text("Counts pages left in the chapter") : Text("Counts pages left in the book"))
         .accessibilityIdentifier("reader.progress")
     }
 }

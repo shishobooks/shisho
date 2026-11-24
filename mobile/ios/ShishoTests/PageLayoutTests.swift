@@ -102,4 +102,24 @@ final class PageLayoutTests: XCTestCase {
         XCTAssertEqual(PageLayout.entry(atPage: 3, in: contents)?.title, "Getting Started")
         XCTAssertEqual(PageLayout.entry(atPage: 4, in: contents)?.title, "Troubleshooting")
     }
+
+    /// Pages left are counted as the ebook reader counts them: to the end
+    /// of the chapter, which ends where the next starts, and to the end of
+    /// the book, from the last page showing. Without chapters there's only
+    /// the book's count.
+    func testPagesLeftInTheChapterAndTheBook() {
+        let contents = PageLayout.contents([
+            ReaderChapter(title: "One", href: nil, depth: 0, startPage: 0),
+            ReaderChapter(title: "Two", href: nil, depth: 0, startPage: 4),
+        ], pageCount: 10)
+        let first = PageLayout.pagesLeft(shown: [1], pageCount: 10, contents: contents)
+        XCTAssertEqual(first.chapter, 2)
+        XCTAssertEqual(first.book, 8)
+        // A spread counts from its last page.
+        XCTAssertEqual(PageLayout.pagesLeft(shown: [2, 3], pageCount: 10, contents: contents).chapter, 0)
+        let last = PageLayout.pagesLeft(shown: [9], pageCount: 10, contents: contents)
+        XCTAssertEqual(last.chapter, 0)
+        XCTAssertEqual(last.book, 0)
+        XCTAssertNil(PageLayout.pagesLeft(shown: [3], pageCount: 10, contents: []).chapter)
+    }
 }

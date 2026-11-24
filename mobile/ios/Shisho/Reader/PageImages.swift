@@ -282,6 +282,23 @@ enum PageLayout {
         }
     }
 
+    /// Pages left to the end of the chapter and of the book, counted from
+    /// the last page shown, as the ebook reader counts them. The chapter
+    /// is the first page's, and ends where the next one starts; before the
+    /// first chapter, or without chapters, there's only the book's count.
+    static func pagesLeft(shown: [Int], pageCount: Int, contents: [ContentsEntry]) -> (chapter: Int?, book: Int) {
+        let first = shown.min() ?? 0
+        let last = shown.max() ?? 0
+        let book = max(0, pageCount - 1 - last)
+        let starts = Set(contents.compactMap { entry -> Int? in
+            if case .page(let start) = entry.target { return start }
+            return nil
+        }).sorted()
+        guard let current = starts.last(where: { $0 <= first }) else { return (nil, book) }
+        let end = (starts.first { $0 > current } ?? pageCount) - 1
+        return (max(0, end - last), book)
+    }
+
     /// The chapter page is in: the last that starts on or before it.
     static func entry(atPage page: Int, in contents: [ContentsEntry]) -> ContentsEntry? {
         contents.last { entry in
