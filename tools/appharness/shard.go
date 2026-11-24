@@ -12,24 +12,21 @@ import (
 // flowSeconds is about how long each flow takes on a CI runner, to balance
 // the flows when they're split across jobs (`ios -shard`). A flow missing here
 // counts as the median, so a new one still runs; add it once CI has timed it
-// (the `[Passed]` lines in the job's log). The flows that took in others
-// (listen_offline, read_and_reopen, reader_footnote, reader_settings,
-// sign_out_sends_changes) and the trimmed ones (browse_offline,
-// sleep_timer_end_of_chapter) are estimates from their parts' times until CI
-// times them.
+// (the `[Passed]` lines in the job's log). Flows that changed since CI last
+// timed them are estimates until it times them again.
 var flowSeconds = map[string]float64{
 	"access_change.yaml":              92,
-	"browse_offline.yaml":             75,
-	"listen_offline.yaml":             257,
+	"browse_offline.yaml":             85,
+	"listen_offline.yaml":             280,
 	"listen_to_the_end.yaml":          98,
-	"read_and_reopen.yaml":            150,
+	"read_and_reopen.yaml":            160,
 	"read_fixed_layout.yaml":          76,
-	"reader_footnote.yaml":            170,
+	"reader_footnote.yaml":            185,
 	"reader_rapid_turns.yaml":         235,
 	"reader_settings.yaml":            300,
 	"server_set_up_again.yaml":        117,
 	"sign_out_sends_changes.yaml":     270,
-	"sleep_timer_end_of_chapter.yaml": 127,
+	"sleep_timer_end_of_chapter.yaml": 180,
 	"switch_accounts.yaml":            94,
 }
 
