@@ -137,12 +137,16 @@ struct ReaderView: View {
                 .presentationContentInteraction(.scrolls)
         }
         .sheet(isPresented: $showingSearch) {
+            // Leaving the sheet for a result hides the controls, as a
+            // contents jump does; stepping from the find bar leaves them as
+            // they are, so the bar stays under the finger.
             ReaderSearchSheet(search: model.search, choose: { index in
                 showingSearch = false
+                model.hideChromeToRead()
                 model.search.goToResult(index)
             }, step: { forward in
-                // As choosing a result does: the page shows where it went.
                 showingSearch = false
+                model.hideChromeToRead()
                 if forward { model.search.next() } else { model.search.previous() }
             }, done: { showingSearch = false })
             // Full height from the start, as the keyboard comes up with it:
@@ -493,6 +497,7 @@ private struct ReaderBottomBar: View {
     }
 
     /// The chapter, pages left, and how far through.
+
     private func placeRow(showingChapter: Bool) -> some View {
         let pagesLeftHidden = !showingChapter && scrubbing != nil
         return HStack(spacing: 6) {
@@ -522,10 +527,19 @@ private struct ReaderBottomBar: View {
                     .opacity(pagesLeftHidden ? 0 : 1)
                     .accessibilityHidden(true)
             }
-            Text(percentShown)
-                .monospacedDigit()
-                .accessibilityLabel(Text(place))
-                .accessibilityIdentifier("reader.progress")
+            // In the one-row bar, as wide as 100% whatever it reads, so the
+            // scrubber beside it keeps its width through a drag.
+            ZStack(alignment: .trailing) {
+                if !showingChapter {
+                    Text(1.0.formatted(.percent.precision(.fractionLength(0))))
+                        .hidden()
+                        .accessibilityHidden(true)
+                }
+                Text(percentShown)
+                    .accessibilityLabel(Text(place))
+                    .accessibilityIdentifier("reader.progress")
+            }
+            .monospacedDigit()
         }
         .font(.geist(.caption))
         .foregroundStyle(Theme.mutedForeground)

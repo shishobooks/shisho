@@ -277,7 +277,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     /// After a jump from a sheet, the page shows clear of the bars, which
     /// would otherwise cover its first and last lines. With VoiceOver they
     /// stay, as on a turn, so they don't move out from under its focus.
-    private func hideChromeToRead() {
+    func hideChromeToRead() {
         guard !UIAccessibility.isVoiceOverRunning else { return }
         chromeVisible = false
     }
@@ -449,7 +449,6 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
 
     func goToResult(_ cfi: String, group: Int) {
         recordJump(group: group)
-        hideChromeToRead()
         source?.jump(to: .cfi(cfi))
     }
 

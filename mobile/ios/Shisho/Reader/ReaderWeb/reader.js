@@ -1326,10 +1326,13 @@ window.R = {
   // the reflow keeps it: a page moved there as a neighbor holds its place
   // as a share of the section's pages, which a new size changes.
   apply(s, keepPlace) {
+    // After the jumps sent before it, whose moves would otherwise pass for
+    // this relayout. Taken as it's called, as a jump takes the changes sent
+    // before it, so each waits only for what came first and neither waits
+    // on the other.
+    const jumps = navigation;
     chained("apply", async () => {
-      // After any jump in flight, whose move would otherwise pass for this
-      // relayout.
-      await navigation;
+      await jumps;
       // Only a page that shows something: an empty page's CFI is its
       // section's body, which would go back to the section's start.
       const shown = view.lastLocation?.range;
@@ -1387,11 +1390,13 @@ window.R = {
   // A jump on the current page. Jumps land in turn, each answering its
   // token once it has, or has failed.
   goTo(target, fallback, token) {
-    // A jump moves the reader, even one landing while a settings change
-    // settles, when its move passes for the relayout's.
     pinnedPlace = null;
+    // After the settings changes sent before it, so the landing isn't
+    // reported as their quiet relayout and goes unsaved.
+    const changes = chain;
     navigation = navigation.then(async () => {
       try {
+        await changes;
         await view.renderer?.settled?.();
         await goToOrNear(target, fallback);
       } catch (err) {

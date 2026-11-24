@@ -20,8 +20,10 @@ name: Search inside the Book and jump to a result
 - runFlow: subflows/show_reader_controls.yaml
 - tapOn:
     id: reader.search
-# The field has the keyboard as the sheet opens, and the sheet keeps its
-# title and Done while it does. Each chapter has one ninth paragraph.
+# The field has the keyboard as the sheet opens: the query is typed with
+# no tap on the field, which only lands in a focused one. (Maestro doesn't
+# report focus for it.) The sheet keeps its title and Done while it does.
+# Each chapter has one ninth paragraph.
 - extendedWaitUntil:
     visible:
       id: reader.search.field
