@@ -1220,4 +1220,6 @@ enum Route: Hashable {
     case file(bookID: Int, fileID: Int)
     /// Search over the device's copy, opened from a tab's toolbar.
     case search
+    /// The Download settings, from the Downloads tab's toolbar.
+    case downloadSettings
 }

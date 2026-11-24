@@ -163,9 +163,19 @@ private struct TabPressStyle: ButtonStyle {
 /// search, which opens on top of the tab, and the account.
 struct RootToolbar: ToolbarContent {
     @Environment(AppModel.self) private var model
+    /// The Downloads tab's: its settings, rarely changed, behind a gear.
+    var downloadSettings = false
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .topBarTrailing) {
+            if downloadSettings {
+                NavigationLink(value: Route.downloadSettings) {
+                    Icon(.settings, size: 20, relativeTo: nil)
+                        .foregroundStyle(Theme.foreground)
+                }
+                .accessibilityLabel("Download Settings")
+                .accessibilityIdentifier("downloads.settings")
+            }
             NavigationLink(value: Route.search) {
                 Icon(.search, size: 20, relativeTo: nil)
                     .foregroundStyle(Theme.foreground)
@@ -216,6 +226,8 @@ private struct RouteDestination: View {
             FileView(bookID: bookID, fileID: fileID)
         case .search:
             SearchView()
+        case .downloadSettings:
+            DownloadSettingsView()
         }
     }
 }

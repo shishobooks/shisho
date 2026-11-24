@@ -46,7 +46,7 @@ Search, from the magnifying glass at the top of the **Library** and **Lists** ta
 
 Edits on the web reach the app the next time it syncs. When an admin changes which libraries a user can access, or a list is shared or unshared, the app follows on its next sync: a library you lose leaves the device, and one you gain downloads in the background. A user whose role can no longer read books keeps nothing from the server on the device.
 
-Covers download as you browse. To have every cover on the device before going offline, including the covers of files that have their own, such as an audiobook's, turn on **Downloads > Download all covers on Wi-Fi**. It applies to every account on the phone.
+Covers download as you browse. To have every cover on the device before going offline, including the covers of files that have their own, such as an audiobook's, turn on **Download all covers on Wi-Fi** in **Download Settings**, the gear at the top of the **Downloads** tab. It applies to every account on the phone.
 
 ### When the Server Can't Be Reached
 
@@ -109,7 +109,7 @@ The app downloads each file as it is in your library. Titles, authors, covers, a
 
 The **Downloads** tab lists what's downloaded and what's on its way, with the space they take and what's left on the phone. Tap a download's remove button, or **Remove All Downloads**, to free the space; tapping a download opens its book. Books you've opened in the reader are listed too, since opening one downloads it.
 
-Two settings on the **Downloads** tab apply to every account on the phone, and both start off:
+Two settings in **Download Settings**, the gear at the top of the **Downloads** tab, apply to every account on the phone, and both start off:
 
 - **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi.
 - **Remove when finished**: a download is removed once you listen to or read it to the end, which finishes its Read-through. A book in the reader is removed when you close it.
@@ -166,7 +166,7 @@ A server with a certificate from your own certificate authority works once the a
 
 **Likely cause:** **Download on Wi-Fi only** is on and the phone is on cellular or a limited network, or the phone can't reach the server.
 
-**Verify:** Check the **Downloads** tab, which says why downloads are waiting, and open the server's address in the phone's browser.
+**Verify:** Check the **Downloads** tab, which says why each download is waiting, and open the server's address in the phone's browser.
 
 **Fix:** Join Wi-Fi, turn off **Download on Wi-Fi only**, or reconnect. A download that failed shows why under the file; tap its download button to try again.
 

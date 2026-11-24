@@ -354,9 +354,6 @@ struct DownloadsView: View {
                         Color.clear.frame(height: 0).id(ScrollTop.anchor)
                         if let downloads {
                             summary(downloads)
-                            if let manager = model.session?.downloads {
-                                DownloadSettingsCard(downloads: manager)
-                            }
                             if downloads.isEmpty {
                                 EmptyNotice(title: String(localized: "No Downloads"),
                                             message: String(localized: "Download audiobooks and ebooks from a Book's page to listen and read offline."),
@@ -387,7 +384,7 @@ struct DownloadsView: View {
             .background(Theme.background)
             .navigationTitle("Downloads")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar { RootToolbar() }
+            .toolbar { RootToolbar(downloadSettings: true) }
             .routeDestinations()
             .confirmationDialog(String(localized: "Remove every Download from this device?"), isPresented: $confirmingRemoveAll,
                                 titleVisibility: .visible) {
@@ -447,7 +444,31 @@ struct DownloadsView: View {
     }
 }
 
-/// Wi-Fi only and Remove when finished, for every account on the device.
+/// The Download settings, on a page of their own behind the Downloads
+/// tab's gear, since they're set once and rarely changed.
+struct DownloadSettingsView: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        ScrollView {
+            if let downloads = model.session?.downloads {
+                DownloadSettingsCard(downloads: downloads)
+                    .padding(.horizontal, GridLayout.margin)
+                    .padding(.top, 8)
+                    .padding(.bottom, 32)
+                    .frame(maxWidth: 680)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .miniPlayerClearance()
+        .background(Theme.background)
+        .navigationTitle("Download Settings")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// Wi-Fi only, Remove when finished, and covers, for every account on the
+/// device.
 private struct DownloadSettingsCard: View {
     @Environment(AppModel.self) private var model
     @Bindable var downloads: DownloadManager

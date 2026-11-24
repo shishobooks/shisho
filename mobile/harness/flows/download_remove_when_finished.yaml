@@ -11,7 +11,12 @@ name: Remove a Download when it's finished
 - tapOn:
     id: tab.downloads
 - tapOn:
+    id: downloads.settings
+- tapOn:
     id: downloads.removeWhenFinished
+# Tapping the tab showing goes back to its first screen, the list.
+- tapOn:
+    id: tab.downloads
 - tapOn:
     id: tab.library
 - runFlow:
