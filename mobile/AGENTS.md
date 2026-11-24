@@ -58,6 +58,22 @@ Agents run these checks many times a ticket, so a few seconds in every flow add 
 - **Move through the app's screens rather than relaunching it**, unless the flow checks what survives a relaunch: launches are slow on CI.
 - **Listen only as long as what the flow checks needs.** Listening is real time: Reading Sessions and the periodic saves of the place are timed by the clock, not the place, so playing faster doesn't shorten a flow that checks them. A flow that needs a place reached, not time listened, skips to it.
 
+## What earns a flow
+
+Every flow runs in every signoff and in master's run on GitHub's runners, so each one adds its time to every app pull request, and the suite only grows. Write a Maestro flow only for what needs the whole system at once:
+
+- **The app and the server together**: what the app sends reaching the server (the journal's changes, Reading Sessions, places), what the server changes reaching the app (an access change, a server set up again), and signing in.
+- **What survives the app's own lifecycle**: a kill and relaunch, going offline and back, signing out with changes not yet sent.
+- **iOS itself, where a unit test would have to fake it**: playing audio, importing from Files.
+
+Everything else goes in the app's unit tests (`ShishoTests`, run by `mise ios:test`): what a screen shows for a given state, settings and their limits, the rules behind a control (what Previous does partway into a chapter, how a sleep timer counts down), and parsing and layout math. Put the rule in a type the test can call, not in the view, as `ReaderSettings`, `ListeningRules` and `SleepTimerRules` do. A unit test has to be written again in Kotlin for Android, while a flow runs on both, but that's still far cheaper than a flow every pull request pays for.
+
+Before adding a flow:
+
+- **Extend a flow that already gets there.** A check on a screen an existing flow already reaches costs seconds; a new flow costs a launch, a sign-in and the walk to that screen.
+- **A ticket's QA checklist is not a list of flows.** It's checked by hand once. Only what a later change could break without anyone noticing, and a unit test can't reach, needs a flow.
+- **Delete a flow its unit tests replace**, in the same change.
+
 ## Writing flows
 
 GitHub's runners still run the flows after every merge to master, and for pull requests from forks and Dependabot. Their macOS simulators stall now and then: a view hierarchy read or the app's main thread can freeze for around 10 seconds, so a flow that passes locally can still fail there. When a flow fails on CI, read the timestamps in the Maestro logs of the failed job's `harness-output` artifact before treating the failure as an app bug. CI's runners can also have an older iOS than this Mac: the harness uses the newest iOS runtime installed, and the runner image's can lag a release behind (in `setup-ios`, the simulator cache key lists the image's runtimes). To run the flows on that iOS, install its runtime, create an iPhone simulator on it, run `SHISHO_SIMULATOR_BASE=<its UDID> mise ios:harness`, and delete the simulator afterwards. Write flows to tolerate those stalls:
