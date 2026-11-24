@@ -1,7 +1,7 @@
-name: iOS flows on GitHub
+name: iOS on GitHub
 
-# For a pull request labelled ios-flows-on-github: runs the iOS flows on
-# GitHub's runners and posts the "iOS flows signoff" status that CI OK
+# For a pull request labelled ios-on-github: runs the iOS unit tests and
+# flows on GitHub's runners and posts the "iOS signoff" status that CI OK
 # (ci.yml) waits for, in place of `mise ios:signoff`, for when a
 # maintainer's Mac can't run them. Only accounts with write access can
 # label, and a fork's token can't post the status. A workflow of its own so
@@ -15,19 +15,19 @@ on:
 # Another label's event gets a group of its own, so it never cancels a run
 # going for this one.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name != 'ios-flows-on-github' && github.run_id || 'flows' }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action == 'labeled' && github.event.label.name != 'ios-on-github' && github.run_id || 'checks' }}
   cancel-in-progress: true
 
 jobs:
-  flows:
+  checks:
     if: >-
-      contains(github.event.pull_request.labels.*.name, 'ios-flows-on-github') &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ios-flows-on-github')
-    uses: ./.github/workflows/ios-flows.yml
+      contains(github.event.pull_request.labels.*.name, 'ios-on-github') &&
+      (github.event.action != 'labeled' || github.event.label.name == 'ios-on-github')
+    uses: ./.github/workflows/ios.yml
 
   signoff:
-    name: Post the iOS flows signoff
-    needs: flows
+    name: Post the iOS signoff
+    needs: checks
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,6 +46,6 @@ jobs:
         run: |
           gh api --method POST "repos/$GITHUB_REPOSITORY/statuses/$SHA" \
             -f state=success \
-            -f context="iOS flows signoff" \
-            -f description="Every Maestro flow passed on GitHub's runners (ios-flows-on-github)"
+            -f context="iOS signoff" \
+            -f description="Every iOS unit test and Maestro flow passed on GitHub's runners (ios-on-github)"
           go run ./tools/appharness rerun-ci-ok "$SHA"

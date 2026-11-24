@@ -15,14 +15,14 @@ import (
 )
 
 // The signoff is how a pull request from this repository passes the iOS
-// flows: they run here, on a Mac of the maintainer's, and a commit status
-// on the tested commit says so. `CI OK` (.github/workflows/ci.yml) waits for
-// that status instead of running the flows on GitHub's runners, which take
-// several times longer. Nothing reaches this Mac from GitHub: only accounts
-// with write access can post a status, and a fork's pull request still runs
-// the flows on GitHub's runners.
+// unit tests and flows: they run here, on a Mac of the maintainer's, and a
+// commit status on the tested commit says so. `CI OK`
+// (.github/workflows/ci.yml) waits for that status instead of running them
+// on GitHub's runners, which take several times longer. Nothing reaches
+// this Mac from GitHub: only accounts with write access can post a status,
+// and a fork's pull request still runs them on GitHub's runners.
 const (
-	signoffContext = "iOS flows signoff"
+	signoffContext = "iOS signoff"
 	ciWorkflow     = "CI"
 	ciOKJob        = "CI OK"
 )
@@ -31,9 +31,9 @@ const (
 // be posted after the commit is pushed without running the flows again.
 const signoffPassesKept = 30 * 24 * time.Hour
 
-// runSignoff runs every flow on HEAD, which must have nothing uncommitted,
-// records the pass, and posts the signoff once the commit is on GitHub. A
-// commit that already passed here only posts. Posting also reruns a
+// runSignoff runs the unit tests and every flow on HEAD, which must have
+// nothing uncommitted, records the pass, and posts the signoff once the
+// commit is on GitHub. A commit that already passed here only posts. Posting also reruns a
 // `CI OK` that failed only for want of the signoff.
 func runSignoff(ctx context.Context, args []string) error {
 	flags := flag.NewFlagSet("signoff", flag.ExitOnError)
@@ -55,12 +55,13 @@ func runSignoff(ctx context.Context, args []string) error {
 		return err
 	}
 	if hasSignoffPass(passes, sha) {
-		fmt.Fprintf(os.Stderr, "appharness: the flows already passed on %s here\n", short(sha))
+		fmt.Fprintf(os.Stderr, "appharness: the checks already passed on %s here\n", short(sha))
 	} else {
 		// Built only now that the commit is known to be clean, so the app
-		// the flows test is the commit's. The simulator boots alongside.
-		if err := runCommand(ctx, root, "mise", "run", "ios:build", ":::", "ios:simulator"); err != nil {
-			return errors.Wrap(err, "build the app")
+		// the checks test is the commit's. ios:test builds it (the flows use
+		// the same build) and runs the unit tests first, as they fail fastest.
+		if err := runCommand(ctx, root, "mise", "run", "ios:test"); err != nil {
+			return errors.Wrap(err, "the unit tests")
 		}
 		if err := runIOSWith(ctx, iosOptions{
 			app: defaultAppPath, flows: defaultFlowsDir, keep: *keep, parallel: *parallel,
@@ -86,13 +87,13 @@ func runSignoff(ctx context.Context, args []string) error {
 		return err
 	}
 	if !pushed {
-		fmt.Fprintf(os.Stderr, "appharness: the flows passed on %s, which isn't on GitHub yet; push it, then run `mise ios:signoff` again to post the signoff without running them again\n", short(sha))
+		fmt.Fprintf(os.Stderr, "appharness: the checks passed on %s, which isn't on GitHub yet; push it, then run `mise ios:signoff` again to post the signoff without running them again\n", short(sha))
 		return nil
 	}
 	if _, err := gh(ctx, "api", "--method", "POST", "repos/{owner}/{repo}/statuses/"+sha,
 		"-f", "state=success",
 		"-f", "context="+signoffContext,
-		"-f", "description=Every Maestro flow passed on a maintainer's Mac (mise ios:signoff)",
+		"-f", "description=Every iOS unit test and Maestro flow passed on a maintainer's Mac (mise ios:signoff)",
 	); err != nil {
 		return errors.Wrap(err, "post the signoff")
 	}

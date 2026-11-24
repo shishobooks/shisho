@@ -49,11 +49,11 @@ The mise tasks are the way in: `mise tasks | grep -E '^(ios|android|mobile)'` li
 
 ## The signoff
 
-This repository's own pull requests don't run the flows on GitHub's macOS runners, which take several times longer. `CI OK` waits instead for a commit status that `mise ios:signoff` posts from a Mac once every flow passes on the commit; `scripts/app-changes.sh` decides which pull requests need it: any that change something other than the web app, docs, and the few other paths it rules out.
+This repository's own pull requests don't run the iOS unit tests or flows on GitHub's macOS runners, which take several times longer. `CI OK` waits instead for a commit status that `mise ios:signoff` posts from a Mac once every unit test and flow passes on the commit; `scripts/app-changes.sh` decides which pull requests need it: any that change something other than the web app, docs, and the few other paths it rules out.
 
 - **Run it on the pull request's final commit, pushed, with nothing uncommitted.** A new commit, a merge from master included, needs its own.
-- **Only `mise ios:signoff` posts that status.** Never post it with `gh api` or touch the passes it records: it tells the maintainer every flow passed on that commit.
-- **When the flows fail on the Mac for a reason outside the change**, such as its audio output breaking, fix the Mac, not the flows. If that can't wait, the `ios-flows-on-github` label runs the pull request's flows on GitHub's runners instead. On a busy Mac, `-- -parallel 1` runs one shard at a time.
+- **Only `mise ios:signoff` posts that status.** Never post it with `gh api` or touch the passes it records: it tells the maintainer every unit test and flow passed on that commit.
+- **When the checks fail on the Mac for a reason outside the change**, such as its audio output breaking, fix the Mac, not the flows. If that can't wait, the `ios-on-github` label runs the pull request's unit tests and flows on GitHub's runners instead. On a busy Mac, `-- -parallel 1` runs one shard at a time.
 
 ## Keeping runs fast
 

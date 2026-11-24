@@ -454,15 +454,15 @@ jobs:
   # is anything scripts/app-changes.sh doesn't rule out. Pushes to master
   # and release runs always run them.
   #
-  # And whether its iOS flows pass by signoff (tools/appharness/signoff.go):
-  # a pull request from this repository's own branches, other than
-  # Dependabot's, runs them on a maintainer's Mac with `mise ios:signoff`,
-  # several times faster than GitHub's macOS runners. Forks and Dependabot
+  # And whether its iOS unit tests and flows pass by signoff
+  # (tools/appharness/signoff.go): a pull request from this repository's own
+  # branches, other than Dependabot's, runs them on a maintainer's Mac with
+  # `mise ios:signoff`, several times faster than GitHub's macOS runners. Forks and Dependabot
   # run them here, and so does every push to master, as the backstop. The
   # signoff tests the pull request's own commit, not its merge with master,
   # so a clash with master's app changes shows only in that backstop run.
-  # The ios-flows-on-github label stands in for the signoff when the Mac
-  # can't run the flows (ios-flows-on-github.yml).
+  # The ios-on-github label stands in for the signoff when the Mac can't
+  # run the iOS checks (ios-on-github.yml).
   app-changes:
     name: Shisho app changes
     runs-on: ubuntu-latest
@@ -497,33 +497,13 @@ jobs:
       - uses: jdx/mise-action@v5
       - run: mise android:test
 
-  # The unit tests and the Maestro flows each get a runner: one macOS
-  # runner is too small for two simulators, and the flows' driver times out
-  # beside anything else. setup-ios restores what they'd otherwise rebuild,
-  # the base simulator included.
+  # The iOS unit tests and flows, on GitHub's runners only when the pull
+  # request doesn't pass them by signoff (app-changes above).
   app-ios:
     name: iOS
     needs: app-changes
-    if: needs.app-changes.outputs.changed == 'true'
-    runs-on: macos-26
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
-      - id: setup
-        uses: ./.github/actions/setup-ios
-      - run: mise ios:test
-      - uses: ./.github/actions/save-ios-simulator
-        with:
-          key: ${{ steps.setup.outputs.simulator-key }}
-          hit: ${{ steps.setup.outputs.simulator-hit }}
-          name: ${{ steps.setup.outputs.simulator-name }}
-
-  app-ios-flows:
-    name: iOS flows
-    needs: app-changes
     if: needs.app-changes.outputs.changed == 'true' && needs.app-changes.outputs.signoff != 'true'
-    uses: ./.github/workflows/ios-flows.yml
+    uses: ./.github/workflows/ios.yml
 
   # The one check branch protection requires, so the shard count and job
   # names can change without editing protection. A job added above that
@@ -543,12 +523,11 @@ jobs:
       - app-changes
       - app-android
       - app-ios
-      - app-ios-flows
     if: always()
     runs-on: ubuntu-latest
     steps:
       # Every job must succeed, except that the Shisho app's are skipped
-      # when a pull request doesn't touch what they test, and the iOS flows
+      # when a pull request doesn't touch what they test, and the iOS checks
       # when they pass by signoff instead.
       - name: Fail unless every needed job succeeded
         env:
@@ -560,26 +539,26 @@ jobs:
             to_entries | all(
               .value.result == "success"
               or (.value.result == "skipped" and $app == "false" and (.key | startswith("app-")) and .key != "app-changes")
-              or (.value.result == "skipped" and $signoff == "true" and .key == "app-ios-flows")
+              or (.value.result == "skipped" and $signoff == "true" and .key == "app-ios")
             )' <<< "$NEEDS"
-      # `mise ios:signoff` posts this status once every flow passes on the
-      # commit. A run started after the push often lands after the other
+      # `mise ios:signoff` posts this status once every unit test and flow
+      # passes on the commit. A run started after the push often lands after the other
       # jobs, so this waits for it rather than failing, which would send a
       # failure email for nearly every pull request. A signoff that comes
       # later still reruns this job. Polled once a minute: a signoff takes
       # far longer, and every job's GITHUB_TOKEN shares one hourly budget.
-      - name: Wait for the iOS flows signoff
+      - name: Wait for the iOS signoff
         if: needs.app-changes.outputs.changed == 'true' && needs.app-changes.outputs.signoff == 'true'
         timeout-minutes: 50
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          echo "::notice::Waiting up to 45 minutes for \`mise ios:signoff\` on $SHA, or the ios-flows-on-github label."
+          echo "::notice::Waiting up to 45 minutes for \`mise ios:signoff\` on $SHA, or the ios-on-github label."
           deadline=$((SECONDS + 45 * 60))
           while :; do
             if state=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
-              --jq '.statuses[] | select(.context == "iOS flows signoff") | .state'); then
+              --jq '.statuses[] | select(.context == "iOS signoff") | .state'); then
               if [ "$state" = success ]; then
                 exit 0
               fi
@@ -587,7 +566,7 @@ jobs:
               echo "Couldn't read the commit's statuses; trying again."
             fi
             if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::No iOS flows signoff on $SHA. Run \`mise ios:signoff\` on this commit, on a Mac; it posts the signoff and reruns this job. If the Mac can't pass the flows, the ios-flows-on-github label runs them on GitHub's runners."
+              echo "::error::No iOS signoff on $SHA. Run \`mise ios:signoff\` on this commit, on a Mac; it posts the signoff and reruns this job. If the Mac can't pass the iOS checks, the ios-on-github label runs them on GitHub's runners."
               exit 1
             fi
             sleep 60

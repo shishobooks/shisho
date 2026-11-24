@@ -132,9 +132,9 @@ func TestOnlyThePullRequestsNewestCIRunIsRerun(t *testing.T) {
 	}
 }
 
-// The flows run on GitHub's runners exactly when CI OK doesn't wait for a
-// signoff, so every pull request gets one or the other.
-func TestCIRunsTheFlowsOrWaitsForTheSignoffNeverNeither(t *testing.T) {
+// The iOS checks run on GitHub's runners exactly when CI OK doesn't wait for
+// a signoff, so every pull request gets one or the other.
+func TestCIRunsTheIOSChecksOrWaitsForTheSignoffNeverNeither(t *testing.T) {
 	t.Parallel()
 	data, err := os.ReadFile("../../.github/workflows/ci.yml")
 	require.NoError(t, err)
@@ -149,10 +149,10 @@ func TestCIRunsTheFlowsOrWaitsForTheSignoffNeverNeither(t *testing.T) {
 	}
 	require.NoError(t, yaml.Unmarshal(data, &workflow))
 	const changed = "needs.app-changes.outputs.changed == 'true'"
-	assert.Equal(t, changed+" && needs.app-changes.outputs.signoff != 'true'", workflow.Jobs["app-ios-flows"].If)
+	assert.Equal(t, changed+" && needs.app-changes.outputs.signoff != 'true'", workflow.Jobs["app-ios"].If)
 	var wait string
 	for _, step := range workflow.Jobs["ci-ok"].Steps {
-		if step.Name == "Wait for the iOS flows signoff" {
+		if step.Name == "Wait for the iOS signoff" {
 			wait = step.If
 		}
 	}
@@ -167,11 +167,12 @@ func TestCIChecksTheStatusTheSignoffPosts(t *testing.T) {
 	require.NoError(t, err)
 	workflow := string(data)
 	assert.True(t, strings.HasPrefix(workflow, "name: "+ciWorkflow+"\n"), "the workflow is named %q", ciWorkflow)
+	assert.Equal(t, "iOS signoff", signoffContext)
 	for _, want := range []string{"name: " + ciOKJob + "\n", `select(.context == "` + signoffContext + `")`} {
 		assert.Contains(t, workflow, want)
 	}
 	// The label's workflow posts the same status in the signoff's place.
-	label, err := os.ReadFile("../../.github/workflows/ios-flows-on-github.yml")
+	label, err := os.ReadFile("../../.github/workflows/ios-on-github.yml")
 	require.NoError(t, err)
 	assert.Contains(t, string(label), `context="`+signoffContext+`"`)
 }

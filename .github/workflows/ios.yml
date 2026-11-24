@@ -1,14 +1,35 @@
-name: iOS flows
+name: iOS
 
-# The Maestro flows on GitHub's macOS runners. ci.yml calls this for the
-# pull requests that don't pass them by signoff, for pushes to master and
-# for releases; ios-flows-on-github.yml calls it for a pull request
-# labelled to run them here instead.
+# The iOS unit tests and Maestro flows on GitHub's macOS runners, what
+# `mise ios:signoff` runs on a Mac. ci.yml calls this for the pull requests
+# that don't pass them by signoff, for pushes to master and for releases;
+# ios-on-github.yml calls it for a pull request labelled to run them here
+# instead.
 
 on:
   workflow_call:
 
 jobs:
+  # The unit tests and the Maestro flows each get a runner: one macOS
+  # runner is too small for two simulators, and the flows' driver times out
+  # beside anything else. setup-ios restores what they'd otherwise rebuild,
+  # the base simulator included.
+  tests:
+    name: iOS unit tests
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - id: setup
+        uses: ./.github/actions/setup-ios
+      - run: mise ios:test
+      - uses: ./.github/actions/save-ios-simulator
+        with:
+          key: ${{ steps.setup.outputs.simulator-key }}
+          hit: ${{ steps.setup.outputs.simulator-hit }}
+          name: ${{ steps.setup.outputs.simulator-name }}
+
   # Two jobs, split by each flow's time (`ios -shard`, `flowSeconds` in
   # tools/appharness/shard.go): the whole suite no longer fits one job's
   # deadline on GitHub's runners. Each extra macOS job is another that can

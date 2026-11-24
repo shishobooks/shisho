@@ -26,7 +26,7 @@ expect true "the harness" "tools/appharness/ios.go"
 expect true "a flow" "mobile/harness/flows/read_and_reopen.yaml"
 expect true "Go modules" "go.sum"
 expect true "the CI workflow" ".github/workflows/ci.yml"
-expect true "the flows workflow" ".github/workflows/ios-flows.yml"
+expect true "the iOS workflow" ".github/workflows/ios.yml"
 # The web reader's foliate and fonts are bundled into the iOS app.
 expect true "foliate" "app/libraries/foliate/view.js"
 expect true "the reader's fonts" "app/assets/fonts/Literata.woff2"
