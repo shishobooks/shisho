@@ -1,7 +1,11 @@
-// After reading and closing the reader, the server has one more Reading
-// Session from the Shisho app for TITLE, from the phone's Device, counting
-// the pages read (each from 5 seconds), and the place it ended at. Reading
-// past the first page starts a Read-through, as on the web.
+// After reading and closing the reader, the server has a Reading Session
+// from the Shisho app for TITLE that started after the app was relaunched
+// (output.relaunchedAt), from the phone's Device, counting the pages read
+// (each from 5 seconds), and the place it ended at. Reading past the first
+// page starts a Read-through, as on the web. A session is told by when it
+// started, not by counting them: the server takes in each journal event in
+// its own transaction, so the session from before the kill can land after
+// the place the flow checked first.
 // It polls the server until the check passes or 25 s pass, since the sync
 // can land late on a stalled CI simulator, and records "ok", or what's still
 // wrong, in output.serverCheck for the flow's assertTrue.
@@ -17,13 +21,13 @@ function check() {
   }
   const reading = json(response.body);
   console.log(JSON.stringify(reading));
-  const sessions = reading.sessions.filter((s) => s.source === "shisho_app");
-  if (sessions.length <= output.appSessionsBefore) {
-    throw new Error(
-      "the server has " +
-        sessions.length +
-        " sessions from the app, as many as before reading",
-    );
+  // Seconds, as the server gives them, less one for the rounding.
+  const relaunched = Math.floor(output.relaunchedAt / 1000) - 1;
+  const sessions = reading.sessions.filter(
+    (s) => s.source === "shisho_app" && s.started_at >= relaunched,
+  );
+  if (sessions.length === 0) {
+    throw new Error("the server has no session from after the relaunch");
   }
   const session = sessions[sessions.length - 1];
   if (!session.device) throw new Error("the session names no Device");

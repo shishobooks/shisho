@@ -1,7 +1,8 @@
 # Open an EPUB, turn a few pages, kill the app, and reopen it at the same
-# place; the server has the place as a CFI too. Then read a page for a
-# while, turn, read another, and close the reader: the Reading Session
-# reaches the server with its time counted per page (#919).
+# place, its title naming the chapter there; the server has the place as a
+# CFI too. Then read a page for a while, turn, read another, and close the
+# reader: the Reading Session reaches the server with its time counted per
+# page (#919).
 appId: ${APP_ID}
 name: Read, kill, reopen at the same place, and send a Reading Session
 ---
@@ -35,6 +36,7 @@ name: Read, kill, reopen at the same place, and send a Reading Session
 
 # Killed: every turn already saved the place.
 - stopApp
+- evalScript: ${output.relaunchedAt = Date.now()}
 - launchApp:
     stopApp: false
     permissions: {}
@@ -50,6 +52,18 @@ name: Read, kill, reopen at the same place, and send a Reading Session
     id: reader.progress
 - evalScript: ${output.afterRelaunch = maestro.copiedText}
 - assertTrue: ${output.beforeKill == output.afterRelaunch}
+# The title names the chapter the book reopens in, before any turn: the
+# chapter the place shows.
+- evalScript: ${output.reopenedIn = output.afterRelaunch.split(' · ')[0]}
+- assertTrue:
+    condition: ${output.reopenedIn.startsWith('Chapter ')}
+    label: The place names the chapter it reopened in
+- runFlow: subflows/show_reader_controls.yaml
+- extendedWaitUntil:
+    visible:
+      id: reader.title
+      text: ${output.reopenedIn + '.*'}
+    timeout: 30000
 # Relaunching synced the place the turns saved, where the app showed it.
 # The script polls the server until the sync lands.
 - runScript:
@@ -61,14 +75,9 @@ name: Read, kill, reopen at the same place, and send a Reading Session
     condition: ${output.serverCheck == "ok"}
     label: The server check passed
 
-# The session from before the kill synced with the place, so the sessions
-# are counted now, while the one since reopening is still open.
-- runScript:
-    file: scripts/note_app_sessions.js
-    env:
-      CONTROL: ${CONTROL}
-      TITLE: The Harness Novel
-# Each page counts from 5 seconds, and the session needs 10.
+# Each page counts from 5 seconds, and the session needs 10. The page
+# reopened at has shown since the relaunch; the next counts once the turn
+# lands, so its wait leaves room for a slow turn.
 - extendedWaitUntil:
     visible: __never__
     timeout: 6000
@@ -77,7 +86,7 @@ name: Read, kill, reopen at the same place, and send a Reading Session
     direction: LEFT
 - extendedWaitUntil:
     visible: __never__
-    timeout: 6000
+    timeout: 8000
     optional: true
 - runFlow: subflows/show_reader_controls.yaml
 # Closing ends the session, which syncs.
@@ -87,7 +96,9 @@ name: Read, kill, reopen at the same place, and send a Reading Session
     visible:
       id: book.read
     timeout: 30000
-# The script polls the server until the sync lands.
+# The script polls the server until the sync lands, for a session that
+# started after the relaunch: the one from before the kill can reach the
+# server after the place does.
 - runScript:
     file: scripts/assert_read_session.js
     env:
