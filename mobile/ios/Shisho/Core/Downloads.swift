@@ -714,7 +714,7 @@ enum DownloadResume {
     static func save(_ data: Data, fileID: Int, in folder: URL) {
         let url = url(fileID: fileID, in: folder)
         try? DownloadSessionDelegate.prepare(folder)
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: false)
         try? data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
@@ -851,10 +851,12 @@ final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, Senda
     }
 
     /// Makes the Downloads folder, kept out of iCloud backup: its Files can
-    /// all be downloaded again.
+    /// all be downloaded again. Only inside the account's folder: an account
+    /// removed while a transfer ended, as for a server set up again, has its
+    /// folder deleted, and this mustn't make it again.
     static func prepare(_ folder: URL) throws {
         guard !FileManager.default.fileExists(atPath: folder.path) else { return }
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
         var folder = folder
