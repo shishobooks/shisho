@@ -873,22 +873,38 @@ func setRating(ctx context.Context, db bun.IDB, userID, bookID int, units *int, 
 	return errors.WithStack(err)
 }
 
-// SetPageFlow saves the Page flow userID chose for bookID; nil clears it.
+// SetPageFlow saves the Page flow userID chose for bookID now; nil clears
+// it.
 func (svc *Service) SetPageFlow(ctx context.Context, userID, bookID int, flow *string) error {
+	_, err := SetPageFlowAt(ctx, svc.db, userID, bookID, flow, time.Now())
+	return err
+}
+
+// SetPageFlowAt saves the Page flow userID chose for bookID at chosen, in
+// db, unless they chose one later, as on the web while a phone that chose
+// this was offline. It reports whether it saved it.
+func SetPageFlowAt(ctx context.Context, db bun.IDB, userID, bookID int, flow *string, chosen time.Time) (bool, error) {
 	now := time.Now()
-	_, err := svc.db.NewInsert().
+	res, err := db.NewInsert().
 		Model(&models.UserBook{
-			UserID:    userID,
-			BookID:    bookID,
-			CreatedAt: now,
-			UpdatedAt: now,
-			PageFlow:  flow,
+			UserID:            userID,
+			BookID:            bookID,
+			CreatedAt:         now,
+			UpdatedAt:         now,
+			PageFlow:          flow,
+			PageFlowUpdatedAt: &chosen,
 		}).
 		On("CONFLICT (user_id, book_id) DO UPDATE").
 		Set("page_flow = EXCLUDED.page_flow").
+		Set("page_flow_updated_at = EXCLUDED.page_flow_updated_at").
 		Set("updated_at = EXCLUDED.updated_at").
+		Where("ub.page_flow_updated_at IS NULL OR ub.page_flow_updated_at <= EXCLUDED.page_flow_updated_at").
 		Exec(ctx)
-	return errors.WithStack(err)
+	if err != nil {
+		return false, errors.WithStack(err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, errors.WithStack(err)
 }
 
 // MergeBooks moves every user's reading data from sourceBookID to

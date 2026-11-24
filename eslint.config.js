@@ -254,6 +254,7 @@ export default tseslint.config(
         NOTE: "readonly",
         FROM: "readonly",
         PAGE: "readonly",
+        FLOW: "readonly",
       },
     },
   },

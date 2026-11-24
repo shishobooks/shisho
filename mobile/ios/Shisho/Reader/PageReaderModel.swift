@@ -30,7 +30,10 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     private(set) var source: ImageSource?
     /// The flow is the one the user chose for this Book, rather than the
     /// one the pages' shapes picked.
-    var flowChosen: Bool { settings.flow(forBook: file.book.id) != nil }
+    var flowChosen: Bool { chosenFlow != nil }
+    /// The flow the user chose for the Book, here or on the web, which
+    /// otherwise follows the pages' shapes.
+    private(set) var chosenFlow: PageFlow?
     var flow: PageFlow { source?.flow ?? .paginated }
     var rightToLeft: Bool { source?.rightToLeft ?? false }
 
@@ -42,15 +45,15 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     @ObservationIgnored private var fileWatch: Task<Void, Never>?
     @ObservationIgnored private var detectedFlow = PageFlow.paginated
     @ObservationIgnored private let onGone: @MainActor () -> Void
+    @ObservationIgnored private let requestSync: @MainActor () -> Void
     @ObservationIgnored private var closed = false
     @ObservationIgnored private var shownChapters: [ReaderChapter]
     /// When the last run of VoiceOver adjustments to the scrubber was.
     @ObservationIgnored private var lastAdjustment: Date?
 
     /// The page a tile of the File's page grid opened, rather than the
-    /// place, and the place it would have opened at.
+    /// place.
     @ObservationIgnored private let askedPage: Int?
-    @ObservationIgnored private var placePage: Int?
 
     init(file: ReadingFile, session: AccountSession, page: Int? = nil, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
@@ -59,7 +62,8 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         askedPage = page
         self.onGone = onGone
         shownChapters = file.chapters
-        settings = PageReaderSettings.load(accountID: session.account.id)
+        settings = PageReaderSettings.load()
+        self.requestSync = requestSync
         tracker = ReadingTracker(fileID: file.fileID, store: session.store, requestSync: requestSync)
     }
 
@@ -148,21 +152,22 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         pageCount = opened.sizes.count
         detectedFlow = PageLayout.detectedFlow(sizes: opened.sizes)
         let fileID = file.fileID
+        let bookID = file.book.id
         let ownDevice = session.account.deviceID
         let choice = try? await session.store.pool.read { db in
             (try CatalogStore.ebookOpening(db, fileID: fileID, ownDeviceID: ownDevice),
-             try CatalogStore.serverPlace(db, fileID: fileID)?.occurredAt)
+             try CatalogStore.serverPlace(db, fileID: fileID)?.occurredAt,
+             try CatalogStore.pageFlow(db, bookID: bookID))
         }
         guard !closed else { return }
+        chosenFlow = choice?.2
         knownServerAt = choice?.1
         offer = choice?.0.offer
-        let place = startPage(choice?.0)
-        placePage = place
-        let start = askedPage.map { min(max(0, $0), pageCount - 1) } ?? place
+        let start = askedPage.map { min(max(0, $0), pageCount - 1) } ?? startPage(choice?.0)
         page = start
         pagesShown = [start]
         contents = entries(shownChapters)
-        let source = ImageSource(pages: opened.pages, sizes: opened.sizes, flow: settings.flow(forBook: file.book.id) ?? detectedFlow,
+        let source = ImageSource(pages: opened.pages, sizes: opened.sizes, flow: chosenFlow ?? detectedFlow,
                                  rightToLeft: settings.rightToLeft(file), startPage: start)
         source.delegate = self
         self.source = source
@@ -254,10 +259,16 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
 
     // MARK: - Settings
 
-    /// Picks the flow for this Book, kept for its next open.
+    /// Picks the flow for this Book, kept with it on the server, so it's
+    /// the flow on the web and every device too.
     func choose(_ flow: PageFlow) {
-        settings.choose(flow, forBook: file.book.id)
-        settings.save()
+        chosenFlow = flow
+        do {
+            try session.store.choosePageFlow(flow, bookID: file.book.id, at: Date())
+            requestSync()
+        } catch {
+            log("couldn't save the flow: \(Diagnostics.describe(error))")
+        }
         source?.apply(flow: flow, rightToLeft: settings.rightToLeft(file))
     }
 
@@ -359,18 +370,12 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         pagesShown = source?.pagesShown ?? [page]
         guard phase != .reading else { return }
         phase = .reading
-        // A page opened from the grid moves the place there, as a link to a
-        // page does on the web; opening at the place isn't reading. As on
-        // the web, it's never the end, even on the last page: finishing
-        // takes reading there.
-        if let placePage, placePage != page {
-            tracker.opened(place(placePage))
-            var opened = place(page)
-            opened.atEnd = false
-            tracker.moved(opened)
-        } else {
-            tracker.opened(place(page))
-        }
+        // Where it opened isn't reading, whether at the place or at a page
+        // tapped in the File's grid, so a look at a page changes nothing.
+        // Reading on from there is: the first turn moves the place, and
+        // starts a Read-through as any reading past the first page does, so
+        // a reader can skip the pages before the story.
+        tracker.opened(place(page))
     }
 
     func imageSourceMoved(page: Int) {

@@ -239,6 +239,36 @@ extension CatalogStore {
         }
     }
 
+    // MARK: - Page flow
+
+    /// The Page flow the user chose for bookID: one chosen here and not yet
+    /// taken in by the server, or else the one the feed brought, from here
+    /// or the web; nil when they chose none.
+    static func pageFlow(_ db: Database, bookID: Int) throws -> PageFlow? {
+        try String.fetchOne(db, sql: """
+            SELECT COALESCE((SELECT page_flow FROM chosen_page_flows WHERE book_id = ?),
+                            (SELECT page_flow FROM user_books WHERE book_id = ?))
+            """, arguments: [bookID, bookID]).flatMap(PageFlow.init(rawValue:))
+    }
+
+    /// Saves the Page flow the user chose for bookID and queues it for the
+    /// server, which keeps it for the Book on the web too. It shows here
+    /// until the server answers; a later choice replaces one not yet sent.
+    func choosePageFlow(_ flow: PageFlow, bookID: Int, at: Date) throws {
+        let payload = Shishoapp.JournalPageFlowPayload(bookId: bookID, pageFlow: Models.PageFlow(rawValue: flow.rawValue))
+        let data = try JSONEncoder().encode(payload)
+        let key = "page_flow:\(bookID)"
+        try pool.write { db in
+            try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
+            try CatalogStore.append(db, type: .pageFlow, at: at, payload: data, fileID: nil, coalesceKey: key)
+            let eventID = try String.fetchOne(db, sql: "SELECT event_id FROM journal WHERE seq = last_insert_rowid()") ?? ""
+            try db.execute(sql: """
+                INSERT INTO chosen_page_flows (book_id, page_flow, event_id) VALUES (?, ?, ?)
+                ON CONFLICT (book_id) DO UPDATE SET page_flow = excluded.page_flow, event_id = excluded.event_id
+                """, arguments: [bookID, flow.rawValue, eventID])
+        }
+    }
+
     /// Queues a Reading Session on its own, as when it ends with no move.
     func recordReading(session: FinishedSession) throws {
         try pool.write { db in

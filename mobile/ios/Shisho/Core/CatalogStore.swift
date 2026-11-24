@@ -364,11 +364,23 @@ final class CatalogStore: Sendable {
         }
         // Reading comics and PDFs (#921): this installation's place in a
         // Page-based File is a 0-based page, and so is another device's
-        // place offered instead.
+        // place offered instead. The Page flow the user chose for a Book
+        // comes with their record of it, and one chosen here shows until
+        // the server takes it in.
         migrator.registerMigration("v10: pages") { db in
             try db.alter(table: "local_positions") { t in
                 t.add(column: "page", .integer)
                 t.add(column: "offer_page", .integer)
+            }
+            try db.alter(table: "user_books") { t in
+                t.add(column: "page_flow", .text)
+            }
+            try db.create(table: "chosen_page_flows") { t in
+                t.primaryKey("book_id", .integer)
+                t.column("page_flow", .text).notNull()
+                // The journal event sending it, which clears it once the
+                // server has answered.
+                t.column("event_id", .text).notNull()
             }
         }
         return migrator

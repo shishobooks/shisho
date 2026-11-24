@@ -1,6 +1,6 @@
 # Open a PDF: its pages are drawn on the device, its outline is the
-# contents, through Shisho's chapters, and its last page is the end
-# (#921).
+# contents, through Shisho's chapters, and its last page is the end; and
+# the flow chosen for it is saved on the server (#921).
 appId: ${APP_ID}
 name: Read a PDF and go to a chapter from its outline
 ---
@@ -43,3 +43,25 @@ name: Read a PDF and go to a chapter from its outline
       id: reader.progress
       text: ".*Page 1 of 6.*"
     timeout: 30000
+
+# The flow chosen here is the Book's, on the server, so the web reads it
+# that way too.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- tapOn:
+    id: reader.flow.scrolled
+- extendedWaitUntil:
+    visible: Saved for this book.
+    timeout: 30000
+- tapOn:
+    id: reader.settings.done
+- runScript:
+    file: scripts/assert_page_flow.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harness Manual
+      FLOW: scrolled
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server keeps the flow

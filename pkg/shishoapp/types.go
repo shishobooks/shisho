@@ -38,13 +38,16 @@ type ServerInfo struct {
 // X-Shisho-Capabilities header). An app turns a feature on for a server only
 // when it lists the feature's capability.
 const (
-	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles;
+	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow;
 	// CapabilityBookmarks is the Bookmark events in the journal and
 	// Bookmarks in the feed.
 	CapabilityBookmarks = "bookmarks"
 	// CapabilityShareFiles is the route that sends a File's Generated File
 	// for the app to share out of itself (ADR 0022).
 	CapabilityShareFiles = "share_files"
+	// CapabilityPageFlow is the Page flow event in the journal, which saves
+	// the flow the app chose for a Book.
+	CapabilityPageFlow = "page_flow"
 )
 
 // SignInPayload signs an installation in with the user's username and
@@ -438,6 +441,10 @@ type FeedUserBook struct {
 	// Reference is the user's choice to dip into the Book rather than read
 	// it through (ADR 0028).
 	Reference bool `json:"reference"`
+	// PageFlow is the flow the user chose for reading the Book's Page-based
+	// Files, on the web or in the app, or null to pick from the pages'
+	// shapes.
+	PageFlow *string `json:"page_flow" tstype:"PageFlow | null"`
 }
 
 // FeedReadingPosition is the user's place in a File, the newest any source
@@ -507,7 +514,7 @@ type JournalPayload struct {
 // The journal's event types. A new kind of change the app can make is a new
 // type, not a new protocol (ADR 0024).
 const (
-	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession | typeof JournalEventBookmarkCreate | typeof JournalEventBookmarkNote | typeof JournalEventBookmarkDelete;
+	//tygo:emit export type JournalEventType = typeof JournalEventReadingPosition | typeof JournalEventReadingSession | typeof JournalEventBookmarkCreate | typeof JournalEventBookmarkNote | typeof JournalEventBookmarkDelete | typeof JournalEventPageFlow;
 	JournalEventReadingPosition = "reading_position"
 	JournalEventReadingSession  = "reading_session"
 	// The Bookmark events, sent only to a server that lists
@@ -515,6 +522,9 @@ const (
 	JournalEventBookmarkCreate = "bookmark_create"
 	JournalEventBookmarkNote   = "bookmark_note"
 	JournalEventBookmarkDelete = "bookmark_delete"
+	// The Page flow event, sent only to a server that lists
+	// CapabilityPageFlow.
+	JournalEventPageFlow = "page_flow"
 )
 
 // JournalEvent is one change the app made. ID is unique to the
@@ -524,7 +534,7 @@ type JournalEvent struct {
 	ID      string          `json:"id"`
 	Type    string          `json:"type" tstype:"JournalEventType"`
 	At      time.Time       `json:"at"`
-	Payload json.RawMessage `json:"payload" tstype:"JournalPositionPayload | JournalSessionPayload | JournalBookmarkCreatePayload | JournalBookmarkNotePayload | JournalBookmarkRef"`
+	Payload json.RawMessage `json:"payload" tstype:"JournalPositionPayload | JournalSessionPayload | JournalBookmarkCreatePayload | JournalBookmarkNotePayload | JournalBookmarkRef | JournalPageFlowPayload"`
 }
 
 // JournalPositionPayload is a Reading Position update: where the user is in
@@ -595,6 +605,13 @@ type JournalBookmarkNotePayload struct {
 	// Note is required, so an event that leaves it out can't clear it by
 	// accident; a blank one clears it.
 	Note *string `json:"note" validate:"required,max=2000" tstype:"string,required"`
+}
+
+// JournalPageFlowPayload saves the Page flow the user chose for a Book,
+// chosen at the event's time: a choice made later elsewhere keeps.
+type JournalPageFlowPayload struct {
+	BookID   int     `json:"book_id" validate:"required,min=1"`
+	PageFlow *string `json:"page_flow" validate:"required,oneof=paginated scrolled" tstype:"PageFlow"`
 }
 
 // What the server did with each event.

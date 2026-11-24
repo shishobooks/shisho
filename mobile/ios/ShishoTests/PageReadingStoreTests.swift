@@ -114,4 +114,42 @@ final class PageReadingStoreTests: XCTestCase {
         XCTAssertEqual(progress.pagesLeft, 1)
         XCTAssertEqual(progress.chapter, "Chapter One")
     }
+
+    // MARK: - Page flow
+
+    private func journalTypes() throws -> [String] {
+        try store.pool.read { try String.fetchAll($0, sql: "SELECT type FROM journal ORDER BY seq") }
+    }
+
+    /// The flow the user chose for a Book comes with their record of it,
+    /// from the web or another device.
+    func testTheBooksFlowComesFromTheFeed() throws {
+        XCTAssertNil(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) })
+        try store.apply(page("""
+        {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"scrolled"}}],"cursor":5}
+        """))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) }, .scrolled)
+    }
+
+    /// A flow chosen here shows at once and is queued for the server, one
+    /// per Book; the feed doesn't undo it while it waits, and once the
+    /// server answers, the feed's is the Book's.
+    func testAFlowChosenHereWaitsForTheServer() throws {
+        try store.choosePageFlow(.paginated, bookID: 1, at: now)
+        try store.choosePageFlow(.scrolled, bookID: 1, at: now)
+        XCTAssertEqual(try journalTypes(), ["page_flow"])
+        let payload = try store.pool.read { try Data.fetchOne($0, sql: "SELECT payload FROM journal") }
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(payload)) as? [String: Any])
+        XCTAssertEqual(sent["book_id"] as? Int, 1)
+        XCTAssertEqual(sent["page_flow"] as? String, "scrolled")
+
+        try store.apply(page("""
+        {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"paginated"}}],"cursor":6}
+        """))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) }, .scrolled)
+
+        let rows = try store.pendingJournal(capabilities: "", limit: 10)
+        try store.applyJournalResults([Shishoapp.JournalResult(id: rows[0].eventID, result: .accepted)], sent: rows, capabilities: "")
+        XCTAssertEqual(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) }, .paginated)
+    }
 }

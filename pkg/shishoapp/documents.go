@@ -667,7 +667,8 @@ func loadUserBooks(ctx context.Context, tx bun.IDB, userID int, bookIDs []int) (
 		return nil, errors.WithStack(err)
 	}
 	for _, row := range rows {
-		out[row.BookID] = &FeedUserBook{BookID: row.BookID, Rating: row.Rating, ToReadPosition: row.ToReadPosition, Reference: row.Reference}
+		out[row.BookID] = &FeedUserBook{BookID: row.BookID, Rating: row.Rating, ToReadPosition: row.ToReadPosition, Reference: row.Reference,
+			PageFlow: row.PageFlow}
 	}
 	return out, nil
 }

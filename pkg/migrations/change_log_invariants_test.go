@@ -223,7 +223,7 @@ var columnsNotCompared = map[string]string{
 	"user_books.updated_at":        reasonBookkeep,
 	"user_books.rating_updated_at": "orders late Ratings on the server, which the app doesn't read",
 	"user_books.status_chosen_at":  "orders late journal events on the server, which the app doesn't read",
-	"user_books.page_flow":         reasonNotYet,
+	"user_books.page_flow_updated_at": "orders late journal events on the server, which the app doesn't read",
 
 	"read_throughs.id":                    reasonPrimaryKey,
 	"read_throughs.created_at":            reasonBookkeep,

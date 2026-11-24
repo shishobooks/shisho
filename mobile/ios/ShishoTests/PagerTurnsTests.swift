@@ -203,3 +203,56 @@ final class PagerTurnsTests: XCTestCase {
         XCTAssertTrue(PagerZones.asksToTurn(dragX: 150, velocity: 0, width: 400))
     }
 }
+
+/// When a tap on a zooming page is a tap and when it's a double tap.
+final class PagerTapsTests: XCTestCase {
+    private let middle = CGPoint(x: 200, y: 400)
+    private let edge = CGPoint(x: 380, y: 400)
+
+    /// Two taps close in time and place are a double tap, anywhere, even
+    /// at the edge where one tap would turn.
+    func testTwoQuickTapsAreADoubleTap() {
+        var taps = PagerTaps()
+        XCTAssertEqual(taps.tap(at: 1, point: edge, turns: true).decision, .wait)
+        XCTAssertEqual(taps.tap(at: 1.15, point: CGPoint(x: 385, y: 410), turns: true).decision, .double)
+        XCTAssertNil(taps.expired())
+    }
+
+    /// A tap with no second acts once the window passes.
+    func testALoneTapActsOnceTheWindowPasses() {
+        var taps = PagerTaps()
+        XCTAssertEqual(taps.tap(at: 1, point: middle, turns: false).decision, .wait)
+        XCTAssertEqual(taps.expired(), middle)
+        XCTAssertNil(taps.expired())
+    }
+
+    /// A second tap too late or too far is two taps: the first acts before
+    /// the second is judged.
+    func testLateOrFarTapsAreTwoTaps() {
+        var taps = PagerTaps()
+        _ = taps.tap(at: 1, point: middle, turns: false)
+        let late = taps.tap(at: 1 + PagerTaps.doubleTapWindow + 0.05, point: middle, turns: false)
+        XCTAssertEqual(late.decision, .wait)
+        XCTAssertEqual(late.flush, middle)
+        let far = taps.tap(at: 1.4, point: edge, turns: true)
+        XCTAssertEqual(far.decision, .wait)
+        XCTAssertEqual(far.flush, middle)
+    }
+
+    /// Tapping through pages: once a page has turned, taps that turn act
+    /// at once, never waiting or zooming, until the run ends.
+    func testTapsInARunOfTurnsActAtOnce() {
+        var taps = PagerTaps()
+        XCTAssertEqual(taps.tap(at: 1, point: edge, turns: true).decision, .wait)
+        XCTAssertEqual(taps.expired(), edge)
+        taps.turned(at: 1.25)
+        XCTAssertEqual(taps.tap(at: 1.4, point: edge, turns: true).decision, .single)
+        taps.turned(at: 1.4)
+        XCTAssertEqual(taps.tap(at: 1.5, point: edge, turns: true).decision, .single)
+        // A tap in the middle, which doesn't turn, still waits for a second.
+        XCTAssertEqual(taps.tap(at: 1.6, point: middle, turns: false).decision, .wait)
+        // The run ends.
+        _ = taps.expired()
+        XCTAssertEqual(taps.tap(at: 1.5 + PagerTaps.turnRun + 0.1, point: edge, turns: true).decision, .wait)
+    }
+}

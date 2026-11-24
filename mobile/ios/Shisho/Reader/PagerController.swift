@@ -93,12 +93,11 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     private(set) var isDragging = false
     private var revealed = false
     private var touchDownAt: TimeInterval = 0
-    /// Where the last touch came down, in the stage's points.
-    private var touchDownPoint: CGPoint = .zero
-    private var tapRecognizer: UITapGestureRecognizer!
     private var panRecognizer: UIPanGestureRecognizer!
-    /// Only for a source whose pages zoom.
-    private var doubleTapRecognizer: UITapGestureRecognizer?
+    /// For a source whose pages zoom: which taps are double taps, and the
+    /// wait for a second tap.
+    private var taps = PagerTaps()
+    private var tapWait: Task<Void, Never>?
 
     /// How close to a link a tap goes to the link instead of turning.
     nonisolated static let linkSlop: CGFloat = 24
@@ -130,7 +129,6 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         // (selection, the edit menu) see the same touches.
         stage.addGestureRecognizer(tap)
         stage.addGestureRecognizer(pan)
-        tapRecognizer = tap
         panRecognizer = pan
     }
 
@@ -145,14 +143,8 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
             page.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             stage.addSubview(page)
         }
-        if source.pagerZooms, doubleTapRecognizer == nil {
-            let doubleTap = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
-            doubleTap.numberOfTapsRequired = 2
-            doubleTap.delegate = self
-            stage.addGestureRecognizer(doubleTap)
-            doubleTapRecognizer = doubleTap
-            panRecognizer.maximumNumberOfTouches = 1
-        }
+        // Pages that zoom pinch with two fingers, so a drag takes one.
+        if source.pagerZooms { panRecognizer.maximumNumberOfTouches = 1 }
         updateAccessibility()
     }
 
@@ -299,6 +291,7 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
             (back, current, forward) = (forward, back, old)
         }
         turns.committed(direction)
+        taps.turned(at: ProcessInfo.processInfo.systemUptime)
         updateAccessibility()
         source?.pagerDidRotate(direction)
     }
@@ -335,28 +328,10 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
 
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         touchDownAt = touch.timestamp
-        touchDownPoint = touch.location(in: stage)
         return true
     }
 
-    /// Whether a tap at point may be the first of a double tap that zooms:
-    /// in the middle third, which only shows the controls, or anywhere on a
-    /// zoomed page. A tap in an edge third turns at once, so quick taps
-    /// turn pages rather than zoom.
-    private func mayZoom(at point: CGPoint) -> Bool {
-        guard let source, source.pagerZooms else { return false }
-        if source.pagerIsZoomed { return true }
-        return PagerZones.tap(at: point.x / max(1, stage.bounds.width), rightToLeft: rightToLeft) == .chrome
-    }
-
-    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRequireFailureOf other: UIGestureRecognizer) -> Bool {
-        // Asked once per tap, so only a tap that may start a double tap
-        // waits to see whether it does.
-        recognizer === tapRecognizer && other === doubleTapRecognizer && mayZoom(at: touchDownPoint)
-    }
-
     func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-        if recognizer === doubleTapRecognizer { return mayZoom(at: recognizer.location(in: stage)) }
         // A press held still this long is WebKit's: selection, the edit menu.
         let held = ProcessInfo.processInfo.systemUptime - touchDownAt
         if held >= PagerController.longPress { return false }
@@ -379,14 +354,38 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
         recognizer is UITapGestureRecognizer
     }
 
-    @objc private func doubleTapped(_ recognizer: UITapGestureRecognizer) {
-        source?.pagerSawInput()
-        source?.pagerDoubleTapped(at: recognizer.location(in: current))
-    }
-
     @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
         source?.pagerSawInput()
         let point = recognizer.location(in: stage)
+        guard let source, source.pagerZooms else {
+            single(at: point)
+            return
+        }
+        // A double tap zooms anywhere on the page, so a tap that may be the
+        // first of one waits a moment; taps in a run of turns don't.
+        let turns = paging && !source.pagerIsZoomed
+            && PagerZones.tap(at: point.x / max(1, stage.bounds.width), rightToLeft: rightToLeft) != .chrome
+        let (decision, flush) = taps.tap(at: ProcessInfo.processInfo.systemUptime, point: point, turns: turns)
+        if let flush { single(at: flush) }
+        switch decision {
+        case .single:
+            single(at: point)
+        case .double:
+            tapWait?.cancel()
+            source.pagerDoubleTapped(at: stage.convert(point, to: current))
+        case .wait:
+            tapWait?.cancel()
+            tapWait = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(PagerTaps.doubleTapWindow))
+                guard !Task.isCancelled, let self, let waiting = self.taps.expired() else { return }
+                self.single(at: waiting)
+            }
+        }
+    }
+
+    /// A single tap at point, in the stage's points: the page's own, as a
+    /// link, or a turn or the controls by where it lands.
+    private func single(at point: CGPoint) {
         if source?.pagerTakesTap(at: point, resting: isResting) == true { return }
         guard paging else {
             source?.pagerToggleChrome()
@@ -420,6 +419,12 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     func dragBegan() {
+        // A tap still waiting to see whether it's a double tap acts first,
+        // as it came first.
+        if let waiting = taps.expired() {
+            tapWait?.cancel()
+            single(at: waiting)
+        }
         isDragging = true
         finishAnimation()
         turns.dragBegan()

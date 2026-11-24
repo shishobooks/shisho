@@ -260,10 +260,11 @@ extension CatalogStore {
                 try db.execute(sql: "DELETE FROM user_books WHERE book_id = ?", arguments: [entry.id])
             } else if let record = entry.userBook {
                 try db.execute(sql: """
-                    INSERT INTO user_books (book_id, rating, to_read_position, reference, generation) VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO user_books (book_id, rating, to_read_position, reference, page_flow, generation) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT (book_id) DO UPDATE SET rating = excluded.rating, to_read_position = excluded.to_read_position,
-                        reference = excluded.reference, generation = excluded.generation
-                    """, arguments: [record.bookId, record.rating, record.toReadPosition, record.reference, generation])
+                        reference = excluded.reference, page_flow = excluded.page_flow, generation = excluded.generation
+                    """, arguments: [record.bookId, record.rating, record.toReadPosition, record.reference,
+                                     record.pageFlow.flatMap { PageFlow(rawValue: $0.rawValue) }?.rawValue, generation])
             }
         case .list:
             if entry.deleted {

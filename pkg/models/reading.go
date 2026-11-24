@@ -87,6 +87,8 @@ type UserBook struct {
 	RatingUpdatedAt *time.Time `json:"-"`
 	ToReadPosition  *int       `json:"to_read_position"`
 	PageFlow        *string    `json:"page_flow" tstype:"PageFlow | null"`
+	// PageFlowUpdatedAt is when PageFlow last changed, set or cleared.
+	PageFlowUpdatedAt *time.Time `json:"-"`
 	// Reference is the user's choice to dip into the Book rather than read
 	// it through (ADR 0028). It never holds alongside a Read-through underway
 	// or a place on To Read.

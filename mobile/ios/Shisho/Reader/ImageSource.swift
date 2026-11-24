@@ -98,13 +98,15 @@ final class ImageSource: PagerSource {
         pager.attach(self)
     }
 
-    /// The page the reader is on: the one a jump or a layout change kept,
-    /// while its spread shows; otherwise a spread's first, or the last page
-    /// when the spread shows it, so turning to the last spread is the end.
+    /// The page the reader is on: the last page whenever a spread shows it,
+    /// however it came to, since seeing it is reaching the end; otherwise
+    /// the one a jump or a layout change kept while its spread shows, or a
+    /// spread's first.
     var currentPage: Int {
         if let strip { return strip.page }
         guard spreads.indices.contains(spreadIndex) else { return startPage }
         let spread = spreads[spreadIndex]
+        if spread.contains(pageCount - 1) { return pageCount - 1 }
         if let anchorPage, spread.contains(anchorPage) { return anchorPage }
         return PageLayout.place(of: spread, pageCount: pageCount)
     }
@@ -154,12 +156,17 @@ final class ImageSource: PagerSource {
         laidOut()
     }
 
-    /// The pages on screen changed in place: the delegate hears it, but the
-    /// reader didn't move, so nothing is saved. The page kept is the one
-    /// the reader was on, even in a spread that also shows the last.
+    /// The pages on screen changed in place, as on rotation: the delegate
+    /// hears it. Only a spread that now shows the last page is a move, the
+    /// end reached; otherwise the reader didn't move, so nothing is saved,
+    /// and rotating back off the last spread doesn't undo the finish.
     private func laidOut() {
         delegate?.imageSourceLaidOut()
-        reportedPlace = (currentPage, screen)
+        if pagesShown.contains(pageCount - 1) {
+            reportMove()
+        } else {
+            reportedPlace = (currentPage, screen)
+        }
     }
 
     /// Goes to page: every screen is laid out again around it.
@@ -373,11 +380,14 @@ final class ImageSource: PagerSource {
 
     var pagerZooms: Bool { true }
 
-    var pagerIsZoomed: Bool { flow == .paginated && current.page.isZoomed }
+    var pagerIsZoomed: Bool { strip?.isZoomed ?? current.page.isZoomed }
 
     func pagerDoubleTapped(at point: CGPoint) {
-        guard flow == .paginated else { return }
-        current.page.toggleZoom(at: current.convert(point, to: current.page))
+        if let strip {
+            strip.toggleZoom(at: current.convert(point, to: strip))
+        } else {
+            current.page.toggleZoom(at: current.convert(point, to: current.page))
+        }
     }
 
     func pagerAllowsDrag(velocityX: CGFloat) -> Bool {

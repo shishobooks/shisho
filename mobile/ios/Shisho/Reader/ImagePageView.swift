@@ -246,8 +246,12 @@ final class ImagePageView: UIScrollView, UIScrollViewDelegate {
 }
 
 /// The scrolled Page flow: every page in one column, edge to edge, as a
-/// webtoon is read. Pages decode as they near the screen, at the screen's
+/// webtoon is read. Pages decode as they near the screen, at the column's
 /// width however tall they are.
+///
+/// Pinch or double-tap zooms the column: it's laid out wider, inside a view
+/// that pans it sideways, so a zoomed column still scrolls down as it does
+/// unzoomed, and its pages decode sharper for the width.
 @MainActor
 final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout,
     UICollectionViewDataSourcePrefetching {
@@ -257,6 +261,8 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     var onReady: (() -> Void)?
 
     private let collection: UICollectionView
+    /// Pans a zoomed column sideways.
+    private let panner = SidewaysScrollView()
     private let sizes: [CGSize]
     private let cache: PageImageCache
     private let label: (Int) -> String
@@ -267,12 +273,17 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     /// screen as the web reader does: a strip can take several screens, or
     /// pass in a moment.
     private(set) var screen = 0
+    /// How many times the screen's width the column is.
+    private(set) var zoom: CGFloat = 1
     private var pending: Int?
-    private var laidOutWidth: CGFloat = 0
+    private var laidOutSize: CGSize = .zero
     private var ready = false
     /// The strip is moving itself, as to a page: that's no scroll of the
     /// reader's.
     private var positioning = false
+
+    static let maximumZoom: CGFloat = 4
+    var isZoomed: Bool { zoom > 1.01 }
 
     init(sizes: [CGSize], cache: PageImageCache, startPage: Int, label: @escaping (Int) -> String) {
         self.sizes = sizes
@@ -293,32 +304,47 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         collection.dataSource = self
         collection.delegate = self
         collection.prefetchDataSource = self
-        collection.frame = bounds
-        collection.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        addSubview(collection)
+        panner.showsHorizontalScrollIndicator = false
+        panner.showsVerticalScrollIndicator = false
+        panner.contentInsetAdjustmentBehavior = .never
+        panner.alwaysBounceVertical = false
+        panner.bounces = false
+        panner.isScrollEnabled = false
+        panner.addSubview(collection)
+        addSubview(panner)
+        addGestureRecognizer(UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:))))
     }
 
     required init?(coder: NSCoder) { nil }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        guard bounds.width > 0, bounds.width != laidOutWidth else { return }
-        // A new width changes every page's height: the page showing stays.
-        laidOutWidth = bounds.width
+        guard bounds.width > 0, bounds.size != laidOutSize else { return }
+        let widthChanged = bounds.width != laidOutSize.width
+        laidOutSize = bounds.size
         let keep = pending ?? page
         // Laying out again moves the column; the reader didn't.
         positioning = true
+        panner.frame = bounds
+        fitColumn()
+        positioning = false
+        if widthChanged || pending != nil { go(to: keep, reporting: false) }
+    }
+
+    /// The column at the zoom's width, and the panner around it.
+    private func fitColumn() {
+        let width = bounds.width * zoom
+        collection.frame = CGRect(x: 0, y: 0, width: width, height: bounds.height)
+        panner.contentSize = CGSize(width: width, height: bounds.height)
         collection.collectionViewLayout.invalidateLayout()
         collection.layoutIfNeeded()
-        positioning = false
-        go(to: keep, reporting: false)
     }
 
     /// Scrolls page to the top, or as far as the column goes. reporting is
     /// false when the reader stays where they were, as on rotation.
     func go(to page: Int, reporting: Bool = true) {
         guard sizes.indices.contains(page) else { return }
-        guard laidOutWidth > 0 else {
+        guard laidOutSize.width > 0 else {
             pending = page
             return
         }
@@ -342,11 +368,63 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         return Int((collection.contentOffset.y / height).rounded())
     }
 
+    // MARK: - Zoom
+
+    /// Zooms the column to scale, keeping what's under anchor, in this
+    /// view's points, where it is.
+    func setZoom(_ scale: CGFloat, anchor: CGPoint) {
+        let scale = min(Self.maximumZoom, max(1, scale))
+        guard bounds.width > 0, abs(scale - zoom) > 0.001 else { return }
+        let contentX = panner.contentOffset.x + anchor.x
+        let contentY = collection.contentOffset.y + anchor.y
+        let ratio = scale / zoom
+        zoom = scale
+        panner.isScrollEnabled = isZoomed
+        positioning = true
+        fitColumn()
+        let maxX = max(0, bounds.width * zoom - bounds.width)
+        let maxY = max(0, collection.contentSize.height - collection.bounds.height)
+        panner.contentOffset = CGPoint(x: min(maxX, max(0, contentX * ratio - anchor.x)), y: 0)
+        collection.contentOffset = CGPoint(x: 0, y: min(maxY, max(0, contentY * ratio - anchor.y)))
+        // The pages showing decode again for the new width.
+        collection.reloadData()
+        collection.layoutIfNeeded()
+        positioning = false
+        screen = currentScreen
+    }
+
+    /// A double tap at point: zooms in there, or back out when zoomed.
+    func toggleZoom(at point: CGPoint) {
+        setZoom(isZoomed ? 1 : 2.5, anchor: point)
+    }
+
+    @objc private func pinched(_ recognizer: UIPinchGestureRecognizer) {
+        let anchor = recognizer.location(in: self)
+        // Drawn scaled while the fingers move, and laid out at the new width
+        // once they let go, so a pinch doesn't lay the column out every
+        // frame.
+        let scale = min(Self.maximumZoom / zoom, max(1 / zoom, recognizer.scale))
+        switch recognizer.state {
+        case .changed:
+            let center = CGPoint(x: bounds.midX, y: bounds.midY)
+            panner.transform = CGAffineTransform(translationX: (1 - scale) * (anchor.x - center.x),
+                                                 y: (1 - scale) * (anchor.y - center.y)).scaledBy(x: scale, y: scale)
+        case .ended, .cancelled, .failed:
+            panner.transform = .identity
+            setZoom(zoom * scale, anchor: anchor)
+        default:
+            break
+        }
+    }
+
+    // MARK: - Pages
+
     /// The pixels across the page fills, as its longer side.
     private func pixels(_ page: Int) -> Int {
         let size = sizes[page]
-        let height = bounds.width * size.height / max(size.width, 1)
-        return Int((max(bounds.width, height) * max(1, traitCollection.displayScale)).rounded(.up))
+        let width = collection.bounds.width
+        let height = width * size.height / max(size.width, 1)
+        return Int((max(width, height) * max(1, traitCollection.displayScale)).rounded(.up))
     }
 
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { sizes.count }
@@ -356,15 +434,29 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         let page = indexPath.item
         cell.page = page
         cell.accessibilityLabel = label(page)
+        cell.accessibilityCustomActions = [
+            UIAccessibilityCustomAction(name: String(localized: "Zoom In")) { [weak self] _ in
+                guard let self else { return false }
+                self.setZoom(self.zoom * 2, anchor: CGPoint(x: self.bounds.midX, y: self.bounds.midY))
+                return true
+            },
+            UIAccessibilityCustomAction(name: String(localized: "Zoom Out")) { [weak self] _ in
+                guard let self else { return false }
+                self.setZoom(self.zoom / 2, anchor: CGPoint(x: self.bounds.midX, y: self.bounds.midY))
+                return true
+            },
+        ]
         let maxPixel = pixels(page)
         if let image = cache.cached(page: page, maxPixel: maxPixel) {
             cell.imageView.image = image
             imageArrived(page)
         } else {
-            cell.imageView.image = nil
+            // A smaller copy, as from before a zoom, shows until the sharper
+            // one decodes, rather than nothing.
+            cell.imageView.image = cache.cached(page: page, maxPixel: 1)
             cell.load = Task { [weak self, weak cell] in
                 let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now)
-                guard let cell, cell.page == page, !Task.isCancelled else { return }
+                guard let cell, cell.page == page, !Task.isCancelled, let image else { return }
                 cell.imageView.image = image
                 self?.imageArrived(page)
             }
@@ -392,7 +484,7 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard !positioning, pending == nil, laidOutWidth > 0 else { return }
+        guard scrollView === collection, !positioning, pending == nil, laidOutSize.width > 0 else { return }
         let bounds = collection.bounds
         let atEnd = bounds.maxY >= collection.contentSize.height - 1
         let probe = CGPoint(x: bounds.midX, y: bounds.minY + bounds.height * 0.25)
@@ -402,6 +494,15 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         page = item
         self.screen = screen
         onMove?()
+    }
+
+    /// Pans only sideways, so a drag down the column always scrolls it.
+    private final class SidewaysScrollView: UIScrollView {
+        override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+            guard recognizer === panGestureRecognizer else { return super.gestureRecognizerShouldBegin(recognizer) }
+            let velocity = panGestureRecognizer.velocity(in: self)
+            return abs(velocity.x) > abs(velocity.y)
+        }
     }
 
     private final class StripCell: UICollectionViewCell {

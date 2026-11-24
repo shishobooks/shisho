@@ -251,6 +251,14 @@ func (h *handler) takeEvent(ctx context.Context, c echo.Context, user *models.Us
 		apply = func(claim claimFunc) (eventOutcome, error) {
 			return h.applyBookmarkDelete(ctx, user, clock, ev.At, p, claim)
 		}
+	case JournalEventPageFlow:
+		p, problem := decodePayload[JournalPageFlowPayload](c, ev)
+		if problem != nil {
+			return reject(problem), nil
+		}
+		apply = func(claim claimFunc) (eventOutcome, error) {
+			return h.applyPageFlow(ctx, user, clock, ev.At, p, claim)
+		}
 	default:
 		return notUnderstood(fmt.Sprintf("This server doesn't know the event type %q.", ev.Type)), nil
 	}
