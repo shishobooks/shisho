@@ -70,7 +70,7 @@ func runSignoff(ctx context.Context, args []string) error {
 		}
 	}
 
-	pushed, err := commitOnGitHub(ctx, sha)
+	pushed, err := commitOnGitHub(ctx, root, sha)
 	if err != nil {
 		return err
 	}
@@ -134,17 +134,14 @@ func gh(ctx context.Context, args ...string) ([]byte, error) {
 	return out, nil
 }
 
-// commitOnGitHub reports whether GitHub has the commit, which a status
-// needs.
-func commitOnGitHub(ctx context.Context, sha string) (bool, error) {
-	_, err := gh(ctx, "api", "repos/{owner}/{repo}/commits/"+sha, "--silent")
-	if err == nil {
-		return true, nil
+// commitOnGitHub reports whether the commit is on a branch pushed to the
+// checkout's remote, as a status needs it on GitHub.
+func commitOnGitHub(ctx context.Context, root, sha string) (bool, error) {
+	branches, err := git(ctx, root, "branch", "--remotes", "--contains", sha)
+	if err != nil {
+		return false, err
 	}
-	if strings.Contains(err.Error(), "No commit found") || strings.Contains(err.Error(), "HTTP 422") {
-		return false, nil
-	}
-	return false, errors.Wrap(err, "check the commit is on GitHub")
+	return strings.TrimSpace(branches) != "", nil
 }
 
 type ciJob struct {

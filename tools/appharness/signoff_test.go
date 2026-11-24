@@ -88,6 +88,6 @@ func TestCIChecksTheStatusTheSignoffPosts(t *testing.T) {
 	workflow := string(data)
 	assert.True(t, strings.HasPrefix(workflow, "name: "+ciWorkflow+"\n"), "the workflow is named %q", ciWorkflow)
 	for _, want := range []string{"name: " + ciOKJob + "\n", `select(.context == "` + signoffContext + `")`} {
-		assert.True(t, strings.Contains(workflow, want), "ci.yml has %q", want)
+		assert.Contains(t, workflow, want)
 	}
 }
