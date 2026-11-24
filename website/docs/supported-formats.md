@@ -6,13 +6,13 @@ Shisho has native support for seven main-file formats. See [Reading and Playback
 
 | Format | Import | Metadata Extraction | In-App Reader or Player | Generated Download |
 |--------|--------|---------------------|-------------------------|--------------------|
-| **EPUB** | Yes | Package metadata, navigation, and embedded cover data | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | EPUB with supported current metadata and [edited chapters](./metadata.md#chapters) applied |
+| **EPUB** | Yes | Package metadata, navigation, embedded cover data, and [word count](#word-count) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | EPUB with supported current metadata and [edited chapters](./metadata.md#chapters) applied |
 | **KePub** (`.kepub.epub`, `.kepub`) | Yes | The same as EPUB; see [KePub](#kepub) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | KePub with supported current metadata and [edited chapters](./metadata.md#chapters) applied, Kobo markup kept |
 | **CBZ** | Yes | `ComicInfo.xml`, page images, and detected chapters | Comic reader | CBZ with supported current metadata applied and chapters written as [folders](#cbz-downloads) |
 | **M4B** (`.m4b`, `.m4a`) | Yes | Audiobook metadata, chapters, audio details, and embedded cover data; see [M4B and M4A](#m4b-and-m4a) | Audiobook player | M4B with supported current metadata applied |
 | **PDF** | Yes | Document metadata, page count, bookmarks, and a rendered cover | PDF reader | PDF with supported current metadata and bookmarks applied |
-| **MOBI** (`.mobi`, `.azw`, `.prc`) | Yes | Embedded metadata, table of contents, and cover; see [MOBI and AZW3](#mobi-and-azw3) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | MOBI with supported current metadata, cover, and [edited chapters](./metadata.md#chapters) applied |
-| **AZW3** (`.azw3`) | Yes | Embedded metadata, table of contents, and cover; see [MOBI and AZW3](#mobi-and-azw3) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | AZW3 with supported current metadata, cover, and [edited chapters](./metadata.md#chapters) applied |
+| **MOBI** (`.mobi`, `.azw`, `.prc`) | Yes | Embedded metadata, table of contents, cover, and [word count](#word-count); see [MOBI and AZW3](#mobi-and-azw3) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | MOBI with supported current metadata, cover, and [edited chapters](./metadata.md#chapters) applied |
+| **AZW3** (`.azw3`) | Yes | Embedded metadata, table of contents, cover, and [word count](#word-count); see [MOBI and AZW3](#mobi-and-azw3) | [Ebook reader](./reading-and-playback.md#epub-mobi-and-azw3-reader) | AZW3 with supported current metadata, cover, and [edited chapters](./metadata.md#chapters) applied |
 
 Generated downloads are format-specific. Each format can represent a different set of metadata, so Shisho cannot write every database field or replace a cover in every generated file. The source file is not modified.
 
@@ -65,6 +65,7 @@ A scan reads these fields from the file:
 - Subjects, as genres, split on `;`
 - The embedded cover
 - The table of contents, as chapters with their nesting. Calibre writes the table of contents of an older Mobipocket book flat, so a `.mobi` converted by Calibre without a KF8 book has no nested chapters.
+- The [word count](#word-count)
 
 Series, tags, and author roles have no place in these formats. Set them through [sidecar files](./sidecar-files.md), [metadata plugins](./plugins/overview.md), or your own edits.
 
@@ -73,6 +74,14 @@ Downloads write the same fields back into the file, with Shisho's current values
 A generated download is named with its file type, so an `.azw` or `.prc` file downloads as `.mobi`. When a download fails, the web app offers **Download unmodified file**, which sends the file as it is on disk, without Shisho's metadata, with its own extension.
 
 DRM-protected files are never imported. Each one is named in the scan's job log; see [Troubleshooting](./troubleshooting.md#a-drm-protected-file-never-appears). KFX, Topaz, and other Kindle formats that are not MOBI or AZW3 are skipped, even when they use the `.azw` extension.
+
+## Word Count
+
+EPUB, KePub, MOBI, and AZW3 files show how many words they hold wherever an audiobook shows its duration or a comic its pages: under the file's name, in its details, and as the words left beside your progress. The count is rounded, such as `29K words` or `1.2M words`, except below 1,000 words, where it's exact. Hover over a rounded count in the web app to see the exact one; the Shisho app gives it in the **Words** row of the file's page. A scan counts the words each time it reads the file, so a file that changes on disk is counted again.
+
+Only the text a reader reads is counted: the book's documents in reading order, without their scripts, styles, or the pronunciation guides printed over Chinese and Japanese text. Words are split at spaces and dashes, so a hyphenated word or a contraction counts once, and punctuation on its own doesn't count. Chinese and Japanese don't put spaces between words, so each of their characters counts as one word.
+
+A file with no count yet, such as one scanned by an older version of Shisho, is counted by the next scan even though the file hasn't changed, reading only its text. Upgrading to a version that counts words starts a scan of every library, so existing files are counted without waiting for the scheduled one. A file whose content is encrypted, or that Shisho can't read, has no word count, and each scan's job log names it.
 
 ## CBZ Page Images
 

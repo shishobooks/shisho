@@ -121,14 +121,16 @@ struct ProgressBar: View {
 }
 
 /// How far through a File the user is, under its facts on its row: a thin
-/// bar, the percentage, and the time or pages left, as the web's row has it.
+/// bar, the percentage, and the time, pages, or words left, as the web's row
+/// has it.
 struct FileProgressLine: View {
     let progress: Double
     let durationSeconds: Double?
     let pageCount: Int?
+    var wordCount: Int?
 
     var body: some View {
-        let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount)
+        let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount)
         HStack(spacing: 8) {
             ProgressBar(value: progress)
                 .frame(maxWidth: 150)

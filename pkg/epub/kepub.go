@@ -35,6 +35,10 @@ func ParseKePub(path string) (*mediafile.ParsedMetadata, error) {
 			return nil, err
 		}
 		if !protected {
+			// Left off on an error, as Parse leaves it.
+			if n, err := countSpine(&zr.Reader, result); err == nil {
+				metadata.WordCount = &n
+			}
 			return metadata, nil
 		}
 	}
@@ -72,17 +76,38 @@ func declaresDRM(zr *zip.Reader) (bool, error) {
 // documents with no record in the book, so that is what gives it away. A
 // readable book can have one odd document, so one is never enough.
 func spineEncrypted(zr *zip.Reader, result *ParseOPFResult) (bool, error) {
+	docs := spineDocuments(zr, result)
+	for _, doc := range docs {
+		markup, err := startsWithMarkup(doc.file)
+		if err != nil || markup {
+			return false, err
+		}
+	}
+	return len(docs) > 0, nil
+}
+
+// spineDocument is one of the spine's content documents in the archive.
+type spineDocument struct {
+	file      *zip.File
+	mediaType string
+}
+
+// spineDocuments are the spine's content documents in reading order,
+// leaving out any the archive doesn't hold.
+func spineDocuments(zr *zip.Reader, result *ParseOPFResult) []spineDocument {
 	files := make(map[string]*zip.File, len(zr.File))
 	for _, f := range zr.File {
 		files[f.Name] = f
 	}
-	hrefs := make(map[string]string, len(result.Package.Manifest.Item))
+	type manifestItem struct{ href, mediaType string }
+	items := make(map[string]manifestItem, len(result.Package.Manifest.Item))
 	for _, item := range result.Package.Manifest.Item {
-		hrefs[item.ID] = item.Href
+		items[item.ID] = manifestItem{href: item.Href, mediaType: item.MediaType}
 	}
-	checked := 0
+	var docs []spineDocument
 	for _, ref := range result.Package.Spine.Itemref {
-		href := hrefs[ref.Idref]
+		item := items[ref.Idref]
+		href := item.href
 		if unescaped, err := url.PathUnescape(href); err == nil {
 			href = unescaped
 		}
@@ -90,13 +115,9 @@ func spineEncrypted(zr *zip.Reader, result *ParseOPFResult) (bool, error) {
 		if f == nil {
 			continue
 		}
-		markup, err := startsWithMarkup(f)
-		if err != nil || markup {
-			return false, err
-		}
-		checked++
+		docs = append(docs, spineDocument{file: f, mediaType: item.mediaType})
 	}
-	return checked > 0, nil
+	return docs
 }
 
 // encryptsContent reports whether an encryption.xml encrypts anything with

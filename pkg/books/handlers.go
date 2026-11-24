@@ -868,6 +868,11 @@ func (h *handler) updateFile(c echo.Context) error {
 			file.AudiobookBitrateBps = nil
 			opts.Columns = append(opts.Columns, "audiobook_duration_seconds", "audiobook_bitrate_bps")
 
+			// Clear the word count: supplements have none, and promoting
+			// the File again rescans it
+			file.WordCount = nil
+			opts.Columns = append(opts.Columns, "word_count")
+
 			// Clear publisher
 			file.PublisherID = nil
 			file.PublisherSource = nil

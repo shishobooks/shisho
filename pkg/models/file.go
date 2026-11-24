@@ -195,6 +195,7 @@ type File struct {
 	NameSource               *string           `json:"name_source" tstype:"DataSource"`
 	PageCount                *int              `json:"page_count"` // Number of pages for CBZ/PDF files, NULL for EPUB/M4B
 	AudiobookDurationSeconds *float64          `json:"audiobook_duration_seconds"`
+	WordCount                *int              `json:"word_count"` // Words in a reflowable ebook's text (EPUB, KePub, MOBI, AZW3), NULL until counted and for other file types
 	AudiobookBitrateBps      *int              `json:"audiobook_bitrate_bps"`
 	AudiobookCodec           *string           `json:"audiobook_codec"`
 	Narrators                []*Narrator       `bun:"rel:has-many,join:id=file_id" json:"narrators,omitempty" tstype:"Narrator[]"`

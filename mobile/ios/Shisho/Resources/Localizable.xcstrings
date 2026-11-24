@@ -104,6 +104,9 @@
         }
       }
     },
+    "%@ words" : {
+
+    },
     "%@ · %@ left" : {
       "localizations" : {
         "en" : {
@@ -1440,6 +1443,12 @@
     "Wide" : {
 
     },
+    "Word count" : {
+
+    },
+    "Words" : {
+
+    },
     "Writer" : {
 
     },
@@ -1533,6 +1542,9 @@
 
     },
     "^[%lld result](inflect: true)" : {
+
+    },
+    "^[%lld word](inflect: true)" : {
 
     },
     "a newer release" : {

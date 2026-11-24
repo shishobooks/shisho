@@ -425,7 +425,7 @@ private struct FileCard: View {
                                 .accessibilityIdentifier("book.detail.narrator")
                         }
                         if let progress {
-                            FileProgressLine(progress: progress, durationSeconds: listeningLength, pageCount: file.pageCount)
+                            FileProgressLine(progress: progress, durationSeconds: listeningLength, pageCount: file.pageCount, wordCount: file.wordCount)
                                 .padding(.top, 3)
                         }
                         DownloadStatusLine(fileID: file.id, row: download ?? nil)
@@ -502,12 +502,13 @@ private struct FileCard: View {
         }
     }
 
-    /// The facts the web's row shows under the name: length, pages, an
-    /// audiobook's bitrate, year, and size, and whether it's a supplement.
+    /// The facts the web's row shows under the name: length, pages or words,
+    /// an audiobook's bitrate, year, and size, and whether it's a supplement.
     private var facts: String {
         var parts: [String] = []
         if let seconds = file.durationSeconds, seconds > 0 { parts.append(FileFacts.duration(seconds)) }
         if let pages = file.pageCount, pages > 0 { parts.append(FileFacts.pages(pages)) }
+        if let words = file.wordCount, words > 0 { parts.append(FileFacts.words(words)) }
         if let bitrate = file.bitrate, bitrate > 0 { parts.append(FileFacts.bitrate(bitrate)) }
         if let released = file.releaseDate { parts.append(FileFacts.year(released)) }
         parts.append(FileFacts.size(file.sizeBytes))

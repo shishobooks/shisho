@@ -66,15 +66,29 @@ enum FileFacts {
         String(AttributedString(localized: "^[\(count) page](inflect: true)").characters)
     }
 
+    /// A word count in the ballpark, as the web's `formatWordCount`: exact
+    /// under a thousand, then rounded to thousands, millions, or billions.
+    /// The count takes in front and back matter, so the exact figure means
+    /// little; the File's page gives it with exactWords.
+    static func words(_ count: Int) -> String {
+        guard count >= 1000 else { return exactWords(count) }
+        let rounded = count.formatted(.number.notation(.compactName))
+        return String(localized: "\(rounded) words")
+    }
+
+    static func exactWords(_ count: Int) -> String {
+        String(AttributedString(localized: "^[\(count) word](inflect: true)").characters)
+    }
+
     static func size(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 }
 
 /// How far through a File the user is, as its row says it under its
-/// facts: the percentage, and the time or pages left.
+/// facts: the percentage, and the time, pages, or words left.
 enum FileProgressText {
-    static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?) -> String {
+    static func text(_ progress: Double, durationSeconds: Double?, pageCount: Int?, wordCount: Int? = nil) -> String {
         let clamped = min(1, max(0, progress))
         let percent = Percent.text(clamped)
         guard clamped < 1 else { return percent }
@@ -89,6 +103,9 @@ enum FileProgressText {
         }
         if let pages = pageCount, pages > 0 {
             return String(localized: "\(percent) · \(FileFacts.pages(Int((Double(pages) * rest).rounded()))) left")
+        }
+        if let words = wordCount, words > 0 {
+            return String(localized: "\(percent) · \(FileFacts.words(Int((Double(words) * rest).rounded()))) left")
         }
         return percent
     }

@@ -996,6 +996,34 @@ func TestUpdateFile_DowngradeMainToSupplement_DeletesChapters(t *testing.T) {
 	assert.Nil(t, updated.ChapterSource)
 }
 
+func TestUpdateFile_DowngradeMainToSupplement_ClearsWordCount(t *testing.T) {
+	t.Parallel()
+	db := testdb.New(t)
+	ctx := context.Background()
+
+	library, book := setupTestLibraryAndBook(t, db)
+	path := filepath.Join(book.Filepath, "book.epub")
+	require.NoError(t, os.WriteFile(path, []byte("epub"), 0644))
+	file := setupTestFile(t, db, book, models.FileTypeEPUB, path)
+	words := 95312
+	file.WordCount = &words
+	_, err := db.NewUpdate().Model(file).Column("word_count").WherePK().Exec(ctx)
+	require.NoError(t, err)
+
+	user := setupTestUser(t, db, library.ID, true)
+	require.NoError(t, db.NewSelect().Model(user).Relation("Role").Relation("Role.Permissions").Where("u.id = ?", user.ID).Scan(ctx))
+	req := httptest.NewRequest(http.MethodPost, "/books/files/"+strconv.Itoa(file.ID), strings.NewReader(`{"file_role": "supplement"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := executeRequestWithUser(t, setupTestServer(t, db), req, user)
+	require.Equal(t, http.StatusOK, rr.Code, "response body: %s", rr.Body.String())
+
+	// Supplements have no word count; promoting the File again rescans it,
+	// which counts it afresh.
+	var updated models.File
+	require.NoError(t, db.NewSelect().Model(&updated).Where("id = ?", file.ID).Scan(ctx))
+	assert.Nil(t, updated.WordCount)
+}
+
 func TestUpdateFile_DowngradeMainToSupplement_DeletesCoverFile(t *testing.T) {
 	t.Parallel()
 

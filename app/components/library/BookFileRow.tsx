@@ -8,10 +8,12 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import FactsLine from "@/components/common/FactsLine";
 import MonoValue from "@/components/common/MonoValue";
+import WordCount from "@/components/common/WordCount";
 import {
   fileEditionRows,
   fileIdentifierRows,
@@ -65,6 +67,7 @@ import {
   formatDuration,
   formatFileSize,
   formatPageCount,
+  formatWordCount,
   formatYear,
   getFilename,
 } from "@/utils/format";
@@ -101,6 +104,9 @@ const fileDetailRows = (
   if (file.page_count) {
     rows.push({ label: "Pages", value: formatPageCount(file.page_count) });
   }
+  if (file.word_count) {
+    rows.push({ label: "Words", value: <WordCount count={file.word_count} /> });
+  }
   if (file.audiobook_duration_seconds) {
     rows.push({
       label: "Duration",
@@ -135,20 +141,24 @@ const fileDetailRows = (
  * The facts a row shows under the name, quietly: length, an audiobook's
  * bitrate (what tells two recordings apart), year, and size.
  */
-const rowFacts = (file: File): string[] =>
+const rowFacts = (file: File): ReactNode[] =>
   [
     file.audiobook_duration_seconds
       ? formatDuration(file.audiobook_duration_seconds)
       : null,
     file.page_count ? formatPageCount(file.page_count) : null,
+    file.word_count ? <WordCount count={file.word_count} /> : null,
     file.audiobook_bitrate_bps
       ? formatBitrate(file.audiobook_bitrate_bps)
       : null,
     file.release_date ? formatYear(file.release_date) : null,
     formatFileSize(file.filesize_bytes),
-  ].filter((fact): fact is string => fact !== null);
+  ].filter((fact) => fact !== null);
 
-/** How much of the file is left at progress: time for an audiobook, else pages. */
+/**
+ * How much of the file is left at progress: time for an audiobook, else
+ * pages, else words.
+ */
 const leftLabel = (file: File, progress: number): string | null => {
   const rest = Math.max(0, 1 - progress);
   if (file.audiobook_duration_seconds) {
@@ -156,6 +166,9 @@ const leftLabel = (file: File, progress: number): string | null => {
   }
   if (file.page_count) {
     return `${formatPageCount(Math.round(file.page_count * rest))} left`;
+  }
+  if (file.word_count) {
+    return `${formatWordCount(Math.round(file.word_count * rest))} left`;
   }
   return null;
 };
@@ -312,7 +325,9 @@ const BookFileRow = ({
           <Badge className="px-1.5 py-0 text-[10px]" variant="outline">
             {isSupplement ? "Supplement" : fileTypeLabel(file.file_type)}
           </Badge>
-          <span>{rowFacts(file).join(" · ")}</span>
+          <span>
+            <FactsLine facts={rowFacts(file)} />
+          </span>
         </div>
         {file.narrators && file.narrators.length > 0 && (
           <p className="mt-0.5 text-xs text-muted-foreground">

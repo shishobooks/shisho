@@ -343,6 +343,7 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 						JobLog:        opts.JobLog,
 					}, cache)
 				}
+				w.countUnchangedFileWords(ctx, existingFile, opts)
 				return &ScanResult{File: existingFile, Book: existingFile.Book}, nil
 			}
 			// File content changed (or we can't tell) — invalidate stale
@@ -375,6 +376,7 @@ func (w *Worker) scanFileByPath(ctx context.Context, opts ScanOptions, cache *Sc
 			// unchanged and we must not invalidate its fingerprint.
 			changed, changedErr := fileContentChanged(opts.FilePath, existingFile, opts.ForceRefresh)
 			if changedErr == nil && !changed {
+				w.countUnchangedFileWords(ctx, existingFile, opts)
 				return &ScanResult{File: existingFile, Book: existingFile.Book}, nil
 			}
 			// File content changed (or we can't tell) — invalidate stale
@@ -1976,6 +1978,16 @@ func (w *Worker) scanFileCore(
 		}
 	}
 
+	// Update word count (reflowable ebooks) - always comes from file
+	// metadata. A count the parser couldn't make keeps the last one; the
+	// next scan tries again for a File that has none.
+	if metadata.WordCount != nil {
+		if file.WordCount == nil || *file.WordCount != *metadata.WordCount {
+			file.WordCount = metadata.WordCount
+			fileUpdateOpts.Columns = appendIfMissing(fileUpdateOpts.Columns, "word_count")
+		}
+	}
+
 	// Apply file column updates
 	if len(fileUpdateOpts.Columns) > 0 {
 		if err := w.bookService.UpdateFile(ctx, file, fileUpdateOpts); err != nil {
@@ -2781,6 +2793,7 @@ func (w *Worker) scanFileCreateNew(ctx context.Context, opts ScanOptions, cache 
 		if metadata.PageCount != nil {
 			file.PageCount = metadata.PageCount
 		}
+		file.WordCount = metadata.WordCount
 	}
 
 	if err := w.bookService.CreateFile(ctx, file); err != nil {
@@ -3725,6 +3738,7 @@ func (w *Worker) runMetadataEnrichers(ctx context.Context, metadata *mediafile.P
 	enrichedMeta.BitrateBps = metadata.BitrateBps
 	enrichedMeta.Codec = metadata.Codec
 	enrichedMeta.PageCount = metadata.PageCount
+	enrichedMeta.WordCount = metadata.WordCount
 
 	// Use file parser's DataSource as fallback if no enricher modified anything
 	if !modified {

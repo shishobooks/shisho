@@ -477,9 +477,9 @@ func TestFeed_BookDocument(t *testing.T) {
 	f.exec(`INSERT INTO series (id, library_id, name, name_source, sort_name, sort_name_source) VALUES (1, 1, 'Dune Chronicles', 'file', 'Dune Chronicles', 'file')`)
 	f.exec(`INSERT INTO book_series (book_id, series_id, series_number, sort_order) VALUES (1, 1, 1, 1)`)
 	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, cover_image_filename, updated_at,
-		release_date, page_count, audiobook_duration_seconds, created_at)
+		release_date, page_count, audiobook_duration_seconds, word_count, created_at)
 		VALUES (7, 1, 1, '/library/1/dune.epub', 'epub', 12345, 'dune.epub.cover.jpg', '2026-01-02 03:04:05',
-		'1965-08-01 00:00:00', 412, 1.5, '2025-01-01 00:00:00')`)
+		'1965-08-01 00:00:00', 412, 1.5, 187240, '2025-01-01 00:00:00')`)
 	f.addUser()
 
 	resp := f.changes(f.signIn(), 0, 0)
@@ -491,6 +491,7 @@ func TestFeed_BookDocument(t *testing.T) {
 	released := time.Date(1965, 8, 1, 0, 0, 0, 0, time.UTC)
 	pages := 412
 	duration := 1.5
+	words := 187240
 	assert.Equal(t, &FeedBook{
 		ID: 1, LibraryID: 1, Title: "Dune", Subtitle: &subtitle, SortTitle: "Dune",
 		CreatedAt: time.Date(2025, 3, 4, 5, 6, 7, 0, time.UTC),
@@ -503,7 +504,7 @@ func TestFeed_BookDocument(t *testing.T) {
 		Tags:   []FeedTagRef{},
 		Files: []FeedFile{{
 			ID: 7, FileType: "epub", FileRole: "main", SizeBytes: 12345, DisplayName: "dune.epub",
-			ReleaseDate: &released, PageCount: &pages, AudiobookDurationSeconds: &duration,
+			ReleaseDate: &released, PageCount: &pages, AudiobookDurationSeconds: &duration, WordCount: &words,
 			CoverVersion: fmt.Sprintf("7-%d", time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC).Unix()),
 			Narrators:    []FeedNarrator{},
 			Chapters:     []FeedChapter{},
@@ -552,6 +553,7 @@ func TestFeed_JoinTableChangesMoveTheBook(t *testing.T) {
 		{"release date", `UPDATE files SET release_date = '2001-01-01 00:00:00' WHERE id = 1`, []string{"book:1"}},
 		{"page count", `UPDATE files SET page_count = 10 WHERE id = 1`, []string{"book:1"}},
 		{"duration", `UPDATE files SET audiobook_duration_seconds = 60 WHERE id = 1`, []string{"book:1"}},
+		{"word count", `UPDATE files SET word_count = 95312 WHERE id = 1`, []string{"book:1"}},
 		{"cover changed", `UPDATE files SET updated_at = '2030-01-01 00:00:00' WHERE id = 1`, []string{"book:1"}},
 		{"file moved", `UPDATE files SET book_id = 2 WHERE id = 1`, []string{"book:1", "book:2"}},
 		{"file deleted", `DELETE FROM files WHERE id = 1`, []string{"book:2"}},
@@ -589,7 +591,7 @@ func TestFeed_WritesThatChangeNothingRecordNothing(t *testing.T) {
 		`UPDATE authors SET sort_order = 1`,
 		`UPDATE persons SET name = 'Frank Herbert', updated_at = '2030-01-01 00:00:00'`,
 		`UPDATE libraries SET name = 'Fiction', organize_file_structure = FALSE`,
-		`UPDATE files SET release_date = release_date, page_count = page_count, audiobook_duration_seconds = audiobook_duration_seconds`,
+		`UPDATE files SET release_date = release_date, page_count = page_count, audiobook_duration_seconds = audiobook_duration_seconds, word_count = word_count`,
 		`UPDATE files SET name = name, name_source = name_source, filepath = filepath`,
 	} {
 		f.exec(write)

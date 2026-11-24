@@ -899,9 +899,12 @@ func fileDownloadEntry(baseURL, bookTitle string, d delivery.Delivery, kindle bo
 		downloadURL = fmt.Sprintf("%s/file/%d/%s", baseURL, f.ID, d.DeliveredFileType)
 	}
 
-	// Build metadata line: type badge + file size
+	// Build metadata line: type badge, length, and file size
 	var metaParts []string
 	metaParts = append(metaParts, models.FileTypeLabel(f.FileType))
+	if length := formatLength(f); length != "" {
+		metaParts = append(metaParts, length)
+	}
 	if f.FilesizeBytes > 0 {
 		metaParts = append(metaParts, formatFileSize(f.FilesizeBytes))
 	}

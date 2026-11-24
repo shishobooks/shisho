@@ -6,6 +6,7 @@ package mobi
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -51,6 +52,11 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	meta.CoverData, meta.CoverMimeType = book.cover(db)
 	if tocs := readTOCs(db, book.books); len(tocs) > 0 {
 		meta.Chapters = parsedChapters(tocs[0].Entries)
+	}
+	// A count is left off rather than failing the parse: the metadata is
+	// still good, and the next scan tries the file again.
+	if n, err := countWords(context.Background(), f, stat.Size()); err == nil {
+		meta.WordCount = &n
 	}
 	return meta, nil
 }

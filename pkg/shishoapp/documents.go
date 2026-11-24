@@ -304,6 +304,7 @@ func bookDocument(ctx context.Context, book *models.Book) *FeedBook {
 			ReleaseDate:              file.ReleaseDate,
 			PageCount:                file.PageCount,
 			AudiobookDurationSeconds: file.AudiobookDurationSeconds,
+			WordCount:                file.WordCount,
 		})
 	}
 	aspect := ""

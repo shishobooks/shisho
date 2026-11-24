@@ -429,6 +429,7 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(FileProgressText.text(200.0 / 240, durationSeconds: 240, pageCount: nil), "83% · 0:40 left")
         // A real fraction of a second isn't rounded up, as the Listen bar doesn't.
         XCTAssertEqual(FileProgressText.text(120.0002 / 240, durationSeconds: 240, pageCount: nil), "50% · 1:59 left")
+        XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil, wordCount: 80321), "25% · 60K words left")
     }
 
     /// By the server's time for each Read-through underway, not the latest
@@ -496,6 +497,19 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(detail.filepath, "/books/a.m4b")
         XCTAssertNotNil(detail.modifiedAt)
         XCTAssertNotNil(detail.addedAt)
+    }
+
+    func testAnEbookKeepsItsWordCount() throws {
+        let file = """
+            {"id":91,"file_type":"epub","file_role":"main","size_bytes":10,"display_name":"Prose","narrators":[],"identifiers":[],
+             "word_count":80321,"filepath":"/books/p.epub","created_at":"2026-01-03T00:00:00Z"}
+            """
+        try store.apply(page(#"{"entries":[\#(library(1, "Fiction")),\#(book(9, files: file))],"cursor":2}"#),
+                        access: Shishoapp.FeedAccess(libraryIds: [1], listIds: []))
+
+        let detail = try XCTUnwrap(store.pool.read { try CatalogStore.book($0, id: 9) }?.files.first)
+        XCTAssertEqual(detail.wordCount, 80321)
+        XCTAssertEqual(detail.headerFacts, ["80K words", "10 bytes"])
     }
 
     func testNamesFoldCaseAsSQLiteDoes() {

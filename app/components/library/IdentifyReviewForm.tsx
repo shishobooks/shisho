@@ -13,9 +13,11 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EntityCombobox } from "@/components/common/EntityCombobox";
+import FactsLine from "@/components/common/FactsLine";
 import { IdentifierEditor } from "@/components/common/IdentifierEditor";
 import { SortableEntityList } from "@/components/common/SortableEntityList";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import WordCount from "@/components/common/WordCount";
 import CoverImage from "@/components/library/CoverImage";
 import { ExtractSubtitleButton } from "@/components/library/ExtractSubtitleButton";
 import { Button } from "@/components/ui/button";
@@ -1124,7 +1126,7 @@ export function IdentifyReviewForm({
   // ---- File section hint ----
   const fileSectionHint = useMemo(() => {
     if (!file) return null;
-    const parts: string[] = [];
+    const parts: React.ReactNode[] = [];
     parts.push(fileTypeLabel(file.file_type));
     const trimmedName = file.name?.trim();
     if (trimmedName) parts.push(trimmedName);
@@ -1137,7 +1139,10 @@ export function IdentifyReviewForm({
     if (file.page_count != null) {
       parts.push(formatPageCount(file.page_count));
     }
-    return parts.join(" · ");
+    if (file.word_count != null) {
+      parts.push(<WordCount count={file.word_count} />);
+    }
+    return <FactsLine facts={parts} />;
   }, [file]);
 
   // ---- Restore suggestions ----

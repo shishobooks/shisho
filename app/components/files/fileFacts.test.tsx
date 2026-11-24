@@ -1,5 +1,7 @@
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import FactsLine from "@/components/common/FactsLine";
 import {
   FileRoleMain,
   FileTypeCBZ,
@@ -10,7 +12,7 @@ import {
   type File,
 } from "@/types";
 
-import { fileEditionRows } from "./fileFacts";
+import { fileDiskRows, fileEditionRows, fileHeaderFacts } from "./fileFacts";
 
 const file = (overrides: Partial<File>): File => ({
   id: 1,
@@ -62,5 +64,44 @@ describe("fileEditionRows", () => {
         }),
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("word count", () => {
+  const epub = file({
+    file_type: FileTypeEPUB,
+    filepath: "/library/book.epub",
+    word_count: 95312,
+  });
+
+  it("is a rounded fact under the name, exact on hover", () => {
+    render(<FactsLine facts={fileHeaderFacts(epub)} />);
+    const words = screen.getByText("95K words");
+    expect(words).toHaveAttribute("title", "95,312 words");
+  });
+
+  it("has a row with the format's facts, exact on hover", () => {
+    const row = fileDiskRows(epub).find((r) => r.label === "Words");
+    render(<>{row?.value}</>);
+    expect(screen.getByText("95K words")).toHaveAttribute(
+      "title",
+      "95,312 words",
+    );
+  });
+
+  it("is left out until the words are counted", () => {
+    const uncounted = file({ file_type: FileTypeEPUB });
+    render(<FactsLine facts={fileHeaderFacts(uncounted)} />);
+    expect(screen.queryByText(/words?$/)).toBeNull();
+    expect(
+      fileDiskRows(uncounted).find((row) => row.label === "Words"),
+    ).toBeUndefined();
+  });
+});
+
+describe("FactsLine", () => {
+  it("separates the facts with a dot", () => {
+    const { container } = render(<FactsLine facts={["350 pages", "1 MB"]} />);
+    expect(container).toHaveTextContent("350 pages · 1 MB");
   });
 });

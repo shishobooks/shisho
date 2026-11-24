@@ -17,6 +17,7 @@ const (
 	FieldDateAdded    = "date_added"
 	FieldDateReleased = "date_released"
 	FieldPageCount    = "page_count"
+	FieldWordCount    = "word_count"
 	FieldDuration     = "duration"
 	// FieldReadingStatus, FieldRating, FieldDateFinished, and FieldLastRead
 	// sort on the reader's own Reading Status, Rating, latest finished
@@ -36,6 +37,7 @@ func AllFields() []string {
 		FieldDateAdded,
 		FieldDateReleased,
 		FieldPageCount,
+		FieldWordCount,
 		FieldDuration,
 		FieldReadingStatus,
 		FieldRating,
@@ -49,7 +51,7 @@ func IsValidField(s string) bool {
 	switch s {
 	case FieldTitle, FieldAuthor, FieldSeries,
 		FieldDateAdded, FieldDateReleased,
-		FieldPageCount, FieldDuration,
+		FieldPageCount, FieldWordCount, FieldDuration,
 		FieldReadingStatus, FieldRating, FieldDateFinished, FieldLastRead:
 		return true
 	}

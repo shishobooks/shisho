@@ -324,6 +324,8 @@ struct FileView: View {
         ]
         if let pages = file.pageCount, pages > 0 { rows.append(.init(String(localized: "Pages"), FileFacts.pages(pages))) }
         if let seconds = file.durationSeconds, seconds > 0 { rows.append(.init(String(localized: "Duration"), FileFacts.duration(seconds))) }
+        // Exact here, where the web gives it on hover.
+        if let words = file.wordCount, words > 0 { rows.append(.init(String(localized: "Words"), FileFacts.exactWords(words))) }
         if let codec = file.codec { rows.append(.init(String(localized: "Codec"), codec)) }
         if let bitrate = file.bitrate, bitrate > 0 { rows.append(.init(String(localized: "Bitrate"), FileFacts.bitrate(bitrate))) }
         if !file.filepath.isEmpty {
@@ -346,12 +348,14 @@ extension BookDetail.File {
     /// The File's label among its Book's Files, as the web's `fileLabel`.
     var label: String { displayName.isEmpty ? FileTypes.label(fileType) : displayName }
 
-    /// The quiet line under the File's name on its page: length, pages, the
-    /// audio's codec and bitrate, and size, as the web's `fileHeaderFacts`.
+    /// The quiet line under the File's name on its page: length, pages or
+    /// words, the audio's codec and bitrate, and size, as the web's
+    /// `fileHeaderFacts`.
     var headerFacts: [String] {
         var facts: [String] = []
         if let seconds = durationSeconds, seconds > 0 { facts.append(FileFacts.duration(seconds)) }
         if let pages = pageCount, pages > 0 { facts.append(FileFacts.pages(pages)) }
+        if let words = wordCount, words > 0 { facts.append(FileFacts.words(words)) }
         if let codec { facts.append(codec) }
         if let bitrate, bitrate > 0 { facts.append(FileFacts.bitrate(bitrate)) }
         facts.append(FileFacts.size(sizeBytes))

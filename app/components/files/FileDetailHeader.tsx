@@ -1,6 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import type { ReactNode } from "react";
 
+import FactsLine from "@/components/common/FactsLine";
 import { fileHeaderFacts } from "@/components/files/fileFacts";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import LabelGrid, { type LabelGridRow } from "@/components/library/LabelGrid";
@@ -124,7 +125,7 @@ const FileDetailHeader = ({
             <Badge className="px-1.5 py-0 text-[10px]" variant="outline">
               {fileTypeLabel(file.file_type)}
             </Badge>
-            {fileHeaderFacts(file).join(" · ")}
+            <FactsLine facts={fileHeaderFacts(file)} />
           </p>
         </div>
         {actions}
