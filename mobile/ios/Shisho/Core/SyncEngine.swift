@@ -72,11 +72,12 @@ final class SyncEngine: Sendable {
     /// Fetches Reading Stats again for every range kept, and all time and
     /// this year always, so they count what the journal just sent (ADR
     /// 0024). A server that doesn't list them keeps the copy as it was.
-    func fetchStats() async throws {
+    func fetchStats(only: Int?? = nil) async throws {
         guard capabilities().contains(Shishoapp.Capability.readingStats.rawValue) else { return }
         var ranges = Set(try store.statsRanges())
         ranges.insert(nil)
         ranges.insert(Calendar.current.component(.year, from: Date()))
+        if let only { ranges = [only] }
         for year in ranges.sorted(by: { ($0 ?? 0) < ($1 ?? 0) }) {
             let began = Date()
             let stats = try await client.stats(year: year)

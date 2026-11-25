@@ -224,12 +224,22 @@ extension CatalogStore {
             type = .readThroughDelete
             if id > 0 {
                 payload = try encoder.encode(Shishoapp.JournalReadThroughDeletePayload(readThroughId: id, day: day))
-            } else if let bookID {
-                // Made here and not confirmed: only the one underway can be
-                // named before the feed brings its id.
-                payload = try encoder.encode(Shishoapp.JournalReadThroughDeletePayload(bookId: bookID, day: day))
             } else {
-                return nil
+                // Made here and not confirmed. One a status choice made that
+                // hasn't been sent goes with it, as if never chosen.
+                let made = [Shishoapp.JournalEventType.readThroughStart, .readThroughFinish].map(\.rawValue)
+                try db.execute(sql: "DELETE FROM journal WHERE seq = ? AND type IN (?, ?) AND held_for IS NULL",
+                               arguments: [-id, made[0], made[1]])
+                if db.changesCount > 0 {
+                    try rebuildLayer(db)
+                    return nil
+                }
+                // Otherwise only the one underway can be named before the
+                // feed brings its id.
+                let underway = try Bool.fetchOne(db, sql: "SELECT outcome = 'underway' FROM read_throughs WHERE id = ?",
+                                                 arguments: [id]) ?? false
+                guard underway, let bookID else { return nil }
+                payload = try encoder.encode(Shishoapp.JournalReadThroughDeletePayload(bookId: bookID, day: day))
             }
         case .markReference(let id):
             (type, payload, bookID) = (.referenceMark, try book(id), id)

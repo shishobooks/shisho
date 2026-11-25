@@ -69,6 +69,14 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertFalse(confirmed[0].pending)
     }
 
+    func testDeletingAReadThroughNotYetSentDropsItsChoice() throws {
+        try store.record(.finish(book: 1), at: now)
+        let id = try XCTUnwrap(store.pool.read { try CatalogStore.history($0) }.first?.id)
+        try store.record(.deleteReadThrough(id: id), at: now)
+        XCTAssertTrue(try store.pool.read { try CatalogStore.history($0) }.isEmpty)
+        XCTAssertEqual(try journalTypes(), [])
+    }
+
     func testARefusedChangeFallsAway() throws {
         try store.record(.rating(book: 2, units: 18), at: now)
         XCTAssertEqual(try store.pool.read { try CatalogStore.standing($0, bookID: 2) }.rating, 18)
@@ -194,5 +202,39 @@ final class ReadingRecordTests: XCTestCase {
         let totals = try allTime().stats.totals
         XCTAssertEqual(totals.finished, 1)
         XCTAssertEqual(totals.didNotFinish, 1)
+    }
+}
+
+/// The status menu and Reading History word things as the web does.
+final class ReadingWordingTests: XCTestCase {
+    func testTheStatusMenuOffersTheWebsTransitions() {
+        XCTAssertEqual(ReadingTransitions.available("currently_reading"), [.pause, .finish, .abandon])
+        XCTAssertEqual(ReadingTransitions.available("paused"), [.resume, .finish, .abandon])
+        XCTAssertEqual(ReadingTransitions.available(nil), [.start, .finish])
+        XCTAssertEqual(ReadingTransitions.label(.start, status: "read", readBefore: true), "Read again")
+        XCTAssertEqual(ReadingTransitions.label(.start, status: "reference", readBefore: false), "Start reading")
+        XCTAssertEqual(ReadingTransitions.label(.start, status: "reference", readBefore: true), "Read again")
+        XCTAssertFalse(ReadingTransitions.canQueue("paused"))
+        XCTAssertTrue(ReadingTransitions.canQueue("read"))
+    }
+
+    func testHistoryDatesReadAsTheWebsDo() {
+        func entry(_ outcome: String, _ begin: String?, _ end: String?) -> HistoryEntry {
+            HistoryEntry(id: 1, book: nil, title: "", authors: "", outcome: outcome, paused: false, beginDay: begin, endDay: end, pending: false)
+        }
+        XCTAssertEqual(HistoryText.days(entry("underway", "2026-03-01", nil)), "Started Mar 1, 2026")
+        XCTAssertEqual(HistoryText.days(entry("finished", "2026-03-01", "2026-03-09")), "Mar 1, 2026 to Mar 9, 2026")
+        XCTAssertEqual(HistoryText.days(entry("finished", nil, "2026-03-09")), "Ended Mar 9, 2026, start date unknown")
+        XCTAssertEqual(HistoryText.days(entry("abandoned", nil, nil)), "Dates unknown")
+    }
+
+    func testMovesFollowTheWebsRule() {
+        var order = [1, 2, 3, 4]
+        ReadingLayer.move(4, after: nil, in: &order)
+        XCTAssertEqual(order, [4, 1, 2, 3])
+        ReadingLayer.move(4, after: 2, in: &order)
+        XCTAssertEqual(order, [1, 2, 4, 3])
+        ReadingLayer.move(1, after: 9, in: &order)
+        XCTAssertEqual(order, [1, 2, 4, 3], "a Book whose neighbor is gone stays where it is")
     }
 }

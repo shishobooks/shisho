@@ -63,6 +63,8 @@ While a book is **Reference**:
 
 To stop treating a book as Reference, choose another status. **Mark as read**, **Add to To Read**, and **Start reading** (**Read again** on a book you read before) each clear it, and starting sends the book's main files back to the start, as it always does. **Remove from Reference** clears it and records nothing: the book shows **Read** or **Did Not Finish** again if you read it before, or no status if you never did, and a book you never read starts a Read-through the next time you turn past its first page.
 
+A status chosen in the [Shisho app](./shisho-app.md#your-reading-record) while it was offline counts from when you chose it, so a later choice made elsewhere wins when the app syncs.
+
 ## Reading on Devices
 
 [KOReader](./koreader.md) and a [Kobo](./kobo-sync.md#reading-progress) can sync your reading with Shisho, which starts, resumes, and finishes Read-throughs, with the same [rereading](#starting-and-finishing-automatically) rule as reading in Shisho.

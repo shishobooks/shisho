@@ -5,6 +5,7 @@ import SwiftUI
 struct ListsView: View {
     @Environment(AppModel.self) private var model
     @State private var lists: [ListSummary]?
+    @State private var making = false
 
     var body: some View {
         @Bindable var model = model
@@ -21,7 +22,7 @@ struct ListsView: View {
                     if let lists {
                         if lists.isEmpty {
                             EmptyNotice(title: String(localized: "No Lists yet"),
-                                        message: String(localized: "Lists you make on the web, and Lists shared with you, appear here."),
+                                        message: String(localized: "Lists you make, and Lists shared with you, appear here."),
                                         icon: .list)
                                 .accessibilityIdentifier("lists.empty")
                         }
@@ -50,8 +51,28 @@ struct ListsView: View {
             .refreshable { await model.syncNow() }
             .navigationTitle("Lists")
             .navigationBarTitleDisplayMode(.large)
-            .toolbar { RootToolbar() }
+            .toolbar {
+                if model.offers(.lists) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { making = true } label: {
+                            Icon(.plus, size: 20, relativeTo: nil)
+                                .foregroundStyle(Theme.foreground)
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .accessibilityLabel(String(localized: "New List"))
+                        .accessibilityIdentifier("lists.new")
+                    }
+                }
+                RootToolbar()
+            }
             .routeDestinations()
+            .sheet(isPresented: $making) {
+                ListFormSheet(title: String(localized: "New List")) { name, ordered in
+                    if let id = model.change(.createList(name: name, description: nil, ordered: ordered)) {
+                        model.push(.list(id: id, name: name))
+                    }
+                }
+            }
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $lists) { db in
             try CatalogStore.lists(db)
@@ -110,6 +131,22 @@ struct ListDetailView: View {
     @State private var list: ListSummary??
     @State private var books: [BookSummary]?
     @State private var downloadable: DownloadAllButton.Files?
+    @State private var abilities: ListAbilities?
+    @State private var editing = false
+    @State private var renaming = false
+    @State private var confirmingDelete = false
+
+    /// What the user may do with the List here.
+    struct ListAbilities: Equatable, Sendable {
+        var ordered: Bool
+        var permission: String
+    }
+
+    private var canEditBooks: Bool {
+        model.offers(.lists) && ["owner", "editor", "manager"].contains(abilities?.permission ?? "")
+    }
+    private var canRename: Bool { model.offers(.lists) && ["owner", "manager"].contains(abilities?.permission ?? "") }
+    private var canDelete: Bool { model.offers(.lists) && abilities?.permission == "owner" }
 
     var body: some View {
         GeometryReader { geometry in
@@ -160,6 +197,53 @@ struct ListDetailView: View {
                     DownloadAllButton(files: downloadable)
                 }
             }
+            if canEditBooks || canRename || canDelete {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        if canEditBooks, !(books ?? []).isEmpty {
+                            Button { editing = true } label: {
+                                Label(abilities?.ordered == true ? "Reorder or Remove Books" : "Remove Books", menuIcon: .gripVertical)
+                            }
+                            .accessibilityIdentifier("list.edit")
+                        }
+                        if canRename {
+                            Button { renaming = true } label: { Label("Rename", menuIcon: .pencil) }
+                                .accessibilityIdentifier("list.rename")
+                        }
+                        if canDelete {
+                            Button(role: .destructive) { confirmingDelete = true } label: { Label("Delete List", menuIcon: .trash) }
+                                .accessibilityIdentifier("list.delete")
+                        }
+                    } label: {
+                        Icon(.ellipsis, size: 20, relativeTo: nil)
+                            .foregroundStyle(Theme.foreground)
+                            .frame(minWidth: 44, minHeight: 44)
+                    }
+                    .accessibilityLabel(String(localized: "List actions"))
+                    .accessibilityIdentifier("list.menu")
+                }
+            }
+        }
+        .sheet(isPresented: $editing) {
+            ListEditSheet(listID: listID, ordered: abilities?.ordered ?? false)
+        }
+        .sheet(isPresented: $renaming) {
+            ListFormSheet(title: String(localized: "Rename List"), name: (list ?? nil)?.name ?? initialName, asksOrdered: false) { name, _ in
+                model.change(.renameList(id: listID, name: name))
+            }
+        }
+        .alert(String(localized: "Delete this List?"), isPresented: $confirmingDelete) {
+            Button(String(localized: "Delete"), role: .destructive) {
+                model.change(.deleteList(id: listID))
+                model.popToRoot(.lists)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("The List goes for everyone it's shared with. The Books in it stay in your Libraries.")
+        }
+        .observing(model.session?.store, id: listID, into: $abilities) { [listID] db in
+            try CatalogStore.listAbilities(db, listID: listID).map { ListAbilities(ordered: $0.ordered, permission: $0.permission) }
+                ?? ListAbilities(ordered: false, permission: "")
         }
         .observing(model.session?.store, id: listID, into: $downloadable) { [listID] db in
             try DownloadAllButton.Files.fetch(db, listID: listID)
@@ -192,5 +276,69 @@ enum SharePermission {
         case "manager": String(localized: "can manage")
         default: permission
         }
+    }
+}
+
+/// A List's Books to remove, and in an ordered List, to drag into a new
+/// order, offline or not. The latest move of each Book wins when it syncs.
+private struct ListEditSheet: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let listID: Int
+    let ordered: Bool
+
+    @State private var books: [BookSummary]?
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(Array((books ?? []).enumerated()), id: \.element.id) { index, book in
+                    BookRow(book: book, place: ordered ? index + 1 : nil)
+                        .accessibilityIdentifier("list.edit.row")
+                        .accessibilityActions {
+                            if ordered, index > 0 {
+                                Button(String(localized: "Move up")) { move(from: index, to: index - 1) }
+                            }
+                            if ordered, index < (books?.count ?? 0) - 1 {
+                                Button(String(localized: "Move down")) { move(from: index, to: index + 1) }
+                            }
+                            Button(String(localized: "Remove from List")) { model.change(.removeFromList(id: listID, book: book.id)) }
+                        }
+                }
+                .onMove(perform: ordered ? { source, destination in
+                    guard let from = source.first else { return }
+                    move(from: from, to: destination > from ? destination - 1 : destination)
+                } : nil)
+                .onDelete { offsets in
+                    for index in offsets {
+                        if let book = books?[index] { model.change(.removeFromList(id: listID, book: book.id)) }
+                    }
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle(ordered ? String(localized: "Reorder or Remove") : String(localized: "Remove Books"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done")) { dismiss() }
+                        .accessibilityIdentifier("list.edit.done")
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+        .observing(model.session?.store, id: listID, into: $books) { [listID] db in
+            // The manual order when it has one, which this sheet changes.
+            let order = try CatalogStore.listOrder(db, listID: listID)
+            let byID = Dictionary(try CatalogStore.listBooks(db, listID: listID).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return order.compactMap { byID[$0] }
+        }
+    }
+
+    private func move(from: Int, to: Int) {
+        guard var order = books?.map(\.id), order.indices.contains(from), from != to else { return }
+        let id = order.remove(at: from)
+        let target = min(max(0, to), order.count)
+        order.insert(id, at: target)
+        model.change(.moveInList(id: listID, book: id, after: target == 0 ? nil : order[target - 1]))
     }
 }

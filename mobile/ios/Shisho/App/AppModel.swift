@@ -105,6 +105,10 @@ final class AppModel {
         get { navigation.path(.library) }
         set { navigation.setPath(newValue, on: .library) }
     }
+    var readingPath: [Route] {
+        get { navigation.path(.reading) }
+        set { navigation.setPath(newValue, on: .reading) }
+    }
     var listsPath: [Route] {
         get { navigation.path(.lists) }
         set { navigation.setPath(newValue, on: .lists) }
@@ -541,6 +545,17 @@ final class AppModel {
     }
 
     // MARK: - The reading record
+
+    /// Fetches Reading Stats for a year, or all time, that the device has
+    /// no copy of yet. Offline, the page says it needs a connection.
+    func loadStats(year: Int?) async {
+        guard let session, networkAvailable else { return }
+        do {
+            try await session.sync.fetchStats(only: .some(year))
+        } catch {
+            await Diagnostics.shared.log(.sync, "reading stats not fetched: \(Diagnostics.describe(error))")
+        }
+    }
 
     /// The account's server lists capability.
     func offers(_ capability: Shishoapp.Capability) -> Bool {
@@ -1260,7 +1275,7 @@ enum Messages {
 
 /// The app's tabs.
 enum AppTab: Hashable {
-    case library, lists, downloads
+    case library, reading, lists, downloads
 }
 
 /// Each tab's pages, and which tabs' searches are active. Every change to a
@@ -1330,6 +1345,12 @@ enum Route: Hashable {
     case search
     /// The Download settings, from the Downloads tab's toolbar.
     case downloadSettings
+    /// The Reading tab's pages: every Book underway, To Read, Reading
+    /// History, and Reading Stats.
+    case currentlyReading
+    case toRead
+    case history
+    case stats
 }
 
 /// The File open in a reader, which records reading whatever the screen

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The signed-in app: the Library, Lists, and Downloads tabs of the prototype's native
+/// The signed-in app: the Library, Reading, Lists, and Downloads tabs of the prototype's native
 /// structure (variant E), each with its own navigation, the mini player
 /// above the tab bar on every one, and the Account sheet any tab opens.
 struct MainTabs: View {
@@ -17,6 +17,10 @@ struct MainTabs: View {
                 .withMiniPlayer()
                 .environment(\.appTab, .library)
                 .tag(AppTab.library)
+            ReadingView()
+                .withMiniPlayer()
+                .environment(\.appTab, .reading)
+                .tag(AppTab.reading)
             ListsView()
                 .withMiniPlayer()
                 .environment(\.appTab, .lists)
@@ -79,6 +83,7 @@ struct AppTabBar: View {
     private var tabs: some View {
         HStack(spacing: 0) {
             item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
+            item(.reading, String(localized: "Reading"), icon: .bookOpen, identifier: "tab.reading")
             item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
             item(.downloads, String(localized: "Downloads"), icon: .download, identifier: "tab.downloads",
                  badge: downloading ?? 0)
@@ -267,6 +272,14 @@ private struct RouteDestination: View {
             SearchView()
         case .downloadSettings:
             DownloadSettingsView()
+        case .currentlyReading:
+            CurrentlyReadingView()
+        case .toRead:
+            ToReadView()
+        case .history:
+            ReadingHistoryView()
+        case .stats:
+            ReadingStatsView()
         }
     }
 }

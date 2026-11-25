@@ -38,12 +38,13 @@ struct ReadingStats: Equatable, Sendable {
 extension CatalogStore {
     // MARK: - Currently Reading and To Read
 
-    /// The Books with a Read-through underway, the one read most recently
-    /// first, then the paused ones. A Reference Book never has one.
+    /// The Books being read, the one read most recently first, as the web's
+    /// Currently Reading page lists them: a paused one waits until it's
+    /// resumed, and a Reference Book never has a Read-through underway.
     static func currentlyReading(_ db: Database) throws -> [BookSummary] {
         try summaries(db, rows: Row.fetchAll(db, sql: summarySQL + """
-             JOIN read_throughs rt ON rt.book_id = b.id AND rt.outcome = 'underway'
-            ORDER BY rt.paused, MAX(COALESCE(rt.last_read_at, 0),
+             JOIN read_throughs rt ON rt.book_id = b.id AND rt.outcome = 'underway' AND NOT rt.paused
+            ORDER BY MAX(COALESCE(rt.last_read_at, 0),
                 COALESCE((SELECT MAX(lp.updated_at) FROM local_positions lp JOIN book_files f ON f.id = lp.file_id WHERE f.book_id = b.id), 0)) DESC,
                 rt.begin_day DESC, b.id
             """))
