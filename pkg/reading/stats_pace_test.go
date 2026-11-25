@@ -42,7 +42,7 @@ func (f *statsFixture) normalMonth(epub *models.File, day time.Time) {
 	f.session(timed(epub, day.Add(6*time.Hour), 60, 0.239, 0.371))
 }
 
-func TestStats_PaceCreditsASkipUpToTheReadersLimit(t *testing.T) {
+func TestStats_PaceLeavesOutASkipAndCreditsItsTimeAtTheReadersAverage(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	book := createBook(t, f.db, "Dune")
@@ -53,13 +53,32 @@ func TestStats_PaceCreditsASkipUpToTheReadersLimit(t *testing.T) {
 	// minute.
 	f.session(timed(epub, day.Add(8*time.Hour), 2, 0.371, 0.771))
 
-	// The reader's limit is the upper quartile of their paces, 250, plus
-	// three times the spread between quartiles: 367 words a minute. The skip
-	// is credited two minutes at that pace, 734 words.
+	// The reader's paces have quartiles of 220 and 250, so anything over
+	// 250 plus three times that spread, 367 words a minute, is a skip.
+	// Pace is the average of the rest, 37,100 words in 155 minutes, and
+	// Words read credits the skip's two minutes at that average.
 	resp := f.stats("?year=2026")
-	assert.InDelta(t, 37_834, resp.Totals.WordsRead, 1, "37,100 words read, and the skip at the limit")
 	require.NotNil(t, resp.Pace.WordsPerMinute)
-	assert.InDelta(t, 37_834.0/157, *resp.Pace.WordsPerMinute, 0.05)
+	assert.InDelta(t, 37_100.0/155, *resp.Pace.WordsPerMinute, 0.01)
+	assert.InDelta(t, 37_100+2*37_100.0/155, resp.Totals.WordsRead, 1)
+}
+
+func TestStats_PaceLeavesOutTimeWithABookLeftOpen(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	f.normalMonth(epub, day)
+	f.session(timed(epub, day.Add(8*time.Hour), 2, 0.371, 0.771))
+	// Twenty minutes open on a page while away: 10 words a minute, under
+	// the quartile of 220 less three times the spread, 150.
+	f.session(timed(epub, day.Add(10*time.Hour), 20, 0.771, 0.773))
+
+	resp := f.stats("?year=2026")
+	require.NotNil(t, resp.Pace.WordsPerMinute)
+	assert.InDelta(t, 37_100.0/155, *resp.Pace.WordsPerMinute, 0.01, "the idle time doesn't slow it")
+	assert.InDelta(t, 37_100+2*37_100.0/155+200, resp.Totals.WordsRead, 1, "the words it covered still count")
 }
 
 func TestStats_PaceBlendsDifferentKindsOfReading(t *testing.T) {
@@ -93,9 +112,13 @@ func TestStats_PaceLearnsTheLimitFromAllTime(t *testing.T) {
 	f.session(timed(epub, day, 30, 0.000, 0.075))
 	f.session(timed(epub, day.Add(2*time.Hour), 2, 0.075, 0.475))
 
-	// The limit from all five timed Sessions is 367 words a minute.
+	// What's normal comes from all six timed Sessions: the skip is over
+	// 367 words a minute, and the other five average 44,600 words in 185
+	// minutes.
 	resp := f.stats("?year=2026")
-	assert.InDelta(t, 7500+734, resp.Totals.WordsRead, 1)
+	assert.InDelta(t, 7500+2*44_600.0/185, resp.Totals.WordsRead, 1)
+	require.NotNil(t, resp.Pace.WordsPerMinute)
+	assert.InDelta(t, 250, *resp.Pace.WordsPerMinute, 0.01, "the year's own reading, without the skip")
 }
 
 func TestStats_PaceCountsEverythingWithTooFewSessionsToJudge(t *testing.T) {

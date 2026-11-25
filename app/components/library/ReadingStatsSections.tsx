@@ -568,8 +568,8 @@ export const PaceList = ({ pace }: { pace: ReadingStatsPace }) => {
         ))}
       </ul>
       <p className="mt-3 text-xs text-muted-foreground">
-        From timed reading. A skip ahead counts as if read at the fastest pace
-        that's normal for you.
+        From timed reading, leaving out skips ahead and time with a book left
+        open, judged against your own usual pace.
       </p>
     </>
   );

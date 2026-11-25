@@ -65,7 +65,7 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 			return nil, err
 		}
 	}
-	resp.Pace, resp.Totals.WordsRead = paceOf(sessions, paceLimits(everySession), rng, loc)
+	resp.Pace, resp.Totals.WordsRead = paceOf(sessions, paceNorms(everySession), rng, loc)
 
 	rereads := rereadIDs(readThroughs)
 	var finished []*models.ReadThrough

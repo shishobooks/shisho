@@ -10,26 +10,27 @@ import (
 
 // What counts toward ReadingStatsPace and ReadingStatsTotals.WordsRead.
 //
-// A skip ahead, such as a jump through the contents, would count a stretch
-// of a book as read in a few seconds. Rather than guess how fast people
-// read, each user's own timed Sessions say what's normal for them: the limit
-// for a kind is Tukey's outer fence on the log of their paces, the upper
-// quartile plus fenceSpreads times the distance between quartiles, with
-// each Session weighted by its time. Anchoring at the upper quartile lets a
-// reader whose books differ in pace keep the faster ones. A Session faster
-// than the limit is credited as if read at the limit for its time.
+// A skip ahead, such as a jump through the contents, counts a stretch of a
+// book as read in seconds, and a book left open while away counts time with
+// no reading. Rather than guess how fast people read, each user's own timed
+// Sessions say what's normal for them: Tukey's outer fences on the log of
+// their paces, the quartiles widened by fenceSpreads times the distance
+// between them, with each Session weighted by its time. A Session outside
+// the fences is left out of Pace. In Words read, a skip's time counts at
+// the user's average pace over the Sessions inside the fences, and a slow
+// Session counts what it covered, which was real progress.
 const (
 	fenceSpreads = 3
-	// minLimitSessions is how many timed Sessions of a kind it takes to
+	// minNormSessions is how many timed Sessions of a kind it takes to
 	// judge what's normal; with fewer, every Session counts in full.
-	minLimitSessions = 5
+	minNormSessions = 5
 	// minPaceSeconds is how much timed time a kind needs in the range
 	// before its pace means anything.
 	minPaceSeconds = 10 * 60
 )
 
 // minLogSpread floors the distance between quartiles at 10%, so a user
-// whose Sessions nearly all ran at one pace doesn't get a limit at that pace.
+// whose Sessions nearly all ran at one pace doesn't get fences at that pace.
 var minLogSpread = math.Log(1.1)
 
 // paceKind is the kind of length a Session covers.
@@ -66,9 +67,10 @@ func isTimed(s statsSession) bool {
 	return s.Measured || s.Source == models.ReadingSourceKobo
 }
 
-// weighted is a value and how much it counts.
+// weighted is a Session's log pace, weighted by its seconds, and what it
+// covered.
 type weighted struct {
-	value, weight float64
+	value, weight, covered float64
 }
 
 // weightedQuantile is the value at fraction q of points' total weight,
@@ -88,10 +90,19 @@ func weightedQuantile(points []weighted, q float64) float64 {
 	return points[len(points)-1].value
 }
 
-// paceLimits are the fastest pace that's normal for the user in each kind,
-// in length per second, from sessions, which should be all of theirs. Zero
-// where too few timed Sessions say.
-func paceLimits(sessions []statsSession) [paceKinds]float64 {
+// paceNorm is what's normal for the user in one kind, in length per second:
+// the slowest and fastest normal paces, and the average pace of the Sessions
+// between them. The zero value means too few timed Sessions to say.
+type paceNorm struct {
+	lower, upper, average float64
+}
+
+// known reports whether there were enough timed Sessions to say.
+func (n paceNorm) known() bool { return n.upper > 0 }
+
+// paceNorms are what's normal for the user in each kind, from sessions,
+// which should be all of theirs.
+func paceNorms(sessions []statsSession) [paceKinds]paceNorm {
 	var points [paceKinds][]weighted
 	for _, s := range sessions {
 		progress := s.EndPercentage - s.StartPercentage
@@ -100,20 +111,21 @@ func paceLimits(sessions []statsSession) [paceKinds]float64 {
 			continue
 		}
 		seconds := float64(s.Duration)
-		points[kind] = append(points[kind], weighted{value: math.Log(progress * length / seconds), weight: seconds})
+		covered := progress * length
+		points[kind] = append(points[kind], weighted{value: math.Log(covered / seconds), weight: seconds, covered: covered})
 	}
-	var limits [paceKinds]float64
-	for kind := range limits {
-		limits[kind] = fenceLimit(points[kind])
+	var norms [paceKinds]paceNorm
+	for kind := range norms {
+		norms[kind] = fenceNorm(points[kind])
 	}
-	return limits
+	return norms
 }
 
-// fenceLimit is Tukey's outer fence on points, the logs of one kind's paces,
-// back as a pace; zero with too few to judge.
-func fenceLimit(points []weighted) float64 {
-	if len(points) < minLimitSessions {
-		return 0
+// fenceNorm is Tukey's outer fences on points, one kind's Sessions, and the
+// average pace of those inside them; zero with too few to judge.
+func fenceNorm(points []weighted) paceNorm {
+	if len(points) < minNormSessions {
+		return paceNorm{}
 	}
 	slices.SortFunc(points, func(a, b weighted) int {
 		switch {
@@ -124,9 +136,17 @@ func fenceLimit(points []weighted) float64 {
 		}
 		return 0
 	})
-	upper := weightedQuantile(points, 0.75)
-	spread := max(upper-weightedQuantile(points, 0.25), minLogSpread)
-	return math.Exp(upper + fenceSpreads*spread)
+	lowerQuartile, upperQuartile := weightedQuantile(points, 0.25), weightedQuantile(points, 0.75)
+	spread := max(upperQuartile-lowerQuartile, minLogSpread)
+	lower, upper := lowerQuartile-fenceSpreads*spread, upperQuartile+fenceSpreads*spread
+	var covered, seconds float64
+	for _, p := range points {
+		if p.value >= lower && p.value <= upper {
+			covered += p.covered
+			seconds += p.weight
+		}
+	}
+	return paceNorm{lower: math.Exp(lower), upper: math.Exp(upper), average: covered / seconds}
 }
 
 // paceTally sums one kind's length covered and the time it took.
@@ -143,9 +163,9 @@ func (t paceTally) rate(per float64) *float64 {
 }
 
 // paceOf works out the range's pace and words read from the range's
-// sessions, crediting each timed one up to the user's limits, and counting
-// the share of each Session's time that falls in rng.
-func paceOf(sessions []statsSession, limits [paceKinds]float64, rng dayRange, loc *time.Location) (ReadingStatsPace, int) {
+// sessions, judging each timed one against what's normal for the user, and
+// counting the share of each Session's time that falls in rng.
+func paceOf(sessions []statsSession, norms [paceKinds]paceNorm, rng dayRange, loc *time.Location) (ReadingStatsPace, int) {
 	var tallies [paceKinds]paceTally
 	wordsRead := 0.0
 	for _, s := range sessions {
@@ -154,20 +174,25 @@ func paceOf(sessions []statsSession, limits [paceKinds]float64, rng dayRange, lo
 		if !ok || progress <= 0 {
 			continue
 		}
-		covered := progress * length
-		timed := isTimed(s)
-		seconds := float64(s.Duration)
-		if limit := limits[kind]; timed && limit > 0 {
-			covered = min(covered, seconds*limit)
-		}
 		share := shareInRange(s, rng, loc)
 		if share == 0 {
 			continue
 		}
-		if kind == paceWords {
-			wordsRead += covered * share
+		covered := progress * length
+		seconds := float64(s.Duration)
+		timed := isTimed(s)
+		norm := norms[kind]
+		// A Session with no time that still moved jumped there.
+		fast := timed && norm.known() && (seconds == 0 || covered/seconds > norm.upper)
+		slow := timed && norm.known() && seconds > 0 && covered/seconds < norm.lower
+		credited := covered
+		if fast {
+			credited = seconds * norm.average
 		}
-		if timed && seconds > 0 {
+		if kind == paceWords {
+			wordsRead += credited * share
+		}
+		if timed && seconds > 0 && !fast && !slow {
 			tallies[kind].covered += covered * share
 			tallies[kind].seconds += seconds * share
 		}
