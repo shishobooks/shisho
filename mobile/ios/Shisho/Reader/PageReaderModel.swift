@@ -58,9 +58,9 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     @ObservationIgnored private var waitingForConnection = false
     /// The last page showed, which finishes the Read-through.
     @ObservationIgnored private var readToEnd = false
-    /// This open downloaded the File, so a copy that won't open can go, to
-    /// be downloaded again on Try Again.
-    @ObservationIgnored private var fetchedToOpen = false
+    /// The copy this open downloaded, which can go if it won't open, to be
+    /// downloaded again on Try Again.
+    @ObservationIgnored private var fetchedCopy: UUID?
     @ObservationIgnored private var shownChapters: [ReaderChapter]
     /// When the last run of VoiceOver adjustments to the scrubber was.
     @ObservationIgnored private var lastAdjustment: Date?
@@ -150,7 +150,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         fileWatch?.cancel()
         source = nil
         waitingForConnection = false
-        fetchedToOpen = false
+        fetchedCopy = nil
         let opening = id
         if let current = try? await session.store.pool.read({ try CatalogStore.readingFile($0, fileID: opening) }) {
             file = current
@@ -172,7 +172,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
                 url = fetch.url
                 // One a background transfer finished meanwhile is a Download
                 // like any other, kept if it won't open.
-                fetchedToOpen = fetch.fetched
+                fetchedCopy = fetch.fetched
             }
         } catch {
             guard !closed else { return }
@@ -184,18 +184,16 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
             }
             return
         }
-        // Which copy this is, so a failure removes only it, not a newer one
-        // a background transfer put in its place meanwhile.
-        let copy = Self.fileIdentity(url)
         let opened: (pages: PageImageSource, sizes: [CGSize])
         do {
             opened = try await Self.open(url: url, file: file)
         } catch {
             guard !closed else { return }
             log("couldn't open the File: \(Diagnostics.describe(error))")
-            let stillThere = copy != nil && session.downloads.localFile(fileID: file.fileID).flatMap(Self.fileIdentity) == copy
-            if Self.removesCopy(after: error, fetchedHere: fetchedToOpen, stillThere: stillThere) {
-                session.downloads.remove([file.fileID])
+            // Only the copy this open downloaded: a newer one a transfer put
+            // in its place meanwhile stays.
+            if let fetchedCopy, Self.removesCopy(after: error) {
+                session.downloads.discard(fileID: file.fileID, copy: fetchedCopy)
             }
             phase = .failed(String(localized: "This book couldn't be opened."))
             return
@@ -238,20 +236,14 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         phase = .failed(ConnectionRules.book(session.client.reachability.connection))
     }
 
-    /// Whether a copy that won't open is removed, so Try Again downloads it
-    /// again: only one this open downloaded, still the one on the device,
-    /// and only when downloading it again could help, unlike a CBZ whose
-    /// pages the server couldn't read or a PDF with a password. One
-    /// downloaded before stays: failing under memory pressure, say on a
-    /// plane, mustn't cost the only copy.
-    nonisolated static func removesCopy(after error: Error, fetchedHere: Bool, stillThere: Bool) -> Bool {
-        fetchedHere && stillThere && error as? PDFPages.Failure != .locked
+    /// Whether a copy this open downloaded that won't open is removed, so
+    /// Try Again downloads it again: only when downloading it again could
+    /// help, unlike a CBZ whose pages the server couldn't read or a PDF with
+    /// a password. One downloaded before stays whatever the error: failing
+    /// under memory pressure, say on a plane, mustn't cost the only copy.
+    nonisolated static func removesCopy(after error: Error) -> Bool {
+        error as? PDFPages.Failure != .locked
             && ![CBZPages.Failure.noPages, .notThisCopy].contains(error as? CBZPages.Failure)
-    }
-
-    /// A file's identity on disk, which a copy moved into its place changes.
-    nonisolated private static func fileIdentity(_ url: URL) -> Int? {
-        (try? FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int) ?? nil
     }
 
     /// The pages and their shapes, read off the main thread.

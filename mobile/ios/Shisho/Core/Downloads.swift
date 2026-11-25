@@ -197,6 +197,9 @@ final class DownloadManager {
     var wait: DownloadRules.Wait? { DownloadRules.wait(wifiOnly: wifiOnly, network: network) }
 
     nonisolated let folder: URL
+    /// Each File's copy in the folder, put there and taken away one at a
+    /// time with the transfers' delegate.
+    nonisolated let copies: DownloadCopies
     @ObservationIgnored nonisolated private let store: CatalogStore
     @ObservationIgnored private let client: APIClient
     @ObservationIgnored private let accountID: String
@@ -260,6 +263,7 @@ final class DownloadManager {
         self.store = store
         accountID = account.id
         folder = account.folder.appendingPathComponent("Downloads", isDirectory: true)
+        copies = DownloadCopies(store: store, folder: folder)
         // A book finished while the reader held it goes now.
         if let pending = try? store.pool.read(CatalogStore.removePending), !pending.isEmpty {
             remove(pending)
@@ -299,7 +303,7 @@ final class DownloadManager {
 
     /// Where a File's Download is kept, whether or not it's there.
     nonisolated func location(fileID: Int, fileType: String) -> URL {
-        folder.appendingPathComponent("\(fileID).\(fileType)")
+        copies.location(fileID: fileID, fileType: fileType)
     }
 
     /// The File's Download on the device, or nil without a finished one.
@@ -336,14 +340,15 @@ final class DownloadManager {
     /// isn't on the device does: the reader needs all of it before it can
     /// show a page. It becomes a Download like any other, listed, removed by
     /// the user, and by Remove when finished. A background transfer of it
-    /// already under way isn't needed after this. fetched says whether this
-    /// call put the file there, rather than finding it on the device.
-    func fetchNow(fileID: Int) async throws -> (url: URL, fetched: Bool) {
-        if let local = localFile(fileID: fileID) { return (local, false) }
+    /// already under way isn't needed after this. fetched is the copy this
+    /// call put there, which only it may discard (`discard`), or nil for one
+    /// it found on the device.
+    func fetchNow(fileID: Int) async throws -> (url: URL, fetched: UUID?) {
+        if let local = localFile(fileID: fileID) { return (local, nil) }
         let fetched = try await client.download(fileID: fileID)
         defer { try? FileManager.default.removeItem(at: fetched) }
         // A background transfer of it may have finished meanwhile.
-        if let local = localFile(fileID: fileID) { return (local, false) }
+        if let local = localFile(fileID: fileID) { return (local, nil) }
         try store.queueDownloads([fileID])
         // One finished whose file is gone counts as wanted again.
         try store.requeueDownloads([fileID])
@@ -356,22 +361,15 @@ final class DownloadManager {
         running.remove(fileID)
         progress[fileID] = nil
         DownloadResume.drop(fileID: fileID, in: folder)
-        try DownloadSessionDelegate.prepare(folder)
-        let destination = location(fileID: fileID, fileType: row.fileType)
-        try? FileManager.default.removeItem(at: destination)
-        do {
-            try FileManager.default.moveItem(at: fetched, to: destination)
-        } catch {
+        guard let copy = try copies.publish(fileID: fileID, from: fetched) else {
             // A background transfer finishing at the same moment put the
-            // same File there first.
-            if let local = localFile(fileID: fileID) { return (local, false) }
-            throw error
+            // same File there first, or it was removed meanwhile.
+            if let local = localFile(fileID: fileID) { return (local, nil) }
+            throw CancellationError()
         }
-        let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? row.sizeBytes
-        _ = try store.markDownloaded(fileID: fileID, sizeBytes: size)
         log("file \(fileID): downloaded to open it")
         onChange?(fileID)
-        return (destination, true)
+        return (location(fileID: fileID, fileType: row.fileType), copy)
     }
 
     /// Stops a transfer and removes Downloads, freeing their space.
@@ -385,19 +383,48 @@ final class DownloadManager {
             return
         }
         for fileID in fileIDs {
-            if let id = transfers.drop(fileID: fileID) {
-                tasks.removeValue(forKey: id)?.cancel()
-            }
-            running.remove(fileID)
-            progress[fileID] = nil
-            failures[fileID] = nil
-            DownloadResume.drop(fileID: fileID, in: folder)
             if let row = rows.first(where: { $0.fileID == fileID }) {
                 try? FileManager.default.removeItem(at: location(fileID: fileID, fileType: row.fileType))
             }
-            onChange?(fileID)
+            forget(fileID)
         }
         log("removed \(fileIDs.map { "file \($0)" }.joined(separator: ", "))")
+    }
+
+    /// Stops a removed Download's transfer and forgets what it had done.
+    private func forget(_ fileID: Int) {
+        if let id = transfers.drop(fileID: fileID) {
+            tasks.removeValue(forKey: id)?.cancel()
+        }
+        running.remove(fileID)
+        progress[fileID] = nil
+        failures[fileID] = nil
+        DownloadResume.drop(fileID: fileID, in: folder)
+        onChange?(fileID)
+    }
+
+    /// Removes a copy an open downloaded (`fetchNow`) that won't open, so
+    /// Try Again downloads it again. Only that copy: a newer one a transfer
+    /// put in its place meanwhile stays, and a replacement on its way keeps
+    /// going.
+    func discard(fileID: Int, copy: UUID) {
+        let discarded: DownloadCopies.Discarded
+        do {
+            discarded = try copies.discard(fileID: fileID, copy: copy)
+        } catch {
+            log("couldn't remove file \(fileID)'s copy: \(Diagnostics.describe(error))")
+            return
+        }
+        switch discarded {
+        case .download:
+            log("file \(fileID): its copy won't open, so its Download is removed")
+            forget(fileID)
+        case .copy:
+            log("file \(fileID): its copy won't open, so it waits for the new one")
+            onChange?(fileID)
+        case .nothing:
+            break
+        }
     }
 
     func removeAll() {
@@ -487,7 +514,7 @@ final class DownloadManager {
 
     private func ensureSessions() {
         guard sessions.isEmpty, !stopped else { return }
-        let sink = DownloadSessionDelegate.Sink(owner: ObjectIdentifier(self), store: store, folder: folder) { [weak self] event in
+        let sink = DownloadSessionDelegate.Sink(owner: ObjectIdentifier(self), copies: copies) { [weak self] event in
             Task { @MainActor in self?.receive(event) }
         }
         for wifiOnly in [false, true] {
@@ -802,6 +829,61 @@ final class DownloadManager {
     }
 }
 
+/// Each File's copy in an account's Downloads folder, at one place per
+/// File. A copy is put there and taken away inside a write to the account's
+/// database, and its writes run one at a time, so the row and the file
+/// change together: an open discarding the copy it downloaded can't take a
+/// newer one a transfer puts there between its check and its delete. Used
+/// from the main actor and from the transfers' delegate.
+struct DownloadCopies: Sendable {
+    let store: CatalogStore
+    let folder: URL
+
+    /// What discarding a copy did.
+    enum Discarded: Equatable, Sendable {
+        /// The Download went with it.
+        case download
+        /// Only the copy went: the Download is on its way, as for a File
+        /// the server replaced, and its transfer goes on.
+        case copy
+        /// Another copy is there now, or none, and it stays.
+        case nothing
+    }
+
+    /// Where a File's copy is kept, whether or not it's there.
+    func location(fileID: Int, fileType: String) -> URL {
+        folder.appendingPathComponent("\(fileID).\(fileType)")
+    }
+
+    /// Moves a downloaded file into the File's place as its new copy, and
+    /// returns which copy it is. Nil, leaving the file where it is, when the
+    /// Download isn't on its way: removed meanwhile, or finished by another
+    /// transfer, whose copy of the same File stays.
+    func publish(fileID: Int, from file: URL) throws -> UUID? {
+        try store.pool.write { db in
+            guard let row = try CatalogStore.download(db, fileID: fileID), row.state == .queued else { return nil }
+            try DownloadSessionDelegate.prepare(folder)
+            let destination = location(fileID: fileID, fileType: row.fileType)
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.moveItem(at: file, to: destination)
+            let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? row.sizeBytes
+            return try CatalogStore.markDownloaded(db, fileID: fileID, sizeBytes: size)
+        }
+    }
+
+    /// Deletes copy if it's still the one in the File's place. A finished
+    /// Download goes with it; one on its way, as a File's replacement, stays
+    /// on its way without the copy.
+    func discard(fileID: Int, copy: UUID) throws -> Discarded {
+        try store.pool.write { db in
+            guard let row = try CatalogStore.download(db, fileID: fileID), row.copy == copy else { return .nothing }
+            try CatalogStore.discardCopy(db, fileID: fileID, finished: row.state == .done)
+            try? FileManager.default.removeItem(at: location(fileID: fileID, fileType: row.fileType))
+            return row.state == .done ? .download : .copy
+        }
+    }
+}
+
 /// What an interrupted transfer carries on from, one file per File in the
 /// Downloads folder. It holds the request, sign-in included, so it stays
 /// out of the database and out of backups.
@@ -882,11 +964,10 @@ final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, Senda
         case backgroundEventsFinished(String)
     }
 
-    /// Where events go: the account's database and folder, and its manager.
+    /// Where events go: the account's Downloads, and its manager.
     struct Sink: Sendable {
         let owner: ObjectIdentifier
-        let store: CatalogStore
-        let folder: URL
+        let copies: DownloadCopies
         let send: @Sendable (Event) -> Void
     }
 
@@ -919,22 +1000,9 @@ final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, Senda
             return
         }
         do {
-            guard let row = try sink.store.pool.read({ try CatalogStore.download($0, fileID: fileID) }), row.state == .queued else {
-                sink.send(.finished(fileID, id, kept: false))
-                return
-            }
-            try DownloadSessionDelegate.prepare(sink.folder)
-            let destination = sink.folder.appendingPathComponent("\(fileID).\(row.fileType)")
-            try? FileManager.default.removeItem(at: destination)
-            try FileManager.default.moveItem(at: location, to: destination)
-            let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? row.sizeBytes
-            let kept = try sink.store.markDownloaded(fileID: fileID, sizeBytes: size)
-            // Removed meanwhile, its file goes too. One finished meanwhile,
-            // as by opening it in the reader, keeps the file there, the
-            // same File's whichever transfer put it there.
-            if !kept, try sink.store.pool.read({ try CatalogStore.download($0, fileID: fileID) })?.state != .done {
-                try? FileManager.default.removeItem(at: destination)
-            }
+            // Not kept when it was removed meanwhile, or finished another
+            // way, as by opening it in the reader.
+            let kept = try sink.copies.publish(fileID: fileID, from: location) != nil
             sink.send(.finished(fileID, id, kept: kept))
         } catch {
             sink.send(.stopped(fileID, id, error, nil))

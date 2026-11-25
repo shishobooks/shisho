@@ -123,9 +123,9 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     @ObservationIgnored private var waitingForConnection = false
     /// A page at the end showed, which finishes the Read-through.
     @ObservationIgnored private var readToEnd = false
-    /// This open downloaded the book, so a copy that won't open can go, to
-    /// be downloaded again on Try Again.
-    @ObservationIgnored private var fetchedToOpen = false
+    /// The copy this open downloaded, which can go if it won't open, to be
+    /// downloaded again on Try Again.
+    @ObservationIgnored private var fetchedCopy: UUID?
 
     init(file: ReadingFile, session: AccountSession, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
@@ -233,7 +233,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         fileWatch?.cancel()
         let bookFile: URL
         waitingForConnection = false
-        fetchedToOpen = false
+        fetchedCopy = nil
         do {
             if let downloaded = session.downloads.localFile(fileID: file.fileID) {
                 bookFile = downloaded
@@ -250,7 +250,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
                 bookFile = fetch.url
                 // One a background transfer finished meanwhile is a Download
                 // like any other, kept if it won't open.
-                fetchedToOpen = fetch.fetched
+                fetchedCopy = fetch.fetched
             }
         } catch {
             guard !closed else { return }
@@ -686,8 +686,9 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         // A copy this open just downloaded that won't open is downloaded
         // again on Try Again. One downloaded before stays: a page that fails
         // under memory pressure, say on a plane, mustn't cost the only copy.
-        if phase == .loading, fetchedToOpen {
-            session.downloads.remove([file.fileID])
+        // So does a newer one a transfer put in its place meanwhile.
+        if phase == .loading, let fetchedCopy {
+            session.downloads.discard(fileID: file.fileID, copy: fetchedCopy)
         }
         phase = .failed(String(localized: "This book couldn't be opened."))
         // The session ends with the page; time on the error screen isn't

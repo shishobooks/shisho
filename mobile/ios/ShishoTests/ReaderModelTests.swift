@@ -84,7 +84,7 @@ final class ReaderModelTests: XCTestCase {
           "cover_version":"1-1","files":[{"id":8,"file_type":"epub","file_role":"main","size_bytes":10}]}}],"cursor":2}
         """.utf8)))
         try session.store.queueDownloads([8])
-        XCTAssertTrue(try session.store.markDownloaded(fileID: 8, sizeBytes: 3))
+        XCTAssertNotNil(try session.store.markDownloaded(fileID: 8, sizeBytes: 3))
         let url = session.downloads.location(fileID: 8, fileType: "epub")
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("abc".utf8).write(to: url)
