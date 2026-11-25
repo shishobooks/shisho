@@ -857,9 +857,9 @@ struct DownloadCopies: Sendable {
     /// Download isn't on its way: removed meanwhile, or finished by another
     /// transfer, whose copy of the same File stays.
     func publish(fileID: Int, from file: URL) throws -> UUID? {
-        try store.pool.write { db in
+        try keepingReplaced { db, replaced in
             guard let row = try CatalogStore.download(db, fileID: fileID), row.state == .queued else { return nil }
-            return try place(file, row: row, in: db)
+            return try place(file, row: row, in: db, replaced: &replaced)
         }
     }
 
@@ -874,32 +874,66 @@ struct DownloadCopies: Sendable {
     }
 
     /// Puts a file an open downloaded (`DownloadManager.fetchNow`) in the
-    /// File's place as a Download, unless a transfer put a copy there first.
-    /// One that failed, or whose file is gone, takes it.
+    /// File's place as a Download, unless a transfer put a copy there first,
+    /// which leaves its Download as it is. One that failed, or whose file is
+    /// gone, takes it. A File that left the catalog meanwhile gets nothing,
+    /// even while its Download's row waits to be removed.
     func publishFetched(fileID: Int, from file: URL) throws -> Fetched {
-        try store.pool.write { db in
-            _ = try CatalogStore.queueDownloads(db, [fileID])
-            guard let row = try CatalogStore.download(db, fileID: fileID) else { return .unknown }
-            let destination = location(fileID: fileID, fileType: row.fileType)
-            if row.state == .done || row.replacing, FileManager.default.fileExists(atPath: destination.path) {
-                return .found(destination)
+        try keepingReplaced { db, replaced in
+            guard try CatalogStore.isDownloadable(db, fileID: fileID) else { return .unknown }
+            if let row = try CatalogStore.download(db, fileID: fileID), row.state == .done || row.replacing {
+                let destination = location(fileID: fileID, fileType: row.fileType)
+                if FileManager.default.fileExists(atPath: destination.path) { return .found(destination) }
             }
+            _ = try CatalogStore.queueDownloads(db, [fileID])
             try CatalogStore.requeueDownloads(db, [fileID])
-            guard let copy = try place(file, row: row, in: db) else { return .unknown }
-            return .published(destination, copy: copy)
+            guard let row = try CatalogStore.download(db, fileID: fileID),
+                  let copy = try place(file, row: row, in: db, replaced: &replaced)
+            else { return .unknown }
+            return .published(location(fileID: fileID, fileType: row.fileType), copy: copy)
+        }
+    }
+
+    /// A copy moved out of its place by a new one, kept aside until the
+    /// write that put the new one there commits.
+    private struct Replaced {
+        let copy: URL
+        let place: URL
+    }
+
+    /// Runs a write that may put a copy in place. The copy it replaces goes
+    /// back if the write doesn't commit, as on a full disk, so the bytes in
+    /// place stay the copy the row names.
+    private func keepingReplaced<T>(_ update: (Database, inout Replaced?) throws -> T) throws -> T {
+        var replaced: Replaced?
+        do {
+            let result = try store.pool.write { db in try update(db, &replaced) }
+            if let replaced { try? FileManager.default.removeItem(at: replaced.copy) }
+            return result
+        } catch {
+            if let replaced {
+                _ = try? FileManager.default.replaceItemAt(replaced.place, withItemAt: replaced.copy, options: .usingNewMetadataOnly)
+            }
+            throw error
         }
     }
 
     /// Records the new copy, then moves file over whatever is in its place
-    /// in one step: a move that fails rolls the row back and leaves the copy
-    /// that was there.
-    private func place(_ file: URL, row: DownloadRow, in db: Database) throws -> UUID? {
+    /// in one step, keeping the copy that was there aside (`keepingReplaced`):
+    /// a move that fails rolls the row back and leaves that copy in place.
+    private func place(_ file: URL, row: DownloadRow, in db: Database, replaced: inout Replaced?) throws -> UUID? {
         let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? row.sizeBytes
         guard let copy = try CatalogStore.markDownloaded(db, fileID: row.fileID, sizeBytes: size) else { return nil }
         try DownloadSessionDelegate.prepare(folder)
         let destination = location(fileID: row.fileID, fileType: row.fileType)
         if FileManager.default.fileExists(atPath: destination.path) {
-            _ = try FileManager.default.replaceItemAt(destination, withItemAt: file, options: .usingNewMetadataOnly)
+            // Named apart from every File's place, so the launch's sweep
+            // deletes one a crash leaves behind.
+            let aside = "\(destination.lastPathComponent).replaced"
+            try? FileManager.default.removeItem(at: folder.appendingPathComponent(aside))
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: file, backupItemName: aside,
+                                                      options: [.usingNewMetadataOnly, .withoutDeletingBackupItem])
+            replaced = Replaced(copy: folder.appendingPathComponent(aside), place: destination)
         } else {
             try FileManager.default.moveItem(at: file, to: destination)
         }

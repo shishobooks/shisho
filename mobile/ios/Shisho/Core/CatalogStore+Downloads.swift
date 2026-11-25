@@ -91,6 +91,13 @@ extension CatalogStore {
 
     // MARK: - Reading
 
+    /// Whether fileID is a File in the catalog of a type a Download can be
+    /// made of.
+    static func isDownloadable(_ db: Database, fileID: Int) throws -> Bool {
+        try Bool.fetchOne(db, sql: "SELECT 1 FROM book_files WHERE id = ? AND file_type IN (\(downloadableTypes))",
+                          arguments: [fileID]) ?? false
+    }
+
     static func downloads(_ db: Database) throws -> [DownloadRow] {
         try Row.fetchAll(db, sql: """
             SELECT file_id, file_type, state, size_bytes, error, replacing, copy_id FROM downloads ORDER BY requested_at, file_id

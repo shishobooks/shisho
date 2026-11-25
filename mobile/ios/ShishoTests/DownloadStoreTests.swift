@@ -1,3 +1,4 @@
+import GRDB
 import ShishoAPI
 import XCTest
 @testable import Shisho
@@ -409,6 +410,54 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 99) })
     }
 
+    /// Rolls back the next transaction as it commits, as a full disk would.
+    private final class CommitVeto: TransactionObserver, Sendable {
+        struct Vetoed: Error {}
+        func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool { true }
+        func databaseDidChange(with event: DatabaseEvent) {}
+        func databaseWillCommit() throws { throw Vetoed() }
+        func databaseDidCommit(_ db: Database) {}
+        func databaseDidRollback(_ db: Database) {}
+    }
+
+    /// A copy put in place whose row then fails to save gives its place back
+    /// to the copy before, which the row still names.
+    func testACopyWhoseRowDoesntSaveGivesItsPlaceBack() throws {
+        let copy = try fetched(11)
+        try replaceTheEbook()
+        let veto = CommitVeto()
+        try session.store.pool.writeWithoutTransaction { $0.add(transactionObserver: veto, extent: .nextTransaction) }
+        XCTAssertThrowsError(try session.downloads.copies.publish(fileID: 11, from: transferred("new")))
+        XCTAssertEqual(try contents(11), "old")
+        XCTAssertEqual(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) }?.copy, copy)
+    }
+
+    /// An open finding a transfer's copy in place leaves its Download as it
+    /// is, a replacement that failed included.
+    func testAnOpenFindingACopyLeavesItsDownloadAsItIs() throws {
+        _ = try fetched(11)
+        try replaceTheEbook()
+        try session.store.markDownloadFailed(fileID: 11, message: "refused")
+        let url = session.downloads.location(fileID: 11, fileType: "epub")
+        XCTAssertEqual(try session.downloads.copies.publishFetched(fileID: 11, from: transferred("fetched")), .found(url))
+        let row = try XCTUnwrap(session.store.pool.read { try CatalogStore.download($0, fileID: 11) })
+        XCTAssertEqual(row.state, .failed)
+        XCTAssertEqual(row.error, "refused")
+    }
+
+    /// A File that left the catalog while an open downloaded it gets no
+    /// copy, even with its Download's row not removed yet.
+    func testAnOpenOfAFileThatLeftTheCatalogKeepsNothing() throws {
+        try session.store.queueDownloads([11])
+        try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""
+        {"entries":[{"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Book","sort_title":"Book","created_at":"2026-01-01T00:00:00Z",
+          "cover_version":"1-1","files":[{"id":10,"file_type":"m4b","file_role":"main","size_bytes":3},
+           {"id":12,"file_type":"epub","file_role":"supplement","size_bytes":3}]}}],"cursor":3}
+        """.utf8)))
+        XCTAssertEqual(try session.downloads.copies.publishFetched(fileID: 11, from: transferred("fetched")), .unknown)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: session.downloads.location(fileID: 11, fileType: "epub").path))
+    }
+
     /// A copy that can't be put in place leaves the one there, and its row,
     /// as they were.
     func testACopyThatCantBePutInPlaceLeavesTheOldOne() throws {
@@ -455,6 +504,8 @@ final class DownloadManagerTests: XCTestCase {
         session.downloads.discard(fileID: 11, copy: copy)
         XCTAssertEqual(try contents(11), "new")
         XCTAssertEqual(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) }?.state, .done)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: session.downloads.folder.path).sorted(), ["11.epub"],
+                       "the copy it replaced isn't kept once its row is saved")
     }
 
     /// A Download removed and made again since has a copy of its own, which
