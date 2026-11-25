@@ -1208,9 +1208,9 @@ final class AudioPlayer {
             case let event as MPChangePlaybackRateCommandEvent:
                 handle(Double(event.playbackRate))
             case let event as MPSeekCommandEvent:
-                // A seek button skips once as it's pressed, not again as
-                // it's let go.
-                if event.type == .beginSeeking { handle(nil) }
+                // A seek button skips once, as it's let go: a car's tap
+                // may send only that end, as BookPlayer found.
+                if event.type == .endSeeking { handle(nil) }
             default:
                 handle(nil)
             }
