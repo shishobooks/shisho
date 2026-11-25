@@ -15,10 +15,36 @@ name: Turn the pages of a fixed-layout book
 - extendedWaitUntil:
     visible: "Fixed page 1 of the picture book."
     timeout: 30000
-- swipe:
-    direction: LEFT
-- swipe:
-    direction: LEFT
+# One turn at a time, each swiped again only while the page still reads as
+# the one before: a stalled runner can drop a swipe, and a second one sent
+# blind after a late first could land past the page.
+- evalScript: ${output.page = 1}
+- repeat:
+    while:
+      true: ${output.page < 3}
+    times: 6
+    commands:
+      - runFlow:
+          when:
+            notVisible:
+              id: reader.progress
+              text: "Page ${output.page + 1} · .*"
+          commands:
+            - swipe:
+                direction: LEFT
+            - extendedWaitUntil:
+                visible:
+                  id: reader.progress
+                  text: "Page ${output.page + 1} · .*"
+                timeout: 30000
+                optional: true
+      - runFlow:
+          when:
+            visible:
+              id: reader.progress
+              text: "Page ${output.page + 1} · .*"
+          commands:
+            - evalScript: ${output.page = output.page + 1}
 - extendedWaitUntil:
     visible:
       id: reader.progress
