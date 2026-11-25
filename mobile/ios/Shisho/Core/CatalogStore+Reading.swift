@@ -192,8 +192,14 @@ extension CatalogStore {
     /// even when only a later turn is sent.
     /// The place is a CFI in a Reflowable File, or a 0-based page in a
     /// Page-based one.
+    ///
+    /// queued saves it on the writer's queue without waiting, for saves
+    /// made while the reader moves, so a commit, and every observer it
+    /// wakes, never holds up a turn or a scroll. Saves land in the order
+    /// made, and a later write waits for them, so a sync or a read after
+    /// one sees them.
     func recordReading(fileID: Int, cfi: String?, page: Int? = nil, percentage: Double, atEnd: Bool, at: Date, sessionID: String,
-                       sessionStartedAt: Date, session: FinishedSession?) throws {
+                       sessionStartedAt: Date, session: FinishedSession?, queued: Bool = false) throws {
         let payload = Shishoapp.JournalPositionPayload(fileId: fileID, cfi: cfi, page: page, percentage: min(1, max(0, percentage)),
                                                        atEnd: atEnd, listeningSince: JournalTime.string(min(sessionStartedAt, at)))
         let data = try JSONEncoder().encode(payload)
@@ -201,12 +207,27 @@ extension CatalogStore {
         // server finishes the Read-through at the first one, and undoes it
         // only for a move back soon after it.
         let key = atEnd ? nil : "position:\(fileID):\(sessionID)"
-        try pool.write { db in
+        let save: @Sendable (Database) throws -> Void = { db in
             try CatalogStore.writePosition(db, fileID: fileID, seconds: 0, cfi: cfi, page: page, percentage: percentage, at: at,
                                            payload: data, coalesceKey: key)
             if let session {
                 try CatalogStore.appendSession(db, session)
             }
+        }
+        if queued {
+            writeQueued("file \(fileID): couldn't save the place", save)
+        } else {
+            try pool.write(save)
+        }
+    }
+
+    /// Writes without waiting, on the writer's queue, so it lands before
+    /// any write made after it. A failure goes to Diagnostics, as nothing
+    /// waits to hear it.
+    private func writeQueued(_ failure: String, _ updates: @escaping @Sendable (Database) throws -> Void) {
+        pool.asyncWrite(updates) { _, result in
+            guard case .failure(let error) = result else { return }
+            Task { await Diagnostics.shared.log(.reader, "\(failure): \(Diagnostics.describe(error))") }
         }
     }
 
@@ -276,9 +297,14 @@ extension CatalogStore {
     }
 
     /// Queues a Reading Session on its own, as when it ends with no move.
-    func recordReading(session: FinishedSession) throws {
-        try pool.write { db in
+    func recordReading(session: FinishedSession, queued: Bool = false) throws {
+        let save: @Sendable (Database) throws -> Void = { db in
             try CatalogStore.appendSession(db, session)
+        }
+        if queued {
+            writeQueued("file \(session.fileID): couldn't save the session", save)
+        } else {
+            try pool.write(save)
         }
     }
 }

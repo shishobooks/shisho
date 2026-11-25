@@ -952,6 +952,18 @@ struct BookRelated: Equatable, Sendable {
         case person(id: Int, name: String)
         case list(id: Int, name: String)
         case none
+
+        /// Names the link in a group's id. Spelled out rather than
+        /// interpolated: interpolating an enum reflects on it, which is
+        /// slow enough to show on every redraw of the Book page.
+        var key: String {
+            switch self {
+            case .series(let id, _): "series:\(id)"
+            case .person(let id, _): "person:\(id)"
+            case .list(let id, _): "list:\(id)"
+            case .none: "none"
+            }
+        }
     }
 
     struct Line: Equatable, Sendable, Identifiable {
@@ -967,7 +979,7 @@ struct BookRelated: Equatable, Sendable {
         /// Every Book in it, which can be more than it lists.
         let total: Int
         let lines: [Line]
-        var id: String { "\(link)-\(title)" }
+        var id: String { "\(link.key)-\(title)" }
     }
 
     var series: [Group] = []

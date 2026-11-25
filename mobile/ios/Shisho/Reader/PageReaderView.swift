@@ -8,9 +8,6 @@ struct PageReaderView: View {
     let model: PageReaderModel
     @State private var showingContents = false
     @State private var showingSettings = false
-    /// Counts pages left in the book rather than the chapter, as the ebook
-    /// reader does, and kept with its choice.
-    @AppStorage(ReaderPagesLeft.inBookKey) private var pagesLeftInBook = false
     let close: () -> Void
 
     private static let pageForeground = Color.white
@@ -49,7 +46,7 @@ struct PageReaderView: View {
                     if model.chromeVisible {
                         PageReaderBottomBar(model: model).transition(.move(edge: .bottom).combined(with: .opacity))
                     } else {
-                        readout
+                        PageReaderReadout(model: model)
                     }
                 }
             }
@@ -127,9 +124,19 @@ struct PageReaderView: View {
         .foregroundStyle(Theme.foreground)
     }
 
-    /// Where the reader is, small under the page while the controls are
-    /// hidden.
-    private var readout: some View {
+}
+
+/// Where the reader is, small under the page while the controls are
+/// hidden. Its own view, so following every turn, or every page a scroll
+/// passes, redraws only it.
+private struct PageReaderReadout: View {
+    let model: PageReaderModel
+    /// Counts pages left in the book rather than the chapter, as the ebook
+    /// reader does, and kept with its choice.
+    @AppStorage(ReaderPagesLeft.inBookKey) private var pagesLeftInBook = false
+    private static let pageForeground = Color.white
+
+    var body: some View {
         // As the ebook reader's: the chapter, which gives way first so the
         // counts always show, the pages left, and how far through. A tap
         // counts the book's pages rather than the chapter's.

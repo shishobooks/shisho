@@ -104,9 +104,10 @@ final class ReadingTracker {
         if let saved, saved.locator == locator, saved.atEnd == atEnd {
             // Another screen of the same page, as down a webtoon's tall
             // strip: the time it counted is kept, so a kill can't lose it.
+            // Queued, as every save during a scroll is.
             if earlierScreen != location.screen, let snapshot = ReadingRules.snapshot(current, at: at) {
                 do {
-                    try store.recordReading(session: snapshot)
+                    try store.recordReading(session: snapshot, queued: true)
                 } catch {
                     log("couldn't save the session: \(Diagnostics.describe(error))")
                 }
@@ -118,10 +119,12 @@ final class ReadingTracker {
         case .cfi(let cfi): (cfi, nil)
         case .page(let page): (nil, page)
         }
+        // Queued, so a turn or a scroll never waits on the commit; the end
+        // is saved at once, as the sync it asks for has to find it.
         do {
             try store.recordReading(fileID: fileID, cfi: cfi, page: page, percentage: percentage, atEnd: atEnd, at: at,
                                     sessionID: current.id, sessionStartedAt: current.startedAt,
-                                    session: ReadingRules.snapshot(current, at: at))
+                                    session: ReadingRules.snapshot(current, at: at), queued: !atEnd)
         } catch {
             log("couldn't save the place: \(Diagnostics.describe(error))")
         }
@@ -207,10 +210,11 @@ final class ReadingTracker {
         requestSync()
     }
 
-    /// Moves of this File wait in the journal.
+    /// Moves of this File wait in the journal. Asked on the writer's
+    /// queue, after the moves still queued there, which a read could miss.
     private var hasUnsentMoves: Bool {
         let fileID = fileID
-        return (try? store.pool.read { try CatalogStore.hasPendingMoves($0, fileID: fileID) }) ?? false
+        return (try? store.pool.writeWithoutTransaction { try CatalogStore.hasPendingMoves($0, fileID: fileID) }) ?? false
     }
 
     private func log(_ message: String) {
