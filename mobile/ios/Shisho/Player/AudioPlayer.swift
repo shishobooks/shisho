@@ -625,6 +625,11 @@ final class AudioPlayer {
                         center.changePlaybackPositionCommand, center.changePlaybackRateCommand] {
             command.removeTarget(nil)
         }
+        #if DEBUG
+        for (_, command) in AudioPlayer.probedCommands(center) {
+            command.removeTarget(nil)
+        }
+        #endif
         for observer in observers {
             NotificationCenter.default.removeObserver(observer)
         }
@@ -1196,10 +1201,38 @@ final class AudioPlayer {
                 }
             }
         }
+        #if DEBUG
+        AudioPlayer.probeCommands()
+        #endif
     }
 
     /// Calls handle when command comes, from whichever queue MediaPlayer
     /// uses, with the time or rate the command carries.
+    #if DEBUG
+    /// The commands iOS can send that the player doesn't handle, and the
+    /// seeks, whose start and end it tells apart, for finding out what a
+    /// car's buttons send. Debug builds only: registering a command can show
+    /// its button on the lock screen and in CarPlay.
+    nonisolated private static func probedCommands(_ center: MPRemoteCommandCenter) -> [(String, MPRemoteCommand)] {
+        [("stop", center.stopCommand), ("like", center.likeCommand), ("dislike", center.dislikeCommand),
+         ("bookmark", center.bookmarkCommand), ("rating", center.ratingCommand), ("repeat mode", center.changeRepeatModeCommand),
+         ("shuffle mode", center.changeShuffleModeCommand), ("enable language option", center.enableLanguageOptionCommand),
+         ("disable language option", center.disableLanguageOptionCommand), ("seek forward, any", center.seekForwardCommand),
+         ("seek back, any", center.seekBackwardCommand)]
+    }
+
+    nonisolated private static func probeCommands() {
+        for (name, command) in probedCommands(MPRemoteCommandCenter.shared()) {
+            command.addTarget { event in
+                let detail = (event as? MPSeekCommandEvent).map { $0.type == .beginSeeking ? ", began" : ", ended" } ?? ""
+                let line = "remote command probe: \(name)\(detail), \(String(describing: type(of: event)))"
+                Task { await Diagnostics.shared.log(.player, line) }
+                return .success
+            }
+        }
+    }
+    #endif
+
     nonisolated private static func onCommand(_ command: MPRemoteCommand, _ handle: @escaping @Sendable (Double?) -> Void) {
         command.addTarget { event in
             switch event {
