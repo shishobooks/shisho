@@ -357,7 +357,8 @@ else
   xcodebuild -project Shisho.xcodeproj -scheme Shisho -configuration Debug -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath "$derived" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- -quiet build
   xcrun simctl boot "$usage_simulator" 2>/dev/null || true
-  open -a Simulator
+  # Xcode 27 replaced the Simulator app with Device Hub.
+  open -a Simulator 2>/dev/null || open "$(xcode-select -p)/../Applications/DeviceHub.app"
   app="$derived/Build/Products/Debug-iphonesimulator/Shisho.app"
   xcrun simctl install "$usage_simulator" "$app"
   xcrun simctl launch "$usage_simulator" "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")"
