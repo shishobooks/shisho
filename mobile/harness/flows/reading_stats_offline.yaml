@@ -77,6 +77,9 @@ name: Reading Stats count offline listening once, and a cleared place syncs
       id: history.row
       text: "(?s).*Harbor Lights.*Not synced yet.*"
     timeout: 30000
+# Back to the Reading tab's first screen while it shows, so it opens there
+# next time.
+- runFlow: subflows/reading_tab_root.yaml
 
 # The File's saved place, cleared from its own page. The Library tab is
 # still on the Book's page, where listening started.
