@@ -20,6 +20,11 @@ name: Reading Stats count offline listening once, and a cleared place syncs
 # Reading Stats are fetched while online, so a copy shows offline.
 - tapOn:
     id: tab.reading
+- scrollUntilVisible:
+    element:
+      id: reading.stats
+    direction: DOWN
+    timeout: 30000
 - tapOn:
     id: reading.stats
 - extendedWaitUntil:
@@ -70,6 +75,12 @@ name: Reading Stats count offline listening once, and a cleared place syncs
       id: stats.unsynced
     timeout: 30000
 - runFlow: subflows/reading_tab_root.yaml
+# Below the shelves, which other flows' Books can fill.
+- scrollUntilVisible:
+    element:
+      id: reading.history
+    direction: DOWN
+    timeout: 30000
 - tapOn:
     id: reading.history
 - extendedWaitUntil:
@@ -115,6 +126,11 @@ name: Reading Stats count offline listening once, and a cleared place syncs
     start: 50%, 30%
     end: 50%, 80%
 - runFlow: subflows/reading_tab_root.yaml
+- scrollUntilVisible:
+    element:
+      id: reading.stats
+    direction: DOWN
+    timeout: 30000
 - tapOn:
     id: reading.stats
 - extendedWaitUntil:

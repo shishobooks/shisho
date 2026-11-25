@@ -36,6 +36,7 @@ struct ReadingView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .miniPlayerClearance()
+                .accessibilityIdentifier("reading.root")
                 .onChange(of: model.scrollToTop[.reading]) { _, _ in
                     withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
                 }
