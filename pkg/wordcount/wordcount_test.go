@@ -159,3 +159,11 @@ func TestHTML_Encodings(t *testing.T) {
 		assert.Equal(t, 4, got)
 	})
 }
+
+func TestCount_Pictures(t *testing.T) {
+	t.Parallel()
+
+	doc, err := Count(strings.NewReader(`<html><body><div><img src="p1.jpg"/></div><svg><image href="p2.jpg"/></svg><p>A caption</p></body></html>`))
+	require.NoError(t, err)
+	assert.Equal(t, Document{Words: 2, Pictures: 2}, doc, "an svg holding an image is one picture")
+}

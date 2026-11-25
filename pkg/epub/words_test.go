@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -180,6 +181,7 @@ func TestCountSpine(t *testing.T) {
 func TestCountWords_PictureBooks(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
+	picture := `<img src="page.jpg" alt=""/>`
 
 	t.Run("a fixed-layout book has no count", func(t *testing.T) {
 		t.Parallel()
@@ -189,17 +191,68 @@ func TestCountWords_PictureBooks(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("a book of pictures with a few words has no count", func(t *testing.T) {
+	t.Run("nor one whose pages are each laid out fixed", func(t *testing.T) {
 		t.Parallel()
-		pages := map[string]string{"copyright": "All rights reserved by the publisher"}
-		idrefs := []string{"copyright"}
+		zr, result := openEPUBWithMeta(t, "", map[string]string{"a": strings.Repeat("word ", 50)}, "a")
+		for i := range result.Package.Spine.Itemref {
+			result.Package.Spine.Itemref[i].Properties = "rendition:layout-pre-paginated"
+		}
+		_, err := countWords(ctx, zr, result)
+		assert.Error(t, err)
+	})
+
+	t.Run("a book mostly of picture pages has no count, however long its introduction", func(t *testing.T) {
+		t.Parallel()
+		pages := map[string]string{"intro": strings.Repeat("word ", 600)}
+		idrefs := []string{"intro"}
 		for i := range 20 {
-			id := "page" + strings.Repeat("i", i+1)
-			pages[id] = ""
+			id := fmt.Sprintf("page%d", i)
+			pages[id] = picture
 			idrefs = append(idrefs, id)
 		}
 		zr, result := openEPUB(t, pages, idrefs...)
 		_, err := countWords(ctx, zr, result)
-		assert.Error(t, err, "6 words over 21 documents")
+		assert.Error(t, err)
 	})
+
+	t.Run("a book of short poems is counted", func(t *testing.T) {
+		t.Parallel()
+		pages := map[string]string{}
+		var idrefs []string
+		for i := range 100 {
+			id := fmt.Sprintf("poem%d", i)
+			pages[id] = "four words of verse"
+			idrefs = append(idrefs, id)
+		}
+		zr, result := openEPUB(t, pages, idrefs...)
+		n, err := countWords(ctx, zr, result)
+		require.NoError(t, err)
+		assert.Equal(t, 400, n)
+	})
+}
+
+func TestWordCount_FixedLayoutFromDisplayOptions(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"META-INF/com.apple.ibooks.display-options.xml", "META-INF/com.kobobooks.display-options.xml"} {
+		path := testgen.GenerateEPUB(t, t.TempDir(), "book.epub", testgen.EPUBOptions{
+			Title:        "Book",
+			ExtraEntries: map[string]string{name: `<display_options><platform name="*"><option name="fixed-layout">true</option></platform></display_options>`},
+		})
+		_, err := WordCount(context.Background(), path)
+		assert.Error(t, err, name)
+	}
+}
+
+func TestParseKePub_FixedLayoutHasNoCount(t *testing.T) {
+	t.Parallel()
+
+	path := testgen.GenerateEPUB(t, t.TempDir(), "book.kepub.epub", testgen.EPUBOptions{
+		Title: "Book", KoboMarkup: true,
+		ExtraEntries: map[string]string{"META-INF/com.kobobooks.display-options.xml": `<display_options><platform name="*"><option name="fixed-layout">true</option></platform></display_options>`},
+	})
+	metadata, err := ParseKePub(path)
+	require.NoError(t, err)
+	assert.Nil(t, metadata.WordCount)
+	assert.True(t, metadata.WordCountFailed)
 }

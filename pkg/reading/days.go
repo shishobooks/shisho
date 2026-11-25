@@ -73,6 +73,13 @@ func (r dayRange) contains(day *string) bool {
 	return day != nil && *day >= r.From && *day <= r.To
 }
 
+// mayTouch reports whether a span from start to end may touch r in some
+// time zone, as instants bounds it: one that can't needn't be split by day.
+func (r dayRange) mayTouch(start, end time.Time) bool {
+	from, to := r.instants()
+	return from == nil || !end.Before(*from) && start.Before(*to)
+}
+
 // instants are the UTC instants that bound loading the Sessions that may
 // touch r in any time zone: a day's margin on each side, since no zone is a
 // day from UTC. Callers trim to r after grouping by day. Both are nil for

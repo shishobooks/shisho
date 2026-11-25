@@ -79,7 +79,7 @@ DRM-protected files are never imported. Each one is named in the scan's job log;
 
 EPUB, KePub, MOBI, and AZW3 files show how many words they hold wherever an audiobook shows its duration or a comic its pages: under the file's name, in its details, and as the words left beside your progress. The count is rounded, such as `29K words` or `1.2M words`, except below 1,000 words, where it's exact. Hover over a rounded count in the web app to see the exact one; the Shisho app gives it in the **Words** row of the file's page. A scan counts the words each time it reads the file, so a file that changes on disk is counted again.
 
-A fixed-layout EPUB, and a book that's mostly pictures, such as manga made into an EPUB, has no word count: its few words, such as a copyright page, aren't what you read.
+A fixed-layout EPUB, and a book whose pages are mostly pictures, such as a comic or manga made into an EPUB, MOBI, or AZW3, has no word count: its few words, such as a copyright page or an introduction, aren't what you read.
 
 Only the text a reader reads is counted: the book's documents in reading order, without their scripts, styles, or the pronunciation guides printed over Chinese and Japanese text. Words are split at spaces and dashes, so a hyphenated word or a contraction counts once, and punctuation on its own doesn't count. Chinese and Japanese don't put spaces between words, so each of their characters counts as one word.
 

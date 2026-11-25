@@ -41,29 +41,43 @@ func Text(s string) int {
 	return c.n
 }
 
-// HTML counts the words in an HTML or XHTML document's text. The head,
-// scripts, styles, and ruby annotations aren't text a reader reads, so
-// they're skipped. Inline elements such as b and span don't split a word;
-// every other element does, as a paragraph or line break would.
+// Document is what one HTML document holds for a reader: its words, and
+// how many pictures it shows.
+type Document struct {
+	Words, Pictures int
+}
+
+// HTML counts the words in an HTML or XHTML document's text, as Count does.
+func HTML(r io.Reader) (int, error) {
+	doc, err := Count(r)
+	return doc.Words, err
+}
+
+// Count counts the words in an HTML or XHTML document's text, and its
+// pictures. The head, scripts, styles, and ruby annotations aren't text a
+// reader reads, so they're skipped. Inline elements such as b and span don't
+// split a word; every other element does, as a paragraph or line break
+// would. A picture is an img, or an svg, however many images it draws.
 //
 // The text is read as UTF-8 unless a byte order mark says it's UTF-16. A
 // meta charset isn't trusted: books are UTF-8 far more often than their
 // markup says.
-func HTML(r io.Reader) (int, error) {
+func Count(r io.Reader) (Document, error) {
 	decoded, err := charset.NewReader(r, "text/html; charset=utf-8")
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return Document{}, errors.WithStack(err)
 	}
 	data, err := io.ReadAll(io.LimitReader(decoded, maxDocumentBytes+1))
 	if err != nil {
-		return 0, errors.WithStack(err)
+		return Document{}, errors.WithStack(err)
 	}
 	if len(data) > maxDocumentBytes {
-		return 0, errors.Errorf("document is larger than %d bytes", maxDocumentBytes)
+		return Document{}, errors.Errorf("document is larger than %d bytes", maxDocumentBytes)
 	}
 
 	var c counter
 	var skip skipState
+	pictures, inSVG := 0, false
 	// The KePub converter's tokenizer setup reads XHTML as a reader does:
 	// CDATA is text, and a self-closed script or title ends where it opens.
 	err = kepub.EachToken(data, func(z *html.Tokenizer, tt html.TokenType) {
@@ -74,18 +88,26 @@ func HTML(r io.Reader) (int, error) {
 			}
 		case html.StartTagToken:
 			name, _ := z.TagName()
+			pictures += picture(string(name), &inSVG)
 			skip.start(string(name))
 			if !inline[string(name)] {
 				c.boundary()
 			}
 		case html.EndTagToken:
 			name, _ := z.TagName()
+			if string(name) == "svg" {
+				inSVG = false
+			}
 			skip.end(string(name))
 			if !inline[string(name)] {
 				c.boundary()
 			}
 		case html.SelfClosingTagToken:
 			name, _ := z.TagName()
+			// A self-closed svg holds nothing.
+			if string(name) != "svg" {
+				pictures += picture(string(name), &inSVG)
+			}
 			if !inline[string(name)] {
 				c.boundary()
 			}
@@ -93,10 +115,28 @@ func HTML(r io.Reader) (int, error) {
 		}
 	})
 	if err != nil {
-		return 0, err
+		return Document{}, err
 	}
 	c.boundary()
-	return c.n, nil
+	return Document{Words: c.n, Pictures: pictures}, nil
+}
+
+// picture is 1 when an element named name starts a picture: an img, an svg,
+// or an image outside an svg. inSVG tracks whether an svg is open, so its
+// images count with it.
+func picture(name string, inSVG *bool) int {
+	switch name {
+	case "img":
+		return 1
+	case "svg":
+		*inSVG = true
+		return 1
+	case "image":
+		if !*inSVG {
+			return 1
+		}
+	}
+	return 0
 }
 
 // skipState tracks whether text is in an element a reader doesn't read: the

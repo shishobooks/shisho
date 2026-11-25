@@ -229,7 +229,7 @@ func TestStats_PaceCountsTheWebReadersPagesFromTheFirst(t *testing.T) {
 	assert.InDelta(t, 10, *resp.Pace.ComicPagesPerHour, 0.01)
 }
 
-func TestStats_PaceJudgesAnUntimedSkip(t *testing.T) {
+func TestStats_PaceCountsUntimedSessionsInFull(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	book := createBook(t, f.db, "Dune")
@@ -237,16 +237,15 @@ func TestStats_PaceJudgesAnUntimedSkip(t *testing.T) {
 	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
 	f.normalMonth(epub, day)
 	f.session(timed(epub, day.Add(9*time.Hour), 30, 0.371, 0.446))
-	// KOReader without the plugin guesses its time from when it synced,
-	// which is at least the time read, so 40,000 words in its ten minutes
-	// is a skip however long the reading really was.
-	guess := timed(epub, day.Add(12*time.Hour), 10, 0.446, 0.846)
+	// KOReader without the plugin times a session from a pull Shisho
+	// stamps to a push the device stamps, so a device clock running behind
+	// can make real reading look like a skip; its words count as covered.
+	guess := timed(epub, day.Add(12*time.Hour), 1, 0.446, 0.471)
 	guess.measured, guess.source = false, models.ReadingSourceKOReader
 	f.session(guess)
 
-	// The five timed Sessions average 44,600 words in 185 minutes.
 	resp := f.stats("?year=2026")
-	assert.InDelta(t, 44_600+10*44_600.0/185, resp.Totals.WordsRead, 1)
+	assert.InDelta(t, 44_600+2_500, resp.Totals.WordsRead, 1)
 }
 
 func TestStats_PaceNeedsTenMinutesOfTimedReading(t *testing.T) {
@@ -330,7 +329,10 @@ func TestFenceNorm(t *testing.T) {
 
 func TestPaceTally_TenMinutesDespiteRounding(t *testing.T) {
 	t.Parallel()
-	// 600 seconds reached by splitting a Session's time by day.
-	tally := paceTally{covered: 100, seconds: 1109 * (600.0 / 1109)}
+	// 600 seconds reached by splitting a 1,109-second Session by day.
+	total, inRange := 1109.0, 600.0
+	seconds := total * (inRange / total)
+	require.Less(t, seconds, 600.0, "the split falls a hair short")
+	tally := paceTally{covered: 100, seconds: seconds}
 	assert.NotNil(t, tally.rate(paceNorm{upper: 1}, 60))
 }

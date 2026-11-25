@@ -190,7 +190,7 @@ func paceOf(sessions []statsSession, norms [paceKinds]paceNorm, rng dayRange, lo
 	wordsRead := 0.0
 	for _, s := range sessions {
 		sample, ok := sampleOf(s)
-		if !ok {
+		if !ok || !rng.mayTouch(s.StartedAt, s.EndedAt) {
 			continue
 		}
 		share := shareInRange(s, rng, loc)
@@ -198,11 +198,13 @@ func paceOf(sessions []statsSession, norms [paceKinds]paceNorm, rng dayRange, lo
 			continue
 		}
 		norm := norms[sample.kind]
-		// A Session with no time that still moved jumped there. An
-		// untimed Session's time is at least its reading, so too fast even
-		// over all of it is a skip too.
-		fast := norm.known() && (sample.seconds == 0 && sample.timed || sample.seconds > 0 && sample.covered/sample.seconds > norm.upper)
-		slow := norm.known() && sample.timed && sample.seconds > 0 && sample.covered/sample.seconds < norm.lower
+		// A timed Session with no time that still moved jumped there. An
+		// untimed one isn't judged: KOReader without the plugin times it
+		// from a pull Shisho stamps to a push the device stamps, so a device
+		// clock running behind could make real reading look like a skip.
+		judged := norm.known() && sample.timed
+		fast := judged && (sample.seconds == 0 || sample.covered/sample.seconds > norm.upper)
+		slow := judged && sample.seconds > 0 && sample.covered/sample.seconds < norm.lower
 		credited := sample.covered
 		if fast {
 			credited = sample.seconds * norm.average

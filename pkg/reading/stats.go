@@ -280,6 +280,9 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 	places := map[[2]string]*place{}
 	var deviceIDs []string
 	for _, s := range sessions {
+		if !rng.mayTouch(s.StartedAt, s.EndedAt) {
+			continue
+		}
 		key := [2]string{s.Source, ""}
 		if s.Source != models.ReadingSourceWebReader && s.SourceDeviceID != nil {
 			key[1] = *s.SourceDeviceID
