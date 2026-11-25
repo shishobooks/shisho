@@ -1,0 +1,198 @@
+import GRDB
+import ShishoAPI
+import XCTest
+@testable import Shisho
+
+/// The reading record offline (#918): changes made on the device show at
+/// once over the feed's copy, until the server confirms or refuses them,
+/// and Reading Stats count reading not yet synced exactly once.
+final class ReadingRecordTests: XCTestCase {
+    private var store: CatalogStore!
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    override func setUpWithError() throws {
+        store = try CatalogStore(path: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite").path)
+        try store.startOverIfNeeded()
+        let books = (1...3).map { id in
+            """
+            {"kind":"book","id":\(id),"library_id":1,"book":{"id":\(id),"library_id":1,"title":"Book \(id)","sort_title":"Book \(id)",
+             "created_at":"2026-01-01T00:00:00Z","cover_version":"","files":[{"id":\(id * 10),"file_type":"m4b","file_role":"main",
+             "size_bytes":10,"audiobook_duration_seconds":600}]}}
+            """
+        }.joined(separator: ",")
+        try store.apply(page("""
+        {"entries":[{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Audio","cover_aspect_ratio":"audiobook"}},
+         \(books)],"cursor":2}
+        """))
+    }
+
+    private func page(_ json: String) throws -> Shishoapp.FeedResponse {
+        try makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data(json.utf8))
+    }
+
+    private func status(_ bookID: Int) throws -> String? {
+        try store.pool.read { try CatalogStore.standing($0, bookID: bookID) }.status
+    }
+
+    private func journalTypes() throws -> [String] {
+        try store.pool.read { try String.fetchAll($0, sql: "SELECT type FROM journal ORDER BY seq") }
+    }
+
+    /// The server's answer to everything in the journal.
+    private func answer(_ result: Shishoapp.JournalResultKind, reason: String = "") throws {
+        let rows = try store.pendingJournal(capabilities: "", limit: 500)
+        try store.applyJournalResults(rows.map { Shishoapp.JournalResult(id: $0.eventID, result: result, reason: reason) },
+                                      sent: rows, capabilities: "")
+    }
+
+    func testAStartShowsAtOnceAndGivesWayToTheServersReadThrough() throws {
+        try store.record(.start(book: 1), at: now)
+        XCTAssertEqual(try status(1), "currently_reading")
+        XCTAssertEqual(try journalTypes(), ["read_through_start"])
+        let entry = try XCTUnwrap(store.pool.read { try CatalogStore.history($0) }.first)
+        XCTAssertTrue(entry.pending)
+        XCTAssertLessThan(entry.id, 0)
+
+        // Taken in: it shows until the feed brings the server's Read-through,
+        // which it doesn't start a second one beside.
+        let began = Date()
+        try answer(.accepted)
+        XCTAssertEqual(try status(1), "currently_reading")
+        try store.apply(page("""
+        {"entries":[{"kind":"read_through","id":7,"read_through":{"id":7,"book_id":1,"begin_day":"2027-01-15","outcome":"underway","paused":false}}],
+         "cursor":3}
+        """))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.history($0) }.map(\.id).count, 1)
+        try store.feedCaughtUp(since: began.addingTimeInterval(1))
+        let confirmed = try store.pool.read { try CatalogStore.history($0) }
+        XCTAssertEqual(confirmed.map(\.id), [7])
+        XCTAssertFalse(confirmed[0].pending)
+    }
+
+    func testARefusedChangeFallsAway() throws {
+        try store.record(.rating(book: 2, units: 18), at: now)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.standing($0, bookID: 2) }.rating, 18)
+        try answer(.refused, reason: "The Book doesn't exist, or you can no longer reach it.")
+        XCTAssertNil(try store.pool.read { try CatalogStore.standing($0, bookID: 2) }.rating)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.journalNotes($0) }.count, 1)
+    }
+
+    func testToReadOrderFollowsMovesMadeOffline() throws {
+        for id in [1, 2, 3] { try store.record(.addToRead(book: id), at: now) }
+        try store.record(.moveToRead(book: 3, after: nil), at: now)
+        try store.record(.moveToRead(book: 1, after: 2), at: now)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.toReadBooks($0) }.map(\.id), [3, 2, 1])
+        XCTAssertEqual(try status(1), "to_read")
+
+        // Starting a Book takes it off To Read.
+        try store.record(.start(book: 2), at: now)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.toReadBooks($0) }.map(\.id), [3, 1])
+    }
+
+    func testAListMadeOfflineIsNamedByItsLocalIDUntilTheFeedBringsIt() throws {
+        let id = try XCTUnwrap(try store.record(.createList(name: "Trip", description: nil, ordered: true), at: now))
+        XCTAssertLessThan(id, 0)
+        try store.record(.addToList(id: id, book: 2), at: now)
+        try store.record(.addToList(id: id, book: 1), at: now)
+        try store.record(.moveInList(id: id, book: 1, after: nil), at: now)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.listOrder($0, listID: id) }, [1, 2])
+        let payloads = try store.pool.read { try Data.fetchAll($0, sql: "SELECT payload FROM journal WHERE type = 'list_add'") }
+        let ref = try makeShishoDecoder().decode(Shishoapp.JournalListBookPayload.self, from: payloads[0])
+        XCTAssertNil(ref.listId)
+        let localID = try XCTUnwrap(ref.localId)
+
+        let began = Date()
+        try answer(.accepted)
+        try store.apply(page("""
+        {"entries":[{"kind":"list","id":40,"list":{"id":40,"name":"Trip","is_ordered":true,"default_sort":"manual","owner":{"id":1,"username":"me"},
+          "permission":"owner","books":[{"book_id":1,"sort_order":1,"added_at":"2027-01-01T00:00:00Z"},
+          {"book_id":2,"sort_order":2,"added_at":"2027-01-01T00:00:00Z"}],"shares":[],"local_id":"\(localID)"}}],"cursor":3}
+        """))
+        try store.feedCaughtUp(since: began.addingTimeInterval(1))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.lists($0) }.map(\.id), [40])
+    }
+
+    func testListeningOfflineStartsAndFinishesTheBook() throws {
+        let (sitting, _) = ListeningRules.play(nil, fileID: 10, at: now, percentage: 0)
+        try store.recordPosition(fileID: 10, seconds: 3, percentage: 0.005, at: now.addingTimeInterval(3), atEnd: false, sitting: sitting)
+        XCTAssertNil(try status(1), "a few seconds don't start a Book")
+        try store.recordPosition(fileID: 10, seconds: 12, percentage: 0.02, at: now.addingTimeInterval(12), atEnd: false, sitting: sitting)
+        XCTAssertEqual(try status(1), "currently_reading")
+        try store.recordPosition(fileID: 10, seconds: 560, percentage: 0.93, at: now.addingTimeInterval(20), atEnd: false, sitting: sitting)
+        XCTAssertEqual(try status(1), "read", "the last minute is the end")
+
+        // A Reference Book never starts.
+        try store.record(.markReference(book: 2), at: now)
+        let (other, _) = ListeningRules.play(nil, fileID: 20, at: now, percentage: 0)
+        try store.recordPosition(fileID: 20, seconds: 30, percentage: 0.05, at: now.addingTimeInterval(30), atEnd: false, sitting: other)
+        XCTAssertEqual(try status(2), "reference")
+    }
+
+    func testMarkingReferenceDissolvesTheReadThroughUnderway() throws {
+        try store.record(.start(book: 1), at: now)
+        try store.record(.markReference(book: 1), at: now)
+        XCTAssertEqual(try status(1), "reference")
+        XCTAssertTrue(try store.pool.read { try CatalogStore.history($0) }.isEmpty)
+        try store.record(.finish(book: 1), at: now)
+        XCTAssertEqual(try status(1), "read")
+    }
+
+    // MARK: - Reading Stats
+
+    private func cache(_ json: String, fetchedAt: Date) throws {
+        let stats = try makeShishoDecoder().decode(Shishoapp.StatsResponse.self, from: Data(json.utf8))
+        try store.saveStats(stats, year: nil, fetchedAt: fetchedAt)
+    }
+
+    private func allTime() throws -> ReadingStats {
+        try XCTUnwrap(store.pool.read { try CatalogStore.stats($0, year: nil, ownDeviceID: "me") })
+    }
+
+    func testReadingStatsCountUnsyncedReadingOnce() throws {
+        try cache("""
+        {"year":null,"years":[2027],"time_zone":"UTC","totals":{"finished":1,"rereads":0,"did_not_finish":0,"reading_seconds":0,
+          "listening_seconds":600,"words_read":0,"average_rating":null},"pace":{},"periods":[{"year":2027,"month":null,"finished":1,
+          "reading_seconds":0,"listening_seconds":600}],"genres":[],"tags":[],"authors":[],"kinds":[],"ratings":[],
+          "places":[{"source":"shisho_app","device_id":"me","device_name":"iPhone","reading_seconds":0,"listening_seconds":600}]}
+        """, fetchedAt: now)
+
+        // Ten minutes listened offline, sent in two snapshots of one sitting.
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        try store.saveSitting(nil, recording: FinishedSession(sittingID: "sit-1", fileID: 10, startedAt: start,
+                                                              endedAt: start.addingTimeInterval(300), startPercentage: 0, endPercentage: 0.5,
+                                                              duration: 300))
+        XCTAssertEqual(try allTime().stats.totals.listeningSeconds, 900)
+        XCTAssertEqual(try allTime().stats.places.first?.listeningSeconds, 900)
+
+        // The first snapshot is taken in and Reading Stats fetched again,
+        // counting it; the second adds only what's new.
+        try answer(.accepted)
+        let refetched = Date()
+        try cache("""
+        {"year":null,"years":[2027],"time_zone":"UTC","totals":{"finished":1,"rereads":0,"did_not_finish":0,"reading_seconds":0,
+          "listening_seconds":900,"words_read":0,"average_rating":null},"pace":{},"periods":[],"genres":[],"tags":[],"authors":[],
+          "kinds":[],"ratings":[],"places":[]}
+        """, fetchedAt: refetched)
+        XCTAssertEqual(try allTime().stats.totals.listeningSeconds, 900, "not counted twice once the copy has it")
+        try store.statsCaughtUp()
+        try store.saveSitting(nil, recording: FinishedSession(sittingID: "sit-1", fileID: 10, startedAt: start,
+                                                              endedAt: start.addingTimeInterval(600), startPercentage: 0, endPercentage: 1,
+                                                              duration: 600))
+        XCTAssertEqual(try allTime().stats.totals.listeningSeconds, 1200)
+        XCTAssertEqual(try allTime().unsyncedSeconds, 300)
+    }
+
+    func testReadingStatsCountFinishesMadeOffline() throws {
+        try cache("""
+        {"year":null,"years":[],"time_zone":"UTC","totals":{"finished":0,"rereads":0,"did_not_finish":0,"reading_seconds":0,
+          "listening_seconds":0,"words_read":0,"average_rating":null},"pace":{},"periods":[],"genres":[],"tags":[],"authors":[],
+          "kinds":[],"ratings":[],"places":[]}
+        """, fetchedAt: now)
+        try store.record(.finish(book: 1), at: now)
+        try store.record(.start(book: 2), at: now)
+        try store.record(.abandon(book: 2), at: now)
+        let totals = try allTime().stats.totals
+        XCTAssertEqual(totals.finished, 1)
+        XCTAssertEqual(totals.didNotFinish, 1)
+    }
+}

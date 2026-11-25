@@ -124,7 +124,7 @@ final class CatalogStore: Sendable {
     /// The kinds and fields of the feed this version understands. When an
     /// app update understands more, raise it, and the catalog downloads
     /// again from the start in the background.
-    static let feedVersion = 6
+    static let feedVersion = 7
 
     let pool: DatabasePool
 
@@ -388,6 +388,12 @@ final class CatalogStore: Sendable {
                 t.column("accepted", .boolean).notNull().defaults(to: false)
             }
         }
+        // The reading record offline (#918): the feed's copy of the user's
+        // records kept apart from what screens read, which lays the changes
+        // the server hasn't confirmed over it, and Reading Stats as last
+        // fetched. Raising feedVersion downloads deleted Books' titles for
+        // Reading History and which Lists this installation made.
+        migrator.registerMigration("v11: reading record", migrate: CatalogStore.migrateReadingRecord)
         return migrator
     }
 
@@ -466,6 +472,9 @@ final class CatalogStore: Sendable {
                 try CatalogStore.applyEntry(entry, generation: generation, ownDeviceID: ownDeviceID, touched: &touched, in: db)
             }
             try CatalogStore.reindex(touched, in: db)
+            if touched.reading {
+                try CatalogStore.rebuildLayer(db)
+            }
             try db.execute(sql: "UPDATE sync_state SET cursor = ?, expired_through = ?, last_synced_at = ? WHERE id = 1",
                            arguments: [page.cursor, page.expiredThrough, Date()])
             if !page.hasMore {
@@ -482,7 +491,7 @@ final class CatalogStore: Sendable {
                 try db.execute(sql: "DELETE FROM books WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM libraries WHERE generation < ?", arguments: [generation])
                 try db.execute(sql: "DELETE FROM reading_positions WHERE generation < ?", arguments: [generation])
-                try db.execute(sql: "DELETE FROM read_throughs WHERE generation < ?", arguments: [generation])
+                try db.execute(sql: "DELETE FROM synced_read_throughs WHERE generation < ?", arguments: [generation])
                 try CatalogStore.dropOlderCatalog(before: generation, in: db)
                 // Bookmarks the server hasn't had yet stay, with their
                 // changes. One it had and didn't send is deleted there, and
@@ -503,6 +512,7 @@ final class CatalogStore: Sendable {
                 try db.execute(sql: "UPDATE sync_state SET starting_over = 0 WHERE id = 1")
                 try CatalogStore.pruneSearch(in: db)
                 try CatalogStore.reindex(dropped, in: db)
+                try CatalogStore.rebuildLayer(db)
             }
             return true
         }
@@ -554,20 +564,24 @@ final class CatalogStore: Sendable {
                 try CatalogStore.keepOffer(position, ownDeviceID: ownDeviceID, in: db)
             }
         case .readThrough:
+            touched.reading = true
             if entry.deleted {
-                try db.execute(sql: "DELETE FROM read_throughs WHERE id = ?", arguments: [entry.id])
+                try db.execute(sql: "DELETE FROM synced_read_throughs WHERE id = ?", arguments: [entry.id])
             } else if let readThrough = entry.readThrough {
                 try db.execute(
                     sql: """
-                    INSERT INTO read_throughs (id, book_id, begin_day, end_day, outcome, paused, last_read_at, generation)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO synced_read_throughs (id, book_id, begin_day, end_day, outcome, paused, last_read_at, book_title,
+                        book_authors, generation)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, begin_day = excluded.begin_day,
                         end_day = excluded.end_day, outcome = excluded.outcome, paused = excluded.paused,
-                        last_read_at = excluded.last_read_at, generation = excluded.generation
+                        last_read_at = excluded.last_read_at, book_title = excluded.book_title,
+                        book_authors = excluded.book_authors, generation = excluded.generation
                     """,
                     arguments: [readThrough.id, readThrough.bookId, readThrough.beginDay, readThrough.endDay,
                                 readThrough.outcome.rawValue, readThrough.paused,
-                                readThrough.lastReadAt.flatMap(CatalogStore.timestamp), generation]
+                                readThrough.lastReadAt.flatMap(CatalogStore.timestamp), readThrough.bookTitle,
+                                readThrough.bookAuthors.isEmpty ? nil : CatalogStore.namesJSON(readThrough.bookAuthors), generation]
                 )
             }
         case .bookmark:

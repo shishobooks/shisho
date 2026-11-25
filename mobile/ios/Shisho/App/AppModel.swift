@@ -82,6 +82,10 @@ final class AppModel {
         didSet { sessionChanged(from: oldValue) }
     }
     private(set) var syncStatus: SyncStatus = .idle
+    /// The capabilities the signed-in account's server listed last, so a
+    /// feature that writes an event type it doesn't list stays hidden (ADR
+    /// 0024).
+    private(set) var capabilities: Set<String> = []
     /// The signed-in account's audiobook player.
     private(set) var player: AudioPlayer?
     /// Now Playing is open.
@@ -218,6 +222,7 @@ final class AppModel {
         stopPrefetching()
         stopChecking()
         libraryID = session.map { UserDefaults.standard.integer(forKey: AccountData(accountID: $0.account.id).libraryIDKey) } ?? 0
+        capabilities = Set(session?.capabilities.withLock { $0 } ?? [])
         filter = LibraryFilter()
         loadSort()
         if let session {
@@ -533,6 +538,32 @@ final class AppModel {
 
     func dismissJournalNotes() {
         try? session?.store.dismissJournalNotes()
+    }
+
+    // MARK: - The reading record
+
+    /// The account's server lists capability.
+    func offers(_ capability: Shishoapp.Capability) -> Bool {
+        capabilities.contains(capability.rawValue)
+    }
+
+    /// Records a change to the user's reading record: it shows at once, and
+    /// goes to the server now when it can, or at the next sync (ADR 0024).
+    /// A List it makes returns its id here.
+    @discardableResult
+    func change(_ change: ReadingChange) -> Int? {
+        guard let session, offers(change.capability) else { return nil }
+        do {
+            let made = try session.store.record(change)
+            if case .clearPosition(let fileID) = change {
+                player?.positionCleared(fileID: fileID)
+            }
+            Task { await syncNow() }
+            return made
+        } catch {
+            Task { await Diagnostics.shared.log(.app, "reading change not saved: \(Diagnostics.describe(error))") }
+            return nil
+        }
     }
 
     // MARK: - Signing in and out
@@ -1118,6 +1149,9 @@ final class AppModel {
 
     private func recordCapabilities(_ listed: [String], accountID: String) {
         guard session?.account.id == accountID, var account = stored(accountID) else { return }
+        if capabilities != Set(listed) {
+            capabilities = Set(listed)
+        }
         player?.capabilitiesChanged(listed)
         guard account.capabilities != listed else { return }
         account.capabilities = listed

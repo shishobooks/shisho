@@ -34,7 +34,7 @@ final class SyncEngine: Sendable {
         // A feed that fails doesn't keep the journal from being sent.
         var feedError: Error?
         do {
-            try await pullFeed()
+            try await pullFeedAndConfirm()
         } catch let error as APIError where error == .noAccess || error == .signedOut || error == .serverReplaced {
             // The server refused the account itself; the journal would be
             // refused too, and a failure sending it mustn't hide why.
@@ -48,8 +48,42 @@ final class SyncEngine: Sendable {
             throw feedError
         }
         if pending > 0 {
-            try await pullFeed()
+            try await pullFeedAndConfirm()
         }
+        // Stats that fail to come keep the copy, which still counts this
+        // device's reading on top; the rest of the sync stands.
+        do {
+            try await fetchStats()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            await Diagnostics.shared.log(.sync, "reading stats not fetched: \(Diagnostics.describe(error))")
+        }
+    }
+
+    /// Pulls the feed, then stops laying the changes the server took in
+    /// before it began over the synced copy, which now holds them.
+    private func pullFeedAndConfirm() async throws {
+        let began = Date()
+        try await pullFeed()
+        try store.feedCaughtUp(since: began)
+    }
+
+    /// Fetches Reading Stats again for every range kept, and all time and
+    /// this year always, so they count what the journal just sent (ADR
+    /// 0024). A server that doesn't list them keeps the copy as it was.
+    func fetchStats() async throws {
+        guard capabilities().contains(Shishoapp.Capability.readingStats.rawValue) else { return }
+        var ranges = Set(try store.statsRanges())
+        ranges.insert(nil)
+        ranges.insert(Calendar.current.component(.year, from: Date()))
+        for year in ranges.sorted(by: { ($0 ?? 0) < ($1 ?? 0) }) {
+            let began = Date()
+            let stats = try await client.stats(year: year)
+            try Task.checkCancellation()
+            try store.saveStats(stats, year: year, fetchedAt: began)
+        }
+        try store.statsCaughtUp()
     }
 
     /// Sends the journal in batches until nothing sendable is left. Any

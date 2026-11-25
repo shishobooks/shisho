@@ -248,6 +248,22 @@ final class APIClient: Sendable {
         return response
     }
 
+    /// The user's Reading Stats for year, or all time. A response without
+    /// its time zone, from something other than Shisho, is an error, so the
+    /// copy on the device stays.
+    func stats(year: Int?) async throws -> Shishoapp.StatsResponse {
+        let query = year.map { [URLQueryItem(name: "year", value: String($0))] } ?? []
+        let body = try await data("mobile/stats", query: query)
+        struct Shape: Decodable {
+            let time_zone: String
+            let totals: [String: Double?]
+        }
+        guard (try? JSONDecoder().decode(Shape.self, from: body)) != nil,
+              let response = try? makeShishoDecoder().decode(Shishoapp.StatsResponse.self, from: body)
+        else { throw APIError.serverPredatesApp }
+        return response
+    }
+
     /// A File's own cover at size pixels, keyed by its cover version.
     func fileCover(fileID: Int, version: String, size: Int, renderKey: String) async throws -> Data {
         try await data("mobile/files/\(fileID)/cover", query: [

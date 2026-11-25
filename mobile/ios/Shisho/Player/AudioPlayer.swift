@@ -869,6 +869,14 @@ final class AudioPlayer {
         close()
     }
 
+    /// The user cleared the File's saved place: a paused File goes back to
+    /// its start, which isn't saved as a place until it plays. One playing
+    /// keeps going from where it is.
+    func positionCleared(fileID: Int) {
+        guard file?.fileID == fileID, !isPlaying else { return }
+        move(to: 0)
+    }
+
     /// Closes the File, keeping what was listened, as when it's no longer
     /// in the user's Libraries.
     private func close() {
