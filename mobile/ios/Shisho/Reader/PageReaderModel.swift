@@ -58,9 +58,6 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     @ObservationIgnored private var waitingForConnection = false
     /// The last page showed, which finishes the Read-through.
     @ObservationIgnored private var readToEnd = false
-    /// The copy this open downloaded, which can go if it won't open, to be
-    /// downloaded again on Try Again.
-    @ObservationIgnored private var fetchedCopy: UUID?
     @ObservationIgnored private var shownChapters: [ReaderChapter]
     /// When the last run of VoiceOver adjustments to the scrubber was.
     @ObservationIgnored private var lastAdjustment: Date?
@@ -150,13 +147,15 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         fileWatch?.cancel()
         source = nil
         waitingForConnection = false
-        fetchedCopy = nil
         let opening = id
         if let current = try? await session.store.pool.read({ try CatalogStore.readingFile($0, fileID: opening) }) {
             file = current
         }
         guard !closed else { return }
         let url: URL
+        // The copy this open downloaded, which can go if it won't open, to
+        // be downloaded again on Try Again.
+        var fetchedCopy: UUID?
         do {
             if let downloaded = session.downloads.localFile(fileID: file.fileID) {
                 url = downloaded

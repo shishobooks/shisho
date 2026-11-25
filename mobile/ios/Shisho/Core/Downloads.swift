@@ -345,31 +345,25 @@ final class DownloadManager {
     /// it found on the device.
     func fetchNow(fileID: Int) async throws -> (url: URL, fetched: UUID?) {
         if let local = localFile(fileID: fileID) { return (local, nil) }
-        let fetched = try await client.download(fileID: fileID)
-        defer { try? FileManager.default.removeItem(at: fetched) }
-        // A background transfer of it may have finished meanwhile.
-        if let local = localFile(fileID: fileID) { return (local, nil) }
-        try store.queueDownloads([fileID])
-        // One finished whose file is gone counts as wanted again.
-        try store.requeueDownloads([fileID])
-        guard let row = try await store.pool.read({ try CatalogStore.download($0, fileID: fileID) }) else {
+        let downloaded = try await client.download(fileID: fileID)
+        defer { try? FileManager.default.removeItem(at: downloaded) }
+        switch try copies.publishFetched(fileID: fileID, from: downloaded) {
+        case .found(let url):
+            // A background transfer of it finished meanwhile.
+            return (url, nil)
+        case .unknown:
             throw APIError.server(status: 404, message: String(localized: "The server doesn't have this File anymore."))
+        case .published(let url, let copy):
+            if let id = transfers.drop(fileID: fileID) {
+                tasks.removeValue(forKey: id)?.cancel()
+            }
+            running.remove(fileID)
+            progress[fileID] = nil
+            DownloadResume.drop(fileID: fileID, in: folder)
+            log("file \(fileID): downloaded to open it")
+            onChange?(fileID)
+            return (url, copy)
         }
-        if let id = transfers.drop(fileID: fileID) {
-            tasks.removeValue(forKey: id)?.cancel()
-        }
-        running.remove(fileID)
-        progress[fileID] = nil
-        DownloadResume.drop(fileID: fileID, in: folder)
-        guard let copy = try copies.publish(fileID: fileID, from: fetched) else {
-            // A background transfer finishing at the same moment put the
-            // same File there first, or it was removed meanwhile.
-            if let local = localFile(fileID: fileID) { return (local, nil) }
-            throw CancellationError()
-        }
-        log("file \(fileID): downloaded to open it")
-        onChange?(fileID)
-        return (location(fileID: fileID, fileType: row.fileType), copy)
     }
 
     /// Stops a transfer and removes Downloads, freeing their space.
@@ -420,7 +414,7 @@ final class DownloadManager {
             log("file \(fileID): its copy won't open, so its Download is removed")
             forget(fileID)
         case .copy:
-            log("file \(fileID): its copy won't open, so it waits for the new one")
+            log("file \(fileID): its copy won't open, so it's removed and the Download stays as it is")
             onChange?(fileID)
         case .nothing:
             break
@@ -830,11 +824,14 @@ final class DownloadManager {
 }
 
 /// Each File's copy in an account's Downloads folder, at one place per
-/// File. A copy is put there and taken away inside a write to the account's
-/// database, and its writes run one at a time, so the row and the file
-/// change together: an open discarding the copy it downloaded can't take a
-/// newer one a transfer puts there between its check and its delete. Used
-/// from the main actor and from the transfers' delegate.
+/// File. A copy is put there, and an open's copy that won't open is taken
+/// away, inside a write to the account's database, whose writes run one at
+/// a time: an open discarding the copy it downloaded can't take a newer one
+/// a transfer puts there between its check and its delete. That rests on
+/// each check and file change sharing one `pool.write`. Removing a Download
+/// (`DownloadManager.remove`) deletes its row first, so nothing is put in
+/// its place after. Used from the main actor and from the transfers'
+/// delegate.
 struct DownloadCopies: Sendable {
     let store: CatalogStore
     let folder: URL
@@ -843,8 +840,8 @@ struct DownloadCopies: Sendable {
     enum Discarded: Equatable, Sendable {
         /// The Download went with it.
         case download
-        /// Only the copy went: the Download is on its way, as for a File
-        /// the server replaced, and its transfer goes on.
+        /// Only the copy went: the Download isn't finished, as for a File
+        /// the server replaced, and stays as it is, its transfer going on.
         case copy
         /// Another copy is there now, or none, and it stays.
         case nothing
@@ -855,20 +852,58 @@ struct DownloadCopies: Sendable {
         folder.appendingPathComponent("\(fileID).\(fileType)")
     }
 
-    /// Moves a downloaded file into the File's place as its new copy, and
+    /// Moves a transfer's file into the File's place as its new copy, and
     /// returns which copy it is. Nil, leaving the file where it is, when the
     /// Download isn't on its way: removed meanwhile, or finished by another
     /// transfer, whose copy of the same File stays.
     func publish(fileID: Int, from file: URL) throws -> UUID? {
         try store.pool.write { db in
             guard let row = try CatalogStore.download(db, fileID: fileID), row.state == .queued else { return nil }
-            try DownloadSessionDelegate.prepare(folder)
-            let destination = location(fileID: fileID, fileType: row.fileType)
-            try? FileManager.default.removeItem(at: destination)
-            try FileManager.default.moveItem(at: file, to: destination)
-            let size = (try? FileManager.default.attributesOfItem(atPath: destination.path)[.size] as? Int) ?? row.sizeBytes
-            return try CatalogStore.markDownloaded(db, fileID: fileID, sizeBytes: size)
+            return try place(file, row: row, in: db)
         }
+    }
+
+    /// What an open's download found when it went to put its copy in place.
+    enum Fetched: Equatable, Sendable {
+        /// Its copy is in place now.
+        case published(URL, copy: UUID)
+        /// A transfer put a copy there first, which it uses instead.
+        case found(URL)
+        /// Not a File in the catalog that this version can download.
+        case unknown
+    }
+
+    /// Puts a file an open downloaded (`DownloadManager.fetchNow`) in the
+    /// File's place as a Download, unless a transfer put a copy there first.
+    /// One that failed, or whose file is gone, takes it.
+    func publishFetched(fileID: Int, from file: URL) throws -> Fetched {
+        try store.pool.write { db in
+            _ = try CatalogStore.queueDownloads(db, [fileID])
+            guard let row = try CatalogStore.download(db, fileID: fileID) else { return .unknown }
+            let destination = location(fileID: fileID, fileType: row.fileType)
+            if row.state == .done || row.replacing, FileManager.default.fileExists(atPath: destination.path) {
+                return .found(destination)
+            }
+            try CatalogStore.requeueDownloads(db, [fileID])
+            guard let copy = try place(file, row: row, in: db) else { return .unknown }
+            return .published(destination, copy: copy)
+        }
+    }
+
+    /// Records the new copy, then moves file over whatever is in its place
+    /// in one step: a move that fails rolls the row back and leaves the copy
+    /// that was there.
+    private func place(_ file: URL, row: DownloadRow, in db: Database) throws -> UUID? {
+        let size = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? Int) ?? row.sizeBytes
+        guard let copy = try CatalogStore.markDownloaded(db, fileID: row.fileID, sizeBytes: size) else { return nil }
+        try DownloadSessionDelegate.prepare(folder)
+        let destination = location(fileID: row.fileID, fileType: row.fileType)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: file, options: .usingNewMetadataOnly)
+        } else {
+            try FileManager.default.moveItem(at: file, to: destination)
+        }
+        return copy
     }
 
     /// Deletes copy if it's still the one in the File's place. A finished

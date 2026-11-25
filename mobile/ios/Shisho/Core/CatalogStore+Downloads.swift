@@ -200,28 +200,30 @@ extension CatalogStore {
     @discardableResult
     func queueDownloads(_ fileIDs: [Int], at: Date = Date()) throws -> [Int] {
         guard !fileIDs.isEmpty else { return [] }
-        return try pool.write { db in
-            var queued: [Int] = []
-            for (offset, fileID) in fileIDs.enumerated() {
-                guard let row = try Row.fetchOne(db, sql: """
-                    SELECT file_type, size_bytes FROM book_files WHERE id = ? AND file_type IN (\(CatalogStore.downloadableTypes))
-                    """, arguments: [fileID])
-                else { continue }
-                let existing = try String.fetchOne(db, sql: "SELECT state FROM downloads WHERE file_id = ?", arguments: [fileID])
-                guard existing == nil || existing == DownloadState.failed.rawValue else { continue }
-                // In the order asked for, so a Series downloads in order.
-                try db.execute(sql: """
-                    INSERT INTO downloads (file_id, file_type, state, size_bytes, catalog_size, error, requested_at)
-                    VALUES (?, ?, 'queued', ?, ?, NULL, ?)
-                    ON CONFLICT (file_id) DO UPDATE SET file_type = excluded.file_type, state = 'queued',
-                        size_bytes = excluded.size_bytes, catalog_size = excluded.catalog_size, error = NULL, remove_pending = 0,
-                        requested_at = excluded.requested_at
-                    """, arguments: [fileID, row["file_type"], row["size_bytes"], row["size_bytes"],
-                                     at.timeIntervalSince1970 + Double(offset) / 1000])
-                queued.append(fileID)
-            }
-            return queued
+        return try pool.write { try CatalogStore.queueDownloads($0, fileIDs, at: at) }
+    }
+
+    static func queueDownloads(_ db: Database, _ fileIDs: [Int], at: Date = Date()) throws -> [Int] {
+        var queued: [Int] = []
+        for (offset, fileID) in fileIDs.enumerated() {
+            guard let row = try Row.fetchOne(db, sql: """
+                SELECT file_type, size_bytes FROM book_files WHERE id = ? AND file_type IN (\(CatalogStore.downloadableTypes))
+                """, arguments: [fileID])
+            else { continue }
+            let existing = try String.fetchOne(db, sql: "SELECT state FROM downloads WHERE file_id = ?", arguments: [fileID])
+            guard existing == nil || existing == DownloadState.failed.rawValue else { continue }
+            // In the order asked for, so a Series downloads in order.
+            try db.execute(sql: """
+                INSERT INTO downloads (file_id, file_type, state, size_bytes, catalog_size, error, requested_at)
+                VALUES (?, ?, 'queued', ?, ?, NULL, ?)
+                ON CONFLICT (file_id) DO UPDATE SET file_type = excluded.file_type, state = 'queued',
+                    size_bytes = excluded.size_bytes, catalog_size = excluded.catalog_size, error = NULL, remove_pending = 0,
+                    requested_at = excluded.requested_at
+                """, arguments: [fileID, row["file_type"], row["size_bytes"], row["size_bytes"],
+                                 at.timeIntervalSince1970 + Double(offset) / 1000])
+            queued.append(fileID)
         }
+        return queued
     }
 
     /// Records a finished transfer as a new copy, and returns which copy it
@@ -247,15 +249,18 @@ extension CatalogStore {
     /// queue, as after restoring a backup, which leaves Downloads out.
     func requeueDownloads(_ fileIDs: [Int]) throws {
         guard !fileIDs.isEmpty else { return }
-        try pool.write { db in
-            try db.execute(sql: """
-                UPDATE downloads SET state = 'queued', error = NULL WHERE file_id IN (\(fileIDs.map(String.init).joined(separator: ",")))
-                """)
-        }
+        try pool.write { try CatalogStore.requeueDownloads($0, fileIDs) }
+    }
+
+    static func requeueDownloads(_ db: Database, _ fileIDs: [Int]) throws {
+        try db.execute(sql: """
+            UPDATE downloads SET state = 'queued', error = NULL WHERE file_id IN (\(fileIDs.map(String.init).joined(separator: ",")))
+            """)
     }
 
     /// Forgets the copy in a File's place: a finished Download goes with it,
-    /// and one on its way stays queued with no copy to use meanwhile.
+    /// and one not finished, as a replacement queued or failed, stays as it
+    /// is with no copy to use meanwhile.
     static func discardCopy(_ db: Database, fileID: Int, finished: Bool) throws {
         if finished {
             try db.execute(sql: "DELETE FROM downloads WHERE file_id = ?", arguments: [fileID])
