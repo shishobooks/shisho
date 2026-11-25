@@ -28,7 +28,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
 /// chapter skips beside the system's skips, which use the listener's
 /// lengths (`AudioPlayer.applySkipIntervals`).
 @MainActor
-final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate {
+final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionConfigurationDelegate {
     private let model: AppModel
     private let interfaceController: CPInterfaceController
     private let root: CPListTemplate
@@ -45,6 +45,10 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate {
     /// What the pushed list last read, to draw again when the player
     /// changes.
     private var lastPushed: [CarPlayAudiobook] = []
+    /// The player's last error, said once.
+    private var lastError: String?
+    /// Says when the car limits its lists, as some do while moving.
+    private var carSession: CPSessionConfiguration?
 
     private struct RootContent: Equatable, Sendable {
         var continueListening: [CarPlayAudiobook]
@@ -61,6 +65,7 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate {
     func start() {
         interfaceController.delegate = self
         interfaceController.setRootTemplate(root, animated: false, completion: completion("show the root list"))
+        carSession = CPSessionConfiguration(delegate: self)
         configureNowPlaying()
         watchSession()
         watchPlayer()
@@ -113,12 +118,8 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate {
         }
         root.emptyViewTitleVariants = []
         root.emptyViewSubtitleVariants = []
-        let deviceID = session.account.deviceID
-        let observation = ValueObservation.tracking(regions: CatalogStore.carPlayTables) { db in
-            RootContent(continueListening: try CatalogStore.continueListening(db, limit: CarPlayRootLayout.continueListeningLimit,
-                                                                               ownDeviceID: deviceID),
-                        libraries: try CatalogStore.audiobookLibraries(db))
-        }.removeDuplicates()
+        let observation = ValueObservation.tracking(regions: CatalogStore.carPlayTables, fetch: rootFetch(session))
+            .removeDuplicates()
         rootUpdates = Task { [weak self] in
             do {
                 for try await content in observation.values(in: session.store.pool) {
@@ -131,19 +132,51 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate {
         }
     }
 
-    /// Draws the lists again when what's playing changes, for the playing
-    /// indicator.
+    private func rootFetch(_ session: AccountSession) -> @Sendable (Database) throws -> RootContent {
+        let deviceID = session.account.deviceID
+        return { db in
+            RootContent(continueListening: try CatalogStore.continueListening(db, limit: CarPlayRootLayout.continueListeningLimit,
+                                                                               ownDeviceID: deviceID),
+                        libraries: try CatalogStore.audiobookLibraries(db))
+        }
+    }
+
+    /// Reads the root again when what's playing changes, for the playing
+    /// indicator and for a File played to its end, whose place the root's
+    /// observation doesn't track. A stream that fails is said in the car.
     private func watchPlayer() {
         withObservationTracking {
             _ = model.player?.file?.fileID
             _ = model.player?.isPlaying
+            _ = model.player?.error
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                if let lastRoot = self.lastRoot { self.showRoot(lastRoot) }
+                self.refreshRoot()
                 self.pushed?.updateSections([CPListSection(items: self.lastPushed.map(self.item))])
+                let error = self.model.player?.error
+                if let error, error != self.lastError { self.alert(error) }
+                self.lastError = error
                 self.watchPlayer()
             }
+        }
+    }
+
+    private func refreshRoot() {
+        guard let session, lastRoot != nil else { return }
+        let fetch = rootFetch(session)
+        Task { [weak self] in
+            guard let content = try? await session.store.pool.read(fetch) else { return }
+            guard let self, self.session === session else { return }
+            self.showRoot(content)
+        }
+    }
+
+    /// The car changed what it limits: the root fits its rows again.
+    nonisolated func sessionConfiguration(_ sessionConfiguration: CPSessionConfiguration,
+                                          limitedUserInterfacesChanged limitedUserInterfaces: CPLimitableUserInterface) {
+        Task { @MainActor in
+            if let lastRoot = self.lastRoot { self.showRoot(lastRoot) }
         }
     }
 
@@ -172,11 +205,13 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate {
         root.updateSections(sections)
     }
 
-    /// A row that leads to another list.
+    /// A row that leads to another list, for the account it was listed for
+    /// only.
     private func row(_ text: String, icon: Lucide, open: @escaping @MainActor (CarPlayScreens) -> Void) -> CPListItem {
         let row = CPListItem(text: text, detailText: nil, image: icon.uiImage, accessoryImage: nil, accessoryType: .disclosureIndicator)
+        let listed = session
         row.handler = { [weak self] _, done in
-            if let self { open(self) }
+            if let self, let listed, self.model.session === listed { open(self) }
             done()
         }
         return row

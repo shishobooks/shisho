@@ -77,8 +77,7 @@ extension CatalogStore {
             let duration: Double = row["duration_seconds"] ?? 0
             let start = PlaceRules.open(local: try localPlace(db, fileID: fileID), server: try serverPlace(db, fileID: fileID),
                                         ownDeviceID: ownDeviceID).start
-            // Listened to the end, where the player stops.
-            if duration > 0, start >= duration - 1 { continue }
+            if ListeningRules.isAtEnd(start, duration: duration) { continue }
             listed.append(audiobook(row, title: row["title"], authors: row["authors"], bookCover: row["book_cover"],
                                     progress: duration > 0 ? start / duration : nil))
             if listed.count == limit { break }

@@ -84,8 +84,10 @@ final class CarPlayCatalogTests: XCTestCase {
         XCTAssertEqual(try continueListening(limit: 1).map(\.fileID), [10])
         XCTAssertEqual(try continueListening(limit: 0), [])
 
-        try listen(fileID: 10, percentage: 0.9995, at: Date(timeIntervalSince1970: 1_800_000_200))
-        XCTAssertEqual(try continueListening().map(\.fileID), [30], "within a second of the end is the end")
+        try listen(fileID: 10, percentage: 0.999, at: Date(timeIntervalSince1970: 1_800_000_200))
+        XCTAssertEqual(try continueListening().map(\.fileID), [10, 30], "a second from the end plays on")
+        try listen(fileID: 10, percentage: 0.9995, at: Date(timeIntervalSince1970: 1_800_000_300))
+        XCTAssertEqual(try continueListening().map(\.fileID), [30], "where playing starts over is the end")
     }
 
     func testContinueListeningShowsABooksAudiobookOnceWithItsOwnCover() throws {

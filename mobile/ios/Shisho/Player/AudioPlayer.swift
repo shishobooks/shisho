@@ -341,7 +341,7 @@ final class AudioPlayer {
             prepareItem()
         }
         // Playing again at the end starts over.
-        if file.duration > 0, currentPosition() >= file.duration - 0.5 {
+        if ListeningRules.isAtEnd(currentPosition(), duration: file.duration) {
             move(to: 0)
             retargetSleep()
         } else if smartRewind, let pausedAt {
