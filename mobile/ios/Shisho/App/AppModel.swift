@@ -145,7 +145,7 @@ final class AppModel {
     /// The order picked on this device for a Library of the account showing,
     /// or nil for the one saved on the web.
     func sortSpec(libraryID: Int) -> String? {
-        session.flatMap { UserDefaults.standard.string(forKey: AccountData(accountID: $0.account.id).sortKey(libraryID: libraryID)) }
+        session.flatMap { AccountData(accountID: $0.account.id).pickedSort(libraryID: libraryID) }
     }
 
     private func loadSort() {

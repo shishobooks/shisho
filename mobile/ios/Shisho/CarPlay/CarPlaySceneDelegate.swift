@@ -23,48 +23,77 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 }
 
-/// CarPlay's templates: a list of Continue Listening, Downloads, and the
-/// Libraries with audiobooks, and the shared Now Playing template with
-/// chapter skips beside the system's skips, which use the listener's
-/// lengths (`AudioPlayer.applySkipIntervals`).
+/// A list CarPlay shows, kept up to date from the account's database while
+/// it shows.
+@MainActor
+private final class LiveList {
+    let template: CPListTemplate
+    /// Names the list in the log, never by a title.
+    let name: String
+    let fetch: @Sendable (Database) throws -> [CarPlayRow]
+    /// What it last read, to draw again when the player or the car's limits
+    /// change.
+    var rows: [CarPlayRow] = []
+    var updates: Task<Void, Never>?
+
+    init(_ template: CPListTemplate, name: String, fetch: @escaping @Sendable (Database) throws -> [CarPlayRow]) {
+        self.template = template
+        self.name = name
+        self.fetch = fetch
+    }
+}
+
+/// CarPlay's templates: tabs for Recent (the audiobooks partway through),
+/// Downloads, and Library, beside the player CarPlay draws itself, and the
+/// shared Now Playing template with chapter skips beside the system's skips,
+/// which use the listener's lengths (`AudioPlayer.applySkipIntervals`).
 @MainActor
 final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionConfigurationDelegate {
     private let model: AppModel
     private let interfaceController: CPInterfaceController
-    private let root: CPListTemplate
+    private let tabs: CPTabBarTemplate
+    private let recent: CPListTemplate
+    private let downloads: CPListTemplate
+    private let library: CPListTemplate
+    /// What shows while no account is signed in.
+    private let signedOut: CPListTemplate
     /// The account the lists show, which every row checks is still the one
-    /// signed in before it plays.
+    /// signed in before it acts.
     private var session: AccountSession?
-    /// Keeps the root list up to date with the account's database.
-    private var rootUpdates: Task<Void, Never>?
-    /// What the root list last read, to draw again when the player changes.
-    private var lastRoot: RootContent?
-    /// The list pushed over the root, kept up to date by listUpdates.
-    private weak var pushed: CPListTemplate?
-    private var listUpdates: Task<Void, Never>?
-    /// What the pushed list last read, to draw again when the player
-    /// changes.
-    private var lastPushed: [CarPlayAudiobook] = []
+    private var watched = false
+    /// The tabs' lists, and a Library's list pushed over them.
+    private var lists: [LiveList] = []
+    private var pushed: LiveList?
     /// The player's last error, said once.
     private var lastError: String?
     /// Says when the car limits its lists, as some do while moving.
     private var carSession: CPSessionConfiguration?
 
-    private struct RootContent: Equatable, Sendable {
-        var continueListening: [CarPlayAudiobook]
-        var libraries: [LibrarySummary]
-    }
-
     init(model: AppModel, interfaceController: CPInterfaceController) {
         self.model = model
         self.interfaceController = interfaceController
-        root = CPListTemplate(title: String(localized: "Shisho"), sections: [])
+        recent = CarPlayScreens.tab(String(localized: "Recent"), icon: .clockArrowUp,
+                                    empty: String(localized: "Nothing Partway Through"))
+        downloads = CarPlayScreens.tab(String(localized: "Downloads"), icon: .download,
+                                       empty: String(localized: "No Audiobooks Downloaded"))
+        library = CarPlayScreens.tab(String(localized: "Library"), icon: .library, empty: String(localized: "No Audiobooks"))
+        tabs = CPTabBarTemplate(templates: [recent, downloads, library])
+        signedOut = CPListTemplate(title: String(localized: "Shisho"), sections: [])
+        signedOut.emptyViewTitleVariants = [String(localized: "Not Signed In")]
+        signedOut.emptyViewSubtitleVariants = [String(localized: "Shisho lists your audiobooks here once it's signed in to your server.")]
         super.init()
+    }
+
+    private static func tab(_ title: String, icon: Lucide, empty: String) -> CPListTemplate {
+        let list = CPListTemplate(title: title, sections: [])
+        list.tabTitle = title
+        list.tabImage = icon.uiImage
+        list.emptyViewTitleVariants = [empty]
+        return list
     }
 
     func start() {
         interfaceController.delegate = self
-        interfaceController.setRootTemplate(root, animated: false, completion: completion("show the root list"))
         carSession = CPSessionConfiguration(delegate: self)
         configureNowPlaying()
         watchSession()
@@ -74,8 +103,8 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
     }
 
     func stop() {
-        rootUpdates?.cancel()
-        listUpdates?.cancel()
+        for list in lists { list.updates?.cancel() }
+        pushed?.updates?.cancel()
         log("disconnected")
         model.carPlayDisconnected()
     }
@@ -91,7 +120,7 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
 
     // MARK: - Watching
 
-    /// Fills the root from the signed-in account, again whenever the account
+    /// Shows the signed-in account's tabs, again whenever the account
     /// changes, leaving nothing of the last one's to play.
     private func watchSession() {
         let session = withObservationTracking {
@@ -99,51 +128,58 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
         } onChange: { [weak self] in
             Task { @MainActor in self?.watchSession() }
         }
-        guard session !== self.session || rootUpdates == nil else { return }
+        guard !watched || session !== self.session else { return }
+        watched = true
         self.session = session
-        rootUpdates?.cancel()
-        listUpdates?.cancel()
-        lastRoot = nil
-        lastPushed = []
+        for list in lists { list.updates?.cancel() }
+        lists = []
+        pushed?.updates?.cancel()
         pushed = nil
-        if interfaceController.templates.count > 1 {
-            interfaceController.popToRootTemplate(animated: false, completion: completion("go back to the root list"))
-        }
-        root.updateSections([])
         guard let session else {
-            root.emptyViewTitleVariants = [String(localized: "Not Signed In")]
-            root.emptyViewSubtitleVariants = [String(localized: "Shisho lists your audiobooks here once it's signed in to your server.")]
-            rootUpdates = Task {}
+            interfaceController.setRootTemplate(signedOut, animated: false, completion: completion("show the signed-out list"))
             return
         }
-        root.emptyViewTitleVariants = []
-        root.emptyViewSubtitleVariants = []
-        let observation = ValueObservation.tracking(regions: CatalogStore.carPlayTables, fetch: rootFetch(session))
-            .removeDuplicates()
-        rootUpdates = Task { [weak self] in
+        let deviceID = session.account.deviceID
+        let account = AccountData(accountID: session.account.id)
+        // The most any car shows; draw cuts the list to what this one does.
+        let limit = CPListTemplate.maximumItemCount
+        lists = [
+            LiveList(recent, name: "recent") { db in
+                try CatalogStore.continueListening(db, limit: limit, ownDeviceID: deviceID)
+                    .map(CarPlayRow.audiobook)
+            },
+            LiveList(downloads, name: "downloads") { db in try CatalogStore.downloadedAudiobooks(db).map(CarPlayRow.audiobook) },
+            LiveList(library, name: "library") { db in
+                try CatalogStore.carPlayLibraryTab(db) { account.pickedSort(libraryID: $0) }
+            },
+        ]
+        for list in lists {
+            list.rows = []
+            draw(list)
+            watch(list, session: session)
+        }
+        interfaceController.setRootTemplate(tabs, animated: false, completion: completion("show the tabs"))
+    }
+
+    /// Keeps list up to date with session's database.
+    private func watch(_ list: LiveList, session: AccountSession) {
+        let observation = ValueObservation.tracking(regions: CatalogStore.carPlayTables, fetch: list.fetch).removeDuplicates()
+        list.updates = Task { [weak self, weak list] in
             do {
-                for try await content in observation.values(in: session.store.pool) {
-                    guard let self, self.session === session else { return }
-                    self.showRoot(content)
+                for try await rows in observation.values(in: session.store.pool) {
+                    guard let self, let list, self.session === session else { return }
+                    list.rows = rows
+                    self.draw(list)
                 }
             } catch {
-                self?.log("couldn't read the root list: \(Diagnostics.describe(error))")
+                self?.log("couldn't read the \(list?.name ?? "") list: \(Diagnostics.describe(error))")
             }
         }
     }
 
-    private func rootFetch(_ session: AccountSession) -> @Sendable (Database) throws -> RootContent {
-        let deviceID = session.account.deviceID
-        return { db in
-            RootContent(continueListening: try CatalogStore.continueListening(db, limit: CarPlayRootLayout.continueListeningLimit,
-                                                                               ownDeviceID: deviceID),
-                        libraries: try CatalogStore.audiobookLibraries(db))
-        }
-    }
-
-    /// Reads the root again when what's playing changes, for the playing
-    /// indicator and for a File played to its end, whose place the root's
-    /// observation doesn't track. A stream that fails is said in the car.
+    /// Reads the lists again when what's playing changes, for the playing
+    /// indicator and for an audiobook played to its end, whose place the
+    /// observations don't track. A stream that fails is said in the car.
     private func watchPlayer() {
         withObservationTracking {
             _ = model.player?.file?.fileID
@@ -152,8 +188,7 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                self.refreshRoot()
-                self.pushed?.updateSections([CPListSection(items: self.lastPushed.map(self.item))])
+                self.refreshAll()
                 let error = self.model.player?.error
                 if let error, error != self.lastError { self.alert(error) }
                 self.lastError = error
@@ -162,129 +197,88 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
         }
     }
 
-    private func refreshRoot() {
-        guard let session, lastRoot != nil else { return }
-        let fetch = rootFetch(session)
-        Task { [weak self] in
-            guard let content = try? await session.store.pool.read(fetch) else { return }
-            guard let self, self.session === session else { return }
-            self.showRoot(content)
+    private func refreshAll() {
+        guard let session else { return }
+        for list in lists + [pushed].compactMap({ $0 }) {
+            let fetch = list.fetch
+            Task { [weak self, weak list] in
+                guard let rows = try? await session.store.pool.read(fetch) else { return }
+                guard let self, let list, self.session === session else { return }
+                list.rows = rows
+                self.draw(list)
+            }
         }
     }
 
-    /// The car changed what it limits: the root fits its rows again.
+    /// The car changed what it limits: the lists fit its rows again.
     nonisolated func sessionConfiguration(_ sessionConfiguration: CPSessionConfiguration,
                                           limitedUserInterfacesChanged limitedUserInterfaces: CPLimitableUserInterface) {
         Task { @MainActor in
-            if let lastRoot = self.lastRoot { self.showRoot(lastRoot) }
+            for list in self.lists + [self.pushed].compactMap({ $0 }) { self.draw(list) }
         }
     }
 
     // MARK: - Lists
 
-    private func showRoot(_ content: RootContent) {
-        lastRoot = content
-        let layout = CarPlayRootLayout.fit(continueListening: content.continueListening.count, libraries: content.libraries.count,
-                                           maxItems: CPListTemplate.maximumItemCount)
-        var sections: [CPListSection] = []
-        if layout.continueListening > 0 {
-            sections.append(CPListSection(items: content.continueListening.prefix(layout.continueListening).map(item),
-                                          header: String(localized: "Continue Listening"), sectionIndexTitle: nil))
-        }
-        let downloads = row(String(localized: "Downloads"), icon: .download) { $0.showDownloads() }
-        if content.libraries.isEmpty {
-            sections.append(CPListSection(items: [downloads]))
-        } else if layout.librariesInline {
-            sections.append(CPListSection(items: [downloads]))
-            sections.append(CPListSection(items: content.libraries.map(libraryRow), header: String(localized: "Libraries"),
-                                          sectionIndexTitle: nil))
-        } else {
-            let libraries = row(String(localized: "Libraries"), icon: .library) { $0.showLibraries(content.libraries) }
-            sections.append(CPListSection(items: [downloads, libraries]))
-        }
-        root.updateSections(sections)
+    /// Draws list's rows, as many as the car allows.
+    private func draw(_ list: LiveList) {
+        let rows = list.rows.prefix(CPListTemplate.maximumItemCount)
+        list.template.updateSections(rows.isEmpty ? [] : [CPListSection(items: rows.map(item))])
     }
 
-    /// A row that leads to another list, for the account it was listed for
-    /// only.
-    private func row(_ text: String, icon: Lucide, open: @escaping @MainActor (CarPlayScreens) -> Void) -> CPListItem {
-        let row = CPListItem(text: text, detailText: nil, image: icon.uiImage, accessoryImage: nil, accessoryType: .disclosureIndicator)
+    private func item(_ row: CarPlayRow) -> CPListItem {
+        switch row {
+        case .audiobook(let book): audiobookItem(book)
+        case .library(let library): libraryItem(library)
+        }
+    }
+
+    private func libraryItem(_ library: LibrarySummary) -> CPListItem {
+        let item = CPListItem(text: library.name, detailText: nil, image: Lucide.library.uiImage, accessoryImage: nil,
+                              accessoryType: .disclosureIndicator)
         let listed = session
-        row.handler = { [weak self] _, done in
-            if let self, let listed, self.model.session === listed { open(self) }
+        item.handler = { [weak self] _, done in
+            if let self, let listed, self.model.session === listed { self.showLibrary(library, session: listed) }
             done()
         }
-        return row
+        return item
     }
 
-    private func libraryRow(_ library: LibrarySummary) -> CPListItem {
-        row(library.name, icon: .library) { $0.showLibrary(library) }
-    }
-
-    /// The Libraries, when there are more than the root has rows for.
-    private func showLibraries(_ libraries: [LibrarySummary]) {
-        let list = CPListTemplate(title: String(localized: "Libraries"),
-                                  sections: [CPListSection(items: libraries.prefix(CPListTemplate.maximumItemCount).map(libraryRow))])
-        interfaceController.pushTemplate(list, animated: true, completion: completion("show the Libraries"))
-    }
-
-    private func showDownloads() {
-        push(title: String(localized: "Downloads"), empty: String(localized: "No Audiobooks Downloaded"), logName: "downloads",
-             fetch: CatalogStore.downloadedAudiobooks)
-    }
-
-    private func showLibrary(_ library: LibrarySummary) {
+    /// A Library's audiobooks, pushed over the tabs, kept up to date while
+    /// they show.
+    private func showLibrary(_ library: LibrarySummary, session: AccountSession) {
         let id = library.id
         let sort = model.sortSpec(libraryID: id)
-        push(title: library.name, empty: String(localized: "No Audiobooks"), logName: "library \(id)",
-             fetch: { try CatalogStore.audiobooks($0, libraryID: id, sort: sort) })
-    }
-
-    /// Pushes a list of audiobooks, kept up to date while it shows. It
-    /// shows as many as the car allows.
-    private func push(title: String, empty: String, logName: String,
-                      fetch: @escaping @Sendable (Database) throws -> [CarPlayAudiobook]) {
-        guard let session else { return }
-        let list = CPListTemplate(title: title, sections: [])
-        list.emptyViewTitleVariants = [empty]
-        pushed = list
-        lastPushed = []
-        listUpdates?.cancel()
-        let maximum = CPListTemplate.maximumItemCount
-        let observation = ValueObservation.tracking(regions: CatalogStore.carPlayTables) { db in
-            Array(try fetch(db).prefix(maximum))
-        }.removeDuplicates()
-        listUpdates = Task { [weak self, weak list] in
-            do {
-                for try await books in observation.values(in: session.store.pool) {
-                    guard let self, let list, self.session === session else { return }
-                    self.lastPushed = books
-                    list.updateSections([CPListSection(items: books.map(self.item))])
-                }
-            } catch {
-                self?.log("couldn't read the \(logName) list: \(Diagnostics.describe(error))")
-            }
+        let template = CPListTemplate(title: library.name, sections: [])
+        template.emptyViewTitleVariants = [String(localized: "No Audiobooks")]
+        let list = LiveList(template, name: "library \(id)") { db in
+            try CatalogStore.audiobooks(db, libraryID: id, sort: sort).map(CarPlayRow.audiobook)
         }
-        interfaceController.pushTemplate(list, animated: true, completion: completion("show the \(logName) list"))
+        pushed?.updates?.cancel()
+        pushed = list
+        watch(list, session: session)
+        interfaceController.pushTemplate(template, animated: true, completion: completion("show library \(id)"))
     }
 
     nonisolated func templateDidDisappear(_ aTemplate: CPTemplate, animated: Bool) {
         let gone = ObjectIdentifier(aTemplate)
         Task { @MainActor in
             // Popped: the list stops updating.
-            guard let pushed = self.pushed, ObjectIdentifier(pushed) == gone,
-                  !self.interfaceController.templates.contains(where: { $0 === pushed })
+            guard let pushed = self.pushed, ObjectIdentifier(pushed.template) == gone,
+                  !self.interfaceController.templates.contains(where: { $0 === pushed.template })
             else { return }
-            self.listUpdates?.cancel()
+            pushed.updates?.cancel()
             self.pushed = nil
-            self.lastPushed = []
         }
     }
 
-    /// A row for an audiobook, with its cover, how far through it the user
-    /// is, and whether it's playing; selecting it plays it.
-    private func item(_ book: CarPlayAudiobook) -> CPListItem {
-        let item = CPListItem(text: book.title, detailText: book.authors.isEmpty ? nil : book.authors)
+    /// A row for an audiobook: its own cover, its Book's title and authors,
+    /// which of the Book's audiobooks it is when it has several, how far
+    /// through it the user is, and whether it's playing. Selecting it plays
+    /// it.
+    private func audiobookItem(_ book: CarPlayAudiobook) -> CPListItem {
+        let detail = [book.authors.isEmpty ? nil : book.authors, book.label].compactMap { $0 }.joined(separator: " · ")
+        let item = CPListItem(text: book.title, detailText: detail.isEmpty ? nil : detail, image: Lucide.headphones.uiImage)
         item.playbackProgress = CGFloat(book.progress ?? 0)
         if let player = model.player, player.file?.fileID == book.fileID {
             item.isPlaying = player.isPlaying
@@ -298,16 +292,17 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
         return item
     }
 
+    /// The audiobook's own cover; one without keeps the headphones.
     private func setCover(of book: CarPlayAudiobook, on item: CPListItem) {
         guard let covers = session?.covers, !book.coverVersion.isEmpty else { return }
         let size = CoverCache.pixelSize(forWidth: CPListItem.maximumImageSize.height,
                                         scale: interfaceController.carTraitCollection.displayScale)
-        if let image = covers.memoryImage(book.cover, version: book.coverVersion, size: size) {
+        if let image = covers.memoryImage(.file(book.fileID), version: book.coverVersion, size: size) {
             item.setImage(image)
             return
         }
         Task {
-            if let image = await covers.image(book.cover, version: book.coverVersion, size: size) {
+            if let image = await covers.image(.file(book.fileID), version: book.coverVersion, size: size) {
                 item.setImage(image)
             }
         }

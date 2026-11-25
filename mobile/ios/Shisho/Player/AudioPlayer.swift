@@ -621,6 +621,7 @@ final class AudioPlayer {
         let center = MPRemoteCommandCenter.shared()
         for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.skipForwardCommand,
                         center.skipBackwardCommand, center.nextTrackCommand, center.previousTrackCommand,
+                        center.seekForwardCommand, center.seekBackwardCommand,
                         center.changePlaybackPositionCommand, center.changePlaybackRateCommand] {
             command.removeTarget(nil)
         }
@@ -1165,28 +1166,32 @@ final class AudioPlayer {
         let center = MPRemoteCommandCenter.shared()
         applySkipIntervals()
         center.changePlaybackRateCommand.supportedPlaybackRates = [0.8, 1.0, 1.2, 1.5, 2.0].map { NSNumber(value: $0) }
-        let commands: [(MPRemoteCommand, @MainActor (AudioPlayer, Double?) -> Void)] = [
-            (center.playCommand, { player, _ in player.play() }),
-            (center.pauseCommand, { player, _ in player.pause() }),
-            (center.togglePlayPauseCommand, { player, _ in player.togglePlay() }),
-            (center.skipBackwardCommand, { player, _ in player.skipBack() }),
-            (center.skipForwardCommand, { player, _ in player.skipForward() }),
-            // Headphones' double and triple click, and a car's track
-            // buttons, skip as the lock screen does rather than change
+        let commands: [(String, MPRemoteCommand, @MainActor (AudioPlayer, Double?) -> Void)] = [
+            ("play", center.playCommand, { player, _ in player.play() }),
+            ("pause", center.pauseCommand, { player, _ in player.pause() }),
+            ("toggle play", center.togglePlayPauseCommand, { player, _ in player.togglePlay() }),
+            ("skip back", center.skipBackwardCommand, { player, _ in player.skipBack() }),
+            ("skip forward", center.skipForwardCommand, { player, _ in player.skipForward() }),
+            // Headphones' double and triple click, and a car's track and
+            // seek buttons, skip as the lock screen does rather than change
             // chapter; chapters change in the app and in CarPlay's Now Playing.
-            (center.nextTrackCommand, { player, _ in player.skipForward() }),
-            (center.previousTrackCommand, { player, _ in player.skipBack() }),
-            (center.changePlaybackPositionCommand, { player, time in
+            ("next track", center.nextTrackCommand, { player, _ in player.skipForward() }),
+            ("previous track", center.previousTrackCommand, { player, _ in player.skipBack() }),
+            ("seek forward", center.seekForwardCommand, { player, _ in player.skipForward() }),
+            ("seek back", center.seekBackwardCommand, { player, _ in player.skipBack() }),
+            ("change position", center.changePlaybackPositionCommand, { player, time in
                 if let time { player.seek(to: player.chapterBounds.start + time) }
             }),
-            (center.changePlaybackRateCommand, { player, rate in
+            ("change rate", center.changePlaybackRateCommand, { player, rate in
                 if let rate { player.setRate(rate) }
             }),
         ]
-        for (command, action) in commands {
+        for (name, command, action) in commands {
             AudioPlayer.onCommand(command) { [weak self] value in
                 Task { @MainActor in
                     guard let self else { return }
+                    // Which control sent what, as cars differ.
+                    self.log("remote command: \(name)")
                     action(self, value)
                 }
             }
@@ -1202,6 +1207,10 @@ final class AudioPlayer {
                 handle(event.positionTime)
             case let event as MPChangePlaybackRateCommandEvent:
                 handle(Double(event.playbackRate))
+            case let event as MPSeekCommandEvent:
+                // A seek button skips once as it's pressed, not again as
+                // it's let go.
+                if event.type == .beginSeeking { handle(nil) }
             default:
                 handle(nil)
             }

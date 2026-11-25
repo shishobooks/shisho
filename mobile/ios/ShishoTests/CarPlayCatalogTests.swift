@@ -78,8 +78,9 @@ final class CarPlayCatalogTests: XCTestCase {
 
         let listed = try continueListening()
         XCTAssertEqual(listed.map(\.fileID), [10, 30], "this device's newer place first")
-        XCTAssertEqual(listed.first, CarPlayAudiobook(fileID: 10, bookID: 1, title: "Dune", authors: "Author 1",
-                                                      cover: .book(1), coverVersion: "1-1", progress: 0.25))
+        XCTAssertEqual(listed.first, CarPlayAudiobook(fileID: 10, bookID: 1, title: "Dune", authors: "Author 1", label: nil,
+                                                      coverVersion: "", progress: 0.25),
+                       "no cover of its own: never its Book's, which can be an ebook's")
         XCTAssertEqual(listed.last?.progress, 0.5, "the server's place, with none on this device")
         XCTAssertEqual(try continueListening(limit: 1).map(\.fileID), [10])
         XCTAssertEqual(try continueListening(limit: 0), [])
@@ -90,13 +91,15 @@ final class CarPlayCatalogTests: XCTestCase {
         XCTAssertEqual(try continueListening().map(\.fileID), [30], "where playing starts over is the end")
     }
 
-    func testContinueListeningShowsABooksAudiobookOnceWithItsOwnCover() throws {
+    /// A Book with several audiobooks lists each, told apart by its label,
+    /// with its own cover.
+    func testContinueListeningListsEachOfABooksAudiobooks() throws {
         try listen(fileID: 20, percentage: 0.1, at: Date(timeIntervalSince1970: 1_800_000_000))
         try listen(fileID: 21, percentage: 0.4, at: Date(timeIntervalSince1970: 1_800_000_100))
         let listed = try continueListening()
-        XCTAssertEqual(listed.map(\.fileID), [21], "the Book's audiobook listened to last")
-        XCTAssertEqual(listed.first?.cover, .file(21), "a File's own cover over its Book's")
-        XCTAssertEqual(listed.first?.coverVersion, "f21")
+        XCTAssertEqual(listed.map(\.fileID), [21, 20])
+        XCTAssertEqual(listed.map(\.label), ["File 21", "File 20"])
+        XCTAssertEqual(listed.map(\.coverVersion), ["f21", ""])
     }
 
     /// Each audiobook is where the player would open it: this device's own
@@ -145,39 +148,34 @@ final class CarPlayCatalogTests: XCTestCase {
         XCTAssertEqual(listed.map(\.fileID), [30, 10])
     }
 
-    func testLibrariesListOnlyThoseWithAudiobooks() throws {
+    /// The Library tab lists the Libraries with audiobooks, or the only one's
+    /// audiobooks.
+    func testTheLibraryTabListsLibrariesOrTheOnlyOnesAudiobooks() throws {
         XCTAssertEqual(try store.pool.read(CatalogStore.audiobookLibraries), [LibrarySummary(id: 1, name: "Fiction")])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in nil } }.count, 4,
+                       "the only Library's audiobooks")
+
+        try store.apply(page(#"{"entries":[\#(library(3, "Audio")),\#(book(6, "Anathem", library: 3, files: [(60, "m4b", "main")]))],"cursor":8}"#))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in nil } },
+                       [.library(LibrarySummary(id: 3, name: "Audio")), .library(LibrarySummary(id: 1, name: "Fiction"))])
     }
 
-    func testALibrarysAudiobooksPlayTheOneListenedToLast() throws {
-        try listen(fileID: 20, percentage: 0.1, at: Date(timeIntervalSince1970: 1_800_000_000))
+    /// A Library lists every audiobook of its Books, in its order, and a
+    /// Book without one not at all.
+    func testALibraryListsEachAudiobookInItsOrder() throws {
         try listen(fileID: 21, percentage: 0.4, at: Date(timeIntervalSince1970: 1_800_000_100))
         let listed = try store.pool.read { try CatalogStore.audiobooks($0, libraryID: 1) }
         // Newest first, as the Library is sorted with no saved sort; a
         // supplement alone doesn't make a Book an audiobook.
-        XCTAssertEqual(listed.map(\.title), ["Foundation", "Hyperion", "Dune"])
-        XCTAssertEqual(listed.map(\.fileID), [30, 21, 10])
-        XCTAssertEqual(try store.pool.read { try CatalogStore.audiobookFileID($0, bookID: 2) }, 21, "as Listen plays")
-        XCTAssertEqual(listed[1].cover, .file(21))
-        XCTAssertNil(listed[1].progress, "the Library shows progress only while a Read-through is underway")
-        try readThrough(2, book: 2, outcome: "underway")
-        XCTAssertEqual(try store.pool.read { try CatalogStore.audiobooks($0, libraryID: 1) }[1].progress, 0.4)
+        XCTAssertEqual(listed.map(\.title), ["Foundation", "Hyperion", "Hyperion", "Dune"])
+        XCTAssertEqual(listed.map(\.fileID), [30, 20, 21, 10])
+        XCTAssertEqual(listed.map(\.label), [nil, "File 20", "File 21", nil])
+        XCTAssertEqual(listed[2].progress, 0.4)
+        XCTAssertNil(listed[1].progress)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.audiobookFileID($0, bookID: 2) }, 21, "Listen plays the one listened to last")
 
         XCTAssertEqual(try store.pool.read { try CatalogStore.audiobooks($0, libraryID: 1, sort: "title:asc") }.map(\.title),
-                       ["Dune", "Foundation", "Hyperion"], "the order picked on the phone")
+                       ["Dune", "Foundation", "Hyperion", "Hyperion"], "the order picked on the phone")
         XCTAssertEqual(try store.pool.read { try CatalogStore.audiobooks($0, libraryID: 2) }, [])
-    }
-
-    func testTheRootListFitsTheRowsTheCarAllows() {
-        XCTAssertEqual(CarPlayRootLayout.fit(continueListening: 10, libraries: 3, maxItems: 500),
-                       CarPlayRootLayout(continueListening: 6, librariesInline: true), "six at most")
-        XCTAssertEqual(CarPlayRootLayout.fit(continueListening: 6, libraries: 5, maxItems: 12),
-                       CarPlayRootLayout(continueListening: 6, librariesInline: true), "exactly twelve rows")
-        XCTAssertEqual(CarPlayRootLayout.fit(continueListening: 6, libraries: 6, maxItems: 12),
-                       CarPlayRootLayout(continueListening: 6, librariesInline: false), "one Libraries row instead")
-        XCTAssertEqual(CarPlayRootLayout.fit(continueListening: 6, libraries: 2, maxItems: 4),
-                       CarPlayRootLayout(continueListening: 2, librariesInline: false), "Downloads and Libraries keep a row")
-        XCTAssertEqual(CarPlayRootLayout.fit(continueListening: 6, libraries: 0, maxItems: 4),
-                       CarPlayRootLayout(continueListening: 3, librariesInline: true))
     }
 }

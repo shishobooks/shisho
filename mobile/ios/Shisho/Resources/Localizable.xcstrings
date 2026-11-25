@@ -412,9 +412,6 @@
     "Contents" : {
 
     },
-    "Continue Listening" : {
-
-    },
     "Continue reading" : {
 
     },
@@ -697,9 +694,6 @@
     "Level %lld" : {
 
     },
-    "Libraries" : {
-
-    },
     "Library" : {
 
     },
@@ -861,6 +855,9 @@
 
     },
     "Note" : {
+
+    },
+    "Nothing Partway Through" : {
 
     },
     "Nothing here yet" : {
@@ -1051,6 +1048,9 @@
 
     },
     "Reading status" : {
+
+    },
+    "Recent" : {
 
     },
     "Reference" : {
