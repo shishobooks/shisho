@@ -1176,7 +1176,7 @@ final class AudioPlayer {
             (center.skipForwardCommand, { player, _ in player.skipForward() }),
             // Headphones' double and triple click, and a car's track
             // buttons, skip as the lock screen does rather than change
-            // chapter; chapters change in the app.
+            // chapter; chapters change in the app and in CarPlay's Now Playing.
             (center.nextTrackCommand, { player, _ in player.skipForward() }),
             (center.previousTrackCommand, { player, _ in player.skipBack() }),
             (center.changePlaybackPositionCommand, { player, time in

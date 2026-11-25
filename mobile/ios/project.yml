@@ -9,8 +9,8 @@ options:
   createIntermediateGroups: true
   groupSortPosition: top
 configFiles:
-  Debug: Config/Shisho.xcconfig
-  Release: Config/Shisho.xcconfig
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -55,7 +55,7 @@ targets:
     info:
       path: Shisho/Info.plist
       properties:
-        CFBundleDisplayName: Shisho
+        CFBundleDisplayName: $(SHISHO_DISPLAY_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
@@ -73,6 +73,13 @@ targets:
         NSLocalNetworkUsageDescription: Shisho connects to your Shisho server when it's on your local network.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+          # The phone's own scene is SwiftUI's; CarPlay's is this one, which
+          # iOS can connect with the phone's screen never shown.
+          UISceneConfigurations:
+            CPTemplateApplicationSceneSessionRoleApplication:
+              - UISceneClassName: CPTemplateApplicationScene
+                UISceneConfigurationName: CarPlay
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).CarPlaySceneDelegate
         # Audiobooks play with the phone locked, and a background refresh
         # sends listening done offline (AppModel.refreshTaskID).
         UIBackgroundModes:
@@ -103,9 +110,10 @@ targets:
           - UIInterfaceOrientationLandscapeRight
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(SHISHO_BUNDLE_ID)
+        PRODUCT_BUNDLE_IDENTIFIER: $(SHISHO_BUNDLE_ID)$(SHISHO_BUNDLE_ID_SUFFIX)
         TARGETED_DEVICE_FAMILY: "1,2"
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: $(SHISHO_ENTITLEMENTS)
+        ASSETCATALOG_COMPILER_APPICON_NAME: $(SHISHO_APP_ICON)
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
   ShishoTests:
     type: bundle.unit-test
@@ -116,7 +124,7 @@ targets:
       - target: Shisho
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: $(SHISHO_BUNDLE_ID).tests
+        PRODUCT_BUNDLE_IDENTIFIER: $(SHISHO_BUNDLE_ID)$(SHISHO_BUNDLE_ID_SUFFIX).tests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
   Shisho:

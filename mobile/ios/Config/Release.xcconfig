@@ -1,0 +1,6 @@
+// Release builds are the Shisho the App Store ships.
+SHISHO_BUNDLE_ID_SUFFIX =
+SHISHO_DISPLAY_NAME = Shisho
+SHISHO_APP_ICON = AppIcon
+
+#include "Shisho.xcconfig"

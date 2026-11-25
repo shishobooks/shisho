@@ -412,6 +412,9 @@
     "Contents" : {
 
     },
+    "Continue Listening" : {
+
+    },
     "Continue reading" : {
 
     },
@@ -694,6 +697,9 @@
     "Level %lld" : {
 
     },
+    "Libraries" : {
+
+    },
     "Library" : {
 
     },
@@ -797,6 +803,12 @@
     "No" : {
 
     },
+    "No Audiobooks" : {
+
+    },
+    "No Audiobooks Downloaded" : {
+
+    },
     "No Books" : {
 
     },
@@ -831,6 +843,9 @@
 
     },
     "No tags found." : {
+
+    },
+    "Not Signed In" : {
 
     },
     "Not downloaded" : {
@@ -1184,6 +1199,9 @@
 
     },
     "Shisho isn't allowed on your local network, where this server is. Turn on Local Network for Shisho in Settings." : {
+
+    },
+    "Shisho lists your audiobooks here once it's signed in to your server." : {
 
     },
     "Show all %@" : {
