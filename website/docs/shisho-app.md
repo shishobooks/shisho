@@ -64,8 +64,10 @@ You manage your reading from the phone the way you do on the web, with or withou
 
 The **Home** tab, where the app opens, has a row for each of these, which you swipe through. Tap a row's heading to see all of it on its own page:
 
-- **Currently Reading**, the books you're reading, most recently read first. As on the web, a paused book waits until you resume it. Each card's button goes straight back to listening or reading where you left off.
-- **Recent Reference**, the [Reference](./reading-tracking.md#reference-books) books you've opened on this phone lately, so you can jump back into one. Nothing records that you're reading a Reference book, so this is kept on the phone only. Press and hold one to remove it, or use **Clear** on its page. Opening it again brings it back.
+- **Currently Reading**, the books you're reading, most recently read first. As on the web, a paused book waits until you resume it.
+- **Recent Reference**, the [Reference](./reading-tracking.md#reference-books) books you've opened on this phone lately, so you can jump back into one. Nothing records that you're reading a Reference book, so this is kept on the phone only. Opening one again moves it to the front; **Remove from Recent**, or **Clear** on its page, takes books off.
+
+A book in these two has a listen or read button on its cover: tapping it goes straight back to the player or reader where you left off, in the file you used last. Press and hold one for **Open Book Page**.
 - **To Read**, in your order. Drag books to reorder them with **Edit**, or press and hold one to move it to the top or bottom or remove it.
 Below the rows are:
 

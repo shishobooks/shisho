@@ -8,6 +8,7 @@ import SwiftUI
 enum Lucide: String, CaseIterable {
     case arrowDown = "arrow-down"
     case arrowDownRight = "arrow-down-right"
+    case arrowDownToLine = "arrow-down-to-line"
     case arrowDownUp = "arrow-down-up"
     case arrowUp = "arrow-up"
     case arrowUpRight = "arrow-up-right"

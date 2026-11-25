@@ -2,15 +2,15 @@ import SwiftUI
 
 /// Home, the first tab: what to pick up next, each as a shelf that scrolls
 /// sideways and opens its own page from its heading. The Books being read
-/// come first, as the prototype's Continue cards with a button that goes
-/// straight back in; then the Reference Books opened lately, which have no
-/// Read-through to keep them anywhere else; then To Read. Reading History
-/// and Reading Stats are below. All of it reads the device's copy, with
+/// come first, then the Reference Books opened lately, which have no
+/// Read-through to keep them anywhere else, each as a tile that goes
+/// straight back into the player or reader; then To Read, as covers that
+/// open the Book's page. Reading History and Reading Stats are below. All of it reads the device's copy, with
 /// changes made offline on top.
 struct HomeView: View {
     @Environment(AppModel.self) private var model
     @State private var current: [CatalogStore.ContinueItem]?
-    @State private var reference: [BookSummary]?
+    @State private var reference: [CatalogStore.ContinueItem]?
     @State private var toRead: [BookSummary]?
     @State private var downloaded: Set<Int>?
 
@@ -32,7 +32,7 @@ struct HomeView: View {
                                          identifier: "home.current")
                             Shelf(identifier: "home.current.shelf") {
                                 ForEach(current) { item in
-                                    ContinueCard(item: item)
+                                    ResumeTile(item: item, identifier: "home.current.tile")
                                 }
                             }
                         }
@@ -40,17 +40,10 @@ struct HomeView: View {
                             ShelfHeading(title: String(localized: "Recent Reference"), count: reference.count, route: .recentReference,
                                          identifier: "home.reference")
                             Shelf(identifier: "home.reference.shelf") {
-                                ForEach(reference.prefix(20)) { book in
-                                    ShelfBook(book: book, downloaded: downloaded?.contains(book.id) == true)
-                                        .contextMenu {
-                                            Button { try? model.session?.store.clearRecent(bookIDs: [book.id]) } label: {
-                                                Label("Remove from Recent", menuIcon: .x)
-                                            }
-                                            .accessibilityIdentifier("home.reference.remove")
-                                        }
-                                        .accessibilityAction(named: Text("Remove from Recent")) {
-                                            try? model.session?.store.clearRecent(bookIDs: [book.id])
-                                        }
+                                ForEach(reference.prefix(20)) { item in
+                                    ResumeTile(item: item, identifier: "home.reference.tile") {
+                                        try? model.session?.store.clearRecent(bookIDs: [item.book.id])
+                                    }
                                 }
                             }
                         }
@@ -92,7 +85,7 @@ struct HomeView: View {
             try CatalogStore.continueItems(db)
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $reference) { db in
-            try CatalogStore.recentReference(db)
+            try CatalogStore.recentReferenceItems(db)
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $toRead) { db in
             try CatalogStore.toReadBooks(db)
@@ -171,70 +164,117 @@ private struct ShelfBook: View {
     }
 }
 
-/// A Book being read, as the prototype's Continue card: its cover, title,
-/// authors, and how far through it is, which open its page, and a button
-/// that goes straight back to listening or reading where it was left.
-private struct ContinueCard: View {
+/// A Book that opens straight into the player or a reader, where it was
+/// left: its cover with a play or read disc on it, so it doesn't look like
+/// the covers that open a Book's page, its title, and how far through it
+/// is. Pressing and holding it offers the Book's page, and remove offers
+/// taking it off the shelf it's on.
+struct ResumeTile: View {
     @Environment(AppModel.self) private var model
-    @ScaledMetric(relativeTo: .body) private var width: CGFloat = 290
+    @ScaledMetric(relativeTo: .body) private var scaledWidth: CGFloat = 112
     let item: CatalogStore.ContinueItem
+    let identifier: String
+    /// The tile's width, or nil for the shelf's.
+    var width: CGFloat?
+    var remove: (() -> Void)?
 
+    private var tileWidth: CGFloat { width ?? scaledWidth }
     private var playing: Bool { model.player?.file?.fileID == item.fileID && model.player?.isPlaying == true }
 
-    var body: some View {
-        HStack(spacing: 12) {
-            Button { model.push(.book(item.book)) } label: {
-                HStack(spacing: 12) {
-                    CoverView(book: item.book, width: item.listens ? 56 : 40)
-                        .frame(width: 56)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(item.book.title)
-                            .font(.geist(.subheadline, weight: .semibold))
-                            .foregroundStyle(Theme.foreground)
-                            .lineLimit(1)
-                        if !item.book.authors.isEmpty {
-                            Text(item.book.authors)
-                                .font(.geist(.caption))
-                                .foregroundStyle(Theme.mutedForeground)
-                                .lineLimit(1)
-                        }
-                        if let progress = item.book.progress {
-                            ProgressBar(value: progress)
-                                .padding(.top, 5)
-                        }
-                    }
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityHint(String(localized: "Opens the Book's page"))
-            .accessibilityIdentifier("home.current.card")
+    private var resumeLabel: String {
+        item.listens ? String(localized: "Listen to \(item.book.title)") : String(localized: "Read \(item.book.title)")
+    }
 
-            Button {
-                if item.listens { model.listen(fileID: item.fileID) } else { model.read(fileID: item.fileID) }
-            } label: {
-                Group {
-                    if playing {
-                        PlayingIndicator(playing: true, height: 14)
-                    } else {
-                        Icon(item.listens ? .headphones : .bookOpen, size: 18, relativeTo: nil)
+    var body: some View {
+        Button(action: resume) {
+            VStack(alignment: .leading, spacing: 6) {
+                CoverView(book: item.book, width: tileWidth)
+                    .overlay(alignment: .bottomTrailing) {
+                        Group {
+                            if playing {
+                                PlayingIndicator(playing: true, height: 12)
+                                    .foregroundStyle(Theme.primaryForeground)
+                            } else {
+                                Icon(item.listens ? .headphones : .bookOpen, size: 16, relativeTo: nil)
+                                    .foregroundStyle(Theme.primaryForeground)
+                            }
+                        }
+                        .frame(width: 34, height: 34)
+                        .background(Theme.primary, in: Circle())
+                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                        .padding(6)
                     }
-                }
-                .foregroundStyle(Theme.primary)
-                .frame(width: 44, height: 44)
-                .background(Theme.primary.opacity(0.12), in: Circle())
+                Text(item.book.title)
+                    .font(.geist(.subheadline, weight: .semibold))
+                    .foregroundStyle(Theme.foreground)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.geist(.caption))
+                    .foregroundStyle(Theme.mutedForeground)
+                    .monospacedDigit()
+                    .lineLimit(1)
             }
-            .buttonStyle(PlayerControlStyle())
-            .accessibilityLabel(item.listens ? String(localized: "Resume listening to \(item.book.title)")
-                                             : String(localized: "Resume reading \(item.book.title)"))
-            .accessibilityIdentifier("home.current.resume")
-            .modifier(NeedsConnection(available: model.canOpen(fileID: item.fileID)))
+            .frame(width: tileWidth, alignment: .leading)
+            .contentShape(Rectangle())
         }
-        .padding(10)
-        .frame(width: width)
-        .cardStyle(radius: 14)
+        .buttonStyle(PressableStyle())
+        .modifier(NeedsConnection(available: model.canOpen(fileID: item.fileID)))
+        .contextMenu {
+            Button { model.push(.book(item.book)) } label: {
+                Label("Open Book Page", menuIcon: .book)
+            }
+            .accessibilityIdentifier("\(identifier).book")
+            if let remove {
+                Button(action: remove) {
+                    Label("Remove from Recent", menuIcon: .x)
+                }
+                .accessibilityIdentifier("\(identifier).remove")
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(resumeLabel)
+        .accessibilityValue(detail)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityActions {
+            Button(String(localized: "Open Book Page")) { model.push(.book(item.book)) }
+            if let remove {
+                Button(String(localized: "Remove from Recent"), action: remove)
+            }
+        }
+        .accessibilityIdentifier(identifier)
+    }
+
+    /// How far through it is, or what the tile does with none yet.
+    private var detail: String {
+        if let progress = item.progress, progress > 0 {
+            return String(localized: "\(Int((progress * 100).rounded()))%")
+        }
+        return item.listens ? String(localized: "Listen") : String(localized: "Read")
+    }
+
+    private func resume() {
+        if item.listens { model.listen(fileID: item.fileID) } else { model.read(fileID: item.fileID) }
+    }
+}
+
+/// Resume tiles in a grid, for a shelf's own page.
+struct ResumeGrid: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    let items: [CatalogStore.ContinueItem]
+    let width: CGFloat
+    let identifier: String
+    var remove: ((CatalogStore.ContinueItem) -> Void)?
+
+    var body: some View {
+        let layout = GridLayout(width: width, regular: sizeClass == .regular, accessibility: dynamicTypeSize.isAccessibilitySize)
+        let column = GridItem(.fixed(layout.cellWidth), spacing: GridLayout.spacing, alignment: .top)
+        LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
+            ForEach(items) { item in
+                ResumeTile(item: item, identifier: identifier, width: layout.cellWidth, remove: remove.map { remove in { remove(item) } })
+            }
+        }
+        .padding(.horizontal, GridLayout.margin)
     }
 }
 
@@ -269,49 +309,37 @@ private struct HomeLink: View {
     }
 }
 
-/// The Reference Books opened on this device lately. Nothing about them is
-/// saved anywhere else, so taking one off only tidies the list: opening it
-/// again brings it back.
+/// The Reference Books opened on this device lately, each opening straight
+/// into the player or reader. Nothing about them is saved anywhere else,
+/// so taking one off only tidies the list: opening it again brings it back.
 struct RecentReferenceView: View {
     @Environment(AppModel.self) private var model
-    @State private var books: [BookSummary]?
+    @State private var items: [CatalogStore.ContinueItem]?
     @State private var confirmingClear = false
 
     var body: some View {
-        Group {
-            if let books, books.isEmpty {
-                EmptyNotice(title: String(localized: "No Reference Books opened lately"),
-                            message: String(localized: "Reference Books you open in the reader or player appear here, so you can jump back in."),
-                            icon: .library)
-                    .frame(maxHeight: .infinity, alignment: .top)
-            } else {
-                List {
-                    ForEach(books ?? []) { book in
-                        Button { model.push(.book(book)) } label: {
-                            BookRow(book: book)
+        GeometryReader { geometry in
+            ScrollView {
+                if let items {
+                    if items.isEmpty {
+                        EmptyNotice(title: String(localized: "No Reference Books opened lately"),
+                                    message: String(localized: "Reference Books you open in the reader or player appear here, so you can jump back in."),
+                                    icon: .library)
+                    } else {
+                        ResumeGrid(items: items, width: geometry.size.width, identifier: "recentReference.tile") { item in
+                            clear([item.book.id])
                         }
-                        .buttonStyle(.plain)
-                        .listRowBackground(Theme.background)
-                        .accessibilityIdentifier("recentReference.row")
-                        .swipeActions {
-                            Button(role: .destructive) { clear([book.id]) } label: {
-                                Label("Remove", menuIcon: .x)
-                            }
-                            .accessibilityIdentifier("recentReference.remove")
-                        }
-                        .accessibilityAction(named: Text("Remove from Recent")) { clear([book.id]) }
+                        .padding(.top, 8)
                     }
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .miniPlayerClearance()
             }
+            .miniPlayerClearance()
         }
         .background(Theme.background)
         .navigationTitle("Recent Reference")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            if !(books ?? []).isEmpty {
+            if !(items ?? []).isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "Clear")) { confirmingClear = true }
                         .font(.geist(.body, weight: .medium))
@@ -325,8 +353,8 @@ struct RecentReferenceView: View {
         } message: {
             Text("The Books stay Reference. Opening one again brings it back here.")
         }
-        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $books) { db in
-            try CatalogStore.recentReference(db)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $items) { db in
+            try CatalogStore.recentReferenceItems(db)
         }
     }
 

@@ -242,6 +242,10 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertEqual(items.map(\.book.id), [1])
         XCTAssertEqual(items.first?.fileID, 10)
         XCTAssertEqual(items.first?.listens, true)
+
+        try store.record(.markReference(book: 2), at: now)
+        try store.noteOpened(fileID: 20, at: now)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.recentReferenceItems($0) }.map(\.fileID), [20])
     }
 
     // MARK: - Reading Stats

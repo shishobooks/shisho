@@ -107,7 +107,7 @@ struct CoverRatingBadge: View {
 /// glance. The cell around it says "Downloaded" to VoiceOver.
 struct CoverDownloadBadge: View {
     var body: some View {
-        Icon(.arrowDown, size: 10, relativeTo: nil)
+        Icon(.arrowDownToLine, size: 10, relativeTo: nil)
             .foregroundStyle(Theme.foreground)
             .frame(width: 18, height: 18)
             .background(Theme.secondary, in: Circle())

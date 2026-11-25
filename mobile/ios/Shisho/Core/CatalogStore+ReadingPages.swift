@@ -84,27 +84,42 @@ extension CatalogStore {
 
     // MARK: - Home
 
-    /// A Book being read, as Home's Continue card shows it, with the File it
-    /// goes on in: the one read or listened to last, on any device.
+    /// A Book Home opens straight into the player or a reader, with the File
+    /// it goes on in: the one read or listened to last, on any device, and
+    /// how far through that File the user is.
     struct ContinueItem: Identifiable, Hashable, Sendable {
         let book: BookSummary
         let fileID: Int
         let listens: Bool
+        var progress: Double?
         var id: Int { book.id }
     }
 
     static func continueItems(_ db: Database) throws -> [ContinueItem] {
+        try resumeItems(db, books: currentlyReading(db))
+    }
+
+    /// The Recent Reference Books, each with the File it opens in.
+    static func recentReferenceItems(_ db: Database, limit: Int? = nil) throws -> [ContinueItem] {
+        try resumeItems(db, books: recentReference(db, limit: limit))
+    }
+
+    /// books with the File each goes on in, leaving out a Book with none the
+    /// app can open.
+    static func resumeItems(_ db: Database, books: [BookSummary]) throws -> [ContinueItem] {
         let types = (readableTypes.union(["m4b"])).map { "'\($0)'" }.joined(separator: ",")
-        return try currentlyReading(db).compactMap { book in
+        return try books.compactMap { book in
             guard let row = try Row.fetchOne(db, sql: """
-                SELECT f.id, f.file_type FROM book_files f
+                SELECT f.id, f.file_type, COALESCE(lp.percentage, p.percentage) AS percentage FROM book_files f
                 LEFT JOIN local_positions l ON l.file_id = f.id
+                LEFT JOIN local_progress lp ON lp.file_id = f.id
                 LEFT JOIN reading_positions p ON p.file_id = f.id
                 WHERE f.book_id = ? AND f.file_role = 'main' AND f.file_type IN (\(types))
                 ORDER BY MAX(COALESCE(l.updated_at, 0), COALESCE(p.occurred_at, 0)) DESC, f.position
                 LIMIT 1
                 """, arguments: [book.id]) else { return nil }
-            return ContinueItem(book: book, fileID: row["id"], listens: (row["file_type"] as String) == "m4b")
+            return ContinueItem(book: book, fileID: row["id"], listens: (row["file_type"] as String) == "m4b",
+                                progress: row["percentage"])
         }
     }
 

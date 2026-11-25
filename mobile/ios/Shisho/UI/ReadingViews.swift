@@ -1,19 +1,20 @@
 import SwiftUI
 
-/// Every Book with a Read-through underway, the most recently read first.
+/// Every Book being read, the most recently read first, each opening
+/// straight back into the player or reader where it was left.
 struct CurrentlyReadingView: View {
     @Environment(AppModel.self) private var model
-    @State private var books: [BookSummary]?
+    @State private var items: [CatalogStore.ContinueItem]?
 
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
-                if let books {
-                    if books.isEmpty {
+                if let items {
+                    if items.isEmpty {
                         EmptyNotice(title: String(localized: "Nothing underway"),
                                     message: String(localized: "Books you start appear here."), icon: .bookOpen)
                     } else {
-                        BookGrid(books: books, width: geometry.size.width, identifier: "currentlyReading.grid")
+                        ResumeGrid(items: items, width: geometry.size.width, identifier: "currentlyReading.tile")
                             .padding(.top, 8)
                     }
                 }
@@ -24,8 +25,8 @@ struct CurrentlyReadingView: View {
         .refreshable { await model.syncNow() }
         .navigationTitle("Currently Reading")
         .navigationBarTitleDisplayMode(.large)
-        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $books) { db in
-            try CatalogStore.currentlyReading(db)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $items) { db in
+            try CatalogStore.continueItems(db)
         }
     }
 }
