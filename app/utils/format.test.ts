@@ -5,6 +5,7 @@ import {
   fileTitle,
   fileTypeLabel,
   formatBitrate,
+  formatCompactNumber,
   formatCount,
   formatDate,
   formatDateTime,
@@ -125,6 +126,13 @@ describe("formatWordCount", () => {
     expect(formatWordCount(999999)).toBe("1M words");
     expect(formatWordCount(1234567)).toBe("1.2M words");
     expect(formatWordCount(2500000000)).toBe("2.5B words");
+  });
+});
+
+describe("formatCompactNumber", () => {
+  it("rounds from a thousand up", () => {
+    expect(formatCompactNumber(850)).toBe("850");
+    expect(formatCompactNumber(2104332)).toBe("2.1M");
   });
 });
 

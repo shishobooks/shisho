@@ -289,6 +289,7 @@ type ReadingStatsResponse struct {
 	// Years are the years with any reading activity, newest first.
 	Years  []int              `json:"years"`
 	Totals ReadingStatsTotals `json:"totals"`
+	Pace   ReadingStatsPace   `json:"pace"`
 	// Periods are the months of Year, or for all time each year from the
 	// first with activity to the last.
 	Periods []ReadingStatsPeriod `json:"periods"`
@@ -323,12 +324,32 @@ type ReadingStatsTotals struct {
 	// Sessions included.
 	ReadingSeconds   int `json:"reading_seconds"`
 	ListeningSeconds int `json:"listening_seconds"`
-	// MedianDaysToFinish counts begin day to end day inclusively, over
-	// finished Read-throughs with both. Null with none.
-	MedianDaysToFinish *float64 `json:"median_days_to_finish" tstype:"number | null,required"`
+	// WordsRead is how far forward the user read through Reflowable Files
+	// with a word count, in words, leaving out skips ahead (see
+	// ReadingStatsPace).
+	WordsRead int `json:"words_read"`
 	// AverageRating is the mean current Rating, in stars, of the finished
 	// Books the user rated. Null with none.
 	AverageRating *float64 `json:"average_rating" tstype:"number | null,required"`
+}
+
+// ReadingStatsPace is how fast the user read and listened in the range, for
+// each kind of File: what a Session covered of the File's length over the
+// time it took, summed across Sessions, so long ones weigh most. Only timed
+// Sessions count (measured ones, and a Kobo's, whose time is its own count
+// of reading minutes), at least a minute long and moving forward, and not
+// faster than anyone reads, which is a skip ahead. Each is null with less
+// than ten minutes of such Sessions.
+//
+//nolint:revive // named for the Reading Stats page, as generated TS types are global
+type ReadingStatsPace struct {
+	// WordsPerMinute is for Reflowable Files with a word count.
+	WordsPerMinute *float64 `json:"words_per_minute" tstype:"number | null,required"`
+	// PagesPerHour is for Page-based Files.
+	PagesPerHour *float64 `json:"pages_per_hour" tstype:"number | null,required"`
+	// ListeningSpeed is audiobook time covered per second spent: 1.5 is half
+	// again as fast as the recording.
+	ListeningSpeed *float64 `json:"listening_speed" tstype:"number | null,required"`
 }
 
 // ReadingStatsPeriod is one month, or one year under all time.
