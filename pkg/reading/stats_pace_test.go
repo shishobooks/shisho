@@ -42,6 +42,21 @@ func (f *statsFixture) normalMonth(epub *models.File, day time.Time) {
 	f.session(timed(epub, day.Add(6*time.Hour), 60, 0.239, 0.371))
 }
 
+// history adds timed Sessions in 2024 covering each fraction of file in
+// minutes, from the start again once the next would pass the end, so the
+// user has enough Sessions for what's normal to be judged.
+func (f *statsFixture) history(file *models.File, minutes int, fractions ...float64) {
+	f.t.Helper()
+	at := 0.0
+	for i, fraction := range fractions {
+		if at+fraction > 1 {
+			at = 0 // read again from the start
+		}
+		f.session(timed(file, time.Date(2024, 1, 1+i, 9, 0, 0, 0, time.UTC), minutes, at, at+fraction))
+		at += fraction
+	}
+}
+
 func TestStats_PaceLeavesOutASkipAndCreditsItsTimeAtTheReadersAverage(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
@@ -130,7 +145,9 @@ func TestStats_PaceCountsEverythingWithTooFewSessionsToJudge(t *testing.T) {
 	f.session(timed(epub, day, 30, 0.000, 0.075))
 	f.session(timed(epub, day.Add(2*time.Hour), 2, 0.075, 0.475))
 
-	assert.Equal(t, 47_500, f.stats("?year=2026").Totals.WordsRead)
+	resp := f.stats("?year=2026")
+	assert.Equal(t, 47_500, resp.Totals.WordsRead)
+	assert.Nil(t, resp.Pace.WordsPerMinute, "a skip can't be told apart yet, so there's no pace to trust")
 }
 
 func TestStats_PaceCountsOnlyTimedSessions(t *testing.T) {
@@ -138,6 +155,8 @@ func TestStats_PaceCountsOnlyTimedSessions(t *testing.T) {
 	f := newStatsFixture(t)
 	book := createBook(t, f.db, "Dune")
 	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	// Sessions at 100, 133, and 166 words a minute before.
+	f.history(epub, 30, 0.03, 0.04, 0.05)
 	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
 	f.session(timed(epub, day, 30, 0.10, 0.15))
 	// A Kobo counts the minutes it spent: 3,000 words in half an hour.
@@ -164,6 +183,8 @@ func TestStats_PacePerKind(t *testing.T) {
 	book := createBook(t, f.db, "Dune")
 	cbz := f.lengthFile(book, models.FileTypeCBZ, 200)
 	m4b := f.lengthFile(book, models.FileTypeM4B, 36_000)
+	f.history(cbz, 60, 0.5, 0.5, 0.5, 0.5)
+	f.history(m4b, 60, 0.15, 0.15, 0.15, 0.15)
 	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
 	// 100 pages in an hour, and 1.5 hours of audio in an hour.
 	f.session(timed(cbz, day, 60, 0, 0.5))
@@ -184,12 +205,13 @@ func TestStats_PaceNeedsTenMinutesOfTimedReading(t *testing.T) {
 	f := newStatsFixture(t)
 	book := createBook(t, f.db, "Dune")
 	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	f.history(epub, 60, 0.06, 0.06, 0.06, 0.06, 0.06)
 	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
-	f.session(timed(epub, day, 5, 0.10, 0.11))
+	f.session(timed(epub, day, 5, 0.40, 0.405))
 
 	resp := f.stats("?year=2026")
 	assert.Nil(t, resp.Pace.WordsPerMinute, "five minutes is too little to say")
-	assert.Equal(t, 1000, resp.Totals.WordsRead)
+	assert.Equal(t, 500, resp.Totals.WordsRead)
 }
 
 func TestStats_PaceLeavesOutFilesOfUnknownLength(t *testing.T) {
@@ -211,6 +233,7 @@ func TestStats_PaceCountsTheShareOfASessionInTheRange(t *testing.T) {
 	f := newStatsFixture(t)
 	book := createBook(t, f.db, "Dune")
 	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	f.history(epub, 60, 0.06, 0.06, 0.06, 0.06)
 	// Half an hour on either side of New Year, 6,000 words.
 	f.session(timed(epub, time.Date(2025, 12, 31, 23, 30, 0, 0, time.UTC), 60, 0.10, 0.16))
 

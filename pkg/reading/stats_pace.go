@@ -22,7 +22,8 @@ import (
 const (
 	fenceSpreads = 3
 	// minNormSessions is how many timed Sessions of a kind it takes to
-	// judge what's normal; with fewer, every Session counts in full.
+	// judge what's normal. With fewer, every Session counts in full toward
+	// Words read, and the kind shows no pace, since a skip would skew it.
 	minNormSessions = 5
 	// minPaceSeconds is how much timed time a kind needs in the range
 	// before its pace means anything.
@@ -154,8 +155,11 @@ type paceTally struct {
 	covered, seconds float64
 }
 
-func (t paceTally) rate(per float64) *float64 {
-	if t.seconds < minPaceSeconds {
+// rate is the tally's pace over each span of the given seconds, or nil
+// without enough to trust: too little time in the range, or too few Sessions
+// overall for a skip to be told apart (norm unknown).
+func (t paceTally) rate(norm paceNorm, per float64) *float64 {
+	if !norm.known() || t.seconds < minPaceSeconds {
 		return nil
 	}
 	r := t.covered / t.seconds * per
@@ -198,9 +202,9 @@ func paceOf(sessions []statsSession, norms [paceKinds]paceNorm, rng dayRange, lo
 		}
 	}
 	return ReadingStatsPace{
-		WordsPerMinute: tallies[paceWords].rate(60),
-		PagesPerHour:   tallies[pacePages].rate(3600),
-		ListeningSpeed: tallies[paceAudio].rate(1),
+		WordsPerMinute: tallies[paceWords].rate(norms[paceWords], 60),
+		PagesPerHour:   tallies[pacePages].rate(norms[pacePages], 3600),
+		ListeningSpeed: tallies[paceAudio].rate(norms[paceAudio], 1),
 	}, roundSeconds(wordsRead)
 }
 

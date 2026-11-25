@@ -339,7 +339,9 @@ type ReadingStatsTotals struct {
 // Sessions are measured ones, and a Kobo's, whose time is its own count of
 // reading minutes. A Session far faster or slower than is normal for the
 // user, a skip ahead or a book left open, is left out (see paceNorms).
-// Each is null with less than ten minutes of timed Sessions.
+// Each is null with fewer than five timed Sessions of its kind across all
+// time, too few to tell a skip apart, or less than ten minutes of them in
+// the range.
 //
 //nolint:revive // named for the Reading Stats page, as generated TS types are global
 type ReadingStatsPace struct {

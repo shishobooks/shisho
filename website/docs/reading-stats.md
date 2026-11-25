@@ -35,9 +35,11 @@ Time is split into days in your time zone, under **Preferences > Reading > Time 
 - **Comics and PDFs**: pages per hour.
 - **Audiobooks**: how fast you get through the recording, where **1.5× real time** means 90 minutes of audio in an hour.
 
-It's how much of each book your sessions covered over the time they took, added up, so long sessions count most and books you read at different speeds blend. Only timed sessions count: those the Shisho reader and player, the Shisho app, and the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin) measure, and a Kobo's, whose time is its own count of minutes. KOReader time without the plugin is left out, since it isn't timed. A session that went back adds nothing. A kind needs ten minutes of timed sessions to show a pace, and a book Shisho hasn't counted the words of yet adds none.
+It's how much of each book your sessions covered over the time they took, added up, so long sessions count most and books you read at different speeds blend. Only timed sessions count: those the Shisho reader and player, the Shisho app, and the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin) measure, and a Kobo's, whose time is its own count of minutes. KOReader time without the plugin is left out, since it isn't timed. A session that went back adds nothing. A book Shisho hasn't counted the words of yet adds none.
 
-A session far faster or slower than your own reading is left out: one much faster is a skip ahead, such as jumping to the end of a book through its contents, and one much slower is time with a book left open while you were away. What's normal comes from all your timed sessions of that kind, not just the range shown, so it's judged once you have five or more of them; until then every session counts. In **Words read**, a skip counts its time at your average pace instead of the stretch it skipped, and a slow session counts the words it covered.
+A session far faster or slower than your own reading is left out: one much faster is a skip ahead, such as jumping to the end of a book through its contents, and one much slower is time with a book left open while you were away. What's normal comes from all your timed sessions of that kind, not just the range shown.
+
+A kind shows a pace once you have five or more timed sessions of it in all, enough to tell a skip apart, and ten minutes of them in the range. Before that, **Words read** counts every session in full. In **Words read**, a skip counts its time at your average pace instead of the stretch it skipped, and a slow session counts the words it covered.
 
 ## Charts and Breakdowns
 
