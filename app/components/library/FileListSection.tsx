@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import WordCount from "@/components/common/WordCount";
 import FileCoverThumbnail from "@/components/library/FileCoverThumbnail";
 import FileScanErrorBadge from "@/components/library/FileScanErrorBadge";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
@@ -70,6 +71,14 @@ function FileMetaInfo({ file }: { file: File }) {
     return (
       <span className="text-xs text-muted-foreground">
         {formatPageCount(file.page_count)}
+      </span>
+    );
+  }
+
+  if (file.word_count != null && file.word_count > 0) {
+    return (
+      <span className="text-xs text-muted-foreground">
+        <WordCount count={file.word_count} />
       </span>
     );
   }

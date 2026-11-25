@@ -2,6 +2,7 @@ import equal from "fast-deep-equal";
 import { AlertTriangle, ExternalLink, Loader2, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import WordCount from "@/components/common/WordCount";
 import LoadingSpinner from "@/components/library/LoadingSpinner";
 import QueryError from "@/components/library/QueryError";
 import { Badge, BadgeRemoveButton } from "@/components/ui/badge";
@@ -309,6 +310,12 @@ export function IdentifyBookDialog({
                           <>
                             <span className="text-muted-foreground/50">·</span>
                             <span>{formatPageCount(file.page_count)}</span>
+                          </>
+                        )}
+                        {!!file.word_count && (
+                          <>
+                            <span className="text-muted-foreground/50">·</span>
+                            <WordCount count={file.word_count} />
                           </>
                         )}
                       </div>

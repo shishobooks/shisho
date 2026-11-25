@@ -13,6 +13,7 @@ export type SortField =
   | "date_added"
   | "date_released"
   | "page_count"
+  | "word_count"
   | "duration"
   | "reading_status"
   | "rating"
@@ -36,6 +37,7 @@ export const SORT_FIELDS: readonly SortField[] = [
   "date_added",
   "date_released",
   "page_count",
+  "word_count",
   "duration",
   "reading_status",
   "rating",
@@ -51,6 +53,7 @@ export const SORT_FIELD_LABELS: Record<SortField, string> = {
   date_added: "Date added",
   date_released: "Date released",
   page_count: "Page count",
+  word_count: "Word count",
   duration: "Duration",
   reading_status: "Reading status",
   rating: "Rating",

@@ -44,9 +44,18 @@ struct ReadProgress: Equatable, Sendable {
     /// while that's still the place shown.
     var chapter: String?
     var pagesLeft: Int?
-    /// How big the File is, said before it's been read: nothing else about
-    /// its length is known without the book.
+    /// How long and how big the File is, said before it's been read.
+    var wordCount: Int?
     var sizeBytes = 0
+
+    /// What the Read card says before the book's been read: how long it is
+    /// and how big, as the Listen card says it of an audiobook.
+    var unstartedFacts: String? {
+        let words = (wordCount ?? 0) > 0 ? [FileFacts.words(wordCount ?? 0)] : []
+        let size = sizeBytes > 0 ? [FileFacts.size(sizeBytes)] : []
+        let facts = words + size
+        return facts.isEmpty ? nil : facts.joined(separator: " · ")
+    }
 }
 
 extension CatalogStore {
@@ -117,9 +126,10 @@ extension CatalogStore {
         let ebooks = try Int.fetchOne(db, sql: """
             SELECT COUNT(*) FROM book_files WHERE book_id = ? AND file_type IN (\(reflowableList)) AND file_role != 'supplement'
             """, arguments: [bookID]) ?? 1
-        let file = try Row.fetchOne(db, sql: "SELECT display_name, size_bytes FROM book_files WHERE id = ?", arguments: [fileID])
+        let file = try Row.fetchOne(db, sql: "SELECT display_name, word_count, size_bytes FROM book_files WHERE id = ?", arguments: [fileID])
         var progress = ReadProgress(fileID: fileID, percentage: min(1, max(0, percentage)), underway: underway,
-                                    fileName: file?["display_name"] ?? "", ebookCount: ebooks, sizeBytes: file?["size_bytes"] ?? 0)
+                                    fileName: file?["display_name"] ?? "", ebookCount: ebooks,
+                                    wordCount: file?["word_count"], sizeBytes: file?["size_bytes"] ?? 0)
         if let place = try Row.fetchOne(db, sql: "SELECT chapter, pages_left, percentage FROM reader_places WHERE file_id = ?",
                                         arguments: [fileID]),
            abs((place["percentage"] as Double) - progress.percentage) < 0.005 {

@@ -52,6 +52,8 @@ enum LibrarySort {
             return nullsLast(newestFile("release_date"), direction)
         case "page_count":
             return nullsLast(newestFile("page_count"), direction)
+        case "word_count":
+            return nullsLast(newestFile("word_count"), direction)
         case "duration":
             return nullsLast(newestFile("duration_seconds"), direction)
         case "reading_status":
@@ -107,7 +109,7 @@ extension LibrarySort {
     /// The fields the sort sheet offers, in the web's order.
     static let fields = [
         "title", "author", "series", "date_added", "date_released",
-        "page_count", "duration", "reading_status", "rating", "date_finished", "last_read",
+        "page_count", "word_count", "duration", "reading_status", "rating", "date_finished", "last_read",
     ]
     /// As many levels as `pkg/sortspec` takes.
     static let maxLevels = 10
@@ -122,6 +124,7 @@ extension LibrarySort {
         case "date_added": String(localized: "Date added")
         case "date_released": String(localized: "Date released")
         case "page_count": String(localized: "Page count")
+        case "word_count": String(localized: "Word count")
         case "duration": String(localized: "Duration")
         case "reading_status": String(localized: "Reading status")
         case "rating": String(localized: "Rating")

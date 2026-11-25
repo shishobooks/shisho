@@ -2,6 +2,7 @@ package epub
 
 import (
 	"archive/zip"
+	"context"
 	"encoding/xml"
 	"io"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/identifiers"
 	"github.com/shishobooks/shisho/pkg/mediafile"
 	"github.com/shishobooks/shisho/pkg/models"
+	"github.com/shishobooks/shisho/pkg/wordcount"
 )
 
 type OPF struct {
@@ -133,32 +135,44 @@ func Parse(path string) (*mediafile.ParsedMetadata, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	metadata, _, err := parseArchive(zipReader)
-	return metadata, err
+	metadata, result, err := parseArchive(zipReader)
+	if err != nil {
+		return nil, err
+	}
+	// A count is left off rather than failing the parse: the metadata is
+	// still good, and the next scan tries the file again.
+	if n, err := countWords(context.Background(), zipReader, result); err == nil {
+		metadata.WordCount = &n
+	} else {
+		metadata.WordCountFailed = !wordcount.Retryable(err)
+	}
+	return metadata, nil
+}
+
+// findOPF reads an open EPUB's package document.
+func findOPF(zipReader *zip.Reader) (*ParseOPFResult, error) {
+	for _, file := range zipReader.File {
+		if filepath.Ext(file.Name) == ".opf" {
+			r, err := file.Open()
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			result, err := ParseOPF(file.Name, r)
+			if err != nil {
+				return nil, errors.WithStack(err)
+			}
+			return result, nil
+		}
+	}
+	return nil, errors.New("no opf file found")
 }
 
 // parseArchive reads an open EPUB's metadata, and returns its parsed OPF
 // along with it.
 func parseArchive(zipReader *zip.Reader) (*mediafile.ParsedMetadata, *ParseOPFResult, error) {
-	// Go through all files in the existing archive save the page information.
-	var result *ParseOPFResult
-	for _, file := range zipReader.File {
-		ext := filepath.Ext(file.Name)
-		if ext == ".opf" {
-			r, err := file.Open()
-			if err != nil {
-				return nil, nil, errors.WithStack(err)
-			}
-			result, err = ParseOPF(file.Name, r)
-			if err != nil {
-				return nil, nil, errors.WithStack(err)
-			}
-			break
-		}
-	}
-
-	if result == nil {
-		return nil, nil, errors.New("no opf file found")
+	result, err := findOPF(zipReader)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	opf := result.OPF

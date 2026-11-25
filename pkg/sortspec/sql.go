@@ -84,6 +84,9 @@ func OrderClauses(levels []SortLevel, readerID *int) []OrderClause {
 		case FieldPageCount:
 			out = append(out, nullsLast(newestFileCoalesce("page_count"), l.Direction))
 
+		case FieldWordCount:
+			out = append(out, nullsLast(newestFileCoalesce("word_count"), l.Direction))
+
 		case FieldDuration:
 			out = append(out, nullsLast(newestFileCoalesce("audiobook_duration_seconds"), l.Direction))
 

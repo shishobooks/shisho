@@ -1128,6 +1128,28 @@ describe("BookDetailBody file progress", () => {
     expect(row("Audio")).toHaveTextContent("50% · 1h 0m left");
   });
 
+  it("says how many words are left in a reflowable ebook, in the ballpark", () => {
+    readingPositions.current = [{ file_id: 1, percentage: 0.25 }];
+    renderBody({
+      book: {
+        ...twoFiles,
+        files: [
+          { ...epub, id: 1, display_name: "Ebook", word_count: 80321 } as File,
+        ],
+      },
+    });
+
+    const row = screen
+      .getByRole("link", { name: "Ebook" })
+      .closest(".border") as HTMLElement;
+    // The exact counts follow for a screen reader.
+    expect(row).toHaveTextContent("25% · 60K words");
+    expect(row).toHaveTextContent("words left");
+    expect(within(row).getByText("80K words")).toBeInTheDocument();
+    expect(within(row).getByText("80,321 words")).toHaveClass("sr-only");
+    expect(within(row).getByText("60,241 words")).toHaveClass("sr-only");
+  });
+
   it.each([
     [0, "0% through"],
     [0.004, "0% through"],

@@ -127,15 +127,17 @@ final class CatalogStoreTests: XCTestCase {
     }
 
     /// A Book in Library 2 with what each sort reads. files are
-    /// (id, release date, page count) in any order.
+    /// (id, release date, page count) in any order, and words their word
+    /// counts by id.
     private func sortable(_ id: Int, title: String, author: String? = nil, series: (String, Double?, Double?)? = nil,
-                          files: [(Int, String?, Int?)] = [], added: String = "2026-01-01T00:00:00Z") -> String {
+                          files: [(Int, String?, Int?)] = [], words: [Int: Int] = [:],
+                          added: String = "2026-01-01T00:00:00Z") -> String {
         let authors = author.map { #"[{"person_id":1,"name":"\#($0)","sort_name":"\#($0)"}]"# } ?? "[]"
         let seriesJSON = series.map { name, number, end in
             #"[{"series_id":1,"name":"\#(name)","sort_name":"\#(name)","number":\#(number.map { "\($0)" } ?? "null"),"number_end":\#(end.map { "\($0)" } ?? "null")}]"#
         } ?? "[]"
         let filesJSON = files.map { fileID, released, pages in
-            #"{"id":\#(fileID),"file_type":"epub","file_role":"main","size_bytes":1,"release_date":\#(released.map { "\"\($0)\"" } ?? "null"),"page_count":\#(pages.map(String.init) ?? "null")}"#
+            #"{"id":\#(fileID),"file_type":"epub","file_role":"main","size_bytes":1,"release_date":\#(released.map { "\"\($0)\"" } ?? "null"),"page_count":\#(pages.map(String.init) ?? "null"),"word_count":\#(words[fileID].map(String.init) ?? "null")}"#
         }.joined(separator: ",")
         return #"{"kind":"book","id":\#(id),"library_id":2,"book":{"id":\#(id),"library_id":2,"title":"\#(title)","sort_title":"\#(title)","created_at":"\#(added)","authors":\#(authors),"series":\#(seriesJSON),"files":[\#(filesJSON)],"cover_version":""}}"#
     }
@@ -180,6 +182,17 @@ final class CatalogStoreTests: XCTestCase {
             sortable(3, title: "c", files: [(30, nil, 50)]),
             sortable(4, title: "c", files: [(40, nil, 50)]),
         ]), [3, 4, 2, 1])
+        // Word count: the newest File's, as page count is.
+        XCTAssertEqual(try order("word_count:desc", [
+            sortable(1, title: "a", files: [(10, nil, nil)], words: [10: 80000]),
+            sortable(2, title: "b", files: [(20, nil, nil)], words: [20: 120_000]),
+            sortable(3, title: "c", files: [(30, nil, nil)]),
+        ]), [2, 1, 3])
+    }
+
+    func testTheSortSheetOffersWordCountBesidePageCount() {
+        XCTAssertEqual(Array(LibrarySort.fields[5...7]), ["page_count", "word_count", "duration"])
+        XCTAssertEqual(LibrarySort.label("word_count"), "Word count")
     }
 
     /// All Libraries together sort by their saved sort when they share one,

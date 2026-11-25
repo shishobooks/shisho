@@ -31,9 +31,7 @@ struct ReadCard: View {
 
     private var detail: String? {
         if finished { return String(localized: "Finished") }
-        // Before it's been read, how big it is: its length isn't known
-        // without the book.
-        if !started { return progress.sizeBytes > 0 ? FileFacts.size(progress.sizeBytes) : nil }
+        if !started { return progress.unstartedFacts }
         guard let pages = progress.pagesLeft else { return nil }
         // The book's pages: the chapter, on the line above, would read as
         // the one counted otherwise.

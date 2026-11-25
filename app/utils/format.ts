@@ -72,6 +72,29 @@ export const readingDirectionLabel = (
 export const formatPageCount = (count: number): string =>
   formatCount(count, "page");
 
+const compactNumber = new Intl.NumberFormat(undefined, { notation: "compact" });
+
+/**
+ * Formats a reflowable ebook's word count in the ballpark: exact under a
+ * thousand, then rounded to thousands, millions, or billions. The count
+ * takes in front and back matter, so the exact figure means little; show it
+ * on hover with formatExactWordCount.
+ * @example formatWordCount(850) // "850 words"
+ * @example formatWordCount(29327) // "29K words"
+ * @example formatWordCount(1234567) // "1.2M words"
+ */
+export const formatWordCount = (count: number): string =>
+  count < 1000
+    ? formatCount(count, "word")
+    : `${compactNumber.format(count)} words`;
+
+/**
+ * Formats a word count exactly, for where formatWordCount's rounding hides it.
+ * @example formatExactWordCount(29327) // "29,327 words"
+ */
+export const formatExactWordCount = (count: number): string =>
+  formatCount(count, "word");
+
 /**
  * Formats a count with its noun, thousands grouped.
  * @example formatCount(18307, "book") // "18,307 books"

@@ -11,6 +11,7 @@ import {
   formatDayTime,
   formatDuration,
   formatElapsed,
+  formatExactWordCount,
   formatFileSize,
   formatLongDay,
   formatMonthName,
@@ -22,6 +23,7 @@ import {
   formatTimeOfDay,
   formatTimeUntil,
   formatTotalDuration,
+  formatWordCount,
   formatYear,
 } from "./format";
 
@@ -104,6 +106,32 @@ describe("formatPlayerTime", () => {
     expect(formatPlayerTime(NaN)).toBe("0:00");
     expect(formatPlayerTime(-10)).toBe("0:00");
     expect(formatPlayerTime(Infinity)).toBe("0:00");
+  });
+});
+
+describe("formatWordCount", () => {
+  it("is exact under a thousand", () => {
+    expect(formatWordCount(0)).toBe("0 words");
+    expect(formatWordCount(1)).toBe("1 word");
+    expect(formatWordCount(850)).toBe("850 words");
+    expect(formatWordCount(999)).toBe("999 words");
+  });
+
+  it("rounds to thousands, millions, and billions", () => {
+    expect(formatWordCount(1000)).toBe("1K words");
+    expect(formatWordCount(1500)).toBe("1.5K words");
+    expect(formatWordCount(29327)).toBe("29K words");
+    expect(formatWordCount(139549)).toBe("140K words");
+    expect(formatWordCount(999999)).toBe("1M words");
+    expect(formatWordCount(1234567)).toBe("1.2M words");
+    expect(formatWordCount(2500000000)).toBe("2.5B words");
+  });
+});
+
+describe("formatExactWordCount", () => {
+  it("groups thousands", () => {
+    expect(formatExactWordCount(29327)).toBe("29,327 words");
+    expect(formatExactWordCount(1)).toBe("1 word");
   });
 });
 

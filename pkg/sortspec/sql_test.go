@@ -80,7 +80,8 @@ func TestOrderClauses_NewestFileFallback(t *testing.T) {
 func TestOrderClauses_NewestFileCoalesce_AllFields(t *testing.T) {
 	t.Parallel()
 
-	// All file-level sort fields (date_released, page_count, duration)
+	// All file-level sort fields (date_released, page_count, word_count,
+	// duration)
 	// must use the newest-file coalesce.
 	tests := []struct {
 		field   string
@@ -88,6 +89,7 @@ func TestOrderClauses_NewestFileCoalesce_AllFields(t *testing.T) {
 	}{
 		{FieldDateReleased, "release_date"},
 		{FieldPageCount, "page_count"},
+		{FieldWordCount, "word_count"},
 		{FieldDuration, "audiobook_duration_seconds"},
 	}
 

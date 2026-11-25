@@ -64,6 +64,7 @@ struct BookDetail: Hashable, Sendable {
         var publisher: String?
         var identifiers: [Identifier] = []
         var pageCount: Int?
+        var wordCount: Int?
         var releaseDate: Date?
         var codec: String?
         var bitrate: Int?
@@ -123,7 +124,7 @@ final class CatalogStore: Sendable {
     /// The kinds and fields of the feed this version understands. When an
     /// app update understands more, raise it, and the catalog downloads
     /// again from the start in the background.
-    static let feedVersion = 5
+    static let feedVersion = 6
 
     let pool: DatabasePool
 
@@ -353,6 +354,14 @@ final class CatalogStore: Sendable {
             try CatalogStore.createDownloads(db)
             try CatalogStore.createLocalProgress(db)
         }
+        // A reflowable ebook's word count, shown beside a File's pages or
+        // duration. Raising feedVersion downloads it for Files already
+        // synced.
+        migrator.registerMigration("v9: word counts") { db in
+            try db.alter(table: "book_files") { t in
+                t.add(column: "word_count", .integer)
+            }
+        }
         return migrator
     }
 
@@ -581,18 +590,18 @@ final class CatalogStore: Sendable {
             try db.execute(
                 sql: """
                 INSERT INTO book_files (id, book_id, position, file_type, file_role, size_bytes, display_name, release_date, page_count,
-                    duration_seconds, cover_version, narrators)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    duration_seconds, cover_version, narrators, word_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET book_id = excluded.book_id, position = excluded.position,
                     file_type = excluded.file_type, file_role = excluded.file_role, size_bytes = excluded.size_bytes,
                     display_name = excluded.display_name,
                     release_date = excluded.release_date, page_count = excluded.page_count,
                     duration_seconds = excluded.duration_seconds, cover_version = excluded.cover_version,
-                    narrators = excluded.narrators
+                    narrators = excluded.narrators, word_count = excluded.word_count
                 """,
                 arguments: [file.id, book.id, position, file.fileType.rawValue, file.fileRole.rawValue, file.sizeBytes,
                             file.displayName, file.releaseDate.map(CatalogStore.timestamp), file.pageCount, file.audiobookDurationSeconds,
-                            file.coverVersion, CatalogStore.namesJSON(file.narrators.map(\.name))]
+                            file.coverVersion, CatalogStore.namesJSON(file.narrators.map(\.name)), file.wordCount]
             )
             try db.execute(sql: "DELETE FROM book_file_chapters WHERE file_id = ?", arguments: [file.id])
             for (index, chapter) in file.chapters.enumerated() {
@@ -709,7 +718,7 @@ final class CatalogStore: Sendable {
         }
         let files = try Row.fetchAll(db, sql: """
             SELECT id, file_type, file_role, size_bytes, display_name, cover_version, narrators, duration_seconds,
-                publisher, identifiers, page_count, release_date, codec, bitrate, language, abridged, url,
+                publisher, identifiers, page_count, word_count, release_date, codec, bitrate, language, abridged, url,
                 reading_direction, filepath, file_modified_at, created_at,
                 COALESCE((SELECT percentage FROM local_positions WHERE file_id = book_files.id),
                     (SELECT percentage FROM reading_positions WHERE file_id = book_files.id)) AS progress,
@@ -724,7 +733,7 @@ final class CatalogStore: Sendable {
                                    displayName: $0["display_name"], coverVersion: $0["cover_version"],
                                    narrators: CatalogStore.names($0["narrators"]), durationSeconds: $0["duration_seconds"],
                                    narratorIDs: narratorIDs, publisher: $0["publisher"],
-                                   identifiers: identifiers, pageCount: $0["page_count"],
+                                   identifiers: identifiers, pageCount: $0["page_count"], wordCount: $0["word_count"],
                                    releaseDate: ($0["release_date"] as Double?).map(Date.init(timeIntervalSince1970:)),
                                    codec: $0["codec"], bitrate: $0["bitrate"], language: $0["language"], abridged: $0["abridged"],
                                    url: $0["url"], readingDirection: $0["reading_direction"], filepath: $0["filepath"],

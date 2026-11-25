@@ -92,6 +92,7 @@ describe("SORT_FIELDS", () => {
       "date_added",
       "date_released",
       "page_count",
+      "word_count",
       "duration",
       "reading_status",
       "rating",

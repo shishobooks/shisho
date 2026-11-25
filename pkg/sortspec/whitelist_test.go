@@ -12,7 +12,7 @@ func TestIsValidField(t *testing.T) {
 	valid := []string{
 		FieldTitle, FieldAuthor, FieldSeries,
 		FieldDateAdded, FieldDateReleased,
-		FieldPageCount, FieldDuration,
+		FieldPageCount, FieldWordCount, FieldDuration,
 	}
 	for _, f := range valid {
 		f := f
@@ -40,7 +40,7 @@ func TestAllFields_Stable(t *testing.T) {
 	expected := []string{
 		"title", "author", "series",
 		"date_added", "date_released",
-		"page_count", "duration",
+		"page_count", "word_count", "duration",
 		"reading_status", "rating", "date_finished", "last_read",
 	}
 	assert.Equal(t, expected, AllFields())

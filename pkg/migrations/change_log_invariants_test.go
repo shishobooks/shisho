@@ -124,6 +124,7 @@ var columnsNotCompared = map[string]string{
 	"files.review_overridden_at":     "the review workflow, which only the web app shows",
 	"files.reviewed":                 "the review workflow, which only the web app shows",
 	"files.scan_error":               "a server-side scan problem",
+	"files.word_count_failed":        "a server-side scan problem",
 	"files.reading_direction_source": reasonSource,
 
 	"authors.id":     reasonPrimaryKey,

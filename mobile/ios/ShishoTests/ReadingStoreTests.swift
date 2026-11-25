@@ -18,7 +18,7 @@ final class ReadingStoreTests: XCTestCase {
         {"entries":[{"kind":"library","id":1,"library_id":1,"library":{"id":1,"name":"Books","cover_aspect_ratio":"book"}},
          {"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"The Harness Novel","sort_title":"Harness Novel",
           "created_at":"2026-01-01T00:00:00Z","cover_version":"1-1","files":[
-           {"id":8,"file_type":"epub","file_role":"main","size_bytes":4096,"display_name":"Novel","chapters":[
+           {"id":8,"file_type":"epub","file_role":"main","size_bytes":4096,"display_name":"Novel","word_count":80321,"chapters":[
             {"id":20,"title":"Part One","href":"part1.xhtml"},
             {"id":21,"parent_id":20,"title":"Chapter One","href":"chapter1.xhtml"},
             {"id":22,"parent_id":20,"title":"Chapter Two","href":"chapter2.xhtml#start"},
@@ -229,6 +229,8 @@ final class ReadingStoreTests: XCTestCase {
         var progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })
         XCTAssertEqual(progress.fileID, 8)
         XCTAssertEqual(progress.percentage, 0)
+        XCTAssertEqual(progress.wordCount, 80321)
+        XCTAssertEqual(progress.unstartedFacts, "80K words · 4 KB", "how long it is and how big, as the Listen card says")
         try store.recordReading(fileID: 8, cfi: "epubcfi(/6/6!/4/2)", percentage: 0.35, atEnd: false, at: now,
                                 sessionID: "s", sessionStartedAt: now, session: nil)
         progress = try XCTUnwrap(store.pool.read { try CatalogStore.readProgress($0, bookID: 1, ownDeviceID: "me") })

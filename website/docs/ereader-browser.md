@@ -44,7 +44,7 @@ The current browser provides:
 - Per-library **All Books**, **Series**, **Authors**, and **Search** pages. **Series** or **Authors** is left out when none of them has anything to deliver.
 - Books the Device's [Delivery Rules](./users-and-permissions.md#delivery-rules-of-a-device) deliver something from. Books, series, and authors with nothing to deliver are left out of the lists.
 - A type filter for each file type the page's books are sent as, when there is more than one. A filter shows the books the Device's rules send in that format, so with the built-in rules a book with an EPUB and a CBZ is only under EPUB, and with a rule that sends CBZ as EPUB, a CBZ-only book is under EPUB too. A filter link saved for a format nothing is sent as any more shows every book.
-- Book details and a download for each file the rules deliver, in the file type they deliver it as.
+- Book details and a download for each file the rules deliver, in the file type they deliver it as, with the file's length (an audiobook's duration, a comic's or PDF's pages, or an ebook's [word count](./supported-formats.md#word-count)) and size.
 - The user's saved per-library [sort](./browsing-search-bulk-actions.md#gallery-sort) on **All Books**, author, and search results. Series books follow series-number order.
 - An optional cover toggle.
 

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import MonoValue from "@/components/common/MonoValue";
+import WordCount from "@/components/common/WordCount";
 import type { LabelGridRow } from "@/components/library/LabelGrid";
 import TextLink from "@/components/library/TextLink";
 import { languageLabel } from "@/constants/languages";
@@ -42,18 +43,19 @@ const externalLink = (href: string, children: ReactNode) => (
  * The quiet line under the file's name: length, the audio's codec and
  * bitrate, and size. The year is in the Released row.
  */
-export const fileHeaderFacts = (file: File): string[] =>
+export const fileHeaderFacts = (file: File): ReactNode[] =>
   [
     file.audiobook_duration_seconds
       ? formatDuration(file.audiobook_duration_seconds)
       : null,
     file.page_count ? formatPageCount(file.page_count) : null,
+    file.word_count ? <WordCount count={file.word_count} /> : null,
     file.audiobook_codec ?? null,
     file.audiobook_bitrate_bps
       ? formatBitrate(file.audiobook_bitrate_bps)
       : null,
     formatFileSize(file.filesize_bytes),
-  ].filter((fact): fact is string => fact !== null);
+  ].filter((fact) => fact !== null);
 
 /**
  * What edition the file is: publisher, release date, language, Reading
@@ -146,6 +148,9 @@ export const fileDiskRows = (file: File): LabelGridRow[] => {
   ];
   if (file.page_count) {
     rows.push({ label: "Pages", value: formatPageCount(file.page_count) });
+  }
+  if (file.word_count) {
+    rows.push({ label: "Words", value: <WordCount count={file.word_count} /> });
   }
   if (file.audiobook_duration_seconds) {
     rows.push({

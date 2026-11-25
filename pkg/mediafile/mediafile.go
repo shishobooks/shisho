@@ -88,6 +88,13 @@ type ParsedMetadata struct {
 	ReadingDirection *string `json:"-"`
 	// PageCount is the number of pages (CBZ and PDF files)
 	PageCount *int `json:"page_count,omitempty"`
+	// WordCount is the number of words in a reflowable ebook's text (EPUB,
+	// KePub, MOBI, and AZW3 files), nil when it couldn't be counted, and
+	// WordCountFailed whether that was the content's fault, so trying again
+	// won't help, rather than a read that failed for now. Only built-in
+	// parsers set them: they aren't part of the plugin contract.
+	WordCount       *int `json:"-"`
+	WordCountFailed bool `json:"-"`
 	// Identifiers contains file identifiers (ISBN, ASIN, etc.) parsed from metadata
 	Identifiers []ParsedIdentifier `json:"identifiers"`
 	// Chapters contains chapter information parsed from file metadata

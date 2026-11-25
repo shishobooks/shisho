@@ -278,6 +278,9 @@ type FeedFile struct {
 	ReleaseDate              *time.Time `json:"release_date"`
 	PageCount                *int       `json:"page_count"`
 	AudiobookDurationSeconds *float64   `json:"audiobook_duration_seconds"`
+	// WordCount is how many words a reflowable ebook's text holds, null
+	// until counted and for other File Types.
+	WordCount *int `json:"word_count"`
 	// CoverVersion keys the File's own cover (GET
 	// /mobile/files/:id/cover?v=), which can differ from its Book's, so it
 	// can be cached as immutable. It's empty for a File with no cover.

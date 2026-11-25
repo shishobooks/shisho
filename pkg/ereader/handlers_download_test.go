@@ -74,6 +74,8 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create three files: EPUB (main), M4B (main), PDF (supplement)
+	words := 95312
+	duration := 24180.0
 	epubFile := &models.File{
 		LibraryID:     library.ID,
 		BookID:        book.ID,
@@ -81,17 +83,19 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 		FileRole:      models.FileRoleMain,
 		Filepath:      filepath.Join(bookDir, "my-book.epub"),
 		FilesizeBytes: 1024 * 1024, // 1 MB
+		WordCount:     &words,
 	}
 	_, err = db.NewInsert().Model(epubFile).Exec(ctx)
 	require.NoError(t, err)
 
 	m4bFile := &models.File{
-		LibraryID:     library.ID,
-		BookID:        book.ID,
-		FileType:      models.FileTypeM4B,
-		FileRole:      models.FileRoleMain,
-		Filepath:      filepath.Join(bookDir, "my-book.m4b"),
-		FilesizeBytes: 50 * 1024 * 1024, // 50 MB
+		LibraryID:                library.ID,
+		BookID:                   book.ID,
+		FileType:                 models.FileTypeM4B,
+		FileRole:                 models.FileRoleMain,
+		Filepath:                 filepath.Join(bookDir, "my-book.m4b"),
+		FilesizeBytes:            50 * 1024 * 1024, // 50 MB
+		AudiobookDurationSeconds: &duration,
 	}
 	_, err = db.NewInsert().Model(m4bFile).Exec(ctx)
 	require.NoError(t, err)
@@ -138,6 +142,10 @@ func TestDownload_ShowsAllMainFiles(t *testing.T) {
 	// File sizes should be shown
 	assert.Contains(t, body, "1.0 MB", "EPUB file size shown")
 	assert.Contains(t, body, "50.0 MB", "M4B file size shown")
+
+	// Each file's length sits between its type and size.
+	assert.Contains(t, body, "EPUB • 95K words • 1.0 MB")
+	assert.Contains(t, body, "M4B • 6h 43m • 50.0 MB")
 }
 
 // TestDownload_SingleFileStillWorks confirms that a book with a single
