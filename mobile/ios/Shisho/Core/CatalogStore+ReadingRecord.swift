@@ -231,11 +231,14 @@ extension CatalogStore {
                 let made = [Shishoapp.JournalEventType.readThroughStart, .readThroughFinish].map(\.rawValue)
                 let maker = try String.fetchOne(db, sql: "SELECT type FROM journal WHERE seq = ? AND held_for IS NULL", arguments: [-id])
                 if let maker, made.contains(maker), let bookID {
+                    // Up to the next pass, which a later start begins.
+                    let next = try Int.fetchOne(db, sql: "SELECT MIN(seq) FROM journal WHERE seq > ? AND book_id = ? AND type = ?",
+                                                arguments: [-id, bookID, Shishoapp.JournalEventType.readThroughStart.rawValue]) ?? Int.max
                     let later = [Shishoapp.JournalEventType.readThroughStart, .readThroughFinish, .readThroughAbandon,
                                  .readThroughPause, .readThroughResume].map { "'\($0.rawValue)'" }.joined(separator: ",")
                     try db.execute(sql: """
-                        DELETE FROM journal WHERE seq >= ? AND book_id = ? AND type IN (\(later)) AND held_for IS NULL
-                        """, arguments: [-id, bookID])
+                        DELETE FROM journal WHERE seq >= ? AND seq < ? AND book_id = ? AND type IN (\(later)) AND held_for IS NULL
+                        """, arguments: [-id, next, bookID])
                     try rebuildLayer(db)
                     return nil
                 }
@@ -402,13 +405,15 @@ extension CatalogStore {
         let book = "COALESCE(book_id, (SELECT f.book_id FROM book_files f WHERE f.id = file_id))"
         let only = books.map { " AND \(book) IN (\(idList($0)))" } ?? ""
         let rows = try Row.fetchAll(db, sql: """
-            SELECT seq, type, at, payload FROM journal_applied WHERE type IN (\(types))\(only)
+            SELECT seq, type, at, payload, 1 AS accepted FROM journal_applied WHERE type IN (\(types))\(only)
             UNION ALL
-            SELECT seq, type, at, payload FROM journal WHERE type IN (\(types))\(only)
+            SELECT seq, type, at, payload, 0 AS accepted FROM journal WHERE type IN (\(types))\(only)
             ORDER BY seq
             """)
         return rows.compactMap { row in
-            layerEvent(seq: row["seq"], type: row["type"], at: row["at"], payload: row["payload"])
+            var event = layerEvent(seq: row["seq"], type: row["type"], at: row["at"], payload: row["payload"])
+            event?.accepted = row["accepted"]
+            return event
         }
     }
 
@@ -631,25 +636,34 @@ extension CatalogStore {
             """, arguments: [now, eventID, Shishoapp.JournalEventType.readingSession.rawValue])
     }
 
-    /// The feed brought a Book's record or Read-through: the changes to it
-    /// the server took in are in the synced copy now, so they stop being
-    /// laid over it. Syncs run one at a time, so what the feed brings after
-    /// a change was taken in already holds it.
-    static func confirmApplied(book: Int, in db: Database) throws {
+    /// The changes to a Book's Read-throughs, and to its own record,
+    /// which the feed's entries of each kind bring back.
+    static let readThroughTypes = [Shishoapp.JournalEventType.readThroughStart, .readThroughFinish, .readThroughAbandon,
+                                   .readThroughPause, .readThroughResume, .readThroughDelete, .readingPosition, .readingSession]
+    static let userBookTypes = [Shishoapp.JournalEventType.referenceMark, .referenceRemove, .ratingSet, .ratingClear, .toReadAdd,
+                                .toReadRemove, .toReadMove]
+
+    /// The feed brought a Book's Read-through or record: the changes of
+    /// types to it the server took in are in the synced copy now, so they
+    /// stop being laid over it. Syncs run one at a time, so what the feed
+    /// brings after a change was taken in already holds it. Each kind
+    /// confirms only its own changes: a Book's record can come a page before
+    /// the Read-through a place started.
+    static func confirmApplied(book: Int, types: [Shishoapp.JournalEventType], in db: Database) throws {
+        let names = types.map { "'\($0.rawValue)'" }.joined(separator: ",")
         try db.execute(sql: """
             DELETE FROM journal_applied WHERE COALESCE(book_id, (SELECT f.book_id FROM book_files f WHERE f.id = file_id)) = ?
-                AND type NOT LIKE 'list_%'
+                AND type IN (\(names))
             """, arguments: [book])
     }
 
     /// The feed brought a List: the changes to it the server took in, named
     /// by its id or the local id this installation made it under.
     static func confirmApplied(list: Int, localID: String?, in db: Database) throws {
-        var refs = ["%\"list_id\":\(list),%", "%\"list_id\":\(list)}"]
-        if let localID, !localID.isEmpty { refs.append("%\"local_id\":\"\(localID)\"%") }
-        for ref in refs {
-            try db.execute(sql: "DELETE FROM journal_applied WHERE type LIKE 'list_%' AND CAST(payload AS TEXT) LIKE ?", arguments: [ref])
-        }
+        try db.execute(sql: """
+            DELETE FROM journal_applied WHERE type LIKE 'list_%'
+                AND (json_extract(CAST(payload AS TEXT), '$.list_id') = ? OR json_extract(CAST(payload AS TEXT), '$.local_id') = ?)
+            """, arguments: [list, localID ?? ""])
     }
 
     /// The feed caught up after since: what the server took in before then

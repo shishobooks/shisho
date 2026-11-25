@@ -144,6 +144,27 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertEqual(try store.pool.read { try CatalogStore.history($0) }.map(\.id), [first])
     }
 
+    func testAnOfflineRereadIsAPassOfItsOwn() throws {
+        let (sitting, _) = ListeningRules.play(nil, fileID: 10, at: now, percentage: 0)
+        try store.recordPosition(fileID: 10, seconds: 12, percentage: 0.02, at: now.addingTimeInterval(12), atEnd: false, sitting: sitting)
+        try store.recordPosition(fileID: 10, seconds: 590, percentage: 0.98, at: now.addingTimeInterval(20), atEnd: true, sitting: sitting)
+        try store.record(.addToRead(book: 1), at: now.addingTimeInterval(30))
+        let (again, _) = ListeningRules.play(nil, fileID: 10, at: now.addingTimeInterval(40), percentage: 0)
+        try store.recordPosition(fileID: 10, seconds: 12, percentage: 0.02, at: now.addingTimeInterval(52), atEnd: false, sitting: again)
+        let outcomes = try store.pool.read { try CatalogStore.history($0) }.map(\.outcome)
+        XCTAssertEqual(outcomes, ["underway", "finished"])
+    }
+
+    func testDeletingAnOfflinePassLeavesTheNextOne() throws {
+        try store.record(.start(book: 1), at: now)
+        try store.record(.finish(book: 1), at: now)
+        try store.record(.start(book: 1), at: now)
+        let first = try XCTUnwrap(store.pool.read { try CatalogStore.history($0) }.first { $0.outcome == "finished" }?.id)
+        try store.record(.deleteReadThrough(id: first), at: now)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.history($0) }.map(\.outcome), ["underway"])
+        XCTAssertEqual(try journalTypes(), ["read_through_start"])
+    }
+
     func testClearingAPlaceKeepsTheMovesNotSent() throws {
         let (sitting, _) = ListeningRules.play(nil, fileID: 10, at: now, percentage: 0)
         try store.recordPosition(fileID: 10, seconds: 12, percentage: 0.02, at: now.addingTimeInterval(12), atEnd: false, sitting: sitting)

@@ -52,7 +52,7 @@ func (svc *Service) BulkFinish(ctx context.Context, userID int, bookIDs []int, t
 				result.Skipped++
 				continue
 			}
-			if err := end(ctx, tx, userID, bookID, models.ReadThroughOutcomeFinished, today, now); err != nil {
+			if err := end(ctx, tx, userID, bookID, models.ReadThroughOutcomeFinished, today, now, now); err != nil {
 				return err
 			}
 			result.Changed++

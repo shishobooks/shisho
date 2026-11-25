@@ -69,8 +69,7 @@ name: Reading Stats count offline listening once, and a cleared place syncs
     visible:
       id: stats.unsynced
     timeout: 30000
-- tapOn:
-    id: tab.reading
+- runFlow: subflows/reading_tab_root.yaml
 - tapOn:
     id: reading.history
 - extendedWaitUntil:
@@ -104,9 +103,7 @@ name: Reading Stats count offline listening once, and a cleared place syncs
 - tapOn:
     id: clearPosition.confirm
 
-# Back online, a refresh syncs, and Reading Stats are fetched again. The
-# Reading tab is tapped twice: once to show it, and again to go back to its
-# first screen.
+# Back online, a refresh syncs, and Reading Stats are fetched again.
 - runScript:
     file: scripts/go_online.js
     env:
@@ -114,10 +111,7 @@ name: Reading Stats count offline listening once, and a cleared place syncs
 - swipe:
     start: 50%, 30%
     end: 50%, 80%
-- tapOn:
-    id: tab.reading
-- tapOn:
-    id: tab.reading
+- runFlow: subflows/reading_tab_root.yaml
 - tapOn:
     id: reading.stats
 - extendedWaitUntil:

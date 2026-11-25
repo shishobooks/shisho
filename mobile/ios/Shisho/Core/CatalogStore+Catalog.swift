@@ -260,7 +260,7 @@ extension CatalogStore {
             try db.execute(sql: "DELETE FROM books WHERE id = ? AND library_id = ?", arguments: [entry.id, entry.libraryId])
         case .userBook:
             touched.reading = true
-            try confirmApplied(book: entry.id, in: db)
+            try confirmApplied(book: entry.id, types: userBookTypes, in: db)
             if entry.deleted {
                 try db.execute(sql: "DELETE FROM synced_user_books WHERE book_id = ?", arguments: [entry.id])
             } else if let record = entry.userBook {

@@ -66,6 +66,9 @@ func (f *syncFixture) changedOn(file *models.File, at time.Time) {
 	_, err = f.db.NewUpdate().Model((*models.UserBook)(nil)).Set("status_chosen_at = ?", at).
 		Where("user_id = ? AND book_id = ? AND status_chosen_at IS NOT NULL", f.user.ID, file.BookID).Exec(f.ctx)
 	require.NoError(f.t, err)
+	_, err = f.db.NewUpdate().Model((*models.UserBook)(nil)).Set("updated_at = ?", at).
+		Where("user_id = ? AND book_id = ?", f.user.ID, file.BookID).Exec(f.ctx)
+	require.NoError(f.t, err)
 }
 
 func statusEvent(id, status, previous string, at time.Time) EventPayload {

@@ -234,6 +234,8 @@ var columnsNotCompared = map[string]string{
 	"read_throughs.book_authors":          "set only when its Book is deleted, which clears book_id",
 	"read_throughs.left_to_read_position": "the To Read place a delete restores, which only the server uses",
 	"read_throughs.history_only":          "keeps Reading Sessions off it on the server, which the app doesn't read",
+	"read_throughs.began_at":              "orders late journal events on the server, which the app doesn't read",
+	"read_throughs.state_changed_at":      "orders late journal events on the server, which the app doesn't read",
 
 	"bookmarks.id":         reasonPrimaryKey,
 	"bookmarks.updated_at": "when the note last changed, which only the server compares",

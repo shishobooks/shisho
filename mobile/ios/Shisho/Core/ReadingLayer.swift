@@ -103,6 +103,9 @@ struct LayerEvent: Equatable, Sendable {
     let seq: Int
     let at: Double
     let change: Change
+    /// The server took it in, and it waits for the feed to bring the record
+    /// it changed.
+    var accepted = false
 }
 
 /// Names a List by the server's id or this installation's local id.
@@ -127,8 +130,9 @@ enum ReadingLayer {
 
     /// The id a Read-through started by reading gets until the feed brings
     /// the server's. A place's events replace each other while reading, so
-    /// it's the Book's rather than an event's, and stays put save to save.
-    static func readingStartID(book: Int) -> Int { -1_000_000_000 - book }
+    /// it's the Book's and the pass's rather than an event's, and stays put
+    /// save to save.
+    static func readingStartID(book: Int, pass: Int) -> Int { -1_000_000_000 - book * 100 - min(pass, 99) }
 
     static func apply(_ events: [LayerEvent], to record: inout ReadingRecord, files: [Int: LayerFile]) {
         for event in events {
@@ -143,9 +147,9 @@ enum ReadingLayer {
             start(book, day: day, id: localID(event.seq), in: &record)
             record.userBooks[book, default: .init()].reference = false
         case .finish(let book, let day):
-            end(book, outcome: "finished", day: day, seq: event.seq, in: &record)
+            end(book, outcome: "finished", day: day, seq: event.seq, accepted: event.accepted, in: &record)
         case .abandon(let book, let day):
-            end(book, outcome: "abandoned", day: day, seq: event.seq, in: &record)
+            end(book, outcome: "abandoned", day: day, seq: event.seq, accepted: event.accepted, in: &record)
         case .pause(let book):
             setPaused(book, true, in: &record)
         case .resume(let book):
@@ -235,7 +239,8 @@ enum ReadingLayer {
 
     /// Ends the Read-through underway, or for a finish with nothing
     /// underway, records one with no begin day, as Mark as read does.
-    private static func end(_ book: Int, outcome: String, day: String, seq: Int, in record: inout ReadingRecord) {
+    private static func end(_ book: Int, outcome: String, day: String, seq: Int, accepted: Bool = false,
+                            in record: inout ReadingRecord) {
         if let rt = underway(book, in: record) {
             var ended = rt
             ended.outcome = outcome
@@ -247,7 +252,7 @@ enum ReadingLayer {
         } else if outcome == "finished" {
             // Taken in, and the feed already brought it, while its page
             // still lays the change over: once is enough.
-            if record.readThroughs.values.contains(where: { $0.id > 0 && $0.bookID == book && $0.outcome == outcome && $0.endDay == day }) {
+            if accepted, record.readThroughs.values.contains(where: { $0.id > 0 && $0.bookID == book && $0.outcome == outcome && $0.endDay == day }) {
                 return
             }
             let id = localID(seq)
@@ -288,7 +293,8 @@ enum ReadingLayer {
         if current == nil {
             let readBefore = record.readThroughs.values.contains { $0.bookID == book }
             guard !readBefore || record.toRead.contains(book) else { return }
-            start(book, day: sinceDay ?? day, id: readingStartID(book: book), in: &record)
+            let passes = record.readThroughs.keys.filter { $0 <= readingStartID(book: book, pass: 0) && $0 > readingStartID(book: book, pass: 99) - 1 }
+            start(book, day: sinceDay ?? day, id: readingStartID(book: book, pass: passes.count), in: &record)
             current = underway(book, in: record)
         } else if let rt = current, rt.paused, !atEnd {
             record.readThroughs[rt.id]?.paused = false

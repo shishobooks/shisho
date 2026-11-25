@@ -249,8 +249,15 @@ struct ListDetailView: View {
         }
         .task(id: listID) {
             guard listID < 0 else { return }
+            // From the List, or from the change that made it, should the feed
+            // have brought the server's already.
             localID = try? await model.session?.store.pool.read { [listID] db in
                 try String.fetchOne(db, sql: "SELECT local_id FROM lists WHERE id = ?", arguments: [listID])
+                    ?? String.fetchOne(db, sql: """
+                        SELECT json_extract(CAST(payload AS TEXT), '$.local_id') FROM journal WHERE seq = ? AND type = 'list_create'
+                        UNION ALL
+                        SELECT json_extract(CAST(payload AS TEXT), '$.local_id') FROM journal_applied WHERE seq = ? AND type = 'list_create'
+                        """, arguments: [-listID, -listID])
             }
         }
         .observing(model.session?.store, id: localID ?? "", into: $resolvedID) { [localID, listID] db in

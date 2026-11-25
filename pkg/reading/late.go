@@ -46,8 +46,11 @@ type LateEvent struct {
 // underway to end.
 var ErrLateNothingUnderway = errors.New("nothing was underway to mark Did Not Finish")
 
-// runLate runs change in a transaction that runs claim first.
-func (svc *Service) runLate(ctx context.Context, claim func(ctx context.Context, tx bun.Tx) error,
+// runLate runs change in a transaction that runs claim first. The change
+// stamps the user's record of bookID with when it happened, for ordering,
+// so its updated_at, which device sync finds changes by, is then moved to
+// now (0 has no record).
+func (svc *Service) runLate(ctx context.Context, userID, bookID int, claim func(ctx context.Context, tx bun.Tx) error,
 	change func(ctx context.Context, tx bun.Tx) error) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		if claim != nil {
@@ -55,7 +58,12 @@ func (svc *Service) runLate(ctx context.Context, claim func(ctx context.Context,
 				return err
 			}
 		}
-		return change(ctx, tx)
+		if err := change(ctx, tx); err != nil || bookID == 0 {
+			return err
+		}
+		_, err := tx.NewUpdate().Model((*models.UserBook)(nil)).Set("updated_at = ?", svc.now()).
+			Where("user_id = ? AND book_id = ?", userID, bookID).Exec(ctx)
+		return errors.WithStack(err)
 	})
 }
 
@@ -92,7 +100,7 @@ func lateDay(ctx context.Context, db bun.IDB, e LateEvent) (string, error) {
 // LateStart starts a Read-through as Start does, begun the day e happened.
 // A Book already underway stays as it is.
 func (svc *Service) LateStart(ctx context.Context, e LateEvent) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
 		if err != nil || after(ub.StatusChosenAt, e.At) {
 			return err
@@ -105,7 +113,7 @@ func (svc *Service) LateStart(ctx context.Context, e LateEvent) error {
 		if err != nil {
 			return err
 		}
-		if _, err := startReadThrough(ctx, tx, e.UserID, e.BookID, day, e.At, 0); err != nil {
+		if _, err := startReadThrough(ctx, tx, e.UserID, e.BookID, day, svc.now(), e.At, 0); err != nil {
 			return err
 		}
 		return chooseStatus(ctx, tx, e.UserID, e.BookID, false, e.At)
@@ -122,7 +130,7 @@ func (svc *Service) LateStart(ctx context.Context, e LateEvent) error {
 // adds nothing. Marking Did Not Finish with nothing underway is refused with
 // ErrLateNothingUnderway.
 func (svc *Service) LateEnd(ctx context.Context, e LateEvent, outcome string) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
 		if err != nil {
 			return err
@@ -133,26 +141,29 @@ func (svc *Service) LateEnd(ctx context.Context, e LateEvent, outcome string) er
 		}
 		if after(ub.StatusChosenAt, e.At) {
 			if !ub.Reference {
+				// Ended since, or on a day as late: Mark as read on the web
+				// dates its finish by the last reading, which can be before
+				// this.
 				ended, err := tx.NewSelect().Model((*models.ReadThrough)(nil)).
-					Where("rt.user_id = ? AND rt.book_id = ? AND rt.outcome != ? AND rt.end_day >= ?",
-						e.UserID, e.BookID, models.ReadThroughOutcomeUnderway, day).
+					Where("rt.user_id = ? AND rt.book_id = ? AND rt.outcome != ?", e.UserID, e.BookID, models.ReadThroughOutcomeUnderway).
+					Where("rt.end_day >= ? OR COALESCE(rt.state_changed_at, rt.updated_at) > ?", day, e.At).
 					Exists(ctx)
 				if err != nil || ended {
 					return errors.WithStack(err)
 				}
 			}
-			return insertHistoryOnly(ctx, tx, e, outcome, day)
+			return insertHistoryOnly(ctx, tx, e, outcome, day, svc.now())
 		}
 		underway, err := retrieveUnderway(ctx, tx, e.UserID, e.BookID)
 		if err != nil {
 			return err
 		}
-		if underway != nil && (underway.BeginDay != nil && day < *underway.BeginDay || underway.CreatedAt.After(e.At)) {
+		if underway != nil && (underway.BeginDay != nil && day < *underway.BeginDay || underway.Began().After(e.At)) {
 			// Underway since after this, as one a device started from
 			// reading later, so this ended an earlier pass.
-			return insertHistoryOnly(ctx, tx, e, outcome, day)
+			return insertHistoryOnly(ctx, tx, e, outcome, day, svc.now())
 		}
-		err = end(ctx, tx, e.UserID, e.BookID, outcome, day, e.At)
+		err = end(ctx, tx, e.UserID, e.BookID, outcome, day, svc.now(), e.At)
 		if errors.Is(err, ErrNothingUnderway) {
 			return ErrLateNothingUnderway
 		}
@@ -162,16 +173,17 @@ func (svc *Service) LateEnd(ctx context.Context, e LateEvent, outcome string) er
 
 // insertHistoryOnly records a Read-through of e's Book that ended with
 // outcome on day, with no begin day, as history only.
-func insertHistoryOnly(ctx context.Context, tx bun.Tx, e LateEvent, outcome, day string) error {
+func insertHistoryOnly(ctx context.Context, tx bun.Tx, e LateEvent, outcome, day string, now time.Time) error {
 	bookID := e.BookID
 	_, err := tx.NewInsert().Model(&models.ReadThrough{
-		CreatedAt:   e.At,
-		UpdatedAt:   e.At,
-		UserID:      e.UserID,
-		BookID:      &bookID,
-		EndDay:      &day,
-		Outcome:     outcome,
-		HistoryOnly: true,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		UserID:         e.UserID,
+		BookID:         &bookID,
+		EndDay:         &day,
+		Outcome:        outcome,
+		HistoryOnly:    true,
+		StateChangedAt: &e.At,
 	}).Exec(ctx)
 	return errors.WithStack(err)
 }
@@ -180,18 +192,19 @@ func insertHistoryOnly(ctx context.Context, tx bun.Tx, e LateEvent, outcome, day
 // changed later than e, or the user made a status choice since. One already
 // in that state, or nothing underway, is left as it is.
 func (svc *Service) LateSetPaused(ctx context.Context, e LateEvent, paused bool) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
 		if err != nil || after(ub.StatusChosenAt, e.At) {
 			return err
 		}
 		underway, err := retrieveUnderway(ctx, tx, e.UserID, e.BookID)
-		if err != nil || underway == nil || underway.Paused == paused || underway.UpdatedAt.After(e.At) {
+		if err != nil || underway == nil || underway.Paused == paused || underway.StateChanged().After(e.At) {
 			return err
 		}
 		underway.Paused = paused
-		underway.UpdatedAt = e.At
-		_, err = tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx)
+		underway.UpdatedAt = svc.now()
+		underway.StateChangedAt = &e.At
+		_, err = tx.NewUpdate().Model(underway).Column("paused", "updated_at", "state_changed_at").WherePK().Exec(ctx)
 		return errors.WithStack(err)
 	})
 }
@@ -201,7 +214,7 @@ func (svc *Service) LateSetPaused(ctx context.Context, e LateEvent, paused bool)
 // since. Marking dissolves whatever is underway: the user chose Reference,
 // and the Read-through's sessions are kept.
 func (svc *Service) LateReference(ctx context.Context, e LateEvent, mark bool) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
 		if err != nil || after(ub.StatusChosenAt, e.At) {
 			return err
@@ -220,7 +233,7 @@ func (svc *Service) LateReference(ctx context.Context, e LateEvent, mark bool) e
 // bookID, unless that began after e, a pass the phone never saw. One gone
 // already stays gone.
 func (svc *Service) LateDeleteReadThrough(ctx context.Context, e LateEvent, rtID *int) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		var rt *models.ReadThrough
 		if rtID != nil {
 			rt = &models.ReadThrough{}
@@ -240,7 +253,7 @@ func (svc *Service) LateDeleteReadThrough(ctx context.Context, e LateEvent, rtID
 			if err != nil {
 				return err
 			}
-			if underway.BeginDay != nil && *underway.BeginDay > day || underway.CreatedAt.After(e.At) {
+			if underway.BeginDay != nil && *underway.BeginDay > day || underway.Began().After(e.At) {
 				return nil
 			}
 			rt = underway
@@ -252,7 +265,7 @@ func (svc *Service) LateDeleteReadThrough(ctx context.Context, e LateEvent, rtID
 // LateSetRating sets the Rating in quarter-star units, or clears it with
 // nil, unless it changed later than e: the latest instant wins.
 func (svc *Service) LateSetRating(ctx context.Context, e LateEvent, units *int) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
 		if err != nil || after(ub.RatingUpdatedAt, e.At) {
 			return err
@@ -265,7 +278,7 @@ func (svc *Service) LateSetRating(ctx context.Context, e LateEvent, units *int) 
 // unless the user made a status choice or changed its place on To Read
 // since. A Book already on To Read, or underway, stays as it is.
 func (svc *Service) LateAddToRead(ctx context.Context, e LateEvent) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
 		if err != nil || after(ub.StatusChosenAt, e.At) || after(ub.ToReadChangedAt, e.At) {
 			return err
@@ -278,7 +291,7 @@ func (svc *Service) LateAddToRead(ctx context.Context, e LateEvent) error {
 // LateRemoveFromToRead takes e's Book off To Read, unless its place there
 // changed since.
 func (svc *Service) LateRemoveFromToRead(ctx context.Context, e LateEvent) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
 		if err != nil || after(ub.ToReadChangedAt, e.At) {
 			return err
@@ -292,7 +305,7 @@ func (svc *Service) LateRemoveFromToRead(ctx context.Context, e LateEvent) error
 // Book wins (ADR 0024). A Book no longer on To Read stays off it, and one
 // whose neighbor left To Read stays where it is.
 func (svc *Service) LateMoveToRead(ctx context.Context, e LateEvent, afterBookID *int) error {
-	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, e.UserID, e.BookID, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		var queued []*models.UserBook
 		err := tx.NewSelect().Model(&queued).
 			Where("ub.user_id = ? AND ub.to_read_position IS NOT NULL", e.UserID).
@@ -354,7 +367,7 @@ func (svc *Service) LateMoveToRead(ctx context.Context, e LateEvent, afterBookID
 // gone.
 func (svc *Service) LateClearPosition(ctx context.Context, userID, fileID int, at time.Time,
 	claim func(ctx context.Context, tx bun.Tx) error) error {
-	return svc.runLate(ctx, claim, func(ctx context.Context, tx bun.Tx) error {
+	return svc.runLate(ctx, userID, 0, claim, func(ctx context.Context, tx bun.Tx) error {
 		exists, err := tx.NewSelect().Model((*models.File)(nil)).Where("f.id = ?", fileID).Exists(ctx)
 		if err != nil {
 			return errors.WithStack(err)

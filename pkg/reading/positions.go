@@ -288,7 +288,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			// Reported finished before Shisho saw it begin, as a book read on
 			// the device first: a finished read with no begin day, like Mark as
 			// read with nothing underway, which leaves the other Files' places.
-			finished, err := insertFinishedReadThrough(ctx, tx, u.UserID, bookID, day, now)
+			finished, err := insertFinishedReadThrough(ctx, tx, u.UserID, bookID, day, now, occurredAt)
 			if err != nil {
 				return err
 			}
@@ -299,7 +299,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		case starting:
 			// Dated when the reading began, not when it arrived, so a choice
 			// the Shisho app made offline after it orders after it (ADR 0024).
-			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, listeningSince, u.FileID)
+			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, now, listeningSince, u.FileID)
 			if err != nil {
 				return err
 			}
@@ -309,10 +309,11 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			result.Started = true
 		// Reading from before the pause, sent late as a device's offline
 		// queue does, saves the place but doesn't undo the pause.
-		case underway != nil && underway.Paused && progress && !finishing && !occurredAt.Before(underway.UpdatedAt):
+		case underway != nil && underway.Paused && progress && !finishing && !occurredAt.Before(underway.StateChanged()):
 			underway.Paused = false
-			underway.UpdatedAt = occurredAt
-			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {
+			underway.UpdatedAt = now
+			underway.StateChangedAt = &occurredAt
+			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at", "state_changed_at").WherePK().Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
 			result.Resumed = true
@@ -323,8 +324,9 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			underway.Outcome = models.ReadThroughOutcomeFinished
 			underway.Paused = false
 			underway.EndDay = &day
-			underway.UpdatedAt = occurredAt
-			_, err := tx.NewUpdate().Model(underway).Column("outcome", "paused", "end_day", "updated_at").WherePK().Exec(ctx)
+			underway.UpdatedAt = now
+			underway.StateChangedAt = &occurredAt
+			_, err := tx.NewUpdate().Model(underway).Column("outcome", "paused", "end_day", "updated_at", "state_changed_at").WherePK().Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -700,7 +702,8 @@ func reopenAutoFinished(ctx context.Context, tx bun.Tx, rtID int, now time.Time)
 	rt.Outcome = models.ReadThroughOutcomeUnderway
 	rt.EndDay = nil
 	rt.UpdatedAt = now
-	if _, err := tx.NewUpdate().Model(rt).Column("outcome", "end_day", "updated_at").WherePK().Exec(ctx); err != nil {
+	rt.StateChangedAt = &now
+	if _, err := tx.NewUpdate().Model(rt).Column("outcome", "end_day", "updated_at", "state_changed_at").WherePK().Exec(ctx); err != nil {
 		return nil, errors.WithStack(err)
 	}
 	_, err = tx.NewUpdate().

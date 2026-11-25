@@ -16,6 +16,12 @@ func init() {
 	//   - list_books.moved_at is when the Book was last placed in its List,
 	//     by adding or moving it, for the same rule there. NULL is when it
 	//     was added.
+	//   - read_throughs.began_at and state_changed_at are when the pass began,
+	//     and when it last paused, resumed, or ended, by when that happened
+	//     rather than when the server heard: a place the app sends late
+	//     starts a pass dated by the reading. updated_at stays the server's
+	//     clock, which KOReader sync finds changes by. NULL is created_at and
+	//     updated_at.
 	//   - read_throughs.history_only marks a finish or abandon made offline
 	//     before a later Reference choice (ADR 0028): an entry in Reading
 	//     History that never takes Reading Sessions.
@@ -27,6 +33,8 @@ func init() {
 		`ALTER TABLE user_books ADD COLUMN to_read_changed_at TIMESTAMP`,
 		`ALTER TABLE list_books ADD COLUMN moved_at TIMESTAMP`,
 		`ALTER TABLE read_throughs ADD COLUMN history_only BOOLEAN NOT NULL DEFAULT FALSE`,
+		`ALTER TABLE read_throughs ADD COLUMN began_at TIMESTAMP`,
+		`ALTER TABLE read_throughs ADD COLUMN state_changed_at TIMESTAMP`,
 		`CREATE TABLE app_journal_lists (
 			user_id INTEGER NOT NULL REFERENCES users (id) ON DELETE CASCADE,
 			local_id TEXT NOT NULL,
@@ -55,6 +63,8 @@ func init() {
 	down := func(ctx context.Context, db *bun.DB) error {
 		return run(ctx, db, []string{
 			`DROP TABLE IF EXISTS app_journal_lists`,
+			`ALTER TABLE read_throughs DROP COLUMN state_changed_at`,
+			`ALTER TABLE read_throughs DROP COLUMN began_at`,
 			`ALTER TABLE read_throughs DROP COLUMN history_only`,
 			`ALTER TABLE list_books DROP COLUMN moved_at`,
 			`ALTER TABLE user_books DROP COLUMN to_read_changed_at`,

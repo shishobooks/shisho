@@ -260,6 +260,22 @@ func TestJournal_ReferenceOrdering(t *testing.T) {
 		assert.Equal(t, []string{"finished"}, f.readThroughs(2), "the web's Mark as read already ended it")
 	})
 
+	// Mark as read on the web dates the finish by the last reading, which
+	// can be before an abandon the phone made offline: the web's later
+	// choice still stands, and nothing is added.
+	t.Run("a later web finish dated earlier still wins", func(t *testing.T) {
+		t.Parallel()
+		f := newReadingFixture(t)
+		monday := f.now.Add(-48 * time.Hour).Format(time.DateOnly)
+		require.NoError(t, f.h.reading.Start(f.ctx, f.userID, 1, monday))
+		f.exec(`UPDATE user_books SET status_chosen_at = ? WHERE user_id = ?`, f.ago(72*time.Hour), f.userID)
+		require.NoError(t, f.h.reading.End(f.ctx, f.userID, 1, "finished", monday))
+		tuesday := map[string]any{"book_id": 1, "day": f.now.Add(-24 * time.Hour).Format(time.DateOnly)}
+		f.send(event("dnf", JournalEventReadThroughAbandon, f.ago(24*time.Hour), tuesday))
+		assert.Equal(t, []string{"finished"}, f.readThroughs(1))
+		assert.Equal(t, "read", f.status(1))
+	})
+
 	// A delete or finish of the Read-through underway leaves one started
 	// after it alone, even the same day.
 	t.Run("a late delete or finish leaves a later pass alone", func(t *testing.T) {
@@ -647,4 +663,20 @@ func TestJournal_StatusChangesAfterReadingOffline(t *testing.T) {
 	assert.Equal(t, []string{"read:accepted"}, f.send(event("read", JournalEventReadThroughFinish, f.ago(40*time.Minute), today)))
 	assert.Equal(t, []string{"finished"}, f.readThroughs(1))
 	assert.Equal(t, "read", f.status(1))
+}
+
+// A change sent late is stamped with when it happened, for ordering, and is
+// still found by device sync, which looks for what changed since it last
+// pulled.
+func TestJournal_LateChangesAreFoundByDeviceSync(t *testing.T) {
+	t.Parallel()
+	f := newReadingFixture(t)
+	since := time.Now()
+	f.send(
+		event("rate", JournalEventRatingSet, f.ago(2*time.Hour), map[string]any{"book_id": 1, "rating": 12}),
+		event("read", JournalEventReadThroughFinish, f.ago(2*time.Hour), book(2)),
+	)
+	changed, err := f.h.reading.ChangedSince(f.ctx, f.userID, since)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []int{1, 2}, changed)
 }
