@@ -284,6 +284,9 @@ struct BookCell: View {
     var seriesNumber: (Double, Double?)?
     /// A File of the Book is downloaded to this device.
     var downloaded = false
+    /// What tapping the cell does instead of opening the Book's page, drawn
+    /// in the cover's middle: listen or read, as Home's tiles do.
+    var action: CoverAction?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -306,8 +309,13 @@ struct BookCell: View {
                 .overlay(alignment: .bottomTrailing) {
                     if downloaded {
                         CoverDownloadBadge()
-                            .padding(4)
+                            .padding(8)
                             .accessibilityIdentifier("book.downloaded")
+                    }
+                }
+                .overlay {
+                    if let action {
+                        CoverActionDisc(action: action)
                     }
                 }
                 .padding(.bottom, book.progress == nil ? 4 : 0)

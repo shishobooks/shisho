@@ -32,7 +32,8 @@ struct HomeView: View {
                                          identifier: "home.current")
                             Shelf(identifier: "home.current.shelf") {
                                 ForEach(current) { item in
-                                    ResumeTile(item: item, identifier: "home.current.tile")
+                                    ResumeTile(item: item, identifier: "home.current.tile",
+                                               downloaded: downloaded?.contains(item.book.id) == true)
                                 }
                             }
                         }
@@ -41,7 +42,8 @@ struct HomeView: View {
                                          identifier: "home.reference")
                             Shelf(identifier: "home.reference.shelf") {
                                 ForEach(reference.prefix(20)) { item in
-                                    ResumeTile(item: item, identifier: "home.reference.tile") {
+                                    ResumeTile(item: item, identifier: "home.reference.tile",
+                                               downloaded: downloaded?.contains(item.book.id) == true) {
                                         try? model.session?.store.clearRecent(bookIDs: [item.book.id])
                                     }
                                 }
@@ -165,15 +167,17 @@ private struct ShelfBook: View {
 }
 
 /// A Book that opens straight into the player or a reader, where it was
-/// left: its cover with a play or read disc on it, so it doesn't look like
-/// the covers that open a Book's page, its title, and how far through it
-/// is. Pressing and holding it offers the Book's page, and remove offers
-/// taking it off the shelf it's on.
+/// left: a cell as the Library's grid draws it, with its status, progress,
+/// Rating, and download disc, and a listen or read disc in the cover's
+/// middle, so it doesn't look like a cover that opens the Book's page.
+/// Pressing and holding it offers the Book's page, and remove offers taking
+/// it off the shelf it's on.
 struct ResumeTile: View {
     @Environment(AppModel.self) private var model
     @ScaledMetric(relativeTo: .body) private var scaledWidth: CGFloat = 112
     let item: CatalogStore.ContinueItem
     let identifier: String
+    var downloaded = false
     /// The tile's width, or nil for the shelf's.
     var width: CGFloat?
     var remove: (() -> Void)?
@@ -181,41 +185,25 @@ struct ResumeTile: View {
     private var tileWidth: CGFloat { width ?? scaledWidth }
     private var playing: Bool { model.player?.file?.fileID == item.fileID && model.player?.isPlaying == true }
 
+    /// The Book as its cell shows it. A Reference Book never has a
+    /// Read-through underway, so its progress is its place in the File.
+    private var book: BookSummary {
+        var book = item.book
+        if book.progress == nil, let progress = item.progress, progress > 0 {
+            book.progress = progress
+        }
+        return book
+    }
+
     private var resumeLabel: String {
         item.listens ? String(localized: "Listen to \(item.book.title)") : String(localized: "Read \(item.book.title)")
     }
 
     var body: some View {
         Button(action: resume) {
-            VStack(alignment: .leading, spacing: 6) {
-                CoverView(book: item.book, width: tileWidth)
-                    .overlay(alignment: .bottomTrailing) {
-                        Group {
-                            if playing {
-                                PlayingIndicator(playing: true, height: 12)
-                                    .foregroundStyle(Theme.primaryForeground)
-                            } else {
-                                Icon(item.listens ? .headphones : .bookOpen, size: 16, relativeTo: nil)
-                                    .foregroundStyle(Theme.primaryForeground)
-                            }
-                        }
-                        .frame(width: 34, height: 34)
-                        .background(Theme.primary, in: Circle())
-                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-                        .padding(6)
-                    }
-                Text(item.book.title)
-                    .font(.geist(.subheadline, weight: .semibold))
-                    .foregroundStyle(Theme.foreground)
-                    .lineLimit(1)
-                Text(detail)
-                    .font(.geist(.caption))
-                    .foregroundStyle(Theme.mutedForeground)
-                    .monospacedDigit()
-                    .lineLimit(1)
-            }
-            .frame(width: tileWidth, alignment: .leading)
-            .contentShape(Rectangle())
+            BookCell(book: book, width: tileWidth, downloaded: downloaded,
+                     action: playing ? .playing : item.listens ? .listen : .read)
+                .frame(width: tileWidth)
         }
         .buttonStyle(PressableStyle())
         .modifier(NeedsConnection(available: model.canOpen(fileID: item.fileID)))
@@ -244,12 +232,12 @@ struct ResumeTile: View {
         .accessibilityIdentifier(identifier)
     }
 
-    /// How far through it is, or what the tile does with none yet.
+    /// How far through it is, and whether it's on the device.
     private var detail: String {
-        if let progress = item.progress, progress > 0 {
-            return String(localized: "\(Int((progress * 100).rounded()))%")
-        }
-        return item.listens ? String(localized: "Listen") : String(localized: "Read")
+        var parts: [String] = []
+        if let progress = book.progress { parts.append(String(localized: "\(Int((progress * 100).rounded()))%")) }
+        if downloaded { parts.append(String(localized: "Downloaded")) }
+        return parts.joined(separator: ", ")
     }
 
     private func resume() {
@@ -259,8 +247,10 @@ struct ResumeTile: View {
 
 /// Resume tiles in a grid, for a shelf's own page.
 struct ResumeGrid: View {
+    @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var downloaded: Set<Int>?
     let items: [CatalogStore.ContinueItem]
     let width: CGFloat
     let identifier: String
@@ -271,10 +261,14 @@ struct ResumeGrid: View {
         let column = GridItem(.fixed(layout.cellWidth), spacing: GridLayout.spacing, alignment: .top)
         LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(items) { item in
-                ResumeTile(item: item, identifier: identifier, width: layout.cellWidth, remove: remove.map { remove in { remove(item) } })
+                ResumeTile(item: item, identifier: identifier, downloaded: downloaded?.contains(item.book.id) == true,
+                           width: layout.cellWidth, remove: remove.map { remove in { remove(item) } })
             }
         }
         .padding(.horizontal, GridLayout.margin)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloaded) { db in
+            try CatalogStore.downloadedBookIDs(db)
+        }
     }
 }
 

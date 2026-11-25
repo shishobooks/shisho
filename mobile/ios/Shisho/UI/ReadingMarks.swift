@@ -115,6 +115,39 @@ struct CoverDownloadBadge: View {
     }
 }
 
+/// What a cover that opens straight into a File does, drawn in its middle
+/// as a video's play button is, so it doesn't look like a cover that opens
+/// the Book's page.
+enum CoverAction: Equatable {
+    case listen
+    case read
+    /// Listening now.
+    case playing
+}
+
+struct CoverActionDisc: View {
+    let action: CoverAction
+
+    var body: some View {
+        Group {
+            switch action {
+            case .playing:
+                PlayingIndicator(playing: true, height: 14)
+            case .listen:
+                Icon(.headphones, size: 19, relativeTo: nil)
+            case .read:
+                Icon(.bookOpen, size: 19, relativeTo: nil)
+            }
+        }
+        .foregroundStyle(Theme.primaryForeground)
+        .frame(width: 44, height: 44)
+        .background(Theme.primary, in: Circle())
+        .overlay(Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+        .accessibilityHidden(true)
+    }
+}
+
 /// How far through a Book or File the user is, as a thin bar.
 struct ProgressBar: View {
     let value: Double
