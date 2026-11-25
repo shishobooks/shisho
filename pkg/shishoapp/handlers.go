@@ -18,6 +18,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
 	"github.com/shishobooks/shisho/pkg/httputil"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/models"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
@@ -65,6 +66,7 @@ type handler struct {
 	feed      *changefeed.Service
 	reading   *reading.Service
 	bookmarks *bookmarks.Service
+	lists     *lists.Service
 	contract  *Contract
 	opts      Options
 	// feedBudget and feedChunk replace the package's defaults in tests; a

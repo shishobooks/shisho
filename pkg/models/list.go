@@ -64,6 +64,10 @@ type ListBook struct {
 	AddedByUserID *int      `json:"added_by_user_id"`
 	AddedByUser   *UserRef  `bun:"rel:belongs-to,join:added_by_user_id=id" json:"added_by_user,omitempty" tstype:"UserRef"`
 	SortOrder     *int      `json:"sort_order"`
+	// MovedAt is when the Book was last moved in the List, or nil when it
+	// hasn't moved since it was added, which orders the Shisho app's late
+	// moves: the latest move of each Book wins (ADR 0024).
+	MovedAt *time.Time `json:"-"`
 }
 
 type ListShare struct {

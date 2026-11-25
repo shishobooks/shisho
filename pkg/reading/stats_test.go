@@ -644,9 +644,9 @@ func TestStats_TimeIsSplitByWhereItWasRead(t *testing.T) {
 
 	name := func(s string) *string { return &s }
 	assert.Equal(t, []ReadingStatsPlace{
-		{Source: models.ReadingSourceKobo, DeviceName: name("Bedside Kobo"), ReadingSeconds: 3600},
+		{Source: models.ReadingSourceKobo, DeviceID: name(kobo), DeviceName: name("Bedside Kobo"), ReadingSeconds: 3600},
 		{Source: models.ReadingSourceWebReader, ReadingSeconds: 600, ListeningSeconds: 1200},
-		{Source: models.ReadingSourceKOReader, DeviceName: name("Boox"), ReadingSeconds: 1500},
+		{Source: models.ReadingSourceKOReader, DeviceID: name(koreader), DeviceName: name("Boox"), ReadingSeconds: 1500},
 		{Source: models.ReadingSourceKOReader, ReadingSeconds: 300},
 		{Source: models.ReadingSourceKobo, ReadingSeconds: 120},
 	}, f.stats("?year=2026").Places)

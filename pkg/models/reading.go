@@ -61,6 +61,10 @@ type ReadThrough struct {
 	// LeftToReadPosition is the To Read position the Book left when this
 	// Read-through started, which deleting it while underway restores.
 	LeftToReadPosition *int `json:"-"`
+	// HistoryOnly is a finish or abandon the Shisho app made offline before
+	// a later Reference choice (ADR 0028): it shows in Reading History and
+	// counts as ended, but never takes Reading Sessions.
+	HistoryOnly bool `bun:",notnull" json:"-"`
 }
 
 // Page flows: how the Page-based reader lays out a Book's pages, one at a
@@ -98,6 +102,10 @@ type UserBook struct {
 	// or removing Reference, starting, Mark as read, Mark as Did Not Finish,
 	// or Add to To Read. Nil when they've made none since it was recorded.
 	StatusChosenAt *time.Time `json:"-"`
+	// ToReadChangedAt is when the Book last joined, left, or moved on To
+	// Read, which orders the Shisho app's late To Read changes: the latest
+	// change of each Book wins (ADR 0024).
+	ToReadChangedAt *time.Time `json:"-"`
 }
 
 // Reading sources: what reported a Reading Position update or a Reading

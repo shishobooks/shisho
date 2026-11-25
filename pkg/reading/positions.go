@@ -915,11 +915,13 @@ func (svc *Service) ClearPosition(ctx context.Context, userID, fileID int) (int,
 // resetPositions deletes userID's Reading Positions in bookID's main Files
 // except keepFileID (0 keeps none), so their readers open at the start. A
 // supplement's place has nothing to do with the Read-through, so it stays. The
-// update log keeps its history.
-func resetPositions(ctx context.Context, db bun.IDB, userID, bookID, keepFileID int) error {
+// update log keeps its history. Only places reached by now are deleted, so a
+// change the Shisho app sends late, dated now, keeps a place saved since.
+func resetPositions(ctx context.Context, db bun.IDB, userID, bookID, keepFileID int, now time.Time) error {
 	_, err := db.NewDelete().
 		Model((*models.ReadingPosition)(nil)).
 		Where("user_id = ? AND file_id != ?", userID, keepFileID).
+		Where("occurred_at <= ?", now).
 		Where("file_id IN (SELECT id FROM files WHERE book_id = ? AND file_role = ?)", bookID, models.FileRoleMain).
 		Exec(ctx)
 	return errors.WithStack(err)
@@ -933,6 +935,16 @@ func userDay(ctx context.Context, db bun.IDB, userID int, instant time.Time) (st
 		return "", err
 	}
 	return instant.In(location).Format(time.DateOnly), nil
+}
+
+// TimeZone is the IANA zone userID's reading is grouped into days in: theirs,
+// or UTC when they set none.
+func (svc *Service) TimeZone(ctx context.Context, userID int) (string, error) {
+	location, err := userLocation(ctx, svc.db, userID)
+	if err != nil {
+		return "", err
+	}
+	return location.String(), nil
 }
 
 // userLocation is userID's time zone at the moment, or UTC when the user has

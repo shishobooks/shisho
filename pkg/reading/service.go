@@ -397,7 +397,7 @@ func startReadThrough(ctx context.Context, tx bun.Tx, userID, bookID int, day st
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	if err := resetPositions(ctx, tx, userID, bookID, keepFileID); err != nil {
+	if err := resetPositions(ctx, tx, userID, bookID, keepFileID, now); err != nil {
 		return nil, err
 	}
 	return rt, leaveToRead(ctx, tx, userID, bookID, now)
@@ -409,6 +409,7 @@ func leaveToRead(ctx context.Context, db bun.IDB, userID, bookID int, now time.T
 		Model((*models.UserBook)(nil)).
 		Set("to_read_position = NULL").
 		Set("updated_at = ?", now).
+		Set("to_read_changed_at = ?", now).
 		Where("user_id = ? AND book_id = ? AND to_read_position IS NOT NULL", userID, bookID).
 		Exec(ctx)
 	return errors.WithStack(err)
@@ -620,7 +621,7 @@ func deleteReadThrough(ctx context.Context, tx bun.Tx, rt *models.ReadThrough, n
 	if rt.Outcome != models.ReadThroughOutcomeUnderway || rt.BookID == nil {
 		return nil
 	}
-	if err := resetPositions(ctx, tx, rt.UserID, *rt.BookID, 0); err != nil {
+	if err := resetPositions(ctx, tx, rt.UserID, *rt.BookID, 0, now); err != nil {
 		return err
 	}
 	if rt.LeftToReadPosition == nil {
@@ -731,13 +732,14 @@ func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int, now
 	added := 0
 	for _, bookID := range bookIDs {
 		res, err := tx.ExecContext(ctx, `
-			INSERT INTO user_books (user_id, book_id, created_at, updated_at, to_read_position)
-			SELECT ?, ?, ?, ?, ?
+			INSERT INTO user_books (user_id, book_id, created_at, updated_at, to_read_position, to_read_changed_at)
+			SELECT ?, ?, ?, ?, ?, ?
 			WHERE NOT EXISTS (SELECT 1 FROM read_throughs WHERE user_id = ? AND book_id = ? AND outcome = ?)
 			ON CONFLICT (user_id, book_id) DO UPDATE
-				SET to_read_position = EXCLUDED.to_read_position, updated_at = EXCLUDED.updated_at
+				SET to_read_position = EXCLUDED.to_read_position, updated_at = EXCLUDED.updated_at,
+					to_read_changed_at = EXCLUDED.to_read_changed_at
 				WHERE user_books.to_read_position IS NULL`,
-			userID, bookID, now, now, last+added+1,
+			userID, bookID, now, now, last+added+1, now,
 			userID, bookID, models.ReadThroughOutcomeUnderway,
 		)
 		if err != nil {
@@ -752,7 +754,7 @@ func appendToRead(ctx context.Context, tx bun.Tx, userID int, bookIDs []int, now
 		}
 		// Joining To Read plans a read from the start, so a Book read before
 		// doesn't open at the old last page.
-		if err := resetPositions(ctx, tx, userID, bookID, 0); err != nil {
+		if err := resetPositions(ctx, tx, userID, bookID, 0, now); err != nil {
 			return 0, err
 		}
 		// Adding is the user's explicit choice, so it clears Reference.
@@ -809,18 +811,28 @@ func (svc *Service) ReorderToRead(ctx context.Context, userID int, bookIDs []int
 			}
 		}
 
+		// The Books the reorder moved, rather than shifted, are the ones the
+		// user moved, which order the app's late moves (ADR 0024).
+		before := make([]int, len(current))
+		for i, ub := range current {
+			before[i] = ub.BookID
+		}
+		moved := MovedInReorder(before, order)
 		now := time.Now()
 		for i, bookID := range order {
 			position := i + 1
-			if current[i].BookID == bookID && *current[i].ToReadPosition == position {
+			if current[i].BookID == bookID && *current[i].ToReadPosition == position && !moved[bookID] {
 				continue
 			}
-			_, err := tx.NewUpdate().
+			q := tx.NewUpdate().
 				Model((*models.UserBook)(nil)).
 				Set("to_read_position = ?", position).
 				Set("updated_at = ?", now).
-				Where("user_id = ? AND book_id = ?", userID, bookID).
-				Exec(ctx)
+				Where("user_id = ? AND book_id = ?", userID, bookID)
+			if moved[bookID] {
+				q = q.Set("to_read_changed_at = ?", now)
+			}
+			_, err := q.Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
 			}
@@ -1054,6 +1066,7 @@ func returnToRead(ctx context.Context, tx bun.Tx, userID, bookID, position int, 
 		Model((*models.UserBook)(nil)).
 		Set("to_read_position = ?", position).
 		Set("updated_at = ?", now).
+		Set("to_read_changed_at = ?", now).
 		Where("user_id = ? AND book_id = ?", userID, bookID).
 		Exec(ctx)
 	return errors.WithStack(err)

@@ -399,7 +399,10 @@ type ReadingStatsRatingCount struct {
 //
 //nolint:revive // named for the Reading Stats page, as generated TS types are global
 type ReadingStatsPlace struct {
-	Source           string  `json:"source" tstype:"ReadingSource"`
+	Source string `json:"source" tstype:"ReadingSource"`
+	// DeviceID is the Device's id when DeviceName is set, so the Shisho app
+	// knows its own.
+	DeviceID         *string `json:"device_id" tstype:"string | null,required"`
 	DeviceName       *string `json:"device_name" tstype:"string | null,required"`
 	ReadingSeconds   int     `json:"reading_seconds"`
 	ListeningSeconds int     `json:"listening_seconds"`

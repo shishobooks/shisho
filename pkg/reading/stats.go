@@ -349,6 +349,8 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 			ListeningSeconds: roundSeconds(p.listening),
 		}
 		if name, ok := names[p.deviceID]; ok {
+			deviceID := p.deviceID
+			row.DeviceID = &deviceID
 			row.DeviceName = &name
 		}
 		resp.Places = append(resp.Places, row)

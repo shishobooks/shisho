@@ -260,7 +260,14 @@ func (h *handler) takeEvent(ctx context.Context, c echo.Context, user *models.Us
 			return h.applyPageFlow(ctx, user, clock, ev.At, p, claim)
 		}
 	default:
-		return notUnderstood(fmt.Sprintf("This server doesn't know the event type %q.", ev.Type)), nil
+		readingApply, problem, ok := h.readingEvent(ctx, c, user, clock, ev)
+		if !ok {
+			return notUnderstood(fmt.Sprintf("This server doesn't know the event type %q.", ev.Type)), nil
+		}
+		if problem != nil {
+			return reject(problem), nil
+		}
+		apply = readingApply
 	}
 	if ev.At.IsZero() {
 		return refuse("The event has no time."), nil

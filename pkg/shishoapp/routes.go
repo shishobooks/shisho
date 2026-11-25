@@ -7,6 +7,7 @@ import (
 	"github.com/shishobooks/shisho/pkg/changefeed"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/events"
+	"github.com/shishobooks/shisho/pkg/lists"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/uptrace/bun"
 )
@@ -27,6 +28,7 @@ func RegisterRoutes(e *echo.Echo, db *bun.DB, authService *auth.Service, broker 
 		feed:      changefeed.NewService(db),
 		reading:   reading.NewService(db),
 		bookmarks: bookmarks.NewService(db),
+		lists:     lists.NewService(db),
 		contract:  opts.Contract,
 		opts:      opts,
 	}
@@ -47,6 +49,9 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	g.GET("/books/:id/cover", h.cover, signedIn, h.requireProtocol)
 	g.GET("/files/:id/cover", h.fileCover, signedIn, h.requireProtocol)
 	g.POST("/journal", h.journal, h.requireInstance, signedIn, h.requireProtocol, h.recordAppVersion)
+	// The user's Reading Stats, which the app keeps a copy of to show offline
+	// (CapabilityReadingStats).
+	g.GET("/stats", h.stats, signedIn, h.requireProtocol)
 	// Original Files (ADR 0022), with Range support so a download resumes
 	// and a stream seeks.
 	g.GET("/files/:id/download", h.download, signedIn, h.requireProtocol)

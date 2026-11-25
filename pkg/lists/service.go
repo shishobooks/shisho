@@ -647,22 +647,36 @@ type ReorderBooksOptions struct {
 
 func (svc *Service) ReorderBooks(ctx context.Context, opts ReorderBooksOptions) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
+		// The Books the reorder moved, rather than shifted, are the ones the
+		// user moved, which order the Shisho app's late moves (ADR 0024).
+		var before []int
+		err := tx.NewSelect().Model((*models.ListBook)(nil)).Column("book_id").
+			Where("list_id = ?", opts.ListID).
+			OrderExpr("sort_order IS NULL, sort_order ASC, added_at DESC, id ASC").
+			Scan(ctx, &before)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		moved := reading.MovedInReorder(before, opts.BookIDs)
+		now := time.Now()
 		for i, bookID := range opts.BookIDs {
 			sortOrder := i + 1
-			_, err := tx.NewUpdate().
+			q := tx.NewUpdate().
 				Model((*models.ListBook)(nil)).
 				Set("sort_order = ?", sortOrder).
-				Where("list_id = ? AND book_id = ?", opts.ListID, bookID).
-				Exec(ctx)
-			if err != nil {
+				Where("list_id = ? AND book_id = ?", opts.ListID, bookID)
+			if moved[bookID] {
+				q = q.Set("moved_at = ?", now)
+			}
+			if _, err := q.Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
 		}
 
 		// Update list's updated_at
-		_, err := tx.NewUpdate().
+		_, err = tx.NewUpdate().
 			Model((*models.List)(nil)).
-			Set("updated_at = ?", time.Now()).
+			Set("updated_at = ?", now).
 			Where("id = ?", opts.ListID).
 			Exec(ctx)
 		return errors.WithStack(err)
@@ -834,15 +848,19 @@ func (svc *Service) MoveBookToPosition(ctx context.Context, listID, bookID, posi
 		// Insert at new position
 		listBooks = append(listBooks[:newIndex], append([]*models.ListBook{book}, listBooks[newIndex:]...)...)
 
-		// Update all sort orders
+		// Update all sort orders. The Book moved orders the Shisho app's late
+		// moves (ADR 0024).
+		now := time.Now()
 		for i, lb := range listBooks {
 			sortOrder := i + 1
-			_, err := tx.NewUpdate().
+			q := tx.NewUpdate().
 				Model((*models.ListBook)(nil)).
 				Set("sort_order = ?", sortOrder).
-				Where("id = ?", lb.ID).
-				Exec(ctx)
-			if err != nil {
+				Where("id = ?", lb.ID)
+			if lb.ID == book.ID {
+				q = q.Set("moved_at = ?", now)
+			}
+			if _, err := q.Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
 		}
@@ -850,7 +868,7 @@ func (svc *Service) MoveBookToPosition(ctx context.Context, listID, bookID, posi
 		// Update list's updated_at
 		_, err = tx.NewUpdate().
 			Model((*models.List)(nil)).
-			Set("updated_at = ?", time.Now()).
+			Set("updated_at = ?", now).
 			Where("id = ?", listID).
 			Exec(ctx)
 		return errors.WithStack(err)

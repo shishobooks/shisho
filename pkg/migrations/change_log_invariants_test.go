@@ -201,6 +201,7 @@ var columnsNotCompared = map[string]string{
 	"lists.updated_at":              reasonBookkeep,
 	"list_books.id":                 reasonPrimaryKey,
 	"list_books.added_by_user_id":   "who added a Book, which only the web app shows",
+	"list_books.moved_at":           "orders late journal events on the server, which the app doesn't read",
 	"list_shares.id":                reasonPrimaryKey,
 	"list_shares.created_at":        reasonBookkeep,
 	"list_shares.shared_by_user_id": "who shared the List, which only the web app shows",
@@ -224,6 +225,7 @@ var columnsNotCompared = map[string]string{
 	"user_books.rating_updated_at":    "orders late Ratings on the server, which the app doesn't read",
 	"user_books.status_chosen_at":     "orders late journal events on the server, which the app doesn't read",
 	"user_books.page_flow_updated_at": "orders late journal events on the server, which the app doesn't read",
+	"user_books.to_read_changed_at":   "orders late journal events on the server, which the app doesn't read",
 
 	"read_throughs.id":                    reasonPrimaryKey,
 	"read_throughs.created_at":            reasonBookkeep,
@@ -231,6 +233,7 @@ var columnsNotCompared = map[string]string{
 	"read_throughs.book_title":            "set only when its Book is deleted, which clears book_id",
 	"read_throughs.book_authors":          "set only when its Book is deleted, which clears book_id",
 	"read_throughs.left_to_read_position": "the To Read place a delete restores, which only the server uses",
+	"read_throughs.history_only":          "keeps Reading Sessions off it on the server, which the app doesn't read",
 
 	"bookmarks.id":         reasonPrimaryKey,
 	"bookmarks.updated_at": "when the note last changed, which only the server compares",
@@ -275,6 +278,7 @@ var tablesNotInFeed = map[string]string{
 	"app_journal_events":            "which Shisho app journal events were taken in, for ignoring repeats",
 	"app_journal_sessions":          "which Reading Session each Shisho app sitting's snapshots update",
 	"app_journal_bookmarks":         "written with its Bookmark and never changed, so the Bookmark's entry carries it",
+	"app_journal_lists":             "written with its List and never changed, so the List's entry carries it",
 	"jobs":                          reasonServer,
 	"job_logs":                      reasonServer,
 	"library_paths":                 reasonServer,
