@@ -92,7 +92,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// it. Without chapters, the book's count stands in.
     func pagesLeftLabel(inBook: Bool) -> AttributedString? {
         guard pageCount > 0 else { return nil }
-        let left = PageLayout.pagesLeft(shown: pagesShown, pageCount: pageCount, contents: contents)
+        let left = PageLayout.pagesLeft(shown: pagesShown, at: page, pageCount: pageCount, contents: contents)
         let count = inBook ? left.book : left.chapter ?? left.book
         let ofBook = inBook || left.chapter == nil
         // The footer asks on every move of a scroll, and the label only
@@ -154,8 +154,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
             } else if !session.client.reachability.allowsRequests {
                 // Not on the device and no connection: say so at once, and
                 // open by itself once the connection is back.
-                waitingForConnection = true
-                phase = .failed(ConnectionRules.book(session.client.reachability.connection))
+                waitForConnection()
                 return
             } else {
                 // The pages are drawn from the whole File, so opening one
@@ -170,25 +169,23 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
             guard !closed else { return }
             log("couldn't fetch the File: \(Diagnostics.describe(error))")
             if !session.client.reachability.allowsRequests {
-                waitingForConnection = true
-                phase = .failed(ConnectionRules.book(session.client.reachability.connection))
+                waitForConnection()
             } else {
                 phase = .failed(String(localized: "This book couldn't be downloaded. Check your connection to the server and try again."))
             }
             return
         }
+        // Which copy this is, so a failure removes only it, not a newer one
+        // a background transfer put in its place meanwhile.
+        let copy = Self.fileIdentity(url)
         let opened: (pages: PageImageSource, sizes: [CGSize])
         do {
             opened = try await Self.open(url: url, file: file)
         } catch {
             guard !closed else { return }
             log("couldn't open the File: \(Diagnostics.describe(error))")
-            // A copy this open just downloaded that won't open is downloaded
-            // again on Try Again, unless that can't help: a CBZ whose pages
-            // the server couldn't read, or a PDF with a password. One
-            // downloaded before stays: failing under memory pressure, say
-            // on a plane, mustn't cost the only copy.
-            if fetchedToOpen, error as? CBZPages.Failure != .noPages, error as? PDFPages.Failure != .locked {
+            let stillThere = copy != nil && session.downloads.localFile(fileID: file.fileID).flatMap(Self.fileIdentity) == copy
+            if Self.removesCopy(after: error, fetchedHere: fetchedToOpen, stillThere: stillThere) {
                 session.downloads.remove([file.fileID])
             }
             phase = .failed(String(localized: "This book couldn't be opened."))
@@ -223,6 +220,29 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         self.source = source
         logMemory("opened")
         watch()
+    }
+
+    /// Not on the device and no connection: the reader says so, and opens
+    /// once the connection is back (connectionChanged).
+    private func waitForConnection() {
+        waitingForConnection = true
+        phase = .failed(ConnectionRules.book(session.client.reachability.connection))
+    }
+
+    /// Whether a copy that won't open is removed, so Try Again downloads it
+    /// again: only one this open downloaded, still the one on the device,
+    /// and only when downloading it again could help, unlike a CBZ whose
+    /// pages the server couldn't read or a PDF with a password. One
+    /// downloaded before stays: failing under memory pressure, say on a
+    /// plane, mustn't cost the only copy.
+    nonisolated static func removesCopy(after error: Error, fetchedHere: Bool, stillThere: Bool) -> Bool {
+        fetchedHere && stillThere && error as? PDFPages.Failure != .locked
+            && ![CBZPages.Failure.noPages, .notThisCopy].contains(error as? CBZPages.Failure)
+    }
+
+    /// A file's identity on disk, which a copy moved into its place changes.
+    nonisolated private static func fileIdentity(_ url: URL) -> Int? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.systemFileNumber] as? Int) ?? nil
     }
 
     /// The pages and their shapes, read off the main thread.

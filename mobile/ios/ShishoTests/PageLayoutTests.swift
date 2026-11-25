@@ -121,5 +121,9 @@ final class PageLayoutTests: XCTestCase {
         XCTAssertEqual(last.chapter, 0)
         XCTAssertEqual(last.book, 0)
         XCTAssertNil(PageLayout.pagesLeft(shown: [3], pageCount: 10, contents: []).chapter)
+        // A jump to a chapter's first page in a spread that starts in the
+        // chapter before counts the chapter jumped to, as its title says.
+        let jumped = PageLayout.pagesLeft(shown: [3, 4], at: 4, pageCount: 10, contents: contents)
+        XCTAssertEqual(jumped.chapter, 5)
     }
 }

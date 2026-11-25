@@ -13,7 +13,7 @@ struct ReaderView: View {
     @State private var pagerFrame: CGRect = .zero
     /// The readout counts pages left in the book rather than the chapter,
     /// as the bar does.
-    @AppStorage(ReaderBottomBar.pagesLeftInBookKey) private var pagesLeftInBook = false
+    @AppStorage(ReaderPagesLeft.inBookKey) private var pagesLeftInBook = false
     let close: () -> Void
 
     /// The app's appearance, which the bars and sheets take.
@@ -350,14 +350,12 @@ private struct ReaderTitle: View {
 /// The bar under the page: the scrubber, the chapter, pages left, and how
 /// far through. Its own view, so a drag on the scrubber redraws only it.
 private struct ReaderBottomBar: View {
-    static let pagesLeftInBookKey = ReaderPagesLeft.inBookKey
-
     let model: ReaderModel
     /// The scrubber's place while it's being dragged.
     @State private var scrubbing: Double?
     /// Counts pages left in the book rather than the chapter, as Now
     /// Playing counts time.
-    @AppStorage(ReaderBottomBar.pagesLeftInBookKey) private var pagesLeftInBook = false
+    @AppStorage(ReaderPagesLeft.inBookKey) private var pagesLeftInBook = false
 
     private var percentShown: String {
         (scrubbing ?? model.fraction).formatted(.percent.precision(.fractionLength(0)))

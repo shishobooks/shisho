@@ -263,7 +263,7 @@ private struct PageReaderBottomBar: View {
         // The page a drag would go to, as a thumbnail above the bar where a
         // finger doesn't cover it.
         .overlay(alignment: .top) {
-            if let scrubbing, let cache = model.source?.cache {
+            if let scrubbing, let cache = model.source?.previewCache {
                 PagePreview(cache: cache, page: scrubbing, label: model.pagesLabel([scrubbing]),
                             chapter: model.chapterTitle(atPage: scrubbing))
                     .frame(height: 0, alignment: .bottom)
@@ -335,7 +335,10 @@ private struct PagePreview: View {
                 guard !Task.isCancelled else { return }
                 image = decoded
             }
-            // The pages either side, where the drag goes next.
+            // The pages either side, where the drag goes next, once it rests
+            // on this one: a drag passing over pages starts none for them.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
             for offset in [1, -1, 2, -2, 3, -3] where (0..<cache.source.pageCount).contains(page + offset) {
                 cache.prefetch(page: page + offset, maxPixel: pixels, need: .later)
             }

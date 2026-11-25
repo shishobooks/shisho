@@ -128,6 +128,31 @@ final class PageImagesTests: XCTestCase {
         XCTAssertEqual(sizes, [CGSize(width: 20, height: 30), CGSize(width: 40, height: 30)])
     }
 
+    /// A copy none of whose entries the server lists, as an older copy kept
+    /// while a replacement with renamed pages downloads, doesn't open
+    /// rather than showing blank pages.
+    func testAComicWhosePagesArentInThisCopyDoesntOpen() throws {
+        let archive = try ZipArchive(data: Self.zip([("old1.png", Self.png(width: 4, height: 4), false)]))
+        XCTAssertThrowsError(try CBZPages(archive: archive, pageNames: ["new1.png", "new2.png"])) { error in
+            XCTAssertEqual(error as? CBZPages.Failure, .notThisCopy)
+        }
+    }
+
+    /// A copy that won't open is removed, so Try Again downloads it again,
+    /// only when this open downloaded it, it's still the copy on the device,
+    /// and a new download could help.
+    func testOnlyACopyThisOpenFetchedIsRemoved() {
+        let broken = PDFPages.Failure.unreadable
+        XCTAssertTrue(PageReaderModel.removesCopy(after: broken, fetchedHere: true, stillThere: true))
+        XCTAssertFalse(PageReaderModel.removesCopy(after: broken, fetchedHere: false, stillThere: true))
+        XCTAssertFalse(PageReaderModel.removesCopy(after: broken, fetchedHere: true, stillThere: false),
+                       "a newer copy put in its place meanwhile stays")
+        XCTAssertFalse(PageReaderModel.removesCopy(after: PDFPages.Failure.locked, fetchedHere: true, stillThere: true))
+        XCTAssertFalse(PageReaderModel.removesCopy(after: CBZPages.Failure.noPages, fetchedHere: true, stillThere: true))
+        XCTAssertFalse(PageReaderModel.removesCopy(after: CBZPages.Failure.notThisCopy, fetchedHere: true, stillThere: true),
+                       "a copy downloaded now matches what the server lists")
+    }
+
     func testAComicWithNoPagesDoesntOpen() throws {
         let archive = try ZipArchive(data: Self.zip([("a.png", Self.png(width: 4, height: 4), false)]))
         XCTAssertThrowsError(try CBZPages(archive: archive, pageNames: [])) { error in

@@ -38,6 +38,10 @@ protocol PagerSource: AnyObject {
     /// Whether a drag starting sideways at velocityX turns, rather than
     /// panning a zoomed page that hasn't reached its edge that way.
     func pagerAllowsDrag(velocityX: CGFloat) -> Bool
+    /// The tap just recognized only stopped a moving scroll, as of the
+    /// scrolled column: it's no tap at all, single or double. Asked once,
+    /// as the tap is recognized.
+    func pagerTapOnlyStoppedScroll() -> Bool
 }
 
 extension PagerSource {
@@ -45,6 +49,7 @@ extension PagerSource {
     var pagerIsZoomed: Bool { false }
     func pagerDoubleTapped(at point: CGPoint) {}
     func pagerAllowsDrag(velocityX: CGFloat) -> Bool { true }
+    func pagerTapOnlyStoppedScroll() -> Bool { false }
 }
 
 /// The one native pager every File is read in (ADR 0026): pages follow the
@@ -365,6 +370,9 @@ final class PagerController: UIViewController, UIGestureRecognizerDelegate {
     @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
         source?.pagerSawInput()
         let point = recognizer.location(in: stage)
+        // Judged now, for this touch: a later one can't change it, nor can
+        // it make half of a double tap.
+        if source?.pagerTapOnlyStoppedScroll() == true { return }
         guard let source, source.pagerZooms else {
             single(at: point)
             return

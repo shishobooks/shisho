@@ -54,6 +54,8 @@ final class ImageSource: PagerSource {
     weak var delegate: ImageSourceDelegate?
     let pager = PagerController()
     let cache: PageImageCache
+    /// The scrubber's thumbnails.
+    let previewCache: PageImageCache
     let pageCount: Int
     private let sizes: [CGSize]
     private var back = Slot()
@@ -80,6 +82,9 @@ final class ImageSource: PagerSource {
 
     init(pages: PageImageSource, sizes: [CGSize], flow: PageFlow, rightToLeft: Bool, startPage: Int) {
         cache = PageImageCache(source: pages)
+        // Apart from the reader's, so a drag across the book doesn't push
+        // the pages around the reader's place out of its cache.
+        previewCache = PageImageCache(source: pages, limit: 16 * 1024 * 1024)
         pageCount = sizes.count
         self.sizes = sizes
         self.flow = flow
@@ -332,6 +337,7 @@ final class ImageSource: PagerSource {
 
     func memoryWarning() {
         cache.purge()
+        previewCache.purge()
     }
 
     // MARK: - PagerSource
@@ -357,10 +363,14 @@ final class ImageSource: PagerSource {
         reportMove()
     }
 
-    func pagerTakesTap(at point: CGPoint, resting: Bool) -> Bool {
+    func pagerTapOnlyStoppedScroll() -> Bool {
         // Scrolled, a tap that only stopped the column is no tap: the
         // controls stay as they were, as in the ebook reader.
-        if let strip { return strip.takeStoppedScroll() }
+        strip?.takeStoppedScroll() ?? false
+    }
+
+    func pagerTakesTap(at point: CGPoint, resting: Bool) -> Bool {
+        if strip != nil { return false }
         // Zoomed, a tap anywhere shows the controls rather than turning
         // away from what the reader zoomed into.
         guard current.page.isZoomed else { return false }

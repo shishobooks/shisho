@@ -439,7 +439,7 @@ private struct FileCard: View {
                         }
                         if let progress {
                             FileProgressLine(progress: progress, durationSeconds: listeningLength, pageCount: file.pageCount,
-                                             wordCount: file.wordCount, pagesLeft: readHere?.pageCount == nil ? nil : readHere?.pagesLeft)
+                                             wordCount: file.wordCount, pagesLeft: readHere.flatMap { $0.pageCount == nil ? nil : $0.pagesLeft })
                                 .padding(.top, 3)
                         }
                         DownloadStatusLine(fileID: file.id, row: download ?? nil)

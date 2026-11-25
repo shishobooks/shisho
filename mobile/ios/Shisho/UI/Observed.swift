@@ -35,6 +35,8 @@ private struct Observing<Value: Sendable & Equatable, ID: Equatable>: ViewModifi
     func body(content: Content) -> some View {
         content
             .task(id: id) {
+                // A change held for the last id isn't this one's.
+                held.value = nil
                 guard let store else { return }
                 do {
                     for try await fetched in ValueObservation.tracking(fetch).removeDuplicates().values(in: store.pool) {

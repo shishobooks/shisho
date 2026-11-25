@@ -51,13 +51,13 @@ struct ReaderTopBar<Title: View, Buttons: View>: View {
     }
 }
 
-/// The chapter and the book over the page, or the book alone.
 /// Where both readers keep whether pages left count to the end of the book
 /// rather than the chapter, so the choice holds in either.
 enum ReaderPagesLeft {
     static let inBookKey = "reader.pagesLeftInBook"
 }
 
+/// The chapter and the book over the page, or the book alone.
 struct ReaderTitleText: View {
     let chapter: String?
     let book: String

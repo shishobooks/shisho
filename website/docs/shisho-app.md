@@ -103,13 +103,15 @@ The app saves your place on every page turn, and a book opens at the same place 
 
 CBZ and PDF files open in a page reader of their own, which turns pages the same way: tap the left or right third, or swipe, and tap the middle for the controls. Pinch, or double-tap anywhere on the page, to zoom into a panel. A tap waits a moment to see whether a second follows, but once a page has turned, taps on the sides turn at once, so tapping through pages stays quick. A zoomed page pans to its edge before a swipe turns it, a tap anywhere shows the controls, and a double-tap zooms back out. Turned sideways, pages show two at a time, with the cover and any wide page (two printed pages scanned as one) on their own. In the **Scrolled** flow, pages fill the screen's width; zoomed, the column scrolls down as before and pans sideways.
 
-The pages come in the same order as in the [Shisho reader](./reading-and-playback.md#cbz-and-pdf-readers), so a page number means the same page in both, and the app keeps your place as a page. A comic's or PDF's file page lists its pages in a grid, as on the web; tap one to open the reader there. The grid shows each page's picture, from your server until the file is [downloaded](#downloads) and from the phone after that; without a connection, a file that isn't downloaded shows only page numbers. Opening a page from the grid doesn't count as reading, so looking at one leaves your place where it was; turning on from it does, and starts a [Read-through](./reading-tracking.md#starting-and-finishing-automatically) there, so you can skip the pages before the story. Seeing the last page, including in a spread after turning the phone sideways, finishes the book.
+The pages come in the same order as in the [Shisho reader](./reading-and-playback.md#cbz-and-pdf-readers), so a page number means the same page in both, and the app keeps your place as a page. A comic's or PDF's file page lists its pages in a grid, as on the web; tap one to open the reader there. The grid shows each page's picture, from your server until the file is [downloaded](#downloads) and from the phone after that; without a connection, a file that isn't downloaded shows page numbers for the pages it hadn't shown yet. Opening a page from the grid doesn't count as reading, so looking at one leaves your place where it was; turning on from it does, and starts a [Read-through](./reading-tracking.md#starting-and-finishing-automatically) there, so you can skip the pages before the story. Seeing the last page, including in a spread after turning the phone sideways, finishes the book.
 
 The controls have:
 
 - **Contents**, the chapters Shisho has for the file, such as a PDF's outline, each going to the page it starts on. [Editing them](./metadata.md#chapters) changes them in the app too. A file with no chapters has no **Contents** button.
 - A bar across the bottom to move through the book, which shows the page you'd land on while you drag it, with [back and forward](./reading-and-playback.md#going-back-after-a-jump) at its ends.
 - **Settings**: the **Paginated** or **Scrolled** flow, and **Follow Reading Direction**. As in the Shisho reader, a book opens scrolled when the pages after its cover are tall strips, as a webtoon's are, until you pick a flow for it. The flow you pick is kept for the book in your account, so the Shisho reader and your other devices use it too, and one picked in the Shisho reader reaches the app. A file whose [Reading Direction](./metadata.md#reading-direction) is right to left, such as manga, turns the other way, and so does the bar; turn off **Follow Reading Direction** to have every book turn left to right on that phone or tablet.
+
+Under the page, with the controls hidden, are the chapter, the pages left in it, and how far through the book you are, as in the ebook reader, in either flow. Tap the pages left to count the pages left in the book instead; the choice holds in both readers. The bar with the controls shows the page you're on.
 
 ## Downloads
 
@@ -142,7 +144,7 @@ The app calls these paths on your server. A reverse proxy has to pass them, as [
 
 | Path | Used for |
 |------|----------|
-| `/mobile/*` | Signing in, syncing the library, your lists, and your reading and listening, covers, downloads, sharing files, and playing audiobooks |
+| `/mobile/*` | Signing in, syncing the library, your lists, and your reading and listening, covers, comic and PDF page thumbnails, downloads, sharing files, and playing audiobooks |
 
 ## Local Network and Certificates
 

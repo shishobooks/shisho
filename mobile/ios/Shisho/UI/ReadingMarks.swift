@@ -131,8 +131,7 @@ struct FileProgressLine: View {
     var pagesLeft: Int?
 
     var body: some View {
-        let text = FileProgressText.text(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount,
-                                         pagesLeft: pagesLeft)
+        let percent = Percent.text(min(1, max(0, progress)))
         let left = FileProgressText.left(progress, durationSeconds: durationSeconds, pageCount: pageCount, wordCount: wordCount,
                                          pagesLeft: pagesLeft)
         // The percent beside the bar, and what's left under it, so a long
@@ -141,7 +140,7 @@ struct FileProgressLine: View {
             HStack(spacing: 8) {
                 ProgressBar(value: progress)
                     .frame(maxWidth: 150)
-                Text(verbatim: Percent.text(min(1, max(0, progress))))
+                Text(verbatim: percent)
                     .lineLimit(1)
                     .layoutPriority(1)
             }
@@ -154,7 +153,8 @@ struct FileProgressLine: View {
         .monospacedDigit()
         .foregroundStyle(Theme.mutedForeground)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
+        // As one line, as FileProgressText.text says it.
+        .accessibilityLabel(left.map { String(localized: "\(percent) · \($0)") } ?? percent)
     }
 }
 

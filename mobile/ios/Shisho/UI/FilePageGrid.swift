@@ -13,8 +13,9 @@ struct FilePageGrid: View {
     let fileID: Int
     let pageCount: Int
     /// Whether the File is on the device, so the pages are drawn from it as
-    /// soon as a Download finishes.
-    let downloaded: Bool
+    /// soon as a Download finishes; nil until that's known, so a downloaded
+    /// File doesn't first fetch from the server.
+    let downloaded: Bool?
     @State private var expanded = false
     @State private var pages: TilePages?
     @State private var width: CGFloat = 0
@@ -22,6 +23,7 @@ struct FilePageGrid: View {
     /// Where the tiles come from now: changes as the File downloads or the
     /// server comes and goes.
     private var source: TileSource {
+        guard let downloaded else { return .none }
         if downloaded { return .downloaded }
         guard model.connection == .online, model.session?.sendsPageImages == true else { return .none }
         return .server
@@ -86,7 +88,7 @@ struct FilePageGrid: View {
         case .none:
             return nil
         case .server:
-            return TilePages(server: session.client, fileID: fileID)
+            return TilePages(.server(session.client, fileID: fileID))
         case .downloaded:
             guard let file = try? await session.store.pool.read({ try CatalogStore.readingFile($0, fileID: fileID) }),
                   let url = session.downloads.localFile(fileID: file.fileID)
@@ -96,8 +98,7 @@ struct FilePageGrid: View {
                 return try? CBZPages(url: url, pageNames: file.pages)
             }.value
             guard let opened, !Task.isCancelled else { return nil }
-            // Small: thumbnails, kept while the page is open.
-            return TilePages(cache: PageImageCache(source: opened, limit: 24 * 1024 * 1024))
+            return TilePages(.device(PageImageCache(source: opened, limit: TilePages.limit)))
         }
     }
 }
@@ -107,42 +108,48 @@ private enum TileSource: Hashable {
 }
 
 /// The tiles' pictures: drawn from the downloaded File, or the server's
-/// thumbnails, kept while the File's page is open so a tile scrolled back
-/// to doesn't fetch again.
+/// thumbnails. Either is kept while the File's page is open, up to a few
+/// megabytes, so a tile scrolled back to doesn't decode or fetch again, and
+/// Show all on a long File doesn't hold every page.
 @MainActor
 private final class TilePages {
-    private let cache: PageImageCache?
-    private let server: APIClient?
-    private let fileID: Int
-    private var fetched: [Int: UIImage] = [:]
+    enum Source {
+        case device(PageImageCache)
+        case server(APIClient, fileID: Int)
+    }
 
-    var fromServer: Bool { server != nil }
-
+    /// Small: thumbnails.
+    static let limit = 24 * 1024 * 1024
     /// The server's thumbnail tier for a tile: its longer side is about
     /// 170 points, at three pixels a point.
     private static let thumbnailSize = 512
 
-    init(cache: PageImageCache) {
-        self.cache = cache
-        server = nil
-        fileID = 0
+    private let source: Source
+    private let fetched = NSCache<NSNumber, UIImage>()
+
+    init(_ source: Source) {
+        self.source = source
+        fetched.totalCostLimit = Self.limit
     }
 
-    init(server: APIClient, fileID: Int) {
-        cache = nil
-        self.server = server
-        self.fileID = fileID
+    var fromServer: Bool {
+        if case .server = source { return true }
+        return false
     }
 
     func image(page: Int) async -> UIImage? {
-        if let cache { return await cache.image(page: page, maxPixel: 300, need: .later) }
-        if let image = fetched[page] { return image }
-        guard let server,
-              let data = try? await server.pageThumbnail(fileID: fileID, page: page, size: Self.thumbnailSize),
-              let image = UIImage(data: data)
-        else { return nil }
-        fetched[page] = image
-        return image
+        switch source {
+        case .device(let cache):
+            return await cache.image(page: page, maxPixel: 300, need: .later)
+        case .server(let server, let fileID):
+            if let image = fetched.object(forKey: page as NSNumber) { return image }
+            guard let data = try? await server.pageThumbnail(fileID: fileID, page: page, size: Self.thumbnailSize),
+                  let image = UIImage(data: data)
+            else { return nil }
+            let bytes = image.cgImage.map { $0.bytesPerRow * $0.height } ?? data.count
+            fetched.setObject(image, forKey: page as NSNumber, cost: bytes)
+            return image
+        }
     }
 }
 

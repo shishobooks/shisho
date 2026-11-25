@@ -51,6 +51,9 @@ struct CBZPages: PageImageSource {
     enum Failure: Error, Equatable {
         /// The server couldn't read the CBZ's pages, so it sent none.
         case noPages
+        /// None of the pages the server lists are in this copy, as an older
+        /// copy kept while a replacement with renamed pages downloads.
+        case notThisCopy
     }
 
     private let archive: ZipArchive
@@ -68,6 +71,9 @@ struct CBZPages: PageImageSource {
         guard !pageNames.isEmpty else { throw Failure.noPages }
         self.archive = archive
         entries = archive.entries(named: pageNames)
+        // Only a whole mismatch: a page missing here and there shows blank,
+        // as a damaged entry does, rather than closing the book.
+        guard entries.contains(where: { $0 != nil }) else { throw Failure.notThisCopy }
     }
 
     /// The bytes an image's header is read from: most formats put the size
@@ -283,11 +289,13 @@ enum PageLayout {
     }
 
     /// Pages left to the end of the chapter and of the book, counted from
-    /// the last page shown, as the ebook reader counts them. The chapter
-    /// is the first page's, and ends where the next one starts; before the
-    /// first chapter, or without chapters, there's only the book's count.
-    static func pagesLeft(shown: [Int], pageCount: Int, contents: [ContentsEntry]) -> (chapter: Int?, book: Int) {
-        let first = shown.min() ?? 0
+    /// the last page shown, as the ebook reader counts them. The chapter is
+    /// the one page is in, the page the title names, or else the first
+    /// shown's, and ends where the next one starts; before the first
+    /// chapter, or without chapters, there's only the book's count.
+    static func pagesLeft(shown: [Int], at page: Int? = nil, pageCount: Int,
+                          contents: [ContentsEntry]) -> (chapter: Int?, book: Int) {
+        let first = page ?? shown.min() ?? 0
         let last = shown.max() ?? 0
         let book = max(0, pageCount - 1 - last)
         let starts = Set(contents.compactMap { entry -> Int? in

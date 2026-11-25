@@ -332,8 +332,10 @@ final class PageStripView: UIView, UIScrollViewDelegate {
         let widthChanged = bounds.width != laidOutSize.width
         laidOutSize = bounds.size
         let keep = pending ?? page
-        // Laying out again moves the column; the reader didn't.
+        // Laying out again moves the column; the reader didn't. A double
+        // tap's zoom cut short here may never say it ended.
         positioning = true
+        zoomAnimating = false
         if scroller.zoomScale != 1 { scroller.setZoomScale(1, animated: false) }
         scroller.frame = bounds
         if widthChanged || frames.isEmpty { layOutColumn() }
@@ -389,8 +391,10 @@ final class PageStripView: UIView, UIScrollViewDelegate {
                       width: scroller.bounds.width / scale, height: scroller.bounds.height / scale)
     }
 
+    /// Screens as they show, zoom and all: zoomed in, a viewport's worth
+    /// down is a screen of reading, though it moves less of the column.
     private var currentScreen: Int {
-        Int((visibleColumn.minY / max(1, bounds.height)).rounded())
+        Int((scroller.contentOffset.y / max(1, scroller.bounds.height)).rounded())
     }
 
     /// The page at y down the column.
@@ -611,9 +615,13 @@ final class PageStripView: UIView, UIScrollViewDelegate {
         }
         tile.load = Task { [weak self, weak tile] in
             let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now, keep: keep)
-            guard let tile, tile.page == page, !Task.isCancelled, let image else { return }
-            tile.image = image
-            tile.shownPixel = maxPixel
+            guard let tile, tile.page == page, !Task.isCancelled else { return }
+            // A page that can't be read is done too, as in the paginated
+            // flow, so the reader shows rather than waiting on it.
+            if let image {
+                tile.image = image
+                tile.shownPixel = maxPixel
+            }
             self?.imageArrived(page)
         }
     }

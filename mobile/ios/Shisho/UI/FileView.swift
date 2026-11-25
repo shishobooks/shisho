@@ -127,7 +127,7 @@ struct FileView: View {
                 // A replaced File's old copy still opens while the new one
                 // downloads.
                 FilePageGrid(fileID: file.id, pageCount: pages,
-                             downloaded: (download ?? nil).map { $0.state == .done || $0.replacing } ?? false)
+                             downloaded: download.map { row in row.map { $0.state == .done || $0.replacing } ?? false })
             }
             chaptersSection(file)
             FileSectionHeading(text: String(localized: "On disk"))
