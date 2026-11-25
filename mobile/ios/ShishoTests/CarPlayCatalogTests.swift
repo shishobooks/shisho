@@ -131,7 +131,7 @@ final class CarPlayCatalogTests: XCTestCase {
         XCTAssertEqual(try store.pool.read(CatalogStore.downloadedAudiobooks), [], "none has arrived yet")
 
         for fileID in [10, 11, 30] {
-            XCTAssertTrue(try store.markDownloaded(fileID: fileID, sizeBytes: 100))
+            XCTAssertNotNil(try store.markDownloaded(fileID: fileID, sizeBytes: 100))
         }
         try listen(fileID: 30, percentage: 0.3, at: Date())
         var listed = try store.pool.read(CatalogStore.downloadedAudiobooks)
