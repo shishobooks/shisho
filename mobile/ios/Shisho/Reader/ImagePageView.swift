@@ -278,6 +278,9 @@ final class PageStripView: UIView, UIScrollViewDelegate {
     /// The pages that had views at the last move, so a move within them,
     /// as most are, does nothing more.
     private var tiled: ClosedRange<Int>?
+    /// A double tap's zoom is animating: page views are only added, and
+    /// those that went out of range let go once it ends.
+    private var zoomAnimating = false
     /// The page the reader is on: the one a quarter of the way down the
     /// screen, or the last once the column is scrolled to its end.
     private(set) var page = 0
@@ -467,6 +470,9 @@ final class PageStripView: UIView, UIScrollViewDelegate {
     /// pages zoom.
     func setZoom(_ scale: CGFloat, around point: CGPoint) {
         let scale = min(Self.maximumZoom, max(1, scale))
+        // Only a zoom that changes ends, and lets go of the views again.
+        guard abs(scale - zoom) > 0.01 else { return }
+        zoomAnimating = true
         guard scale > 1.01 else {
             scroller.setZoomScale(1, animated: true)
             return
@@ -487,6 +493,9 @@ final class PageStripView: UIView, UIScrollViewDelegate {
     }
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+        zoomAnimating = false
+        tiled = nil
+        showTiles()
         // Sharper zoomed in, and back to the column's size zoomed out.
         sharpenVisiblePages()
     }
@@ -511,18 +520,27 @@ final class PageStripView: UIView, UIScrollViewDelegate {
         let last = page(at: visible.maxY + visible.height)
         guard tiled != first...last else { return }
         tiled = first...last
-        for (page, tile) in tiles where !(first...last).contains(page) {
-            recycle(tile)
-            tiles[page] = nil
-        }
-        for page in first...last where tiles[page] == nil {
-            let tile = spare.popLast() ?? makeTile()
-            tile.page = page
-            tile.frame = frames[page]
-            tile.isHidden = false
-            tile.accessibilityLabel = label(page)
-            tiles[page] = tile
-            load(tile, page: page, keepingShown: false)
+        // A page's view goes straight to its place. Within a double tap's
+        // animated zoom, a view taken for another page would otherwise
+        // slide there from the page it last showed, reshuffling the pages
+        // on screen; and the range mid-animation may not be the one that
+        // ends up showing, so none is let go until it ends.
+        UIView.performWithoutAnimation {
+            if !zoomAnimating {
+                for (page, tile) in tiles where !(first...last).contains(page) {
+                    recycle(tile)
+                    tiles[page] = nil
+                }
+            }
+            for page in first...last where tiles[page] == nil {
+                let tile = spare.popLast() ?? makeTile()
+                tile.page = page
+                tile.frame = frames[page]
+                tile.isHidden = false
+                tile.accessibilityLabel = label(page)
+                tiles[page] = tile
+                load(tile, page: page, keepingShown: false)
+            }
         }
         for page in [first - 2, first - 1, last + 1, last + 2, last + 3] where sizes.indices.contains(page) {
             cache.prefetch(page: page, maxPixel: pixels(page, zoom: 1), need: .soon)
