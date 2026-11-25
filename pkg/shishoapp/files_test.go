@@ -245,6 +245,7 @@ func TestFiles_PageThumbnailsForTheGrid(t *testing.T) {
 	dir := t.TempDir()
 	comic := testgen.GenerateCBZ(t, dir, "comic.cbz", testgen.CBZOptions{PageCount: 3})
 	manual := testgen.GeneratePDF(t, dir, "manual.pdf", testgen.PDFOptions{PageCount: 2})
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "novel.epub"), []byte("epub"), 0o600))
 	f.addLibrary(1, "Mine")
 	f.addLibrary(2, "Theirs")
 	f.addBook(1, 1, "Comic")
@@ -267,6 +268,20 @@ func TestFiles_PageThumbnailsForTheGrid(t *testing.T) {
 	// and no credential.
 	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/5/pages/3?size=256", credential: credential}).Code)
 	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/7/pages/0?size=256", credential: credential}).Code)
-	assert.NotEqual(t, http.StatusOK, f.do(call{path: "/mobile/files/8/pages/0?size=256", credential: credential}).Code)
 	assert.Equal(t, http.StatusUnauthorized, f.do(call{path: "/mobile/files/5/pages/0?size=256"}).Code)
+	for _, tt := range []struct {
+		path string
+		code string
+	}{
+		// Thumbnails only: the reader draws its pages from the File
+		// (ADR 0025), so a full page isn't served here.
+		{"/mobile/files/5/pages/0", "validation_error"},
+		{"/mobile/files/5/pages/0?size=300", "validation_error"},
+		{"/mobile/files/5/pages/x?size=256", "validation_error"},
+		{"/mobile/files/8/pages/0?size=256", "invalid_state"},
+	} {
+		rec := f.do(call{path: tt.path, credential: credential})
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, tt.path)
+		assert.Equal(t, tt.code, errorCode(t, rec), tt.path)
+	}
 }
