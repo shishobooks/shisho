@@ -3,6 +3,21 @@ import XCTest
 
 /// The full player's rules (#916): smart rewind and the sleep timer.
 final class PlayerRulesTests: XCTestCase {
+    /// A stream that stops with an error gets one retry per failure. The
+    /// same failure again, even after a quiet spell, is still that failure
+    /// while playback hasn't got anywhere, so it shows rather than retrying
+    /// forever.
+    func testAStreamStopIsNewOnlyOnceListeningGotSomewhere() {
+        let then = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertTrue(StreamStopRules.isNew(at: then, position: 0, last: nil), "the first")
+        XCTAssertFalse(StreamStopRules.isNew(at: then.addingTimeInterval(2), position: 40, last: (then, 0)),
+                       "one failure reported again soon after")
+        XCTAssertFalse(StreamStopRules.isNew(at: then.addingTimeInterval(6), position: 0.5, last: (then, 0)),
+                       "the same place a while later")
+        XCTAssertTrue(StreamStopRules.isNew(at: then.addingTimeInterval(60), position: 50, last: (then, 0)),
+                      "after listening on")
+    }
+
     /// A short pause picks up where it stopped; a longer one goes back a
     /// little, more the longer it was.
     func testSmartRewindGoesBackMoreAfterLongerPauses() {

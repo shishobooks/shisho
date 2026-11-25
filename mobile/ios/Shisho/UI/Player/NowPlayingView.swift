@@ -28,6 +28,9 @@ struct NowPlayingView: View {
     /// The Bookmark just added, which the toast offers a note for.
     @State private var added: Bookmark?
     @State private var noting: Bookmark?
+    /// How tall the notices over the artwork are, which the artwork gives
+    /// up, so the tools stay on screen.
+    @State private var noticesHeight: CGFloat = 0
     @State private var note = ""
 
     var body: some View {
@@ -97,16 +100,19 @@ struct NowPlayingView: View {
     private func page(_ player: AudioPlayer, _ file: ListeningFile, space: CGSize) -> some View {
         VStack(spacing: 0) {
             header(player, file)
-            if let offer = player.offer {
-                PlaceOfferBanner(offer: offer, accept: player.acceptOffer, dismiss: player.dismissOffer)
-                    .padding(.top, 12)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+            VStack(spacing: 0) {
+                if let offer = player.offer {
+                    PlaceOfferBanner(offer: offer, accept: player.acceptOffer, dismiss: player.dismissOffer)
+                        .padding(.top, 12)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+                if let error = player.error {
+                    NoticeCard(text: error, icon: .triangleAlert, tint: Theme.destructive)
+                        .padding(.top, 12)
+                        .accessibilityIdentifier("player.error")
+                }
             }
-            if let error = player.error {
-                NoticeCard(text: error, icon: .triangleAlert, tint: Theme.destructive)
-                    .padding(.top, 12)
-                    .accessibilityIdentifier("player.error")
-            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { noticesHeight = $0 }
             artwork(player, file, size: artworkWidth(space))
             titles(file)
             chapterRow(player, file)
@@ -124,10 +130,10 @@ struct NowPlayingView: View {
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: player.offer)
     }
 
-    /// The artwork's width: as large as fits beside the controls, by its
-    /// height for a portrait cover.
+    /// The artwork's width: as large as fits beside the controls and any
+    /// notice over it, by its height for a portrait cover.
     private func artworkWidth(_ space: CGSize) -> CGFloat {
-        let height = space.height * (dynamicTypeSize.isAccessibilitySize ? 0.28 : 0.38)
+        let height = space.height * (dynamicTypeSize.isAccessibilitySize ? 0.28 : 0.38) - noticesHeight
         // An audiobook's cover is square.
         return max(120, min(336, space.width - 44, height))
     }

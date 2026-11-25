@@ -97,6 +97,7 @@ final class AudioPlayer {
     /// When the stream last stopped playing with an error while the item
     /// stayed ready, and whether play was tried again since.
     @ObservationIgnored private var stoppedAt: Date?
+    @ObservationIgnored private var stoppedPosition: Double = 0
     @ObservationIgnored private var retriedStop = false
     /// When the player played again after a failure, until it plays.
     @ObservationIgnored private var retriedAt: Date?
@@ -1077,22 +1078,18 @@ final class AudioPlayer {
     private func stoppedWithError(_ failure: String) {
         guard let file else { return }
         let now = Date()
-        // One failure is reported several times in a row. A new one starts
-        // after a quiet spell, or after a seek, which also gives it its own
-        // retry (move(to:)).
-        let quiet = stoppedAt.map { now.timeIntervalSince($0) > AudioPlayer.stopWindow } ?? true
-        if quiet {
+        let position = currentPosition()
+        let new = StreamStopRules.isNew(at: now, position: position, last: stoppedAt.map { ($0, stoppedPosition) })
+        if new {
             retriedStop = false
         }
-        if quiet || stoppedSeek != seekCount {
-            log("file \(file.fileID): stopped at \(Int(currentPosition())) s: \(failure)")
+        if new || stoppedSeek != seekCount {
+            log("file \(file.fileID): stopped at \(Int(position)) s: \(failure)")
         }
         stoppedAt = now
+        stoppedPosition = position
         stoppedSeek = seekCount
     }
-
-    /// How long after a failure the player may play again on its own.
-    private static let stopWindow: TimeInterval = 5
 
     /// Plays again, once per failure, when the stream stopped with an error
     /// although playback is wanted. Some xHE-AAC audiobooks mark every frame
@@ -1109,13 +1106,13 @@ final class AudioPlayer {
             // yet, so a retry that never gets going still shows the error.
             if player.timeControlStatus == .playing {
                 self.retriedAt = nil
-            } else if now.timeIntervalSince(retriedAt) >= AudioPlayer.stopWindow {
+            } else if now.timeIntervalSince(retriedAt) >= StreamStopRules.window {
                 self.retriedAt = nil
                 couldNotPlay("still not playing after playing again")
             }
             return
         }
-        guard stopped, let stoppedAt, now.timeIntervalSince(stoppedAt) < AudioPlayer.stopWindow else { return }
+        guard stopped, let stoppedAt, now.timeIntervalSince(stoppedAt) < StreamStopRules.window else { return }
         if retriedStop {
             couldNotPlay("stopped again after playing again")
             return

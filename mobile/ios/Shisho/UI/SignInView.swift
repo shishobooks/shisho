@@ -162,9 +162,17 @@ struct SignInView: View {
         }
     }
 
+    /// The app icon as the home screen shows it: debug builds are Shisho
+    /// Dev, whose icon is blue (`AppIconDev`).
+    #if DEBUG
+    private static let logo = "LogoDev"
+    #else
+    private static let logo = "Logo"
+    #endif
+
     private var brand: some View {
         VStack(spacing: 18) {
-            Image("Logo")
+            Image(SignInView.logo)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 84, height: 84)
