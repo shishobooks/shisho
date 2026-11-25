@@ -1,6 +1,7 @@
 package shishoapp
 
 import (
+	"archive/zip"
 	"bytes"
 	"image"
 	_ "image/jpeg"
@@ -246,13 +247,16 @@ func TestFiles_PageThumbnailsForTheGrid(t *testing.T) {
 	comic := testgen.GenerateCBZ(t, dir, "comic.cbz", testgen.CBZOptions{PageCount: 3})
 	manual := testgen.GeneratePDF(t, dir, "manual.pdf", testgen.PDFOptions{PageCount: 2})
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "novel.epub"), []byte("epub"), 0o600))
+	odd := filepath.Join(dir, "odd.cbz")
+	writeZip(t, odd, map[string][]byte{"page.jpg": []byte("not an image")})
 	f.addLibrary(1, "Mine")
 	f.addLibrary(2, "Theirs")
 	f.addBook(1, 1, "Comic")
 	f.addBook(2, 2, "Theirs")
 	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, page_count) VALUES
-		(5, 1, 1, ?, 'cbz', 1, 3), (6, 1, 1, ?, 'pdf', 1, 2), (7, 2, 2, ?, 'cbz', 1, 3), (8, 1, 1, ?, 'epub', 1, NULL)`,
-		comic, manual, comic, filepath.Join(dir, "novel.epub"))
+		(5, 1, 1, ?, 'cbz', 1, 3), (6, 1, 1, ?, 'pdf', 1, 2), (7, 2, 2, ?, 'cbz', 1, 3), (8, 1, 1, ?, 'epub', 1, NULL),
+		(9, 1, 1, ?, 'cbz', 1, 1)`,
+		comic, manual, comic, filepath.Join(dir, "novel.epub"), odd)
 	f.addUser(1)
 	credential := f.signIn()
 
@@ -279,9 +283,27 @@ func TestFiles_PageThumbnailsForTheGrid(t *testing.T) {
 		{"/mobile/files/5/pages/0?size=300", "validation_error"},
 		{"/mobile/files/5/pages/x?size=256", "validation_error"},
 		{"/mobile/files/8/pages/0?size=256", "invalid_state"},
+		// A page the server can't make a thumbnail of isn't sent whole.
+		{"/mobile/files/9/pages/0?size=256", "invalid_state"},
 	} {
 		rec := f.do(call{path: tt.path, credential: credential})
 		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, tt.path)
 		assert.Equal(t, tt.code, errorCode(t, rec), tt.path)
 	}
+}
+
+// writeZip writes an archive of entries to path.
+func writeZip(t *testing.T, path string, entries map[string][]byte) {
+	t.Helper()
+	out, err := os.Create(path)
+	require.NoError(t, err)
+	w := zip.NewWriter(out)
+	for name, data := range entries {
+		f, err := w.Create(name)
+		require.NoError(t, err)
+		_, err = f.Write(data)
+		require.NoError(t, err)
+	}
+	require.NoError(t, w.Close())
+	require.NoError(t, out.Close())
 }

@@ -1995,6 +1995,10 @@ func (h *handler) pageImages() PageImages {
 	return PageImages{Pages: h.pageCache, PDFPages: h.pdfPageCache, Thumbnails: h.coverCache}
 }
 
+// UnthumbnailablePageMessage is the refusal of a page the server can't make
+// a thumbnail of, when only thumbnails are served.
+const UnthumbnailablePageMessage = "This page can't be made into a thumbnail."
+
 // PageImages serves a CBZ's or PDF's pages as images, for the web reader,
 // and as thumbnails, for page grids on the web and in the Shisho app.
 type PageImages struct {
@@ -2004,6 +2008,10 @@ type PageImages struct {
 	// thumbnail is resized into. Without it (some tests) the whole page is
 	// served.
 	Thumbnails *covers.ThumbnailCache
+	// ThumbnailsOnly refuses a page the server can't make a thumbnail of,
+	// rather than serving it whole, as for the Shisho app's page grid,
+	// which never draws whole pages from the server (ADR 0025).
+	ThumbnailsOnly bool
 }
 
 // Serve serves file's page pageNum, 0-based, to someone already allowed
@@ -2100,6 +2108,8 @@ func (p PageImages) Serve(c echo.Context, file *models.File, pageNum int) error 
 		case err == nil:
 			covers.WriteThumbnail(c, thumb, cacheControl)
 			return nil
+		case errors.Is(err, covers.ErrUnsupportedThumbnail) && p.ThumbnailsOnly:
+			return errcodes.InvalidState(UnthumbnailablePageMessage)
 		case errors.Is(err, covers.ErrUnsupportedThumbnail):
 			// A page image the resizer cannot decode is served whole, uncached.
 			cacheControl = "private, no-store"
@@ -2108,6 +2118,11 @@ func (p PageImages) Serve(c echo.Context, file *models.File, pageNum int) error 
 		}
 	}
 
+	// A PDF thumbnail is drawn at its size above; anything else here is a
+	// whole page.
+	if p.ThumbnailsOnly && (thumbSize == 0 || file.FileType == models.FileTypeCBZ) {
+		return errcodes.InvalidState(UnthumbnailablePageMessage)
+	}
 	return httputil.ServeFile(c, cachedPath, errcodes.NotFound("Page"),
 		httputil.WithContentType(mimeType),
 		httputil.WithCacheControl(cacheControl))

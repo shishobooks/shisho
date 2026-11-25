@@ -99,9 +99,10 @@ func newFixtureFull(t *testing.T, contract *Contract, cache *downloadcache.Cache
 		bookmarks: bookmarks.NewService(db),
 		contract:  contract,
 		opts: Options{Contract: contract, ServerVersion: "v0.10.0", InstanceID: testInstanceID, Pages: books.PageImages{
-			Pages:      cbzpages.NewCache(pageDir),
-			PDFPages:   pdfpages.NewCache(pageDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality),
-			Thumbnails: covers.NewThumbnailCache(pageDir, 1<<30),
+			Pages:          cbzpages.NewCache(pageDir),
+			PDFPages:       pdfpages.NewCache(pageDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality),
+			Thumbnails:     covers.NewThumbnailCache(pageDir, 1<<30),
+			ThumbnailsOnly: true,
 		}},
 	}
 	registerRoutes(e, h, devices.NewMiddleware(deviceService, nil))
