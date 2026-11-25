@@ -33,7 +33,10 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	sessions, err := svc.statsSessions(ctx, user.ID, rng)
+	// All the user's Sessions: what pace is normal for them comes from all
+	// of them, so a year with few still judges skips well, and reading time
+	// and pace keep only the range's share of each.
+	sessions, err := svc.statsSessions(ctx, user.ID, yearRange(nil))
 	if err != nil {
 		return nil, err
 	}
@@ -56,9 +59,10 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 		return nil, err
 	}
 
+	resp.Pace, resp.Totals.WordsRead = paceOf(sessions, paceNorms(sessions), rng, loc)
+
 	rereads := rereadIDs(readThroughs)
 	var finished []*models.ReadThrough
-	var spans []int
 	for _, rt := range readThroughs {
 		if rt.Outcome == models.ReadThroughOutcomeUnderway || !rng.contains(rt.EndDay) {
 			continue
@@ -72,14 +76,10 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 		if rereads[rt.ID] {
 			resp.Totals.Rereads++
 		}
-		if days := daysTaken(rt); days != nil {
-			spans = append(spans, *days)
-		}
 		if rt.EndDay != nil {
 			periods.addFinish(*rt.EndDay)
 		}
 	}
-	resp.Totals.MedianDaysToFinish = median(spans)
 	resp.Periods = periods.rows()
 	// The totals are the periods' sums, so the chart adds up to them. Every
 	// day in the range falls in a period.
@@ -103,6 +103,16 @@ type statsSession struct {
 	Kind           string    `bun:"kind"`
 	Source         string    `bun:"source"`
 	SourceDeviceID *string   `bun:"source_device_id"`
+	Measured       bool      `bun:"measured"`
+	// StartPercentage and EndPercentage are how far through its File the
+	// Session began and ended, and the File's length its words, pages, or
+	// seconds of audio, by FileType; all nil once the File is gone.
+	StartPercentage float64  `bun:"start_percentage"`
+	EndPercentage   float64  `bun:"end_percentage"`
+	FileType        *string  `bun:"file_type"`
+	WordCount       *int     `bun:"word_count"`
+	PageCount       *int     `bun:"page_count"`
+	AudioSeconds    *float64 `bun:"audiobook_duration_seconds"`
 }
 
 // statsSessions loads userID's Sessions that may touch rng in any time zone.
@@ -110,7 +120,10 @@ func (svc *Service) statsSessions(ctx context.Context, userID int, rng dayRange)
 	var sessions []statsSession
 	q := svc.db.NewSelect().
 		TableExpr("reading_sessions AS rs").
-		ColumnExpr("rs.started_at, rs.ended_at, rs.duration, rs.kind, rs.source, rs.source_device_id").
+		ColumnExpr("rs.started_at, rs.ended_at, rs.duration, rs.kind, rs.source, rs.source_device_id, rs.measured").
+		ColumnExpr("rs.start_percentage, rs.end_percentage").
+		ColumnExpr("f.file_type, f.word_count, f.page_count, f.audiobook_duration_seconds").
+		Join("LEFT JOIN files AS f ON f.id = rs.file_id").
 		Where("rs.user_id = ?", userID)
 	if from, to := rng.instants(); from != nil {
 		q = q.Where("rs.ended_at >= ? AND rs.started_at < ?", *from, *to)
@@ -267,6 +280,9 @@ func (svc *Service) addSessionTime(ctx context.Context, resp *ReadingStatsRespon
 	places := map[[2]string]*place{}
 	var deviceIDs []string
 	for _, s := range sessions {
+		if !rng.mayTouch(s.StartedAt, s.EndedAt) {
+			continue
+		}
 		key := [2]string{s.Source, ""}
 		if s.Source != models.ReadingSourceWebReader && s.SourceDeviceID != nil {
 			key[1] = *s.SourceDeviceID
@@ -403,20 +419,6 @@ func daysTaken(rt *models.ReadThrough) *int {
 	}
 	days := int(end.Sub(begin).Hours()/24) + 1
 	return &days
-}
-
-func median(values []int) *float64 {
-	if len(values) == 0 {
-		return nil
-	}
-	sorted := slices.Clone(values)
-	slices.Sort(sorted)
-	mid := len(sorted) / 2
-	m := float64(sorted[mid])
-	if len(sorted)%2 == 0 {
-		m = float64(sorted[mid-1]+sorted[mid]) / 2
-	}
-	return &m
 }
 
 func roundSeconds(seconds float64) int {

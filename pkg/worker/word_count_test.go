@@ -73,7 +73,7 @@ func TestScan_RecountsWordsOfChangedFile(t *testing.T) {
 
 	testgen.GenerateEPUB(t, bookDir, "prose.epub", testgen.EPUBOptions{
 		Title:   "Prose",
-		Chapter: []byte(`<html><body><p>Only four words here.</p></body></html>`),
+		Chapter: []byte(`<html><body><p>Only five words are here.</p></body></html>`),
 	})
 	later := time.Now().Add(time.Hour)
 	require.NoError(t, os.Chtimes(path, later, later))
@@ -81,7 +81,7 @@ func TestScan_RecountsWordsOfChangedFile(t *testing.T) {
 
 	epub := tc.fileByType(models.FileTypeEPUB)
 	require.NotNil(t, epub.WordCount)
-	assert.Equal(t, 4, *epub.WordCount)
+	assert.Equal(t, 5, *epub.WordCount)
 }
 
 func TestScan_CountsWordsOfUnchangedFilesWithoutACount(t *testing.T) {

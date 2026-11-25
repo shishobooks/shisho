@@ -86,7 +86,16 @@ const compactNumber = new Intl.NumberFormat(undefined, { notation: "compact" });
 export const formatWordCount = (count: number): string =>
   count < 1000
     ? formatCount(count, "word")
-    : `${compactNumber.format(count)} words`;
+    : `${formatCompactNumber(count)} words`;
+
+/**
+ * Formats a number in the ballpark: as it is under a thousand, then rounded
+ * to thousands, millions, or billions.
+ * @example formatCompactNumber(850) // "850"
+ * @example formatCompactNumber(2104332) // "2.1M"
+ */
+export const formatCompactNumber = (count: number): string =>
+  count < 1000 ? count.toLocaleString() : compactNumber.format(count);
 
 /**
  * Formats a word count exactly, for where formatWordCount's rounding hides it.

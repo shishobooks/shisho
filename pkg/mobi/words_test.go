@@ -46,3 +46,26 @@ func TestWordCount_DRMProtected(t *testing.T) {
 	_, err := WordCount(context.Background(), path)
 	assert.ErrorIs(t, err, mediafile.ErrDRMProtected)
 }
+
+func TestWordCount_PictureBook(t *testing.T) {
+	t.Parallel()
+
+	opts := testgen.KF8Sample(testgen.MOBIKindKF8)
+	opts.KF8.Parts = []testgen.MOBIKF8Part{
+		{Fragments: []string{`<p>A short introduction to the pictures that follow.</p>`}},
+		{Fragments: []string{`<p><img src="kindle:embed:img:0" alt=""/></p>`}},
+		{Fragments: []string{`<p><img src="kindle:embed:img:0" alt=""/></p>`}},
+	}
+	opts.TOC = nil
+	path := testgen.GenerateMOBI(t, t.TempDir(), "comic.azw3", opts)
+	_, err := WordCount(context.Background(), path)
+	require.Error(t, err, "two picture pages of three")
+
+	// The same book with words on its pages is counted.
+	opts.KF8.Parts[1].Fragments = []string{`<p>One two three.</p>`}
+	opts.KF8.Parts[2].Fragments = []string{`<p>Four five six.</p>`}
+	path = testgen.GenerateMOBI(t, t.TempDir(), "book.azw3", opts)
+	n, err := WordCount(context.Background(), path)
+	require.NoError(t, err)
+	assert.Equal(t, 14, n)
+}

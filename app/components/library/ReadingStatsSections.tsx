@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/libraries/utils";
 import type {
   ReadingStatsFinishedBook,
+  ReadingStatsPace,
   ReadingStatsPeriod,
   ReadingStatsPlace,
 } from "@/types";
@@ -519,6 +520,65 @@ const placeTime = (place: PlaceRow) => {
   if (place.listening_seconds > 0)
     parts.push(`${formatDuration(place.listening_seconds)} listening`);
   return parts.join(", ") || formatDuration(0);
+};
+
+// Each kind's pace as a sentence ends it: "245 words per minute".
+const paceRows = (pace: ReadingStatsPace): { kind: string; value: string }[] =>
+  [
+    pace.words_per_minute === null
+      ? null
+      : {
+          kind: "Ebooks",
+          value: `${Math.round(pace.words_per_minute).toLocaleString()} words per minute`,
+        },
+    pace.comic_pages_per_hour === null
+      ? null
+      : {
+          kind: "Comics",
+          value: `${Math.round(pace.comic_pages_per_hour).toLocaleString()} pages per hour`,
+        },
+    pace.pdf_pages_per_hour === null
+      ? null
+      : {
+          kind: "PDFs",
+          value: `${Math.round(pace.pdf_pages_per_hour).toLocaleString()} pages per hour`,
+        },
+    pace.listening_speed === null
+      ? null
+      : {
+          kind: "Audiobooks",
+          value: `${pace.listening_speed.toLocaleString(undefined, { maximumFractionDigits: 1 })}× real time`,
+        },
+  ].filter((row) => row !== null);
+
+/**
+ * How fast the user read and listened, for each kind with enough timed
+ * reading to say.
+ */
+export const PaceList = ({ pace }: { pace: ReadingStatsPace }) => {
+  const rows = paceRows(pace);
+  if (rows.length === 0) {
+    return <EmptyNote>Not enough timed reading yet.</EmptyNote>;
+  }
+  return (
+    <>
+      <ul className="space-y-2">
+        {rows.map((row) => (
+          <li
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 text-sm"
+            key={row.kind}
+          >
+            <span>{row.kind}</span>
+            <span className="text-right tabular-nums">{row.value}</span>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-3 text-xs text-muted-foreground">
+        From timed reading, leaving out skips ahead and time with a book left
+        open, judged against your own usual pace.
+      </p>
+    </>
+  );
 };
 
 export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {

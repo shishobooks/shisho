@@ -23,6 +23,7 @@ import {
   CountList,
   FinishedChart,
   FinishedList,
+  PaceList,
   PlaceList,
   RatingValue,
   StatsCard,
@@ -54,7 +55,9 @@ import { parsePageParam, resetPaging } from "@/libraries/pagination";
 import { cn } from "@/libraries/utils";
 import type { ReadingStatsKind, ReadingStatsResponse } from "@/types";
 import {
+  formatCompactNumber,
   formatCount,
+  formatExactWordCount,
   formatShowingRange,
   formatTotalDuration,
   formatTotalHours,
@@ -128,7 +131,8 @@ const hasActivity = (stats: ReadingStatsResponse) =>
   stats.totals.finished > 0 ||
   stats.totals.did_not_finish > 0 ||
   stats.totals.reading_seconds > 0 ||
-  stats.totals.listening_seconds > 0;
+  stats.totals.listening_seconds > 0 ||
+  stats.totals.words_read > 0;
 
 const StatsBody = ({
   stats,
@@ -170,14 +174,14 @@ const StatsBody = ({
           value={formatTotalDuration(totals.listening_seconds)}
         />
         <StatTile
-          label="Median days to finish"
-          value={
-            totals.median_days_to_finish === null
-              ? "None"
-              : totals.median_days_to_finish.toLocaleString(undefined, {
-                  maximumFractionDigits: 1,
-                })
+          label="Words read"
+          note={
+            formatCompactNumber(totals.words_read) ===
+            totals.words_read.toLocaleString()
+              ? undefined
+              : formatExactWordCount(totals.words_read)
           }
+          value={formatCompactNumber(totals.words_read)}
         />
         <StatTile
           label="Average Rating"
@@ -214,6 +218,15 @@ const StatsBody = ({
           </StatsCard>
         </div>
       )}
+
+      <div className="grid gap-4 md:grid-cols-2 md:gap-6">
+        <StatsCard title="Pace">
+          <PaceList pace={stats.pace} />
+        </StatsCard>
+        <StatsCard title="Where you read">
+          <PlaceList places={stats.places} />
+        </StatsCard>
+      </div>
 
       <div>
         <p className="mb-2 text-xs text-muted-foreground">
@@ -270,9 +283,6 @@ const StatsBody = ({
               selected={filters.rating ?? null}
               singularNoun="rating"
             />
-          </StatsCard>
-          <StatsCard title="Where you read">
-            <PlaceList places={stats.places} />
           </StatsCard>
         </div>
       </div>

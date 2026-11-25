@@ -102,8 +102,9 @@ type Package struct {
 		Toc                      string `xml:"toc,attr"`
 		PageProgressionDirection string `xml:"page-progression-direction,attr"`
 		Itemref                  []struct {
-			Text  string `xml:",chardata"`
-			Idref string `xml:"idref,attr"`
+			Text       string `xml:",chardata"`
+			Idref      string `xml:"idref,attr"`
+			Properties string `xml:"properties,attr"`
 		} `xml:"itemref"`
 	} `xml:"spine"`
 	Guide struct {

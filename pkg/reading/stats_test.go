@@ -95,6 +95,8 @@ type sessionSpec struct {
 	source      string
 	deviceID    *string
 	measured    bool
+	// from and to are how far through the File it began and ended, 0 to 1.
+	from, to float64
 }
 
 func seedSession(t *testing.T, db *bun.DB, user *models.User, spec sessionSpec) {
@@ -102,6 +104,7 @@ func seedSession(t *testing.T, db *bun.DB, user *models.User, spec sessionSpec) 
 	session := &models.ReadingSession{
 		CreatedAt: spec.end, UserID: user.ID, Source: spec.source,
 		StartedAt: spec.start, EndedAt: spec.end, Measured: spec.measured,
+		StartPercentage: spec.from, EndPercentage: spec.to,
 		Kind: spec.kind, Duration: spec.duration, SourceDeviceID: spec.deviceID,
 	}
 	if session.Source == "" {
@@ -232,8 +235,6 @@ func TestStats_CountsRereadsAndDidNotFinishByTheDayTheyEnded(t *testing.T) {
 	assert.Equal(t, 3, year.Totals.Finished, "a reread counts each time")
 	assert.Equal(t, 1, year.Totals.Rereads)
 	assert.Equal(t, 1, year.Totals.DidNotFinish)
-	require.NotNil(t, year.Totals.MedianDaysToFinish)
-	assert.InDelta(t, 10, *year.Totals.MedianDaysToFinish, 0.001, "10, 1, and 13 days, counted inclusively")
 	assert.Equal(t, []int{2026, 2025}, year.Years)
 
 	require.Len(t, year.Periods, 12)
@@ -285,7 +286,6 @@ func TestStats_ReadThroughsWithNoEndDayCountOnlyUnderAllTime(t *testing.T) {
 	all := f.stats("")
 	assert.Equal(t, 1, all.Totals.Finished)
 	assert.Equal(t, 1, all.Totals.DidNotFinish)
-	assert.Nil(t, all.Totals.MedianDaysToFinish, "no Read-through has both days")
 	finished := f.finishedList("").Items
 	require.Len(t, finished, 1)
 	assert.Nil(t, finished[0].DaysTaken)

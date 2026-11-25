@@ -84,8 +84,14 @@ const emptyStats = (year: number | null): ReadingStatsResponse => ({
     did_not_finish: 0,
     reading_seconds: 0,
     listening_seconds: 0,
-    median_days_to_finish: null,
+    words_read: 0,
     average_rating: null,
+  },
+  pace: {
+    words_per_minute: null,
+    comic_pages_per_hour: null,
+    pdf_pages_per_hour: null,
+    listening_speed: null,
   },
   periods: [],
   genres: [],
@@ -105,8 +111,14 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
     did_not_finish: 1,
     reading_seconds: 7200,
     listening_seconds: 1800,
-    median_days_to_finish: 9,
+    words_read: 2104332,
     average_rating: 4.5,
+  },
+  pace: {
+    words_per_minute: 245.4,
+    comic_pages_per_hour: 85.2,
+    pdf_pages_per_hour: 30.4,
+    listening_speed: 1.42,
   },
   periods: Array.from({ length: 12 }, (_, i) => ({
     year: 2026,
@@ -332,6 +344,17 @@ describe("ReadingStatsPage", () => {
         { name: "Rated 4.5 stars" },
       ),
     ).toHaveTextContent("4.5");
+    const wordsRead = screen.getByRole("group", { name: "Words read" });
+    expect(wordsRead).toHaveTextContent("2.1M");
+    expect(wordsRead).toHaveTextContent("2,104,332 words");
+    expect(
+      screen.queryByRole("group", { name: "Median days to finish" }),
+    ).toBeNull();
+    const pace = screen.getByRole("region", { name: "Pace" });
+    expect(pace).toHaveTextContent("Ebooks245 words per minute");
+    expect(pace).toHaveTextContent("Comics85 pages per hour");
+    expect(pace).toHaveTextContent("PDFs30 pages per hour");
+    expect(pace).toHaveTextContent("Audiobooks1.4× real time");
     expect(screen.getByText("Bedside Kobo")).toBeInTheDocument();
     expect(screen.getByText("KOReader")).toBeInTheDocument();
     expect(screen.getByText(/time from them is estimated/)).toBeInTheDocument();
@@ -398,6 +421,20 @@ describe("ReadingStatsPage", () => {
     expect(screen.getByRole("combobox", { name: "Range" })).toHaveTextContent(
       "2026",
     );
+  });
+
+  it("shows the stats of a range whose only reading is words read", async () => {
+    renderPage({
+      stats: (year: number | null) => ({
+        ...emptyStats(year),
+        totals: { ...emptyStats(year).totals, words_read: 1200 },
+      }),
+    });
+
+    expect(
+      await screen.findByRole("group", { name: "Words read" }),
+    ).toHaveTextContent("1.2K");
+    expect(screen.queryByText(/No reading in 2026 yet/)).toBeNull();
   });
 
   it("links only the finished books the user can still reach", async () => {
