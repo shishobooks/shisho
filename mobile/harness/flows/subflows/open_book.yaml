@@ -9,6 +9,12 @@ appId: ${APP_ID}
     visible:
       id: library.grid
     timeout: 30000
+# From the grid's top, which the Library's tab scrolls it back to: a grid
+# left scrolled down, as after opening a Book far down it, can leave the
+# title under the header, where Maestro counts it as visible and its tap
+# lands on the header's search button instead.
+- tapOn:
+    id: tab.library
 # A Book in the last row can never reach the middle. Maestro then keeps
 # swiping to center it before it settles for the Book being visible, which
 # takes most of the default timeout, so one slow view hierarchy read fails the
