@@ -77,9 +77,10 @@ func sampleOf(s statsSession) (paceSample, bool) {
 		if fileType == models.FileTypePDF {
 			sample.kind = pacePDFPages
 		}
-		// The web reader saves its place as the 0-based page over the last
-		// page, so its percentage spans one page fewer than the File has.
-		if s.Source == models.ReadingSourceWebReader {
+		// Shisho's own page readers, on the web and in the app, save their
+		// place as the 0-based page over the last page, so their percentage
+		// spans one page fewer than the File has.
+		if s.Source == models.ReadingSourceWebReader || s.Source == models.ReadingSourceShishoApp {
 			length = max(length-1, 1)
 		}
 	case models.IsAudiobookFileType(fileType) && s.AudioSeconds != nil && *s.AudioSeconds > 0:

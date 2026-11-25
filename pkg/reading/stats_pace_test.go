@@ -212,21 +212,34 @@ func TestStats_PacePerKind(t *testing.T) {
 	assert.Equal(t, ReadingStatsPace{}, f.stats("?year=2025").Pace, "nothing read in the year")
 }
 
-// The web reader saves a page-based File's place as its 0-based page over
-// the last page, so a session from the first page to the last turned one
-// page fewer than the File has.
-func TestStats_PaceCountsTheWebReadersPagesFromTheFirst(t *testing.T) {
+// Shisho's own page readers, on the web and in the app, save a page-based
+// File's place as its 0-based page over the last page; KOReader saves its
+// 1-based page over the page count. Either way, a session from the first
+// page of an 11-page comic to its last turned ten pages.
+func TestStats_PaceCountsPagesAsEachReaderSavesThem(t *testing.T) {
 	t.Parallel()
-	f := newStatsFixture(t)
-	book := createBook(t, f.db, "Dune")
-	cbz := f.lengthFile(book, models.FileTypeCBZ, 11)
-	for i := range 5 {
-		f.session(timed(cbz, time.Date(2026, 3, 2+i, 9, 0, 0, 0, time.UTC), 60, 0, 1))
-	}
 
-	resp := f.stats("?year=2026")
-	require.NotNil(t, resp.Pace.ComicPagesPerHour)
-	assert.InDelta(t, 10, *resp.Pace.ComicPagesPerHour, 0.01)
+	for source, firstPage := range map[string]float64{
+		models.ReadingSourceWebReader: 0,
+		models.ReadingSourceShishoApp: 0,
+		models.ReadingSourceKOReader:  1.0 / 11,
+	} {
+		t.Run(source, func(t *testing.T) {
+			t.Parallel()
+			f := newStatsFixture(t)
+			book := createBook(t, f.db, "Dune")
+			cbz := f.lengthFile(book, models.FileTypeCBZ, 11)
+			for i := range 5 {
+				spec := timed(cbz, time.Date(2026, 3, 2+i, 9, 0, 0, 0, time.UTC), 60, firstPage, 1)
+				spec.source = source
+				f.session(spec)
+			}
+
+			resp := f.stats("?year=2026")
+			require.NotNil(t, resp.Pace.ComicPagesPerHour)
+			assert.InDelta(t, 10, *resp.Pace.ComicPagesPerHour, 0.01)
+		})
+	}
 }
 
 func TestStats_PaceCountsUntimedSessionsInFull(t *testing.T) {
