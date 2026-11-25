@@ -354,10 +354,7 @@ final class AudioPlayer {
         }
         pausedAt = nil
         let audio = AVAudioSession.sharedInstance()
-        // No long-form route sharing policy: with it, and the Now Playing
-        // chapter fields (updateNowPlaying), a car's skip buttons never
-        // reached the remote commands (#917).
-        try? audio.setCategory(.playback, mode: .spokenAudio)
+        try? audio.setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
         try? audio.setActive(true)
         isPlaying = true
         watchForShakes()
@@ -1236,9 +1233,8 @@ final class AudioPlayer {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: max(0, position - bounds.start),
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying && !isBuffering ? rate : 0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: rate,
-            // No chapter number and count: with them, and the long-form
-            // route sharing policy (play), a car's skip buttons never
-            // reached the remote commands (#917).
+            // No chapter number, chapter count, or media type: with them, a
+            // car's skip buttons never reached the remote commands (#917).
         ]
         if let artwork {
             info[MPMediaItemPropertyArtwork] = AudioPlayer.nowPlayingArtwork(artwork)
