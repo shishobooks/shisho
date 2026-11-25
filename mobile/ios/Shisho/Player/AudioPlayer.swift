@@ -98,8 +98,6 @@ final class AudioPlayer {
     /// stayed ready, and whether play was tried again since.
     @ObservationIgnored private var stoppedAt: Date?
     @ObservationIgnored private var stoppedPosition: Double = 0
-    /// The last skip a remote command made, and when.
-    @ObservationIgnored private var lastRemoteSkip: (direction: RemoteSkipRules.Direction, at: Date)?
     @ObservationIgnored private var retriedStop = false
     /// When the player played again after a failure, until it plays.
     @ObservationIgnored private var retriedAt: Date?
@@ -857,7 +855,7 @@ final class AudioPlayer {
             return
         }
         if updated != file {
-            let coverChanged = updated.coverVersion != file?.coverVersion || updated.book.coverVersion != file?.book.coverVersion
+            let coverChanged = updated.coverVersion != file?.coverVersion
             file = updated
             if coverChanged { loadArtwork(updated) }
             updateNowPlaying()
@@ -1172,15 +1170,15 @@ final class AudioPlayer {
             ("play", center.playCommand, { player, _ in player.play() }),
             ("pause", center.pauseCommand, { player, _ in player.pause() }),
             ("toggle play", center.togglePlayPauseCommand, { player, _ in player.togglePlay() }),
-            ("skip back", center.skipBackwardCommand, { player, _ in player.remoteSkip(.back) }),
-            ("skip forward", center.skipForwardCommand, { player, _ in player.remoteSkip(.forward) }),
+            ("skip back", center.skipBackwardCommand, { player, _ in player.skipBack() }),
+            ("skip forward", center.skipForwardCommand, { player, _ in player.skipForward() }),
             // Headphones' double and triple click, and a car's track and
             // seek buttons, skip as the lock screen does rather than change
             // chapter; chapters change in the app and in CarPlay's Now Playing.
-            ("next track", center.nextTrackCommand, { player, _ in player.remoteSkip(.forward) }),
-            ("previous track", center.previousTrackCommand, { player, _ in player.remoteSkip(.back) }),
-            ("seek forward", center.seekForwardCommand, { player, _ in player.remoteSkip(.forward) }),
-            ("seek back", center.seekBackwardCommand, { player, _ in player.remoteSkip(.back) }),
+            ("next track", center.nextTrackCommand, { player, _ in player.skipForward() }),
+            ("previous track", center.previousTrackCommand, { player, _ in player.skipBack() }),
+            ("seek forward", center.seekForwardCommand, { player, _ in player.skipForward() }),
+            ("seek back", center.seekBackwardCommand, { player, _ in player.skipBack() }),
             ("change position", center.changePlaybackPositionCommand, { player, time in
                 if let time { player.seek(to: player.chapterBounds.start + time) }
             }),
@@ -1198,15 +1196,6 @@ final class AudioPlayer {
                 }
             }
         }
-    }
-
-    /// A skip from a remote command, unless it's the same press as the last,
-    /// reaching the app as a second command.
-    private func remoteSkip(_ direction: RemoteSkipRules.Direction) {
-        let now = Date()
-        guard !RemoteSkipRules.isSamePress(direction, at: now, last: lastRemoteSkip) else { return }
-        lastRemoteSkip = (direction, now)
-        direction == .forward ? skipForward() : skipBack()
     }
 
     /// Calls handle when command comes, from whichever queue MediaPlayer
@@ -1261,11 +1250,13 @@ final class AudioPlayer {
     /// audiobook's, never its Book's, which can be an ebook's. A File with
     /// none shows the system's own.
     private func loadArtwork(_ loaded: ListeningFile) {
+        artwork = nil
         guard !loaded.coverVersion.isEmpty else { return }
         let covers = session.covers
         Task { [weak self] in
             let image = await covers.image(.file(loaded.fileID), version: loaded.coverVersion, size: AudioPlayer.artworkSize)
-            guard let self, self.file?.fileID == loaded.fileID else { return }
+            // Not for a File or a cover since replaced.
+            guard let self, self.file?.fileID == loaded.fileID, self.file?.coverVersion == loaded.coverVersion else { return }
             self.artwork = image
             self.updateNowPlaying()
         }

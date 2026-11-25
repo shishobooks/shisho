@@ -176,6 +176,8 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
         ]
         for list in lists {
             tabLists[list.name] = list
+            // The last account's empty text waits for this one's first read.
+            list.template.emptyViewTitleVariants = []
             draw(list)
             watch(list)
         }
@@ -204,9 +206,8 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
     }
 
     /// Marks the playing audiobook in every list when what's playing
-    /// changes, and reads Recent again when playback stops, for an
-    /// audiobook played to its end, whose place its observation doesn't
-    /// track. A stream that fails is said in the car.
+    /// changes, and reads Recent again when playback stops or moves to
+    /// another File, whose last place its observation doesn't track. A stream that fails is said in the car.
     private func watchPlayer() {
         withObservationTracking {
             _ = model.player?.file?.fileID
@@ -217,10 +218,11 @@ final class CarPlayScreens: NSObject, CPInterfaceControllerDelegate, CPSessionCo
                 guard let self else { return }
                 let now = (fileID: self.model.player?.file?.fileID, isPlaying: self.model.player?.isPlaying == true)
                 if now.fileID != self.playing.fileID || now.isPlaying != self.playing.isPlaying {
-                    let stopped = self.playing.isPlaying && !now.isPlaying
+                    // Playback stopped, or moved on to another File.
+                    let left = self.playing.isPlaying && (!now.isPlaying || now.fileID != self.playing.fileID)
                     self.playing = now
                     self.markPlaying()
-                    if stopped, let recent = self.tabLists["recent"] { self.watch(recent) }
+                    if left, let recent = self.tabLists["recent"] { self.watch(recent) }
                 }
                 let error = self.model.player?.error
                 if let error, error != self.lastError { self.alert(error) }

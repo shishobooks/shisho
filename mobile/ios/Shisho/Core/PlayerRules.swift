@@ -20,12 +20,9 @@ enum StreamStopRules {
     }
 }
 
-/// How a car's and headphones' buttons skip (`AudioPlayer.remoteSkip`).
+/// How a car's and headphones' buttons skip
+/// (`AudioPlayer.setUpRemoteCommands`).
 enum RemoteSkipRules {
-    enum Direction: Sendable {
-        case back, forward
-    }
-
     /// A seek button's press and release.
     enum SeekPhase: Sendable {
         case began, ended
@@ -35,15 +32,6 @@ enum RemoteSkipRules {
     /// that end.
     static func seekSkips(_ phase: SeekPhase) -> Bool {
         phase == .ended
-    }
-
-    /// Skips the same way this close together are one press that reached the
-    /// app as two commands, such as a track command and a seek.
-    static let samePressWithin: TimeInterval = 0.3
-
-    static func isSamePress(_ direction: Direction, at now: Date, last: (direction: Direction, at: Date)?) -> Bool {
-        guard let last else { return false }
-        return last.direction == direction && now.timeIntervalSince(last.at) < samePressWithin
     }
 }
 

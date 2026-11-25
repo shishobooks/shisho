@@ -17,20 +17,10 @@ final class PlayerRulesTests: XCTestCase {
         XCTAssertEqual(NowPlayingLayout.artworkWidth(space: CGSize(width: 402, height: 200), accessibilitySize: false, noticesHeight: 0), 120)
     }
 
-    /// A car's seek button skips once, as it's let go, and one press that
-    /// reaches the app as two commands skips once.
-    func testACarsButtonSkipsOncePerPress() {
+    /// A car's seek button skips once, as it's let go.
+    func testACarsSeekButtonSkipsOnceAsItsLetGo() {
         XCTAssertFalse(RemoteSkipRules.seekSkips(.began))
         XCTAssertTrue(RemoteSkipRules.seekSkips(.ended), "a car's tap may send only the end")
-
-        let then = Date(timeIntervalSince1970: 1_800_000_000)
-        XCTAssertFalse(RemoteSkipRules.isSamePress(.forward, at: then, last: nil))
-        XCTAssertTrue(RemoteSkipRules.isSamePress(.forward, at: then.addingTimeInterval(0.1), last: (.forward, then)),
-                      "a track command and a seek for one press")
-        XCTAssertFalse(RemoteSkipRules.isSamePress(.back, at: then.addingTimeInterval(0.1), last: (.forward, then)),
-                       "the other way")
-        XCTAssertFalse(RemoteSkipRules.isSamePress(.forward, at: then.addingTimeInterval(0.5), last: (.forward, then)),
-                       "a second press")
     }
 
     /// A stream that stops with an error gets one retry per failure. The

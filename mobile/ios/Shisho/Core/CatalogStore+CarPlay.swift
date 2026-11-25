@@ -44,7 +44,8 @@ extension CatalogStore {
     static let listenedSQL = """
         listened AS (
             SELECT f.id AS file_id, f.book_id, f.position, f.cover_version, f.duration_seconds, f.display_name,
-                COUNT(*) OVER (PARTITION BY f.book_id) AS audiobooks,
+                (SELECT COUNT(*) FROM book_files g
+                 WHERE g.book_id = f.book_id AND g.file_type = 'm4b' AND g.file_role != 'supplement') AS audiobooks,
                 (l.file_id IS NOT NULL OR p.file_id IS NOT NULL) AS started,
                 MAX(COALESCE(l.updated_at, 0), COALESCE(p.occurred_at, 0)) AS touched
             FROM book_files f

@@ -163,6 +163,9 @@ final class CarPlayCatalogTests: XCTestCase {
         XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in nil } }.compactMap {
             if case .audiobook(let book) = $0 { book.fileID } else { nil }
         }, [30, 20, 21, 10], "the only Library's audiobooks, in its order")
+        XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in "title:asc" } }.compactMap {
+            if case .audiobook(let book) = $0 { book.fileID } else { nil }
+        }, [10, 30, 20, 21], "in the order picked on the phone")
 
         try store.apply(page(#"{"entries":[\#(library(3, "Audio")),\#(book(6, "Anathem", library: 3, files: [(60, "m4b", "main")]))],"cursor":8}"#))
         XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in nil } },
