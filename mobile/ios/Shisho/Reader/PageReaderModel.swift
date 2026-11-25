@@ -9,8 +9,11 @@ import UIKit
 @MainActor
 @Observable
 final class PageReaderModel: ImageSourceDelegate, Identifiable {
-    let file: ReadingFile
-    nonisolated var id: Int { file.fileID }
+    /// Read again from the catalog on each load, so Try Again after a
+    /// sync opens the File as it is now, its page list included.
+    private(set) var file: ReadingFile
+    /// The File's id, which a load reading it again never changes.
+    nonisolated let id: Int
     private(set) var phase = ReaderModel.Phase.loading
     var chromeVisible = true
     /// The page the reader is on, 0-based.
@@ -69,6 +72,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     init(file: ReadingFile, session: AccountSession, page: Int? = nil, requestSync: @escaping @MainActor () -> Void,
          onGone: @escaping @MainActor () -> Void) {
         self.file = file
+        id = file.fileID
         self.session = session
         askedPage = page
         self.onGone = onGone
@@ -147,6 +151,11 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
         source = nil
         waitingForConnection = false
         fetchedToOpen = false
+        let opening = id
+        if let current = try? await session.store.pool.read({ try CatalogStore.readingFile($0, fileID: opening) }) {
+            file = current
+        }
+        guard !closed else { return }
         let url: URL
         do {
             if let downloaded = session.downloads.localFile(fileID: file.fileID) {

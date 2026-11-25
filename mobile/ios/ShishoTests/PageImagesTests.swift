@@ -11,6 +11,12 @@ final class PageImagesTests: XCTestCase {
 
     /// A zip of entries, each stored or deflated.
     static func zip(_ entries: [(name: String, data: Data, deflate: Bool)]) -> Data {
+        zip(raw: entries.map { (Array($0.name.utf8), $0.data, $0.deflate) })
+    }
+
+    /// A zip of entries named by raw bytes, as an archive made by a tool
+    /// that didn't write UTF-8 names.
+    static func zip(raw entries: [(name: [UInt8], data: Data, deflate: Bool)]) -> Data {
         var body = Data()
         var directory = Data()
         func u16(_ value: Int, into data: inout Data) { withUnsafeBytes(of: UInt16(value).littleEndian) { data.append(contentsOf: $0) } }
@@ -18,7 +24,7 @@ final class PageImagesTests: XCTestCase {
         for entry in entries {
             let stored = entry.deflate ? deflated(entry.data) : entry.data
             let method = entry.deflate ? 8 : 0
-            let name = Data(entry.name.utf8)
+            let name = Data(entry.name)
             let offset = body.count
             u32(0x0403_4B50, into: &body)
             u16(20, into: &body); u16(0x0800, into: &body); u16(method, into: &body); u16(0, into: &body); u16(0, into: &body)
@@ -97,14 +103,26 @@ final class PageImagesTests: XCTestCase {
             ("page10.png", Self.png(width: 40, height: 30), true),
             ("ComicInfo.xml", Data("<ComicInfo/>".utf8), true),
         ]))
-        let pages = try CBZPages(archive: archive, pageNames: ["page10.png", "page2.png", "missing.png"])
-        XCTAssertEqual(pages.pageCount, 3)
+        let pages = try CBZPages(archive: archive, pageNames: ["page10.png", "page2.png"])
+        XCTAssertEqual(pages.pageCount, 2)
         let sizes = await pages.pageSizes()
-        XCTAssertEqual(sizes, [CGSize(width: 40, height: 30), CGSize(width: 20, height: 30), PageImages.unknownSize])
+        XCTAssertEqual(sizes, [CGSize(width: 40, height: 30), CGSize(width: 20, height: 30)])
         let image = await pages.image(page: 0, maxPixel: 4096)
         XCTAssertEqual(image?.width, 40)
-        let none = await pages.image(page: 2, maxPixel: 100)
-        XCTAssertNil(none)
+    }
+
+    /// Names that aren't UTF-8, as from a tool writing Shift-JIS, reach the
+    /// app as the server's JSON writes them: each byte of a bad sequence its
+    /// own replacement character. The archive's own names are read the same
+    /// way, so the pages still match.
+    func testNamesThatArentUTF8MatchTheServersList() async throws {
+        let archive = try ZipArchive(data: Self.zip(raw: [
+            ([0xE1, 0x80] + Array("a.png".utf8), Self.png(width: 20, height: 30), false),
+            ([0x83] + Array("b.png".utf8), Self.png(width: 40, height: 30), false),
+        ]))
+        let pages = try CBZPages(archive: archive, pageNames: ["\u{FFFD}\u{FFFD}a.png", "\u{FFFD}b.png"])
+        let sizes = await pages.pageSizes()
+        XCTAssertEqual(sizes, [CGSize(width: 20, height: 30), CGSize(width: 40, height: 30)])
     }
 
     /// A page decodes at the size it's shown, not its own.
@@ -128,13 +146,18 @@ final class PageImagesTests: XCTestCase {
         XCTAssertEqual(sizes, [CGSize(width: 20, height: 30), CGSize(width: 40, height: 30)])
     }
 
-    /// A copy none of whose entries the server lists, as an older copy kept
-    /// while a replacement with renamed pages downloads, doesn't open
-    /// rather than showing blank pages.
-    func testAComicWhosePagesArentInThisCopyDoesntOpen() throws {
-        let archive = try ZipArchive(data: Self.zip([("old1.png", Self.png(width: 4, height: 4), false)]))
-        XCTAssertThrowsError(try CBZPages(archive: archive, pageNames: ["new1.png", "new2.png"])) { error in
-            XCTAssertEqual(error as? CBZPages.Failure, .notThisCopy)
+    /// A copy missing a page the server lists, as an older copy kept while
+    /// a replacement with renamed pages downloads, doesn't open rather than
+    /// showing blank pages, even sharing a name or two with the new one.
+    func testAComicMissingAListedPageIsntThisCopy() throws {
+        let archive = try ZipArchive(data: Self.zip([
+            ("cover.png", Self.png(width: 4, height: 4), false),
+            ("old1.png", Self.png(width: 4, height: 4), false),
+        ]))
+        for names in [["new1.png", "new2.png"], ["cover.png", "new1.png"]] {
+            XCTAssertThrowsError(try CBZPages(archive: archive, pageNames: names)) { error in
+                XCTAssertEqual(error as? CBZPages.Failure, .notThisCopy)
+            }
         }
     }
 

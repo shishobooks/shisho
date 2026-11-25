@@ -12,10 +12,11 @@ struct FilePageGrid: View {
     @Environment(AppModel.self) private var model
     let fileID: Int
     let pageCount: Int
-    /// Whether the File is on the device, so the pages are drawn from it as
-    /// soon as a Download finishes; nil until that's known, so a downloaded
-    /// File doesn't first fetch from the server.
-    let downloaded: Bool?
+    /// The File's Download, as its page has it: nil until that's known, so
+    /// a downloaded File doesn't first fetch from the server, and nil
+    /// inside without one. The pages are drawn from it as soon as it
+    /// finishes, and again when a replacement does.
+    let download: DownloadRow??
     @State private var expanded = false
     @State private var pages: TilePages?
     @State private var width: CGFloat = 0
@@ -23,8 +24,12 @@ struct FilePageGrid: View {
     /// Where the tiles come from now: changes as the File downloads or the
     /// server comes and goes.
     private var source: TileSource {
-        guard let downloaded else { return .none }
-        if downloaded { return .downloaded }
+        guard let download else { return .none }
+        // A replaced File's old copy still opens while the new one
+        // downloads; the new one, once there, is another copy to open.
+        if let row = download, row.state == .done || row.replacing {
+            return .downloaded(copy: "\(row.state)-\(row.replacing)-\(row.sizeBytes)")
+        }
         guard model.connection == .online, model.session?.sendsPageImages == true else { return .none }
         return .server
     }
@@ -78,7 +83,10 @@ struct FilePageGrid: View {
             // Server thumbnails already shown stay when the connection goes,
             // rather than turning back into numbers.
             if source == .none, pages?.fromServer == true { return }
-            pages = await openPages(source)
+            let opened = await openPages(source)
+            // A source changed meanwhile has its own task.
+            guard !Task.isCancelled else { return }
+            pages = opened
         }
     }
 
@@ -104,7 +112,8 @@ struct FilePageGrid: View {
 }
 
 private enum TileSource: Hashable {
-    case none, server, downloaded
+    case none, server
+    case downloaded(copy: String)
 }
 
 /// The tiles' pictures: drawn from the downloaded File, or the server's

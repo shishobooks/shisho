@@ -343,6 +343,7 @@ final class PageStripView: UIView, UIScrollViewDelegate {
         if widthChanged || pending != nil {
             go(to: keep, reporting: false)
         } else {
+            rebaseScreens()
             showTiles()
         }
     }
@@ -377,9 +378,12 @@ final class PageStripView: UIView, UIScrollViewDelegate {
         scroller.setContentOffset(CGPoint(x: scroller.contentOffset.x, y: min(frames[page].minY * zoom, bottom)), animated: false)
         positioning = false
         // The page asked for, even where the column's end stops it short of
-        // the top.
+        // the top. A jump is a new screen; staying put, as on rotation, isn't.
         self.page = page
-        screen = currentScreen
+        if reporting {
+            screen = currentScreen
+        }
+        rebaseScreens()
         showTiles()
         if reporting { onMove?() }
     }
@@ -393,8 +397,19 @@ final class PageStripView: UIView, UIScrollViewDelegate {
 
     /// Screens as they show, zoom and all: zoomed in, a viewport's worth
     /// down is a screen of reading, though it moves less of the column.
+    /// Counted from where the last zoom left off, so zooming in place,
+    /// which moves the offset without moving the reader, starts no screen.
     private var currentScreen: Int {
-        Int((scroller.contentOffset.y / max(1, scroller.bounds.height)).rounded())
+        screenBase.screen + Int(((scroller.contentOffset.y - screenBase.offset) / max(1, scroller.bounds.height)).rounded())
+    }
+
+    /// Where screens are counted from: an offset and its screen.
+    private var screenBase: (offset: CGFloat, screen: Int) = (0, 0)
+
+    /// The column moves to a new place without the reader scrolling there,
+    /// as a zoom or a layout does: the screen stays, counted from here.
+    private func rebaseScreens() {
+        screenBase = (scroller.contentOffset.y, screen)
     }
 
     /// The page at y down the column.
@@ -415,6 +430,8 @@ final class PageStripView: UIView, UIScrollViewDelegate {
         // stops it: it's no tap, so it doesn't show the controls.
         if event?.type == .touches {
             touchStoppedScroll = ProcessInfo.processInfo.systemUptime - movedAt < 0.1
+            // Stopped now: a touch after this one is a tap, however soon.
+            if touchStoppedScroll { movedAt = 0 }
         }
         return super.hitTest(point, with: event)
     }
@@ -461,7 +478,8 @@ final class PageStripView: UIView, UIScrollViewDelegate {
         let visible = visibleColumn
         let atEnd = scroller.contentOffset.y + scroller.bounds.height >= scroller.contentSize.height - 1
         let item = atEnd ? sizes.count - 1 : page(at: visible.minY + visible.height * 0.25)
-        let screen = currentScreen
+        // A zoom under way moves the offset with the reader in place.
+        let screen = scroller.isZooming || zoomAnimating ? self.screen : currentScreen
         guard item != page || screen != self.screen else { return }
         page = item
         self.screen = screen
@@ -498,6 +516,7 @@ final class PageStripView: UIView, UIScrollViewDelegate {
 
     func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
         zoomAnimating = false
+        rebaseScreens()
         tiled = nil
         showTiles()
         // Sharper zoomed in, and back to the column's size zoomed out.

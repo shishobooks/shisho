@@ -51,8 +51,8 @@ struct CBZPages: PageImageSource {
     enum Failure: Error, Equatable {
         /// The server couldn't read the CBZ's pages, so it sent none.
         case noPages
-        /// None of the pages the server lists are in this copy, as an older
-        /// copy kept while a replacement with renamed pages downloads.
+        /// A page the server lists isn't in this copy, as an older copy kept
+        /// while a replacement with renamed pages downloads.
         case notThisCopy
     }
 
@@ -71,9 +71,10 @@ struct CBZPages: PageImageSource {
         guard !pageNames.isEmpty else { throw Failure.noPages }
         self.archive = archive
         entries = archive.entries(named: pageNames)
-        // Only a whole mismatch: a page missing here and there shows blank,
-        // as a damaged entry does, rather than closing the book.
-        guard entries.contains(where: { $0 != nil }) else { throw Failure.notThisCopy }
+        // The server lists the pages of the copy it has, by the names in
+        // it, so every one is in the same copy here. Even a name or two in
+        // common, as a cover kept across a replacement, isn't the same copy.
+        guard !entries.contains(where: { $0 == nil }) else { throw Failure.notThisCopy }
     }
 
     /// The bytes an image's header is read from: most formats put the size
@@ -308,11 +309,16 @@ enum PageLayout {
     }
 
     /// The chapter page is in: the last that starts on or before it.
+    /// The latest start at or before page, whatever order the outline
+    /// lists its chapters in, as pagesLeft counts it; of two starting on
+    /// one page, the later listed.
     static func entry(atPage page: Int, in contents: [ContentsEntry]) -> ContentsEntry? {
-        contents.last { entry in
-            if case .page(let start) = entry.target { return start <= page }
-            return false
+        var found: (start: Int, entry: ContentsEntry)?
+        for entry in contents {
+            guard case .page(let start) = entry.target, start <= page, start >= found?.start ?? .min else { continue }
+            found = (start, entry)
         }
+        return found?.entry
     }
 
     /// How far through the File page is, as the web reader counts it: the

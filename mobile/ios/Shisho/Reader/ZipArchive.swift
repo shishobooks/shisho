@@ -59,6 +59,52 @@ struct ZipArchive: Sendable {
         }
     }
 
+    /// An entry's name as the server's page list spells it. The server sends
+    /// the name's bytes through Go's JSON encoder, which keeps valid UTF-8 and
+    /// writes each byte of an invalid sequence, as in a name a tool wrote in
+    /// Shift-JIS, as its own U+FFFD. Swift's own decoding writes one U+FFFD
+    /// for a whole invalid sequence, so the names wouldn't match.
+    static func name(_ bytes: some Collection<UInt8>) -> String {
+        let bytes = Array(bytes)
+        var scalars = String.UnicodeScalarView()
+        var index = 0
+        while index < bytes.count {
+            let lead = bytes[index]
+            if lead < 0x80 {
+                scalars.append(Unicode.Scalar(lead))
+                index += 1
+                continue
+            }
+            // The sequence's length and its smallest value, past overlong
+            // encodings, as Go's utf8.DecodeRune checks.
+            let (length, least, start): (Int, UInt32, UInt32) = switch lead {
+            case 0xC2...0xDF: (2, 0x80, UInt32(lead & 0x1F))
+            case 0xE0...0xEF: (3, 0x800, UInt32(lead & 0x0F))
+            case 0xF0...0xF4: (4, 0x1_0000, UInt32(lead & 0x07))
+            default: (0, 0, 0)
+            }
+            var value = start
+            var valid = length > 0 && index + length <= bytes.count
+            if valid {
+                for next in bytes[(index + 1)..<(index + length)] {
+                    guard next & 0xC0 == 0x80 else {
+                        valid = false
+                        break
+                    }
+                    value = value << 6 | UInt32(next & 0x3F)
+                }
+            }
+            if valid, value >= least, let scalar = Unicode.Scalar(value) {
+                scalars.append(scalar)
+                index += length
+            } else {
+                scalars.append("\u{FFFD}")
+                index += 1
+            }
+        }
+        return String(scalars)
+    }
+
     /// The largest entry read in one piece, past which an entry is treated
     /// as damaged: no page image comes near it, and a page's bytes are held
     /// in memory while it decodes, two pages at a time in a spread.
@@ -166,7 +212,7 @@ struct ZipArchive: Sendable {
             let extraLength = try reader.u16(position + 30)
             let commentLength = try reader.u16(position + 32)
             var local = try reader.u32(position + 42)
-            let name = String(decoding: try reader.bytes(position + 46, nameLength), as: UTF8.self)
+            let name = Self.name(try reader.bytes(position + 46, nameLength))
             // zip64's sizes and offset, for those at their maximum, in order.
             if uncompressed == 0xFFFF_FFFF || compressed == 0xFFFF_FFFF || local == 0xFFFF_FFFF {
                 var extra = position + 46 + nameLength

@@ -101,6 +101,16 @@ final class PageLayoutTests: XCTestCase {
         XCTAssertEqual(contents.map(\.position), [0, nil, 0.8, 1])
         XCTAssertEqual(PageLayout.entry(atPage: 3, in: contents)?.title, "Getting Started")
         XCTAssertEqual(PageLayout.entry(atPage: 4, in: contents)?.title, "Troubleshooting")
+        // An outline out of page order still names the chapter the page is
+        // in, the one counted for pages left.
+        let unordered = PageLayout.contents([
+            ReaderChapter(title: "One", href: nil, depth: 0, startPage: 0),
+            ReaderChapter(title: "Three", href: nil, depth: 0, startPage: 8),
+            ReaderChapter(title: "Two", href: nil, depth: 0, startPage: 3),
+        ], pageCount: 10)
+        XCTAssertEqual(PageLayout.entry(atPage: 9, in: unordered)?.title, "Three")
+        XCTAssertEqual(PageLayout.entry(atPage: 5, in: unordered)?.title, "Two")
+        XCTAssertEqual(PageLayout.pagesLeft(shown: [9], pageCount: 10, contents: unordered).chapter, 0)
     }
 
     /// Pages left are counted as the ebook reader counts them: to the end
