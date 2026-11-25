@@ -26,6 +26,9 @@ struct DownloadRow: Equatable, Sendable {
     /// Queued again because the server replaced its File, with the old copy
     /// still on the device, used until the new one arrives.
     var replacing = false
+    /// Which copy is in the File's place on the device, new each time one
+    /// is put there (`DownloadCopies`).
+    var copy: UUID?
 }
 
 /// One Download, as the Downloads tab lists it.
@@ -71,6 +74,11 @@ extension CatalogStore {
             t.column("remove_pending", .boolean).notNull().defaults(to: false)
             // Queued again for a replaced File, its old copy still here.
             t.column("replacing", .boolean).notNull().defaults(to: false)
+            // Which copy is in the File's place, a new one each time a copy
+            // is put there, so an open removes only the copy it downloaded.
+            // Random rather than counted, so a Download removed and made
+            // again never reuses one.
+            t.column("copy_id", .text)
             t.column("requested_at", .double).notNull()
         }
     }
@@ -83,22 +91,29 @@ extension CatalogStore {
 
     // MARK: - Reading
 
+    /// Whether fileID is a File in the catalog of a type a Download can be
+    /// made of.
+    static func isDownloadable(_ db: Database, fileID: Int) throws -> Bool {
+        try Bool.fetchOne(db, sql: "SELECT 1 FROM book_files WHERE id = ? AND file_type IN (\(downloadableTypes))",
+                          arguments: [fileID]) ?? false
+    }
+
     static func downloads(_ db: Database) throws -> [DownloadRow] {
         try Row.fetchAll(db, sql: """
-            SELECT file_id, file_type, state, size_bytes, error, replacing FROM downloads ORDER BY requested_at, file_id
+            SELECT file_id, file_type, state, size_bytes, error, replacing, copy_id FROM downloads ORDER BY requested_at, file_id
             """).map(downloadRow)
     }
 
     static func download(_ db: Database, fileID: Int) throws -> DownloadRow? {
         try Row.fetchOne(db, sql: """
-            SELECT file_id, file_type, state, size_bytes, error, replacing FROM downloads WHERE file_id = ?
+            SELECT file_id, file_type, state, size_bytes, error, replacing, copy_id FROM downloads WHERE file_id = ?
             """, arguments: [fileID]).map(downloadRow)
     }
 
     private static func downloadRow(_ row: Row) -> DownloadRow {
         DownloadRow(fileID: row["file_id"], fileType: row["file_type"],
                     state: DownloadState(rawValue: row["state"]) ?? .failed, sizeBytes: row["size_bytes"], error: row["error"],
-                    replacing: row["replacing"])
+                    replacing: row["replacing"], copy: (row["copy_id"] as String?).flatMap(UUID.init(uuidString:)))
     }
 
     /// Finished Downloads whose File was replaced on the server, which the
@@ -192,40 +207,42 @@ extension CatalogStore {
     @discardableResult
     func queueDownloads(_ fileIDs: [Int], at: Date = Date()) throws -> [Int] {
         guard !fileIDs.isEmpty else { return [] }
-        return try pool.write { db in
-            var queued: [Int] = []
-            for (offset, fileID) in fileIDs.enumerated() {
-                guard let row = try Row.fetchOne(db, sql: """
-                    SELECT file_type, size_bytes FROM book_files WHERE id = ? AND file_type IN (\(CatalogStore.downloadableTypes))
-                    """, arguments: [fileID])
-                else { continue }
-                let existing = try String.fetchOne(db, sql: "SELECT state FROM downloads WHERE file_id = ?", arguments: [fileID])
-                guard existing == nil || existing == DownloadState.failed.rawValue else { continue }
-                // In the order asked for, so a Series downloads in order.
-                try db.execute(sql: """
-                    INSERT INTO downloads (file_id, file_type, state, size_bytes, catalog_size, error, requested_at)
-                    VALUES (?, ?, 'queued', ?, ?, NULL, ?)
-                    ON CONFLICT (file_id) DO UPDATE SET file_type = excluded.file_type, state = 'queued',
-                        size_bytes = excluded.size_bytes, catalog_size = excluded.catalog_size, error = NULL, remove_pending = 0,
-                        requested_at = excluded.requested_at
-                    """, arguments: [fileID, row["file_type"], row["size_bytes"], row["size_bytes"],
-                                     at.timeIntervalSince1970 + Double(offset) / 1000])
-                queued.append(fileID)
-            }
-            return queued
-        }
+        return try pool.write { try CatalogStore.queueDownloads($0, fileIDs, at: at) }
     }
 
-    /// Records a finished transfer. False when the Download was removed
-    /// meanwhile, so its file isn't wanted.
-    func markDownloaded(fileID: Int, sizeBytes: Int) throws -> Bool {
-        try pool.write { db in
+    static func queueDownloads(_ db: Database, _ fileIDs: [Int], at: Date = Date()) throws -> [Int] {
+        var queued: [Int] = []
+        for (offset, fileID) in fileIDs.enumerated() {
+            guard let row = try Row.fetchOne(db, sql: """
+                SELECT file_type, size_bytes FROM book_files WHERE id = ? AND file_type IN (\(CatalogStore.downloadableTypes))
+                """, arguments: [fileID])
+            else { continue }
+            let existing = try String.fetchOne(db, sql: "SELECT state FROM downloads WHERE file_id = ?", arguments: [fileID])
+            guard existing == nil || existing == DownloadState.failed.rawValue else { continue }
+            // In the order asked for, so a Series downloads in order.
             try db.execute(sql: """
-                UPDATE downloads SET state = 'done', size_bytes = ?, error = NULL, replacing = 0
-                WHERE file_id = ? AND state = 'queued'
-                """, arguments: [sizeBytes, fileID])
-            return db.changesCount > 0
+                INSERT INTO downloads (file_id, file_type, state, size_bytes, catalog_size, error, requested_at)
+                VALUES (?, ?, 'queued', ?, ?, NULL, ?)
+                ON CONFLICT (file_id) DO UPDATE SET file_type = excluded.file_type, state = 'queued',
+                    size_bytes = excluded.size_bytes, catalog_size = excluded.catalog_size, error = NULL, remove_pending = 0,
+                    requested_at = excluded.requested_at
+                """, arguments: [fileID, row["file_type"], row["size_bytes"], row["size_bytes"],
+                                 at.timeIntervalSince1970 + Double(offset) / 1000])
+            queued.append(fileID)
         }
+        return queued
+    }
+
+    /// Records a finished transfer as a new copy, and returns which copy it
+    /// is. Nil when the Download was removed meanwhile, so its file isn't
+    /// wanted. `DownloadCopies.publish` calls it as it puts the file there.
+    static func markDownloaded(_ db: Database, fileID: Int, sizeBytes: Int) throws -> UUID? {
+        let copy = UUID()
+        try db.execute(sql: """
+            UPDATE downloads SET state = 'done', size_bytes = ?, error = NULL, replacing = 0, copy_id = ?
+            WHERE file_id = ? AND state = 'queued'
+            """, arguments: [sizeBytes, copy.uuidString, fileID])
+        return db.changesCount > 0 ? copy : nil
     }
 
     func markDownloadFailed(fileID: Int, message: String) throws {
@@ -239,10 +256,23 @@ extension CatalogStore {
     /// queue, as after restoring a backup, which leaves Downloads out.
     func requeueDownloads(_ fileIDs: [Int]) throws {
         guard !fileIDs.isEmpty else { return }
-        try pool.write { db in
-            try db.execute(sql: """
-                UPDATE downloads SET state = 'queued', error = NULL WHERE file_id IN (\(fileIDs.map(String.init).joined(separator: ",")))
-                """)
+        try pool.write { try CatalogStore.requeueDownloads($0, fileIDs) }
+    }
+
+    static func requeueDownloads(_ db: Database, _ fileIDs: [Int]) throws {
+        try db.execute(sql: """
+            UPDATE downloads SET state = 'queued', error = NULL WHERE file_id IN (\(fileIDs.map(String.init).joined(separator: ",")))
+            """)
+    }
+
+    /// Forgets the copy in a File's place: a finished Download goes with it,
+    /// and one not finished, as a replacement queued or failed, stays as it
+    /// is with no copy to use meanwhile.
+    static func discardCopy(_ db: Database, fileID: Int, finished: Bool) throws {
+        if finished {
+            try db.execute(sql: "DELETE FROM downloads WHERE file_id = ?", arguments: [fileID])
+        } else {
+            try db.execute(sql: "UPDATE downloads SET copy_id = NULL, replacing = 0 WHERE file_id = ?", arguments: [fileID])
         }
     }
 

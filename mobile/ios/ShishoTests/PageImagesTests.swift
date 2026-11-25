@@ -161,18 +161,14 @@ final class PageImagesTests: XCTestCase {
         }
     }
 
-    /// A copy that won't open is removed, so Try Again downloads it again,
-    /// only when this open downloaded it, it's still the copy on the device,
-    /// and a new download could help.
-    func testOnlyACopyThisOpenFetchedIsRemoved() {
-        let broken = PDFPages.Failure.unreadable
-        XCTAssertTrue(PageReaderModel.removesCopy(after: broken, fetchedHere: true, stillThere: true))
-        XCTAssertFalse(PageReaderModel.removesCopy(after: broken, fetchedHere: false, stillThere: true))
-        XCTAssertFalse(PageReaderModel.removesCopy(after: broken, fetchedHere: true, stillThere: false),
-                       "a newer copy put in its place meanwhile stays")
-        XCTAssertFalse(PageReaderModel.removesCopy(after: PDFPages.Failure.locked, fetchedHere: true, stillThere: true))
-        XCTAssertFalse(PageReaderModel.removesCopy(after: CBZPages.Failure.noPages, fetchedHere: true, stillThere: true))
-        XCTAssertFalse(PageReaderModel.removesCopy(after: CBZPages.Failure.notThisCopy, fetchedHere: true, stillThere: true),
+    /// A copy this open downloaded that won't open is removed, so Try Again
+    /// downloads it again, only when a new download could help. Which copy
+    /// goes is `DownloadManager.discard`'s, tested in `DownloadManagerTests`.
+    func testOnlyACopyANewDownloadCouldFixIsRemoved() {
+        XCTAssertTrue(PageReaderModel.removesCopy(after: PDFPages.Failure.unreadable))
+        XCTAssertFalse(PageReaderModel.removesCopy(after: PDFPages.Failure.locked))
+        XCTAssertFalse(PageReaderModel.removesCopy(after: CBZPages.Failure.noPages))
+        XCTAssertFalse(PageReaderModel.removesCopy(after: CBZPages.Failure.notThisCopy),
                        "a copy downloaded now matches what the server lists")
     }
 

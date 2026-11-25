@@ -1,6 +1,16 @@
+import GRDB
 import ShishoAPI
 import XCTest
 @testable import Shisho
+
+extension CatalogStore {
+    /// Records a finished transfer's row, without its file, as
+    /// `DownloadCopies.publish` does.
+    @discardableResult
+    func markDownloaded(fileID: Int, sizeBytes: Int) throws -> UUID? {
+        try pool.write { try CatalogStore.markDownloaded($0, fileID: fileID, sizeBytes: sizeBytes) }
+    }
+}
 
 /// Downloads' rows in the account's database (ADR 0022): what can be
 /// queued, what a finished transfer records, and which go when their File
@@ -44,7 +54,7 @@ final class DownloadStoreTests: XCTestCase {
         XCTAssertEqual(try rows().first?.state, .queued)
         XCTAssertEqual(try rows().first?.sizeBytes, 1000, "the catalog's size, until it's downloaded")
 
-        XCTAssertTrue(try store.markDownloaded(fileID: 10, sizeBytes: 987))
+        XCTAssertNotNil(try store.markDownloaded(fileID: 10, sizeBytes: 987))
         XCTAssertEqual(try store.pool.read { try CatalogStore.download($0, fileID: 10) }?.state, .done)
         XCTAssertEqual(try store.pool.read { try CatalogStore.download($0, fileID: 10) }?.sizeBytes, 987)
         XCTAssertEqual(try store.queueDownloads([10]), [], "a finished Download isn't downloaded again")
@@ -60,7 +70,7 @@ final class DownloadStoreTests: XCTestCase {
     func testAFinishedTransferForARemovedDownloadIsntKept() throws {
         try store.queueDownloads([10])
         try store.deleteDownloads([10])
-        XCTAssertFalse(try store.markDownloaded(fileID: 10, sizeBytes: 5))
+        XCTAssertNil(try store.markDownloaded(fileID: 10, sizeBytes: 5))
         XCTAssertEqual(try rows(), [])
     }
 
@@ -85,7 +95,7 @@ final class DownloadStoreTests: XCTestCase {
     /// again.
     func testPendingRemovalsAndRequeues() throws {
         try store.queueDownloads([10, 11])
-        XCTAssertTrue(try store.markDownloaded(fileID: 10, sizeBytes: 5))
+        XCTAssertNotNil(try store.markDownloaded(fileID: 10, sizeBytes: 5))
         try store.markRemovePending(fileID: 11)
         XCTAssertEqual(try store.pool.read(CatalogStore.removePending), [], "only a finished Download")
         try store.markRemovePending(fileID: 10)
@@ -101,8 +111,8 @@ final class DownloadStoreTests: XCTestCase {
     /// catalog's size, but whose catalog size hasn't changed, doesn't.
     func testAReplacedFileDownloadsAgain() throws {
         try store.queueDownloads([10, 11])
-        XCTAssertTrue(try store.markDownloaded(fileID: 10, sizeBytes: 987))
-        XCTAssertTrue(try store.markDownloaded(fileID: 11, sizeBytes: 1100))
+        XCTAssertNotNil(try store.markDownloaded(fileID: 10, sizeBytes: 987))
+        XCTAssertNotNil(try store.markDownloaded(fileID: 11, sizeBytes: 1100))
         XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [], "the catalog's size is the one it was queued at")
 
         try store.apply(page(#"{"entries":[\#(book(1, files: [(10, "m4b", "main"), (11, "epub", "main"), (12, "pdf", "supplement")], sizes: [10: 5000]))],"cursor":5}"#))
@@ -113,7 +123,7 @@ final class DownloadStoreTests: XCTestCase {
         XCTAssertEqual(row.state, .queued)
         XCTAssertEqual(row.sizeBytes, 5000)
         XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [], "queued at its new size")
-        XCTAssertTrue(try store.markDownloaded(fileID: 10, sizeBytes: 4999))
+        XCTAssertNotNil(try store.markDownloaded(fileID: 10, sizeBytes: 4999))
         XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [])
     }
 
@@ -137,7 +147,7 @@ final class DownloadStoreTests: XCTestCase {
 
     func testTheDownloadsTabListsEachWithItsBook() throws {
         try store.queueDownloads([10, 30])
-        XCTAssertTrue(try store.markDownloaded(fileID: 10, sizeBytes: 900))
+        XCTAssertNotNil(try store.markDownloaded(fileID: 10, sizeBytes: 900))
         let stored = try store.pool.read(CatalogStore.storedDownloads)
         XCTAssertEqual(stored.map(\.fileID).sorted(), [10, 30])
         let audiobook = try XCTUnwrap(stored.first { $0.fileID == 10 })
@@ -153,7 +163,7 @@ extension DownloadStoreTests {
     /// count only finished Downloads, and the badge only those on their way.
     func testWhatsDownloadedAndWhatsOnItsWay() throws {
         try store.queueDownloads([10, 20])
-        XCTAssertTrue(try store.markDownloaded(fileID: 20, sizeBytes: 5))
+        XCTAssertNotNil(try store.markDownloaded(fileID: 20, sizeBytes: 5))
         XCTAssertEqual(try store.pool.read(CatalogStore.downloadedBookIDs), [2])
         XCTAssertEqual(try store.pool.read(CatalogStore.downloadingCount), 1)
         let filtered = try store.pool.read { try CatalogStore.books($0, libraryID: nil, filter: LibraryFilter(downloaded: true)) }
@@ -281,11 +291,8 @@ final class DownloadManagerTests: XCTestCase {
     /// A finished Download on the device, as a transfer leaves it.
     private func downloaded(_ fileID: Int, _ fileType: String) throws -> URL {
         try session.store.queueDownloads([fileID])
-        XCTAssertTrue(try session.store.markDownloaded(fileID: fileID, sizeBytes: 3))
-        let url = session.downloads.location(fileID: fileID, fileType: fileType)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("abc".utf8).write(to: url)
-        return url
+        XCTAssertNotNil(try session.downloads.copies.publish(fileID: fileID, from: transferred("abc")))
+        return session.downloads.location(fileID: fileID, fileType: fileType)
     }
 
     func testAFinishedFileIsRemovedOnlyWithTheSettingOn() throws {
@@ -354,6 +361,183 @@ final class DownloadManagerTests: XCTestCase {
         session.downloads.released(fileID: 10)
         XCTAssertNil(session.downloads.localFile(fileID: 10))
         XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 10) })
+    }
+
+    /// A file a transfer, or an open's download, leaves, to put in a File's
+    /// place.
+    private func transferred(_ text: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try Data(text.utf8).write(to: url)
+        return url
+    }
+
+    /// The copy an open downloads with `fetchNow`.
+    private func fetched(_ fileID: Int, _ text: String = "old") throws -> UUID {
+        let fetched = try session.downloads.copies.publishFetched(fileID: fileID, from: transferred(text))
+        guard case .published(_, let copy) = fetched else { return try XCTUnwrap(nil, "not put in place: \(fetched)") }
+        return copy
+    }
+
+    /// A copy a background transfer put in place while an open downloaded
+    /// the same File is the one it opens, and it isn't written over.
+    func testAnOpenUsesACopyATransferPutThereFirst() throws {
+        try session.store.queueDownloads([11])
+        XCTAssertNotNil(try session.downloads.copies.publish(fileID: 11, from: transferred("transfer")))
+        let url = session.downloads.location(fileID: 11, fileType: "epub")
+        XCTAssertEqual(try session.downloads.copies.publishFetched(fileID: 11, from: transferred("fetched")), .found(url))
+        XCTAssertEqual(try contents(11), "transfer")
+    }
+
+    /// An open's download is put in place over a background transfer the
+    /// server refused meanwhile, and over a finished one whose file is gone.
+    func testAnOpenPublishesOverAFailedOrMissingCopy() throws {
+        try session.store.queueDownloads([10, 11])
+        try session.store.markDownloadFailed(fileID: 11, message: "refused")
+        guard case .published = try session.downloads.copies.publishFetched(fileID: 11, from: transferred("fetched")) else {
+            return XCTFail("a failed Download takes the open's copy")
+        }
+        XCTAssertEqual(try contents(11), "fetched")
+
+        XCTAssertNotNil(try session.store.markDownloaded(fileID: 10, sizeBytes: 3))
+        guard case .published = try session.downloads.copies.publishFetched(fileID: 10, from: transferred("fetched")) else {
+            return XCTFail("a finished Download whose file is gone takes the open's copy")
+        }
+        XCTAssertEqual(try contents(10), "fetched")
+    }
+
+    func testAnOpenOfAFileNotInTheCatalogKeepsNothing() throws {
+        XCTAssertEqual(try session.downloads.copies.publishFetched(fileID: 99, from: transferred("fetched")), .unknown)
+        XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 99) })
+    }
+
+    /// Rolls back the next transaction as it commits, as a full disk would.
+    private final class CommitVeto: TransactionObserver, Sendable {
+        struct Vetoed: Error {}
+        func observes(eventsOfKind eventKind: DatabaseEventKind) -> Bool { true }
+        func databaseDidChange(with event: DatabaseEvent) {}
+        func databaseWillCommit() throws { throw Vetoed() }
+        func databaseDidCommit(_ db: Database) {}
+        func databaseDidRollback(_ db: Database) {}
+    }
+
+    /// A copy put in place whose row then fails to save gives its place back
+    /// to the copy before, which the row still names.
+    func testACopyWhoseRowDoesntSaveGivesItsPlaceBack() throws {
+        let copy = try fetched(11)
+        try replaceTheEbook()
+        let veto = CommitVeto()
+        try session.store.pool.writeWithoutTransaction { $0.add(transactionObserver: veto, extent: .nextTransaction) }
+        XCTAssertThrowsError(try session.downloads.copies.publish(fileID: 11, from: transferred("new")))
+        XCTAssertEqual(try contents(11), "old")
+        XCTAssertEqual(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) }?.copy, copy)
+    }
+
+    /// An open finding a transfer's copy in place leaves its Download as it
+    /// is, a replacement that failed included.
+    func testAnOpenFindingACopyLeavesItsDownloadAsItIs() throws {
+        _ = try fetched(11)
+        try replaceTheEbook()
+        try session.store.markDownloadFailed(fileID: 11, message: "refused")
+        let url = session.downloads.location(fileID: 11, fileType: "epub")
+        XCTAssertEqual(try session.downloads.copies.publishFetched(fileID: 11, from: transferred("fetched")), .found(url))
+        let row = try XCTUnwrap(session.store.pool.read { try CatalogStore.download($0, fileID: 11) })
+        XCTAssertEqual(row.state, .failed)
+        XCTAssertEqual(row.error, "refused")
+    }
+
+    /// A File that left the catalog while an open downloaded it gets no
+    /// copy, even with its Download's row not removed yet.
+    func testAnOpenOfAFileThatLeftTheCatalogKeepsNothing() throws {
+        try session.store.queueDownloads([11])
+        try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""
+        {"entries":[{"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Book","sort_title":"Book","created_at":"2026-01-01T00:00:00Z",
+          "cover_version":"1-1","files":[{"id":10,"file_type":"m4b","file_role":"main","size_bytes":3},
+           {"id":12,"file_type":"epub","file_role":"supplement","size_bytes":3}]}}],"cursor":3}
+        """.utf8)))
+        XCTAssertEqual(try session.downloads.copies.publishFetched(fileID: 11, from: transferred("fetched")), .unknown)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: session.downloads.location(fileID: 11, fileType: "epub").path))
+    }
+
+    /// A copy that can't be put in place leaves the one there, and its row,
+    /// as they were.
+    func testACopyThatCantBePutInPlaceLeavesTheOldOne() throws {
+        _ = try fetched(11)
+        try replaceTheEbook()
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        XCTAssertThrowsError(try session.downloads.copies.publish(fileID: 11, from: missing))
+        XCTAssertEqual(try contents(11), "old")
+        XCTAssertEqual(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) }?.replacing, true)
+    }
+
+    /// The server replaces the ebook, File 11, which queues its Download
+    /// again with its copy still in place.
+    private func replaceTheEbook() throws {
+        try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""
+        {"entries":[{"kind":"book","id":1,"library_id":1,"book":{"id":1,"library_id":1,"title":"Book","sort_title":"Book","created_at":"2026-01-01T00:00:00Z",
+          "cover_version":"1-1","files":[{"id":10,"file_type":"m4b","file_role":"main","size_bytes":3},{"id":11,"file_type":"epub","file_role":"main","size_bytes":5000},
+           {"id":12,"file_type":"epub","file_role":"supplement","size_bytes":3}]}}],"cursor":3}
+        """.utf8)))
+        XCTAssertEqual(try session.store.requeueReplaced(), [11])
+    }
+
+    private func contents(_ fileID: Int) throws -> String? {
+        try session.downloads.localFile(fileID: fileID).map { try String(contentsOf: $0, encoding: .utf8) }
+    }
+
+    /// A copy an open downloaded that won't open goes with its Download, so
+    /// Try Again downloads it again.
+    func testACopyAnOpenFetchedThatWontOpenGoes() throws {
+        let copy = try fetched(11)
+        XCTAssertEqual(try contents(11), "old")
+        session.downloads.discard(fileID: 11, copy: copy)
+        XCTAssertNil(session.downloads.localFile(fileID: 11))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: session.downloads.location(fileID: 11, fileType: "epub").path))
+        XCTAssertNil(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) })
+    }
+
+    /// A replacement a transfer put in the File's place after the open
+    /// downloaded its copy, and before that copy failed to open, stays.
+    func testANewerCopyPutThereMeanwhileStays() throws {
+        let copy = try fetched(11)
+        try replaceTheEbook()
+        XCTAssertNotNil(try session.downloads.copies.publish(fileID: 11, from: transferred("new")))
+        session.downloads.discard(fileID: 11, copy: copy)
+        XCTAssertEqual(try contents(11), "new")
+        XCTAssertEqual(try session.store.pool.read { try CatalogStore.download($0, fileID: 11) }?.state, .done)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: session.downloads.folder.path).sorted(), ["11.epub"],
+                       "the copy it replaced isn't kept once its row is saved")
+    }
+
+    /// A Download removed and made again since has a copy of its own, which
+    /// an older open's failure leaves.
+    func testACopyMadeAgainAfterARemovalStays() throws {
+        let copy = try fetched(11)
+        session.downloads.remove([11])
+        _ = try fetched(11, "again")
+        session.downloads.discard(fileID: 11, copy: copy)
+        XCTAssertEqual(try contents(11), "again")
+    }
+
+    /// A replacement still on its way when the copy fails to open keeps
+    /// going: only the copy that won't open goes, and the new one is kept
+    /// when it arrives.
+    func testAReplacementOnItsWayKeepsGoing() throws {
+        let copy = try fetched(11)
+        try replaceTheEbook()
+        // What the replacement's transfer carries on from, which stopping
+        // the transfer drops.
+        DownloadResume.save(Data("resume".utf8), fileID: 11, in: session.downloads.folder)
+        session.downloads.discard(fileID: 11, copy: copy)
+        XCTAssertNotNil(DownloadResume.take(fileID: 11, in: session.downloads.folder), "its transfer isn't stopped")
+        XCTAssertNil(session.downloads.localFile(fileID: 11))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: session.downloads.location(fileID: 11, fileType: "epub").path))
+        let row = try XCTUnwrap(session.store.pool.read { try CatalogStore.download($0, fileID: 11) }, "still wanted")
+        XCTAssertEqual(row.state, .queued)
+        XCTAssertFalse(row.replacing, "with no copy on the device meanwhile")
+        XCTAssertEqual(try session.store.pool.read(CatalogStore.downloadedBookIDs), [])
+
+        XCTAssertNotNil(try session.downloads.copies.publish(fileID: 11, from: transferred("new")))
+        XCTAssertEqual(try contents(11), "new")
     }
 
     /// A Download that was never finished has no copy to use, whatever is in
