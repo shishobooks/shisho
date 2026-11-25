@@ -249,28 +249,35 @@ final class ImagePageView: UIScrollView, UIScrollViewDelegate {
 /// webtoon is read. Pages decode as they near the screen, at the column's
 /// width however tall they are.
 ///
-/// Pinch or double-tap zooms the column as the paginated pages zoom: it sits
-/// in a zooming scroll view, which scales it and pans it in every direction.
-/// Zoomed, that one view takes every pan, so a drag can't land on the column
-/// while the zoom still coasts, and its moves up and down scroll the column
-/// through the pages. It moves its own window over the column only at the
-/// book's ends. Once a zoom settles, the pages showing decode sharper for it.
+/// One zooming scroll view holds the whole column, so a pan, zoomed or not,
+/// is the scroll view's own in every direction, with its own momentum, as a
+/// zoomed page pans in the paginated flow. Only the pages near the screen
+/// have views; the rest of the column is space. A page coming on screen
+/// while the column moves shows at the column's size, which is quick and
+/// kept; once a zoomed column rests, the pages showing are drawn sharp.
 @MainActor
-final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout,
-    UICollectionViewDataSourcePrefetching {
+final class PageStripView: UIView, UIScrollViewDelegate {
     /// The reader scrolled to another page or screen.
     var onMove: (() -> Void)?
     /// Called once the page it opened at has its image.
     var onReady: (() -> Void)?
 
-    private let collection: UICollectionView
-    /// Zooms and pans the column.
-    private let zoomer = UIScrollView()
-    /// What the zoomer scales: the column, at the screen's size.
-    private let content = UIView()
+    private let scroller = UIScrollView()
+    /// What the scroller zooms: the column at the screen's width, as tall as
+    /// every page together.
+    private let column = UIView()
     private let sizes: [CGSize]
     private let cache: PageImageCache
     private let label: (Int) -> String
+    /// Each page's place in the column, at its width.
+    private var frames: [CGRect] = []
+    /// The pages near the screen, with their views.
+    private var tiles: [Int: Tile] = [:]
+    /// Views of pages that went out of range, for the next to come in.
+    private var spare: [Tile] = []
+    /// The pages that had views at the last move, so a move within them,
+    /// as most are, does nothing more.
+    private var tiled: ClosedRange<Int>?
     /// The page the reader is on: the one a quarter of the way down the
     /// screen, or the last once the column is scrolled to its end.
     private(set) var page = 0
@@ -288,16 +295,10 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
     private var movedAt: TimeInterval = 0
     /// The last touch came down on a moving column, which it only stopped.
     private var touchStoppedScroll = false
-    /// Where the zoom was at its last move, to carry a pan's move up or
-    /// down on to the column.
-    private var lastZoomOffset: CGPoint = .zero
-    private var lastZoomScale: CGFloat = 1
-    /// The zoom is being moved back, its move given to the column.
-    private var carrying = false
 
     static let maximumZoom: CGFloat = 4
-    var zoom: CGFloat { zoomer.zoomScale }
-    var isZoomed: Bool { zoomer.zoomScale > 1.01 }
+    var zoom: CGFloat { scroller.zoomScale }
+    var isZoomed: Bool { scroller.zoomScale > 1.01 }
 
     init(sizes: [CGSize], cache: PageImageCache, startPage: Int, label: @escaping (Int) -> String) {
         self.sizes = sizes
@@ -305,36 +306,19 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         self.label = label
         page = startPage
         pending = startPage
-        let layout = UICollectionViewFlowLayout()
-        layout.scrollDirection = .vertical
-        layout.minimumLineSpacing = 0
-        layout.minimumInteritemSpacing = 0
-        collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(frame: .zero)
-        collection.backgroundColor = .clear
-        collection.showsVerticalScrollIndicator = false
-        collection.contentInsetAdjustmentBehavior = .never
-        collection.register(StripCell.self, forCellWithReuseIdentifier: "page")
-        collection.dataSource = self
-        collection.delegate = self
-        collection.prefetchDataSource = self
-        collection.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        zoomer.delegate = self
-        zoomer.showsHorizontalScrollIndicator = false
-        zoomer.showsVerticalScrollIndicator = false
-        zoomer.contentInsetAdjustmentBehavior = .never
-        zoomer.minimumZoomScale = 1
-        zoomer.maximumZoomScale = Self.maximumZoom
+        scroller.delegate = self
+        scroller.backgroundColor = .clear
+        scroller.showsHorizontalScrollIndicator = false
+        scroller.showsVerticalScrollIndicator = false
+        scroller.contentInsetAdjustmentBehavior = .never
+        scroller.minimumZoomScale = 1
+        scroller.maximumZoomScale = Self.maximumZoom
         // A pinch out past the screen's width would bounce back through
         // black at the edges: the column never needs to be narrower.
-        zoomer.bouncesZoom = false
-        zoomer.decelerationRate = .fast
-        // Unzoomed there's nothing to pan, and its drag would take the
-        // column's.
-        zoomer.isScrollEnabled = false
-        content.addSubview(collection)
-        zoomer.addSubview(content)
-        addSubview(zoomer)
+        scroller.bouncesZoom = false
+        scroller.addSubview(column)
+        addSubview(scroller)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -347,45 +331,74 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         let keep = pending ?? page
         // Laying out again moves the column; the reader didn't.
         positioning = true
-        if zoomer.zoomScale != 1 { zoomer.setZoomScale(1, animated: false) }
-        zoomer.isScrollEnabled = false
-        collection.isScrollEnabled = true
-        zoomer.frame = bounds
-        content.frame = CGRect(origin: .zero, size: bounds.size)
-        collection.frame = content.bounds
-        zoomer.contentSize = bounds.size
-        collection.collectionViewLayout.invalidateLayout()
-        collection.layoutIfNeeded()
+        if scroller.zoomScale != 1 { scroller.setZoomScale(1, animated: false) }
+        scroller.frame = bounds
+        if widthChanged || frames.isEmpty { layOutColumn() }
         positioning = false
-        if widthChanged || pending != nil { go(to: keep, reporting: false) }
+        if widthChanged || pending != nil {
+            go(to: keep, reporting: false)
+        } else {
+            showTiles()
+        }
+    }
+
+    /// Places every page down the column at the screen's width.
+    private func layOutColumn() {
+        let width = bounds.width
+        var top: CGFloat = 0
+        frames = sizes.map { size in
+            let height = max(1, (width * size.height / max(size.width, 1)).rounded())
+            defer { top += height }
+            return CGRect(x: 0, y: top, width: width, height: height)
+        }
+        column.frame = CGRect(x: 0, y: 0, width: width, height: top)
+        scroller.contentSize = column.frame.size
+        for tile in tiles.values { recycle(tile) }
+        tiles.removeAll()
+        tiled = nil
     }
 
     /// Scrolls page to the top, or as far as the column goes. reporting is
     /// false when the reader stays where they were, as on rotation.
     func go(to page: Int, reporting: Bool = true) {
         guard sizes.indices.contains(page) else { return }
-        guard laidOutSize.width > 0 else {
+        guard laidOutSize.width > 0, frames.indices.contains(page) else {
             pending = page
             return
         }
         pending = nil
         positioning = true
-        collection.layoutIfNeeded()
-        if let frame = collection.layoutAttributesForItem(at: IndexPath(item: page, section: 0))?.frame {
-            let bottom = max(0, collection.contentSize.height - collection.bounds.height)
-            collection.setContentOffset(CGPoint(x: 0, y: min(frame.minY, bottom)), animated: false)
-        }
+        let bottom = max(0, scroller.contentSize.height - scroller.bounds.height)
+        scroller.setContentOffset(CGPoint(x: scroller.contentOffset.x, y: min(frames[page].minY * zoom, bottom)), animated: false)
         positioning = false
         // The page asked for, even where the column's end stops it short of
         // the top.
         self.page = page
         screen = currentScreen
+        showTiles()
         if reporting { onMove?() }
     }
 
+    /// The part of the column on screen, in the column's own points.
+    private var visibleColumn: CGRect {
+        let scale = max(zoom, 0.01)
+        return CGRect(x: scroller.contentOffset.x / scale, y: scroller.contentOffset.y / scale,
+                      width: scroller.bounds.width / scale, height: scroller.bounds.height / scale)
+    }
+
     private var currentScreen: Int {
-        let height = max(1, collection.bounds.height)
-        return Int((collection.contentOffset.y / height).rounded())
+        Int((visibleColumn.minY / max(1, bounds.height)).rounded())
+    }
+
+    /// The page at y down the column.
+    private func page(at y: CGFloat) -> Int {
+        var low = 0
+        var high = frames.count - 1
+        while low < high {
+            let middle = (low + high + 1) / 2
+            if frames[middle].minY <= y { low = middle } else { high = middle - 1 }
+        }
+        return max(0, low)
     }
 
     // MARK: - Taps
@@ -406,69 +419,13 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         return touchStoppedScroll
     }
 
-    // MARK: - Zoom
+    // MARK: - Moving
 
-    /// Zooms to scale around point, in this view's points, animated as the
-    /// pages zoom.
-    func setZoom(_ scale: CGFloat, around point: CGPoint) {
-        let scale = min(Self.maximumZoom, max(1, scale))
-        guard scale > 1.01 else {
-            zoomer.setZoomScale(1, animated: true)
-            return
-        }
-        let center = convert(point, to: content)
-        let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
-        zoomer.zoom(to: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
-                               width: size.width, height: size.height), animated: true)
-    }
-
-    /// A double tap at point: zooms in there, or back out when zoomed.
-    func toggleZoom(at point: CGPoint) {
-        setZoom(isZoomed ? 1 : 2.5, around: point)
-    }
-
-    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
-        scrollView === zoomer ? content : nil
-    }
-
-    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
-        guard scrollView === zoomer else { return }
-        // Zoomed, the zoom takes every pan, and carries the column; not, the
-        // column scrolls itself.
-        zoomer.isScrollEnabled = isZoomed
-        collection.isScrollEnabled = !isZoomed
-        sharpenVisiblePages()
-    }
-
-    /// Gives the zoom's move up or down to the column, as far as the column
-    /// can go, so the zoom only moves its window at the book's ends. A
-    /// zoom's own change of scale, and a bounce already past an end, are
-    /// left as they are.
-    private func carryToColumn() {
-        guard !carrying else { return }
-        let scale = zoomer.zoomScale
-        let last = lastZoomOffset
-        defer {
-            lastZoomOffset = zoomer.contentOffset
-            lastZoomScale = scale
-        }
-        let maxY = max(0, zoomer.contentSize.height - zoomer.bounds.height)
-        guard isZoomed, scale == lastZoomScale, !zoomer.isZooming, !zoomer.isZoomBouncing,
-              last.y >= 0, last.y <= maxY else { return }
-        let y = zoomer.contentOffset.y
-        let column = collection.contentOffset.y
-        let maxColumn = max(0, collection.contentSize.height - collection.bounds.height)
-        let moved = min(max(0, column + (y - last.y) / scale), maxColumn) - column
-        guard moved != 0 else { return }
-        carrying = true
-        collection.contentOffset.y = column + moved
-        zoomer.contentOffset.y = y - moved * scale
-        carrying = false
-    }
-
-    /// The column or its zoom is moving, by a drag or its momentum.
-    private var isMoving: Bool {
-        zoomer.isDragging || zoomer.isDecelerating || collection.isDragging || collection.isDecelerating
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        showTiles()
+        guard !positioning else { return }
+        movedAt = ProcessInfo.processInfo.systemUptime
+        updatePlace()
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
@@ -479,6 +436,11 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         settled()
     }
 
+    /// The column or its zoom is moving.
+    private var isMoving: Bool {
+        scroller.isDragging || scroller.isDecelerating || scroller.isZooming
+    }
+
     /// Zoomed, the pages that came on screen while it moved show at the
     /// column's size; once it rests, they're drawn sharp for the zoom.
     private func settled() {
@@ -486,33 +448,90 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         sharpenVisiblePages()
     }
 
-    /// The pages showing, decoded again for the zoom: sharper zoomed in,
-    /// and back to the screen's size zoomed out.
+    /// Finds the page and screen showing, and tells of a change.
+    private func updatePlace() {
+        guard pending == nil, laidOutSize.width > 0, !frames.isEmpty else { return }
+        let visible = visibleColumn
+        let atEnd = scroller.contentOffset.y + scroller.bounds.height >= scroller.contentSize.height - 1
+        let item = atEnd ? sizes.count - 1 : page(at: visible.minY + visible.height * 0.25)
+        let screen = currentScreen
+        guard item != page || screen != self.screen else { return }
+        page = item
+        self.screen = screen
+        onMove?()
+    }
+
+    // MARK: - Zoom
+
+    /// Zooms to scale around point, in this view's points, animated as the
+    /// pages zoom.
+    func setZoom(_ scale: CGFloat, around point: CGPoint) {
+        let scale = min(Self.maximumZoom, max(1, scale))
+        guard scale > 1.01 else {
+            scroller.setZoomScale(1, animated: true)
+            return
+        }
+        let center = convert(point, to: column)
+        let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
+        scroller.zoom(to: CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
+                                 width: size.width, height: size.height), animated: true)
+    }
+
+    /// A double tap at point: zooms in there, or back out when zoomed.
+    func toggleZoom(at point: CGPoint) {
+        setZoom(isZoomed ? 1 : 2.5, around: point)
+    }
+
+    func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+        column
+    }
+
+    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
+        // Sharper zoomed in, and back to the column's size zoomed out.
+        sharpenVisiblePages()
+    }
+
+    /// The pages showing, decoded again for the zoom.
     private func sharpenVisiblePages() {
-        for case let cell as StripCell in collection.visibleCells {
-            load(cell, page: cell.page, keepingShown: true)
+        let visible = visibleColumn
+        for (page, tile) in tiles where frames[page].intersects(visible) {
+            load(tile, page: page, keepingShown: true)
         }
     }
 
     // MARK: - Pages
 
-    /// The pixels the page fills, as its longer side, at zoom: the
-    /// column's own by default.
-    private func pixels(_ page: Int, zoom: CGFloat? = nil) -> Int {
-        let size = sizes[page]
-        let width = bounds.width * (zoom ?? self.zoom)
-        let height = width * size.height / max(size.width, 1)
-        return Int((max(width, height) * max(1, traitCollection.displayScale)).rounded(.up))
+    /// Gives the pages near the screen their views, a screen's worth either
+    /// side so a page has its image before it shows, and decodes a few
+    /// more ahead at the column's size.
+    private func showTiles() {
+        guard !frames.isEmpty, pending == nil else { return }
+        let visible = visibleColumn
+        let first = page(at: max(0, visible.minY - visible.height))
+        let last = page(at: visible.maxY + visible.height)
+        guard tiled != first...last else { return }
+        tiled = first...last
+        for (page, tile) in tiles where !(first...last).contains(page) {
+            recycle(tile)
+            tiles[page] = nil
+        }
+        for page in first...last where tiles[page] == nil {
+            let tile = spare.popLast() ?? makeTile()
+            tile.page = page
+            tile.frame = frames[page]
+            tile.isHidden = false
+            tile.accessibilityLabel = label(page)
+            tiles[page] = tile
+            load(tile, page: page, keepingShown: false)
+        }
+        for page in [first - 2, first - 1, last + 1, last + 2, last + 3] where sizes.indices.contains(page) {
+            cache.prefetch(page: page, maxPixel: pixels(page, zoom: 1), need: .soon)
+        }
     }
 
-    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int { sizes.count }
-
-    func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
-        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "page", for: indexPath) as! StripCell
-        let page = indexPath.item
-        cell.page = page
-        cell.accessibilityLabel = label(page)
-        cell.accessibilityCustomActions = [
+    private func makeTile() -> Tile {
+        let tile = Tile()
+        tile.accessibilityCustomActions = [
             UIAccessibilityCustomAction(name: String(localized: "Zoom In")) { [weak self] _ in
                 guard let self else { return false }
                 self.setZoom(self.zoom * 2, around: CGPoint(x: self.bounds.midX, y: self.bounds.midY))
@@ -524,41 +543,59 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
                 return true
             },
         ]
-        load(cell, page: page, keepingShown: false)
-        return cell
+        column.addSubview(tile)
+        return tile
     }
 
-    /// Puts page's image in cell at the zoom's size. Zoomed, a page is held
-    /// only by its cell, as a zoomed page in the paginated flow is: at four
+    private func recycle(_ tile: Tile) {
+        tile.load?.cancel()
+        tile.load = nil
+        tile.image = nil
+        tile.shownPixel = 0
+        tile.page = -1
+        tile.isHidden = true
+        spare.append(tile)
+    }
+
+    /// The pixels the page fills, as its longer side, at zoom: the
+    /// column's own by default.
+    private func pixels(_ page: Int, zoom: CGFloat? = nil) -> Int {
+        let size = sizes[page]
+        let width = bounds.width * (zoom ?? self.zoom)
+        let height = width * size.height / max(size.width, 1)
+        return Int((max(width, height) * max(1, traitCollection.displayScale)).rounded(.up))
+    }
+
+    /// Puts page's image in tile at the zoom's size. Zoomed, a page is held
+    /// only by its view, as a zoomed page in the paginated flow is: at four
     /// times the width, a few would fill the cache. While the column moves,
-    /// a page coming on screen shows at the column's size, which is quick
-    /// and kept, rather than decoding a whole scan for the zoom mid-pan;
-    /// settled() sharpens it once the column rests. keepingShown leaves the
-    /// image showing until the new one decodes.
-    private func load(_ cell: StripCell, page: Int, keepingShown: Bool) {
+    /// a page coming on screen shows at the column's size rather than
+    /// decoding a whole scan for the zoom mid-pan; settled() sharpens it.
+    /// keepingShown leaves the image showing until the new one decodes.
+    private func load(_ tile: Tile, page: Int, keepingShown: Bool) {
         let sharp = isZoomed && !isMoving
         let maxPixel = pixels(page, zoom: sharp ? nil : 1)
         // Already drawn at this size: nothing to do.
-        if keepingShown, cell.page == page, cell.shownPixel == maxPixel, cell.imageView.image != nil { return }
-        cell.load?.cancel()
+        if keepingShown, tile.page == page, tile.shownPixel == maxPixel, tile.image != nil { return }
+        tile.load?.cancel()
         let keep = !sharp
         if keep, let image = cache.cached(page: page, maxPixel: maxPixel) {
-            cell.imageView.image = image
-            cell.shownPixel = maxPixel
+            tile.image = image
+            tile.shownPixel = maxPixel
             imageArrived(page)
             return
         }
         if !keepingShown {
-            // The page at the column's unzoomed width, when it's kept,
-            // shows until the sharper one decodes, rather than nothing.
-            cell.imageView.image = cache.cached(page: page, maxPixel: pixels(page, zoom: 1))
-            cell.shownPixel = 0
+            // The page at the column's width, when it's kept, shows until
+            // the sharper one decodes, rather than nothing.
+            tile.image = cache.cached(page: page, maxPixel: pixels(page, zoom: 1))
+            tile.shownPixel = 0
         }
-        cell.load = Task { [weak self, weak cell] in
+        tile.load = Task { [weak self, weak tile] in
             let image = await self?.cache.image(page: page, maxPixel: maxPixel, need: .now, keep: keep)
-            guard let cell, cell.page == page, !Task.isCancelled, let image else { return }
-            cell.imageView.image = image
-            cell.shownPixel = maxPixel
+            guard let tile, tile.page == page, !Task.isCancelled, let image else { return }
+            tile.image = image
+            tile.shownPixel = maxPixel
             self?.imageArrived(page)
         }
     }
@@ -569,70 +606,22 @@ final class PageStripView: UIView, UICollectionViewDataSource, UICollectionViewD
         onReady?()
     }
 
-    func collectionView(_ collectionView: UICollectionView, layout: UICollectionViewLayout,
-                        sizeForItemAt indexPath: IndexPath) -> CGSize {
-        let size = sizes[indexPath.item]
-        let width = collectionView.bounds.width
-        return CGSize(width: width, height: max(1, (width * size.height / max(size.width, 1)).rounded()))
-    }
-
-    func collectionView(_ collectionView: UICollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
-        // At the unzoomed width: the cells decode sharper ones once shown.
-        for indexPath in indexPaths {
-            cache.prefetch(page: indexPath.item, maxPixel: pixels(indexPath.item, zoom: 1), need: .soon)
-        }
-    }
-
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        movedAt = ProcessInfo.processInfo.systemUptime
-        if scrollView === zoomer {
-            carryToColumn()
-            return
-        }
-        guard !positioning else { return }
-        updatePlace()
-    }
-
-    /// Finds the page and screen showing, and tells of a change.
-    private func updatePlace() {
-        guard pending == nil, laidOutSize.width > 0 else { return }
-        let bounds = collection.bounds
-        let atEnd = bounds.maxY >= collection.contentSize.height - 1
-        let probe = CGPoint(x: bounds.midX, y: bounds.minY + bounds.height * 0.25)
-        let item = atEnd ? sizes.count - 1 : collection.indexPathForItem(at: probe)?.item ?? page
-        let screen = currentScreen
-        guard item != page || screen != self.screen else { return }
-        page = item
-        self.screen = screen
-        onMove?()
-    }
-
-    private final class StripCell: UICollectionViewCell {
-        let imageView = UIImageView()
+    /// One page's view in the column.
+    private final class Tile: UIImageView {
         var page = -1
         /// The size, in pixels, the image showing was decoded at.
         var shownPixel = 0
-        /// The page's decode, cancelled when the cell is reused for
-        /// another, so a fling doesn't queue every page it passed.
+        /// The page's decode, cancelled when the view goes to another page,
+        /// so a fling doesn't queue every page it passed.
         var load: Task<Void, Never>?
 
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            imageView.contentMode = .scaleAspectFit
-            imageView.frame = contentView.bounds
-            imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            contentView.addSubview(imageView)
+        init() {
+            super.init(frame: .zero)
+            contentMode = .scaleAspectFit
             isAccessibilityElement = true
             accessibilityTraits = .image
         }
 
         required init?(coder: NSCoder) { nil }
-
-        override func prepareForReuse() {
-            super.prepareForReuse()
-            load?.cancel()
-            load = nil
-            shownPixel = 0
-        }
     }
 }

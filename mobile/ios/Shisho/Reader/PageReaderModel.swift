@@ -93,15 +93,22 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     func pagesLeftLabel(inBook: Bool) -> AttributedString? {
         guard pageCount > 0 else { return nil }
         let left = PageLayout.pagesLeft(shown: pagesShown, pageCount: pageCount, contents: contents)
-        guard !inBook, let chapter = left.chapter else {
-            return left.book == 0
-                ? AttributedString(localized: "Last page in book")
-                : AttributedString(localized: "^[\(left.book) page](inflect: true) left in book")
+        let count = inBook ? left.book : left.chapter ?? left.book
+        let ofBook = inBook || left.chapter == nil
+        // The footer asks on every move of a scroll, and the label only
+        // changes with the count; the bundle named saves looking it up.
+        if let last = lastPagesLeft, last.count == count, last.ofBook == ofBook { return last.label }
+        let label: AttributedString = switch (ofBook, count) {
+        case (true, 0): AttributedString(localized: "Last page in book", bundle: .main)
+        case (true, _): AttributedString(localized: "^[\(count) page](inflect: true) left in book", bundle: .main)
+        case (false, 0): AttributedString(localized: "Last page in chapter", bundle: .main)
+        case (false, _): AttributedString(localized: "^[\(count) page](inflect: true) left in chapter", bundle: .main)
         }
-        return chapter == 0
-            ? AttributedString(localized: "Last page in chapter")
-            : AttributedString(localized: "^[\(chapter) page](inflect: true) left in chapter")
+        lastPagesLeft = (count, ofBook, label)
+        return label
     }
+
+    @ObservationIgnored private var lastPagesLeft: (count: Int, ofBook: Bool, label: AttributedString)?
 
     /// The chapter page is in, as the scrubber names where it goes.
     func chapterTitle(atPage page: Int) -> String? {
