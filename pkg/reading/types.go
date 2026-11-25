@@ -325,8 +325,8 @@ type ReadingStatsTotals struct {
 	ReadingSeconds   int `json:"reading_seconds"`
 	ListeningSeconds int `json:"listening_seconds"`
 	// WordsRead is how far forward the user read through Reflowable Files
-	// with a word count, in words, leaving out skips ahead (see
-	// ReadingStatsPace).
+	// with a word count, in words, with skips ahead credited as
+	// ReadingStatsPace credits them.
 	WordsRead int `json:"words_read"`
 	// AverageRating is the mean current Rating, in stars, of the finished
 	// Books the user rated. Null with none.
@@ -334,12 +334,12 @@ type ReadingStatsTotals struct {
 }
 
 // ReadingStatsPace is how fast the user read and listened in the range, for
-// each kind of File: what a Session covered of the File's length over the
-// time it took, summed across Sessions, so long ones weigh most. Only timed
-// Sessions count (measured ones, and a Kobo's, whose time is its own count
-// of reading minutes), at least a minute long and moving forward, and not
-// faster than anyone reads, which is a skip ahead. Each is null with less
-// than ten minutes of such Sessions.
+// each kind of File: what timed Sessions covered of their Files' lengths
+// over the time they took, added up, so long Sessions weigh most. Timed
+// Sessions are measured ones, and a Kobo's, whose time is its own count of
+// reading minutes. A Session faster than is normal for the user, a skip
+// ahead, is credited as if read at the fastest normal pace (see paceLimits).
+// Each is null with less than ten minutes of timed Sessions.
 //
 //nolint:revive // named for the Reading Stats page, as generated TS types are global
 type ReadingStatsPace struct {

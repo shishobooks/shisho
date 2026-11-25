@@ -56,7 +56,16 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 		return nil, err
 	}
 
-	resp.Pace, resp.Totals.WordsRead = paceOf(sessions, rng, loc)
+	// What pace is normal for the user comes from all their Sessions, so a
+	// year with few still judges skips well.
+	everySession := sessions
+	if year != nil {
+		everySession, err = svc.statsSessions(ctx, user.ID, yearRange(nil))
+		if err != nil {
+			return nil, err
+		}
+	}
+	resp.Pace, resp.Totals.WordsRead = paceOf(sessions, paceLimits(everySession), rng, loc)
 
 	rereads := rereadIDs(readThroughs)
 	var finished []*models.ReadThrough

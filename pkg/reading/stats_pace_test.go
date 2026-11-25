@@ -31,52 +31,129 @@ func timed(file *models.File, at time.Time, minutes int, from, to float64) sessi
 	return sessionSpec{file: file, start: at, end: at.Add(time.Duration(minutes) * time.Minute), measured: true, from: from, to: to}
 }
 
-func TestStats_Pace(t *testing.T) {
+// normalMonth adds the reading of one month in epub, a 100,000-word book,
+// on the day given: 30, 45, 20, and 60 minutes at 250, 240, 280, and 220
+// words a minute.
+func (f *statsFixture) normalMonth(epub *models.File, day time.Time) {
+	f.t.Helper()
+	f.session(timed(epub, day, 30, 0.000, 0.075))
+	f.session(timed(epub, day.Add(2*time.Hour), 45, 0.075, 0.183))
+	f.session(timed(epub, day.Add(4*time.Hour), 20, 0.183, 0.239))
+	f.session(timed(epub, day.Add(6*time.Hour), 60, 0.239, 0.371))
+}
+
+func TestStats_PaceCreditsASkipUpToTheReadersLimit(t *testing.T) {
 	t.Parallel()
 	f := newStatsFixture(t)
 	book := createBook(t, f.db, "Dune")
 	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
-	cbz := f.lengthFile(book, models.FileTypeCBZ, 200)
-	m4b := f.lengthFile(book, models.FileTypeM4B, 36_000)
 	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	f.normalMonth(epub, day)
+	// Two minutes jumping 40% on through the contents: 20,000 words a
+	// minute.
+	f.session(timed(epub, day.Add(8*time.Hour), 2, 0.371, 0.771))
 
-	// 5,000 and 4,000 words in half an hour each.
+	// The reader's limit is the upper quartile of their paces, 250, plus
+	// three times the spread between quartiles: 367 words a minute. The skip
+	// is credited two minutes at that pace, 734 words.
+	resp := f.stats("?year=2026")
+	assert.InDelta(t, 37_834, resp.Totals.WordsRead, 1, "37,100 words read, and the skip at the limit")
+	require.NotNil(t, resp.Pace.WordsPerMinute)
+	assert.InDelta(t, 37_834.0/157, *resp.Pace.WordsPerMinute, 0.05)
+}
+
+func TestStats_PaceBlendsDifferentKindsOfReading(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	thriller := f.lengthFile(book, models.FileTypeEPUB, 360_000)
+	history := f.lengthFile(book, models.FileTypeEPUB, 216_000)
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	// Ten hours at 300 words a minute and ten at 180.
+	for i := range 5 {
+		at := day.AddDate(0, 0, i)
+		f.session(timed(thriller, at, 120, float64(i)*0.1, float64(i+1)*0.1))
+		f.session(timed(history, at.Add(3*time.Hour), 120, float64(i)*0.1, float64(i+1)*0.1))
+	}
+
+	resp := f.stats("?year=2026")
+	assert.Equal(t, 288_000, resp.Totals.WordsRead, "neither is a skip")
+	require.NotNil(t, resp.Pace.WordsPerMinute)
+	assert.InDelta(t, 240, *resp.Pace.WordsPerMinute, 0.01, "the two blended, not one picked")
+}
+
+func TestStats_PaceLearnsTheLimitFromAllTime(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	f.normalMonth(epub, time.Date(2025, 3, 2, 9, 0, 0, 0, time.UTC))
+	// 2026 alone has too few Sessions to judge a skip by.
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	f.session(timed(epub, day, 30, 0.000, 0.075))
+	f.session(timed(epub, day.Add(2*time.Hour), 2, 0.075, 0.475))
+
+	// The limit from all five timed Sessions is 367 words a minute.
+	resp := f.stats("?year=2026")
+	assert.InDelta(t, 7500+734, resp.Totals.WordsRead, 1)
+}
+
+func TestStats_PaceCountsEverythingWithTooFewSessionsToJudge(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	f.session(timed(epub, day, 30, 0.000, 0.075))
+	f.session(timed(epub, day.Add(2*time.Hour), 2, 0.075, 0.475))
+
+	assert.Equal(t, 47_500, f.stats("?year=2026").Totals.WordsRead)
+}
+
+func TestStats_PaceCountsOnlyTimedSessions(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
 	f.session(timed(epub, day, 30, 0.10, 0.15))
-	f.session(timed(epub, day.Add(2*time.Hour), 30, 0.15, 0.19))
 	// A Kobo counts the minutes it spent: 3,000 words in half an hour.
-	kobo := timed(epub, day.Add(4*time.Hour), 30, 0.19, 0.22)
+	kobo := timed(epub, day.Add(2*time.Hour), 30, 0.15, 0.18)
 	kobo.measured, kobo.source = false, models.ReadingSourceKobo
 	f.session(kobo)
 	// KOReader without the plugin guesses its time from when it synced, so
 	// its 2,000 words count as read but not toward pace.
-	guess := timed(epub, day.Add(6*time.Hour), 300, 0.22, 0.24)
+	guess := timed(epub, day.Add(6*time.Hour), 300, 0.18, 0.20)
 	guess.measured, guess.source = false, models.ReadingSourceKOReader
 	f.session(guess)
-	// A skip ahead isn't reading: 80,000 words in two minutes.
-	f.session(timed(epub, day.Add(12*time.Hour), 2, 0.24, 0.94))
 	// Going back counts nothing.
-	f.session(timed(epub, day.Add(13*time.Hour), 20, 0.94, 0.50))
-	// Under a minute is too short to time: 100 words counted as read only.
-	short := timed(epub, day.Add(14*time.Hour), 0, 0.50, 0.501)
-	short.end = short.start.Add(30 * time.Second)
-	f.session(short)
+	f.session(timed(epub, day.Add(13*time.Hour), 20, 0.50, 0.30))
 
-	// 100 pages in an hour.
+	resp := f.stats("?year=2026")
+	assert.Equal(t, 10_000, resp.Totals.WordsRead)
+	require.NotNil(t, resp.Pace.WordsPerMinute)
+	assert.InDelta(t, 8000.0/60, *resp.Pace.WordsPerMinute, 0.01)
+}
+
+func TestStats_PacePerKind(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	cbz := f.lengthFile(book, models.FileTypeCBZ, 200)
+	m4b := f.lengthFile(book, models.FileTypeM4B, 36_000)
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	// 100 pages in an hour, and 1.5 hours of audio in an hour.
 	f.session(timed(cbz, day, 60, 0, 0.5))
-	// 1.5 hours of audio in an hour.
 	f.session(timed(m4b, day, 60, 0.20, 0.35))
 
 	resp := f.stats("?year=2026")
-	require.NotNil(t, resp.Pace.WordsPerMinute)
-	assert.InDelta(t, 12_000.0/90, *resp.Pace.WordsPerMinute, 0.01, "measured and Kobo Sessions, weighted by time")
+	assert.Nil(t, resp.Pace.WordsPerMinute)
 	require.NotNil(t, resp.Pace.PagesPerHour)
 	assert.InDelta(t, 100, *resp.Pace.PagesPerHour, 0.01)
 	require.NotNil(t, resp.Pace.ListeningSpeed)
 	assert.InDelta(t, 1.5, *resp.Pace.ListeningSpeed, 0.001)
-	assert.Equal(t, 14_100, resp.Totals.WordsRead, "every Session's way forward but the skip")
-
+	assert.Zero(t, resp.Totals.WordsRead)
 	assert.Equal(t, ReadingStatsPace{}, f.stats("?year=2025").Pace, "nothing read in the year")
-	assert.Zero(t, f.stats("?year=2025").Totals.WordsRead)
 }
 
 func TestStats_PaceNeedsTenMinutesOfTimedReading(t *testing.T) {
