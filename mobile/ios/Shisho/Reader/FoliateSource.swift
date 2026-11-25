@@ -7,12 +7,16 @@ enum ReaderTarget: Equatable, Sendable {
     case href(String)
     /// How far through the book, from 0 to 1.
     case fraction(Double)
+    /// A 0-based page in a Page-based File, which the image pager goes to
+    /// and foliate never sees.
+    case page(Int)
 
     /// The target as the page's script takes it.
     var script: String {
         switch self {
         case .cfi(let value), .href(let value): javaScriptLiteral(value)
         case .fraction(let value): "{\"fraction\":\(min(1, max(0, value.isFinite ? value : 0)))}"
+        case .page: "null"
         }
     }
 }

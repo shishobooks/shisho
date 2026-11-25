@@ -78,7 +78,7 @@ If the server turns down a change the app made offline, for example listening to
 
 ## Reading
 
-Books with an EPUB, KePub, MOBI, or AZW3 file have a **Read** button, which shows the book's [word count](./supported-formats.md#word-count) and the file's size before you start, and the chapter you're in and the pages left in the book once you've read on the phone. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. The reader needs the whole book before it can show a page, so opening a book that isn't on the phone [downloads](#downloads) it. It stays on the phone, and opens without a connection, until you remove it.
+Books with an EPUB, KePub, MOBI, AZW3, CBZ, or PDF file have a **Read** button, which shows an ebook's [word count](./supported-formats.md#word-count) or a comic's or PDF's page count, and the file's size, before you start, and once you've started, the chapter you're in and the pages left in the book. Each of those files has a read button in the book's list of files; **Read** opens the one you read last. The reader needs the whole book before it can show a page, so opening a book that isn't on the phone [downloads](#downloads) it. It stays on the phone, and opens without a connection, until you remove it.
 
 A tap on the left or right third of the page turns it, and a tap in the middle shows or hides the controls. A tap on a link follows it, and in the middle of the page so does a tap near one; a tap near a footnote reference opens it anywhere on the page. A tap on a picture in the middle of the page opens it on its own: pinch or double-tap to zoom, and drag down to close it. A footnote opens in a card beside its reference, with **Go to Note** to read it in place. Press and hold to select text and use **Copy**, **Look Up**, and the rest of the system's menu; while text is selected, dragging moves the selection instead of turning the page.
 
@@ -86,7 +86,7 @@ In **Scrolled** layout, swipe left or right to go to the next or previous chapte
 
 The controls have:
 
-- **Contents**, the book's chapters. For EPUB and KePub books these are the chapters Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too; a file Shisho has no chapters for uses the table of contents inside it. MOBI and AZW3 books use the table of contents inside the file.
+- **Contents**, the book's chapters. For EPUB and KePub books these are the chapters Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too; a file Shisho has no chapters for uses the table of contents inside it. MOBI and AZW3 books use the table of contents inside the file. A book with no chapters at all has no **Contents** button.
 - A bar across the bottom to move through the book, with a mark where each chapter starts, and at its ends, [back and forward](./reading-and-playback.md#going-back-after-a-jump) to where you were before a jump. In the app, going to another device's place is a jump too.
 - **Search**, which finds a word or phrase anywhere in the book, as [search in the Shisho reader](./reading-and-playback.md#searching-inside-a-book) does, and lists each result in its sentence under its chapter. A single character searches when you tap **Search** on the keyboard. Choose a result to go to it: every match on the page is shaded, and the one you chose more strongly. The bar over the page then counts the results and steps to the previous or next one, and its search button shows the list again. With a keyboard, Command-F opens search, Command-G and Shift-Command-G step through the results, and Escape closes it. A search counts as one [jump](./reading-and-playback.md#going-back-after-a-jump), however many results you step through.
 - **Settings**: the Shisho reader's [display settings](./reading-and-playback.md#display-settings), with the same options and steps: font, font size, force font size, line spacing, margins, justify text, theme, layout, and pages. Each change applies right away and keeps your place. Settings are kept on each phone or tablet, so an iPad can read at a different size than a phone, and they apply to every book and account on it. The theme starts on **System**, which is Light or Dark to match the app's appearance. Fixed-layout books always turn page by page, whatever the layout setting, as in the Shisho reader.
@@ -98,6 +98,20 @@ The screen stays on while a book is open, past the auto-lock time.
 Under the page, with or without the controls, are the chapter and how far through the book you are, and in Paginated layout, the pages left in the chapter. Tap the pages left to count the pages left in the book instead. Where the contents don't say where the chapter ends, the count is the book's. Pages past the chapter showing are estimated from the pages read so far, so the count settles as you read.
 
 The app saves your place on every page turn, and a book opens at the same place in the app and the [Shisho reader](./reading-and-playback.md#epub-mobi-and-azw3-reader). Reading time is counted as the [Shisho reader counts it](./reading-tracking.md#reading-time-from-devices), and reading starts and finishes a book's Read-through by the same [rules](./reading-tracking.md#starting-and-finishing-automatically). Places and reading time reach your server when the app syncs, such as when you close the book or open the app; reading done offline counts at the time you read. Opening a book follows the same rule as listening: your latest place from any device, unless you've also read on this phone since it last synced, when the other place is offered instead.
+
+### Comics and PDFs
+
+CBZ and PDF files open in a page reader of their own, which turns pages the same way: tap the left or right third, or swipe, and tap the middle for the controls. Pinch, or double-tap anywhere on the page, to zoom into a panel. A tap waits a moment to see whether a second follows, but once a page has turned, taps on the sides turn at once, so tapping through pages stays quick. A zoomed page pans to its edge before a swipe turns it, a tap anywhere shows the controls, and a double-tap zooms back out. Turned sideways, pages show two at a time, with the cover and any wide page (two printed pages scanned as one) on their own. In the **Scrolled** flow, pages fill the screen's width; zoomed, the column scrolls down as before and pans sideways.
+
+The pages come in the same order as in the [Shisho reader](./reading-and-playback.md#cbz-and-pdf-readers), so a page number means the same page in both, and the app keeps your place as a page. A comic's or PDF's file page lists its pages in a grid, as on the web; tap one to open the reader there. The grid shows each page's picture, from your server until the file is [downloaded](#downloads) and from the phone after that; without a connection, a file that isn't downloaded shows page numbers for the pages it hadn't shown yet. Opening a page from the grid doesn't count as reading, so looking at one leaves your place where it was; turning on from it does, and starts a [Read-through](./reading-tracking.md#starting-and-finishing-automatically) there, so you can skip the pages before the story. Seeing the last page, including in a spread after turning the phone sideways, finishes the book.
+
+The controls have:
+
+- **Contents**, the chapters Shisho has for the file, such as a PDF's outline, each going to the page it starts on. [Editing them](./metadata.md#chapters) changes them in the app too. A file with no chapters has no **Contents** button.
+- A bar across the bottom to move through the book, which shows the page you'd land on while you drag it, with [back and forward](./reading-and-playback.md#going-back-after-a-jump) at its ends.
+- **Settings**: the **Paginated** or **Scrolled** flow, and **Follow Reading Direction**. As in the Shisho reader, a book opens scrolled when the pages after its cover are tall strips, as a webtoon's are, until you pick a flow for it. The flow you pick is kept for the book in your account, so the Shisho reader and your other devices use it too, and one picked in the Shisho reader reaches the app. A file whose [Reading Direction](./metadata.md#reading-direction) is right to left, such as manga, turns the other way, and so does the bar; turn off **Follow Reading Direction** to have every book turn left to right on that phone or tablet.
+
+Under the page, with the controls hidden, are the chapter, the pages left in it, and how far through the book you are, as in the ebook reader, in either flow. Tap the pages left to count the pages left in the book instead; the choice holds in both readers. The bar with the controls shows the page you're on.
 
 ## Downloads
 
@@ -130,7 +144,7 @@ The app calls these paths on your server. A reverse proxy has to pass them, as [
 
 | Path | Used for |
 |------|----------|
-| `/mobile/*` | Signing in, syncing the library, your lists, and your reading and listening, covers, downloads, sharing files, and playing audiobooks |
+| `/mobile/*` | Signing in, syncing the library, your lists, and your reading and listening, covers, comic and PDF page thumbnails, downloads, sharing files, and playing audiobooks |
 
 ## Local Network and Certificates
 

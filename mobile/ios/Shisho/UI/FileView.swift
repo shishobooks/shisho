@@ -5,8 +5,7 @@ import SwiftUI
 /// it sits on disk. It's all in the device's copy, so it works offline.
 ///
 /// Left out from the web's page: the Book's other Files, a step back on the
-/// Book page; a comic's or PDF's page grid, which waits for the reader's page
-/// images (#921); and links out from identifiers, whose pages plugins define.
+/// Book page, and links out from identifiers, whose pages plugins define.
 struct FileView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -20,6 +19,11 @@ struct FileView: View {
     @State private var tint: Color?
     @State private var scrolled = false
     @State private var download: DownloadRow??
+    /// The chapter list's full height, which it's shown at up to
+    /// chaptersMaxHeight.
+    @State private var chaptersHeight: CGFloat = 0
+    /// The web's bound on a File's chapter list.
+    private static let chaptersMaxHeight: CGFloat = 460
 
     private var file: BookDetail.File? { (book ?? nil)?.files.first { $0.id == fileID } }
 
@@ -115,6 +119,12 @@ struct FileView: View {
             if !edition.isEmpty {
                 LabelRows(rows: edition)
                     .padding(.top, 24)
+            }
+            if CatalogStore.pageBasedTypes.contains(file.fileType), let pages = file.pageCount, pages > 0 {
+                // Between the Book's other Files, which the web lists here,
+                // and the chapters, as the web places it.
+                FileSectionHeading(text: FileFacts.pages(pages))
+                FilePageGrid(fileID: file.id, pageCount: pages, download: download)
             }
             chaptersSection(file)
             FileSectionHeading(text: String(localized: "On disk"))
@@ -263,15 +273,24 @@ struct FileView: View {
                         .foregroundStyle(Theme.mutedForeground)
                         .frame(maxWidth: .infinity, minHeight: 72)
                 } else {
-                    // Lazy, since an EPUB can have thousands.
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
-                            if index > 0 {
-                                Divider().overlay(Theme.border)
+                    // As tall as the chapters up to a bound, as on the web,
+                    // then scrolling within it: a long list would push the
+                    // rest of the page far down. Lazy, since an EPUB can have
+                    // thousands.
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(chapters.enumerated()), id: \.element.id) { index, chapter in
+                                if index > 0 {
+                                    Divider().overlay(Theme.border)
+                                }
+                                ChapterRow(chapter: chapter, file: file)
                             }
-                            ChapterRow(chapter: chapter, file: file)
                         }
+                        .onGeometryChange(for: CGFloat.self, of: \.size.height) { chaptersHeight = $0 }
                     }
+                    .frame(height: min(chaptersHeight, Self.chaptersMaxHeight))
+                    .scrollBounceBehavior(.basedOnSize)
+                    .accessibilityIdentifier("file.chapters.list")
                 }
             }
             .cardStyle()

@@ -280,6 +280,7 @@ func TestNew_DemoModeRoutes(t *testing.T) {
 				"GET /mobile/files/:id/download", "HEAD /mobile/files/:id/download",
 				"GET /mobile/files/:id/stream", "HEAD /mobile/files/:id/stream",
 				"GET /mobile/files/:id/share", "HEAD /mobile/files/:id/share",
+				"GET /mobile/files/:id/pages/:page",
 			} {
 				assert.True(t, routes[route], route)
 			}

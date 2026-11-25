@@ -362,6 +362,32 @@ final class CatalogStore: Sendable {
                 t.add(column: "word_count", .integer)
             }
         }
+        // Reading comics and PDFs (#921): this installation's place in a
+        // Page-based File is a 0-based page, and so is another device's
+        // place offered instead. The Page flow the user chose for a Book
+        // comes with their record of it, and one chosen here shows until
+        // the feed brings it back; raising feedVersion downloads the flows
+        // of records already synced.
+        migrator.registerMigration("v10: pages") { db in
+            try db.alter(table: "local_positions") { t in
+                t.add(column: "page", .integer)
+                t.add(column: "offer_page", .integer)
+            }
+            try db.alter(table: "user_books") { t in
+                t.add(column: "page_flow", .text)
+            }
+            try db.create(table: "chosen_page_flows") { t in
+                t.primaryKey("book_id", .integer)
+                t.column("page_flow", .text).notNull()
+                // The journal event sending it, or nil for a choice kept on
+                // the device because the server can't take it.
+                t.column("event_id", .text)
+                // The server took it in: it goes once the feed brings the
+                // Book's record back, so the choice never flickers back to
+                // the old one in between.
+                t.column("accepted", .boolean).notNull().defaults(to: false)
+            }
+        }
         return migrator
     }
 

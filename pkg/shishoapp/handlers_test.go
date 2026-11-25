@@ -22,10 +22,14 @@ import (
 	"github.com/shishobooks/shisho/pkg/binder"
 	"github.com/shishobooks/shisho/pkg/bookmarks"
 	"github.com/shishobooks/shisho/pkg/books"
+	"github.com/shishobooks/shisho/pkg/cbzpages"
 	"github.com/shishobooks/shisho/pkg/changefeed"
+	"github.com/shishobooks/shisho/pkg/config"
+	"github.com/shishobooks/shisho/pkg/covers"
 	"github.com/shishobooks/shisho/pkg/devices"
 	"github.com/shishobooks/shisho/pkg/downloadcache"
 	"github.com/shishobooks/shisho/pkg/errcodes"
+	"github.com/shishobooks/shisho/pkg/pdfpages"
 	"github.com/shishobooks/shisho/pkg/reading"
 	"github.com/shishobooks/shisho/pkg/testutils/testdb"
 	"github.com/stretchr/testify/assert"
@@ -80,6 +84,8 @@ func newFixtureFull(t *testing.T, contract *Contract, cache *downloadcache.Cache
 	hash, err := bcrypt.GenerateFromPassword([]byte(testPassword), bcrypt.MinCost)
 	require.NoError(t, err)
 	deviceService := devices.NewService(db)
+	pageDir := t.TempDir()
+	cfg := config.NewForTest()
 	// Builds run outside requests; they end before the directories go.
 	t.Cleanup(cache.Wait)
 	h := &handler{
@@ -92,7 +98,12 @@ func newFixtureFull(t *testing.T, contract *Contract, cache *downloadcache.Cache
 		reading:   reading.NewService(db),
 		bookmarks: bookmarks.NewService(db),
 		contract:  contract,
-		opts:      Options{Contract: contract, ServerVersion: "v0.10.0", InstanceID: testInstanceID},
+		opts: Options{Contract: contract, ServerVersion: "v0.10.0", InstanceID: testInstanceID, Pages: books.PageImages{
+			Pages:          cbzpages.NewCache(pageDir),
+			PDFPages:       pdfpages.NewCache(pageDir, cfg.PDFRenderDPI, cfg.PDFRenderQuality),
+			Thumbnails:     covers.NewThumbnailCache(pageDir, 1<<30),
+			ThumbnailsOnly: true,
+		}},
 	}
 	registerRoutes(e, h, devices.NewMiddleware(deviceService, nil))
 	return &fixture{t: t, ctx: context.Background(), db: db, e: e, h: h, password: string(hash)}

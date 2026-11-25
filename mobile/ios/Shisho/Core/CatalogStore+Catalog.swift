@@ -260,10 +260,13 @@ extension CatalogStore {
                 try db.execute(sql: "DELETE FROM user_books WHERE book_id = ?", arguments: [entry.id])
             } else if let record = entry.userBook {
                 try db.execute(sql: """
-                    INSERT INTO user_books (book_id, rating, to_read_position, reference, generation) VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO user_books (book_id, rating, to_read_position, reference, page_flow, generation) VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT (book_id) DO UPDATE SET rating = excluded.rating, to_read_position = excluded.to_read_position,
-                        reference = excluded.reference, generation = excluded.generation
-                    """, arguments: [record.bookId, record.rating, record.toReadPosition, record.reference, generation])
+                        reference = excluded.reference, page_flow = excluded.page_flow, generation = excluded.generation
+                    """, arguments: [record.bookId, record.rating, record.toReadPosition, record.reference,
+                                     record.pageFlow.flatMap { PageFlow(rawValue: $0.rawValue) }?.rawValue, generation])
+                // The server's answer to a flow chosen here has arrived.
+                try db.execute(sql: "DELETE FROM chosen_page_flows WHERE book_id = ? AND accepted", arguments: [record.bookId])
             }
         case .list:
             if entry.deleted {
@@ -949,6 +952,18 @@ struct BookRelated: Equatable, Sendable {
         case person(id: Int, name: String)
         case list(id: Int, name: String)
         case none
+
+        /// Names the link in a group's id. Spelled out rather than
+        /// interpolated: interpolating an enum reflects on it, which is
+        /// slow enough to show on every redraw of the Book page.
+        var key: String {
+            switch self {
+            case .series(let id, _): "series:\(id)"
+            case .person(let id, _): "person:\(id)"
+            case .list(let id, _): "list:\(id)"
+            case .none: "none"
+            }
+        }
     }
 
     struct Line: Equatable, Sendable, Identifiable {
@@ -964,7 +979,7 @@ struct BookRelated: Equatable, Sendable {
         /// Every Book in it, which can be more than it lists.
         let total: Int
         let lines: [Line]
-        var id: String { "\(link)-\(title)" }
+        var id: String { "\(link.key)-\(title)" }
     }
 
     var series: [Group] = []

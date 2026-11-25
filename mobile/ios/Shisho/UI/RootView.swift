@@ -12,8 +12,10 @@ struct RootView: View {
                     // the last one's rows while its own load.
                     .id(model.session?.account.id)
                     .transition(.opacity.combined(with: .scale(scale: 1.02)))
-                    // Under the reader, out of VoiceOver's way.
+                    // Under the reader, out of VoiceOver's way, and holding
+                    // their updates until it closes.
                     .accessibilityHidden(model.reader != nil)
+                    .environment(\.coveredByReader, model.reader != nil)
             } else {
                 SignInView()
                     .transition(.opacity)
@@ -24,14 +26,19 @@ struct RootView: View {
             // full-screen cover, so VoiceOver couldn't reach them. Sheets
             // from here present as the player's do.
             if let reader = model.reader {
-                ReaderView(model: reader) { model.closeReader() }
-                    .id(reader.id)
-                    // Slides in as one piece: without it, the bars and a
-                    // message the reader shows as it opens appear in place
-                    // at once while the page slides up under them.
-                    .geometryGroup()
-                    .transition(.move(edge: .bottom))
-                    .zIndex(1)
+                Group {
+                    switch reader {
+                    case .reflowable(let reader): ReaderView(model: reader) { model.closeReader() }
+                    case .pages(let reader): PageReaderView(model: reader) { model.closeReader() }
+                    }
+                }
+                .id(reader.id)
+                // Slides in as one piece: without it, the bars and a
+                // message the reader shows as it opens appear in place
+                // at once while the page slides up under them.
+                .geometryGroup()
+                .transition(.move(edge: .bottom))
+                .zIndex(1)
             }
         }
         .animation(.easeInOut(duration: 0.3), value: model.session != nil)

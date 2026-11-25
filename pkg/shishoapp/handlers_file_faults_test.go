@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/shishobooks/shisho/internal/testgen"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,25 +44,29 @@ func TestCover_FaultsAreServerErrors(t *testing.T) {
 	}
 }
 
-// The same for Original File downloads and streams, and a File shared out:
-// an unreadable file and a failing database are server faults, never a 404
-// or a partial file.
+// The same for Original File downloads and streams, a File shared out, and
+// a comic's page thumbnails: an unreadable file and a failing database are
+// server faults, never a 404 or a partial file.
 func TestFiles_FaultsAreServerErrors(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	dir := t.TempDir()
 	audio := filepath.Join(dir, "a.m4b")
 	require.NoError(t, os.WriteFile(audio, []byte("audio"), 0o600))
+	comic := testgen.GenerateCBZ(t, dir, "comic.cbz", testgen.CBZOptions{PageCount: 2})
 	f.addLibrary(1, "Mine")
 	f.addBook(1, 1, "Dune")
 	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes) VALUES (1, 1, 1, ?, 'm4b', 5)`, audio)
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, page_count) VALUES (2, 1, 1, ?, 'cbz', 1, 2)`, comic)
 	f.addUser()
 	credential := f.signIn()
-	paths := []string{"/mobile/files/1/download", "/mobile/files/1/stream", "/mobile/files/1/share"}
+	paths := []string{"/mobile/files/1/download", "/mobile/files/1/stream", "/mobile/files/1/share", "/mobile/files/2/pages/0?size=256"}
 
 	if os.Geteuid() != 0 {
-		require.NoError(t, os.Chmod(audio, 0o000))
-		t.Cleanup(func() { _ = os.Chmod(audio, 0o600) })
+		for _, file := range []string{audio, comic} {
+			require.NoError(t, os.Chmod(file, 0o000))
+			t.Cleanup(func() { _ = os.Chmod(file, 0o600) })
+		}
 		for _, path := range paths {
 			assertServerFault(t, f.do(call{path: path, credential: credential}))
 		}

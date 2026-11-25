@@ -13,17 +13,22 @@ import (
 // Book, for the flows to check against what the app showed. Times are
 // seconds since 1970.
 type readingState struct {
-	// Seconds, CFI, Percentage, and Source are the Reading Position: Seconds
-	// -1 without one or in an ebook, CFI empty without one or in an
-	// audiobook.
+	// Seconds, CFI, Page, Percentage, and Source are the Reading Position:
+	// Seconds -1 without one or in an ebook, CFI empty without one or
+	// outside a Reflowable File, Page -1 without one or outside a
+	// Page-based File.
 	Seconds    float64          `json:"seconds"`
 	CFI        string           `json:"cfi"`
+	Page       int              `json:"page"`
 	Percentage float64          `json:"percentage"`
 	Source     string           `json:"source"`
 	OccurredAt int64            `json:"occurred_at"`
 	Sessions   []readingSession `json:"sessions"`
 	// ReadThrough is the latest Read-through's outcome, or empty.
 	ReadThrough string `json:"read_through"`
+	// PageFlow is the Page flow the harness user chose for the Book, or
+	// empty.
+	PageFlow string `json:"page_flow"`
 	// OfflineAt and OnlineAt are when a flow last took the server offline
 	// and brought it back, or 0.
 	OfflineAt int64 `json:"offline_at"`
@@ -56,12 +61,12 @@ func readReading(ctx context.Context, path, title string) (*readingState, error)
 	db := sql.OpenDB(connector)
 	defer db.Close()
 
-	state := &readingState{Seconds: -1, Sessions: []readingSession{}}
+	state := &readingState{Seconds: -1, Page: -1, Sessions: []readingSession{}}
 	err = db.QueryRowContext(ctx, `
-		SELECT COALESCE(rp.seconds, -1), COALESCE(rp.cfi, ''), rp.percentage, rp.source,
+		SELECT COALESCE(rp.seconds, -1), COALESCE(rp.cfi, ''), COALESCE(rp.page, -1), rp.percentage, rp.source,
 			CAST(strftime('%s', rp.occurred_at) AS INTEGER)
 		FROM reading_positions rp JOIN files f ON f.id = rp.file_id JOIN books b ON b.id = f.book_id
-		WHERE b.title = ?`, title).Scan(&state.Seconds, &state.CFI, &state.Percentage, &state.Source, &state.OccurredAt)
+		WHERE b.title = ?`, title).Scan(&state.Seconds, &state.CFI, &state.Page, &state.Percentage, &state.Source, &state.OccurredAt)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.WithStack(err)
 	}
@@ -88,6 +93,12 @@ func readReading(ctx context.Context, path, title string) (*readingState, error)
 	err = db.QueryRowContext(ctx, `
 		SELECT rt.outcome FROM read_throughs rt JOIN books b ON b.id = rt.book_id
 		WHERE b.title = ? ORDER BY rt.id DESC LIMIT 1`, title).Scan(&state.ReadThrough)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, errors.WithStack(err)
+	}
+	err = db.QueryRowContext(ctx, `
+		SELECT COALESCE(ub.page_flow, '') FROM user_books ub JOIN books b ON b.id = ub.book_id JOIN users u ON u.id = ub.user_id
+		WHERE b.title = ? AND u.username = ?`, title, harnessUsername).Scan(&state.PageFlow)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, errors.WithStack(err)
 	}

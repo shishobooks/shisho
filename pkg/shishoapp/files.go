@@ -2,6 +2,7 @@ package shishoapp
 
 import (
 	"database/sql"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
@@ -116,6 +117,26 @@ func (h *handler) fileCover(c echo.Context) error {
 		cacheControl = covers.CacheControlImmutable
 	}
 	return covers.ServeFileCover(c, file, cacheControl, "Cover", h.opts.Thumbnails)
+}
+
+// page serves a thumbnail of one of a CBZ's or PDF's pages, 0-based, at a
+// size in the tiers cover URLs use, from the user's Libraries
+// (CapabilityPageImages). Only thumbnails: the reader draws its pages from
+// the downloaded File (ADR 0025), so the app never relies on whole pages
+// from the server.
+func (h *handler) page(c echo.Context) error {
+	file, err := h.requireFile(c, false)
+	if err != nil {
+		return err
+	}
+	page, err := strconv.Atoi(c.Param("page"))
+	if err != nil {
+		return errcodes.ValidationError("Invalid page number")
+	}
+	if c.QueryParam("size") == "" {
+		return errcodes.ValidationError(covers.InvalidThumbnailSizeMessage)
+	}
+	return h.opts.Pages.Serve(c, file, page)
 }
 
 // download serves an Original File as it sits in the library (ADR 0022),

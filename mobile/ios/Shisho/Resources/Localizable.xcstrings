@@ -48,6 +48,9 @@
     "%@ isn't a font Shisho can read." : {
 
     },
+    "%@ left" : {
+
+    },
     "%@ left at %@" : {
       "localizations" : {
         "en" : {
@@ -107,12 +110,12 @@
     "%@ words" : {
 
     },
-    "%@ · %@ left" : {
+    "%@ · %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ · %2$@ left"
+            "value" : "%1$@ · %2$@"
           }
         }
       }
@@ -544,6 +547,9 @@
     "Enter your Shisho server's address." : {
 
     },
+    "Every book turns left to right. Saved on this device." : {
+
+    },
     "Every cover in your Libraries shows offline. Otherwise covers download as you browse." : {
 
     },
@@ -577,7 +583,13 @@
     "Finished" : {
 
     },
+    "Flow" : {
+
+    },
     "Folder" : {
+
+    },
+    "Follow Reading Direction" : {
 
     },
     "Font" : {
@@ -907,11 +919,31 @@
     "Page %lld" : {
 
     },
+    "Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld of %2$lld"
+          }
+        }
+      }
+    },
     "Page count" : {
 
     },
     "Pages" : {
 
+    },
+    "Pages %lld–%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Pages %1$lld–%2$lld of %3$lld"
+          }
+        }
+      }
     },
     "Paginated" : {
 
@@ -929,6 +961,9 @@
 
     },
     "People" : {
+
+    },
+    "Picked from the page shapes until you choose." : {
 
     },
     "Place in the book" : {
@@ -1073,7 +1108,16 @@
     "Right to left" : {
 
     },
+    "Right to left books turn the other way. Saved on this device." : {
+
+    },
     "Save" : {
+
+    },
+    "Saved for this book on this device." : {
+
+    },
+    "Saved for this book." : {
 
     },
     "Scrolled" : {
@@ -1140,6 +1184,12 @@
 
     },
     "Shisho isn't allowed on your local network, where this server is. Turn on Local Network for Shisho in Settings." : {
+
+    },
+    "Show all %@" : {
+
+    },
+    "Show fewer" : {
 
     },
     "Show less" : {
@@ -1346,6 +1396,9 @@
     "This book couldn't be opened." : {
 
     },
+    "This book has no pages." : {
+
+    },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
 
     },
@@ -1512,6 +1565,12 @@
 
     },
     "Your server can't be reached. What's downloaded still works." : {
+
+    },
+    "Zoom In" : {
+
+    },
+    "Zoom Out" : {
 
     },
     "^[%lld book](inflect: true)" : {

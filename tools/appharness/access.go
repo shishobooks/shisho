@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shishobooks/shisho/pkg/sqliteconn"
@@ -86,4 +87,38 @@ func openServerDB(path string) (*sql.DB, error) {
 		return nil, err
 	}
 	return sql.OpenDB(connector), nil
+}
+
+// bookTimeLayout is how the server writes a Book's created_at.
+const bookTimeLayout = "2006-01-02 15:04:05.999999999-07:00"
+
+// dateComicsBehind moves the page reader's comics a day back in the order
+// Books were added. The Library lists the newest first, and the scan adds
+// Books in no set order, so without this a comic could push a Book the
+// other flows expect on a phone's first screen, as The Harness Novel, below
+// it.
+func dateComicsBehind(ctx context.Context, path string) error {
+	db, err := openServerDB(path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	for _, f := range fixtures {
+		if f.Comic == 0 {
+			continue
+		}
+		var created string
+		if err := db.QueryRowContext(ctx, `SELECT created_at FROM books WHERE title = ?`, f.Title).Scan(&created); err != nil {
+			return errors.Wrapf(err, "find %s", f.Title)
+		}
+		at, err := time.Parse(bookTimeLayout, created)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+		if _, err := db.ExecContext(ctx, `UPDATE books SET created_at = ? WHERE title = ?`,
+			at.Add(-24*time.Hour).Format(bookTimeLayout), f.Title); err != nil {
+			return errors.WithStack(err)
+		}
+	}
+	return nil
 }

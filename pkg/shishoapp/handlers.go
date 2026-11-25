@@ -52,6 +52,8 @@ type Options struct {
 	// and Downloads is the server's one download cache, which builds it.
 	Books     *books.Service
 	Downloads *downloadcache.Cache
+	// Pages serves a CBZ's or PDF's pages, as the web's page route does.
+	Pages books.PageImages
 }
 
 type handler struct {

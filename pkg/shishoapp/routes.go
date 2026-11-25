@@ -57,4 +57,8 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	// current metadata (CapabilityShareFiles).
 	g.GET("/files/:id/share", h.share, signedIn, h.requireProtocol)
 	g.HEAD("/files/:id/share", h.share, signedIn, h.requireProtocol)
+	// A CBZ's or PDF's pages, as thumbnails for the page grid of a File
+	// that isn't downloaded (CapabilityPageImages). The reader draws its
+	// pages from the downloaded File (ADR 0025).
+	g.GET("/files/:id/pages/:page", h.page, signedIn, h.requireProtocol)
 }

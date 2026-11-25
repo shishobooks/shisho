@@ -117,7 +117,7 @@ extension CatalogStore {
     /// reader left only as a percentage is placed by the File's length.
     static func serverPlace(_ db: Database, fileID: Int) throws -> ServerPlace? {
         guard let row = try Row.fetchOne(db, sql: """
-            SELECT p.seconds, p.cfi, p.percentage, p.occurred_at, p.device_id, p.device_name, p.source, f.duration_seconds
+            SELECT p.seconds, p.cfi, p.page, p.percentage, p.occurred_at, p.device_id, p.device_name, p.source, f.duration_seconds
             FROM reading_positions p LEFT JOIN book_files f ON f.id = p.file_id
             WHERE p.file_id = ?
             """, arguments: [fileID])
@@ -127,12 +127,12 @@ extension CatalogStore {
         let seconds: Double = row["seconds"] ?? percentage * duration
         return ServerPlace(seconds: seconds, occurredAt: Date(timeIntervalSince1970: row["occurred_at"]),
                            deviceID: row["device_id"], source: row["source"], cfi: row["cfi"], percentage: percentage,
-                           deviceName: row["device_name"])
+                           page: row["page"], deviceName: row["device_name"])
     }
 
     static func localPlace(_ db: Database, fileID: Int) throws -> LocalPlace? {
         guard let row = try Row.fetchOne(db, sql: """
-            SELECT seconds, cfi, percentage, updated_at, base_occurred_at, offer_seconds, offer_cfi, offer_percentage,
+            SELECT seconds, cfi, page, percentage, updated_at, base_occurred_at, offer_seconds, offer_cfi, offer_page, offer_percentage,
                 offer_occurred_at, offer_source, offer_device_id, offer_device_name
             FROM local_positions WHERE file_id = ?
             """, arguments: [fileID])
@@ -142,12 +142,12 @@ extension CatalogStore {
             offer = ServerPlace(seconds: seconds, occurredAt: Date(timeIntervalSince1970: at),
                                 deviceID: row["offer_device_id"], source: row["offer_source"] ?? "",
                                 cfi: row["offer_cfi"], percentage: row["offer_percentage"] ?? 0,
-                                deviceName: row["offer_device_name"])
+                                page: row["offer_page"], deviceName: row["offer_device_name"])
         }
         return LocalPlace(seconds: row["seconds"], updatedAt: Date(timeIntervalSince1970: row["updated_at"]),
                           pending: try hasPendingMoves(db, fileID: fileID),
                           base: (row["base_occurred_at"] as Double?).map(Date.init(timeIntervalSince1970:)), offer: offer,
-                          cfi: row["cfi"], percentage: row["percentage"])
+                          cfi: row["cfi"], percentage: row["percentage"], page: row["page"])
     }
 
     /// Keeps another device's place as an offer when it arrives while this
@@ -164,19 +164,19 @@ extension CatalogStore {
                                         arguments: [position.fileId]) ?? false
         guard try offered || hasPendingMoves(db, fileID: position.fileId) else { return }
         try db.execute(sql: """
-            UPDATE local_positions SET offer_seconds = ?, offer_cfi = ?, offer_percentage = ?, offer_occurred_at = ?,
+            UPDATE local_positions SET offer_seconds = ?, offer_cfi = ?, offer_page = ?, offer_percentage = ?, offer_occurred_at = ?,
                 offer_source = ?, offer_device_id = ?, offer_device_name = ?
             WHERE file_id = ? AND ? > COALESCE(base_occurred_at, 0) AND ? > COALESCE(offer_occurred_at, 0)
-            """, arguments: [place.seconds, place.cfi, place.percentage, occurredAt, position.source.rawValue, position.deviceId,
-                             position.deviceName, position.fileId, occurredAt, occurredAt])
+            """, arguments: [place.seconds, place.cfi, place.page, place.percentage, occurredAt, position.source.rawValue,
+                             position.deviceId, position.deviceName, position.fileId, occurredAt, occurredAt])
         // The same move by ServerPlace.isSameMove: another Device's move at
         // the same moment is a different one.
         try db.execute(sql: """
             UPDATE local_positions SET offer_device_id = ?, offer_device_name = ?
             WHERE file_id = ? AND offer_occurred_at = ? AND offer_source = ? AND offer_seconds = ?
-                AND offer_cfi IS ? AND offer_percentage = ?
+                AND offer_cfi IS ? AND offer_page IS ? AND offer_percentage = ?
             """, arguments: [position.deviceId, position.deviceName, position.fileId, occurredAt, position.source.rawValue,
-                             place.seconds, place.cfi, place.percentage])
+                             place.seconds, place.cfi, place.page, place.percentage])
     }
 
     /// The user went to the offered place, or chose to stay. Either way the
@@ -190,7 +190,8 @@ extension CatalogStore {
 
     static func resolveOffer(_ db: Database, fileID: Int) throws {
         try db.execute(sql: """
-            UPDATE local_positions SET offer_seconds = NULL, offer_cfi = NULL, offer_percentage = NULL, offer_occurred_at = NULL,
+            UPDATE local_positions SET offer_seconds = NULL, offer_cfi = NULL, offer_page = NULL, offer_percentage = NULL,
+                offer_occurred_at = NULL,
                 offer_source = NULL, offer_device_id = NULL, offer_device_name = NULL,
                 base_occurred_at = MAX(COALESCE(base_occurred_at, 0),
                     COALESCE((SELECT occurred_at FROM reading_positions WHERE file_id = ?), 0))
@@ -279,16 +280,17 @@ extension CatalogStore {
     /// Saves a place locally and queues its event, in the caller's
     /// transaction. coalesceKey names moves that replace each other until
     /// sent; nil is always sent.
-    static func writePosition(_ db: Database, fileID: Int, seconds: Double, cfi: String?, percentage: Double, at: Date,
-                              payload: Data, coalesceKey key: String?) throws {
+    static func writePosition(_ db: Database, fileID: Int, seconds: Double, cfi: String?, page: Int? = nil, percentage: Double,
+                              at: Date, payload: Data, coalesceKey key: String?) throws {
         let pending = try hasPendingMoves(db, fileID: fileID)
         let serverAt = try Double.fetchOne(db, sql: "SELECT occurred_at FROM reading_positions WHERE file_id = ?", arguments: [fileID])
         try db.execute(sql: """
-            INSERT INTO local_positions (file_id, seconds, cfi, percentage, updated_at, base_occurred_at) VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (file_id) DO UPDATE SET seconds = excluded.seconds, cfi = excluded.cfi, percentage = excluded.percentage,
-                updated_at = excluded.updated_at,
+            INSERT INTO local_positions (file_id, seconds, cfi, page, percentage, updated_at, base_occurred_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (file_id) DO UPDATE SET seconds = excluded.seconds, cfi = excluded.cfi, page = excluded.page,
+                percentage = excluded.percentage, updated_at = excluded.updated_at,
                 base_occurred_at = CASE WHEN ? THEN local_positions.base_occurred_at ELSE excluded.base_occurred_at END
-            """, arguments: [fileID, seconds, cfi, percentage, at.timeIntervalSince1970, serverAt, pending])
+            """, arguments: [fileID, seconds, cfi, page, percentage, at.timeIntervalSince1970, serverAt, pending])
         if let key {
             try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
         }
@@ -373,9 +375,13 @@ extension CatalogStore {
                 switch result.result {
                 case .accepted, .duplicate:
                     try CatalogStore.finishBookmarkChange(eventID: result.id, duplicate: result.result == .duplicate, in: db)
+                    // Kept until the feed brings the Book's flow as the
+                    // server kept it.
+                    try db.execute(sql: "UPDATE chosen_page_flows SET accepted = TRUE WHERE event_id = ?", arguments: [result.id])
                     try db.execute(sql: "DELETE FROM journal WHERE event_id = ?", arguments: [result.id])
                 case .refused:
                     try CatalogStore.undoRefusedBookmarkChange(eventID: result.id, in: db)
+                    try db.execute(sql: "DELETE FROM chosen_page_flows WHERE event_id = ?", arguments: [result.id])
                     try db.execute(sql: "DELETE FROM journal WHERE event_id = ?", arguments: [result.id])
                     try db.execute(sql: "INSERT INTO journal_notes (at, event_type, reason) VALUES (?, ?, ?)",
                                    arguments: [Date().timeIntervalSince1970, types[result.id] ?? "", result.reason])

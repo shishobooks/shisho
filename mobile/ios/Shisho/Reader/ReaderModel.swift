@@ -276,6 +276,8 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
         let start: ReaderTarget? = switch choice?.0.start {
         case .cfi(let cfi): .cfi(cfi)
         case .fraction(let fraction): .fraction(fraction)
+        // A page is a Page-based File's place, never a Reflowable one's.
+        case .page: .fraction(choice?.0.percentage ?? 0)
         case nil: nil
         }
         let source = FoliateSource(bookFile: bookFile, fileType: file.fileType, settings: settings, pages: ReaderPagePool.shared.take(),
@@ -724,15 +726,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     /// WebKit's processes, which the app can't measure; when iOS ends one,
     /// FoliateSource logs it.
     private func logMemory(_ event: String) {
-        var info = task_vm_info_data_t()
-        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
-        let result = withUnsafeMutablePointer(to: &info) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
-            }
-        }
-        let megabytes = result == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : -1
-        log("\(event), \(file.fileType), \(file.sizeBytes / 1024) KB; app footprint \(megabytes) MB")
+        log("\(event), \(file.fileType), \(file.sizeBytes / 1024) KB; app footprint \(MemoryFootprint.megabytes) MB")
     }
 
     private func log(_ message: String) {

@@ -22,8 +22,15 @@ final class ReadingTrackerTests: XCTestCase {
         PageLocation(cfi: "epubcfi(/6/\(n * 2)!/4/2)", fraction: percentage, index: n, page: 1, pages: 3, atEnd: atEnd, screen: "\(n):1")
     }
 
+    /// Moves are saved on the writer's queue without waiting; a write
+    /// waits for them, so reads after it see them.
+    private func settle() throws {
+        try store.pool.writeWithoutTransaction { _ in }
+    }
+
     private func journal() throws -> [String] {
-        try store.pool.read { try String.fetchAll($0, sql: "SELECT type FROM journal ORDER BY seq") }
+        try settle()
+        return try store.pool.read { try String.fetchAll($0, sql: "SELECT type FROM journal ORDER BY seq") }
     }
 
     private func wait(_ seconds: TimeInterval) {
@@ -104,9 +111,28 @@ final class ReadingTrackerTests: XCTestCase {
         tracker.foreground()
         wait(8)
         tracker.moved(page(2))
+        try settle()
         let duration = try store.pool.read { db in
             try Data.fetchOne(db, sql: "SELECT payload FROM journal WHERE type = 'reading_session'")
         }.flatMap { try JSONSerialization.jsonObject(with: $0) as? [String: Any] }?["duration"] as? Int
         XCTAssertEqual(duration, 8)
+    }
+
+    /// A comic's or a PDF's place is a 0-based page: a turn saves it as
+    /// one, and reaching the last page is the end, sent at once (#921).
+    func testPagesAreSavedAsPages() throws {
+        let tracker = tracker()
+        func page(_ n: Int) -> ReadingPlace {
+            ReadingPlace(locator: .page(n), fraction: Double(n) / 4, atEnd: n == 4, screen: String(n))
+        }
+        tracker.opened(page(0))
+        wait(6)
+        tracker.moved(page(4))
+        let payload = try store.pool.read { try Data.fetchOne($0, sql: "SELECT payload FROM journal WHERE type = 'reading_position'") }
+        let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(payload)) as? [String: Any])
+        XCTAssertEqual(sent["page"] as? Int, 4)
+        XCTAssertNil(sent["cfi"])
+        XCTAssertEqual(sent["at_end"] as? Bool, true)
+        XCTAssertEqual(syncs, 1)
     }
 }

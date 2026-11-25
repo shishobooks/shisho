@@ -257,6 +257,14 @@ final class APIClient: Sendable {
         ], readsCapabilities: false)
     }
 
+    /// A CBZ's or PDF's page, 0-based, as a thumbnail at size pixels, for
+    /// the page grid of a File that isn't downloaded (CapabilityPageImages).
+    func pageThumbnail(fileID: Int, page: Int, size: Int) async throws -> Data {
+        try await data("mobile/files/\(fileID)/pages/\(page)", query: [
+            URLQueryItem(name: "size", value: String(size)),
+        ], readsCapabilities: false)
+    }
+
     /// Where an audiobook File streams from, with Range support.
     func streamURL(fileID: Int) -> URL {
         baseURL.appendingPathComponent("mobile/files/\(fileID)/stream")

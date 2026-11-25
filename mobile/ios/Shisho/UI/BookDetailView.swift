@@ -258,7 +258,7 @@ struct BookDetailView: View {
                     .accessibilityAddTraits(.isHeader)
                 VStack(spacing: 10) {
                     ForEach(book.files) { file in
-                        FileCard(file: file, book: book.summary, listen: listen ?? nil)
+                        FileCard(file: file, book: book.summary, listen: listen ?? nil, read: read ?? nil)
                     }
                 }
             }
@@ -335,16 +335,29 @@ private struct FileCard: View {
     @State private var download: DownloadRow??
 
     private var isAudiobook: Bool { file.fileType == "m4b" }
-    private var isReflowable: Bool { CatalogStore.reflowableTypes.contains(file.fileType) }
+    private var isReadable: Bool { CatalogStore.readableTypes.contains(file.fileType) }
 
     private var readLabel: String {
         String(localized: "Read \(name)")
     }
 
+    /// The Read card's progress, which this row matches when it's for this
+    /// File, so the two never show different numbers.
+    var read: ReadProgress?
+
+    /// The Read card's place when it's about this File: the place it opens
+    /// at across devices, and pages left exactly.
+    private var readHere: ReadProgress? {
+        guard let read, read.fileID == file.id else { return nil }
+        return read
+    }
+
     /// How far through the File the user is: for the audiobook the Listen
-    /// card is about, the card's own place, live while it plays, so both say
-    /// the same; for any other File, the place saved with its percentage.
+    /// card is about, the card's own place, live while it plays, and for the
+    /// ebook the Read card is about, the card's, so both say the same; for
+    /// any other File, the place saved with its percentage.
     private var progress: Double? {
+        if let readHere { return readHere.percentage > 0.001 || file.progress != nil ? readHere.percentage : nil }
         guard isAudiobook else { return file.progress }
         if let player = model.player, player.file?.fileID == file.id, let duration = player.file?.duration, duration > 0 {
             return min(1, max(0, player.position / duration))
@@ -425,7 +438,8 @@ private struct FileCard: View {
                                 .accessibilityIdentifier("book.detail.narrator")
                         }
                         if let progress {
-                            FileProgressLine(progress: progress, durationSeconds: listeningLength, pageCount: file.pageCount, wordCount: file.wordCount)
+                            FileProgressLine(progress: progress, durationSeconds: listeningLength, pageCount: file.pageCount,
+                                             wordCount: file.wordCount, pagesLeft: readHere.flatMap { $0.pageCount == nil ? nil : $0.pagesLeft })
                                 .padding(.top, 3)
                         }
                         DownloadStatusLine(fileID: file.id, row: download ?? nil)
@@ -481,7 +495,7 @@ private struct FileCard: View {
                 .accessibilityIdentifier("file.listen.\(file.id)")
                 .modifier(NeedsConnection(available: model.canOpen(fileID: file.id)))
             }
-            if isReflowable {
+            if isReadable {
                 // Every ebook File opens from here; the Read button above
                 // opens the one read last.
                 Button { model.read(fileID: file.id) } label: {

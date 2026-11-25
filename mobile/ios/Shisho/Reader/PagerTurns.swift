@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// Which way a page turn goes through the book.
 enum TurnDirection: Int, Sendable {
@@ -162,5 +163,62 @@ enum PagerZones {
             return (dragX < -width * 0.25 || velocity < -flick) && velocity < flick
         }
         return (dragX > width * 0.25 || velocity > flick) && velocity > -flick
+    }
+}
+
+/// When a tap on a page that zooms is a tap and when it's half of a double
+/// tap, which zooms anywhere on the page. A tap waits a moment to see
+/// whether a second follows close by; taps in a run of turns, as when
+/// tapping through pages quickly, act at once, so tapping through stays
+/// quick and only the first turn of a run waits.
+struct PagerTaps: Sendable {
+    /// How soon a second tap has to follow for a double tap, which is also
+    /// how long a single tap waits: well under the system's, so a tap that
+    /// turns a page doesn't feel slow.
+    static let doubleTapWindow: TimeInterval = 0.175
+    /// How near the first a second tap has to land.
+    static let doubleTapReach: CGFloat = 50
+    /// How long after a turn a tap that turns still acts at once.
+    static let turnRun: TimeInterval = 0.8
+
+    enum Decision: Equatable, Sendable {
+        /// A tap: act on it now.
+        case single
+        /// Maybe the first of a double tap: act on it once the window
+        /// passes with no second (`expired`).
+        case wait
+        /// The second of a double tap.
+        case double
+    }
+
+    private var pending: (time: TimeInterval, point: CGPoint)?
+    private var lastTurn: TimeInterval?
+
+    /// A tap at point, at time. turns says whether it would turn a page on
+    /// its own. flush is an earlier tap still waiting, which isn't half of
+    /// a double tap with this one: act on it first.
+    mutating func tap(at time: TimeInterval, point: CGPoint, turns: Bool) -> (decision: Decision, flush: CGPoint?) {
+        var flush: CGPoint?
+        if let pending {
+            self.pending = nil
+            let near = hypot(point.x - pending.point.x, point.y - pending.point.y) <= Self.doubleTapReach
+            if time - pending.time <= Self.doubleTapWindow, near { return (.double, nil) }
+            flush = pending.point
+        }
+        if turns, let lastTurn, time - lastTurn <= Self.turnRun { return (.single, flush) }
+        pending = (time, point)
+        return (.wait, flush)
+    }
+
+    /// The window passed with no second tap: the tap waiting, to act on
+    /// now, if there is one.
+    mutating func expired() -> CGPoint? {
+        defer { pending = nil }
+        return pending?.point
+    }
+
+    /// A tap turned a page.
+    mutating func turned(at time: TimeInterval) {
+        lastTurn = time
     }
 }

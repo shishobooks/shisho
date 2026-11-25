@@ -3,14 +3,51 @@
 # CFI too. Then read a page for a while, turn, read another, and close the
 # reader: the Reading Session reaches the server with its time counted per
 # page (#919).
+#
+# A comic goes through the same kill: its pages are the server's list of the
+# archive's entries, read from the downloaded File, and it reopens at the
+# page it was on, which the server has as a 0-based page; the flow chosen
+# for it is saved on the server for the Book (#921).
 appId: ${APP_ID}
-name: Read, kill, reopen at the same place, and send a Reading Session
+name: Read an EPUB and a comic, kill, reopen at the same places, and send a Reading Session
 ---
 - runScript:
     file: scripts/go_online.js
     env:
       CONTROL: ${CONTROL}
 - runFlow: subflows/launch_signed_in.yaml
+
+# No other flow reads the comic, so it opens at its first page.
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Comic
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 1 of 8.*"
+    timeout: 30000
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          direction: LEFT
+# Every turn lands, however long they queue.
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 4 of 8.*"
+    timeout: 30000
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.close
+- tapOn:
+    id: tab.library
+- extendedWaitUntil:
+    visible:
+      id: library.grid
+    timeout: 30000
+
 - runFlow:
     file: subflows/read.yaml
     env:
@@ -140,3 +177,51 @@ name: Read, kill, reopen at the same place, and send a Reading Session
 - assertTrue:
     condition: ${output.serverCheck == "ok"}
     label: The server check passed
+
+# The comic reopens at its page after the kill, and the server has the
+# place as a 0-based page.
+- tapOn:
+    id: tab.library
+- extendedWaitUntil:
+    visible:
+      id: library.grid
+    timeout: 30000
+- runFlow:
+    file: subflows/read.yaml
+    env:
+      TITLE: Harness Comic
+- extendedWaitUntil:
+    visible:
+      id: reader.progress
+      text: ".*Page 4 of 8.*"
+    timeout: 30000
+- runScript:
+    file: scripts/assert_page_position.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harness Comic
+      PAGE: "Page 4 of 8"
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server has the comic's page
+# The flow chosen here is the Book's, on the server, so the web reads it
+# that way too.
+- runFlow: subflows/show_reader_controls.yaml
+- tapOn:
+    id: reader.settings
+- tapOn:
+    id: reader.flow.scrolled
+- extendedWaitUntil:
+    visible: Saved for this book.
+    timeout: 30000
+- tapOn:
+    id: reader.settings.done
+- runScript:
+    file: scripts/assert_page_flow.js
+    env:
+      CONTROL: ${CONTROL}
+      TITLE: Harness Comic
+      FLOW: scrolled
+- assertTrue:
+    condition: ${output.serverCheck == "ok"}
+    label: The server keeps the flow

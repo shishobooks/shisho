@@ -425,11 +425,23 @@ final class CatalogBrowseTests: XCTestCase {
         XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil, wordCount: nil), "25%")
         XCTAssertEqual(FileProgressText.text(1, durationSeconds: 7200, pageCount: nil, wordCount: nil), "100%", "nothing left to say at the end")
         XCTAssertEqual(FileProgressText.text(0.02, durationSeconds: 241, pageCount: nil, wordCount: nil), "2% · 3:56 left", "to the second, as the Listen card says it")
+        // Exact, as the Read card knows it for a comic or PDF.
+        XCTAssertEqual(FileProgressText.text(3.0 / 7, durationSeconds: nil, pageCount: 8, wordCount: nil, pagesLeft: 4), "43% · 4 pages left")
         // Not a second short from the fraction's rounding error.
         XCTAssertEqual(FileProgressText.text(200.0 / 240, durationSeconds: 240, pageCount: nil, wordCount: nil), "83% · 0:40 left")
         // A real fraction of a second isn't rounded up, as the Listen bar doesn't.
         XCTAssertEqual(FileProgressText.text(120.0002 / 240, durationSeconds: 240, pageCount: nil, wordCount: nil), "50% · 1:59 left")
         XCTAssertEqual(FileProgressText.text(0.25, durationSeconds: nil, pageCount: nil, wordCount: 80321), "25% · 60K words left")
+    }
+
+    /// The row shows the percent beside its bar and what's left on the line
+    /// under it, so a long time left doesn't squeeze the bar.
+    func testAFileRowsTimeLeftGoesUnderItsBar() {
+        XCTAssertEqual(FileProgressText.left(0.5, durationSeconds: 7200, pageCount: nil, wordCount: nil), "1:00:00 left")
+        XCTAssertEqual(FileProgressText.left(3.0 / 7, durationSeconds: nil, pageCount: 8, wordCount: nil, pagesLeft: 4), "4 pages left")
+        XCTAssertEqual(FileProgressText.left(0.25, durationSeconds: nil, pageCount: nil, wordCount: 80321), "60K words left")
+        XCTAssertNil(FileProgressText.left(0.25, durationSeconds: nil, pageCount: nil, wordCount: nil))
+        XCTAssertNil(FileProgressText.left(1, durationSeconds: 7200, pageCount: nil, wordCount: nil), "nothing left at the end")
     }
 
     /// By the server's time for each Read-through underway, not the latest
