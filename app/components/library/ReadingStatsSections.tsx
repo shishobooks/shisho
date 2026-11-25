@@ -522,20 +522,20 @@ const placeTime = (place: PlaceRow) => {
   return parts.join(", ") || formatDuration(0);
 };
 
-// Each kind's pace as a sentence ends it: "245 words a minute".
+// Each kind's pace as a sentence ends it: "245 words per minute".
 const paceRows = (pace: ReadingStatsPace): { kind: string; value: string }[] =>
   [
     pace.words_per_minute === null
       ? null
       : {
           kind: "Ebooks",
-          value: `${Math.round(pace.words_per_minute).toLocaleString()} words a minute`,
+          value: `${Math.round(pace.words_per_minute).toLocaleString()} words per minute`,
         },
     pace.pages_per_hour === null
       ? null
       : {
           kind: "Comics and PDFs",
-          value: `${Math.round(pace.pages_per_hour).toLocaleString()} pages an hour`,
+          value: `${Math.round(pace.pages_per_hour).toLocaleString()} pages per hour`,
         },
     pace.listening_speed === null
       ? null

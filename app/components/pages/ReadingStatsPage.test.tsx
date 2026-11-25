@@ -345,8 +345,8 @@ describe("ReadingStatsPage", () => {
       screen.queryByRole("group", { name: "Median days to finish" }),
     ).toBeNull();
     const pace = screen.getByRole("region", { name: "Pace" });
-    expect(pace).toHaveTextContent("Ebooks245 words a minute");
-    expect(pace).toHaveTextContent("Comics and PDFs85 pages an hour");
+    expect(pace).toHaveTextContent("Ebooks245 words per minute");
+    expect(pace).toHaveTextContent("Comics and PDFs85 pages per hour");
     expect(pace).toHaveTextContent("Audiobooks1.4× real time");
     expect(screen.getByText("Bedside Kobo")).toBeInTheDocument();
     expect(screen.getByText("KOReader")).toBeInTheDocument();

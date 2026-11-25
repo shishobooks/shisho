@@ -31,8 +31,8 @@ Time is split into days in your time zone, under **Preferences > Reading > Time 
 
 **Pace** shows how fast you read and listen, for each kind you have enough timed reading of in the range:
 
-- **Ebooks**: words a minute in EPUB, KePub, MOBI, and AZW3 books.
-- **Comics and PDFs**: pages an hour.
+- **Ebooks**: words per minute in EPUB, KePub, MOBI, and AZW3 books.
+- **Comics and PDFs**: pages per hour.
 - **Audiobooks**: how fast you get through the recording, where **1.5× real time** means 90 minutes of audio in an hour.
 
 It's how much of each book your sessions covered over the time they took, added up, so long sessions count most and books you read at different speeds blend. Only timed sessions count: those the Shisho reader and player, the Shisho app, and the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin) measure, and a Kobo's, whose time is its own count of minutes. KOReader time without the plugin is left out, since it isn't timed. A session that went back adds nothing. A kind needs ten minutes of timed sessions to show a pace, and a book Shisho hasn't counted the words of yet adds none.

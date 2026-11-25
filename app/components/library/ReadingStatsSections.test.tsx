@@ -15,7 +15,7 @@ describe("PaceList", () => {
       />,
     );
     expect(screen.getByText("Ebooks")).toBeInTheDocument();
-    expect(screen.getByText("313 words a minute")).toBeInTheDocument();
+    expect(screen.getByText("313 words per minute")).toBeInTheDocument();
     expect(screen.queryByText("Comics and PDFs")).toBeNull();
     expect(screen.getByText("1× real time")).toBeInTheDocument();
     expect(screen.getByText(/timed reading/)).toBeInTheDocument();
