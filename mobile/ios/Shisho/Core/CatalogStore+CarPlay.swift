@@ -8,8 +8,8 @@ struct CarPlayAudiobook: Equatable, Sendable {
     let bookID: Int
     let title: String
     let authors: String
-    /// The File's label among its Book's audiobooks, when it has more than
-    /// one, so their rows can be told apart; nil otherwise.
+    /// The File's label, when its row needs one to be told apart: a Book
+    /// with more than one audiobook, or a supplement; nil otherwise.
     let label: String?
     /// Keys the File's own cover, the audiobook's, never its Book's, which
     /// can be an ebook's; empty when the File has none.
@@ -44,8 +44,7 @@ extension CatalogStore {
     static let listenedSQL = """
         listened AS (
             SELECT f.id AS file_id, f.book_id, f.position, f.cover_version, f.duration_seconds, f.display_name,
-                (SELECT COUNT(*) FROM book_files g
-                 WHERE g.book_id = f.book_id AND g.file_type = 'm4b' AND g.file_role != 'supplement') AS audiobooks,
+                COUNT(*) OVER (PARTITION BY f.book_id) AS audiobooks,
                 (l.file_id IS NOT NULL OR p.file_id IS NOT NULL) AS started,
                 MAX(COALESCE(l.updated_at, 0), COALESCE(p.occurred_at, 0)) AS touched
             FROM book_files f
@@ -55,18 +54,20 @@ extension CatalogStore {
         )
         """
 
-    /// This device's place in a File to the whole percent, or else the
-    /// server's, as the Downloads tab shows it, for `listened l`.
-    private static let fileProgressSQL = """
-        COALESCE((SELECT percentage FROM local_progress WHERE file_id = l.file_id),
-            (SELECT percentage FROM reading_positions WHERE file_id = l.file_id)) AS progress
+    /// This device's place in the File in column to the whole percent, or
+    /// else the server's, as the Downloads tab shows it.
+    private static func fileProgressSQL(_ column: String) -> String {
         """
+        COALESCE((SELECT percentage FROM local_progress WHERE file_id = \(column)),
+            (SELECT percentage FROM reading_positions WHERE file_id = \(column))) AS progress
+        """
+    }
 
     private static func audiobook(_ row: Row, title: String, authors: String, progress: Double?) -> CarPlayAudiobook {
         let name: String = row["display_name"]
-        let several = (row["audiobooks"] as Int? ?? 1) > 1
+        let needsLabel = (row["audiobooks"] as Int? ?? 1) > 1 || (row["file_role"] as String?) == "supplement"
         return CarPlayAudiobook(fileID: row["file_id"], bookID: row["book_id"], title: title, authors: authors,
-                                label: several && !name.isEmpty ? name : nil, coverVersion: row["cover_version"],
+                                label: needsLabel && !name.isEmpty ? name : nil, coverVersion: row["cover_version"],
                                 // To the whole percent, so a list doesn't redraw
                                 // for each save of the place as it plays.
                                 progress: progress.map { (min(1, max(0, $0)) * 100).rounded() / 100 })
@@ -102,16 +103,18 @@ extension CatalogStore {
         return listed
     }
 
-    /// The audiobook Files on the phone, the newest Download first. A
-    /// Download being replaced still plays the copy it has.
+    /// The audiobook Files on the phone, supplements too, the newest
+    /// Download first. A Download being replaced still plays the copy it has.
     static func downloadedAudiobooks(_ db: Database) throws -> [CarPlayAudiobook] {
         try Row.fetchAll(db, sql: """
-            WITH \(listenedSQL)
-            SELECT l.*, b.title, b.authors, \(fileProgressSQL)
+            SELECT f.id AS file_id, f.book_id, f.cover_version, f.display_name, f.file_role, b.title, b.authors,
+                (SELECT COUNT(*) FROM book_files g
+                 WHERE g.book_id = f.book_id AND g.file_type = 'm4b' AND g.file_role != 'supplement') AS audiobooks,
+                \(fileProgressSQL("f.id"))
             FROM downloads d
-            JOIN listened l ON l.file_id = d.file_id
-            JOIN books b ON b.id = l.book_id
-            WHERE d.state = 'done' OR d.replacing
+            JOIN book_files f ON f.id = d.file_id
+            JOIN books b ON b.id = f.book_id
+            WHERE (d.state = 'done' OR d.replacing) AND f.file_type = 'm4b'
             ORDER BY d.requested_at DESC, d.file_id
             """).map { audiobook($0, title: $0["title"], authors: $0["authors"], progress: $0["progress"]) }
     }
@@ -137,7 +140,7 @@ extension CatalogStore {
         guard !books.isEmpty else { return [] }
         let files = try Row.fetchAll(db, sql: """
             WITH \(listenedSQL)
-            SELECT l.*, \(fileProgressSQL) FROM listened l JOIN books b ON b.id = l.book_id
+            SELECT l.*, \(fileProgressSQL("l.file_id")) FROM listened l JOIN books b ON b.id = l.book_id
             WHERE b.library_id = ?
             ORDER BY l.book_id, l.position
             """, arguments: [libraryID])

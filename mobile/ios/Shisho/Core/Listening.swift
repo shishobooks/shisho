@@ -53,7 +53,7 @@ enum ListeningRules {
     static let saveInterval: TimeInterval = 5
 
     /// A place this close to a File's end is the end: playing from it starts
-    /// over, and CarPlay's Continue Listening leaves the File out.
+    /// over, and CarPlay's Recent leaves the File out.
     static func isAtEnd(_ seconds: Double, duration: Double) -> Bool {
         duration > 0 && seconds >= duration - 0.5
     }

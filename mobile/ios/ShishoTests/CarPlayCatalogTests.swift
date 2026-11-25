@@ -3,8 +3,8 @@ import XCTest
 @testable import Shisho
 
 /// What CarPlay lists (#917), read from the account's database so it works
-/// with no phone screen and no connection: Continue Listening, the
-/// audiobooks downloaded, and each Library's audiobooks.
+/// with no phone screen and no connection: its tabs Recent (the audiobooks
+/// partway through), Downloads, and Library.
 final class CarPlayCatalogTests: XCTestCase {
     private var store: CatalogStore!
     /// Every audiobook in the fixtures is this long.
@@ -142,18 +142,27 @@ final class CarPlayCatalogTests: XCTestCase {
         XCTAssertEqual(listed.first?.progress, 0.3)
         XCTAssertNil(listed.last?.progress, "never started")
 
+        // A downloaded supplement is audio too, named so it isn't taken for
+        // its Book's audiobook.
+        XCTAssertEqual(try store.queueDownloads([41], at: Date(timeIntervalSince1970: 1_800_000_200)), [41])
+        XCTAssertNotNil(try store.markDownloaded(fileID: 41, sizeBytes: 100))
+        listed = try store.pool.read(CatalogStore.downloadedAudiobooks)
+        XCTAssertEqual(listed.map(\.fileID), [41, 30, 10])
+        XCTAssertEqual(listed.first?.label, "File 41")
+
         // One being replaced plays the copy it has meanwhile.
         try store.pool.write { try $0.execute(sql: "UPDATE downloads SET state = 'queued', replacing = 1 WHERE file_id = 30") }
         listed = try store.pool.read(CatalogStore.downloadedAudiobooks)
-        XCTAssertEqual(listed.map(\.fileID), [30, 10])
+        XCTAssertEqual(listed.map(\.fileID), [41, 30, 10])
     }
 
     /// The Library tab lists the Libraries with audiobooks, or the only one's
     /// audiobooks.
     func testTheLibraryTabListsLibrariesOrTheOnlyOnesAudiobooks() throws {
         XCTAssertEqual(try store.pool.read(CatalogStore.audiobookLibraries), [LibrarySummary(id: 1, name: "Fiction")])
-        XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in nil } }.count, 4,
-                       "the only Library's audiobooks")
+        XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in nil } }.compactMap {
+            if case .audiobook(let book) = $0 { book.fileID } else { nil }
+        }, [30, 20, 21, 10], "the only Library's audiobooks, in its order")
 
         try store.apply(page(#"{"entries":[\#(library(3, "Audio")),\#(book(6, "Anathem", library: 3, files: [(60, "m4b", "main")]))],"cursor":8}"#))
         XCTAssertEqual(try store.pool.read { try CatalogStore.carPlayLibraryTab($0) { _ in nil } },
