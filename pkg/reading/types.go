@@ -66,6 +66,11 @@ type SetRatingPayload struct {
 // the Books in libraries the user can reach can reorder those.
 type ReorderToReadPayload struct {
 	BookIDs []int `json:"book_ids" validate:"required,min=1,max=500,dive,min=1"`
+	// MovedBookID is the Book the user dragged, which orders the Shisho
+	// app's late moves against this one (ADR 0024). Without it, the Books
+	// outside the longest run left in order count as moved, which can't
+	// tell a Book dragged one place from its neighbor.
+	MovedBookID *int `json:"moved_book_id,omitempty" validate:"omitempty,min=1" tstype:"number"`
 }
 
 // BulkFinishPayload marks each of the named Books read, as marking one

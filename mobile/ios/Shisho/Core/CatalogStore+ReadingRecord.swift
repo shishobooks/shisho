@@ -226,11 +226,16 @@ extension CatalogStore {
                 payload = try encoder.encode(Shishoapp.JournalReadThroughDeletePayload(readThroughId: id, day: day))
             } else {
                 // Made here and not confirmed. One a status choice made that
-                // hasn't been sent goes with it, as if never chosen.
+                // hasn't been sent goes with it, as if never chosen, and so
+                // do the later choices about it not sent either.
                 let made = [Shishoapp.JournalEventType.readThroughStart, .readThroughFinish].map(\.rawValue)
-                try db.execute(sql: "DELETE FROM journal WHERE seq = ? AND type IN (?, ?) AND held_for IS NULL",
-                               arguments: [-id, made[0], made[1]])
-                if db.changesCount > 0 {
+                let maker = try String.fetchOne(db, sql: "SELECT type FROM journal WHERE seq = ? AND held_for IS NULL", arguments: [-id])
+                if let maker, made.contains(maker), let bookID {
+                    let later = [Shishoapp.JournalEventType.readThroughStart, .readThroughFinish, .readThroughAbandon,
+                                 .readThroughPause, .readThroughResume].map { "'\($0.rawValue)'" }.joined(separator: ",")
+                    try db.execute(sql: """
+                        DELETE FROM journal WHERE seq >= ? AND book_id = ? AND type IN (\(later)) AND held_for IS NULL
+                        """, arguments: [-id, bookID])
                     try rebuildLayer(db)
                     return nil
                 }
@@ -285,10 +290,9 @@ extension CatalogStore {
             fileID = file
             type = .positionClear
             payload = try encoder.encode(Shishoapp.JournalFilePayload(fileId: file))
-            // This device's own place goes at once, as the web's does; a
-            // move of it not yet sent goes too, since the clear comes after.
-            try db.execute(sql: "DELETE FROM journal WHERE type = ? AND file_id = ? AND held_for IS NULL",
-                           arguments: [Shishoapp.JournalEventType.readingPosition.rawValue, file])
+            // This device's own place goes at once, as the web's does. Moves
+            // not sent yet stay, since they can start or finish the Book;
+            // the server clears the place they leave, being older.
             try db.execute(sql: "DELETE FROM local_positions WHERE file_id = ?", arguments: [file])
             try db.execute(sql: "DELETE FROM reader_places WHERE file_id = ?", arguments: [file])
             try db.execute(sql: "DELETE FROM reading_positions WHERE file_id = ?", arguments: [file])
@@ -625,6 +629,27 @@ extension CatalogStore {
             INSERT OR REPLACE INTO unstated_sessions (event_id, payload, accepted_at)
             SELECT event_id, payload, ? FROM journal WHERE event_id = ? AND type = ?
             """, arguments: [now, eventID, Shishoapp.JournalEventType.readingSession.rawValue])
+    }
+
+    /// The feed brought a Book's record or Read-through: the changes to it
+    /// the server took in are in the synced copy now, so they stop being
+    /// laid over it. Syncs run one at a time, so what the feed brings after
+    /// a change was taken in already holds it.
+    static func confirmApplied(book: Int, in db: Database) throws {
+        try db.execute(sql: """
+            DELETE FROM journal_applied WHERE COALESCE(book_id, (SELECT f.book_id FROM book_files f WHERE f.id = file_id)) = ?
+                AND type NOT LIKE 'list_%'
+            """, arguments: [book])
+    }
+
+    /// The feed brought a List: the changes to it the server took in, named
+    /// by its id or the local id this installation made it under.
+    static func confirmApplied(list: Int, localID: String?, in db: Database) throws {
+        var refs = ["%\"list_id\":\(list),%", "%\"list_id\":\(list)}"]
+        if let localID, !localID.isEmpty { refs.append("%\"local_id\":\"\(localID)\"%") }
+        for ref in refs {
+            try db.execute(sql: "DELETE FROM journal_applied WHERE type LIKE 'list_%' AND CAST(payload AS TEXT) LIKE ?", arguments: [ref])
+        }
     }
 
     /// The feed caught up after since: what the server took in before then

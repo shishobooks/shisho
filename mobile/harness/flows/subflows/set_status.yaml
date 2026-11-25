@@ -10,7 +10,11 @@ appId: ${APP_ID}
 - tapOn:
     id: book.detail.status
     retryTapIfNoChange: true
-- tapOn: ${ITEM}
+# A tap a stall drops leaves the menu open, so it's tapped again; one that
+# landed closed the menu.
+- tapOn:
+    text: ${ITEM}
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: book.detail.status

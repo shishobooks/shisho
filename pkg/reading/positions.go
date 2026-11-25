@@ -297,7 +297,9 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			underway = finished
 			finishing = false
 		case starting:
-			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, now, u.FileID)
+			// Dated when the reading began, not when it arrived, so a choice
+			// the Shisho app made offline after it orders after it (ADR 0024).
+			underway, err = startReadThrough(ctx, tx, u.UserID, bookID, beginDay, listeningSince, u.FileID)
 			if err != nil {
 				return err
 			}
@@ -309,7 +311,7 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 		// queue does, saves the place but doesn't undo the pause.
 		case underway != nil && underway.Paused && progress && !finishing && !occurredAt.Before(underway.UpdatedAt):
 			underway.Paused = false
-			underway.UpdatedAt = now
+			underway.UpdatedAt = occurredAt
 			if _, err := tx.NewUpdate().Model(underway).Column("paused", "updated_at").WherePK().Exec(ctx); err != nil {
 				return errors.WithStack(err)
 			}
@@ -321,12 +323,12 @@ func (svc *Service) UpdatePosition(ctx context.Context, u PositionUpdate) (*Upda
 			underway.Outcome = models.ReadThroughOutcomeFinished
 			underway.Paused = false
 			underway.EndDay = &day
-			underway.UpdatedAt = now
+			underway.UpdatedAt = occurredAt
 			_, err := tx.NewUpdate().Model(underway).Column("outcome", "paused", "end_day", "updated_at").WherePK().Exec(ctx)
 			if err != nil {
 				return errors.WithStack(err)
 			}
-			if err := leaveToRead(ctx, tx, u.UserID, bookID, now); err != nil {
+			if err := leaveToRead(ctx, tx, u.UserID, bookID, occurredAt); err != nil {
 				return err
 			}
 			// A reported finish is the reader's own, so it's never undone.

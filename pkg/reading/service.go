@@ -776,6 +776,13 @@ func (svc *Service) RemoveFromToRead(ctx context.Context, userID, bookID int) er
 // library the user can no longer reach) keep theirs; ids not on To Read are
 // ignored. Positions are renumbered from 1.
 func (svc *Service) ReorderToRead(ctx context.Context, userID int, bookIDs []int) error {
+	return svc.ReorderToReadMoving(ctx, userID, bookIDs, nil)
+}
+
+// ReorderToReadMoving is ReorderToRead for a reorder that names the Book
+// the user moved, which alone is marked moved; nil works it out from the
+// orders (MovedInReorder).
+func (svc *Service) ReorderToReadMoving(ctx context.Context, userID int, bookIDs []int, movedBookID *int) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
 		var current []*models.UserBook
 		err := tx.NewSelect().
@@ -818,6 +825,9 @@ func (svc *Service) ReorderToRead(ctx context.Context, userID int, bookIDs []int
 			before[i] = ub.BookID
 		}
 		moved := MovedInReorder(before, order)
+		if movedBookID != nil {
+			moved = map[int]bool{*movedBookID: true}
+		}
 		now := time.Now()
 		for i, bookID := range order {
 			position := i + 1

@@ -42,6 +42,12 @@ func CreateListIn(ctx context.Context, db bun.IDB, opts CreateListOptions, now t
 	return list, errors.WithStack(err)
 }
 
+// DeleteListIn deletes listID in db, as DeleteList does.
+func DeleteListIn(ctx context.Context, db bun.IDB, listID int) error {
+	_, err := db.NewDelete().Model((*models.List)(nil)).Where("id = ?", listID).Exec(ctx)
+	return errors.WithStack(err)
+}
+
 // RenameListIn renames listID in db, refusing with ErrListNameTaken a name
 // its owner already uses.
 func RenameListIn(ctx context.Context, db bun.IDB, listID int, name string, now time.Time) error {

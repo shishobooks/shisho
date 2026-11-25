@@ -46,7 +46,7 @@ type LateEvent struct {
 // underway to end.
 var ErrLateNothingUnderway = errors.New("nothing was underway to mark Did Not Finish")
 
-// run runs change in a transaction that claims e first.
+// runLate runs change in a transaction that runs claim first.
 func (svc *Service) runLate(ctx context.Context, claim func(ctx context.Context, tx bun.Tx) error,
 	change func(ctx context.Context, tx bun.Tx) error) error {
 	return svc.db.RunInTx(ctx, &sql.TxOptions{}, func(ctx context.Context, tx bun.Tx) error {
@@ -113,11 +113,14 @@ func (svc *Service) LateStart(ctx context.Context, e LateEvent) error {
 }
 
 // LateEnd ends the Read-through underway with outcome as End does, dated
-// by the day e happened. Dated before a later Reference choice, or before
+// by the day e happened. Dated before a later explicit choice, or before
 // the Read-through underway began, it's recorded as an ended Read-through
 // with no begin day that takes no Reading Sessions, leaving the status and
-// To Read as they are (ADR 0028). Marking Did Not Finish with nothing
-// underway is refused with ErrLateNothingUnderway.
+// To Read as they are (ADR 0028), so Reading History keeps the pass. A
+// later choice that itself ended a Read-through on or after that day, such
+// as Mark as read on the web, already says how it ended, and the late one
+// adds nothing. Marking Did Not Finish with nothing underway is refused with
+// ErrLateNothingUnderway.
 func (svc *Service) LateEnd(ctx context.Context, e LateEvent, outcome string) error {
 	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		ub, err := userBookAt(ctx, tx, e.UserID, e.BookID)
@@ -130,7 +133,13 @@ func (svc *Service) LateEnd(ctx context.Context, e LateEvent, outcome string) er
 		}
 		if after(ub.StatusChosenAt, e.At) {
 			if !ub.Reference {
-				return nil
+				ended, err := tx.NewSelect().Model((*models.ReadThrough)(nil)).
+					Where("rt.user_id = ? AND rt.book_id = ? AND rt.outcome != ? AND rt.end_day >= ?",
+						e.UserID, e.BookID, models.ReadThroughOutcomeUnderway, day).
+					Exists(ctx)
+				if err != nil || ended {
+					return errors.WithStack(err)
+				}
 			}
 			return insertHistoryOnly(ctx, tx, e, outcome, day)
 		}
@@ -138,9 +147,9 @@ func (svc *Service) LateEnd(ctx context.Context, e LateEvent, outcome string) er
 		if err != nil {
 			return err
 		}
-		if underway != nil && underway.BeginDay != nil && day < *underway.BeginDay {
-			// Underway since a later day, as one a device started from
-			// reading after this, so this ended an earlier pass.
+		if underway != nil && (underway.BeginDay != nil && day < *underway.BeginDay || underway.CreatedAt.After(e.At)) {
+			// Underway since after this, as one a device started from
+			// reading later, so this ended an earlier pass.
 			return insertHistoryOnly(ctx, tx, e, outcome, day)
 		}
 		err = end(ctx, tx, e.UserID, e.BookID, outcome, day, e.At)
@@ -197,20 +206,19 @@ func (svc *Service) LateReference(ctx context.Context, e LateEvent, mark bool) e
 		if err != nil || after(ub.StatusChosenAt, e.At) {
 			return err
 		}
-		switch {
-		case mark && !ub.Reference:
+		if mark && !ub.Reference {
 			return markReference(ctx, tx, e.UserID, e.BookID, e.At)
-		case !mark && ub.Reference:
-			return chooseStatus(ctx, tx, e.UserID, e.BookID, false, e.At)
 		}
-		return nil
+		// Already as chosen, it's still the latest choice, so an older one
+		// from another phone arriving after it doesn't apply.
+		return chooseStatus(ctx, tx, e.UserID, e.BookID, mark, e.At)
 	})
 }
 
 // LateDeleteReadThrough deletes one of the user's Read-throughs as
 // DeleteReadThrough does: rtID, or with rtID nil, the one underway in
-// bookID, unless that began after the day e happened. One gone already
-// stays gone.
+// bookID, unless that began after e, a pass the phone never saw. One gone
+// already stays gone.
 func (svc *Service) LateDeleteReadThrough(ctx context.Context, e LateEvent, rtID *int) error {
 	return svc.runLate(ctx, e.Claim, func(ctx context.Context, tx bun.Tx) error {
 		var rt *models.ReadThrough
@@ -232,7 +240,7 @@ func (svc *Service) LateDeleteReadThrough(ctx context.Context, e LateEvent, rtID
 			if err != nil {
 				return err
 			}
-			if underway.BeginDay != nil && *underway.BeginDay > day {
+			if underway.BeginDay != nil && *underway.BeginDay > day || underway.CreatedAt.After(e.At) {
 				return nil
 			}
 			rt = underway

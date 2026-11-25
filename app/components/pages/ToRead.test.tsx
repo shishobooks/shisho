@@ -19,7 +19,7 @@ vi.mock("@/components/library/DraggableBookList", () => ({
     onReorder,
   }: {
     books: { id: number; title: string }[];
-    onReorder: (ids: number[]) => Promise<unknown>;
+    onReorder: (ids: number[], movedId: number) => Promise<unknown>;
   }) => (
     <div>
       <ol aria-label="Queue">
@@ -30,9 +30,10 @@ vi.mock("@/components/library/DraggableBookList", () => ({
       <button
         onClick={() => {
           const ids = books.map((book) => book.id);
-          onReorder([ids[ids.length - 1], ...ids.slice(0, -1)]).catch(
-            () => undefined,
-          );
+          onReorder(
+            [ids[ids.length - 1], ...ids.slice(0, -1)],
+            ids[ids.length - 1],
+          ).catch(() => undefined);
         }}
       >
         Move last to top
@@ -156,6 +157,7 @@ describe("ToRead", () => {
       expect(put?.[0]).toBe("/api/reading/to-read/order");
       expect(JSON.parse(String(put?.[1]?.body))).toEqual({
         book_ids: [3, 1, 2],
+        moved_book_id: 3,
       });
     });
   });

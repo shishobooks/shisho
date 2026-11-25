@@ -35,40 +35,7 @@ type CreateListOptions struct {
 }
 
 func (svc *Service) CreateList(ctx context.Context, opts CreateListOptions) (*models.List, error) {
-	now := time.Now()
-
-	defaultSort := opts.DefaultSort
-	if defaultSort == "" {
-		if opts.IsOrdered {
-			defaultSort = models.ListSortManual
-		} else {
-			defaultSort = models.ListSortAddedAtDesc
-		}
-	}
-
-	list := &models.List{
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		UserID:      opts.UserID,
-		Name:        opts.Name,
-		Description: opts.Description,
-		IsOrdered:   opts.IsOrdered,
-		DefaultSort: defaultSort,
-	}
-
-	_, err := svc.db.
-		NewInsert().
-		Model(list).
-		Returning("*").
-		Exec(ctx)
-	if database.IsUniqueViolation(err) {
-		return nil, ErrListNameTaken
-	}
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	return list, nil
+	return CreateListIn(ctx, svc.db, opts, time.Now())
 }
 
 type RetrieveListOptions struct {
@@ -643,6 +610,9 @@ func (svc *Service) RemoveBooks(ctx context.Context, opts RemoveBooksOptions) er
 type ReorderBooksOptions struct {
 	ListID  int
 	BookIDs []int // New order - book IDs in desired sequence
+	// MovedBookID is the Book the user dragged, or nil to work it out from
+	// the orders (reading.MovedInReorder).
+	MovedBookID *int
 }
 
 func (svc *Service) ReorderBooks(ctx context.Context, opts ReorderBooksOptions) error {
@@ -658,6 +628,9 @@ func (svc *Service) ReorderBooks(ctx context.Context, opts ReorderBooksOptions) 
 			return errors.WithStack(err)
 		}
 		moved := reading.MovedInReorder(before, opts.BookIDs)
+		if opts.MovedBookID != nil {
+			moved = map[int]bool{*opts.MovedBookID: true}
+		}
 		now := time.Now()
 		for i, bookID := range opts.BookIDs {
 			sortOrder := i + 1

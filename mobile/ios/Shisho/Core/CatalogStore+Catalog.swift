@@ -260,6 +260,7 @@ extension CatalogStore {
             try db.execute(sql: "DELETE FROM books WHERE id = ? AND library_id = ?", arguments: [entry.id, entry.libraryId])
         case .userBook:
             touched.reading = true
+            try confirmApplied(book: entry.id, in: db)
             if entry.deleted {
                 try db.execute(sql: "DELETE FROM synced_user_books WHERE book_id = ?", arguments: [entry.id])
             } else if let record = entry.userBook {
@@ -275,6 +276,7 @@ extension CatalogStore {
             }
         case .list:
             touched.reading = true
+            try confirmApplied(list: entry.id, localID: entry.list?.localId, in: db)
             if entry.deleted {
                 try dropList(entry.id, in: db)
             } else if let list = entry.list {
@@ -464,8 +466,9 @@ extension CatalogStore {
             let recorded = Set(try Int.fetchAll(db, sql: "SELECT library_id FROM library_access"))
             let had = recorded.union(try Int.fetchAll(db, sql: "SELECT id FROM libraries"))
             let lostLibraries = had.subtracting(libraries)
-            for lost in lostLibraries {
-                try CatalogStore.dropLibrary(lost, in: db)
+            var lost = !lostLibraries.isEmpty
+            for library in lostLibraries {
+                try CatalogStore.dropLibrary(library, in: db)
             }
             let gained = libraries.subtracting(recorded)
             let behind = Set(access.behindLibraryIds)
@@ -477,8 +480,9 @@ extension CatalogStore {
             let lists = Set(access.listIds)
             let recordedLists = Set(try Int.fetchAll(db, sql: "SELECT list_id FROM list_access"))
             let hadLists = recordedLists.union(try Int.fetchAll(db, sql: "SELECT id FROM synced_lists"))
-            for lost in hadLists.subtracting(lists) {
-                try CatalogStore.dropList(lost, in: db)
+            for gone in hadLists.subtracting(lists) {
+                try CatalogStore.dropList(gone, in: db)
+                lost = true
             }
             if !gained.isEmpty || !lostLibraries.isEmpty {
                 try db.execute(sql: "UPDATE list_access SET complete = 0")
@@ -486,7 +490,9 @@ extension CatalogStore {
             for id in lists.subtracting(recordedLists) {
                 try db.execute(sql: "INSERT OR REPLACE INTO list_access (list_id, complete) VALUES (?, 0)", arguments: [id])
             }
-            try CatalogStore.rebuildLayer(db)
+            if lost {
+                try CatalogStore.rebuildLayer(db)
+            }
         }
     }
 

@@ -110,7 +110,8 @@ interface DraggableBookListProps {
   /** Who added a book, shown on its card, or undefined to show no one. */
   addedByUsernameFor?: (bookId: number) => string | undefined;
   // Rejecting restores the order from before the drag.
-  onReorder: (bookIds: number[]) => Promise<unknown>;
+  // movedId is the Book dragged, which the server marks as the one moved.
+  onReorder: (bookIds: number[], movedId: number) => Promise<unknown>;
 }
 
 export const DraggableBookList = ({
@@ -194,7 +195,10 @@ export const DraggableBookList = ({
         // order unchanged, and an unchanged refetch would not resync the
         // props, so put the server order back here.
         const seq = ++reorderSeqRef.current;
-        onReorder(newItems.map((item) => item.id)).catch(() => {
+        onReorder(
+          newItems.map((item) => item.id),
+          active.id as number,
+        ).catch(() => {
           if (seq === reorderSeqRef.current) setItems(booksRef.current);
         });
       }

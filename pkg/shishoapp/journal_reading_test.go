@@ -242,6 +242,39 @@ func TestJournal_ReferenceOrdering(t *testing.T) {
 		assert.Equal(t, 3, f.count(`SELECT COUNT(*) FROM reading_sessions WHERE read_through_id IS NULL`))
 	})
 
+	// A finish made offline before a later choice that wasn't Reference is
+	// kept as history, unless that choice ended the pass itself.
+	t.Run("a finish before a later non-Reference choice is kept as history", func(t *testing.T) {
+		t.Parallel()
+		f := newReadingFixture(t)
+		today := func(id int) map[string]any { return map[string]any{"book_id": id, "day": f.ago(time.Hour).Format(time.DateOnly)} }
+		require.NoError(t, f.h.reading.AddToRead(f.ctx, f.userID, 1))
+		require.NoError(t, f.h.reading.End(f.ctx, f.userID, 2, "finished", f.now.Format(time.DateOnly)))
+		assert.Equal(t, []string{"start:accepted", "finish:accepted", "abandon:accepted"}, f.send(
+			event("start", JournalEventReadThroughStart, f.ago(2*time.Hour), today(1)),
+			event("finish", JournalEventReadThroughFinish, f.ago(time.Hour), today(1)),
+			event("abandon", JournalEventReadThroughAbandon, f.ago(time.Hour), today(2)),
+		))
+		assert.Equal(t, []string{"finished history"}, f.readThroughs(1))
+		assert.Equal(t, "to_read", f.status(1))
+		assert.Equal(t, []string{"finished"}, f.readThroughs(2), "the web's Mark as read already ended it")
+	})
+
+	// A delete or finish of the Read-through underway leaves one started
+	// after it alone, even the same day.
+	t.Run("a late delete or finish leaves a later pass alone", func(t *testing.T) {
+		t.Parallel()
+		f := newReadingFixture(t)
+		today := map[string]any{"book_id": 1, "day": f.now.Format(time.DateOnly)}
+		require.NoError(t, f.h.reading.Start(f.ctx, f.userID, 1, f.now.Format(time.DateOnly)))
+		f.exec(`UPDATE user_books SET status_chosen_at = ? WHERE user_id = ?`, f.ago(3*time.Hour), f.userID)
+		assert.Equal(t, []string{"delete:accepted", "abandon:accepted"}, f.send(
+			event("delete", JournalEventReadThroughDelete, f.ago(2*time.Hour), today),
+			event("abandon", JournalEventReadThroughAbandon, f.ago(2*time.Hour), today),
+		))
+		assert.Equal(t, []string{"underway", "abandoned history"}, f.readThroughs(1))
+	})
+
 	// A Reference choice made offline before a later explicit choice
 	// elsewhere doesn't apply, including Remove from Reference.
 	t.Run("a Reference choice before a later choice doesn't apply", func(t *testing.T) {
@@ -285,6 +318,20 @@ func TestJournal_ReferenceOrdering(t *testing.T) {
 		require.NoError(t, f.h.reading.End(f.ctx, f.userID, 1, "finished", "2026-03-02"))
 		f.send(event("ref", JournalEventReferenceMark, at, book(1)))
 		assert.Equal(t, "read", f.status(1))
+	})
+
+	// A choice that matches the Book's state is still the latest choice:
+	// another phone's older one, arriving after it, doesn't apply.
+	t.Run("a choice matching the state still orders later ones", func(t *testing.T) {
+		t.Parallel()
+		f := newReadingFixture(t)
+		f.choose(1, true, f.ago(2*time.Hour))
+		assert.Equal(t, []string{"remove:accepted", "keep:accepted", "older:accepted"}, f.send(
+			event("remove", JournalEventReferenceRemove, f.ago(90*time.Minute), book(1)),
+			event("keep", JournalEventReferenceRemove, f.ago(30*time.Minute), book(1)),
+			event("older", JournalEventReferenceMark, f.ago(time.Hour), book(1)),
+		))
+		assert.Empty(t, f.status(1))
 	})
 
 	// Equal instants: the event applies, as the later arrival.
@@ -555,4 +602,49 @@ func TestStats_SendsTheUsersReadingStats(t *testing.T) {
 	year := f.now.Year()
 	rec = f.do(call{path: "/mobile/stats?year=" + strconv.Itoa(year), credential: f.credential})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+}
+
+// A reorder that names the Book dragged marks that Book, even where the
+// orders alone can't tell it from its neighbor.
+func TestReorderToRead_MarksTheBookNamedAsMoved(t *testing.T) {
+	t.Parallel()
+	f := newReadingFixture(t)
+	for _, id := range []int{1, 2, 3} {
+		require.NoError(t, f.h.reading.AddToRead(f.ctx, f.userID, id))
+	}
+	f.exec(`UPDATE user_books SET to_read_changed_at = NULL`)
+	moved := 1
+	require.NoError(t, f.h.reading.ReorderToReadMoving(f.ctx, f.userID, []int{2, 1, 3}, &moved))
+	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM user_books WHERE to_read_changed_at IS NOT NULL AND book_id = 1`))
+	assert.Equal(t, 1, f.count(`SELECT COUNT(*) FROM user_books WHERE to_read_changed_at IS NOT NULL`))
+}
+
+// Status changes made offline after reading offline apply in the order they
+// happened, though the reading started the Read-through only when it
+// arrived: a pause, then Mark as read, and Mark as not started on another.
+func TestJournal_StatusChangesAfterReadingOffline(t *testing.T) {
+	t.Parallel()
+	f := newReadingFixture(t)
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, audiobook_duration_seconds)
+		VALUES (5, 1, 1, '/dune.m4b', 'm4b', 1, 6000)`)
+	f.exec(`INSERT INTO files (id, library_id, book_id, filepath, file_type, filesize_bytes, audiobook_duration_seconds)
+		VALUES (6, 1, 2, '/emma.m4b', 'm4b', 1, 6000)`)
+	listen := func(fileID int) map[string]any {
+		p := position(fileID, 120, 0.02)
+		p["listened_seconds"] = 90
+		return p
+	}
+	assert.Equal(t, []string{"listen:accepted", "pause:accepted", "listen2:accepted", "notStarted:accepted"}, f.send(
+		event("listen", JournalEventReadingPosition, f.ago(time.Hour), listen(5)),
+		event("pause", JournalEventReadThroughPause, f.ago(50*time.Minute), book(1)),
+		event("listen2", JournalEventReadingPosition, f.ago(time.Hour), listen(6)),
+		event("notStarted", JournalEventReadThroughDelete, f.ago(50*time.Minute), map[string]any{"book_id": 2, "day": f.now.Format(time.DateOnly)}),
+	))
+	assert.Equal(t, []string{"underway paused"}, f.readThroughs(1))
+	assert.Empty(t, f.readThroughs(2))
+
+	today := map[string]any{"book_id": 1, "day": f.now.Format(time.DateOnly)}
+	assert.Equal(t, []string{"read:accepted"}, f.send(event("read", JournalEventReadThroughFinish, f.ago(40*time.Minute), today)))
+	assert.Equal(t, []string{"finished"}, f.readThroughs(1))
+	assert.Equal(t, "read", f.status(1))
 }

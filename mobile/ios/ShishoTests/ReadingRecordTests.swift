@@ -136,6 +136,55 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertEqual(try status(2), "reference")
     }
 
+    func testAReadThroughStartedByReadingKeepsItsIDSaveToSave() throws {
+        let (sitting, _) = ListeningRules.play(nil, fileID: 10, at: now, percentage: 0)
+        try store.recordPosition(fileID: 10, seconds: 12, percentage: 0.02, at: now.addingTimeInterval(12), atEnd: false, sitting: sitting)
+        let first = try XCTUnwrap(store.pool.read { try CatalogStore.history($0) }.first?.id)
+        try store.recordPosition(fileID: 10, seconds: 20, percentage: 0.03, at: now.addingTimeInterval(20), atEnd: false, sitting: sitting)
+        XCTAssertEqual(try store.pool.read { try CatalogStore.history($0) }.map(\.id), [first])
+    }
+
+    func testClearingAPlaceKeepsTheMovesNotSent() throws {
+        let (sitting, _) = ListeningRules.play(nil, fileID: 10, at: now, percentage: 0)
+        try store.recordPosition(fileID: 10, seconds: 12, percentage: 0.02, at: now.addingTimeInterval(12), atEnd: false, sitting: sitting)
+        try store.record(.clearPosition(file: 10), at: now.addingTimeInterval(30))
+        XCTAssertEqual(try journalTypes(), ["reading_position", "position_clear"])
+        XCTAssertEqual(try status(1), "currently_reading")
+        XCTAssertNil(try store.pool.read { try CatalogStore.localPlace($0, fileID: 10) })
+    }
+
+    func testDeletingAReadThroughMadeOfflineDropsEveryChoiceAboutIt() throws {
+        try store.record(.start(book: 1), at: now)
+        try store.record(.finish(book: 1), at: now)
+        let id = try XCTUnwrap(store.pool.read { try CatalogStore.history($0) }.first?.id)
+        try store.record(.deleteReadThrough(id: id), at: now)
+        XCTAssertTrue(try store.pool.read { try CatalogStore.history($0) }.isEmpty)
+        XCTAssertEqual(try journalTypes(), [])
+    }
+
+    func testAChangeIsConfirmedWhenTheFeedBringsItsBook() throws {
+        try store.record(.finish(book: 1), at: now)
+        try answer(.accepted)
+        // The server's day differs from the phone's, as with a time zone set.
+        try store.apply(page("""
+        {"entries":[{"kind":"read_through","id":9,"read_through":{"id":9,"book_id":1,"end_day":"2000-01-02","outcome":"finished","paused":false}}],
+         "cursor":3}
+        """))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.history($0) }.map(\.id), [9])
+        XCTAssertEqual(try store.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM journal_applied") }, 0)
+    }
+
+    func testAFinishTheFeedBroughtBackIsntShownTwice() throws {
+        try store.record(.finish(book: 1), at: now)
+        let day = CatalogStore.day(now)
+        try answer(.accepted)
+        try store.apply(page("""
+        {"entries":[{"kind":"read_through","id":9,"read_through":{"id":9,"book_id":1,"end_day":"\(day)","outcome":"finished","paused":false}}],
+         "cursor":3}
+        """))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.history($0) }.map(\.id), [9])
+    }
+
     func testMarkingReferenceDissolvesTheReadThroughUnderway() throws {
         try store.record(.start(book: 1), at: now)
         try store.record(.markReference(book: 1), at: now)
@@ -226,6 +275,21 @@ final class ReadingWordingTests: XCTestCase {
         XCTAssertEqual(HistoryText.days(entry("finished", "2026-03-01", "2026-03-09")), "Mar 1, 2026 to Mar 9, 2026")
         XCTAssertEqual(HistoryText.days(entry("finished", nil, "2026-03-09")), "Ended Mar 9, 2026, start date unknown")
         XCTAssertEqual(HistoryText.days(entry("abandoned", nil, nil)), "Dates unknown")
+    }
+
+    func testADragIsAMoveAfterItsNewNeighbor() {
+        XCTAssertNil(ReadingLayer.move(in: [1, 2, 3], from: 1, to: 1))
+        XCTAssertEqual(ReadingLayer.move(in: [1, 2, 3], from: 2, to: 0).map { [$0.book, $0.after ?? 0] }, [3, 0])
+        XCTAssertEqual(ReadingLayer.move(in: [1, 2, 3], from: 0, to: 2).map { [$0.book, $0.after ?? 0] }, [1, 3])
+    }
+
+    func testPlacesAreNamedAsTheWebNamesThem() {
+        let places = StatsText.places([
+            Shishoapp.StatsPlace(source: .webReader, readingSeconds: 600, listeningSeconds: 120),
+            Shishoapp.StatsPlace(source: .shishoApp, deviceId: "me", deviceName: "iPhone", listeningSeconds: 900),
+            Shishoapp.StatsPlace(source: .kobo, deviceId: "k", deviceName: "Kobo Libra", readingSeconds: 60),
+        ], ownDeviceID: "me")
+        XCTAssertEqual(places.map(\.label), ["iPhone (this device)", "Shisho web reader", "Shisho web player", "Kobo Libra"])
     }
 
     func testMovesFollowTheWebsRule() {

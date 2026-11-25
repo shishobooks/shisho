@@ -132,6 +132,12 @@ struct ListDetailView: View {
     @State private var books: [BookSummary]?
     @State private var downloadable: DownloadAllButton.Files?
     @State private var abilities: ListAbilities?
+    /// The List's id now: a List made here and not synced yet has a
+    /// temporary one until the feed brings the server's, found by the id
+    /// this installation made it under.
+    @State private var resolvedID: Int?
+    @State private var localID: String?
+    private var shownID: Int { resolvedID ?? listID }
     @State private var editing = false
     @State private var renaming = false
     @State private var confirmingDelete = false
@@ -225,34 +231,44 @@ struct ListDetailView: View {
             }
         }
         .sheet(isPresented: $editing) {
-            ListEditSheet(listID: listID, ordered: abilities?.ordered ?? false)
+            ListEditSheet(listID: shownID, ordered: abilities?.ordered ?? false)
         }
         .sheet(isPresented: $renaming) {
             ListFormSheet(title: String(localized: "Rename List"), name: (list ?? nil)?.name ?? initialName, asksOrdered: false) { name, _ in
-                model.change(.renameList(id: listID, name: name))
+                model.change(.renameList(id: shownID, name: name))
             }
         }
         .alert(String(localized: "Delete this List?"), isPresented: $confirmingDelete) {
             Button(String(localized: "Delete"), role: .destructive) {
-                model.change(.deleteList(id: listID))
+                model.change(.deleteList(id: shownID))
                 model.popToRoot(.lists)
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
             Text("The List goes for everyone it's shared with. The Books in it stay in your Libraries.")
         }
-        .observing(model.session?.store, id: listID, into: $abilities) { [listID] db in
-            try CatalogStore.listAbilities(db, listID: listID).map { ListAbilities(ordered: $0.ordered, permission: $0.permission) }
+        .task(id: listID) {
+            guard listID < 0 else { return }
+            localID = try? await model.session?.store.pool.read { [listID] db in
+                try String.fetchOne(db, sql: "SELECT local_id FROM lists WHERE id = ?", arguments: [listID])
+            }
+        }
+        .observing(model.session?.store, id: localID ?? "", into: $resolvedID) { [localID, listID] db in
+            guard let localID else { return listID }
+            return try Int.fetchOne(db, sql: "SELECT id FROM lists WHERE local_id = ? ORDER BY id DESC LIMIT 1", arguments: [localID]) ?? listID
+        }
+        .observing(model.session?.store, id: shownID, into: $abilities) { [shownID] db in
+            try CatalogStore.listAbilities(db, listID: shownID).map { ListAbilities(ordered: $0.ordered, permission: $0.permission) }
                 ?? ListAbilities(ordered: false, permission: "")
         }
-        .observing(model.session?.store, id: listID, into: $downloadable) { [listID] db in
-            try DownloadAllButton.Files.fetch(db, listID: listID)
+        .observing(model.session?.store, id: shownID, into: $downloadable) { [shownID] db in
+            try DownloadAllButton.Files.fetch(db, listID: shownID)
         }
-        .observing(model.session?.store, id: listID, into: $list) { [listID] db in
-            try CatalogStore.list(db, id: listID)
+        .observing(model.session?.store, id: shownID, into: $list) { [shownID] db in
+            try CatalogStore.list(db, id: shownID)
         }
-        .observing(model.session?.store, id: listID, into: $books) { [listID] db in
-            try CatalogStore.listBooks(db, listID: listID)
+        .observing(model.session?.store, id: shownID, into: $books) { [shownID] db in
+            try CatalogStore.listBooks(db, listID: shownID)
         }
     }
 }
@@ -335,10 +351,7 @@ private struct ListEditSheet: View {
     }
 
     private func move(from: Int, to: Int) {
-        guard var order = books?.map(\.id), order.indices.contains(from), from != to else { return }
-        let id = order.remove(at: from)
-        let target = min(max(0, to), order.count)
-        order.insert(id, at: target)
-        model.change(.moveInList(id: listID, book: id, after: target == 0 ? nil : order[target - 1]))
+        guard let move = ReadingLayer.move(in: books?.map(\.id) ?? [], from: from, to: to) else { return }
+        model.change(.moveInList(id: listID, book: move.book, after: move.after))
     }
 }

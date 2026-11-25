@@ -9,10 +9,12 @@ struct ReadingControlsState: Equatable, Sendable {
     var underway: (id: Int, pending: Bool)?
     var readBefore = false
     var toReadPlace: Int?
+    /// A change to the Book's Read-throughs the server hasn't confirmed.
+    var pending = false
 
     static func == (a: Self, b: Self) -> Bool {
         a.status == b.status && a.rating == b.rating && a.underway?.id == b.underway?.id && a.underway?.pending == b.underway?.pending
-            && a.readBefore == b.readBefore && a.toReadPlace == b.toReadPlace
+            && a.readBefore == b.readBefore && a.toReadPlace == b.toReadPlace && a.pending == b.pending
     }
 
     static func fetch(_ db: Database, bookID: Int) throws -> ReadingControlsState {
@@ -20,7 +22,9 @@ struct ReadingControlsState: Equatable, Sendable {
         return ReadingControlsState(status: standing.status, rating: standing.rating,
                                     underway: try CatalogStore.underwayReadThrough(db, bookID: bookID),
                                     readBefore: try CatalogStore.readBefore(db, bookID: bookID),
-                                    toReadPlace: try CatalogStore.toReadPlace(db, bookID: bookID))
+                                    toReadPlace: try CatalogStore.toReadPlace(db, bookID: bookID),
+                                    pending: try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM read_throughs WHERE book_id = ? AND pending)",
+                                                               arguments: [bookID]) ?? false)
     }
 }
 
@@ -121,13 +125,17 @@ struct BookReadingControls: View {
         }
         .alert(String(localized: "Mark as Reference?"), isPresented: $confirmingReference) {
             Button(String(localized: "Mark as Reference"), role: .destructive) { model.change(.markReference(book: bookID)) }
+                .accessibilityIdentifier("reference.confirm")
             Button(String(localized: "Cancel"), role: .cancel) {}
+                .accessibilityIdentifier("reference.cancel")
         } message: {
             Text("Your current Read-through of this book is deleted from your reading history, and this can't be undone. The reading time recorded during it still counts toward your Reading Stats, and every file keeps its place. While the book is Reference, opening it never starts or finishes a Read-through.")
         }
         .alert(String(localized: "Mark as not started?"), isPresented: $confirmingNotStarted) {
             Button(String(localized: "Mark as not started"), role: .destructive) { model.change(.notStarted(book: bookID)) }
+                .accessibilityIdentifier("notStarted.confirm")
             Button(String(localized: "Cancel"), role: .cancel) {}
+                .accessibilityIdentifier("notStarted.cancel")
         } message: {
             Text("Your current Read-through is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there.")
         }
@@ -180,9 +188,13 @@ struct BookReadingControls: View {
                 statusLabel(chevron: true)
             }
             .accessibilityLabel(String(localized: "Reading status: \(status.map(ReadingStatusLabel.text) ?? String(localized: "Not started"))"))
+            .accessibilityValue(state?.pending == true ? String(localized: "Not synced yet") : "")
             .accessibilityIdentifier("book.detail.status")
         } else if status != nil {
             statusLabel(chevron: false)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(String(localized: "Reading status: \(status.map(ReadingStatusLabel.text) ?? "")"))
+                .accessibilityValue(state?.pending == true ? String(localized: "Not synced yet") : "")
                 .accessibilityIdentifier("book.detail.status")
         }
     }
@@ -199,7 +211,7 @@ struct BookReadingControls: View {
                     .foregroundStyle(Theme.mutedForeground)
                     .accessibilityHidden(true)
             }
-            if state?.underway?.pending == true {
+            if state?.pending == true {
                 PendingMark()
             }
         }
@@ -211,13 +223,12 @@ struct BookReadingControls: View {
 }
 
 /// The small mark on something the server hasn't confirmed yet, as Reading
-/// History marks reading still on the device.
+/// History marks reading still on the device. It's drawn only: what it sits
+/// in says "Not synced yet" to VoiceOver, since the icon is hidden from it.
 struct PendingMark: View {
     var body: some View {
         Icon(.cloudUpload, size: 13, relativeTo: .caption)
             .foregroundStyle(Theme.mutedForeground)
-            .accessibilityLabel(String(localized: "Not synced yet"))
-            .accessibilityIdentifier("pending.mark")
     }
 }
 
@@ -245,7 +256,7 @@ struct RatingControl: View {
                     Button { set(nil) } label: {
                         Icon(.x, size: 14, relativeTo: nil)
                             .foregroundStyle(Theme.mutedForeground)
-                            .frame(width: 32, height: 44)
+                            .frame(width: 44, height: 44)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(String(localized: "Clear rating"))
@@ -267,7 +278,7 @@ struct RatingControl: View {
                     }
                 }
                 .foregroundStyle(Theme.rating)
-                .frame(height: 44)
+                .frame(minHeight: 44)
             }
         }
         .contentShape(Rectangle())
@@ -411,6 +422,7 @@ struct ListFormSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "Cancel")) { dismiss() }
+                        .accessibilityIdentifier("listForm.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Save"), action: submit)
@@ -449,6 +461,7 @@ struct ClearPositionConfirmation: ViewModifier {
             Button(String(localized: "Clear"), role: .destructive) { model.change(.clearPosition(file: file.id)) }
                 .accessibilityIdentifier("clearPosition.confirm")
             Button(String(localized: "Cancel"), role: .cancel) {}
+                .accessibilityIdentifier("clearPosition.cancel")
         } message: { file in
             Text("\(file.label) will open at the start. Your reading history and status stay as they are.")
         }

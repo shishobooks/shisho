@@ -565,6 +565,9 @@ final class CatalogStore: Sendable {
             }
         case .readThrough:
             touched.reading = true
+            if let bookID = entry.readThrough?.bookId {
+                try CatalogStore.confirmApplied(book: bookID, in: db)
+            }
             if entry.deleted {
                 try db.execute(sql: "DELETE FROM synced_read_throughs WHERE id = ?", arguments: [entry.id])
             } else if let readThrough = entry.readThrough {

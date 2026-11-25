@@ -550,11 +550,8 @@ final class AppModel {
     /// no copy of yet. Offline, the page says it needs a connection.
     func loadStats(year: Int?) async {
         guard let session, networkAvailable else { return }
-        do {
-            try await session.sync.fetchStats(only: .some(year))
-        } catch {
-            await Diagnostics.shared.log(.sync, "reading stats not fetched: \(Diagnostics.describe(error))")
-        }
+        if let year { session.sync.want(year: year) }
+        await syncNow()
     }
 
     /// The account's server lists capability.

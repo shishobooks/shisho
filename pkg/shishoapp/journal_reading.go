@@ -138,8 +138,7 @@ func (h *handler) readingEvent(ctx context.Context, c echo.Context, user *models
 			apply = func(claim claimFunc) (eventOutcome, error) {
 				return h.changeList(ctx, user, clock, ev.At, p, claim, h.lists.IsOwner, refusedListOwner,
 					func(ctx context.Context, tx bun.Tx, listID int, _ time.Time) error {
-						_, err := tx.NewDelete().Model((*models.List)(nil)).Where("id = ?", listID).Exec(ctx)
-						return errors.WithStack(err)
+						return lists.DeleteListIn(ctx, tx, listID)
 					})
 			}
 		}

@@ -1,4 +1,5 @@
 import Foundation
+import os
 import ShishoAPI
 
 /// Syncs an account both ways: brings the copy of the catalog up to date
@@ -16,6 +17,9 @@ final class SyncEngine: Sendable {
     private let capabilities: @Sendable () -> [String]
     /// This installation's Device, which tells its own places from others'.
     private let deviceID: String
+    /// Years of Reading Stats a screen asked for that have no copy yet,
+    /// fetched with the next sync's.
+    private let wantedYears = OSAllocatedUnfairLock<Set<Int>>(initialState: [])
 
     init(client: APIClient, store: CatalogStore, deviceID: String = "", capabilities: @escaping @Sendable () -> [String] = { [] }) {
         self.client = client
@@ -61,28 +65,38 @@ final class SyncEngine: Sendable {
         }
     }
 
+    /// Asks the next sync to fetch Reading Stats for year too, which a
+    /// screen shows but the device has no copy of. It's fetched in the sync
+    /// rather than beside it, so it never runs while the journal is sent
+    /// and counts a session the copy then counts again.
+    func want(year: Int) {
+        _ = wantedYears.withLock { $0.insert(year) }
+    }
+
     /// Pulls the feed, then stops laying the changes the server took in
     /// before it began over the synced copy, which now holds them.
     private func pullFeedAndConfirm() async throws {
         let began = Date()
-        try await pullFeed()
+        // A pull another sync overtook leaves confirming to that one.
+        guard try await pullFeed() else { return }
         try store.feedCaughtUp(since: began)
     }
 
     /// Fetches Reading Stats again for every range kept, and all time and
     /// this year always, so they count what the journal just sent (ADR
     /// 0024). A server that doesn't list them keeps the copy as it was.
-    func fetchStats(only: Int?? = nil) async throws {
+    func fetchStats() async throws {
         guard capabilities().contains(Shishoapp.Capability.readingStats.rawValue) else { return }
         var ranges = Set(try store.statsRanges())
         ranges.insert(nil)
         ranges.insert(Calendar.current.component(.year, from: Date()))
-        if let only { ranges = [only] }
+        for year in wantedYears.withLock({ $0 }) { ranges.insert(year) }
         for year in ranges.sorted(by: { ($0 ?? 0) < ($1 ?? 0) }) {
             let began = Date()
             let stats = try await client.stats(year: year)
             try Task.checkCancellation()
             try store.saveStats(stats, year: year, fetchedAt: began)
+            if let year { _ = wantedYears.withLock { $0.remove(year) } }
         }
         try store.statsCaughtUp()
     }
@@ -110,7 +124,10 @@ final class SyncEngine: Sendable {
         }
     }
 
-    private func pullFeed() async throws {
+    /// Pulls the feed to its end, reporting false when another sync moved
+    /// the copy on first and this one stopped.
+    @discardableResult
+    private func pullFeed() async throws -> Bool {
         try store.startOverIfNeeded()
         var restarts = 0
         while true {
@@ -131,7 +148,7 @@ final class SyncEngine: Sendable {
             // one's answer is stale.
             try Task.checkCancellation()
             guard try store.apply(page, after: state.cursor, ownDeviceID: deviceID, access: fetched.access) else {
-                return
+                return false
             }
             // Every page's access counts: a Library lost and gained again
             // between two pages had its records skipped meanwhile.
@@ -142,7 +159,7 @@ final class SyncEngine: Sendable {
                 if fetched.access != nil {
                     try await fetchGained()
                 }
-                return
+                return true
             }
         }
     }

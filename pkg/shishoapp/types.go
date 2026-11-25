@@ -511,7 +511,7 @@ type FeedReadThrough struct {
 	// BookTitle and BookAuthors are the deleted Book's title and author
 	// names, for Reading History, and null while the Book exists.
 	BookTitle   *string  `json:"book_title"`
-	BookAuthors []string `json:"book_authors"`
+	BookAuthors []string `json:"book_authors" tstype:"string[] | null"`
 }
 
 // FeedBookmark is one of the user's Bookmarks: a moment in an audiobook

@@ -98,8 +98,11 @@ name: Reading Stats count offline listening once, and a cleared place syncs
 - tapOn:
     id: file.menu
     retryTapIfNoChange: true
-- tapOn: Clear saved position
-- tapOn: Clear
+- tapOn:
+    text: Clear saved position
+    retryTapIfNoChange: true
+- tapOn:
+    id: clearPosition.confirm
 
 # Back online, a refresh syncs, and Reading Stats are fetched again. The
 # Reading tab is tapped twice: once to show it, and again to go back to its

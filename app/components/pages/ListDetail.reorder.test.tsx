@@ -17,9 +17,9 @@ vi.mock("@/components/library/DraggableBookList", () => ({
   DraggableBookList: ({
     onReorder,
   }: {
-    onReorder: (ids: number[]) => Promise<unknown>;
+    onReorder: (ids: number[], movedId: number) => Promise<unknown>;
   }) => (
-    <button onClick={() => onReorder([2, 1]).catch(() => undefined)}>
+    <button onClick={() => onReorder([2, 1], 2).catch(() => undefined)}>
       Reorder
     </button>
   ),

@@ -239,12 +239,12 @@ const ListDetail = () => {
     }
   };
 
-  const handleReorder = async (bookIds: number[]) => {
+  const handleReorder = async (bookIds: number[], movedId: number) => {
     if (!listId) return;
     try {
       await reorderMutation.mutateAsync({
         listId,
-        payload: { book_ids: bookIds },
+        payload: { book_ids: bookIds, moved_book_id: movedId },
       });
     } catch (error) {
       toastRequestError(error, "Failed to reorder list");

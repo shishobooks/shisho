@@ -208,6 +208,7 @@ struct ToReadView: View {
                                 Button(role: .destructive) { model.change(.removeFromToRead(book: book.id)) } label: {
                                     Label("Remove", menuIcon: .trash)
                                 }
+                                .accessibilityIdentifier("toRead.remove")
                             }
                         }
                         .contextMenu {
@@ -220,10 +221,12 @@ struct ToReadView: View {
                                     Button { move(from: index, to: (books?.count ?? 1) - 1) } label: {
                                         Label("Move to Bottom", menuIcon: .arrowDown)
                                     }
+                                    .accessibilityIdentifier("toRead.moveToBottom")
                                 }
                                 Button(role: .destructive) { model.change(.removeFromToRead(book: book.id)) } label: {
                                     Label("Remove from To Read", menuIcon: .trash)
                                 }
+                                .accessibilityIdentifier("toRead.menuRemove")
                             }
                         }
                     }
@@ -258,11 +261,8 @@ struct ToReadView: View {
     /// Moves the Book at from to to, recording it as a move after the Book
     /// it now follows, or to the top.
     private func move(from: Int, to: Int) {
-        guard var order = books?.map(\.id), order.indices.contains(from), from != to else { return }
-        let id = order.remove(at: from)
-        let target = min(max(0, to), order.count)
-        order.insert(id, at: target)
-        model.change(.moveToRead(book: id, after: target == 0 ? nil : order[target - 1]))
+        guard let move = ReadingLayer.move(in: books?.map(\.id) ?? [], from: from, to: to) else { return }
+        model.change(.moveToRead(book: move.book, after: move.after))
     }
 }
 
@@ -334,6 +334,7 @@ struct ReadingHistoryView: View {
                                 Button(role: .destructive) { deleting = entry } label: {
                                     Label("Delete", menuIcon: .trash)
                                 }
+                                .accessibilityIdentifier("history.delete")
                             }
                         }
                         .accessibilityActions {
@@ -355,11 +356,11 @@ struct ReadingHistoryView: View {
         .alert(String(localized: "Delete this Read-through?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                presenting: deleting) { entry in
             Button(String(localized: "Delete"), role: .destructive) { model.change(.deleteReadThrough(id: entry.id)) }
+                .accessibilityIdentifier("history.delete.confirm")
             Button(String(localized: "Cancel"), role: .cancel) {}
+                .accessibilityIdentifier("history.delete.cancel")
         } message: { entry in
-            Text(entry.outcome == "underway"
-                 ? "The reading time and places recorded during it are deleted too, and every main file opens at the start again."
-                 : "The reading time recorded during it is deleted too, and it no longer counts in your Reading Stats.")
+            Text(HistoryText.deleteDescription(entry))
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $entries) { db in
             try CatalogStore.history(db)
@@ -434,6 +435,18 @@ enum HistoryText {
         case "finished": String(localized: "Finished")
         default: String(localized: "Did Not Finish")
         }
+    }
+
+    /// What deleting a Read-through takes with it, as the web's
+    /// `readThroughDeleteDescription` says.
+    static func deleteDescription(_ entry: HistoryEntry) -> String {
+        if entry.book == nil {
+            return String(localized: "It won't count in your reading history anymore. The reading time recorded during it is deleted too.")
+        }
+        if entry.outcome == "underway" {
+            return String(localized: "It won't count toward this book's history or its Reading Status. The reading time recorded during it is deleted too. Every file opens at the start again, and if starting it took the book off To Read, it goes back to its place there.")
+        }
+        return String(localized: "It won't count toward this book's history or its Reading Status. The reading time recorded during it is deleted too.")
     }
 
     static func days(_ entry: HistoryEntry) -> String {

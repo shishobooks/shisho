@@ -60,6 +60,16 @@ name: Change the reading record offline, then sync
 - tapOn:
     id: listForm.name
 - inputText: Offline Picks
+# A stall can drop typed text: typed again while the field doesn't hold it.
+- repeat:
+    while:
+      notVisible:
+        id: listForm.name
+        text: Offline Picks
+    times: 3
+    commands:
+      - eraseText
+      - inputText: Offline Picks
 - tapOn:
     id: listForm.save
 - extendedWaitUntil:
@@ -83,7 +93,9 @@ name: Change the reading record offline, then sync
 - longPressOn:
     id: toRead.row
     text: ".*Harness Webtoon.*"
-- tapOn: Move to Top
+- tapOn:
+    text: Move to Top
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: toRead.row

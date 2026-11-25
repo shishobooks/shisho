@@ -49,8 +49,13 @@ struct ReadingStatsView: View {
             try CatalogStore.stats(db, year: year, ownDeviceID: deviceID)
         }
         .task(id: year) {
-            // A range never fetched is fetched now, when it can be.
-            guard case .some(.none) = stats else { return }
+            // A range never fetched is fetched now, when it can be. The
+            // range is checked here, since the page may still show the
+            // last one's.
+            let cached = try? await model.session?.store.pool.read { [year] db in
+                try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM stats_cache WHERE range_key = ?)", arguments: [year ?? 0])
+            }
+            guard cached != true else { return }
             loading = model.connection == .online
             await model.loadStats(year: year)
             loading = false
@@ -117,11 +122,13 @@ struct ReadingStatsView: View {
         .padding(.top, 12)
 
         StatsSection(title: String(localized: "Pace")) {
-            PaceRow(label: String(localized: "Reading"), value: stats.pace.wordsPerMinute.map { String(localized: "\(Int($0.rounded())) words a minute") })
-            PaceRow(label: String(localized: "Comics"), value: stats.pace.comicPagesPerHour.map { String(localized: "\(Int($0.rounded())) pages an hour") })
-            PaceRow(label: String(localized: "PDFs"), value: stats.pace.pdfPagesPerHour.map { String(localized: "\(Int($0.rounded())) pages an hour") })
-            PaceRow(label: String(localized: "Listening"),
-                    value: stats.pace.listeningSpeed.map { String(localized: "\($0.formatted(.number.precision(.fractionLength(1))))× speed") })
+            let rows = StatsText.pace(stats.pace)
+            if rows.isEmpty {
+                CountRow(name: String(localized: "Not enough timed reading yet."), value: "", muted: true)
+            }
+            ForEach(rows, id: \.kind) { row in
+                CountRow(name: row.kind, value: row.value)
+            }
         }
 
         if !stats.periods.isEmpty {
@@ -132,9 +139,9 @@ struct ReadingStatsView: View {
 
         if !stats.places.isEmpty {
             StatsSection(title: String(localized: "Where you read")) {
-                ForEach(Array(stats.places.enumerated()), id: \.offset) { _, place in
-                    CountRow(name: PlaceName.text(place, ownDeviceID: model.session?.account.deviceID ?? ""),
-                             value: FileFacts.duration(Double(place.readingSeconds + place.listeningSeconds)))
+                ForEach(Array(StatsText.places(stats.places, ownDeviceID: model.session?.account.deviceID ?? "").enumerated()),
+                        id: \.offset) { _, place in
+                    CountRow(name: place.label, value: FileFacts.duration(Double(place.seconds)))
                 }
             }
             .accessibilityIdentifier("stats.places")
@@ -142,6 +149,13 @@ struct ReadingStatsView: View {
         breakdown(String(localized: "Genres"), stats.genres)
         breakdown(String(localized: "Authors"), stats.authors)
         breakdown(String(localized: "Tags"), stats.tags)
+        if !stats.kinds.isEmpty {
+            StatsSection(title: String(localized: "Kinds")) {
+                ForEach(stats.kinds, id: \.kind) { row in
+                    CountRow(name: StatsText.kind(row.kind), value: Counts.books(row.books))
+                }
+            }
+        }
         if !stats.ratings.isEmpty {
             StatsSection(title: String(localized: "Ratings")) {
                 ForEach(stats.ratings.sorted { $0.rating > $1.rating }, id: \.rating) { row in
@@ -217,15 +231,6 @@ private struct StatsSection<Content: View>: View {
     }
 }
 
-private struct PaceRow: View {
-    let label: String
-    let value: String?
-
-    var body: some View {
-        CountRow(name: label, value: value ?? String(localized: "Not enough timed reading yet"), muted: value == nil)
-    }
-}
-
 private struct CountRow: View {
     let name: String
     let value: String
@@ -284,19 +289,67 @@ private struct PeriodChart: View {
     }
 }
 
-/// Where reading happened, as the web's Reading Stats names each place.
-enum PlaceName {
-    static func text(_ place: Shishoapp.StatsPlace, ownDeviceID: String) -> String {
-        if let name = place.deviceName, !name.isEmpty {
-            return place.deviceId == ownDeviceID ? String(localized: "\(name) (this device)") : name
+/// How Reading Stats words its rows, as the web's (`placeRows`,
+/// `paceRows`, and `KIND_LABELS` in the web app).
+enum StatsText {
+    struct Place: Equatable {
+        let label: String
+        let seconds: Int
+    }
+
+    /// Where reading happened, most time first: each Device by its name,
+    /// and the web's or the app's reader and player apart, by the web's
+    /// names, for time no Device is named for.
+    static func places(_ places: [Shishoapp.StatsPlace], ownDeviceID: String) -> [Place] {
+        places.flatMap { place -> [Place] in
+            if let name = place.deviceName, !name.isEmpty {
+                let label = place.deviceId == ownDeviceID ? String(localized: "\(name) (this device)") : name
+                return [Place(label: label, seconds: place.readingSeconds + place.listeningSeconds)]
+            }
+            if place.deviceId == ownDeviceID, !ownDeviceID.isEmpty {
+                return [Place(label: String(localized: "This device"), seconds: place.readingSeconds + place.listeningSeconds)]
+            }
+            let reader: String
+            let player: String?
+            switch place.source {
+            case .webReader: (reader, player) = (String(localized: "Shisho web reader"), String(localized: "Shisho web player"))
+            case .shishoApp: (reader, player) = (String(localized: "Shisho app reader"), String(localized: "Shisho app player"))
+            case .kobo: (reader, player) = ("Kobo", nil)
+            case .koreader: (reader, player) = ("KOReader", nil)
+            case .unknown(let raw): (reader, player) = (raw, nil)
+            }
+            guard let player else { return [Place(label: reader, seconds: place.readingSeconds + place.listeningSeconds)] }
+            return [Place(label: reader, seconds: place.readingSeconds), Place(label: player, seconds: place.listeningSeconds)]
+                .filter { $0.seconds > 0 }
         }
-        if place.deviceId == ownDeviceID, !ownDeviceID.isEmpty { return String(localized: "This device") }
-        switch place.source {
-        case .webReader: return String(localized: "Shisho reader")
-        case .kobo: return "Kobo"
-        case .koreader: return "KOReader"
-        case .shishoApp: return String(localized: "Shisho app")
-        case .unknown(let raw): return raw
+        .sorted { $0.seconds > $1.seconds }
+    }
+
+    /// Each kind's pace, only those with enough timed reading to say.
+    static func pace(_ pace: Shishoapp.StatsPace) -> [(kind: String, value: String)] {
+        var rows: [(kind: String, value: String)] = []
+        if let wpm = pace.wordsPerMinute {
+            rows.append((String(localized: "Ebooks"), String(localized: "\(Int(wpm.rounded())) words per minute")))
+        }
+        if let pages = pace.comicPagesPerHour {
+            rows.append((String(localized: "Comics"), String(localized: "\(Int(pages.rounded())) pages per hour")))
+        }
+        if let pages = pace.pdfPagesPerHour {
+            rows.append((String(localized: "PDFs"), String(localized: "\(Int(pages.rounded())) pages per hour")))
+        }
+        if let speed = pace.listeningSpeed {
+            rows.append((String(localized: "Audiobooks"),
+                         String(localized: "\(speed.formatted(.number.precision(.fractionLength(0...1))))× real time")))
+        }
+        return rows
+    }
+
+    static func kind(_ kind: String) -> String {
+        switch kind {
+        case "ebook": String(localized: "Ebooks")
+        case "comic": String(localized: "Comics")
+        case "audiobook": String(localized: "Audiobooks")
+        default: String(localized: "Unknown")
         }
     }
 }

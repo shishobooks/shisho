@@ -748,7 +748,7 @@ func (h *handler) reorderToRead(c echo.Context) error {
 	if err := c.Bind(&params); err != nil {
 		return errors.WithStack(err)
 	}
-	if err := h.readingService.ReorderToRead(c.Request().Context(), user.ID, params.BookIDs); err != nil {
+	if err := h.readingService.ReorderToReadMoving(c.Request().Context(), user.ID, params.BookIDs, params.MovedBookID); err != nil {
 		return err
 	}
 	return errors.WithStack(c.NoContent(http.StatusNoContent))
