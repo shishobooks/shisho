@@ -114,20 +114,19 @@ func resetRecord(ctx context.Context, path string, titles, lists []string) error
 		return err
 	}
 	defer db.Close()
-	user := `(SELECT id FROM users WHERE username = '` + harnessUsername + `')`
+	const user = `(SELECT id FROM users WHERE username = ?)`
 	for _, title := range titles {
-		book := `(SELECT id FROM books WHERE title = ?)`
 		for _, statement := range []string{
-			`DELETE FROM read_throughs WHERE user_id = ` + user + ` AND book_id IN ` + book,
-			`DELETE FROM user_books WHERE user_id = ` + user + ` AND book_id IN ` + book,
+			`DELETE FROM read_throughs WHERE user_id = ` + user + ` AND book_id IN (SELECT id FROM books WHERE title = ?)`,
+			`DELETE FROM user_books WHERE user_id = ` + user + ` AND book_id IN (SELECT id FROM books WHERE title = ?)`,
 		} {
-			if _, err := db.ExecContext(ctx, statement, title); err != nil {
+			if _, err := db.ExecContext(ctx, statement, harnessUsername, title); err != nil {
 				return errors.WithStack(err)
 			}
 		}
 	}
 	for _, name := range lists {
-		if _, err := db.ExecContext(ctx, `DELETE FROM lists WHERE user_id = `+user+` AND name = ?`, name); err != nil {
+		if _, err := db.ExecContext(ctx, `DELETE FROM lists WHERE user_id = `+user+` AND name = ?`, harnessUsername, name); err != nil {
 			return errors.WithStack(err)
 		}
 	}

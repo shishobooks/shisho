@@ -140,12 +140,14 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
   places: [
     {
       source: "kobo",
+      device_id: null,
       device_name: "Bedside Kobo",
       reading_seconds: 3600,
       listening_seconds: 0,
     },
     {
       source: "koreader",
+      device_id: null,
       device_name: null,
       reading_seconds: 600,
       listening_seconds: 0,
@@ -538,6 +540,7 @@ describe("ReadingStatsPage", () => {
         places: [
           {
             source: "web_reader",
+            device_id: null,
             device_name: null,
             reading_seconds: 600,
             listening_seconds: 0,
@@ -545,6 +548,7 @@ describe("ReadingStatsPage", () => {
           // The Shisho app times its listening, as the web player does.
           {
             source: "shisho_app",
+            device_id: null,
             device_name: "iPhone 17 Pro",
             reading_seconds: 0,
             listening_seconds: 900,
@@ -755,6 +759,7 @@ describe("ReadingStatsPage", () => {
         places: [
           {
             source: "web_reader",
+            device_id: null,
             device_name: null,
             reading_seconds: 3600,
             listening_seconds: 1200,

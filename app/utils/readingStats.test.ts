@@ -51,12 +51,14 @@ describe("placeRows", () => {
       placeRows([
         {
           source: "web_reader",
+          device_id: null,
           device_name: null,
           reading_seconds: 600,
           listening_seconds: 3000,
         },
         {
           source: "kobo",
+          device_id: null,
           device_name: "Bedside Kobo",
           reading_seconds: 1200,
           listening_seconds: 0,
@@ -82,12 +84,14 @@ describe("placeRows", () => {
       placeRows([
         {
           source: "web_reader",
+          device_id: null,
           device_name: null,
           reading_seconds: 600,
           listening_seconds: 0,
         },
         {
           source: "koreader",
+          device_id: null,
           device_name: null,
           reading_seconds: 60,
           listening_seconds: 0,
@@ -108,12 +112,14 @@ describe("placeRows", () => {
       placeRows([
         {
           source: "shisho_app",
+          device_id: null,
           device_name: "iPhone 17 Pro",
           reading_seconds: 60,
           listening_seconds: 600,
         },
         {
           source: "shisho_app",
+          device_id: null,
           device_name: null,
           reading_seconds: 120,
           listening_seconds: 300,

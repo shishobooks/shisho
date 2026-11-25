@@ -19,7 +19,9 @@ function check() {
     CONTROL + "/record?titles=" + encodeURIComponent(TITLE),
   );
   if (response.status !== 200) {
-    throw new Error("the harness could not read the server: " + response.status);
+    throw new Error(
+      "the harness could not read the server: " + response.status,
+    );
   }
   last = json(response.body);
   if (last.positions[TITLE]) {

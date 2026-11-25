@@ -247,7 +247,9 @@ func TestJournal_ReferenceOrdering(t *testing.T) {
 	t.Run("a finish before a later non-Reference choice is kept as history", func(t *testing.T) {
 		t.Parallel()
 		f := newReadingFixture(t)
-		today := func(id int) map[string]any { return map[string]any{"book_id": id, "day": f.ago(time.Hour).Format(time.DateOnly)} }
+		today := func(id int) map[string]any {
+			return map[string]any{"book_id": id, "day": f.ago(time.Hour).Format(time.DateOnly)}
+		}
 		require.NoError(t, f.h.reading.AddToRead(f.ctx, f.userID, 1))
 		require.NoError(t, f.h.reading.End(f.ctx, f.userID, 2, "finished", f.now.Format(time.DateOnly)))
 		assert.Equal(t, []string{"start:accepted", "finish:accepted", "abandon:accepted"}, f.send(
