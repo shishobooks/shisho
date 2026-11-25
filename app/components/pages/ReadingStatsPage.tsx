@@ -131,7 +131,8 @@ const hasActivity = (stats: ReadingStatsResponse) =>
   stats.totals.finished > 0 ||
   stats.totals.did_not_finish > 0 ||
   stats.totals.reading_seconds > 0 ||
-  stats.totals.listening_seconds > 0;
+  stats.totals.listening_seconds > 0 ||
+  stats.totals.words_read > 0;
 
 const StatsBody = ({
   stats,
@@ -175,9 +176,10 @@ const StatsBody = ({
         <StatTile
           label="Words read"
           note={
-            totals.words_read >= 1000
-              ? formatExactWordCount(totals.words_read)
-              : undefined
+            formatCompactNumber(totals.words_read) ===
+            totals.words_read.toLocaleString()
+              ? undefined
+              : formatExactWordCount(totals.words_read)
           }
           value={formatCompactNumber(totals.words_read)}
         />

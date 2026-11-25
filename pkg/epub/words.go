@@ -11,6 +11,12 @@ import (
 	"github.com/shishobooks/shisho/pkg/wordcount"
 )
 
+// minWordsPerDocument is the fewest words a spine document holds on average
+// in a book of text. A book of pictures, such as manga made into an EPUB,
+// averages well under it: its words are a copyright page and a contents
+// page, not what the reader reads, so it gets no count.
+const minWordsPerDocument = 5
+
 // maxBookTextBytes bounds how much of a book's documents a count reads, as
 // the MOBI reader bounds a book's text, so a crafted EPUB can't make a scan
 // decompress without end. The longest books are tens of megabytes.
@@ -51,6 +57,13 @@ func countWords(ctx context.Context, zr *zip.Reader, result *ParseOPFResult) (in
 	if protected {
 		return 0, errors.WithStack(mediafile.ErrDRMProtected)
 	}
+	// A fixed-layout book lays out pictures of pages, and its few words
+	// aren't what the reader reads.
+	for _, meta := range result.Package.Metadata.Meta {
+		if meta.Property == "rendition:layout" && strings.TrimSpace(meta.Text) == "pre-paginated" {
+			return 0, errors.New("a fixed-layout book has no word count")
+		}
+	}
 	return countSpine(ctx, zr, result, maxBookTextBytes)
 }
 
@@ -82,6 +95,9 @@ func countSpine(ctx context.Context, zr *zip.Reader, result *ParseOPFResult, lim
 	}
 	if len(seen) == 0 {
 		return 0, errors.New("spine names no document in the book")
+	}
+	if total < minWordsPerDocument*len(seen) {
+		return 0, errors.New("a book mostly of pictures has no word count")
 	}
 	return total, nil
 }

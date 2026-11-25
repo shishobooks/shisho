@@ -8,14 +8,14 @@ Everything here comes from your [reading history](./reading-tracking.md#reading-
 
 ## Summary
 
-| Figure             | What it counts                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Books finished** | Read-throughs you finished in the range, counted on the day each ended. A book you finished twice counts twice, and the note under the figure says how many were rereads. Read-throughs of a book since deleted from Shisho are never counted as rereads.                                                                                                      |
-| **Did Not Finish** | Read-throughs you abandoned in the range, counted on the day each ended.                                                                                                                                                                                                                                                                                       |
-| **Reading time**   | Time spent reading ebooks, comics, and PDFs.                                                                                                                                                                                                                                                                                                                   |
-| **Listening time** | Time spent listening to audiobooks, kept apart from reading time.                                                                                                                                                                                                                                                                                              |
-| **Words read**     | How far you read through EPUB, KePub, MOBI, and AZW3 books in the range, in words, from where each session started and ended and the book's [word count](./supported-formats.md#word-count). A skip ahead counts its time at your average [pace](#pace) instead of the stretch it skipped. The figure is rounded, and the note under it gives the exact count. |
-| **Average Rating** | The average of your current ratings of the books you finished in the range, each book once.                                                                                                                                                                                                                                                                    |
+| Figure             | What it counts                                                                                                                                                                                                                                                   |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Books finished** | Read-throughs you finished in the range, counted on the day each ended. A book you finished twice counts twice, and the note under the figure says how many were rereads. Read-throughs of a book since deleted from Shisho are never counted as rereads.        |
+| **Did Not Finish** | Read-throughs you abandoned in the range, counted on the day each ended.                                                                                                                                                                                         |
+| **Reading time**   | Time spent reading ebooks, comics, and PDFs.                                                                                                                                                                                                                     |
+| **Listening time** | Time spent listening to audiobooks, kept apart from reading time.                                                                                                                                                                                                |
+| **Words read**     | How far you read through books with a [word count](./supported-formats.md#word-count) in the range, from where each session started and ended. Skips ahead count as [Pace](#pace) describes. The figure is rounded, and the note under it gives the exact count. |
+| **Average Rating** | The average of your current ratings of the books you finished in the range, each book once.                                                                                                                                                                      |
 
 A Read-through with no end date has no year, so it counts only under **All time**.
 
@@ -29,17 +29,20 @@ Time is split into days in your time zone, under **Preferences > Reading > Time 
 
 ## Pace
 
-**Pace** shows how fast you read and listen, for each kind you have enough timed reading of in the range:
+**Pace** shows how fast you read and listen, for each kind you have enough timed reading of:
 
-- **Ebooks**: words per minute in EPUB, KePub, MOBI, and AZW3 books.
-- **Comics and PDFs**: pages per hour.
+- **Ebooks**: words per minute in EPUB, KePub, MOBI, and AZW3 books that have a [word count](./supported-formats.md#word-count).
+- **Comics**: pages per hour in CBZ files.
+- **PDFs**: pages per hour, kept apart from comics since pages of text take far longer.
 - **Audiobooks**: how fast you get through the recording, where **1.5× real time** means 90 minutes of audio in an hour.
 
-It's how much of each book your sessions covered over the time they took, added up, so long sessions count most and books you read at different speeds blend. Only timed sessions count: those the Shisho reader and player, the Shisho app, and the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin) measure, and a Kobo's, whose time is its own count of minutes. KOReader time without the plugin is left out, since it isn't timed. A session that went back adds nothing. A book Shisho hasn't counted the words of yet adds none.
+It's how much of each book your sessions covered over the time they took, added up, so long sessions count most and books you read at different speeds blend.
 
-A session far faster or slower than your own reading is left out: one much faster is a skip ahead, such as jumping to the end of a book through its contents, and one much slower is time with a book left open while you were away. What's normal comes from all your timed sessions of that kind, not just the range shown.
+Only timed sessions count toward Pace: those the Shisho reader and player, the Shisho app, and the [KOReader plugin](./koreader.md#sync-reading-with-the-plugin) measure, and a Kobo's. A Kobo counts the minutes it spends on each book itself, so although Shisho estimates when those minutes fell, how many there were is real. KOReader time without the plugin is only the span between syncs, so it's left out of Pace. A session that went back adds nothing, and a book deleted from Shisho no longer counts toward Pace or **Words read**, since its length went with it.
 
-A kind shows a pace once you have five or more timed sessions of it in all, enough to tell a skip apart, and ten minutes of them in the range. Before that, **Words read** counts every session in full. In **Words read**, a skip counts its time at your average pace instead of the stretch it skipped, and a slow session counts the words it covered.
+A session far faster or slower than your own reading is left out of Pace: one much faster is a skip ahead, such as jumping to the end of a book through its contents, and one much slower is time with a book left open while you were away. What's normal comes from all your timed sessions of that kind, not just the range shown, once you have five or more of them. Until then nothing is judged, and that kind shows no pace. In **Words read**, a skip counts its time at your average pace instead of the stretch it skipped, and a slow session counts the words it covered. KOReader time without the plugin can only be judged as a skip: when it's too fast even over its whole span.
+
+A kind shows a pace once its sessions can be judged and you have ten minutes of them in the range, not counting skips and idle time.
 
 ## Charts and Breakdowns
 

@@ -347,8 +347,10 @@ type ReadingStatsTotals struct {
 type ReadingStatsPace struct {
 	// WordsPerMinute is for Reflowable Files with a word count.
 	WordsPerMinute *float64 `json:"words_per_minute" tstype:"number | null,required"`
-	// PagesPerHour is for Page-based Files.
-	PagesPerHour *float64 `json:"pages_per_hour" tstype:"number | null,required"`
+	// ComicPagesPerHour and PDFPagesPerHour are for Page-based Files, each
+	// judged on its own, as they read at such different paces.
+	ComicPagesPerHour *float64 `json:"comic_pages_per_hour" tstype:"number | null,required"`
+	PDFPagesPerHour   *float64 `json:"pdf_pages_per_hour" tstype:"number | null,required"`
 	// ListeningSpeed is audiobook time covered per second spent: 1.5 is half
 	// again as fast as the recording.
 	ListeningSpeed *float64 `json:"listening_speed" tstype:"number | null,required"`

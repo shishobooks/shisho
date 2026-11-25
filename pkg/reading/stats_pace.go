@@ -1,6 +1,7 @@
 package reading
 
 import (
+	"cmp"
 	"math"
 	"slices"
 	"time"
@@ -34,61 +35,82 @@ const (
 // whose Sessions nearly all ran at one pace doesn't get fences at that pace.
 var minLogSpread = math.Log(1.1)
 
-// paceKind is the kind of length a Session covers.
+// paceKind is the kind of length a Session covers. Comics and PDFs are both
+// pages, but read at such different paces that each is judged on its own.
 type paceKind int
 
 const (
 	paceWords paceKind = iota
-	pacePages
+	paceComicPages
+	pacePDFPages
 	paceAudio
 	paceKinds
 )
 
-// sessionLength is the kind and length of s's File: its words, pages, or
-// seconds of audio. ok is false for a File of unknown length, or gone.
-func sessionLength(s statsSession) (kind paceKind, length float64, ok bool) {
-	if s.FileType == nil {
-		return 0, 0, false
+// paceSample is what one Session covered of its File and the time it took.
+type paceSample struct {
+	kind    paceKind
+	covered float64
+	seconds float64
+	timed   bool
+}
+
+// sampleOf is s's sample, and false for a Session that didn't move forward
+// or whose File's length is unknown, or gone.
+func sampleOf(s statsSession) (paceSample, bool) {
+	progress := s.EndPercentage - s.StartPercentage
+	if progress <= 0 || s.FileType == nil {
+		return paceSample{}, false
 	}
-	switch {
-	case models.IsReflowableFileType(*s.FileType) && s.WordCount != nil && *s.WordCount > 0:
-		return paceWords, float64(*s.WordCount), true
-	case models.IsPageBasedFileType(*s.FileType) && s.PageCount != nil && *s.PageCount > 0:
-		return pacePages, float64(*s.PageCount), true
-	case models.IsAudiobookFileType(*s.FileType) && s.AudioSeconds != nil && *s.AudioSeconds > 0:
-		return paceAudio, *s.AudioSeconds, true
+	sample := paceSample{
+		seconds: float64(max(s.Duration, 0)),
+		// Measured time, or a Kobo's own count of reading minutes.
+		// KOReader without the plugin guesses its time from when it synced.
+		timed: s.Measured || s.Source == models.ReadingSourceKobo,
 	}
-	return 0, 0, false
+	var length float64
+	switch fileType := *s.FileType; {
+	case models.IsReflowableFileType(fileType) && s.WordCount != nil && *s.WordCount > 0:
+		sample.kind, length = paceWords, float64(*s.WordCount)
+	case models.IsPageBasedFileType(fileType) && s.PageCount != nil && *s.PageCount > 0:
+		sample.kind, length = paceComicPages, float64(*s.PageCount)
+		if fileType == models.FileTypePDF {
+			sample.kind = pacePDFPages
+		}
+		// The web reader saves its place as the 0-based page over the last
+		// page, so its percentage spans one page fewer than the File has.
+		if s.Source == models.ReadingSourceWebReader {
+			length = max(length-1, 1)
+		}
+	case models.IsAudiobookFileType(fileType) && s.AudioSeconds != nil && *s.AudioSeconds > 0:
+		sample.kind, length = paceAudio, *s.AudioSeconds
+	default:
+		return paceSample{}, false
+	}
+	sample.covered = progress * length
+	return sample, true
 }
 
-// isTimed reports whether s's time is what it took: measured, or a Kobo's
-// own count of reading minutes. KOReader without the plugin guesses its time
-// from when it synced.
-func isTimed(s statsSession) bool {
-	return s.Measured || s.Source == models.ReadingSourceKobo
+// pacePoint is one timed Session's log pace, weighted by its seconds.
+type pacePoint struct {
+	logPace, seconds, covered float64
 }
 
-// weighted is a Session's log pace, weighted by its seconds, and what it
-// covered.
-type weighted struct {
-	value, weight, covered float64
-}
-
-// weightedQuantile is the value at fraction q of points' total weight,
-// points sorted by value.
-func weightedQuantile(points []weighted, q float64) float64 {
+// weightedQuantile is the log pace at fraction q of points' total time,
+// points sorted by pace.
+func weightedQuantile(points []pacePoint, q float64) float64 {
 	total := 0.0
 	for _, p := range points {
-		total += p.weight
+		total += p.seconds
 	}
 	cum := 0.0
 	for _, p := range points {
-		cum += p.weight
+		cum += p.seconds
 		if cum >= total*q {
-			return p.value
+			return p.logPace
 		}
 	}
-	return points[len(points)-1].value
+	return points[len(points)-1].logPace
 }
 
 // paceNorm is what's normal for the user in one kind, in length per second:
@@ -104,16 +126,17 @@ func (n paceNorm) known() bool { return n.upper > 0 }
 // paceNorms are what's normal for the user in each kind, from sessions,
 // which should be all of theirs.
 func paceNorms(sessions []statsSession) [paceKinds]paceNorm {
-	var points [paceKinds][]weighted
+	var points [paceKinds][]pacePoint
 	for _, s := range sessions {
-		progress := s.EndPercentage - s.StartPercentage
-		kind, length, ok := sessionLength(s)
-		if !ok || !isTimed(s) || progress <= 0 || s.Duration <= 0 {
+		sample, ok := sampleOf(s)
+		if !ok || !sample.timed || sample.seconds <= 0 {
 			continue
 		}
-		seconds := float64(s.Duration)
-		covered := progress * length
-		points[kind] = append(points[kind], weighted{value: math.Log(covered / seconds), weight: seconds, covered: covered})
+		points[sample.kind] = append(points[sample.kind], pacePoint{
+			logPace: math.Log(sample.covered / sample.seconds),
+			seconds: sample.seconds,
+			covered: sample.covered,
+		})
 	}
 	var norms [paceKinds]paceNorm
 	for kind := range norms {
@@ -124,27 +147,19 @@ func paceNorms(sessions []statsSession) [paceKinds]paceNorm {
 
 // fenceNorm is Tukey's outer fences on points, one kind's Sessions, and the
 // average pace of those inside them; zero with too few to judge.
-func fenceNorm(points []weighted) paceNorm {
+func fenceNorm(points []pacePoint) paceNorm {
 	if len(points) < minNormSessions {
 		return paceNorm{}
 	}
-	slices.SortFunc(points, func(a, b weighted) int {
-		switch {
-		case a.value < b.value:
-			return -1
-		case a.value > b.value:
-			return 1
-		}
-		return 0
-	})
+	slices.SortFunc(points, func(a, b pacePoint) int { return cmp.Compare(a.logPace, b.logPace) })
 	lowerQuartile, upperQuartile := weightedQuantile(points, 0.25), weightedQuantile(points, 0.75)
 	spread := max(upperQuartile-lowerQuartile, minLogSpread)
 	lower, upper := lowerQuartile-fenceSpreads*spread, upperQuartile+fenceSpreads*spread
 	var covered, seconds float64
 	for _, p := range points {
-		if p.value >= lower && p.value <= upper {
+		if p.logPace >= lower && p.logPace <= upper {
 			covered += p.covered
-			seconds += p.weight
+			seconds += p.seconds
 		}
 	}
 	return paceNorm{lower: math.Exp(lower), upper: math.Exp(upper), average: covered / seconds}
@@ -157,55 +172,55 @@ type paceTally struct {
 
 // rate is the tally's pace over each span of the given seconds, or nil
 // without enough to trust: too little time in the range, or too few Sessions
-// overall for a skip to be told apart (norm unknown).
+// overall for a skip to be told apart (norm unknown). Splitting time by day
+// can leave a whole ten minutes a hair short, which still counts.
 func (t paceTally) rate(norm paceNorm, per float64) *float64 {
-	if !norm.known() || t.seconds < minPaceSeconds {
+	if !norm.known() || t.seconds < minPaceSeconds-1e-6 {
 		return nil
 	}
 	r := t.covered / t.seconds * per
 	return &r
 }
 
-// paceOf works out the range's pace and words read from the range's
-// sessions, judging each timed one against what's normal for the user, and
-// counting the share of each Session's time that falls in rng.
+// paceOf works out the range's pace and words read from sessions, judging
+// each against what's normal for the user, and counting the share of each
+// Session's time that falls in rng.
 func paceOf(sessions []statsSession, norms [paceKinds]paceNorm, rng dayRange, loc *time.Location) (ReadingStatsPace, int) {
 	var tallies [paceKinds]paceTally
 	wordsRead := 0.0
 	for _, s := range sessions {
-		progress := s.EndPercentage - s.StartPercentage
-		kind, length, ok := sessionLength(s)
-		if !ok || progress <= 0 {
+		sample, ok := sampleOf(s)
+		if !ok {
 			continue
 		}
 		share := shareInRange(s, rng, loc)
 		if share == 0 {
 			continue
 		}
-		covered := progress * length
-		seconds := float64(s.Duration)
-		timed := isTimed(s)
-		norm := norms[kind]
-		// A Session with no time that still moved jumped there.
-		fast := timed && norm.known() && (seconds == 0 || covered/seconds > norm.upper)
-		slow := timed && norm.known() && seconds > 0 && covered/seconds < norm.lower
-		credited := covered
+		norm := norms[sample.kind]
+		// A Session with no time that still moved jumped there. An
+		// untimed Session's time is at least its reading, so too fast even
+		// over all of it is a skip too.
+		fast := norm.known() && (sample.seconds == 0 && sample.timed || sample.seconds > 0 && sample.covered/sample.seconds > norm.upper)
+		slow := norm.known() && sample.timed && sample.seconds > 0 && sample.covered/sample.seconds < norm.lower
+		credited := sample.covered
 		if fast {
-			credited = seconds * norm.average
+			credited = sample.seconds * norm.average
 		}
-		if kind == paceWords {
+		if sample.kind == paceWords {
 			wordsRead += credited * share
 		}
-		if timed && seconds > 0 && !fast && !slow {
-			tallies[kind].covered += covered * share
-			tallies[kind].seconds += seconds * share
+		if sample.timed && sample.seconds > 0 && !fast && !slow {
+			tallies[sample.kind].covered += sample.covered * share
+			tallies[sample.kind].seconds += sample.seconds * share
 		}
 	}
 	return ReadingStatsPace{
-		WordsPerMinute: tallies[paceWords].rate(norms[paceWords], 60),
-		PagesPerHour:   tallies[pacePages].rate(norms[pacePages], 3600),
-		ListeningSpeed: tallies[paceAudio].rate(norms[paceAudio], 1),
-	}, roundSeconds(wordsRead)
+		WordsPerMinute:    tallies[paceWords].rate(norms[paceWords], 60),
+		ComicPagesPerHour: tallies[paceComicPages].rate(norms[paceComicPages], 3600),
+		PDFPagesPerHour:   tallies[pacePDFPages].rate(norms[pacePDFPages], 3600),
+		ListeningSpeed:    tallies[paceAudio].rate(norms[paceAudio], 1),
+	}, int(math.Round(wordsRead))
 }
 
 // shareInRange is the fraction of s's time that falls on days in rng, as

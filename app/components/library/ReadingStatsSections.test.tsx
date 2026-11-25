@@ -9,14 +9,16 @@ describe("PaceList", () => {
       <PaceList
         pace={{
           words_per_minute: 312.6,
-          pages_per_hour: null,
+          comic_pages_per_hour: null,
+          pdf_pages_per_hour: null,
           listening_speed: 1,
         }}
       />,
     );
     expect(screen.getByText("Ebooks")).toBeInTheDocument();
     expect(screen.getByText("313 words per minute")).toBeInTheDocument();
-    expect(screen.queryByText("Comics and PDFs")).toBeNull();
+    expect(screen.queryByText("Comics")).toBeNull();
+    expect(screen.queryByText("PDFs")).toBeNull();
     expect(screen.getByText("1× real time")).toBeInTheDocument();
     expect(screen.getByText(/timed reading/)).toBeInTheDocument();
   });
@@ -26,7 +28,8 @@ describe("PaceList", () => {
       <PaceList
         pace={{
           words_per_minute: null,
-          pages_per_hour: null,
+          comic_pages_per_hour: null,
+          pdf_pages_per_hour: null,
           listening_speed: null,
         }}
       />,

@@ -531,11 +531,17 @@ const paceRows = (pace: ReadingStatsPace): { kind: string; value: string }[] =>
           kind: "Ebooks",
           value: `${Math.round(pace.words_per_minute).toLocaleString()} words per minute`,
         },
-    pace.pages_per_hour === null
+    pace.comic_pages_per_hour === null
       ? null
       : {
-          kind: "Comics and PDFs",
-          value: `${Math.round(pace.pages_per_hour).toLocaleString()} pages per hour`,
+          kind: "Comics",
+          value: `${Math.round(pace.comic_pages_per_hour).toLocaleString()} pages per hour`,
+        },
+    pace.pdf_pages_per_hour === null
+      ? null
+      : {
+          kind: "PDFs",
+          value: `${Math.round(pace.pdf_pages_per_hour).toLocaleString()} pages per hour`,
         },
     pace.listening_speed === null
       ? null
@@ -562,7 +568,7 @@ export const PaceList = ({ pace }: { pace: ReadingStatsPace }) => {
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 text-sm"
             key={row.kind}
           >
-            <span className="min-w-0 truncate">{row.kind}</span>
+            <span>{row.kind}</span>
             <span className="text-right tabular-nums">{row.value}</span>
           </li>
         ))}

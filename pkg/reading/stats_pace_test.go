@@ -1,6 +1,7 @@
 package reading
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -182,22 +183,70 @@ func TestStats_PacePerKind(t *testing.T) {
 	f := newStatsFixture(t)
 	book := createBook(t, f.db, "Dune")
 	cbz := f.lengthFile(book, models.FileTypeCBZ, 200)
+	pdf := f.lengthFile(book, models.FileTypePDF, 400)
 	m4b := f.lengthFile(book, models.FileTypeM4B, 36_000)
 	f.history(cbz, 60, 0.5, 0.5, 0.5, 0.5)
+	f.history(pdf, 60, 0.05, 0.05, 0.05, 0.05)
 	f.history(m4b, 60, 0.15, 0.15, 0.15, 0.15)
 	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
-	// 100 pages in an hour, and 1.5 hours of audio in an hour.
-	f.session(timed(cbz, day, 60, 0, 0.5))
+	// In an hour each: 100 comic pages, 20 PDF pages, and 1.5 hours of
+	// audio. Comics and PDFs read at such different paces that each is
+	// judged against its own.
+	koreader := func(spec sessionSpec) sessionSpec {
+		spec.source = models.ReadingSourceKOReader
+		return spec
+	}
+	f.session(koreader(timed(cbz, day, 60, 0, 0.5)))
+	f.session(koreader(timed(pdf, day, 60, 0.2, 0.25)))
 	f.session(timed(m4b, day, 60, 0.20, 0.35))
 
 	resp := f.stats("?year=2026")
 	assert.Nil(t, resp.Pace.WordsPerMinute)
-	require.NotNil(t, resp.Pace.PagesPerHour)
-	assert.InDelta(t, 100, *resp.Pace.PagesPerHour, 0.01)
+	require.NotNil(t, resp.Pace.ComicPagesPerHour)
+	assert.InDelta(t, 100, *resp.Pace.ComicPagesPerHour, 0.01)
+	require.NotNil(t, resp.Pace.PDFPagesPerHour)
+	assert.InDelta(t, 20, *resp.Pace.PDFPagesPerHour, 0.01)
 	require.NotNil(t, resp.Pace.ListeningSpeed)
 	assert.InDelta(t, 1.5, *resp.Pace.ListeningSpeed, 0.001)
 	assert.Zero(t, resp.Totals.WordsRead)
 	assert.Equal(t, ReadingStatsPace{}, f.stats("?year=2025").Pace, "nothing read in the year")
+}
+
+// The web reader saves a page-based File's place as its 0-based page over
+// the last page, so a session from the first page to the last turned one
+// page fewer than the File has.
+func TestStats_PaceCountsTheWebReadersPagesFromTheFirst(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	cbz := f.lengthFile(book, models.FileTypeCBZ, 11)
+	for i := range 5 {
+		f.session(timed(cbz, time.Date(2026, 3, 2+i, 9, 0, 0, 0, time.UTC), 60, 0, 1))
+	}
+
+	resp := f.stats("?year=2026")
+	require.NotNil(t, resp.Pace.ComicPagesPerHour)
+	assert.InDelta(t, 10, *resp.Pace.ComicPagesPerHour, 0.01)
+}
+
+func TestStats_PaceJudgesAnUntimedSkip(t *testing.T) {
+	t.Parallel()
+	f := newStatsFixture(t)
+	book := createBook(t, f.db, "Dune")
+	epub := f.lengthFile(book, models.FileTypeEPUB, 100_000)
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	f.normalMonth(epub, day)
+	f.session(timed(epub, day.Add(9*time.Hour), 30, 0.371, 0.446))
+	// KOReader without the plugin guesses its time from when it synced,
+	// which is at least the time read, so 40,000 words in its ten minutes
+	// is a skip however long the reading really was.
+	guess := timed(epub, day.Add(12*time.Hour), 10, 0.446, 0.846)
+	guess.measured, guess.source = false, models.ReadingSourceKOReader
+	f.session(guess)
+
+	// The five timed Sessions average 44,600 words in 185 minutes.
+	resp := f.stats("?year=2026")
+	assert.InDelta(t, 44_600+10*44_600.0/185, resp.Totals.WordsRead, 1)
 }
 
 func TestStats_PaceNeedsTenMinutesOfTimedReading(t *testing.T) {
@@ -241,4 +290,47 @@ func TestStats_PaceCountsTheShareOfASessionInTheRange(t *testing.T) {
 	assert.Equal(t, 3000, resp.Totals.WordsRead, "half the Session fell in 2026")
 	require.NotNil(t, resp.Pace.WordsPerMinute)
 	assert.InDelta(t, 100, *resp.Pace.WordsPerMinute, 0.01)
+}
+
+func TestFenceNorm(t *testing.T) {
+	t.Parallel()
+	cube := func(x float64) float64 { return x * x * x }
+	minute := func(wpm, minutes float64) pacePoint {
+		seconds := minutes * 60
+		covered := wpm * minutes
+		return pacePoint{logPace: math.Log(covered / seconds), seconds: seconds, covered: covered}
+	}
+
+	t.Run("the worked example", func(t *testing.T) {
+		t.Parallel()
+		norm := fenceNorm([]pacePoint{minute(250, 30), minute(240, 45), minute(280, 20), minute(220, 60), minute(20_000, 2)})
+		// Quartiles 220 and 250, widened by three times their distance.
+		assert.InDelta(t, 220/cube(250.0/220), norm.lower*60, 0.01)
+		assert.InDelta(t, 250*cube(250.0/220), norm.upper*60, 0.01)
+		assert.InDelta(t, 37_100.0/155, norm.average*60, 0.01, "the skip left out")
+	})
+
+	t.Run("quartiles weigh each Session by its time", func(t *testing.T) {
+		t.Parallel()
+		points := []pacePoint{minute(200, 120), minute(200, 120)}
+		for range 10 {
+			points = append(points, minute(400, 1))
+		}
+		norm := fenceNorm(points)
+		// By count the quartiles would both be 400; by time both are 200,
+		// so the spread takes its floor of 10%.
+		assert.InDelta(t, 200*cube(1.1), norm.upper*60, 0.01)
+	})
+
+	t.Run("too few Sessions say nothing", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, fenceNorm([]pacePoint{minute(250, 30), minute(240, 45)}).known())
+	})
+}
+
+func TestPaceTally_TenMinutesDespiteRounding(t *testing.T) {
+	t.Parallel()
+	// 600 seconds reached by splitting a Session's time by day.
+	tally := paceTally{covered: 100, seconds: 1109 * (600.0 / 1109)}
+	assert.NotNil(t, tally.rate(paceNorm{upper: 1}, 60))
 }

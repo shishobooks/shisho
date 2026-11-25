@@ -33,7 +33,10 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
-	sessions, err := svc.statsSessions(ctx, user.ID, rng)
+	// All the user's Sessions: what pace is normal for them comes from all
+	// of them, so a year with few still judges skips well, and reading time
+	// and pace keep only the range's share of each.
+	sessions, err := svc.statsSessions(ctx, user.ID, yearRange(nil))
 	if err != nil {
 		return nil, err
 	}
@@ -56,16 +59,7 @@ func (svc *Service) Stats(ctx context.Context, user *models.User, year *int) (*R
 		return nil, err
 	}
 
-	// What pace is normal for the user comes from all their Sessions, so a
-	// year with few still judges skips well.
-	everySession := sessions
-	if year != nil {
-		everySession, err = svc.statsSessions(ctx, user.ID, yearRange(nil))
-		if err != nil {
-			return nil, err
-		}
-	}
-	resp.Pace, resp.Totals.WordsRead = paceOf(sessions, paceNorms(everySession), rng, loc)
+	resp.Pace, resp.Totals.WordsRead = paceOf(sessions, paceNorms(sessions), rng, loc)
 
 	rereads := rereadIDs(readThroughs)
 	var finished []*models.ReadThrough
