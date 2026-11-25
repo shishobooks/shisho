@@ -42,7 +42,7 @@ Restoring a [backup](./deployment-and-maintenance.md#restore-a-backup) taken sin
 
 Everything in the libraries you can access is on the device: books with their descriptions, series, authors and narrators, genres, tags, and files, plus your [lists](./lists.md) and the lists shared with you. The **Library** tab browses it by series, people, genres, and tags, and the **Lists** tab shows your lists. **Filter** narrows the library by reading status, a range of ratings, file type, genres, tags, and language, as on the web, or to only the books [downloaded](#downloads) to the phone, and **Sort** orders it by several fields, each ascending or descending. Sort starts from the sort you [saved for the library on the web](./gallery-sort.md); a sort you pick in the app stays on that device, and **reset to default** goes back to the saved one. Each book shows your [reading status](./reading-tracking.md#reading-status) and rating, which you can change in the app as described in [Your Reading Record](#your-reading-record), and tapping a file opens its page, as on the web, with its edition details, chapters, and where it sits on disk. Tapping an audiobook's chapter there plays from that chapter. At the bottom of a book, the **Series**, **Author**, and **Lists** tabs show the books around it, as on the web. A list shows who it's shared with to its owner and anyone who can manage it, as on the web.
 
-Search, from the magnifying glass at the top of the **Library**, **Reading**, and **Lists** tabs, finds books by title, author, narrator, series, or an identifier such as an ISBN, and finds series, people, genres, and tags, including by their [aliases](./metadata.md#aliases-and-resource-merges). It searches the copy on the device, so it works in airplane mode, and it matches words and ranks results the way the web's search does. Unlike the web, it doesn't search the names of files and folders on the server.
+Search, from the magnifying glass at the top of the **Home**, **Library**, and **Lists** tabs, finds books by title, author, narrator, series, or an identifier such as an ISBN, and finds series, people, genres, and tags, including by their [aliases](./metadata.md#aliases-and-resource-merges). It searches the copy on the device, so it works in airplane mode, and it matches words and ranks results the way the web's search does. Unlike the web, it doesn't search the names of files and folders on the server.
 
 Edits on the web reach the app the next time it syncs. When an admin changes which libraries a user can access, or a list is shared or unshared, the app follows on its next sync: a library you lose leaves the device, and one you gain downloads in the background. A user whose role can no longer read books keeps nothing from the server on the device.
 
@@ -62,10 +62,13 @@ You manage your reading from the phone the way you do on the web, with or withou
 - **Lists**: **Add to List** on a book's page checks the lists it's in and makes a new one. **+** on the **Lists** tab makes a list, and a list's **…** menu renames or deletes it, and removes its books or, in an ordered list, drags them into a new order. What you can do follows your [permission](./lists.md) on the list.
 - **Clear saved position**: press and hold a file in a book's list of files, or use the **…** menu on the file's page, to clear your place in it, as on the web. The app's own place in the file goes too, so the reader or player opens at the start.
 
-The **Reading** tab shows what you're reading and your To Read queue, and opens:
+The **Home** tab, where the app opens, has a row for each of these, which you swipe through. Tap a row's heading to see all of it on its own page:
 
-- **Currently Reading**, the books you're reading, most recently read first. As on the web, a paused book waits until you resume it.
+- **Currently Reading**, the books you're reading, most recently read first. As on the web, a paused book waits until you resume it. Each card's button goes straight back to listening or reading where you left off.
+- **Recent Reference**, the [Reference](./reading-tracking.md#reference-books) books you've opened on this phone lately, so you can jump back into one. Nothing records that you're reading a Reference book, so this is kept on the phone only. Press and hold one to remove it, or use **Clear** on its page. Opening it again brings it back.
 - **To Read**, in your order. Drag books to reorder them with **Edit**, or press and hold one to move it to the top or bottom or remove it.
+Below the rows are:
+
 - **Reading History**, every Read-through, as on the web's [Reading History page](./reading-tracking.md#reading-history-page). Swipe one to delete it.
 - **Reading Stats**, for all time or one year, from the copy the app last fetched from your server, so it opens offline. Reading and listening time, the time by period and by where you read, and the Finished, Did Not Finish, and reread counts include what you've done on the phone since it last synced, and a note says how much of the time hasn't synced yet. The breakdowns by genre, author, and tag, pace, words read, and the average rating catch up at the next sync.
 
@@ -149,6 +152,8 @@ Under the page, with the controls hidden, are the chapter, the pages left in it,
 ## Downloads
 
 Each file in a book's list of files has a download button, so you can keep a book's audiobook without its ebook, or the other way round. The download button at the top of a series or a list downloads the main files of every book in it in one tap; supplements download one at a time. A file type this version of the app doesn't support shows as not supported, with its download button turned off.
+
+A book with a file on the phone has a small download mark in the corner of its cover, wherever covers show, so you can tell at a glance what plays and opens offline.
 
 Downloads go on in the background when you switch to another app or lock the phone. One that's interrupted, by losing the connection or by the app closing, carries on from where it stopped instead of starting over. Downloads go on for the account you're using; another account's pause until you switch back to it. A downloaded audiobook plays, and a downloaded book opens, without a connection.
 

@@ -82,9 +82,9 @@ name: Change the reading record offline, then sync
 
 # The second Book queued moves to the top.
 - tapOn:
-    id: tab.reading
+    id: tab.home
 - tapOn:
-    id: reading.toRead.all
+    id: home.toRead.header
 - extendedWaitUntil:
     visible:
       id: toRead.row

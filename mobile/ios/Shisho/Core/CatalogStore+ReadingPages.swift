@@ -82,6 +82,65 @@ extension CatalogStore {
             """, arguments: [bookID])
     }
 
+    // MARK: - Home
+
+    /// A Book being read, as Home's Continue card shows it, with the File it
+    /// goes on in: the one read or listened to last, on any device.
+    struct ContinueItem: Identifiable, Hashable, Sendable {
+        let book: BookSummary
+        let fileID: Int
+        let listens: Bool
+        var id: Int { book.id }
+    }
+
+    static func continueItems(_ db: Database) throws -> [ContinueItem] {
+        let types = (readableTypes.union(["m4b"])).map { "'\($0)'" }.joined(separator: ",")
+        return try currentlyReading(db).compactMap { book in
+            guard let row = try Row.fetchOne(db, sql: """
+                SELECT f.id, f.file_type FROM book_files f
+                LEFT JOIN local_positions l ON l.file_id = f.id
+                LEFT JOIN reading_positions p ON p.file_id = f.id
+                WHERE f.book_id = ? AND f.file_role = 'main' AND f.file_type IN (\(types))
+                ORDER BY MAX(COALESCE(l.updated_at, 0), COALESCE(p.occurred_at, 0)) DESC, f.position
+                LIMIT 1
+                """, arguments: [book.id]) else { return nil }
+            return ContinueItem(book: book, fileID: row["id"], listens: (row["file_type"] as String) == "m4b")
+        }
+    }
+
+    /// Notes that a File's Book was opened now, for Recent Reference.
+    func noteOpened(fileID: Int, at date: Date = Date()) throws {
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO recent_opens (book_id, opened_at) SELECT book_id, ? FROM book_files WHERE id = ?
+                ON CONFLICT (book_id) DO UPDATE SET opened_at = excluded.opened_at
+                """, arguments: [date.timeIntervalSince1970, fileID])
+        }
+    }
+
+    /// The Reference Books opened on this device, the latest first: there's
+    /// no Read-through to say one is underway, so this keeps them handy.
+    static func recentReference(_ db: Database, limit: Int? = nil) throws -> [BookSummary] {
+        var sql = summarySQL + """
+             JOIN recent_opens ro ON ro.book_id = b.id
+            WHERE EXISTS (SELECT 1 FROM user_books ub WHERE ub.book_id = b.id AND ub.reference)
+            ORDER BY ro.opened_at DESC, b.id
+            """
+        if let limit { sql += " LIMIT \(limit)" }
+        return try summaries(db, rows: Row.fetchAll(db, sql: sql))
+    }
+
+    /// Takes Books off Recent Reference, or every one with nil.
+    func clearRecent(bookIDs: [Int]?) throws {
+        try pool.write { db in
+            if let bookIDs {
+                try db.execute(sql: "DELETE FROM recent_opens WHERE book_id IN (\(bookIDs.map(String.init).joined(separator: ",")))")
+            } else {
+                try db.execute(sql: "DELETE FROM recent_opens WHERE book_id IN (SELECT book_id FROM user_books WHERE reference)")
+            }
+        }
+    }
+
     // MARK: - Lists
 
     /// The Lists the user can put Books in, with whether each holds the Book.

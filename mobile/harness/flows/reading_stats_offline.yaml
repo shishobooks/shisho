@@ -19,7 +19,7 @@ name: Reading Stats count offline listening once, and a cleared place syncs
 - runFlow: subflows/launch_signed_in.yaml
 # Reading Stats are fetched while online, so a copy shows offline.
 - tapOn:
-    id: tab.reading
+    id: tab.home
 - scrollUntilVisible:
     element:
       id: reading.stats
@@ -69,12 +69,12 @@ name: Reading Stats count offline listening once, and a cleared place syncs
     direction: DOWN
 
 - tapOn:
-    id: tab.reading
+    id: tab.home
 - extendedWaitUntil:
     visible:
       id: stats.unsynced
     timeout: 30000
-- runFlow: subflows/reading_tab_root.yaml
+- runFlow: subflows/home_root.yaml
 # Below the shelves, which other flows' Books can fill.
 - scrollUntilVisible:
     element:
@@ -88,9 +88,9 @@ name: Reading Stats count offline listening once, and a cleared place syncs
       id: history.row
       text: "(?s).*Harbor Lights.*Not synced yet.*"
     timeout: 30000
-# Back to the Reading tab's first screen while it shows, so it opens there
+# Back to the Home tab's first screen while it shows, so it opens there
 # next time.
-- runFlow: subflows/reading_tab_root.yaml
+- runFlow: subflows/home_root.yaml
 
 # The File's saved place, cleared from its own page. The Library tab is
 # still on the Book's page, where listening started.
@@ -125,7 +125,7 @@ name: Reading Stats count offline listening once, and a cleared place syncs
 - swipe:
     start: 50%, 30%
     end: 50%, 80%
-- runFlow: subflows/reading_tab_root.yaml
+- runFlow: subflows/home_root.yaml
 - scrollUntilVisible:
     element:
       id: reading.stats

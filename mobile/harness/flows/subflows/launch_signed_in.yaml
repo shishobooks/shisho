@@ -21,3 +21,6 @@ appId: ${APP_ID}
     visible:
       id: account.button
     timeout: 90000
+# The app opens on Home; the flows start from the Library.
+- tapOn:
+    id: tab.library

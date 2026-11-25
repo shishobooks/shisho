@@ -282,6 +282,8 @@ struct BookCell: View {
     /// The Book's Series Number, on a Series' page, inline with the title so
     /// the title wraps under it, as the web gallery shows it.
     var seriesNumber: (Double, Double?)?
+    /// A File of the Book is downloaded to this device.
+    var downloaded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -299,6 +301,13 @@ struct BookCell: View {
                     if let rating = book.rating {
                         CoverRatingBadge(units: rating)
                             .padding(4)
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if downloaded {
+                        CoverDownloadBadge()
+                            .padding(4)
+                            .accessibilityIdentifier("book.downloaded")
                     }
                 }
                 .padding(.bottom, book.progress == nil ? 4 : 0)

@@ -94,7 +94,7 @@ final class AppModel {
     /// screen does, as the player records listening.
     private(set) var reader: OpenReader?
     /// The tab showing, and each tab's navigation: the pages pushed on it.
-    var tab: AppTab = .library
+    var tab: AppTab = .home
     /// The Related tab a Book opened from the Related panel starts on, as
     /// the web carries its tab along the panel's links. The Book's page takes
     /// it when it opens.
@@ -105,9 +105,9 @@ final class AppModel {
         get { navigation.path(.library) }
         set { navigation.setPath(newValue, on: .library) }
     }
-    var readingPath: [Route] {
-        get { navigation.path(.reading) }
-        set { navigation.setPath(newValue, on: .reading) }
+    var homePath: [Route] {
+        get { navigation.path(.home) }
+        set { navigation.setPath(newValue, on: .home) }
     }
     var listsPath: [Route] {
         get { navigation.path(.lists) }
@@ -472,12 +472,20 @@ final class AppModel {
     func listen(fileID: Int) {
         player?.open(fileID: fileID, autoplay: true)
         showingPlayer = true
+        noteOpened(fileID: fileID)
+    }
+
+    /// Notes the File's Book as opened on this device, for Home's Recent
+    /// Reference.
+    private func noteOpened(fileID: Int) {
+        try? session?.store.noteOpened(fileID: fileID)
     }
 
     /// Plays an audiobook File from seconds in, such as a chapter's start.
     func listen(fileID: Int, from seconds: Double) {
         guard let player else { return }
         player.open(fileID: fileID, autoplay: false)
+        noteOpened(fileID: fileID)
         // A File that couldn't be opened, such as one a sync just removed,
         // leaves the one before it loaded, whose place mustn't move.
         guard player.file?.fileID == fileID else { return }
@@ -491,6 +499,7 @@ final class AppModel {
     /// there, as a tile of its page grid does, rather than at its place.
     func read(fileID: Int, page: Int? = nil) {
         guard let session else { return }
+        noteOpened(fileID: fileID)
         let file: ReadingFile?
         do {
             file = try session.store.pool.read { try CatalogStore.readingFile($0, fileID: fileID) }
@@ -1272,7 +1281,7 @@ enum Messages {
 
 /// The app's tabs.
 enum AppTab: Hashable {
-    case library, reading, lists, downloads
+    case home, library, lists, downloads
 }
 
 /// Each tab's pages, and which tabs' searches are active. Every change to a
@@ -1342,9 +1351,10 @@ enum Route: Hashable {
     case search
     /// The Download settings, from the Downloads tab's toolbar.
     case downloadSettings
-    /// The Reading tab's pages: every Book underway, To Read, Reading
-    /// History, and Reading Stats.
+    /// Home's pages: every Book underway, the Reference Books opened
+    /// lately, To Read, Reading History, and Reading Stats.
     case currentlyReading
+    case recentReference
     case toRead
     case history
     case stats

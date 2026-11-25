@@ -156,6 +156,13 @@ extension CatalogStore {
             t.column("seconds", .double).notNull()
             t.column("counted_at", .double).notNull()
         }
+        // When each Book was last opened on this device, in the player or a
+        // reader, for Home's Recent Reference. It's this device's own and
+        // never synced; clearing a Book takes it off until it's opened again.
+        try db.create(table: "recent_opens") { t in
+            t.primaryKey("book_id", .integer)
+            t.column("opened_at", .double).notNull()
+        }
     }
 
     // MARK: - Recording

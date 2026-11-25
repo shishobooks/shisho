@@ -37,3 +37,6 @@ appId: ${APP_ID}
           optional: true
 - assertNotVisible:
     id: signin.server
+# The app opens on Home; the flows start from the Library.
+- tapOn:
+    id: tab.library

@@ -215,6 +215,35 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertEqual(try status(1), "read")
     }
 
+    // MARK: - Home
+
+    func testRecentReferenceListsReferenceBooksOpenedHereLatestFirst() throws {
+        try store.record(.markReference(book: 1), at: now)
+        try store.record(.markReference(book: 2), at: now)
+        try store.noteOpened(fileID: 10, at: now)
+        try store.noteOpened(fileID: 20, at: now.addingTimeInterval(60))
+        try store.noteOpened(fileID: 30, at: now.addingTimeInterval(120))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.recentReference($0) }.map(\.id), [2, 1], "only Reference Books")
+
+        try store.noteOpened(fileID: 10, at: now.addingTimeInterval(180))
+        XCTAssertEqual(try store.pool.read { try CatalogStore.recentReference($0) }.map(\.id), [1, 2])
+        try store.clearRecent(bookIDs: [1])
+        XCTAssertEqual(try store.pool.read { try CatalogStore.recentReference($0) }.map(\.id), [2])
+        try store.record(.removeReference(book: 2), at: now)
+        XCTAssertTrue(try store.pool.read { try CatalogStore.recentReference($0) }.isEmpty, "no longer Reference")
+        try store.record(.markReference(book: 2), at: now)
+        try store.clearRecent(bookIDs: nil)
+        XCTAssertTrue(try store.pool.read { try CatalogStore.recentReference($0) }.isEmpty)
+    }
+
+    func testContinueCardsGoBackToTheFileUsedLast() throws {
+        try store.record(.start(book: 1), at: now)
+        let items = try store.pool.read { try CatalogStore.continueItems($0) }
+        XCTAssertEqual(items.map(\.book.id), [1])
+        XCTAssertEqual(items.first?.fileID, 10)
+        XCTAssertEqual(items.first?.listens, true)
+    }
+
     // MARK: - Reading Stats
 
     private func cache(_ json: String, fetchedAt: Date) throws {

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The signed-in app: the Library, Reading, Lists, and Downloads tabs of the prototype's native
+/// The signed-in app: the Home, Library, Lists, and Downloads tabs of the prototype's native
 /// structure (variant E), each with its own navigation, the mini player
 /// above the tab bar on every one, and the Account sheet any tab opens.
 struct MainTabs: View {
@@ -13,14 +13,14 @@ struct MainTabs: View {
         // prototype's tab bar sits over it instead of the system's floating
         // one; every screen hides the system's (routeDestinations).
         TabView(selection: Binding(get: { model.tab }, set: { model.tab = $0 })) {
+            HomeView()
+                .withMiniPlayer()
+                .environment(\.appTab, .home)
+                .tag(AppTab.home)
             LibraryView()
                 .withMiniPlayer()
                 .environment(\.appTab, .library)
                 .tag(AppTab.library)
-            ReadingView()
-                .withMiniPlayer()
-                .environment(\.appTab, .reading)
-                .tag(AppTab.reading)
             ListsView()
                 .withMiniPlayer()
                 .environment(\.appTab, .lists)
@@ -82,8 +82,8 @@ struct AppTabBar: View {
 
     private var tabs: some View {
         HStack(spacing: 0) {
+            item(.home, String(localized: "Home"), icon: .house, identifier: "tab.home")
             item(.library, String(localized: "Library"), icon: .library, identifier: "tab.library")
-            item(.reading, String(localized: "Reading"), icon: .bookOpen, identifier: "tab.reading")
             item(.lists, String(localized: "Lists"), icon: .list, identifier: "tab.lists")
             item(.downloads, String(localized: "Downloads"), icon: .download, identifier: "tab.downloads",
                  badge: downloading ?? 0)
@@ -274,6 +274,8 @@ private struct RouteDestination: View {
             DownloadSettingsView()
         case .currentlyReading:
             CurrentlyReadingView()
+        case .recentReference:
+            RecentReferenceView()
         case .toRead:
             ToReadView()
         case .history:
@@ -326,14 +328,16 @@ struct BookGrid: View {
         LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(books) { book in
                 let onDevice = !ConnectionRules.dimmed(bookID: book.id, connection: connection, downloaded: downloaded)
+                let isDownloaded = downloaded?.contains(book.id) == true
                 NavigationLink(value: Route.book(book)) {
-                    BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id])
+                    BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id], downloaded: isDownloaded)
                         // Without the server, a Book with nothing downloaded
                         // can't be listened to or read: dimmed, though its
                         // page still opens.
                         .opacity(onDevice ? 1 : 0.5)
                 }
                 .buttonStyle(PressableStyle())
+                .accessibilityValue(isDownloaded ? String(localized: "Downloaded") : "")
                 .accessibilityHint(onDevice ? "" : String(localized: "Not downloaded"))
             }
         }

@@ -102,6 +102,19 @@ struct CoverRatingBadge: View {
     }
 }
 
+/// The mark on a cover whose Book has a File downloaded to this device, as
+/// the prototype flags one, so what plays and opens offline shows at a
+/// glance. The cell around it says "Downloaded" to VoiceOver.
+struct CoverDownloadBadge: View {
+    var body: some View {
+        Icon(.arrowDown, size: 10, relativeTo: nil)
+            .foregroundStyle(Theme.foreground)
+            .frame(width: 18, height: 18)
+            .background(Theme.secondary, in: Circle())
+            .accessibilityHidden(true)
+    }
+}
+
 /// How far through a Book or File the user is, as a thin bar.
 struct ProgressBar: View {
     let value: Double

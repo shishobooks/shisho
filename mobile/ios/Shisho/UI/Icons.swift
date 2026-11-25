@@ -35,6 +35,7 @@ enum Lucide: String, CaseIterable {
     case gripVertical = "grip-vertical"
     case headphones
     case history
+    case house
     case languages
     case layers
     case library
