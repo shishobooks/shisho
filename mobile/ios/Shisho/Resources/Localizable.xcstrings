@@ -110,7 +110,7 @@
     "%@ words" : {
 
     },
-    "%@ · %@ left" : {
+    "%@ · %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
