@@ -4,6 +4,9 @@
     " by " : {
 
     },
+    "#%lld on To Read" : {
+
+    },
     "%@ #%@" : {
 
     },
@@ -26,6 +29,9 @@
           }
         }
       }
+    },
+    "%@ (this device)" : {
+
     },
     "%@ available" : {
 
@@ -91,11 +97,24 @@
         }
       }
     },
+    "%@ of 5 stars" : {
+
+    },
     "%@ stars" : {
 
     },
     "%@ through" : {
 
+    },
+    "%@ to %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ to %2$@"
+          }
+        }
+      }
     },
     "%@ to %@ stars" : {
       "localizations" : {
@@ -106,6 +125,9 @@
           }
         }
       }
+    },
+    "%@ will open at the start. Your reading history and status stay as they are." : {
+
     },
     "%@ words" : {
 
@@ -146,10 +168,23 @@
         }
       }
     },
+    "%@, %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$lld"
+          }
+        }
+      }
+    },
     "%@, ascending" : {
 
     },
     "%@, descending" : {
+
+    },
+    "%@× real time" : {
 
     },
     "%lld Minutes" : {
@@ -184,7 +219,19 @@
     "%lld on the way" : {
 
     },
+    "%lld pages per hour" : {
+
+    },
+    "%lld rereads" : {
+
+    },
     "%lld selected" : {
+
+    },
+    "%lld words per minute" : {
+
+    },
+    "%lld%%" : {
 
     },
     "+%lld more" : {
@@ -226,6 +273,12 @@
     "Add tags…" : {
 
     },
+    "Add to List" : {
+
+    },
+    "Add to To Read" : {
+
+    },
     "Added" : {
 
     },
@@ -239,6 +292,9 @@
 
     },
     "All downloaded or on their way" : {
+
+    },
+    "All time" : {
 
     },
     "Also known as %@" : {
@@ -265,7 +321,13 @@
     "At %@" : {
 
     },
+    "Audiobooks" : {
+
+    },
     "Author" : {
+
+    },
+    "Authors" : {
 
     },
     "Authors, narrators, and other contributors" : {
@@ -275,6 +337,9 @@
 
     },
     "Auto shows two pages side by side when the reader is wider than it is tall and has room for both." : {
+
+    },
+    "Average rating" : {
 
     },
     "Back %lld Seconds" : {
@@ -331,6 +396,18 @@
     "Books with a file on this device." : {
 
     },
+    "Books you add to To Read appear here, in the order you choose." : {
+
+    },
+    "Books you start appear here." : {
+
+    },
+    "Books you start, finish, or stop reading appear here." : {
+
+    },
+    "Books you're reading and Books on To Read appear here." : {
+
+    },
     "Books, series, people" : {
 
     },
@@ -341,6 +418,12 @@
 
     },
     "Browse tags in your library" : {
+
+    },
+    "By month" : {
+
+    },
+    "By year" : {
 
     },
     "Can't reach your server" : {
@@ -373,13 +456,28 @@
     "Choose a TTF, OTF, or WOFF2 font file." : {
 
     },
+    "Clear" : {
+
+    },
     "Clear Filters" : {
+
+    },
+    "Clear Recent Reference?" : {
 
     },
     "Clear all" : {
 
     },
     "Clear all filters" : {
+
+    },
+    "Clear rating" : {
+
+    },
+    "Clear saved position" : {
+
+    },
+    "Clear saved position?" : {
 
     },
     "Clear search" : {
@@ -404,6 +502,9 @@
 
     },
     "Colorist" : {
+
+    },
+    "Comics" : {
 
     },
     "Compact" : {
@@ -448,6 +549,9 @@
     "Date released" : {
 
     },
+    "Dates unknown" : {
+
+    },
     "Decrease font size" : {
 
     },
@@ -460,7 +564,19 @@
     "Delete" : {
 
     },
+    "Delete List" : {
+
+    },
+    "Delete Read-through" : {
+
+    },
     "Delete bookmark at %@" : {
+
+    },
+    "Delete this List?" : {
+
+    },
+    "Delete this Read-through?" : {
 
     },
     "Diagnostics" : {
@@ -529,6 +645,9 @@
     "Duration" : {
 
     },
+    "Ebooks" : {
+
+    },
     "Edit Note" : {
 
     },
@@ -542,6 +661,9 @@
 
     },
     "End of Chapter" : {
+
+    },
+    "Ended %@, start date unknown" : {
 
     },
     "Enter your Shisho server's address." : {
@@ -634,6 +756,12 @@
     "Highest rating" : {
 
     },
+    "Home" : {
+
+    },
+    "Hours" : {
+
+    },
     "Image" : {
 
     },
@@ -647,6 +775,9 @@
 
     },
     "Included" : {
+
+    },
+    "Includes %@ on this device not synced yet" : {
 
     },
     "Increase font size" : {
@@ -664,7 +795,25 @@
     "It kept stopping. Check your connection and try again." : {
 
     },
+    "It won't count in your reading history anymore. The reading time recorded during it is deleted too." : {
+
+    },
+    "It won't count toward this book's history or its Reading Status. The reading time recorded during it is deleted too." : {
+
+    },
+    "It won't count toward this book's history or its Reading Status. The reading time recorded during it is deleted too. Every file opens at the start again, and if starting it took the book off To Read, it goes back to its place there." : {
+
+    },
     "Justify text" : {
+
+    },
+    "Keep Books in my own order" : {
+
+    },
+    "Kind" : {
+
+    },
+    "Kinds" : {
 
     },
     "Language" : {
@@ -706,6 +855,9 @@
     "Line spacing" : {
 
     },
+    "List actions" : {
+
+    },
     "Listen" : {
 
     },
@@ -731,10 +883,16 @@
     "Listening %@" : {
 
     },
+    "Listening time" : {
+
+    },
     "Lists" : {
 
     },
-    "Lists you make on the web, and Lists shared with you, appear here." : {
+    "Lists you can add Books to appear here." : {
+
+    },
+    "Lists you make, and Lists shared with you, appear here." : {
 
     },
     "Loading" : {
@@ -755,6 +913,24 @@
     "Margins" : {
 
     },
+    "Mark as Did Not Finish" : {
+
+    },
+    "Mark as Reference" : {
+
+    },
+    "Mark as Reference?" : {
+
+    },
+    "Mark as not started" : {
+
+    },
+    "Mark as not started?" : {
+
+    },
+    "Mark as read" : {
+
+    },
     "Modified" : {
 
     },
@@ -764,7 +940,16 @@
     "Move down" : {
 
     },
+    "Move to Bottom" : {
+
+    },
+    "Move to Top" : {
+
+    },
     "Move up" : {
+
+    },
+    "Name" : {
 
     },
     "Narrated by " : {
@@ -780,6 +965,9 @@
 
     },
     "Never" : {
+
+    },
+    "New List" : {
 
     },
     "Next Chapter" : {
@@ -818,6 +1006,9 @@
     "No Lists yet" : {
 
     },
+    "No Reference Books opened lately" : {
+
+    },
     "No Results for “%@”" : {
 
     },
@@ -828,6 +1019,9 @@
 
     },
     "No genres found." : {
+
+    },
+    "No reading history yet" : {
 
     },
     "No results" : {
@@ -845,6 +1039,12 @@
     "Not downloaded" : {
 
     },
+    "Not enough timed reading yet." : {
+
+    },
+    "Not rated" : {
+
+    },
     "Not started" : {
 
     },
@@ -852,6 +1052,9 @@
 
     },
     "Not supported in this version of the app" : {
+
+    },
+    "Not synced yet" : {
 
     },
     "Note" : {
@@ -864,6 +1067,12 @@
 
     },
     "Nothing is playing" : {
+
+    },
+    "Nothing to pick up yet" : {
+
+    },
+    "Nothing underway" : {
 
     },
     "Number %@" : {
@@ -910,10 +1119,16 @@
     "Open %@" : {
 
     },
+    "Open Book Page" : {
+
+    },
     "Open Settings" : {
 
     },
     "Opening the book" : {
+
+    },
+    "Opens every one" : {
 
     },
     "Opens the Book" : {
@@ -926,6 +1141,12 @@
 
     },
     "Organize your books into custom collections" : {
+
+    },
+    "PDFs" : {
+
+    },
+    "Pace" : {
 
     },
     "Page %lld" : {
@@ -973,6 +1194,9 @@
 
     },
     "People" : {
+
+    },
+    "Period" : {
 
     },
     "Picked from the page shapes until you choose." : {
@@ -1026,10 +1250,16 @@
     "Pull for previous chapter" : {
 
     },
+    "Range" : {
+
+    },
     "Rated %@ of 5 stars" : {
 
     },
     "Rating" : {
+
+    },
+    "Ratings" : {
 
     },
     "Read" : {
@@ -1041,19 +1271,46 @@
     "Read again" : {
 
     },
+    "Reading" : {
+
+    },
     "Reading %@" : {
 
     },
     "Reading Direction" : {
 
     },
+    "Reading History" : {
+
+    },
+    "Reading Stats" : {
+
+    },
+    "Reading Stats need a connection" : {
+
+    },
+    "Reading and listening time by period" : {
+
+    },
     "Reading status" : {
+
+    },
+    "Reading status: %@" : {
+
+    },
+    "Reading time" : {
 
     },
     "Recent" : {
 
     },
+    "Recent Reference" : {
+
+    },
     "Reference" : {
+
+    },
+    "Reference Books you open in the reader or player appear here, so you can jump back in." : {
 
     },
     "Relaxed" : {
@@ -1083,10 +1340,25 @@
     "Remove All Downloads" : {
 
     },
+    "Remove Books" : {
+
+    },
     "Remove Download" : {
 
     },
     "Remove every Download from this device?" : {
+
+    },
+    "Remove from List" : {
+
+    },
+    "Remove from Recent" : {
+
+    },
+    "Remove from Reference" : {
+
+    },
+    "Remove from To Read" : {
 
     },
     "Remove the Download of %@" : {
@@ -1105,6 +1377,18 @@
     "Remove when finished" : {
 
     },
+    "Rename" : {
+
+    },
+    "Rename List" : {
+
+    },
+    "Reorder or Remove" : {
+
+    },
+    "Reorder or Remove Books" : {
+
+    },
     "Reset" : {
 
     },
@@ -1112,6 +1396,9 @@
 
     },
     "Results" : {
+
+    },
+    "Resume" : {
 
     },
     "Resume listening" : {
@@ -1198,10 +1485,22 @@
     "Shisho" : {
 
     },
+    "Shisho app player" : {
+
+    },
+    "Shisho app reader" : {
+
+    },
     "Shisho isn't allowed on your local network, where this server is. Turn on Local Network for Shisho in Settings." : {
 
     },
     "Shisho lists your audiobooks here once it's signed in to your server." : {
+
+    },
+    "Shisho web player" : {
+
+    },
+    "Shisho web reader" : {
 
     },
     "Show all %@" : {
@@ -1298,6 +1597,18 @@
     "Speed %@" : {
 
     },
+    "Start date unknown" : {
+
+    },
+    "Start reading" : {
+
+    },
+    "Started %@" : {
+
+    },
+    "Started %@, end date unknown" : {
+
+    },
     "Stay Here" : {
 
     },
@@ -1347,6 +1658,12 @@
     "That doesn't look like a server address. Try something like https://shisho.example.com." : {
 
     },
+    "The Books stay Reference. Opening one again brings it back here." : {
+
+    },
+    "The List goes for everyone it's shared with. The Books in it stay in your Libraries." : {
+
+    },
     "The app couldn't open its storage on this device. %@" : {
 
     },
@@ -1390,6 +1707,9 @@
     "Then by…" : {
 
     },
+    "They show here once the app has synced with your server, and work offline after." : {
+
+    },
     "They stay in your library, and you can redownload them later." : {
 
     },
@@ -1415,6 +1735,9 @@
 
     },
     "This book has no pages." : {
+
+    },
+    "This device" : {
 
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
@@ -1460,6 +1783,9 @@
     "To Read" : {
 
     },
+    "To Read is empty" : {
+
+    },
     "Toggles the direction" : {
 
     },
@@ -1481,6 +1807,9 @@
     "Unknown" : {
 
     },
+    "Unknown Book" : {
+
+    },
     "Untitled" : {
 
     },
@@ -1491,6 +1820,9 @@
 
     },
     "Update the app" : {
+
+    },
+    "Updated %@" : {
 
     },
     "Use the same username and password as on the web. The server's address is the one you open in a browser." : {
@@ -1511,6 +1843,9 @@
     "Waiting to download" : {
 
     },
+    "Where you read" : {
+
+    },
     "Wide" : {
 
     },
@@ -1518,6 +1853,9 @@
 
     },
     "Words" : {
+
+    },
+    "Words read" : {
 
     },
     "Writer" : {
@@ -1568,6 +1906,12 @@
 
     },
     "Your account can't read Books on this server. Ask the server's owner for access." : {
+
+    },
+    "Your current Read-through is deleted along with the reading time and places recorded during it, and every main file opens at the start again. If starting it took the book off To Read, it goes back to its place there." : {
+
+    },
+    "Your current Read-through of this book is deleted from your reading history, and this can't be undone. The reading time recorded during it still counts toward your Reading Stats, and every file keeps its place. While the book is Reference, opening it never starts or finishes a Read-through." : {
 
     },
     "Your library, in your pocket." : {
