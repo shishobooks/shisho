@@ -52,6 +52,10 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	// The user's Reading Stats, which the app keeps a copy of to show offline
 	// (CapabilityReadingStats).
 	g.GET("/stats", h.stats, signedIn, h.requireProtocol)
+	// Reading Stats' Calendar, a day at a time (CapabilityReadingCalendar).
+	g.GET("/stats/heatmap", h.statsHeatmap, signedIn, h.requireProtocol)
+	g.GET("/stats/calendar", h.statsCalendar, signedIn, h.requireProtocol)
+	g.GET("/stats/day", h.statsDay, signedIn, h.requireProtocol)
 	// Original Files (ADR 0022), with Range support so a download resumes
 	// and a stream seeks.
 	g.GET("/files/:id/download", h.download, signedIn, h.requireProtocol)

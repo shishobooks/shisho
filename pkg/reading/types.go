@@ -322,9 +322,13 @@ type ReadingStatsResponse struct {
 type ReadingStatsTotals struct {
 	// Finished counts finished Read-throughs, every reread included, and
 	// Rereads how many of those were of a Book already finished before.
-	Finished     int `json:"finished"`
-	Rereads      int `json:"rereads"`
-	DidNotFinish int `json:"did_not_finish"`
+	Finished int `json:"finished"`
+	Rereads  int `json:"rereads"`
+	// FinishedBooks is how many distinct Books the breakdowns (Genres, Tags,
+	// Authors, Kinds, Ratings) count from: each finished Book once, leaving
+	// out detached Read-throughs. Each breakdown row's share is of this.
+	FinishedBooks int `json:"finished_books"`
+	DidNotFinish  int `json:"did_not_finish"`
 	// ReadingSeconds and ListeningSeconds are Session time, estimated
 	// Sessions included.
 	ReadingSeconds   int `json:"reading_seconds"`

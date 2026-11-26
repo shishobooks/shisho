@@ -567,6 +567,7 @@ func (svc *Service) addBreakdowns(ctx context.Context, resp *ReadingStatsRespons
 			bookIDs = append(bookIDs, *rt.BookID)
 		}
 	}
+	resp.Totals.FinishedBooks = len(bookIDs)
 	resp.Genres = newBreakdown(nil)
 	resp.Tags = newBreakdown(nil)
 	resp.Authors = newBreakdown(nil)

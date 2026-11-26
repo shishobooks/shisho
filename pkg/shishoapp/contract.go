@@ -74,7 +74,7 @@ var capabilities = map[int][]string{
 	1: {
 		CapabilityBookmarks, CapabilityShareFiles, CapabilityPageFlow, CapabilityPageImages,
 		CapabilityReadingStatus, CapabilityRatings, CapabilityToRead, CapabilityLists, CapabilityClearPosition,
-		CapabilityReadingStats,
+		CapabilityReadingStats, CapabilityReadingCalendar,
 	},
 }
 

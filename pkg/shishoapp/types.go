@@ -38,7 +38,7 @@ type ServerInfo struct {
 // X-Shisho-Capabilities header). An app turns a feature on for a server only
 // when it lists the feature's capability.
 const (
-	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow | typeof CapabilityPageImages | typeof CapabilityReadingStatus | typeof CapabilityRatings | typeof CapabilityToRead | typeof CapabilityLists | typeof CapabilityClearPosition | typeof CapabilityReadingStats;
+	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow | typeof CapabilityPageImages | typeof CapabilityReadingStatus | typeof CapabilityRatings | typeof CapabilityToRead | typeof CapabilityLists | typeof CapabilityClearPosition | typeof CapabilityReadingStats | typeof CapabilityReadingCalendar;
 	// CapabilityBookmarks is the Bookmark events in the journal and
 	// Bookmarks in the feed.
 	CapabilityBookmarks = "bookmarks"
@@ -69,6 +69,9 @@ const (
 	// CapabilityReadingStats is the route that sends the user's Reading
 	// Stats, which the app keeps a copy of to show offline.
 	CapabilityReadingStats = "reading_stats"
+	// CapabilityReadingCalendar is the routes that send Reading Stats'
+	// Calendar: the heatmap, a month's calendar, and a day's Sessions.
+	CapabilityReadingCalendar = "reading_calendar"
 )
 
 // SignInPayload signs an installation in with the user's username and
@@ -783,9 +786,13 @@ type StatsResponse struct {
 type StatsTotals struct {
 	// Finished counts finished Read-throughs, rereads included, and Rereads
 	// how many of those were of a Book finished before.
-	Finished     int `json:"finished"`
-	Rereads      int `json:"rereads"`
-	DidNotFinish int `json:"did_not_finish"`
+	Finished int `json:"finished"`
+	Rereads  int `json:"rereads"`
+	// FinishedBooks is how many distinct Books the breakdowns count from,
+	// each finished Book once, so a row's share is its Books over this. Null
+	// from a server before it was sent.
+	FinishedBooks *int `json:"finished_books"`
+	DidNotFinish  int  `json:"did_not_finish"`
 	// ReadingSeconds and ListeningSeconds are Reading Session time.
 	ReadingSeconds   int `json:"reading_seconds"`
 	ListeningSeconds int `json:"listening_seconds"`
@@ -845,6 +852,120 @@ type StatsPlace struct {
 	DeviceName       *string `json:"device_name"`
 	ReadingSeconds   int     `json:"reading_seconds"`
 	ListeningSeconds int     `json:"listening_seconds"`
+}
+
+// StatsHeatmapQuery picks the heatmap's year, or the last 12 months when
+// Year is omitted.
+type StatsHeatmapQuery struct {
+	Year *int `query:"year" json:"year,omitempty" validate:"omitempty,min=1,max=9999"`
+}
+
+// StatsHeatmapResponse is the user's reading a day at a time, for the
+// heatmap on Reading Stats' Calendar tab, as the web's. Days are in the
+// user's time zone, a Session past midnight split between both. The app
+// keeps a copy of each it shows (CapabilityReadingCalendar).
+type StatsHeatmapResponse struct {
+	// Today is the user's today.
+	Today string `json:"today"`
+	// From and To are the heatmap's first and last days: the last 12 months
+	// up to Today, or the whole year asked for.
+	From string `json:"from"`
+	To   string `json:"to"`
+	// FirstDay is the earliest day the user read or began or ended a
+	// Read-through, which the calendar goes back to. Null with no reading
+	// at all.
+	FirstDay *string `json:"first_day"`
+	// Days are the days from From to To with Session time, in order.
+	Days []StatsDay `json:"days"`
+}
+
+// StatsDay is the Session time that fell on one day.
+type StatsDay struct {
+	Day              string `json:"day"`
+	ReadingSeconds   int    `json:"reading_seconds"`
+	ListeningSeconds int    `json:"listening_seconds"`
+}
+
+// StatsCalendarQuery picks the month the calendar shows.
+type StatsCalendarQuery struct {
+	Year  int `query:"year" json:"year" validate:"required,min=1,max=9999"`
+	Month int `query:"month" json:"month" validate:"required,min=1,max=12"`
+}
+
+// StatsCalendarResponse is one month of the Reading Stats calendar: each
+// day with reading or a finish, and the Books on them.
+type StatsCalendarResponse struct {
+	Year  int `json:"year"`
+	Month int `json:"month"`
+	// Books are every Book read or finished in the month, by title.
+	Books []StatsBookRef `json:"books"`
+	// Days are the days with anything on them, in order.
+	Days []StatsCalendarDay `json:"days"`
+}
+
+// StatsCalendarDay is one day of the calendar and the Books on it.
+type StatsCalendarDay struct {
+	Day   string                 `json:"day"`
+	Books []StatsCalendarDayBook `json:"books"`
+}
+
+// StatsCalendarDayBook is one Book on one calendar day: the Session time
+// spent on it that day, and whether a Read-through of it finished that day.
+type StatsCalendarDayBook struct {
+	Key      string `json:"key"`
+	Seconds  int    `json:"seconds"`
+	Finished bool   `json:"finished"`
+}
+
+// StatsBookRef names a Book on the calendar and in a day's detail.
+type StatsBookRef struct {
+	// Key stays the same for a Book in every month, so it picks the Book's
+	// color the way the web's calendar does.
+	Key   string `json:"key"`
+	Title string `json:"title"`
+	// Removed is true when the Book was deleted.
+	Removed bool `json:"removed"`
+	// BookID is the Book when the user can still reach it, which the app
+	// finds in its own catalog: null when it was deleted or sits in a
+	// library they no longer have access to.
+	BookID *int `json:"book_id"`
+}
+
+// StatsDayQuery picks the day whose Sessions the calendar lists.
+type StatsDayQuery struct {
+	Day string `query:"day" json:"day" validate:"required,date"`
+}
+
+// StatsDayResponse is one day's Reading Sessions, in the user's time zone,
+// and the Read-throughs finished that day.
+type StatsDayResponse struct {
+	Day string `json:"day"`
+	// TimeZone is the IANA zone the day is in: the user's, or UTC when they
+	// set none.
+	TimeZone string            `json:"time_zone"`
+	Sessions []StatsDaySession `json:"sessions"`
+	Finished []StatsBookRef    `json:"finished"`
+}
+
+// StatsDaySession is one Reading Session that touched the day, in the order
+// they started. StartedAt and EndedAt are the whole Session, which may begin
+// the day before or end the day after; Seconds is its time on this day.
+type StatsDaySession struct {
+	ID              int          `json:"id"`
+	Book            StatsBookRef `json:"book"`
+	StartedAt       time.Time    `json:"started_at"`
+	EndedAt         time.Time    `json:"ended_at"`
+	Seconds         int          `json:"seconds"`
+	StartPercentage float64      `json:"start_percentage"`
+	EndPercentage   float64      `json:"end_percentage"`
+	Kind            string       `json:"kind" tstype:"ReadingKind"`
+	Source          string       `json:"source" tstype:"ReadingSource"`
+	// Measured is false for a Session its source estimated.
+	Measured bool `json:"measured"`
+	// DeviceID and DeviceName are the user's Device it came from, null for
+	// the web reader or a Device since deleted.
+	DeviceID   *string `json:"device_id"`
+	DeviceName *string `json:"device_name"`
 }
 
 // What the server did with each event.

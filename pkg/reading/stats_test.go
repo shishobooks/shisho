@@ -466,6 +466,7 @@ func TestStats_BreakdownsCountEachBookOnceUnderEachName(t *testing.T) {
 	f.finished(comic, "2026-03-01", "2026-03-01")
 
 	resp := f.stats("?year=2026")
+	assert.Equal(t, 3, resp.Totals.FinishedBooks, "the breakdowns' share of the distinct Books, a reread counted once")
 	assert.Equal(t, []ReadingStatsCount{{Name: "Classics", Books: 2}, {Name: "Science Fiction", Books: 1}}, resp.Genres,
 		"a reread doesn't count its Book twice, and the same name in two libraries is one Genre")
 	assert.Equal(t, []ReadingStatsCount{{Name: "Desert", Books: 1}}, resp.Tags)
@@ -577,6 +578,7 @@ func TestStats_DetachedReadThroughsCountButAreLeftOutOfBreakdowns(t *testing.T) 
 
 	resp := f.stats("?year=2026")
 	assert.Equal(t, 1, resp.Totals.Finished)
+	assert.Equal(t, 0, resp.Totals.FinishedBooks, "a detached Read-through has no Book for the breakdowns")
 	assert.Equal(t, 3600, resp.Totals.ReadingSeconds)
 	assert.Empty(t, resp.Genres)
 	assert.Empty(t, resp.Authors)

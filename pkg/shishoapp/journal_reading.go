@@ -379,7 +379,8 @@ func statsFor(resp *reading.ReadingStatsResponse, timeZone string) StatsResponse
 	out := StatsResponse{
 		Year: resp.Year, Years: resp.Years, TimeZone: timeZone,
 		Totals: StatsTotals{
-			Finished: resp.Totals.Finished, Rereads: resp.Totals.Rereads, DidNotFinish: resp.Totals.DidNotFinish,
+			Finished: resp.Totals.Finished, Rereads: resp.Totals.Rereads, FinishedBooks: &resp.Totals.FinishedBooks,
+			DidNotFinish:   resp.Totals.DidNotFinish,
 			ReadingSeconds: resp.Totals.ReadingSeconds, ListeningSeconds: resp.Totals.ListeningSeconds,
 			WordsRead: resp.Totals.WordsRead, AverageRating: resp.Totals.AverageRating,
 		},
