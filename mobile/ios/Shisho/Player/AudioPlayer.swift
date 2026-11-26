@@ -97,6 +97,7 @@ final class AudioPlayer {
     /// When the stream last stopped playing with an error while the item
     /// stayed ready, and whether play was tried again since.
     @ObservationIgnored private var stoppedAt: Date?
+    @ObservationIgnored private var stoppedPosition: Double = 0
     @ObservationIgnored private var retriedStop = false
     /// When the player played again after a failure, until it plays.
     @ObservationIgnored private var retriedAt: Date?
@@ -341,7 +342,7 @@ final class AudioPlayer {
             prepareItem()
         }
         // Playing again at the end starts over.
-        if file.duration > 0, currentPosition() >= file.duration - 0.5 {
+        if ListeningRules.isAtEnd(currentPosition(), duration: file.duration) {
             move(to: 0)
             retargetSleep()
         } else if smartRewind, let pausedAt {
@@ -620,6 +621,7 @@ final class AudioPlayer {
         let center = MPRemoteCommandCenter.shared()
         for command in [center.playCommand, center.pauseCommand, center.togglePlayPauseCommand, center.skipForwardCommand,
                         center.skipBackwardCommand, center.nextTrackCommand, center.previousTrackCommand,
+                        center.seekForwardCommand, center.seekBackwardCommand,
                         center.changePlaybackPositionCommand, center.changePlaybackRateCommand] {
             command.removeTarget(nil)
         }
@@ -853,7 +855,7 @@ final class AudioPlayer {
             return
         }
         if updated != file {
-            let coverChanged = updated.coverVersion != file?.coverVersion || updated.book.coverVersion != file?.book.coverVersion
+            let coverChanged = updated.coverVersion != file?.coverVersion
             file = updated
             if coverChanged { loadArtwork(updated) }
             updateNowPlaying()
@@ -1077,22 +1079,18 @@ final class AudioPlayer {
     private func stoppedWithError(_ failure: String) {
         guard let file else { return }
         let now = Date()
-        // One failure is reported several times in a row. A new one starts
-        // after a quiet spell, or after a seek, which also gives it its own
-        // retry (move(to:)).
-        let quiet = stoppedAt.map { now.timeIntervalSince($0) > AudioPlayer.stopWindow } ?? true
-        if quiet {
+        let position = currentPosition()
+        let new = StreamStopRules.isNew(at: now, position: position, last: stoppedAt.map { ($0, stoppedPosition) })
+        if new {
             retriedStop = false
         }
-        if quiet || stoppedSeek != seekCount {
-            log("file \(file.fileID): stopped at \(Int(currentPosition())) s: \(failure)")
+        if new || stoppedSeek != seekCount {
+            log("file \(file.fileID): stopped at \(Int(position)) s: \(failure)")
         }
         stoppedAt = now
+        stoppedPosition = position
         stoppedSeek = seekCount
     }
-
-    /// How long after a failure the player may play again on its own.
-    private static let stopWindow: TimeInterval = 5
 
     /// Plays again, once per failure, when the stream stopped with an error
     /// although playback is wanted. Some xHE-AAC audiobooks mark every frame
@@ -1109,13 +1107,13 @@ final class AudioPlayer {
             // yet, so a retry that never gets going still shows the error.
             if player.timeControlStatus == .playing {
                 self.retriedAt = nil
-            } else if now.timeIntervalSince(retriedAt) >= AudioPlayer.stopWindow {
+            } else if now.timeIntervalSince(retriedAt) >= StreamStopRules.window {
                 self.retriedAt = nil
                 couldNotPlay("still not playing after playing again")
             }
             return
         }
-        guard stopped, let stoppedAt, now.timeIntervalSince(stoppedAt) < AudioPlayer.stopWindow else { return }
+        guard stopped, let stoppedAt, now.timeIntervalSince(stoppedAt) < StreamStopRules.window else { return }
         if retriedStop {
             couldNotPlay("stopped again after playing again")
             return
@@ -1168,28 +1166,32 @@ final class AudioPlayer {
         let center = MPRemoteCommandCenter.shared()
         applySkipIntervals()
         center.changePlaybackRateCommand.supportedPlaybackRates = [0.8, 1.0, 1.2, 1.5, 2.0].map { NSNumber(value: $0) }
-        let commands: [(MPRemoteCommand, @MainActor (AudioPlayer, Double?) -> Void)] = [
-            (center.playCommand, { player, _ in player.play() }),
-            (center.pauseCommand, { player, _ in player.pause() }),
-            (center.togglePlayPauseCommand, { player, _ in player.togglePlay() }),
-            (center.skipBackwardCommand, { player, _ in player.skipBack() }),
-            (center.skipForwardCommand, { player, _ in player.skipForward() }),
-            // Headphones' double and triple click, and a car's track
-            // buttons, skip as the lock screen does rather than change
-            // chapter; chapters change in the app.
-            (center.nextTrackCommand, { player, _ in player.skipForward() }),
-            (center.previousTrackCommand, { player, _ in player.skipBack() }),
-            (center.changePlaybackPositionCommand, { player, time in
+        let commands: [(String, MPRemoteCommand, @MainActor (AudioPlayer, Double?) -> Void)] = [
+            ("play", center.playCommand, { player, _ in player.play() }),
+            ("pause", center.pauseCommand, { player, _ in player.pause() }),
+            ("toggle play", center.togglePlayPauseCommand, { player, _ in player.togglePlay() }),
+            ("skip back", center.skipBackwardCommand, { player, _ in player.skipBack() }),
+            ("skip forward", center.skipForwardCommand, { player, _ in player.skipForward() }),
+            // Headphones' double and triple click, and a car's track and
+            // seek buttons, skip as the lock screen does rather than change
+            // chapter; chapters change in the app and in CarPlay's Now Playing.
+            ("next track", center.nextTrackCommand, { player, _ in player.skipForward() }),
+            ("previous track", center.previousTrackCommand, { player, _ in player.skipBack() }),
+            ("seek forward", center.seekForwardCommand, { player, _ in player.skipForward() }),
+            ("seek back", center.seekBackwardCommand, { player, _ in player.skipBack() }),
+            ("change position", center.changePlaybackPositionCommand, { player, time in
                 if let time { player.seek(to: player.chapterBounds.start + time) }
             }),
-            (center.changePlaybackRateCommand, { player, rate in
+            ("change rate", center.changePlaybackRateCommand, { player, rate in
                 if let rate { player.setRate(rate) }
             }),
         ]
-        for (command, action) in commands {
+        for (name, command, action) in commands {
             AudioPlayer.onCommand(command) { [weak self] value in
                 Task { @MainActor in
                     guard let self else { return }
+                    // Which control sent what, as cars differ.
+                    self.log("remote command: \(name)")
                     action(self, value)
                 }
             }
@@ -1205,6 +1207,8 @@ final class AudioPlayer {
                 handle(event.positionTime)
             case let event as MPChangePlaybackRateCommandEvent:
                 handle(Double(event.playbackRate))
+            case let event as MPSeekCommandEvent:
+                if RemoteSkipRules.seekSkips(event.type == .beginSeeking ? .began : .ended) { handle(nil) }
             default:
                 handle(nil)
             }
@@ -1227,12 +1231,10 @@ final class AudioPlayer {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: max(0, position - bounds.start),
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying && !isBuffering ? rate : 0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: rate,
-            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
+            // No chapter number, chapter count, or media type: with the three,
+            // a car's skip buttons never reached the remote commands (#917).
+            // Which of them did it wasn't narrowed down.
         ]
-        if let index = chapterIndex {
-            info[MPNowPlayingInfoPropertyChapterNumber] = index
-            info[MPNowPlayingInfoPropertyChapterCount] = file.chapters.count
-        }
         if let artwork {
             info[MPMediaItemPropertyArtwork] = AudioPlayer.nowPlayingArtwork(artwork)
         }
@@ -1244,14 +1246,17 @@ final class AudioPlayer {
     /// downloading every cover fetches each File's own at.
     nonisolated static let artworkSize = 512
 
-    /// The lock screen's artwork: the File's own cover, or its Book's.
+    /// The lock screen's and CarPlay's artwork: the File's own cover, the
+    /// audiobook's, never its Book's, which can be an ebook's. A File with
+    /// none shows the system's own.
     private func loadArtwork(_ loaded: ListeningFile) {
+        artwork = nil
+        guard !loaded.coverVersion.isEmpty else { return }
         let covers = session.covers
-        let (owner, version): (CoverCache.Owner, String) = loaded.coverVersion.isEmpty
-            ? (.book(loaded.book.id), loaded.book.coverVersion) : (.file(loaded.fileID), loaded.coverVersion)
         Task { [weak self] in
-            let image = await covers.image(owner, version: version, size: AudioPlayer.artworkSize)
-            guard let self, self.file?.fileID == loaded.fileID else { return }
+            let image = await covers.image(.file(loaded.fileID), version: loaded.coverVersion, size: AudioPlayer.artworkSize)
+            // Not for a File or a cover since replaced.
+            guard let self, self.file?.fileID == loaded.fileID, self.file?.coverVersion == loaded.coverVersion else { return }
             self.artwork = image
             self.updateNowPlaying()
         }

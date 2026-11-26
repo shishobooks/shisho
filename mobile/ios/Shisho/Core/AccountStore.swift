@@ -73,6 +73,9 @@ struct AccountData {
     var libraryIDKey: String { "libraryID.\(accountID)" }
     /// The order picked for a Library, or 0 for every Library.
     func sortKey(libraryID: Int) -> String { sortKeyPrefix + String(libraryID) }
+    /// The order picked on this device for a Library, in the sort parameter
+    /// form, or nil for the one the user saved on the web.
+    func pickedSort(libraryID: Int) -> String? { UserDefaults.standard.string(forKey: sortKey(libraryID: libraryID)) }
     private var sortKeyPrefix: String { "sort.\(accountID)." }
     /// Downloading every cover on Wi-Fi, from before the setting applied to
     /// every account: read once to carry it over, and removed with the

@@ -58,7 +58,7 @@ The app can be signed in to several servers, or several accounts on one server, 
 
 ## Listening
 
-Books with an M4B audiobook have a **Listen** button that streams it from your server, or plays it from the phone once it's [downloaded](#downloads). Before you start, it shows the audiobook's length and size. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app. Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
+Books with an M4B audiobook have a **Listen** button that streams it from your server, or plays it from the phone once it's [downloaded](#downloads). Before you start, it shows the audiobook's length and size. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app and in [CarPlay](#carplay). Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
 
 The chapters are the ones Shisho has for the file, so [editing them](./metadata.md#chapters) changes them in the app too. Tap the chapter's name under the title, or **Chapters** under the player, to list them and go to one. Tap the time left under the position bar, which is at your current speed, to switch the bar between the chapter and the whole book.
 
@@ -75,6 +75,12 @@ If the server turns down a change the app made offline, for example listening to
 ### Bookmarks
 
 **Bookmark** under the player adds a [bookmark](./reading-and-playback.md#bookmarks) at the current moment; tap **Add Note** in the message that follows to write a note. The **Bookmarks** tab beside **Chapters**, also in the **…** menu, lists them in time order: tap one to go to its moment, or use its buttons to edit its note or delete it. Bookmarks work offline and sync with your account, so ones you add on the web show in the app after it syncs, and ones you add in the app show on the web. If a note was edited in two places, the later edit wins, and a deleted bookmark stays deleted.
+
+### CarPlay
+
+In a car with CarPlay, Shisho has three tabs: **Recent**, the audiobooks you're partway through with the one you listened to last first, **Downloads**, the audiobooks on the phone, and **Library**, your libraries with audiobooks, or the audiobooks themselves if only one library has any. A library lists its audiobooks in the same order as the library in the app. Recent leaves out books whose [status](./reading-tracking.md#reading-status) is Read, Paused, or Did Not Finish. Each audiobook is listed with its own cover, and a book with more than one audiobook lists each, with the file's name after the author. Pick one to play it and open Now Playing, which has previous and next chapter buttons beside skip back and skip forward at your skip lengths; the car's own skip buttons use the same lengths.
+
+CarPlay doesn't need the app open on the phone, and it works offline for downloaded audiobooks; others need a connection to your server, as on the phone. Listening in the car saves your place and counts in your reading history and stats, as on the phone.
 
 ## Reading
 

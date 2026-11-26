@@ -1,8 +1,43 @@
 import XCTest
 @testable import Shisho
 
-/// The full player's rules (#916): smart rewind and the sleep timer.
+/// The full player's rules (#916): smart rewind, the sleep timer, retrying
+/// a stream that stopped, and how a car's and headphones' buttons skip
+/// (#917).
 final class PlayerRulesTests: XCTestCase {
+    /// A notice over Now Playing's artwork takes its height from the
+    /// artwork, so the tools under the controls stay on screen.
+    func testANoticeTakesItsHeightFromTheArtwork() {
+        let phone = CGSize(width: 402, height: 780)
+        let plain = NowPlayingLayout.artworkWidth(space: phone, accessibilitySize: false, noticesHeight: 0)
+        XCTAssertEqual(plain, 296.4, accuracy: 0.01)
+        XCTAssertEqual(NowPlayingLayout.artworkWidth(space: phone, accessibilitySize: false, noticesHeight: 100), plain - 100, accuracy: 0.01)
+        XCTAssertEqual(NowPlayingLayout.artworkWidth(space: phone, accessibilitySize: false, noticesHeight: 400), 72,
+                       "two notices shrink it further than with none")
+        XCTAssertEqual(NowPlayingLayout.artworkWidth(space: CGSize(width: 402, height: 200), accessibilitySize: false, noticesHeight: 0), 120)
+    }
+
+    /// A car's seek button skips once, as it's let go.
+    func testACarsSeekButtonSkipsOnceAsItsLetGo() {
+        XCTAssertFalse(RemoteSkipRules.seekSkips(.began))
+        XCTAssertTrue(RemoteSkipRules.seekSkips(.ended), "a car's tap may send only the end")
+    }
+
+    /// A stream that stops with an error gets one retry per failure. The
+    /// same failure again, even after a quiet spell, is still that failure
+    /// while playback hasn't got anywhere, so it shows rather than retrying
+    /// forever.
+    func testAStreamStopIsNewOnlyOnceListeningGotSomewhere() {
+        let then = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertTrue(StreamStopRules.isNew(at: then, position: 0, last: nil), "the first")
+        XCTAssertFalse(StreamStopRules.isNew(at: then.addingTimeInterval(2), position: 40, last: (then, 0)),
+                       "one failure reported again soon after")
+        XCTAssertFalse(StreamStopRules.isNew(at: then.addingTimeInterval(6), position: 0.5, last: (then, 0)),
+                       "the same place a while later")
+        XCTAssertTrue(StreamStopRules.isNew(at: then.addingTimeInterval(60), position: 50, last: (then, 0)),
+                      "after listening on")
+    }
+
     /// A short pause picks up where it stopped; a longer one goes back a
     /// little, more the longer it was.
     func testSmartRewindGoesBackMoreAfterLongerPauses() {

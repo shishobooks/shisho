@@ -1,0 +1,9 @@
+// Debug builds are a separate app, Shisho Dev, with its own bundle id,
+// name, and blue icon, so it installs beside the App Store's Shisho and the
+// two are easy to tell apart. Set before the shared settings, so
+// Signing.local.xcconfig can still change any of it.
+SHISHO_BUNDLE_ID_SUFFIX = .dev
+SHISHO_DISPLAY_NAME = Shisho Dev
+SHISHO_APP_ICON = AppIconDev
+
+#include "Shisho.xcconfig"

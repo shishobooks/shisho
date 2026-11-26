@@ -78,12 +78,8 @@ extension CatalogStore {
     /// when the Book has none.
     static func audiobookFileID(_ db: Database, bookID: Int) throws -> Int? {
         try Int.fetchOne(db, sql: """
-            SELECT f.id FROM book_files f
-            LEFT JOIN local_positions l ON l.file_id = f.id
-            LEFT JOIN reading_positions p ON p.file_id = f.id
-            WHERE f.book_id = ? AND f.file_type = 'm4b' AND f.file_role != 'supplement'
-            ORDER BY MAX(COALESCE(l.updated_at, 0), COALESCE(p.occurred_at, 0)) DESC, f.position
-            LIMIT 1
+            WITH \(listenedSQL)
+            SELECT file_id FROM listened WHERE book_id = ? ORDER BY touched DESC, position LIMIT 1
             """, arguments: [bookID])
     }
 

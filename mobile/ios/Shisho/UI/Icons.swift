@@ -81,6 +81,11 @@ enum Lucide: String, CaseIterable {
     var image: Image {
         Image("Lucide/\(rawValue)").renderingMode(.template)
     }
+
+    /// The icon for UIKit, such as CarPlay's templates, which tint it.
+    var uiImage: UIImage? {
+        UIImage(named: "Lucide/\(rawValue)")?.withRenderingMode(.alwaysTemplate)
+    }
 }
 
 /// A Lucide icon, size points across at the default text size, growing with

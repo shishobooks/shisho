@@ -52,6 +52,12 @@ enum ListeningRules {
     /// The position is saved this often while playing, and on pause.
     static let saveInterval: TimeInterval = 5
 
+    /// A place this close to a File's end is the end: playing from it starts
+    /// over, and CarPlay's Recent leaves the File out.
+    static func isAtEnd(_ seconds: Double, duration: Double) -> Bool {
+        duration > 0 && seconds >= duration - 0.5
+    }
+
     /// Starts playing fileID at at. The current sitting goes on unless it's
     /// for another File or was paused too long; then it's finished and
     /// returned, to record, beside the new one.

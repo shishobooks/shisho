@@ -72,6 +72,10 @@ enum SyncStatus: Equatable {
 @MainActor
 @Observable
 final class AppModel {
+    /// The one model, which the phone's screen and CarPlay share. CarPlay
+    /// can launch the app with no screen, so whichever comes first makes it.
+    static let shared = AppModel()
+
     private let accounts = AccountStore()
 
     private(set) var session: AccountSession? {
@@ -138,12 +142,20 @@ final class AppModel {
         AccountData(accountID: session.account.id).sortKey(libraryID: libraryID)
     }
 
+    /// The order picked on this device for a Library of the account showing,
+    /// or nil for the one saved on the web.
+    func sortSpec(libraryID: Int) -> String? {
+        session.flatMap { AccountData(accountID: $0.account.id).pickedSort(libraryID: libraryID) }
+    }
+
     private func loadSort() {
-        let spec = session.map { UserDefaults.standard.string(forKey: sortKey($0)) } ?? nil
+        let spec = sortSpec(libraryID: libraryID)
         if spec != sortSpec { sortSpec = spec }
     }
     private let syncs = SyncRunner()
-    var isSyncing: Bool { syncs.isRunning || session.map { signingOut.contains($0.account.id) } == true }
+    var isSyncing: Bool { syncs.isRunning || isSigningOut }
+    /// The account showing is being signed out, sending its unsent changes.
+    var isSigningOut: Bool { session.map { signingOut.contains($0.account.id) } == true }
     /// False while the device has no network at all, as in airplane mode
     /// without Wi-Fi, so a sync says so at once instead of waiting on a
     /// request that can't go anywhere.
@@ -244,6 +256,9 @@ final class AppModel {
     /// Checks the server every so often while it can't be reached.
     @ObservationIgnored private var checking: Task<Void, Never>?
     @ObservationIgnored private var active = true
+    /// CarPlay is showing, which, like the app being in front, keeps
+    /// checking a server that can't be reached.
+    @ObservationIgnored private var carPlayShowing = false
 
     private func connectionChanged(to new: Connection) {
         let old = connection
@@ -285,7 +300,7 @@ final class AppModel {
     /// again every so often, so the app notices it's back without anyone
     /// waiting on a request.
     private func startChecking() {
-        guard checking == nil, active, let session else { return }
+        guard checking == nil, active || carPlayShowing, let session else { return }
         checking = Task { [weak self] in
             while !Task.isCancelled {
                 if await session.client.checkServer() { break }
@@ -307,7 +322,36 @@ final class AppModel {
         playingInBackground = player?.isPlaying == true
         reader?.background()
         active = false
-        stopChecking()
+        if !carPlayShowing { stopChecking() }
+    }
+
+    // MARK: - CarPlay
+
+    /// CarPlay connected, perhaps launching the app with no screen: the
+    /// server is checked as it is with the app in front, and synced, since
+    /// nothing else has asked for the places of other devices yet.
+    func carPlayConnected() {
+        carPlayShowing = true
+        checkConnection()
+        Task { await syncNow() }
+    }
+
+    /// CarPlay went, as when the car turns off, with the app perhaps never
+    /// on screen: what was listened goes now, and the background refresh
+    /// sends it later if the server can't be reached from the car.
+    func carPlayDisconnected() {
+        carPlayShowing = false
+        if !active { stopChecking() }
+        scheduleBackgroundRefresh()
+        Task { await syncNow() }
+    }
+
+    /// Asks the server now, and keeps asking while it can't be reached, as
+    /// when CarPlay is asked to stream with the server out of reach.
+    func checkConnection() {
+        guard connection != .online else { return }
+        checkServer()
+        if connection == .unreachable { startChecking() }
     }
 
     /// The app is leaving the screen, perhaps to be swiped away, which skips
@@ -325,10 +369,7 @@ final class AppModel {
         session?.downloads.resume()
         active = true
         // The network may have changed while the app was away.
-        if connection != .online {
-            checkServer()
-            if connection == .unreachable { startChecking() }
-        }
+        checkConnection()
         // Not over the reader, which was open as the audio played on.
         if playingInBackground, reader == nil, player?.isPlaying == true, player?.file != nil {
             showingPlayer = true

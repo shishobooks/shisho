@@ -1,5 +1,10 @@
 // Copy to Signing.local.xcconfig (gitignored) to sign with your own Apple
 // Developer team. A free Personal Team works on your own devices; it needs
-// a bundle id no one else has registered.
+// a bundle id no one else has registered. Debug builds add .dev to it.
 DEVELOPMENT_TEAM = YOURTEAMID
 SHISHO_BUNDLE_ID = com.example.shisho
+
+// A team without Apple's CarPlay entitlement can't sign it for a device, so
+// device builds leave it out. The Simulator needs no approval, so CarPlay
+// still works there.
+SHISHO_ENTITLEMENTS[sdk=iphoneos*] =

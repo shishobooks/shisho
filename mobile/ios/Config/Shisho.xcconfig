@@ -1,12 +1,18 @@
 // Settings every configuration of the Shisho app shares.
 //
 // Run in Xcode signs automatically with the maintainer's team and the
-// store's bundle id, so there's no team to pick. To sign with your own
-// team, copy Signing.local.xcconfig.example to Signing.local.xcconfig
-// (gitignored) and set both there.
+// store's bundle id, so there's no team to pick. Debug builds add .dev to
+// the bundle id (Debug.xcconfig). To sign with your own team, copy
+// Signing.local.xcconfig.example to Signing.local.xcconfig (gitignored)
+// and set both there.
 DEVELOPMENT_TEAM = 5GBPBX69VA
 SHISHO_BUNDLE_ID = com.shishobooks.shisho
 CODE_SIGN_STYLE = Automatic
+
+// CarPlay's audio entitlement, for every build. A device build signs only
+// when the App ID has the CarPlay capability, which Apple grants on
+// request, so both the store's bundle id and its .dev one need it.
+SHISHO_ENTITLEMENTS = Shisho/Shisho.entitlements
 
 // The app's version, which its Device in Shisho shows.
 MARKETING_VERSION = 0.1.0

@@ -2,7 +2,7 @@ import SwiftUI
 
 @main
 struct ShishoApp: App {
-    @State private var model = AppModel()
+    private let model = AppModel.shared
     @Environment(\.scenePhase) private var scenePhase
 
     init() {

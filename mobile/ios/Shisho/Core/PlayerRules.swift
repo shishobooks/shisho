@@ -1,5 +1,40 @@
 import Foundation
 
+/// When a stream that stopped with an error is played again on its own
+/// (`AudioPlayer.retryAfterStop`): once per failure.
+enum StreamStopRules {
+    /// How long after a failure the player may play again on its own.
+    static let window: TimeInterval = 5
+    /// How far listening must get past the last failure for the next to be
+    /// a failure of its own.
+    static let progress: Double = 2
+
+    /// Whether a stop at position is a failure of its own, with its own
+    /// retry, rather than the last one again: one failure is reported several
+    /// times in a row, and a stream that can't play fails at the same place
+    /// each time it's played again. A seek gives one its own retry too
+    /// (`AudioPlayer.move(to:)`).
+    static func isNew(at now: Date, position: Double, last: (at: Date, position: Double)?) -> Bool {
+        guard let last else { return true }
+        return now.timeIntervalSince(last.at) > window && abs(position - last.position) > progress
+    }
+}
+
+/// How a car's and headphones' buttons skip
+/// (`AudioPlayer.setUpRemoteCommands`).
+enum RemoteSkipRules {
+    /// A seek button's press and release.
+    enum SeekPhase: Sendable {
+        case began, ended
+    }
+
+    /// A seek skips once, as the button is let go: a car's tap may send only
+    /// that end.
+    static func seekSkips(_ phase: SeekPhase) -> Bool {
+        phase == .ended
+    }
+}
+
 /// Going back a little after a long pause, so the listener picks up the
 /// thread. The longer the pause, the further back.
 enum SmartRewind {
