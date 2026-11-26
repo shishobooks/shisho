@@ -236,6 +236,7 @@ const StatsBody = ({
         <div className="grid gap-4 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
           <StatsCard title="Genres">
             <CountList
+              books={stats.totals.finished_books}
               emptyMessage="No finished books with genres."
               onSelect={(value) => onToggleFilter("genre", value)}
               pluralNoun="genres"
@@ -246,6 +247,7 @@ const StatsBody = ({
           </StatsCard>
           <StatsCard title="Tags">
             <CountList
+              books={stats.totals.finished_books}
               emptyMessage="No finished books with tags."
               onSelect={(value) => onToggleFilter("tag", value)}
               pluralNoun="tags"
@@ -256,6 +258,7 @@ const StatsBody = ({
           </StatsCard>
           <StatsCard title="Authors">
             <CountList
+              books={stats.totals.finished_books}
               emptyMessage="No finished books with authors."
               onSelect={(value) => onToggleFilter("author", value)}
               pluralNoun="authors"
@@ -266,6 +269,7 @@ const StatsBody = ({
           </StatsCard>
           <StatsCard title="Kind">
             <CountList
+              books={stats.totals.finished_books}
               emptyMessage="No finished books."
               onSelect={(value) => onToggleFilter("kind", value)}
               pluralNoun="kinds"
@@ -276,6 +280,7 @@ const StatsBody = ({
           </StatsCard>
           <StatsCard title="Ratings">
             <CountList
+              books={stats.totals.finished_books}
               emptyMessage="No finished books are rated."
               onSelect={(value) => onToggleFilter("rating", value)}
               pluralNoun="ratings"

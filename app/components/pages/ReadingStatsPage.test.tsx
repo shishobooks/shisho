@@ -81,6 +81,7 @@ const emptyStats = (year: number | null): ReadingStatsResponse => ({
   totals: {
     finished: 0,
     rereads: 0,
+    finished_books: 0,
     did_not_finish: 0,
     reading_seconds: 0,
     listening_seconds: 0,
@@ -108,6 +109,7 @@ const busyStats = (year: number | null): ReadingStatsResponse => ({
   totals: {
     finished: 3,
     rereads: 1,
+    finished_books: 2,
     did_not_finish: 1,
     reading_seconds: 7200,
     listening_seconds: 1800,
@@ -587,10 +589,14 @@ describe("ReadingStatsPage", () => {
         .getAllByRole("button", { pressed: false })
         .map((button) => button.textContent),
     ).toEqual(
-      Array.from(
-        { length: 10 },
-        (_, i) => `Tag 14${i}${formatCount(150 - 140 - i, "book")}`,
-      ),
+      Array.from({ length: 10 }, (_, i) => {
+        // Each row's share of the books it counts from: here the most any
+        // tag has, 150, since the fixture's tags outnumber its books.
+        const books = 150 - 140 - i;
+        const percent = (books / 150) * 100;
+        const share = percent < 1 ? "<1%" : `${Math.round(percent)}%`;
+        return `Tag 14${i}${formatCount(books, "book")} · ${share}`;
+      }),
     );
     await user.click(within(tags).getByRole("button", { name: "Show fewer" }));
     expect(

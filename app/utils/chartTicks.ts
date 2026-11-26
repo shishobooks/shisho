@@ -24,6 +24,21 @@ export const niceTicks = (max: number): number[] => {
   return ticks;
 };
 
+/**
+ * niceTicks, with one step more when `max` lands exactly on the top tick,
+ * so the tallest bar never reaches the top of a bar chart.
+ * @example roomyTicks(1) // [0, 1, 2]
+ * @example roomyTicks(5) // [0, 2, 4, 6]
+ */
+export const roomyTicks = (max: number): number[] => {
+  const ticks = niceTicks(max);
+  const top = ticks[ticks.length - 1];
+  if (max > 0 && top === max) {
+    return [...ticks, top + (ticks[1] - ticks[0])];
+  }
+  return ticks;
+};
+
 /** A duration axis: its ticks in seconds, and how to label each. */
 export interface DurationAxis {
   ticks: number[];
@@ -32,14 +47,19 @@ export interface DurationAxis {
 
 /**
  * Y-axis ticks for time, in seconds, on round hours from an hour up and
- * round minutes below it.
+ * round minutes below it, with roomyTicks' extra step when asked for.
  * @example durationTicks(7.2 * 3600).ticks // [0, 7200, 14400, 21600, 28800]
  */
-export const durationTicks = (maxSeconds: number): DurationAxis => {
+export const durationTicks = (
+  maxSeconds: number,
+  { roomy = false }: { roomy?: boolean } = {},
+): DurationAxis => {
   const unit = maxSeconds >= 3600 ? 3600 : 60;
   const suffix = unit === 3600 ? "h" : "m";
   return {
-    ticks: niceTicks(maxSeconds / unit).map((t) => t * unit),
+    ticks: (roomy ? roomyTicks : niceTicks)(maxSeconds / unit).map(
+      (t) => t * unit,
+    ),
     format: (seconds) => (seconds === 0 ? "0" : `${seconds / unit}${suffix}`),
   };
 };

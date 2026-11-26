@@ -14,7 +14,7 @@ import type {
   ReadingStatsPeriod,
   ReadingStatsPlace,
 } from "@/types";
-import { durationTicks, niceTicks, yPercent } from "@/utils/chartTicks";
+import { durationTicks, roomyTicks, yPercent } from "@/utils/chartTicks";
 import {
   formatCount,
   formatDate,
@@ -23,6 +23,11 @@ import {
   formatRating,
 } from "@/utils/format";
 import { placeRows, type CountRow, type PlaceRow } from "@/utils/readingStats";
+
+// The Shisho app draws these sections too, in
+// mobile/ios/Shisho/UI/ReadingStatsView.swift, with the same titles, notes,
+// and colors. A change to what a section shows or says changes both;
+// app/utils/appParity.test.ts fails until it does.
 
 // Reading and listening keep the same colours on every chart.
 const READING_BAR = "bg-reading";
@@ -240,7 +245,9 @@ export const FinishedChart = ({
 }: {
   periods: ReadingStatsPeriod[];
 }) => {
-  const ticks = niceTicks(Math.max(0, ...periods.map((p) => p.finished)));
+  // A step more when the busiest period is exactly a tick, so its bar never
+  // reaches the top. The app's chart does the same.
+  const ticks = roomyTicks(Math.max(0, ...periods.map((p) => p.finished)));
   return (
     <PeriodBars
       caption="Books finished"
@@ -283,6 +290,7 @@ const TooltipSeries = ({
 export const TimeChart = ({ periods }: { periods: ReadingStatsPeriod[] }) => {
   const axis = durationTicks(
     Math.max(0, ...periods.map((p) => p.reading_seconds + p.listening_seconds)),
+    { roomy: true },
   );
   return (
     <>
@@ -355,6 +363,12 @@ const ShareBar = ({ children }: { children: ReactNode }) => (
   </span>
 );
 
+// A share of a whole, as "26%", or "<1%" for a sliver.
+const shareText = (seconds: number, total: number) => {
+  const percent = total > 0 ? (seconds / total) * 100 : 0;
+  return percent > 0 && percent < 1 ? "<1%" : `${Math.round(percent)}%`;
+};
+
 // Rows shown before "Show all".
 const VISIBLE_ROWS = 5;
 // How much of the last row an expanded list shows: enough to cut its name.
@@ -363,11 +377,14 @@ const PEEK = 0.45;
 /**
  * A breakdown of finished books, most first. It shows the first few and
  * expands to all of them, with a search once there are many, so a library
- * with hundreds of tags stays usable. Selecting a row filters the finished
- * books to it; selecting it again clears that.
+ * with hundreds of tags stays usable. Each row's bar is its share of the
+ * finished books: 2 mysteries of 3 books fill two thirds. A book can count
+ * under several rows, so the shares needn't add up to a whole. Selecting a
+ * row filters the finished books to it; selecting it again clears that.
  */
 export const CountList = ({
   rows,
+  books,
   singularNoun,
   pluralNoun,
   emptyMessage,
@@ -375,6 +392,8 @@ export const CountList = ({
   onSelect,
 }: {
   rows: CountRow[];
+  /** The distinct finished books the rows count from. */
+  books: number;
   singularNoun: string;
   pluralNoun: string;
   emptyMessage: string;
@@ -430,7 +449,8 @@ export const CountList = ({
   if (rows.length === 0) {
     return <EmptyNote>{emptyMessage}</EmptyNote>;
   }
-  const max = Math.max(...rows.map((row) => row.books));
+  // Never less than a row's own count, so no bar overflows.
+  const total = Math.max(books, ...rows.map((row) => row.books));
   return (
     <div
       className="flex flex-col"
@@ -472,12 +492,13 @@ export const CountList = ({
                   {row.label}
                 </span>
                 <span className="text-xs tabular-nums text-muted-foreground">
-                  {formatCount(row.books, "book")}
+                  {formatCount(row.books, "book")} ·{" "}
+                  {shareText(row.books, total)}
                 </span>
                 <ShareBar>
                   <span
                     className={cn("h-full rounded-full", SERIES_BAR)}
-                    style={{ width: share(row.books, max) }}
+                    style={{ width: share(row.books, total) }}
                   />
                 </ShareBar>
               </Button>
@@ -586,39 +607,49 @@ export const PlaceList = ({ places }: { places: ReadingStatsPlace[] }) => {
   if (rows.length === 0) {
     return <EmptyNote>No reading time recorded.</EmptyNote>;
   }
-  const max = Math.max(
-    ...rows.map((p) => p.reading_seconds + p.listening_seconds),
+  // Each bar is the place's slice of all the time, so the bars add up to a
+  // whole, as a single stacked bar would, but stay readable with many
+  // places.
+  const total = rows.reduce(
+    (sum, p) => sum + p.reading_seconds + p.listening_seconds,
+    0,
   );
   return (
     <>
       <Legend />
       <ul className="space-y-2">
-        {rows.map((place, i) => (
-          // Two Devices can share a name, so the place in the list keys it.
-          <li
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 text-sm"
-            key={`${i}-${place.label}`}
-            title={placeTime(place)}
-          >
-            <TruncatedText className="min-w-0 truncate">
-              {place.label}
-            </TruncatedText>
-            <span className="text-right text-xs tabular-nums text-muted-foreground">
-              {placeTime(place)}
-            </span>
-            <ShareBar>
-              <span
-                className={cn("h-full", READING_BAR)}
-                style={{ width: share(place.reading_seconds, max) }}
-              />
-              <span
-                className={cn("h-full", LISTENING_BAR)}
-                style={{ width: share(place.listening_seconds, max) }}
-              />
-              <span className="sr-only">{placeTime(place)}</span>
-            </ShareBar>
-          </li>
-        ))}
+        {rows.map((place, i) => {
+          const percent = shareText(
+            place.reading_seconds + place.listening_seconds,
+            total,
+          );
+          return (
+            // Two Devices can share a name, so the place in the list keys it.
+            <li
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 text-sm"
+              key={`${i}-${place.label}`}
+              title={placeTime(place)}
+            >
+              <TruncatedText className="min-w-0 truncate">
+                {place.label}
+              </TruncatedText>
+              <span className="text-right text-xs tabular-nums text-muted-foreground">
+                {placeTime(place)} · {percent}
+              </span>
+              <ShareBar>
+                <span
+                  className={cn("h-full", READING_BAR)}
+                  style={{ width: share(place.reading_seconds, total) }}
+                />
+                <span
+                  className={cn("h-full", LISTENING_BAR)}
+                  style={{ width: share(place.listening_seconds, total) }}
+                />
+                <span className="sr-only">{placeTime(place)}</span>
+              </ShareBar>
+            </li>
+          );
+        })}
       </ul>
     </>
   );
