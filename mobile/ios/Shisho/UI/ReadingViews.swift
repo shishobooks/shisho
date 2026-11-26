@@ -24,7 +24,7 @@ struct CurrentlyReadingView: View {
         .background(Theme.background)
         .refreshable { await model.syncNow() }
         .navigationTitle("Currently Reading")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $items) { db in
             try CatalogStore.continueItems(db)
         }
@@ -42,9 +42,11 @@ struct ToReadView: View {
     var body: some View {
         Group {
             if let books, books.isEmpty {
-                EmptyNotice(title: String(localized: "To Read is empty"),
-                            message: String(localized: "Books you add to To Read appear here, in the order you choose."), icon: .clock)
-                    .frame(maxHeight: .infinity, alignment: .top)
+                // In a scroll view, so it can still be pulled to refresh.
+                ScrollView {
+                    EmptyNotice(title: String(localized: "To Read is empty"),
+                                message: String(localized: "Books you add to To Read appear here, in the order you choose."), icon: .clock)
+                }
             } else {
                 List {
                     ForEach(Array((books ?? []).enumerated()), id: \.element.id) { index, book in
@@ -105,7 +107,7 @@ struct ToReadView: View {
         .background(Theme.background)
         .refreshable { await model.syncNow() }
         .navigationTitle("To Read")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if editable, (books?.count ?? 0) > 1 {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -176,9 +178,11 @@ struct ReadingHistoryView: View {
     var body: some View {
         Group {
             if let entries, entries.isEmpty {
-                EmptyNotice(title: String(localized: "No reading history yet"),
-                            message: String(localized: "Books you start, finish, or stop reading appear here."), icon: .history)
-                    .frame(maxHeight: .infinity, alignment: .top)
+                // In a scroll view, so it can still be pulled to refresh.
+                ScrollView {
+                    EmptyNotice(title: String(localized: "No reading history yet"),
+                                message: String(localized: "Books you start, finish, or stop reading appear here."), icon: .history)
+                }
             } else {
                 List {
                     ForEach(entries ?? []) { entry in
@@ -214,7 +218,7 @@ struct ReadingHistoryView: View {
         .background(Theme.background)
         .refreshable { await model.syncNow() }
         .navigationTitle("Reading History")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .alert(String(localized: "Delete this Read-through?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
                presenting: deleting) { entry in
             Button(String(localized: "Delete"), role: .destructive) { model.change(.deleteReadThrough(id: entry.id)) }
@@ -230,7 +234,9 @@ struct ReadingHistoryView: View {
     }
 }
 
-private struct HistoryRow: View {
+/// A Read-through as Reading History lists it, also used by Reading Stats'
+/// Finished page.
+struct HistoryRow: View {
     let entry: HistoryEntry
 
     var body: some View {

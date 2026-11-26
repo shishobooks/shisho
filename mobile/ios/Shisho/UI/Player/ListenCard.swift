@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Variant E's listen bar on a Book's page: the primary action for a Book
 /// with an audiobook, with where the user is, the time left at their speed
-/// for this Book, and a progress line. It opens Now Playing.
+/// for this Book, and its fill as far as the user is. It opens Now Playing.
 struct ListenCard: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -125,23 +125,13 @@ struct ListenCard: View {
                         .monospacedDigit()
                 }
             }
-            // Room above and below however many lines it has, and above the
-            // progress line when there is one.
-            .padding(.top, 12)
-            .padding(.bottom, seconds > 1 ? 15 : 12)
+            // Room above and below however many lines it has.
+            .padding(.vertical, 12)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 60)
             .foregroundStyle(Theme.primaryForeground)
-            .background(Theme.primary)
-            .overlay(alignment: .bottomLeading) {
-                GeometryReader { geometry in
-                    Rectangle()
-                        .fill(Theme.primaryForeground.opacity(0.55))
-                        .frame(width: geometry.size.width * fraction, height: 3)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-                }
-                .accessibilityHidden(true)
-            }
+            // The card is its own progress bar, filled as far as the user is.
+            .background(ProgressFill(fraction: finished ? 0 : fraction))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: Theme.primary.opacity(0.35), radius: 14, y: 10)
         }

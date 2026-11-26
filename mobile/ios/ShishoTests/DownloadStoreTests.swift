@@ -127,10 +127,10 @@ final class DownloadStoreTests: XCTestCase {
         XCTAssertEqual(try store.pool.read(CatalogStore.replacedDownloads), [])
     }
 
-    func testASeriesDownloadsItsBooksMainFilesItKnows() throws {
+    func testASeriesDownloadsItsBooksFilesItKnows() throws {
         let files = try store.pool.read { try CatalogStore.downloadableFiles($0, seriesID: 1) }
-        XCTAssertEqual(files, [10, 11, 20], "no supplement, and no File Type this version doesn't know")
-        XCTAssertEqual(try store.pool.read { try CatalogStore.notDownloaded($0, fileIDs: files) }, 3)
+        XCTAssertEqual(files, [10, 11, 12, 20], "supplements too, after their Book's main Files, and no File Type this version doesn't know")
+        XCTAssertEqual(try store.pool.read { try CatalogStore.notDownloaded($0, fileIDs: files) }, 4)
         try store.queueDownloads(files)
         XCTAssertEqual(try store.pool.read { try CatalogStore.notDownloaded($0, fileIDs: files) }, 0)
         try store.markDownloadFailed(fileID: 20, message: "gone")

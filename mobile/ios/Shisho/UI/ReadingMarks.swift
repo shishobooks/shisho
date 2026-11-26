@@ -115,35 +115,30 @@ struct CoverDownloadBadge: View {
     }
 }
 
-/// What a cover that opens straight into a File does, drawn in its middle
-/// as a video's play button is, so it doesn't look like a cover that opens
-/// the Book's page.
-enum CoverAction: Equatable {
-    case listen
-    case read
-    /// Listening now.
-    case playing
-}
-
-struct CoverActionDisc: View {
-    let action: CoverAction
+/// The download badge's place while a Book's Files download: a ring the
+/// same size, filling from 0 to 1, or turning while nothing is known yet.
+/// It gives way to `CoverDownloadBadge` once they're here. The cell around
+/// it says how far it has got to VoiceOver.
+struct CoverDownloadProgress: View {
+    let fraction: Double?
+    @State private var turning = false
 
     var body: some View {
-        Group {
-            switch action {
-            case .playing:
-                PlayingIndicator(playing: true, height: 14)
-            case .listen:
-                Icon(.headphones, size: 19, relativeTo: nil)
-            case .read:
-                Icon(.bookOpen, size: 19, relativeTo: nil)
-            }
+        ZStack {
+            Circle()
+                .stroke(Theme.foreground.opacity(0.15), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: fraction.map { max(0.04, min(1, $0)) } ?? 0.25)
+                .stroke(Theme.primary, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(fraction == nil && turning ? 270 : -90))
+                .animation(fraction == nil ? .linear(duration: 1).repeatForever(autoreverses: false) : .easeOut(duration: 0.2),
+                           value: fraction == nil && turning)
+                .animation(.easeOut(duration: 0.2), value: fraction)
         }
-        .foregroundStyle(Theme.primaryForeground)
-        .frame(width: 44, height: 44)
-        .background(Theme.primary, in: Circle())
-        .overlay(Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1))
-        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+        .padding(3)
+        .frame(width: 18, height: 18)
+        .background(Theme.secondary, in: Circle())
+        .onAppear { turning = true }
         .accessibilityHidden(true)
     }
 }

@@ -57,7 +57,7 @@ The app knows when the phone has no network, and when it has one but your server
 You manage your reading from the phone the way you do on the web, with or without a connection. Changes made offline show at once and reach your server the next time the app syncs.
 
 - **Reading status**: the status button on a book's page has the web's [status menu](./reading-tracking.md#changing-the-status): start, pause, resume, mark as read or Did Not Finish, **Mark as Reference** and **Remove from Reference**, and **Mark as not started** while you're reading it. Choices that delete a Read-through ask first, as on the web.
-- **Rating**: tap a star beside the status to rate in whole stars, or drag across the stars for quarter stars. The **×** clears it.
+- **Rating**: tap the stars beside the status to rate. The picker that opens rates in quarter stars, as on the web: tap or drag across its large stars, or step a quarter star at a time with **−** and **+**. **Clear Rating** there removes it.
 - **To Read**: **Add to To Read** in the status menu queues a book. The book's page shows its place, such as **#3 on To Read**.
 - **Lists**: **Add to List** on a book's page checks the lists it's in and makes a new one. **+** on the **Lists** tab makes a list, and a list's **…** menu renames or deletes it, and removes its books or, in an ordered list, drags them into a new order. What you can do follows your [permission](./lists.md) on the list.
 - **Clear saved position**: press and hold a file in a book's list of files, or use the **…** menu on the file's page, to clear your place in it, as on the web. The app's own place in the file goes too, so the reader or player opens at the start.
@@ -67,12 +67,12 @@ The **Home** tab, where the app opens, has a row for each of these, which you sw
 - **Currently Reading**, the books you're reading, most recently read first. As on the web, a paused book waits until you resume it.
 - **Recent Reference**, the [Reference](./reading-tracking.md#reference-books) books you've opened on this phone lately, so you can jump back into one. Nothing records that you're reading a Reference book, so this is kept on the phone only. Opening one again moves it to the front; **Remove from Recent**, or **Clear** on its page, takes books off.
 
-A book in these two has a listen or read button on its cover: tapping it goes straight back to the player or reader where you left off, in the file you used last. Press and hold one for **Open Book Page**.
+A book in these two is a card with a **Listen** or **Read** button that fills as far as you are: tapping it goes straight back to the player or reader where you left off, in the file you used last. Press and hold one for **Open Book Page** or to download it.
 - **To Read**, in your order. Drag books to reorder them with **Edit**, or press and hold one to move it to the top or bottom or remove it.
 Below the rows are:
 
 - **Reading History**, every Read-through, as on the web's [Reading History page](./reading-tracking.md#reading-history-page). Swipe one to delete it.
-- **Reading Stats**, for all time or one year, from the copy the app last fetched from your server, so it opens offline. Reading and listening time, the time by period and by where you read, and the Finished, Did Not Finish, and reread counts include what you've done on the phone since it last synced, and a note says how much of the time hasn't synced yet. The breakdowns by genre, author, and tag, pace, words read, and the average rating catch up at the next sync.
+- **Reading Stats**, for this year at first, or another year or all time, as on the web, from the copy the app last fetched from your server, so it opens offline. Reading and listening time, the time by period and by where you read, and the Finished, Did Not Finish, and reread counts include what you've done on the phone since it last synced, and a note says how much of the time hasn't synced yet. The breakdowns by genre, author, and tag, pace, words read, and the average rating catch up at the next sync. Tapping a row under **Genres**, **Tags**, **Authors**, or **Ratings** lists the books you finished that it counts, as the web's [Finished](./reading-stats.md#finished) section does, from the books on the phone, so it works offline; **Kind** rows don't open a list in the app. The **Calendar** tab has the web's [heatmap, month calendar, and each day's sessions](./reading-stats.md#calendar). A year, month, or day you've opened shows offline as it was when last fetched, with the reading and finishes done on the phone that haven't synced yet added on their days and marked as not synced in each day's list. One you haven't opened shows only the phone's reading until the app syncs. Sessions can be deleted only on the web.
 
 Something you did on the phone that your server hasn't confirmed yet, such as a book you started or finished offline, or reading time not sent yet, has a small cloud mark in Reading History and beside the status. It goes once the app syncs.
 
@@ -82,7 +82,7 @@ When the phone and the web change the same thing while the phone is offline, the
 - **To Read and ordered lists**: the latest move of each book wins. Books moved only on one side keep that side's move.
 - **Reading status**: the later choice wins. A status chosen on the phone before a later choice on the web doesn't apply when it syncs. A book marked read or Did Not Finish offline before you marked it Reference elsewhere is still recorded in Reading History, and the book stays Reference.
 
-A server from before these features doesn't offer them: the app shows your status and rating there without the controls to change them, and the **Reading Stats** link is hidden.
+A server from before these features doesn't offer them: the app shows your status and rating there without the controls to change them, and the **Reading Stats** link is hidden. With a server whose Reading Stats predate the calendar, the app shows them without the **Calendar** tab.
 
 ## Accounts
 
@@ -153,9 +153,9 @@ Under the page, with the controls hidden, are the chapter, the pages left in it,
 
 ## Downloads
 
-Each file in a book's list of files has a download button, so you can keep a book's audiobook without its ebook, or the other way round. The download button at the top of a series or a list downloads the main files of every book in it in one tap; supplements download one at a time. A file type this version of the app doesn't support shows as not supported, with its download button turned off.
+The **Download** button under **Listen** and **Read** at the top of a book's page downloads all of the book's files at once, supplements included, and says how much space they take. While they download it shows how far they've got, and tapping it offers to stop. Once they're all on the phone it says **Downloaded**, and tapping it offers to remove them. Each file in a book's list of files also has its own download button, so you can keep a book's audiobook without its ebook, or the other way round. The download button at the top of a series or a list downloads every file of every book in it in one tap, supplements included. A file type this version of the app doesn't support shows as not supported, with its download button turned off.
 
-A book with a file on the phone has a small download mark in the corner of its cover, wherever covers show, so you can tell at a glance what plays and opens offline.
+A book with a file on the phone has a small download mark in the corner of its cover, wherever covers show, so you can tell at a glance what plays and opens offline. While a book's files download, the mark is a ring that fills as they arrive. Press and hold a book's cover on Home, in the library, a series, a list, or a person's, genre's, or tag's page to **Download** it, **Cancel Download** while it's on its way, or **Remove Download** once it's on the phone. Pressing and holding a file in a book's list of files offers the same for that file.
 
 Downloads go on in the background when you switch to another app or lock the phone. One that's interrupted, by losing the connection or by the app closing, carries on from where it stopped instead of starting over. Downloads go on for the account you're using; another account's pause until you switch back to it. A downloaded audiobook plays, and a downloaded book opens, without a connection.
 

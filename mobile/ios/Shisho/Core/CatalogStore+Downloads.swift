@@ -85,7 +85,7 @@ extension CatalogStore {
 
     /// The File Types a Download can be made of: the ones this version
     /// knows (ADR 0020).
-    private static var downloadableTypes: String {
+    static var downloadableTypes: String {
         FileTypes.known.keys.sorted().map { "'\($0)'" }.joined(separator: ",")
     }
 
@@ -170,9 +170,10 @@ extension CatalogStore {
         }
     }
 
-    /// The main Files of a Series' Books, or a List's, that a Download can
-    /// be made of, for downloading them all at once. Supplements are left
-    /// out: they're extras, downloaded one at a time.
+    /// Every File of a Series' Books, or a List's, that a Download can be
+    /// made of, for downloading them all at once: supplements too, since
+    /// they're usually small and go with their Book, each Book's main Files
+    /// first.
     static func downloadableFiles(_ db: Database, seriesID: Int? = nil, listID: Int? = nil) throws -> [Int] {
         let books: String
         if let seriesID {
@@ -183,9 +184,8 @@ extension CatalogStore {
             return []
         }
         return try Int.fetchAll(db, sql: """
-            SELECT id FROM book_files WHERE book_id IN (\(books)) AND file_role != 'supplement'
-                AND file_type IN (\(downloadableTypes))
-            ORDER BY book_id, position
+            SELECT id FROM book_files WHERE book_id IN (\(books)) AND file_type IN (\(downloadableTypes))
+            ORDER BY book_id, file_role = 'supplement', position
             """)
     }
 

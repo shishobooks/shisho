@@ -3,7 +3,7 @@ import SwiftUI
 /// Variant E's read bar on a Book's page: the primary action for a Book
 /// with an ebook, beside the listen bar when it also has an audiobook, as
 /// ListenCard draws it: the chapter, the pages left in the book, how far
-/// through, and a progress line. It opens the reader.
+/// through, and its fill as far as the user is. It opens the reader.
 struct ReadCard: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -98,23 +98,12 @@ struct ReadCard: View {
                         .monospacedDigit()
                 }
             }
-            .padding(.top, 12)
-            .padding(.bottom, started ? 15 : 12)
+            .padding(.vertical, 12)
             .padding(.horizontal, 16)
             .frame(maxWidth: .infinity, minHeight: 60)
             .foregroundStyle(Theme.primaryForeground)
-            .background(Theme.primary)
-            .overlay(alignment: .bottomLeading) {
-                if started && !finished {
-                    GeometryReader { geometry in
-                        Rectangle()
-                            .fill(Theme.primaryForeground.opacity(0.55))
-                            .frame(width: geometry.size.width * progress.percentage, height: 3)
-                            .frame(maxHeight: .infinity, alignment: .bottom)
-                    }
-                    .accessibilityHidden(true)
-                }
-            }
+            // The card is its own progress bar, filled as far as the user is.
+            .background(ProgressFill(fraction: started && !finished ? progress.percentage : 0))
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .shadow(color: Theme.primary.opacity(0.35), radius: 14, y: 10)
         }

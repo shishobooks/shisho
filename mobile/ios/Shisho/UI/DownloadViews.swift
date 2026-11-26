@@ -376,6 +376,7 @@ struct DownloadsView: View {
     @Environment(AppModel.self) private var model
     @State private var downloads: [StoredDownload]?
     @State private var confirmingRemoveAll = false
+    @State private var scrolledBy: CGFloat = 0
 
     var body: some View {
         @Bindable var model = model
@@ -383,7 +384,11 @@ struct DownloadsView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
-                        Color.clear.frame(height: 0).id(ScrollTop.anchor)
+                        ScrollTopMarker(space: "downloads")
+                            .id(ScrollTop.anchor)
+                        TabHeading(title: String(localized: "Downloads"))
+                            .padding(.top, 4)
+                            .padding(.bottom, -8)
                         if let downloads {
                             summary(downloads)
                             if downloads.isEmpty {
@@ -417,15 +422,18 @@ struct DownloadsView: View {
                     .frame(maxWidth: 680)
                     .frame(maxWidth: .infinity)
                 }
+                .onScrolledDistanceChange(space: "downloads") { scrolledBy = $0 }
                 .miniPlayerClearance()
                 .onChange(of: model.scrollToTop[.downloads]) { _, _ in
                     withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
                 }
             }
             .background(Theme.background)
-            .navigationTitle("Downloads")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar { RootToolbar(downloadSettings: true) }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Downloads"))
+                RootToolbar(downloadSettings: true)
+            }
             .routeDestinations()
         }
         .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloads) { db in

@@ -95,7 +95,8 @@ struct LibraryView: View {
             .refreshable { await model.syncNow() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                LogoToolbarItem(scrolledBy: scrolledBy)
+                // The Library's heading sits under its picker and browse links.
+                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Library"), titleAfter: 110)
                 RootToolbar()
             }
             .routeDestinations()
@@ -234,31 +235,6 @@ private struct LibraryPicker: View {
     }
 }
 
-/// The logo at the top left, shrinking a little as the Library scrolls.
-private struct LogoToolbarItem: ToolbarContent {
-    let scrolledBy: CGFloat
-
-    private var scale: CGFloat {
-        1 - 0.18 * min(1, scrolledBy / 48)
-    }
-
-    var body: some ToolbarContent {
-        if #available(iOS 26, *) {
-            ToolbarItem(placement: .topBarLeading) { logo }
-                .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .topBarLeading) { logo }
-        }
-    }
-
-    private var logo: some View {
-        Wordmark(size: 26)
-            .fixedSize()
-            .scaleEffect(scale, anchor: .leading)
-            .accessibilityAddTraits(.isHeader)
-    }
-}
-
 /// The signed-in account, top right, as the user's initial.
 struct AccountButton: View {
     @Environment(AppModel.self) private var model
@@ -284,9 +260,9 @@ struct BookCell: View {
     var seriesNumber: (Double, Double?)?
     /// A File of the Book is downloaded to this device.
     var downloaded = false
-    /// What tapping the cell does instead of opening the Book's page, drawn
-    /// in the cover's middle: listen or read, as Home's tiles do.
-    var action: CoverAction?
+    /// The Book's Downloads, from `CatalogStore.booksDownloads`, which add
+    /// a ring filling while its Files download; nil shows only downloaded.
+    var downloads: BookDownloads?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -307,16 +283,8 @@ struct BookCell: View {
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    if downloaded {
-                        CoverDownloadBadge()
-                            .padding(8)
-                            .accessibilityIdentifier("book.downloaded")
-                    }
-                }
-                .overlay {
-                    if let action {
-                        CoverActionDisc(action: action)
-                    }
+                    BookDownloadMark(downloads: downloads, downloaded: downloaded)
+                        .padding(8)
                 }
                 .padding(.bottom, book.progress == nil ? 4 : 0)
             if let progress = book.progress {
@@ -347,7 +315,7 @@ struct BookCell: View {
         .frame(width: width, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityText)
+        .modifier(BookDownloadLabel(label: accessibilityText, downloads: downloads, downloaded: downloaded))
         .accessibilityAddTraits(.isButton)
         .accessibilityIdentifier("book.cell")
     }

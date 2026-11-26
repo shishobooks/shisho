@@ -86,6 +86,10 @@ final class CarPlayCatalogTests: XCTestCase {
         XCTAssertEqual(try continueListening(limit: 0), [])
 
         try listen(fileID: 10, percentage: 0.999, at: Date(timeIntervalSince1970: 1_800_000_200))
+        XCTAssertEqual(try continueListening().map(\.fileID), [30],
+                       "the last minute finishes the Read-through, as the server does, and a finished Book isn't continued")
+        // A Reference Book never finishes, so only its place decides.
+        try store.record(.markReference(book: 1), at: Date(timeIntervalSince1970: 1_800_000_250))
         XCTAssertEqual(try continueListening().map(\.fileID), [10, 30], "a second from the end plays on")
         try listen(fileID: 10, percentage: 0.9995, at: Date(timeIntervalSince1970: 1_800_000_300))
         XCTAssertEqual(try continueListening().map(\.fileID), [30], "where playing starts over is the end")

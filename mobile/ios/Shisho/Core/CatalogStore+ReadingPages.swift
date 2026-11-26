@@ -92,6 +92,10 @@ extension CatalogStore {
         let fileID: Int
         let listens: Bool
         var progress: Double?
+        /// The File's type and cover version, so a card shows the cover of
+        /// the File it opens, square for an audiobook.
+        var fileType = ""
+        var coverVersion = ""
         var id: Int { book.id }
     }
 
@@ -110,7 +114,7 @@ extension CatalogStore {
         let types = (readableTypes.union(["m4b"])).map { "'\($0)'" }.joined(separator: ",")
         return try books.compactMap { book in
             guard let row = try Row.fetchOne(db, sql: """
-                SELECT f.id, f.file_type, COALESCE(lp.percentage, p.percentage) AS percentage FROM book_files f
+                SELECT f.id, f.file_type, f.cover_version, COALESCE(lp.percentage, p.percentage) AS percentage FROM book_files f
                 LEFT JOIN local_positions l ON l.file_id = f.id
                 LEFT JOIN local_progress lp ON lp.file_id = f.id
                 LEFT JOIN reading_positions p ON p.file_id = f.id
@@ -119,7 +123,7 @@ extension CatalogStore {
                 LIMIT 1
                 """, arguments: [book.id]) else { return nil }
             return ContinueItem(book: book, fileID: row["id"], listens: (row["file_type"] as String) == "m4b",
-                                progress: row["percentage"])
+                                progress: row["percentage"], fileType: row["file_type"], coverVersion: row["cover_version"] ?? "")
         }
     }
 
@@ -195,6 +199,13 @@ extension CatalogStore {
             FROM read_throughs rt LEFT JOIN books b ON b.id = rt.book_id
             ORDER BY rt.outcome = 'underway' DESC, rt.end_day IS NULL, rt.end_day DESC, rt.begin_day DESC, rt.id DESC
             """)
+        return try historyEntries(db, rows: rows)
+    }
+
+    /// Read-through rows as Reading History lists them, each with its Book
+    /// when the device has it, or the title and authors it kept. rows have
+    /// the Read-through's columns and the Book's id as present, or null.
+    static func historyEntries(_ db: Database, rows: [Row]) throws -> [HistoryEntry] {
         let ids = rows.compactMap { $0["present"] as Int? }
         var books: [Int: BookSummary] = [:]
         if !ids.isEmpty {
@@ -224,12 +235,18 @@ extension CatalogStore {
         }
     }
 
-    /// Folds the sessions every range's copy counts into counted_sessions:
-    /// those the server took in before the oldest copy was fetched.
+    /// Folds the sessions every copy counts into counted_sessions: those the
+    /// server took in before the oldest copy of Reading Stats, or of the
+    /// calendar, was fetched. A calendar copy holds a session back for at
+    /// most calendarHold past the oldest stats copy, so a month seen once
+    /// and never again doesn't keep every session after it.
     func statsCaughtUp() throws {
         try pool.write { db in
             let decoder = makeShishoDecoder()
-            guard let cutoff = try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM stats_cache") else { return }
+            guard let statsCutoff = try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM stats_cache") else { return }
+            let calendarCutoff = try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM calendar_cache WHERE fetched_at >= ?",
+                                                     arguments: [statsCutoff - CatalogStore.calendarHold])
+            let cutoff = min(statsCutoff, calendarCutoff ?? statsCutoff)
             for row in try Row.fetchAll(db, sql: "SELECT payload FROM unstated_sessions WHERE accepted_at < ?", arguments: [cutoff]) {
                 guard let session = try? decoder.decode(Shishoapp.JournalSessionPayload.self, from: row["payload"] as Data),
                       !session.sessionId.isEmpty else { continue }
@@ -269,52 +286,18 @@ extension CatalogStore {
         else { return nil }
         var result = ReadingStats(stats: cached, fetchedAt: Date(timeIntervalSince1970: row["fetched_at"]))
         let zone = TimeZone(identifier: cached.timeZone) ?? .current
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = zone
 
         // Sessions not yet counted: the latest snapshot of each sitting,
-        // less what the copy already counts of it, which is every snapshot
-        // the server took in before the copy was fetched.
-        let decoder = makeShishoDecoder()
-        let fetchedAt: Double = row["fetched_at"]
-        var latest: [String: Shishoapp.JournalSessionPayload] = [:]
-        var counted: [String: Double] = [:]
-        for row in try Row.fetchAll(db, sql: "SELECT session_id, seconds FROM counted_sessions") {
-            counted[row["session_id"]] = row["seconds"]
-        }
-        let pending = try Row.fetchAll(db, sql: """
-            SELECT event_id, payload, NULL AS accepted_at FROM journal WHERE type = 'reading_session'
-            UNION ALL SELECT event_id, payload, accepted_at FROM unstated_sessions
-            """)
-        for row in pending {
-            guard let session = try? decoder.decode(Shishoapp.JournalSessionPayload.self, from: row["payload"] as Data) else { continue }
-            let key = session.sessionId.isEmpty ? "event:" + (row["event_id"] as String) : session.sessionId
-            if let accepted = row["accepted_at"] as Double?, accepted < fetchedAt {
-                counted[key] = max(counted[key] ?? 0, seconds(session))
-                continue
-            }
-            if let kept = latest[key], (timestamp(kept.endedAt) ?? 0) >= (timestamp(session.endedAt) ?? 0) { continue }
-            latest[key] = session
-        }
-        let fileIDs = Set(latest.values.map(\.fileId))
-        var listening: [Int: Bool] = [:]
-        if !fileIDs.isEmpty {
-            for row in try Row.fetchAll(db, sql: "SELECT id, file_type FROM book_files WHERE id IN (\(fileIDs.map(String.init).joined(separator: ",")))") {
-                listening[row["id"]] = (row["file_type"] as String) == "m4b"
-            }
-        }
+        // less what the copy already counts of it (UnsyncedReading).
+        let uncounted = UnsyncedReading.uncounted(try sessionSnapshots(db), counted: try countedSessions(db),
+                                                  fetchedAt: row["fetched_at"])
+        let listening = try listenedFiles(db, ids: Set(uncounted.map(\.payload.fileId)))
         var stats = result.stats
-        for (key, session) in latest {
-            let added = (seconds(session) - (counted[key] ?? 0)).rounded()
-            guard added > 0, let started = timestamp(session.startedAt) else { continue }
-            let date = Date(timeIntervalSince1970: started)
-            let parts = calendar.dateComponents([.year, .month], from: date)
-            guard let sessionYear = parts.year, year == nil || year == sessionYear else { continue }
-            let seconds = Int(added)
+        func add(_ seconds: Int, of session: Shishoapp.JournalSessionPayload, year sessionYear: Int, month: Int) {
             let listened = listening[session.fileId] ?? false
             result.unsyncedSeconds += seconds
             if listened { stats.totals.listeningSeconds += seconds } else { stats.totals.readingSeconds += seconds }
-            addToPeriod(&stats, year: sessionYear, month: year == nil ? nil : parts.month) { period in
+            addToPeriod(&stats, year: sessionYear, month: year == nil ? nil : month) { period in
                 if listened { period.listeningSeconds += seconds } else { period.readingSeconds += seconds }
             }
             if let index = stats.places.firstIndex(where: { $0.deviceId == ownDeviceID && !ownDeviceID.isEmpty }) {
@@ -326,6 +309,23 @@ extension CatalogStore {
             if !stats.years.contains(sessionYear) {
                 stats.years.append(sessionYear)
                 stats.years.sort(by: >)
+            }
+        }
+        // Each sitting's time is split at midnight and every part counted on
+        // its own day, as the server counts it, so one across New Year's
+        // Eve doesn't move between years once it syncs.
+        for sitting in uncounted {
+            let session = sitting.payload
+            let added = sitting.seconds - sitting.counted
+            guard added > 0, let started = timestamp(session.startedAt) else { continue }
+            let start = Date(timeIntervalSince1970: started)
+            let end = timestamp(session.endedAt).map(Date.init(timeIntervalSince1970:)) ?? start
+            let from = UnsyncedReading.uncountedStart(start: start, end: end, seconds: sitting.seconds, counted: sitting.counted)
+            for part in UnsyncedReading.splitByDay(start: from, end: end, seconds: added, zone: zone) {
+                let day = part.day.split(separator: "-").compactMap { Int($0) }
+                let seconds = Int(part.seconds.rounded())
+                guard day.count == 3, year == nil || year == day[0], seconds > 0 else { continue }
+                add(seconds, of: session, year: day[0], month: day[1])
             }
         }
         stats.places.sort { ($0.readingSeconds + $0.listeningSeconds) > ($1.readingSeconds + $1.listeningSeconds) }

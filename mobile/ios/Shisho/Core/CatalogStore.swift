@@ -394,6 +394,7 @@ final class CatalogStore: Sendable {
         // fetched. Raising feedVersion downloads deleted Books' titles for
         // Reading History and which Lists this installation made.
         migrator.registerMigration("v11: reading record", migrate: CatalogStore.migrateReadingRecord)
+        migrator.registerMigration("v12: reading calendar", migrate: CatalogStore.migrateReadingCalendar)
         return migrator
     }
 

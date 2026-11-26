@@ -264,6 +264,56 @@ final class APIClient: Sendable {
         return response
     }
 
+    /// The user's reading a day at a time for year, or the last 12 months,
+    /// for Reading Stats' Calendar (CapabilityReadingCalendar). A response
+    /// without its days, from something other than Shisho, is an error, so
+    /// the copy on the device stays.
+    func statsHeatmap(year: Int?) async throws -> Shishoapp.StatsHeatmapResponse {
+        let query = year.map { [URLQueryItem(name: "year", value: String($0))] } ?? []
+        let body = try await data("mobile/stats/heatmap", query: query)
+        struct Shape: Decodable {
+            let today: String
+            let from: String
+            let to: String
+            let days: [Shishoapp.StatsDay]
+        }
+        guard (try? JSONDecoder().decode(Shape.self, from: body)) != nil,
+              let response = try? makeShishoDecoder().decode(Shishoapp.StatsHeatmapResponse.self, from: body)
+        else { throw APIError.serverPredatesApp }
+        return response
+    }
+
+    /// One month, 1 to 12, of the user's Reading Stats calendar.
+    func statsCalendar(year: Int, month: Int) async throws -> Shishoapp.StatsCalendarResponse {
+        let body = try await data("mobile/stats/calendar", query: [
+            URLQueryItem(name: "year", value: String(year)),
+            URLQueryItem(name: "month", value: String(month)),
+        ])
+        struct Shape: Decodable {
+            let year: Int
+            let month: Int
+            let books: [Shishoapp.StatsBookRef]
+        }
+        guard (try? JSONDecoder().decode(Shape.self, from: body)) != nil,
+              let response = try? makeShishoDecoder().decode(Shishoapp.StatsCalendarResponse.self, from: body)
+        else { throw APIError.serverPredatesApp }
+        return response
+    }
+
+    /// One day's Reading Sessions and finishes, day as YYYY-MM-DD.
+    func statsDay(day: String) async throws -> Shishoapp.StatsDayResponse {
+        let body = try await data("mobile/stats/day", query: [URLQueryItem(name: "day", value: day)])
+        struct Shape: Decodable {
+            let day: String
+            let time_zone: String
+            let sessions: [Shishoapp.StatsDaySession]
+        }
+        guard (try? JSONDecoder().decode(Shape.self, from: body)) != nil,
+              let response = try? makeShishoDecoder().decode(Shishoapp.StatsDayResponse.self, from: body)
+        else { throw APIError.serverPredatesApp }
+        return response
+    }
+
     /// A File's own cover at size pixels, keyed by its cover version.
     func fileCover(fileID: Int, version: String, size: Int, renderKey: String) async throws -> Data {
         try await data("mobile/files/\(fileID)/cover", query: [

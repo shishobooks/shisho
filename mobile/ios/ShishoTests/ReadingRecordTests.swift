@@ -136,6 +136,17 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertEqual(try status(2), "reference")
     }
 
+    func testAStatusChangeThatDeletesTheReadThroughStillShowsItsNotSynced() throws {
+        func pending(_ book: Int) throws -> Bool {
+            try store.pool.read { try ReadingControlsState.pendingStatus($0, bookID: book) }
+        }
+        XCTAssertFalse(try pending(2))
+        try store.record(.markReference(book: 2), at: now)
+        XCTAssertTrue(try pending(2), "Mark as Reference, with no Read-through left to mark")
+        try answer(.accepted)
+        XCTAssertTrue(try pending(2), "until the feed brings it back")
+    }
+
     func testAReadThroughStartedByReadingKeepsItsIDSaveToSave() throws {
         let (sitting, _) = ListeningRules.play(nil, fileID: 10, at: now, percentage: 0)
         try store.recordPosition(fileID: 10, seconds: 12, percentage: 0.02, at: now.addingTimeInterval(12), atEnd: false, sitting: sitting)
@@ -293,6 +304,25 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertEqual(try allTime().unsyncedSeconds, 300)
     }
 
+    func testReadingStatsSplitUnsyncedReadingAtMidnightAsTheServerDoes() throws {
+        try cache("""
+        {"year":null,"years":[],"time_zone":"UTC","totals":{"finished":0,"rereads":0,"did_not_finish":0,"reading_seconds":0,
+          "listening_seconds":0,"words_read":0,"average_rating":null},"pace":{},"periods":[],"genres":[],"tags":[],"authors":[],
+          "kinds":[],"ratings":[],"places":[]}
+        """, fetchedAt: now)
+        // An hour listened from 11:30pm on New Year's Eve, half in each year.
+        let start = ISO8601DateFormatter().date(from: "2026-12-31T23:30:00Z")!
+        try store.saveSitting(nil, recording: FinishedSession(sittingID: "nye", fileID: 10, startedAt: start,
+                                                              endedAt: start.addingTimeInterval(3600), startPercentage: 0, endPercentage: 0.5,
+                                                              duration: 3600))
+        let stats = try allTime().stats
+        XCTAssertEqual(stats.totals.listeningSeconds, 3600)
+        XCTAssertEqual(stats.periods.first { $0.year == 2026 }?.listeningSeconds, 1800)
+        XCTAssertEqual(stats.periods.first { $0.year == 2027 }?.listeningSeconds, 1800)
+        XCTAssertEqual(stats.years, [2027, 2026])
+        XCTAssertEqual(try allTime().unsyncedSeconds, 3600)
+    }
+
     func testReadingStatsCountFinishesMadeOffline() throws {
         try cache("""
         {"year":null,"years":[],"time_zone":"UTC","totals":{"finished":0,"rereads":0,"did_not_finish":0,"reading_seconds":0,
@@ -344,6 +374,33 @@ final class ReadingWordingTests: XCTestCase {
             Shishoapp.StatsPlace(source: .kobo, deviceId: "k", deviceName: "Kobo Libra", readingSeconds: 60),
         ], ownDeviceID: "me")
         XCTAssertEqual(places.map(\.label), ["iPhone (this device)", "Shisho web reader", "Shisho web player", "Kobo Libra"])
+    }
+
+    func testChartTicksMatchTheWebs() {
+        XCTAssertEqual(ChartTicks.nice(18319), [0, 5000, 10000, 15000, 20000])
+        XCTAssertEqual(ChartTicks.nice(0), [0, 1])
+        let hours = ChartTicks.duration(7.2 * 3600)
+        XCTAssertEqual(hours.ticks.map { $0 * hours.unit }, [0, 7200, 14400, 21600, 28800])
+        XCTAssertEqual(hours.label(2), "2h")
+        let minutes = ChartTicks.duration(25 * 60)
+        XCTAssertEqual(minutes.unit, 60)
+        XCTAssertEqual(minutes.label(10), "10m")
+        XCTAssertEqual(minutes.label(0), "0")
+        XCTAssertEqual(ChartTicks.roomy(1), [0, 1, 2], "a step more when the most is exactly the top tick")
+        XCTAssertEqual(ChartTicks.roomy(5), [0, 2, 4, 6])
+        XCTAssertEqual(ChartTicks.duration(4 * 3600, roomy: true).ticks, [0, 1, 2, 3, 4, 5])
+    }
+
+    func testRereadsAreCountedInWords() {
+        XCTAssertEqual(StatsText.rereads(1), "1 reread")
+        XCTAssertEqual(StatsText.rereads(2), "2 rereads")
+    }
+
+    func testTotalsGoToDaysAsTheWebs() {
+        XCTAssertEqual(StatsText.totalDuration(526_800), "6d 2h 20m")
+        XCTAssertEqual(StatsText.totalHours(526_800), "146h 20m")
+        XCTAssertEqual(StatsText.totalDuration(3661), "1h 1m")
+        XCTAssertNil(StatsText.totalHours(3661))
     }
 
     func testMovesFollowTheWebsRule() {

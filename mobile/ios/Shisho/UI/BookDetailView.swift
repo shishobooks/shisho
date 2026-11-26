@@ -49,6 +49,8 @@ struct BookDetailView: View {
                             .padding(.top, (listen ?? nil) == nil ? 22 : 10)
                             .frame(maxWidth: 520)
                     }
+                    BookDownloadButton(bookID: bookID, spacing: (listen ?? nil) == nil && (read ?? nil) == nil ? 22 : 10)
+                        .frame(maxWidth: 520)
                     if let detail = book ?? nil {
                         details(detail)
                     }
@@ -457,6 +459,7 @@ private struct FileCard: View {
                     }
                     .accessibilityIdentifier("file.clearPosition.\(file.id)")
                 }
+                FileDownloadMenu(fileID: file.id, supported: FileTypes.isKnown(file.fileType), row: download ?? nil)
             }
             actions
         }

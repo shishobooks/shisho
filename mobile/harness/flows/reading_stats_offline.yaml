@@ -24,12 +24,17 @@ name: Reading Stats count offline listening once, and a cleared place syncs
     element:
       id: reading.stats
     direction: DOWN
-    timeout: 30000
+    # In the middle, not peeking out above the tab bar and the offline
+    # notice, where a tap lands on the tab bar instead. The last rows on
+    # Home can't reach the middle, so Maestro keeps swiping a while.
+    centerElement: true
+    timeout: 45000
 - tapOn:
     id: reading.stats
+# The tiles, or the empty state for a year with no reading yet.
 - extendedWaitUntil:
     visible:
-      id: stats.listening
+      id: "stats\\.(listening|empty)"
     timeout: 30000
 # Playback starts online, so the player buffers the whole (small) File,
 # then goes on offline.
@@ -80,7 +85,11 @@ name: Reading Stats count offline listening once, and a cleared place syncs
     element:
       id: reading.history
     direction: DOWN
-    timeout: 30000
+    # In the middle, not peeking out above the tab bar and the offline
+    # notice, where a tap lands on the tab bar instead. The last rows on
+    # Home can't reach the middle, so Maestro keeps swiping a while.
+    centerElement: true
+    timeout: 45000
 - tapOn:
     id: reading.history
 - extendedWaitUntil:
@@ -130,7 +139,11 @@ name: Reading Stats count offline listening once, and a cleared place syncs
     element:
       id: reading.stats
     direction: DOWN
-    timeout: 30000
+    # In the middle, not peeking out above the tab bar and the offline
+    # notice, where a tap lands on the tab bar instead. The last rows on
+    # Home can't reach the middle, so Maestro keeps swiping a while.
+    centerElement: true
+    timeout: 45000
 - tapOn:
     id: reading.stats
 - extendedWaitUntil:

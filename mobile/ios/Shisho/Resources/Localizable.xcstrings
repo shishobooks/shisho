@@ -30,6 +30,9 @@
         }
       }
     },
+    "%@ (estimated)" : {
+
+    },
     "%@ (this device)" : {
 
     },
@@ -41,6 +44,26 @@
     },
     "%@ couldn't be saved." : {
 
+    },
+    "%@ in %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ in %2$@"
+          }
+        }
+      }
+    },
+    "%@ in %@. The most was %@ on %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ in %2$@. The most was %3$@ on %4$@."
+          }
+        }
+      }
     },
     "%@ in your Libraries appear here." : {
 
@@ -87,6 +110,9 @@
         }
       }
     },
+    "%@ listening" : {
+
+    },
     "%@ of %@" : {
       "localizations" : {
         "en" : {
@@ -98,6 +124,18 @@
       }
     },
     "%@ of 5 stars" : {
+
+    },
+    "%@ pages per hour" : {
+
+    },
+    "%@ reading" : {
+
+    },
+    "%@ rereads" : {
+
+    },
+    "%@ star" : {
 
     },
     "%@ stars" : {
@@ -130,6 +168,9 @@
 
     },
     "%@ words" : {
+
+    },
+    "%@ words per minute" : {
 
     },
     "%@ · %@" : {
@@ -184,6 +225,22 @@
     "%@, descending" : {
 
     },
+    "%@, finished" : {
+
+    },
+    "%@. No reading" : {
+
+    },
+    "%@: %@ reading, %@ listening" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@: %2$@ reading, %3$@ listening"
+          }
+        }
+      }
+    },
     "%@× real time" : {
 
     },
@@ -219,16 +276,7 @@
     "%lld on the way" : {
 
     },
-    "%lld pages per hour" : {
-
-    },
-    "%lld rereads" : {
-
-    },
     "%lld selected" : {
-
-    },
-    "%lld words per minute" : {
 
     },
     "%lld%%" : {
@@ -240,6 +288,9 @@
     "-%@" : {
 
     },
+    "1 reread" : {
+
+    },
     "1 star" : {
 
     },
@@ -247,6 +298,12 @@
 
     },
     "A change made on this device couldn't be saved on the server: %@" : {
+
+    },
+    "A quarter star less" : {
+
+    },
+    "A quarter star more" : {
 
     },
     "Abridged" : {
@@ -339,7 +396,7 @@
     "Auto shows two pages side by side when the reader is wider than it is tall and has room for both." : {
 
     },
-    "Average rating" : {
+    "Average Rating" : {
 
     },
     "Back %lld Seconds" : {
@@ -387,6 +444,15 @@
     "Books added to this List appear here." : {
 
     },
+    "Books finished" : {
+
+    },
+    "Books finished by month" : {
+
+    },
+    "Books finished by year" : {
+
+    },
     "Books in Series" : {
 
     },
@@ -397,6 +463,12 @@
 
     },
     "Books you add to To Read appear here, in the order you choose." : {
+
+    },
+    "Books you finished in %@" : {
+
+    },
+    "Books you finished, all time" : {
 
     },
     "Books you start appear here." : {
@@ -420,16 +492,16 @@
     "Browse tags in your library" : {
 
     },
-    "By month" : {
-
-    },
-    "By year" : {
+    "Calendar" : {
 
     },
     "Can't reach your server" : {
 
     },
     "Cancel" : {
+
+    },
+    "Cancel Download" : {
 
     },
     "Ch. %@" : {
@@ -462,6 +534,9 @@
     "Clear Filters" : {
 
     },
+    "Clear Rating" : {
+
+    },
     "Clear Recent Reference?" : {
 
     },
@@ -469,9 +544,6 @@
 
     },
     "Clear all filters" : {
-
-    },
-    "Clear rating" : {
 
     },
     "Clear saved position" : {
@@ -490,6 +562,9 @@
 
     },
     "Close Search" : {
+
+    },
+    "Close day" : {
 
     },
     "Close search" : {
@@ -612,6 +687,9 @@
     "Download all covers on Wi-Fi" : {
 
     },
+    "Download all · %@" : {
+
+    },
     "Download audiobooks and ebooks from a Book's page to listen and read offline." : {
 
     },
@@ -621,19 +699,37 @@
     "Download on Wi-Fi only" : {
 
     },
+    "Download the rest · %@" : {
+
+    },
+    "Download · %@" : {
+
+    },
     "Downloaded" : {
 
     },
     "Downloaded only" : {
 
     },
+    "Downloaded · %@" : {
+
+    },
+    "Downloaded, %@" : {
+
+    },
     "Downloading" : {
+
+    },
+    "Downloading %@" : {
 
     },
     "Downloading your library…" : {
 
     },
     "Downloading · %@" : {
+
+    },
+    "Downloading, %@" : {
 
     },
     "Downloads" : {
@@ -643,6 +739,9 @@
 
     },
     "Duration" : {
+
+    },
+    "Each book keeps its own color." : {
 
     },
     "Ebooks" : {
@@ -705,6 +804,9 @@
     "Finished" : {
 
     },
+    "Finished books show here once they're on this device." : {
+
+    },
     "Flow" : {
 
     },
@@ -738,6 +840,9 @@
     "From " : {
 
     },
+    "From timed reading, leaving out skips ahead and time with a book left open, judged against your own usual pace." : {
+
+    },
     "Genres" : {
 
     },
@@ -753,13 +858,13 @@
     "Goes to this moment" : {
 
     },
+    "Heatmap year" : {
+
+    },
     "Highest rating" : {
 
     },
     "Home" : {
-
-    },
-    "Hours" : {
 
     },
     "Image" : {
@@ -795,6 +900,12 @@
     "It kept stopping. Check your connection and try again." : {
 
     },
+    "It shows here once the app has reached your server, and works offline after." : {
+
+    },
+    "It stays in your library, and you can download it again later." : {
+
+    },
     "It won't count in your reading history anymore. The reading time recorded during it is deleted too." : {
 
     },
@@ -813,10 +924,10 @@
     "Kind" : {
 
     },
-    "Kinds" : {
+    "Language" : {
 
     },
-    "Language" : {
+    "Last 12 months" : {
 
     },
     "Last page in book" : {
@@ -835,6 +946,9 @@
 
     },
     "Leave it empty to remove the note." : {
+
+    },
+    "Less" : {
 
     },
     "Letterer" : {
@@ -979,10 +1093,16 @@
     "Next field" : {
 
     },
+    "Next month" : {
+
+    },
     "Next result" : {
 
     },
     "No" : {
+
+    },
+    "No %@ match." : {
 
     },
     "No Audiobooks" : {
@@ -1012,25 +1132,67 @@
     "No Results for “%@”" : {
 
     },
+    "No access to this library" : {
+
+    },
     "No bookmarks yet. Use Bookmark under the player to mark where you are." : {
 
     },
     "No chapters" : {
 
     },
+    "No finished books" : {
+
+    },
+    "No finished books are rated." : {
+
+    },
+    "No finished books with authors." : {
+
+    },
+    "No finished books with genres." : {
+
+    },
+    "No finished books with tags." : {
+
+    },
+    "No finished books." : {
+
+    },
     "No genres found." : {
+
+    },
+    "No reading" : {
 
     },
     "No reading history yet" : {
 
     },
+    "No reading in %@" : {
+
+    },
+    "No reading in %@ yet" : {
+
+    },
+    "No reading on this day." : {
+
+    },
+    "No reading time recorded." : {
+
+    },
     "No results" : {
+
+    },
+    "No stats yet" : {
 
     },
     "No status" : {
 
     },
     "No tags found." : {
+
+    },
+    "None" : {
 
     },
     "Not Signed In" : {
@@ -1101,6 +1263,9 @@
     "OK" : {
 
     },
+    "Offers removing the Download" : {
+
+    },
     "Offline" : {
 
     },
@@ -1116,6 +1281,9 @@
     "Only for Paginated" : {
 
     },
+    "Only this device's reading shows here until the app syncs." : {
+
+    },
     "Open %@" : {
 
     },
@@ -1126,6 +1294,9 @@
 
     },
     "Opening the book" : {
+
+    },
+    "Opens a picker that rates in quarter stars." : {
 
     },
     "Opens every one" : {
@@ -1141,6 +1312,9 @@
 
     },
     "Organize your books into custom collections" : {
+
+    },
+    "Overview" : {
 
     },
     "PDFs" : {
@@ -1226,6 +1400,12 @@
     "Preparing…" : {
 
     },
+    "Press and hold the chart to see each month." : {
+
+    },
+    "Press and hold the chart to see each year." : {
+
+    },
     "Previous Chapter" : {
 
     },
@@ -1233,6 +1413,9 @@
 
     },
     "Previous field" : {
+
+    },
+    "Previous month" : {
 
     },
     "Previous result" : {
@@ -1251,6 +1434,9 @@
 
     },
     "Range" : {
+
+    },
+    "Rated %@" : {
 
     },
     "Rated %@ of 5 stars" : {
@@ -1286,10 +1472,22 @@
     "Reading Stats" : {
 
     },
+    "Reading Stats chart the books you finish and the time you spend reading, in Shisho's readers and on your synced devices. They fill in as you read." : {
+
+    },
     "Reading Stats need a connection" : {
 
     },
-    "Reading and listening time by period" : {
+    "Reading and listening by month" : {
+
+    },
+    "Reading and listening by year" : {
+
+    },
+    "Reading and listening time" : {
+
+    },
+    "Reading by day" : {
 
     },
     "Reading status" : {
@@ -1374,7 +1572,13 @@
         }
       }
     },
+    "Remove this Book's Downloads from this device?" : {
+
+    },
     "Remove when finished" : {
+
+    },
+    "Removed from library" : {
 
     },
     "Rename" : {
@@ -1628,6 +1832,12 @@
         }
       }
     },
+    "Stop downloading this Book" : {
+
+    },
+    "Stop downloading this Book?" : {
+
+    },
     "Supplement" : {
 
     },
@@ -1655,6 +1865,9 @@
     "Tap Search on the keyboard" : {
 
     },
+    "Tap or drag the stars" : {
+
+    },
     "That doesn't look like a server address. Try something like https://shisho.example.com." : {
 
     },
@@ -1668,6 +1881,9 @@
 
     },
     "The app couldn't save your sign-in on this device. Try again." : {
+
+    },
+    "The calendar needs a connection" : {
 
     },
     "The font couldn't be imported." : {
@@ -1737,6 +1953,9 @@
     "This book has no pages." : {
 
     },
+    "This day shows once the app can reach your server." : {
+
+    },
     "This device" : {
 
     },
@@ -1750,6 +1969,9 @@
 
     },
     "This isn't in your Libraries anymore" : {
+
+    },
+    "This month shows once the app can reach your server." : {
 
     },
     "This server runs Shisho %@, which is too old for this version of the app (%@). Ask the server's owner to update Shisho." : {
@@ -1777,6 +1999,9 @@
     "This version of the app (%@) is too old for this server, which runs Shisho %@. Update the Shisho app to keep syncing." : {
 
     },
+    "Time" : {
+
+    },
     "Title" : {
 
     },
@@ -1787,6 +2012,9 @@
 
     },
     "Toggles the direction" : {
+
+    },
+    "Total %@" : {
 
     },
     "Translator" : {
@@ -1831,6 +2059,12 @@
     "Username" : {
 
     },
+    "Value" : {
+
+    },
+    "View" : {
+
+    },
     "Vol. %@" : {
 
     },
@@ -1841,6 +2075,9 @@
 
     },
     "Waiting to download" : {
+
+    },
+    "What's already downloaded stays on this device." : {
 
     },
     "Where you read" : {
@@ -1920,6 +2157,12 @@
     "Your password has to be changed before you can sign in. Sign in on the web to change it, then try again." : {
 
     },
+    "Your reading for %@. Only you can see this." : {
+
+    },
+    "Your reading, day by day. Only you can see this." : {
+
+    },
     "Your server can't be reached, and this audiobook isn't downloaded. Download it to listen without a connection." : {
 
     },
@@ -1971,10 +2214,22 @@
     "a newer release" : {
 
     },
+    "all time" : {
+
+    },
     "an older release" : {
 
     },
     "ascending" : {
+
+    },
+    "at %@" : {
+
+    },
+    "author" : {
+
+    },
+    "authors" : {
 
     },
     "by " : {
@@ -2001,13 +2256,43 @@
     "editor" : {
 
     },
+    "genre" : {
+
+    },
+    "genres" : {
+
+    },
     "https://shisho.example.com" : {
+
+    },
+    "kind" : {
+
+    },
+    "kinds" : {
 
     },
     "manager" : {
 
     },
+    "marks the day you finished one." : {
+
+    },
+    "rating" : {
+
+    },
+    "ratings" : {
+
+    },
     "reset to default" : {
+
+    },
+    "tag" : {
+
+    },
+    "tags" : {
+
+    },
+    "the last 12 months" : {
 
     },
     "viewer" : {

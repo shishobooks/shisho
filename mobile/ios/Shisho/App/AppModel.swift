@@ -749,6 +749,7 @@ final class AppModel {
         signedOutAccount = nil
         serverReplacedAccountID = nil
         addingAccount = false
+        tab = .home
         // Changes that couldn't be counted are said too. Without a
         // replacement, a notice from an earlier sign-in stays until it's
         // dismissed, shown only on its own account.
@@ -1358,6 +1359,9 @@ enum Route: Hashable {
     case toRead
     case history
     case stats
+    /// The finished Books a Reading Stats breakdown row counts, in the
+    /// year it showed, or all time for nil.
+    case statsFinished(StatsFinishedFilter, year: Int?)
 }
 
 /// The File open in a reader, which records reading whatever the screen

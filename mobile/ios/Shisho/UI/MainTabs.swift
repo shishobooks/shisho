@@ -205,6 +205,76 @@ private struct TabPressStyle: ButtonStyle {
 
 /// The top right of each tab's first screen, as the prototype has it:
 /// search, which opens on top of the tab, and the account.
+/// The logo at the top left of a tab's first screen, as the web's top bar
+/// has it. On Home it shrinks a little as the page scrolls; on the other
+/// tabs the tab's name takes its place once the page's own heading has
+/// scrolled under the bar.
+struct LogoToolbarItem: ToolbarContent {
+    let scrolledBy: CGFloat
+    /// The tab's name, or nil to keep the logo, as Home does.
+    var title: String?
+    /// How far the page scrolls before its heading is under the bar.
+    var titleAfter: CGFloat = 40
+
+    private var showsTitle: Bool { title != nil && scrolledBy > titleAfter }
+
+    private var scale: CGFloat {
+        title == nil ? 1 - 0.18 * min(1, scrolledBy / 48) : 1
+    }
+
+    var body: some ToolbarContent {
+        if #available(iOS 26, *) {
+            ToolbarItem(placement: .topBarLeading) { content }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { content }
+        }
+    }
+
+    /// How far each slides as they trade places.
+    private static let travel: CGFloat = 14
+
+    /// Both are always there, at a size that doesn't change, and only slide
+    /// and fade, so neither moves sideways as they trade places. They move
+    /// with the page: scrolling down, the logo rises out of view and the
+    /// name rises in from below; scrolling back, the name sinks away and the
+    /// logo comes down from above.
+    private var content: some View {
+        ZStack(alignment: .leading) {
+            Wordmark(size: 26)
+                .fixedSize()
+                .scaleEffect(scale, anchor: .leading)
+                .offset(y: showsTitle ? -Self.travel : 0)
+                .opacity(showsTitle ? 0 : 1)
+            if let title {
+                Text(title)
+                    .font(.geist(.headline, weight: .semibold))
+                    .foregroundStyle(Theme.foreground)
+                    .fixedSize()
+                    .offset(y: showsTitle ? 0 : Self.travel)
+                    .opacity(showsTitle ? 1 : 0)
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: showsTitle)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(showsTitle ? title ?? "Shisho" : "Shisho")
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// A tab's own heading at the top of its first screen, which the bar's
+/// logo gives way to once it scrolls under (LogoToolbarItem).
+struct TabHeading: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.geist(.title2, weight: .semibold))
+            .foregroundStyle(Theme.foreground)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
 struct RootToolbar: ToolbarContent {
     @Environment(AppModel.self) private var model
     /// The Downloads tab's: its settings, rarely changed, behind a gear.
@@ -282,6 +352,8 @@ private struct RouteDestination: View {
             ReadingHistoryView()
         case .stats:
             ReadingStatsView()
+        case .statsFinished(let filter, let year):
+            StatsFinishedView(filter: filter, year: year)
         }
     }
 }
@@ -314,8 +386,9 @@ struct BookGrid: View {
     let width: CGFloat
     var badges: [Int: (Double, Double?)] = [:]
     var identifier = "library.grid"
-    /// The Books with a File on the device.
-    @State private var downloaded: Set<Int>?
+    /// Each Book with a Download of any of its Files, for its mark, its
+    /// menu, and which Books open offline.
+    @State private var downloads: [Int: BookDownloads]?
 
     var body: some View {
         let layout = GridLayout(width: width, regular: sizeClass == .regular,
@@ -324,27 +397,29 @@ struct BookGrid: View {
         // Read here in body: a lazy grid builds its cells outside body, so
         // state read only in a cell doesn't redraw it when it changes.
         let connection = model.connection
-        let downloaded = downloaded
+        let downloads = downloads
+        let downloaded = downloads.map { Set($0.values.filter(\.hasDownloaded).map(\.bookID)) }
         LazyVGrid(columns: Array(repeating: column, count: layout.columns), spacing: 22) {
             ForEach(books) { book in
                 let onDevice = !ConnectionRules.dimmed(bookID: book.id, connection: connection, downloaded: downloaded)
                 let isDownloaded = downloaded?.contains(book.id) == true
                 NavigationLink(value: Route.book(book)) {
-                    BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id], downloaded: isDownloaded)
+                    BookCell(book: book, width: layout.cellWidth, seriesNumber: badges[book.id], downloaded: isDownloaded,
+                             downloads: downloads?[book.id])
                         // Without the server, a Book with nothing downloaded
                         // can't be listened to or read: dimmed, though its
                         // page still opens.
                         .opacity(onDevice ? 1 : 0.5)
                 }
                 .buttonStyle(PressableStyle())
-                .accessibilityValue(isDownloaded ? String(localized: "Downloaded") : "")
+                .bookDownloadMenu(book: book, downloads: downloads?[book.id])
                 .accessibilityHint(onDevice ? "" : String(localized: "Not downloaded"))
             }
         }
         .padding(.horizontal, GridLayout.margin)
         .accessibilityIdentifier(identifier)
-        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloaded) { db in
-            try CatalogStore.downloadedBookIDs(db)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $downloads) { db in
+            try CatalogStore.booksDownloads(db)
         }
     }
 }

@@ -23,9 +23,27 @@ struct ReadingControlsState: Equatable, Sendable {
                                     underway: try CatalogStore.underwayReadThrough(db, bookID: bookID),
                                     readBefore: try CatalogStore.readBefore(db, bookID: bookID),
                                     toReadPlace: try CatalogStore.toReadPlace(db, bookID: bookID),
-                                    pending: try Bool.fetchOne(db, sql: "SELECT EXISTS (SELECT 1 FROM read_throughs WHERE book_id = ? AND pending)",
-                                                               arguments: [bookID]) ?? false)
+                                    pending: try pendingStatus(db, bookID: bookID))
     }
+
+    /// The Book's status has a change the server hasn't confirmed: a
+    /// Read-through not confirmed, or a change to its status not sent or not
+    /// back in the feed yet. The second covers Mark as Reference and Mark as
+    /// not started, which delete the Read-through the first would find.
+    static func pendingStatus(_ db: Database, bookID: Int) throws -> Bool {
+        let types = statusTypes.map { "'\($0.rawValue)'" }.joined(separator: ",")
+        return try Bool.fetchOne(db, sql: """
+            SELECT EXISTS (SELECT 1 FROM read_throughs WHERE book_id = ?1 AND pending)
+                OR EXISTS (SELECT 1 FROM journal WHERE book_id = ?1 AND type IN (\(types)))
+                OR EXISTS (SELECT 1 FROM journal_applied WHERE book_id = ?1 AND type IN (\(types)))
+            """, arguments: [bookID]) ?? false
+    }
+
+    /// The changes that set a Book's Reading Status.
+    private static let statusTypes: [Shishoapp.JournalEventType] = [
+        .readThroughStart, .readThroughFinish, .readThroughAbandon, .readThroughPause, .readThroughResume,
+        .readThroughDelete, .referenceMark, .referenceRemove,
+    ]
 }
 
 /// The transitions a Reading Status offers, as the web's status menu does
@@ -90,11 +108,17 @@ struct BookReadingControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                statusControl
-                Spacer(minLength: 8)
-                RatingControl(units: state?.rating, editable: model.offers(.ratings)) { units in
-                    model.change(.rating(book: bookID, units: units))
+            // Side by side when they fit, the Rating under the status when
+            // they don't, as at the largest text sizes.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    statusControl
+                    Spacer(minLength: 0)
+                    ratingControl
+                }
+                VStack(alignment: .leading, spacing: 6) {
+                    statusControl
+                    ratingControl
                 }
             }
             HStack(spacing: 14) {
@@ -144,6 +168,12 @@ struct BookReadingControls: View {
         }
     }
 
+    private var ratingControl: some View {
+        RatingControl(units: state?.rating, editable: model.offers(.ratings), title: title) { units in
+            model.change(.rating(book: bookID, units: units))
+        }
+    }
+
     @ViewBuilder
     private var statusControl: some View {
         if canChangeStatus || canQueue {
@@ -187,11 +217,17 @@ struct BookReadingControls: View {
             } label: {
                 statusLabel(chevron: true)
             }
+            .buttonStyle(SmallOutlineStyle())
             .accessibilityLabel(String(localized: "Reading status: \(status.map(ReadingStatusLabel.text) ?? String(localized: "Not started"))"))
             .accessibilityValue(state?.pending == true ? String(localized: "Not synced yet") : "")
             .accessibilityIdentifier("book.detail.status")
         } else if status != nil {
             statusLabel(chevron: false)
+                .font(.geist(.footnote, weight: .medium))
+                .padding(.horizontal, 12)
+                .frame(minHeight: 34)
+                .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(String(localized: "Reading status: \(status.map(ReadingStatusLabel.text) ?? "")"))
                 .accessibilityValue(state?.pending == true ? String(localized: "Not synced yet") : "")
@@ -199,13 +235,16 @@ struct BookReadingControls: View {
         }
     }
 
+    /// The status as the Library's picker shows its Library: in a small
+    /// outlined box (SmallOutlineStyle).
     private func statusLabel(chevron: Bool) -> some View {
         HStack(spacing: 6) {
             Icon(StatusStyle.icon(status), size: 14, relativeTo: .footnote)
                 .foregroundStyle(status.map(StatusStyle.color) ?? Theme.mutedForeground)
             Text(status.map(ReadingStatusLabel.text) ?? String(localized: "Not started"))
-                .font(.geist(.footnote, weight: .medium))
                 .foregroundStyle(Theme.foreground)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             if chevron {
                 Icon(.chevronDown, size: 12, relativeTo: .footnote)
                     .foregroundStyle(Theme.mutedForeground)
@@ -215,10 +254,6 @@ struct BookReadingControls: View {
                 PendingMark()
             }
         }
-        .padding(.horizontal, 12)
-        .frame(minHeight: 44)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
     }
 }
 
@@ -232,84 +267,187 @@ struct PendingMark: View {
     }
 }
 
-/// A Rating in stars, set in quarter steps as on the web: a tap sets whole
-/// stars, a drag across sets quarters, and VoiceOver adjusts it a quarter at
-/// a time. Read only for a server that doesn't take Ratings from the app.
+/// A Rating in stars, in quarter steps as on the web. The stars open a
+/// sheet to rate, change, or clear it in, with room for quarter stars that
+/// a row this size can't give a finger (RatingSheet). Read only for a
+/// server that doesn't take Ratings from the app.
 struct RatingControl: View {
     /// Quarter stars, 1 to 20, or nil when unrated.
     let units: Int?
     let editable: Bool
+    /// The Book's title, for the sheet.
+    let title: String
     let set: (Int?) -> Void
 
-    @State private var dragging: Int?
+    @State private var rating = false
     @ScaledMetric(relativeTo: .body) private var starSize: CGFloat = 22
-
-    private var shown: Int { dragging ?? units ?? 0 }
 
     var body: some View {
         if !editable {
             if let units { RatingStars(units: units) }
         } else {
-            HStack(spacing: 4) {
-                stars
-                if units != nil {
-                    Button { set(nil) } label: {
-                        Icon(.x, size: 14, relativeTo: nil)
-                            .foregroundStyle(Theme.mutedForeground)
-                            .frame(width: 44, height: 44)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Clear rating"))
-                    .accessibilityIdentifier("rating.clear")
-                }
+            Button { rating = true } label: {
+                PreciseStars(units: units ?? 0, size: starSize)
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "Rating"))
+            .accessibilityValue(units.map { String(localized: "\(Ratings.text($0)) of 5 stars") } ?? String(localized: "Not rated"))
+            .accessibilityHint(String(localized: "Opens a picker that rates in quarter stars."))
+            .accessibilityIdentifier("book.detail.rating")
+            .sheet(isPresented: $rating) {
+                RatingSheet(title: title, initial: units, set: set)
+                    .presentationDetents([.height(330)])
+                    .presentationDragIndicator(.visible)
             }
         }
     }
+}
 
-    private var stars: some View {
-        let spacing: CGFloat = 2
-        return HStack(spacing: spacing) {
+/// Five stars filled to a Rating's exact quarter, as the web's StarRating
+/// draws them, rather than rounded to halves.
+struct PreciseStars: View {
+    /// Quarter stars, 0 to 20.
+    let units: Int
+    let size: CGFloat
+    var spacing: CGFloat = 2
+
+    var body: some View {
+        HStack(spacing: spacing) {
             ForEach(0..<5, id: \.self) { index in
-                let fill = min(1, max(0, Double(shown) / 4 - Double(index)))
-                ZStack {
-                    Icon(fill >= 0.75 ? .starFill : .star, size: starSize, relativeTo: nil)
-                    if fill >= 0.25, fill < 0.75 {
-                        Icon(.starHalfFill, size: starSize, relativeTo: nil)
-                    }
+                let fill = min(1, max(0, Double(units) / 4 - Double(index)))
+                ZStack(alignment: .leading) {
+                    Icon(.star, size: size, relativeTo: nil)
+                        .foregroundStyle(Theme.rating.opacity(0.55))
+                    Icon(.starFill, size: size, relativeTo: nil)
+                        .foregroundStyle(Theme.rating)
+                        .mask(alignment: .leading) {
+                            Rectangle().frame(width: size * fill)
+                        }
                 }
-                .foregroundStyle(Theme.rating)
-                .frame(minHeight: 44)
+                .frame(width: size, height: size)
             }
         }
-        .contentShape(Rectangle())
-        .gesture(DragGesture(minimumDistance: 0)
-            .onChanged { value in dragging = units(at: value.location.x, spacing: spacing) }
-            .onEnded { value in
-                let picked = units(at: value.location.x, spacing: spacing)
-                dragging = nil
-                // A tap lands on whole stars; a drag keeps its quarters.
-                let tapped = abs(value.translation.width) < 4
-                set(tapped ? max(4, Int((Double(picked) / 4).rounded(.up)) * 4) : picked)
-            })
-        .accessibilityElement()
-        .accessibilityLabel(String(localized: "Rating"))
-        .accessibilityValue(units.map { String(localized: "\((Double($0) / 4).formatted(.number.precision(.fractionLength(0...2)))) of 5 stars") }
-            ?? String(localized: "Not rated"))
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: set(min(20, (units ?? 0) + 1))
-            case .decrement: set((units ?? 0) <= 1 ? nil : (units ?? 0) - 1)
-            @unknown default: break
-            }
-        }
-        .accessibilityIdentifier("book.detail.rating")
+        .accessibilityHidden(true)
+    }
+}
+
+/// Where a Rating is set in quarter stars: big stars to tap or drag across,
+/// a tick under the finger at each quarter, the number as it changes, and
+/// steps of a quarter either way. A sheet, since nothing scrolls under a
+/// drag here and the stars can be large enough for a finger. It saves once,
+/// as it closes.
+struct RatingSheet: View {
+    let title: String
+    let initial: Int?
+    let set: (Int?) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var value: Int
+    @State private var cleared = false
+    @ScaledMetric(relativeTo: .largeTitle) private var starSize: CGFloat = 42
+    private let spacing: CGFloat = 6
+
+    init(title: String, initial: Int?, set: @escaping (Int?) -> Void) {
+        self.title = title
+        self.initial = initial
+        self.set = set
+        _value = State(initialValue: initial ?? 0)
     }
 
-    /// The quarter stars at x across the stars, 1 to 20.
-    private func units(at x: CGFloat, spacing: CGFloat) -> Int {
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 18) {
+                Text(value == 0 ? String(localized: "Not rated") : Ratings.text(value))
+                    .font(.geist(size: value == 0 ? 22 : 40, relativeTo: .largeTitle, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(value == 0 ? Theme.mutedForeground : Theme.foreground)
+                    .contentTransition(.numericText(value: Double(value)))
+                    .frame(height: 48)
+                    .accessibilityHidden(true)
+                PreciseStars(units: value, size: starSize, spacing: spacing)
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 0).onChanged { pick(at: $0.location.x) })
+                    .accessibilityElement()
+                    .accessibilityLabel(String(localized: "Rating"))
+                    .accessibilityValue(value == 0 ? String(localized: "Not rated") : String(localized: "\(Ratings.text(value)) of 5 stars"))
+                    .accessibilityAdjustableAction { direction in
+                        switch direction {
+                        case .increment: step(1)
+                        case .decrement: step(-1)
+                        @unknown default: break
+                        }
+                    }
+                    .accessibilityIdentifier("rating.stars")
+                HStack(spacing: 28) {
+                    stepButton(-1, icon: .minus, label: String(localized: "A quarter star less"), identifier: "rating.less")
+                    Text("Tap or drag the stars")
+                        .font(.geist(.footnote))
+                        .foregroundStyle(Theme.mutedForeground)
+                        .accessibilityHidden(true)
+                    stepButton(1, icon: .plus, label: String(localized: "A quarter star more"), identifier: "rating.more")
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .frame(maxHeight: .infinity, alignment: .top)
+            .sensoryFeedback(.selection, trigger: value)
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "Cancel")) {
+                        value = initial ?? 0
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("rating.cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done")) { dismiss() }
+                        .fontWeight(.semibold)
+                        .accessibilityIdentifier("rating.done")
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    if value != 0 {
+                        Button(String(localized: "Clear Rating"), role: .destructive) { value = 0 }
+                            .accessibilityIdentifier("rating.clearInSheet")
+                    }
+                }
+            }
+        }
+        .onDisappear {
+            // Once, as the sheet closes, however it closes.
+            let chosen = value == 0 ? nil : value
+            if chosen != initial { set(chosen) }
+        }
+    }
+
+    /// The quarter star under x, 1 to 20; left of the first star clears
+    /// nothing, so a drag back never unrates by accident.
+    private func pick(at x: CGFloat) {
         let width = starSize * 5 + spacing * 4
         let fraction = min(1, max(0, x / width))
-        return max(1, min(20, Int((fraction * 20).rounded(.up))))
+        let units = max(1, min(20, Int((fraction * 20).rounded(.up))))
+        if units != value { value = units }
+    }
+
+    private func step(_ by: Int) {
+        let next = value + by
+        value = next < 1 ? 0 : min(20, next)
+    }
+
+    private func stepButton(_ by: Int, icon: Lucide, label: String, identifier: String) -> some View {
+        Button { step(by) } label: {
+            Icon(icon, size: 18, relativeTo: .body)
+                .foregroundStyle(Theme.foreground)
+                .frame(width: 44, height: 44)
+                .background(Theme.secondary, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(by > 0 ? value >= 20 : value <= 0)
+        .accessibilityLabel(label)
+        .accessibilityIdentifier(identifier)
     }
 }
 

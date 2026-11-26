@@ -6,6 +6,7 @@ struct ListsView: View {
     @Environment(AppModel.self) private var model
     @State private var lists: [ListSummary]?
     @State private var making = false
+    @State private var scrolledBy: CGFloat = 0
 
     var body: some View {
         @Bindable var model = model
@@ -13,12 +14,17 @@ struct ListsView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    ScrollTopMarker(space: "lists")
+                        .id(ScrollTop.anchor)
+                    TabHeading(title: String(localized: "Lists"))
+                        .padding(.horizontal, GridLayout.margin)
+                        .padding(.top, 4)
                     Text("Organize your books into custom collections")
                         .font(.geist(.subheadline))
                         .foregroundStyle(Theme.mutedForeground)
                         .padding(.horizontal, GridLayout.margin)
+                        .padding(.top, 2)
                         .padding(.bottom, 16)
-                        .id(ScrollTop.anchor)
                     if let lists {
                         if lists.isEmpty {
                             EmptyNotice(title: String(localized: "No Lists yet"),
@@ -42,6 +48,7 @@ struct ListsView: View {
                 .frame(maxWidth: 680)
                 .frame(maxWidth: .infinity)
             }
+            .onScrolledDistanceChange(space: "lists") { scrolledBy = $0 }
             .miniPlayerClearance()
             .onChange(of: model.scrollToTop[.lists]) { _, _ in
                 withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
@@ -49,11 +56,11 @@ struct ListsView: View {
             }
             .background(Theme.background)
             .refreshable { await model.syncNow() }
-            .navigationTitle("Lists")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Lists"))
                 if model.offers(.lists) {
-                    ToolbarItem(placement: .topBarLeading) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button { making = true } label: {
                             Icon(.plus, size: 20, relativeTo: nil)
                                 .foregroundStyle(Theme.foreground)
@@ -196,7 +203,7 @@ struct ListDetailView: View {
         .background(Theme.background)
         .refreshable { await model.syncNow() }
         .navigationTitle((list ?? nil)?.name ?? initialName)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let downloadable, !downloadable.fileIDs.isEmpty {
                 ToolbarItem(placement: .topBarTrailing) {

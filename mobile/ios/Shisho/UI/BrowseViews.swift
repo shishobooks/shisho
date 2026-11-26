@@ -106,7 +106,7 @@ struct ResourceListView: View {
         .background(Theme.background)
         .searchable(text: $filter, isPresented: model.searchActive(on: tab), prompt: Text("Search \(kind.title.lowercased())"))
         .navigationTitle(kind.title)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .refreshable { await model.syncNow() }
         .observing(model.session?.store, id: "\(model.session?.account.id ?? "")-\(kind)-\(model.libraryID)", into: $items) { [kind, libraryID = model.libraryID == 0 ? nil : model.libraryID] db in
             try CatalogStore.resources(db, kind: kind, libraryID: libraryID)
@@ -181,7 +181,7 @@ struct ResourceView: View {
         .background(Theme.background)
         .refreshable { await model.syncNow() }
         .navigationTitle(name)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             // A whole Series downloads in one tap, for a trip.
             if kind == .series, let downloadable, !downloadable.fileIDs.isEmpty {
