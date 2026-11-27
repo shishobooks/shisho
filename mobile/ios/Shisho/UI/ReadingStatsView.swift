@@ -244,13 +244,13 @@ struct CardRevealer: Equatable {
     static func == (lhs: CardRevealer, rhs: CardRevealer) -> Bool { true }
 }
 
-/// The steps of purple every chart and bar is drawn in, the web's
-/// `--chart-purple-1` to `-3` in `app/index.css`: reading in the first,
-/// listening in the second. `app/utils/appParity.test.ts` checks the asset
+/// The colors every chart and bar is drawn in, the web's `--chart-series-1`
+/// to `-3` in `app/index.css`: reading in the first, purple, and listening in
+/// the second, magenta. `app/utils/appParity.test.ts` checks the asset
 /// catalog's copies match the web's.
 enum StatsColors {
-    static let reading = Color("ChartPurple1")
-    static let listening = Color("ChartPurple2")
+    static let reading = Color("ChartSeries1")
+    static let listening = Color("ChartSeries2")
 }
 
 // MARK: - Tiles
