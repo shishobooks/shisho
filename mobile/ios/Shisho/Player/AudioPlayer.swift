@@ -362,6 +362,7 @@ final class AudioPlayer {
         try? audio.setCategory(.playback, mode: .spokenAudio, policy: .longFormAudio)
         try? audio.setActive(true)
         isPlaying = true
+        startTicker()
         watchForShakes()
         player?.volume = SleepTimerRules.volume(sleepTimer)
         if ready && pendingSeek == nil {
@@ -665,7 +666,11 @@ final class AudioPlayer {
         ticker?.cancel()
         ticker = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
+                // Paused, nothing moves: only a sitting that's been paused
+                // long enough to end needs noticing. Playing again starts
+                // the ticker over.
+                let interval: Duration = self?.isPlaying == false ? .seconds(5) : .milliseconds(500)
+                try? await Task.sleep(for: interval)
                 self?.tick()
             }
         }
@@ -917,6 +922,9 @@ final class AudioPlayer {
         teardownItem()
         placeWatch?.cancel()
         fileWatch?.cancel()
+        // Loading another File starts it again.
+        ticker?.cancel()
+        ticker = nil
         file = nil
         offer = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
