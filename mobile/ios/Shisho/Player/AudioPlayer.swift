@@ -18,12 +18,20 @@ import UIKit
 @MainActor
 @Observable
 final class AudioPlayer {
-    private(set) var file: ListeningFile?
+    private(set) var file: ListeningFile? {
+        didSet { updateChapter() }
+    }
     /// Playback is wanted: playing, or about to once loaded.
     private(set) var isPlaying = false
     /// Waiting for the stream before it can play.
     private(set) var isBuffering = false
+    /// Where playback is, as the screens show it: changed only when the
+    /// whole second does, so a screen showing it redraws once a second
+    /// rather than on every tick (`setPosition`).
     private(set) var position: Double = 0
+    /// Where playback is exactly, for places, Reading Sessions, and the
+    /// lock screen.
+    @ObservationIgnored private var exactPosition: Double = 0
     private(set) var rate: Double = 1
     private(set) var error: String?
     /// Another device's place, offered without jumping (#912).
@@ -38,9 +46,9 @@ final class AudioPlayer {
     private(set) var smartRewind = PlayerSettings.smartRewind
     private(set) var sleepTimer: SleepTimer = .off
 
-    var chapterIndex: Int? {
-        file.flatMap { AudioChapters.index(at: position, in: $0.chapters) }
-    }
+    /// The chapter playing, kept as playback moves so a screen showing
+    /// it redraws only when it changes.
+    private(set) var chapterIndex: Int?
 
     /// The chapter playing, as `AudioChapters.name` names it.
     var chapterTitle: String? {
@@ -188,12 +196,12 @@ final class AudioPlayer {
         knownServerAt = places?.server?.occurredAt
         artwork = nil
         rate = storedRate(fileID: fileID)
-        position = min(choice.start, max(0, loaded.duration))
+        setPosition(min(choice.start, max(0, loaded.duration)))
         // Opening at this device's own place picks up after a pause as long
         // as the time since it was saved.
-        pausedAt = places?.local.flatMap { abs($0.seconds - position) < 1 ? $0.updatedAt : nil }
+        pausedAt = places?.local.flatMap { abs($0.seconds - exactPosition) < 1 ? $0.updatedAt : nil }
         retargetSleep()
-        pendingSeek = position
+        pendingSeek = exactPosition
         ready = false
         nowPlayingChapter = nil
         UserDefaults.standard.set(fileID, forKey: lastFileKey)
@@ -233,7 +241,7 @@ final class AudioPlayer {
         player.automaticallyWaitsToMinimizeStalling = true
         self.player = player
         ready = false
-        pendingSeek = pendingSeek ?? position
+        pendingSeek = pendingSeek ?? exactPosition
         itemGeneration += 1
         let generation = itemGeneration
         statusObservation = AudioPlayer.observeStatus(of: item) { [weak self] status, failure in
@@ -319,7 +327,7 @@ final class AudioPlayer {
             // A failed stream is tried again from where it was.
             error = nil
             waitingForConnection = false
-            pendingSeek = position
+            pendingSeek = exactPosition
             teardownItem()
         }
         // A stream loaded before its File finished downloading gives way to
@@ -622,18 +630,35 @@ final class AudioPlayer {
 
     private var percentage: Double {
         guard let file, file.duration > 0 else { return 0 }
-        return min(1, max(0, position / file.duration))
+        return min(1, max(0, exactPosition / file.duration))
     }
 
     private func currentPosition() -> Double {
         if let pendingSeek { return pendingSeek }
         if let seekingTo { return seekingTo }
-        guard ready, let seconds = player?.currentTime().seconds, seconds.isFinite else { return position }
+        guard ready, let seconds = player?.currentTime().seconds, seconds.isFinite else { return exactPosition }
         return seconds
     }
 
     private func refreshPosition() {
-        position = currentPosition()
+        setPosition(currentPosition())
+    }
+
+    /// Moves the place, publishing it to the screens only when the second
+    /// they show changes, and the chapter only when it changes.
+    private func setPosition(_ seconds: Double) {
+        exactPosition = seconds
+        if seconds.rounded(.down) != position.rounded(.down) {
+            position = seconds
+        }
+        updateChapter()
+    }
+
+    private func updateChapter() {
+        let index = file.flatMap { AudioChapters.index(at: exactPosition, in: $0.chapters) }
+        if index != chapterIndex {
+            chapterIndex = index
+        }
     }
 
     private func startTicker() {
@@ -683,8 +708,7 @@ final class AudioPlayer {
                 persistSitting()
             }
             if now.timeIntervalSince(lastSave) >= ListeningRules.saveInterval {
-                savePosition()
-                persistSitting()
+                saveWhilePlaying()
             }
         } else if let current = sitting, ListeningRules.isOver(current, at: now) {
             // Paused too long: the sitting ends where the pause began.
@@ -740,12 +764,28 @@ final class AudioPlayer {
             + "item status \(item?.status.rawValue ?? -1)"
     }
 
+    /// The periodic save while playing, which doesn't wait for the write.
+    private func saveWhilePlaying() {
+        guard let file, let sitting else {
+            savePosition()
+            persistSitting()
+            return
+        }
+        lastSave = Date()
+        do {
+            try session.store.recordListening(fileID: file.fileID, seconds: exactPosition, percentage: percentage, at: lastSave,
+                                              sitting: sitting)
+        } catch {
+            log("file \(file.fileID): couldn't save the place: \(Diagnostics.describe(error))")
+        }
+    }
+
     /// Saves the place locally and queues it for the server.
     private func savePosition(atEnd: Bool = false) {
         guard let file else { return }
         lastSave = Date()
         do {
-            try session.store.recordPosition(fileID: file.fileID, seconds: position, percentage: percentage, at: lastSave,
+            try session.store.recordPosition(fileID: file.fileID, seconds: exactPosition, percentage: percentage, at: lastSave,
                                              atEnd: atEnd, sitting: sitting)
         } catch {
             log("file \(file.fileID): couldn't save the place: \(Diagnostics.describe(error))")
@@ -783,7 +823,7 @@ final class AudioPlayer {
         if sleepTimer != .off {
             setSleepTimer(.off)
         }
-        position = file.duration
+        setPosition(file.duration)
         if let current = sitting {
             sitting = ListeningRules.pause(current, at: Date(), percentage: 1)
         }
@@ -804,7 +844,7 @@ final class AudioPlayer {
         let hasDownload = session.downloads.localFile(fileID: fileID) != nil
         guard hasDownload != playingDownload else { return }
         teardownItem()
-        pendingSeek = position
+        pendingSeek = exactPosition
     }
 
     /// Follows the open File in the catalog: an edit, such as renamed
@@ -930,7 +970,7 @@ final class AudioPlayer {
     private func move(to seconds: Double) {
         guard let file else { return }
         let target = max(0, min(seconds, max(0, file.duration - 0.5)))
-        position = target
+        setPosition(target)
         if ready, let player {
             seekingTo = target
             seekCount += 1
@@ -1221,7 +1261,7 @@ final class AudioPlayer {
             MPMediaItemPropertyAlbumTitle: file.book.title,
             MPMediaItemPropertyArtist: file.book.authors,
             MPMediaItemPropertyPlaybackDuration: max(0, bounds.end - bounds.start),
-            MPNowPlayingInfoPropertyElapsedPlaybackTime: max(0, position - bounds.start),
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: max(0, exactPosition - bounds.start),
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying && !isBuffering ? rate : 0,
             MPNowPlayingInfoPropertyDefaultPlaybackRate: rate,
             // No chapter number, chapter count, or media type: with the three,

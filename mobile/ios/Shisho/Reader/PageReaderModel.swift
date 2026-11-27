@@ -15,6 +15,8 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// The File's id, which a load reading it again never changes.
     nonisolated let id: Int
     private(set) var phase = ReaderModel.Phase.loading
+    /// How far the File's download has got while it opens.
+    let download = OpeningDownload()
     var chromeVisible = true
     /// The page the reader is on, 0-based.
     private(set) var page = 0
@@ -143,6 +145,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
     /// the reader left off, here or on another device.
     func load() async {
         phase = .loading
+        download.reset()
         placeWatch?.cancel()
         fileWatch?.cancel()
         source = nil
@@ -167,7 +170,7 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
             } else {
                 // The pages are drawn from the whole File, so opening one
                 // downloads it, as a Download like any other.
-                let fetch = try await session.downloads.fetchNow(fileID: file.fileID)
+                let fetch = try await session.downloads.fetchNow(fileID: file.fileID, reporting: download.start())
                 url = fetch.url
                 // One a background transfer finished meanwhile is a Download
                 // like any other, kept if it won't open.

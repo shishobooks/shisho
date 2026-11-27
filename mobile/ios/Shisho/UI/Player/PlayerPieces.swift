@@ -8,7 +8,9 @@ struct PlayingIndicator: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(paused: !playing || reduceMotion)) { context in
+        // 30 frames a second is smooth for three small bars, and lets the
+        // screen drop below its full rate while audio plays.
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !playing || reduceMotion)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
             HStack(alignment: .bottom, spacing: 2) {
                 ForEach(0..<3, id: \.self) { bar in

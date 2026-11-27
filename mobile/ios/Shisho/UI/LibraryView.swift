@@ -248,7 +248,7 @@ private struct LibraryPicker: View {
     }
 }
 
-/// The signed-in account, top right, as the user's initial.
+/// The signed-in account, top right, as its avatar.
 struct AccountButton: View {
     @Environment(AppModel.self) private var model
     let action: () -> Void
@@ -256,7 +256,7 @@ struct AccountButton: View {
     var body: some View {
         Button(action: action) {
             if let account = model.session?.account {
-                AccountAvatar(account: account, size: 34, inToolbar: true)
+                AccountAvatar(account: account, size: 30)
             }
         }
         .accessibilityLabel("Account")

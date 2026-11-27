@@ -549,10 +549,42 @@ private struct DownloadSettingsCard: View {
                           description: "A Download is removed once you listen to or read it to the end.",
                           isOn: $downloads.removeWhenFinished, identifier: "downloads.removeWhenFinished")
             SettingsDivider()
+            SettingToggle(title: "Download the top of To Read",
+                          description: "The first Books on To Read download by themselves, with all their Files, so what's next is ready offline.",
+                          isOn: Binding(get: { downloads.toReadCount > 0 },
+                                        set: { downloads.toReadCount = $0 ? ToReadCountStepper.defaultCount : 0 }),
+                          identifier: "downloads.toRead")
+            if downloads.toReadCount > 0 {
+                ToReadCountStepper(count: $downloads.toReadCount)
+            }
+            SettingsDivider()
             SettingToggle(title: "Download all covers on Wi-Fi",
                           description: "Every cover in your Libraries shows offline. Otherwise covers download as you browse.",
                           isOn: $model.prefetchesCovers, identifier: "downloads.prefetchCovers")
         }
+    }
+}
+
+/// How many Books from the top of To Read download, under the setting that
+/// turns it on.
+private struct ToReadCountStepper: View {
+    static let defaultCount = 3
+    @Binding var count: Int
+
+    var body: some View {
+        Stepper(value: $count, in: DownloadSettings.toReadCountRange) {
+            Group {
+                if count == 1 { Text("1 Book") } else { Text("\(count) Books") }
+            }
+            .font(.geist(.subheadline))
+            .foregroundStyle(Theme.foreground)
+            .monospacedDigit()
+        }
+        .frame(minHeight: 44)
+        .padding(.top, 6)
+        .accessibilityLabel(Text("Books to download from To Read"))
+        .accessibilityValue(Text("\(count)"))
+        .accessibilityIdentifier("downloads.toReadCount")
     }
 }
 

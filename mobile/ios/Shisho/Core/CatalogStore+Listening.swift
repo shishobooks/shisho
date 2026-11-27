@@ -257,6 +257,27 @@ extension CatalogStore {
     /// Saves the user's place in fileID locally and queues it for the server,
     /// in one transaction. Moves of one sitting replace each other until
     /// sent, but reaching the end is always sent.
+    /// The periodic save while playing: the place, and the sitting being
+    /// timed, in one write that doesn't wait, so the main thread never
+    /// waits behind a sync's write. It lands before any write made after it.
+    func recordListening(fileID: Int, seconds: Double, percentage: Double, at: Date, sitting: ListeningSitting) throws {
+        var payload = Shishoapp.JournalPositionPayload(fileId: fileID, seconds: seconds, percentage: min(1, max(0, percentage)),
+                                                       atEnd: false)
+        if sitting.fileID == fileID {
+            payload.listenedSeconds = sitting.played(at: at)
+            payload.listeningSince = JournalTime.string(sitting.startedAt)
+        }
+        let data = try JSONEncoder().encode(payload)
+        let kept = try JSONEncoder().encode(sitting)
+        let key = "position:\(fileID):\(String(sitting.startedAt.timeIntervalSince1970))"
+        writeQueued("file \(fileID): couldn't save the place", category: .player) { db in
+            try CatalogStore.writePosition(db, fileID: fileID, seconds: seconds, cfi: nil, percentage: percentage, at: at,
+                                           payload: data, coalesceKey: key)
+            try db.execute(sql: "INSERT INTO open_sitting (id, sitting) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET sitting = excluded.sitting",
+                           arguments: [kept])
+        }
+    }
+
     func recordPosition(fileID: Int, seconds: Double, percentage: Double, at: Date, atEnd: Bool,
                         sitting: ListeningSitting?) throws {
         var payload = Shishoapp.JournalPositionPayload(fileId: fileID, seconds: seconds, percentage: min(1, max(0, percentage)),

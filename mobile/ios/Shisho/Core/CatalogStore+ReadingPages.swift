@@ -58,6 +58,19 @@ extension CatalogStore {
             """))
     }
 
+    /// To Read's Books in the user's order, each with how many of its Files
+    /// a Download can be made of, so one whose Files haven't synced yet
+    /// isn't taken as having nothing to download.
+    static func toReadDownloadables(_ db: Database) throws -> [(bookID: Int, files: Int)] {
+        try Row.fetchAll(db, sql: """
+            SELECT ub.book_id,
+                (SELECT COUNT(*) FROM book_files f WHERE f.book_id = ub.book_id AND f.file_type IN (\(downloadableTypes))) AS files
+            FROM user_books ub JOIN books b ON b.id = ub.book_id
+            WHERE ub.to_read_position IS NOT NULL
+            ORDER BY ub.to_read_position, b.id
+            """).map { ($0["book_id"], $0["files"]) }
+    }
+
     /// Whether the Book has a Read-through underway that this device made
     /// and the server hasn't confirmed.
     static func underwayReadThrough(_ db: Database, bookID: Int) throws -> (id: Int, pending: Bool)? {

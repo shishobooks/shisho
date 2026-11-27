@@ -69,7 +69,7 @@ final class CoverCache: Sendable {
             return image
         }
         let file = folder(owner).appendingPathComponent(name)
-        if let data = try? Data(contentsOf: file), let image = UIImage(data: data) {
+        if let data = try? Data(contentsOf: file), let image = await Self.decoded(data) {
             memory[name] = image
             return image
         }
@@ -80,7 +80,7 @@ final class CoverCache: Sendable {
         case .file(let id):
             fetched = try? await client.fileCover(fileID: id, version: version, size: size, renderKey: renderKey)
         }
-        guard let data = fetched, let image = UIImage(data: data) else {
+        guard let data = fetched, let image = await Self.decoded(data) else {
             return otherSize(owner, version: version)
         }
         // A view that moved on to a newer version cancelled this download;
@@ -106,6 +106,14 @@ final class CoverCache: Sendable {
             return nil
         }
         return UIImage(data: data)
+    }
+
+    /// The cover decoded here, off the main thread, rather than when it's
+    /// first drawn, which would decode it on the main thread as a grid
+    /// scrolls.
+    private static func decoded(_ data: Data) async -> UIImage? {
+        guard let image = UIImage(data: data) else { return nil }
+        return await image.byPreparingForDisplay() ?? image
     }
 
     private func size(of name: String, after prefix: String) -> Int {
@@ -139,6 +147,8 @@ private final class MemoryCache: @unchecked Sendable {
     private let cache: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
         cache.countLimit = 300
+        // Decoded, a cover takes 4 bytes a pixel whatever its file size.
+        cache.totalCostLimit = 64 * 1024 * 1024
         return cache
     }()
 
@@ -146,7 +156,8 @@ private final class MemoryCache: @unchecked Sendable {
         get { cache.object(forKey: key as NSString) }
         set {
             if let newValue {
-                cache.setObject(newValue, forKey: key as NSString)
+                let pixels = newValue.size.width * newValue.scale * newValue.size.height * newValue.scale
+                cache.setObject(newValue, forKey: key as NSString, cost: Int(pixels) * 4)
             } else {
                 cache.removeObject(forKey: key as NSString)
             }

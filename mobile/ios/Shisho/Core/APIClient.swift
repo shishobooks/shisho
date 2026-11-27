@@ -377,8 +377,11 @@ final class APIClient: Sendable {
 
     /// A File's Original File (ADR 0022), downloaded to a temporary file
     /// the caller moves where it keeps it.
-    func download(fileID: Int) async throws -> URL {
-        try await fetchFile(request("mobile/files/\(fileID)/download", accept: "*/*"), session: session).0
+    /// progress hears how far it has got, from 0 to 1, when the server
+    /// says how big the File is.
+    func download(fileID: Int, progress: (@Sendable (Double) -> Void)? = nil) async throws -> URL {
+        try await fetchFile(request("mobile/files/\(fileID)/download", accept: "*/*"), session: session,
+                            progress: progress.map(TransferProgress.init(report:))).0
     }
 
     /// A File's Generated File, which carries Shisho's current metadata, for
@@ -405,12 +408,14 @@ final class APIClient: Sendable {
         }
     }
 
-    private func fetchFile(_ request: URLRequest, session: URLSession) async throws -> (URL, URLResponse) {
+    private func fetchFile(_ request: URLRequest, session: URLSession,
+                           progress: TransferProgress? = nil) async throws -> (URL, URLResponse) {
         guard reachability.allowsRequests else { throw APIError.unreachable("offline") }
         let file: URL
         let response: URLResponse
+        defer { progress?.stop() }
         do {
-            (file, response) = try await session.download(for: request)
+            (file, response) = try await session.download(for: request, delegate: progress)
         } catch {
             reachability.failed(error)
             throw APIClient.transportError(error)

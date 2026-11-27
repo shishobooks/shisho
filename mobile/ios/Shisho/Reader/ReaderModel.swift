@@ -99,6 +99,8 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
 
     /// Search inside the Book.
     let search = ReaderSearch()
+    /// How far the File's download has got while it opens.
+    let download = OpeningDownload()
 
     private(set) var source: FoliateSource?
     @ObservationIgnored private let session: AccountSession
@@ -227,6 +229,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
     /// reader left off, here or on another device.
     func load() async {
         phase = .loading
+        download.reset()
         // Try Again opens new pages, with no search running in them.
         search.close()
         placeWatch?.cancel()
@@ -246,7 +249,7 @@ final class ReaderModel: FoliateSourceDelegate, ReaderSearchEngine, Identifiable
             } else {
                 // The reader needs all of a book before it can show a page,
                 // so opening one downloads it, as a Download like any other.
-                let fetch = try await session.downloads.fetchNow(fileID: file.fileID)
+                let fetch = try await session.downloads.fetchNow(fileID: file.fileID, reporting: download.start())
                 bookFile = fetch.url
                 // One a background transfer finished meanwhile is a Download
                 // like any other, kept if it won't open.

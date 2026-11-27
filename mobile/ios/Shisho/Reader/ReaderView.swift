@@ -11,9 +11,6 @@ struct ReaderView: View {
     @State private var showingSearch = false
     /// The page's frame on screen.
     @State private var pagerFrame: CGRect = .zero
-    /// The readout counts pages left in the book rather than the chapter,
-    /// as the bar does.
-    @AppStorage(ReaderPagesLeft.inBookKey) private var pagesLeftInBook = false
     let close: () -> Void
 
     /// The app's appearance, which the bars and sheets take.
@@ -69,18 +66,11 @@ struct ReaderView: View {
                         // passes under its top edge.
                         searchBar
                     } else {
-                        readout
+                        ReaderReadout(model: model, foreground: foreground)
                     }
                 }
             }
-            if let pull = model.pull {
-                PullHint(direction: pull.direction, progress: pull.progress,
-                         chapter: pull.chapter, foreground: foreground)
-                    .frame(maxHeight: .infinity, alignment: pull.direction == .forward ? .bottom : .top)
-                    .padding(.vertical, 56)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
+            ReaderPullHint(model: model, foreground: foreground)
             if let image = model.image {
                 ImageViewer(image: image.image) { model.image = nil }
                     .transition(.opacity)
@@ -188,7 +178,7 @@ struct ReaderView: View {
     // MARK: - Loading
 
     private var status: some View {
-        ReaderStatus(phase: model.phase, foreground: foreground) { Task { await model.load() } }
+        ReaderStatus(phase: model.phase, download: model.download, foreground: foreground) { Task { await model.load() } }
     }
 
     /// A chosen search result's bar, while the results are away.
@@ -270,6 +260,20 @@ struct ReaderView: View {
         }
         .foregroundStyle(Theme.foreground)
     }
+}
+
+/// Where the reader is, small under the page while the controls are
+/// hidden: its own view, so a page turn redraws only it, not the reader.
+private struct ReaderReadout: View {
+    /// The readout counts pages left in the book rather than the chapter,
+    /// as the bar does.
+    @AppStorage(ReaderPagesLeft.inBookKey) private var pagesLeftInBook = false
+    let model: ReaderModel
+    let foreground: Color
+
+    var body: some View {
+        readout
+    }
 
     private var percentShown: String {
         model.fraction.formatted(.percent.precision(.fractionLength(0)))
@@ -317,6 +321,24 @@ struct ReaderView: View {
 
     private var readoutLabel: String {
         model.placeLabel(percent: percentShown, pagesLeft: pagesLeftLabel)
+    }
+}
+
+/// A pull past a section's end or start under way, scrolled: its own view,
+/// as a pull moves it at the rate of the touch.
+private struct ReaderPullHint: View {
+    let model: ReaderModel
+    let foreground: Color
+
+    var body: some View {
+        if let pull = model.pull {
+            PullHint(direction: pull.direction, progress: pull.progress,
+                     chapter: pull.chapter, foreground: foreground)
+                .frame(maxHeight: .infinity, alignment: pull.direction == .forward ? .bottom : .top)
+                .padding(.vertical, 56)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
     }
 }
 

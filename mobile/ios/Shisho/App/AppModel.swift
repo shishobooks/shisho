@@ -64,6 +64,8 @@ final class AppModel {
     static let shared = AppModel()
 
     private let accounts = AccountStore()
+    /// Each account's color and icon on this device.
+    let looks = AccountLooks()
 
     private(set) var session: AccountSession? {
         didSet { sessionChanged(from: oldValue) }

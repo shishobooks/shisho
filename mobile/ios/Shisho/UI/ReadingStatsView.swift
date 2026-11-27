@@ -57,9 +57,7 @@ struct ReadingStatsView: View {
             .frame(maxWidth: 900)
             .frame(maxWidth: .infinity)
         }
-        .environment(\.revealCard) { id in
-            withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
-        }
+        .environment(\.revealCard, CardRevealer(proxy: proxy))
         }
         .miniPlayerClearance()
         .background(Theme.background)
@@ -229,7 +227,21 @@ struct ReadingStatsView: View {
 extension EnvironmentValues {
     /// Scrolls Reading Stats so the view with id shows from its top, as a
     /// breakdown's search does to show its matches above the keyboard.
-    @Entry var revealCard: ((String) -> Void)?
+    @Entry var revealCard: CardRevealer?
+}
+
+/// Scrolls Reading Stats to a card. A value rather than a closure, so the
+/// views reading it aren't redrawn each time the screen is: a closure is
+/// never equal to the last one.
+struct CardRevealer: Equatable {
+    let proxy: ScrollViewProxy
+
+    func reveal(_ id: String) {
+        withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .top) }
+    }
+
+    /// The screen's one scroll view's, for as long as the screen shows.
+    static func == (lhs: CardRevealer, rhs: CardRevealer) -> Bool { true }
 }
 
 /// The steps of purple every chart and bar is drawn in, the web's
@@ -969,7 +981,7 @@ private struct CountList: View {
                 Task {
                     // After the keyboard's own scrolling, which would undo it.
                     try? await Task.sleep(for: .milliseconds(350))
-                    revealCard?(identifier)
+                    revealCard?.reveal(identifier)
                 }
             }
         }

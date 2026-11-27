@@ -19,6 +19,10 @@ final class ReaderPagePool {
 
     private var ready: Pages?
     private var watches: [Task<Void, Never>] = []
+    /// Lets waiting pages go once no Book with an ebook has shown for a
+    /// while, so browsing on doesn't keep three web content processes up.
+    private var idle: Task<Void, Never>?
+    private static let idleDrain: Duration = .seconds(90)
 
     private init() {
         for name in [UIApplication.didReceiveMemoryWarningNotification, UIApplication.didEnterBackgroundNotification] {
@@ -57,6 +61,12 @@ final class ReaderPagePool {
     /// Boots a reader's pages if none are waiting, as when a Book with an
     /// ebook shows.
     func prewarm() {
+        idle?.cancel()
+        idle = Task { [weak self] in
+            try? await Task.sleep(for: Self.idleDrain)
+            guard !Task.isCancelled else { return }
+            self?.drain()
+        }
         guard ready == nil else { return }
         let pages = Self.makePages()
         for page in [pages.back, pages.current, pages.forward] {
@@ -83,6 +93,7 @@ final class ReaderPagePool {
 
     /// The waiting pages, or new ones when there are none.
     func take() -> Pages {
+        idle?.cancel()
         if let ready {
             self.ready = nil
             parking.removeFromSuperview()

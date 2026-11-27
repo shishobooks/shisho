@@ -88,6 +88,8 @@ A server from before these features doesn't offer them: the app shows your statu
 
 The app can be signed in to several servers, or several accounts on one server, at once. **Account > Add Server** signs in to another server, or as someone else on the same one, and tapping an account in that list switches to it. Each account keeps its own copy of its libraries, so switching shows it at once, even offline. Signing out of one account switches to another that's still signed in.
 
+Each account has an avatar, shown in the top corner and in the list of accounts. Tap the avatar under **Account** to give the account a color and an icon, so accounts with the same username on different servers are easy to tell apart. The avatar is kept on the phone or tablet, not on your server.
+
 ## Listening
 
 Books with an M4B audiobook have a **Listen** button that streams it from your server, or plays it from the phone once it's [downloaded](#downloads). Before you start, it shows the audiobook's length and size. A book with more than one audiobook, such as an abridged and an unabridged edition, has a listen button on each in its list of files, and **Listen** plays the one you listened to last. Playback goes on with the phone locked, and the lock screen and Control Center show the chapter, its length, and your speed, with controls to play, pause, and skip. Headphone and car controls skip too; chapters change in the app and in [CarPlay](#carplay). Calls and other apps' audio pause playback and resume it afterwards, and unplugging or disconnecting headphones pauses it.
@@ -163,10 +165,11 @@ The app downloads each file as it is in your library. Titles, authors, covers, a
 
 The **Downloads** tab lists what's downloaded and what's on its way, with the space they take and what's left on the phone. Each download shows whether you've started it, how far you are, or that you've finished it, to help you choose what to remove. Tap a download's remove button, or **Remove All Downloads**, to free the space; tapping a download opens its book. Books you've opened in the reader are listed too, since opening one downloads it.
 
-Two settings in **Download Settings**, the gear at the top of the **Downloads** tab, apply to every account on the phone, and both start off:
+These settings in **Download Settings**, the gear at the top of the **Downloads** tab, apply to every account on the phone, and each starts off:
 
-- **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi. A book you open in the reader still downloads on any network, since the reader needs the whole book to show a page, just as an audiobook streams on any network.
+- **Download on Wi-Fi only**: downloads wait while the phone is on cellular or a network iOS treats as limited, such as a personal hotspot, and carry on from where they stopped once it's on Wi-Fi. A book you open in the reader still downloads on any network, since the reader needs the whole book to show a page, just as an audiobook streams on any network. The reader shows how far that download has got while it opens.
 - **Remove when finished**: a download is removed once you listen to or read it to the end. A book in the reader is removed when you close it, unless you went back from the end. Supplements are never removed this way.
+- **Download the top of To Read**: the first books on your [To Read](#your-reading-record) list download by themselves, with all of their files, so the next ones are ready offline. Choose how many, from 1 to 20. A book downloads when it moves into that many, wherever you change the order, and **Download on Wi-Fi only** still applies. Nothing is removed when a book moves down the list. If you remove a book's download, it isn't downloaded again while it stays on To Read.
 
 A downloaded file that's deleted from your library, or is in a library you lose access to, is removed from the phone at the next sync. One whose file in your library is replaced by a copy of a different size downloads again at the next sync, and the copy already on the phone plays or opens until the new one arrives.
 

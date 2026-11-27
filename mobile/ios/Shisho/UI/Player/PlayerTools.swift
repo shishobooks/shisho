@@ -328,7 +328,8 @@ struct PlayerListSheet: View {
     // MARK: - Chapters
 
     private var chapters: some View {
-        VStack(spacing: 0) {
+        // Lazy, as a book can have hundreds of chapters.
+        LazyVStack(spacing: 0) {
             if let file = player.file {
                 ForEach(Array(file.chapters.enumerated()), id: \.offset) { index, chapter in
                     if index > 0 {

@@ -70,6 +70,11 @@ struct AccountData {
     private var sortKeyPrefix: String { "sort.\(accountID)." }
     /// The audiobook File the player had open.
     var lastFileKey: String { "player.lastFile.\(accountID)" }
+    /// The Books downloaded since they came into the top of To Read
+    /// (`ToReadDownloads`).
+    var toReadDownloadsKey: String { "downloads.toRead.\(accountID)" }
+    /// The account's color and icon (`AccountLook`).
+    var lookKey: String { "accountLook.\(accountID)" }
     /// The speed picked for an audiobook File.
     func speedKey(fileID: Int) -> String { speedKeyPrefix + String(fileID) }
     private var speedKeyPrefix: String { "player.speed.\(accountID).file." }
@@ -90,7 +95,7 @@ struct AccountData {
 
     func removeCredentialAndSettings(defaults: UserDefaults = .standard) {
         Keychain.removeCredential(for: accountID)
-        let exact: Set = [libraryIDKey, lastFileKey]
+        let exact: Set = [libraryIDKey, lastFileKey, toReadDownloadsKey, lookKey]
         let prefixes = [sortKeyPrefix, speedKeyPrefix]
         for key in defaults.dictionaryRepresentation().keys
         where exact.contains(key) || prefixes.contains(where: { key.hasPrefix($0) }) {

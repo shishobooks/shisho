@@ -244,6 +244,12 @@
     "%@× real time" : {
 
     },
+    "%lld" : {
+
+    },
+    "%lld Books" : {
+
+    },
     "%lld Minutes" : {
 
     },
@@ -286,6 +292,9 @@
 
     },
     "-%@" : {
+
+    },
+    "1 Book" : {
 
     },
     "1 reread" : {
@@ -357,6 +366,9 @@
     "Also known as %@" : {
 
     },
+    "Amber" : {
+
+    },
     "Another sign-in to this server finished first. Sign in again to use this one." : {
 
     },
@@ -396,6 +408,9 @@
     "Auto shows two pages side by side when the reader is wider than it is tall and has room for both." : {
 
     },
+    "Avatar" : {
+
+    },
     "Average Rating" : {
 
     },
@@ -409,6 +424,9 @@
 
     },
     "Black" : {
+
+    },
+    "Blue" : {
 
     },
     "Book" : {
@@ -459,6 +477,9 @@
     "Books in the Libraries you can access appear here." : {
 
     },
+    "Books to download from To Read" : {
+
+    },
     "Books with a file on this device." : {
 
     },
@@ -483,6 +504,12 @@
     "Books, series, people" : {
 
     },
+    "Briefcase" : {
+
+    },
+    "Brown" : {
+
+    },
     "Browse book series in your library" : {
 
     },
@@ -490,6 +517,9 @@
 
     },
     "Browse tags in your library" : {
+
+    },
+    "Building" : {
 
     },
     "Calendar" : {
@@ -504,7 +534,13 @@
     "Cancel Download" : {
 
     },
+    "Cat" : {
+
+    },
     "Ch. %@" : {
+
+    },
+    "Change avatar" : {
 
     },
     "Change or clear the filters to see more." : {
@@ -574,6 +610,12 @@
 
     },
     "Codec" : {
+
+    },
+    "Coffee" : {
+
+    },
+    "Color" : {
 
     },
     "Colorist" : {
@@ -666,6 +708,9 @@
     "Dismiss" : {
 
     },
+    "Dog" : {
+
+    },
     "Done" : {
 
     },
@@ -702,6 +747,9 @@
     "Download the rest · %@" : {
 
     },
+    "Download the top of To Read" : {
+
+    },
     "Download · %@" : {
 
     },
@@ -726,6 +774,9 @@
     "Downloading %@ again" : {
 
     },
+    "Downloading the book" : {
+
+    },
     "Downloading your library…" : {
 
     },
@@ -733,6 +784,9 @@
 
     },
     "Downloading, %@" : {
+
+    },
+    "Downloading…" : {
 
     },
     "Downloads" : {
@@ -849,6 +903,12 @@
     "Genres" : {
 
     },
+    "Ghost" : {
+
+    },
+    "Globe" : {
+
+    },
     "Go There" : {
 
     },
@@ -861,6 +921,18 @@
     "Goes to this moment" : {
 
     },
+    "Graduation cap" : {
+
+    },
+    "Green" : {
+
+    },
+    "Headphones" : {
+
+    },
+    "Heart" : {
+
+    },
     "Heatmap year" : {
 
     },
@@ -868,6 +940,12 @@
 
     },
     "Home" : {
+
+    },
+    "House" : {
+
+    },
+    "Icon" : {
 
     },
     "Image" : {
@@ -895,6 +973,12 @@
 
     },
     "Increase margins" : {
+
+    },
+    "Indigo" : {
+
+    },
+    "Initial" : {
 
     },
     "Inker" : {
@@ -946,6 +1030,9 @@
 
     },
     "Layout" : {
+
+    },
+    "Leaf" : {
 
     },
     "Leave it empty to remove the note." : {
@@ -1051,7 +1138,13 @@
     "Modified" : {
 
     },
+    "Moon" : {
+
+    },
     "More" : {
+
+    },
+    "Mountain" : {
 
     },
     "Move down" : {
@@ -1064,6 +1157,9 @@
 
     },
     "Move up" : {
+
+    },
+    "Music" : {
 
     },
     "Name" : {
@@ -1314,6 +1410,9 @@
     "Opens the player" : {
 
     },
+    "Orange" : {
+
+    },
     "Organize your books into custom collections" : {
 
     },
@@ -1358,6 +1457,9 @@
     "Paginated" : {
 
     },
+    "Palette" : {
+
+    },
     "Password" : {
 
     },
@@ -1377,6 +1479,12 @@
 
     },
     "Picked from the page shapes until you choose." : {
+
+    },
+    "Picks a color and an icon for this account" : {
+
+    },
+    "Pink" : {
 
     },
     "Place in the book" : {
@@ -1508,6 +1616,9 @@
     "Recent Reference" : {
 
     },
+    "Red" : {
+
+    },
     "Reference" : {
 
     },
@@ -1618,6 +1729,9 @@
 
     },
     "Right to left books turn the other way. Saved on this device." : {
+
+    },
+    "Rocket" : {
 
     },
     "Save" : {
@@ -1765,6 +1879,12 @@
     "Skip Forward" : {
 
     },
+    "Sky" : {
+
+    },
+    "Slate" : {
+
+    },
     "Sleep" : {
 
     },
@@ -1795,10 +1915,16 @@
     "Sorted by:" : {
 
     },
+    "Sparkles" : {
+
+    },
     "Speed" : {
 
     },
     "Speed %@" : {
+
+    },
+    "Star" : {
 
     },
     "Start date unknown" : {
@@ -1838,6 +1964,9 @@
     "Stop downloading this Book?" : {
 
     },
+    "Sun" : {
+
+    },
     "Supplement" : {
 
     },
@@ -1868,6 +1997,9 @@
     "Tap or drag the stars" : {
 
     },
+    "Teal" : {
+
+    },
     "That doesn't look like a server address. Try something like https://shisho.example.com." : {
 
     },
@@ -1884,6 +2016,9 @@
 
     },
     "The calendar needs a connection" : {
+
+    },
+    "The first Books on To Read download by themselves, with all their Files, so what's next is ready offline." : {
 
     },
     "The font couldn't be imported." : {
@@ -2066,6 +2201,9 @@
 
     },
     "View" : {
+
+    },
+    "Violet" : {
 
     },
     "Vol. %@" : {

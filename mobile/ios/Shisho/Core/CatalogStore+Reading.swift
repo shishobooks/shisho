@@ -224,10 +224,11 @@ extension CatalogStore {
     /// Writes without waiting, on the writer's queue, so it lands before
     /// any write made after it. A failure goes to Diagnostics, as nothing
     /// waits to hear it.
-    private func writeQueued(_ failure: String, _ updates: @escaping @Sendable (Database) throws -> Void) {
+    func writeQueued(_ failure: String, category: Diagnostics.Category = .reader,
+                     _ updates: @escaping @Sendable (Database) throws -> Void) {
         pool.asyncWrite(updates) { _, result in
             guard case .failure(let error) = result else { return }
-            Task { await Diagnostics.shared.log(.reader, "\(failure): \(Diagnostics.describe(error))") }
+            Task { await Diagnostics.shared.log(category, "\(failure): \(Diagnostics.describe(error))") }
         }
     }
 

@@ -145,11 +145,22 @@ struct TransferID: Hashable, Sendable {
     }
 }
 
-/// The Download settings, for every account on this installation. Both are
-/// off until the user turns them on.
+/// The Download settings, for every account on this installation. Each is
+/// off until the user turns it on.
 enum DownloadSettings {
     private static let wifiOnlyKey = "downloads.wifiOnly"
     private static let removeWhenFinishedKey = "downloads.removeWhenFinished"
+    private static let toReadCountKey = "downloads.toReadCount"
+
+    /// The most Books from the top of To Read that download by themselves.
+    static let toReadCountRange = 1...20
+
+    /// How many Books from the top of To Read download by themselves, or 0
+    /// for none (`ToReadDownloads`).
+    static var toReadCount: Int {
+        get { UserDefaults.standard.integer(forKey: toReadCountKey) }
+        set { UserDefaults.standard.set(newValue, forKey: toReadCountKey) }
+    }
 
     static var wifiOnly: Bool {
         get { UserDefaults.standard.bool(forKey: wifiOnlyKey) }
@@ -191,6 +202,17 @@ final class DownloadManager {
     var removeWhenFinished = DownloadSettings.removeWhenFinished {
         didSet { DownloadSettings.removeWhenFinished = removeWhenFinished }
     }
+    /// How many Books from the top of To Read download by themselves, or 0
+    /// for none.
+    var toReadCount = DownloadSettings.toReadCount {
+        didSet {
+            guard toReadCount != oldValue else { return }
+            DownloadSettings.toReadCount = toReadCount
+            watchToRead()
+        }
+    }
+    /// Follows To Read while its top downloads by itself.
+    @ObservationIgnored private var toReadWatch: Task<Void, Never>?
     private(set) var network: DownloadNetwork = .wifi
 
     /// Why queued Downloads aren't transferring, or nil when they may.
@@ -264,6 +286,7 @@ final class DownloadManager {
         accountID = account.id
         folder = account.folder.appendingPathComponent("Downloads", isDirectory: true)
         copies = DownloadCopies(store: store, folder: folder)
+        watchToRead()
         // A book finished while the reader held it goes now.
         if let pending = try? store.pool.read(CatalogStore.removePending), !pending.isEmpty {
             remove(pending)
@@ -342,10 +365,11 @@ final class DownloadManager {
     /// the user, and by Remove when finished. A background transfer of it
     /// already under way isn't needed after this. fetched is the copy this
     /// call put there, which only it may discard (`discard`), or nil for one
-    /// it found on the device.
-    func fetchNow(fileID: Int) async throws -> (url: URL, fetched: UUID?) {
+    /// it found on the device. report hears how far it has got, from 0
+    /// to 1, for the screen waiting on it.
+    func fetchNow(fileID: Int, reporting report: (@Sendable (Double) -> Void)? = nil) async throws -> (url: URL, fetched: UUID?) {
         if let local = localFile(fileID: fileID) { return (local, nil) }
-        let downloaded = try await client.download(fileID: fileID)
+        let downloaded = try await client.download(fileID: fileID, progress: report)
         defer { try? FileManager.default.removeItem(at: downloaded) }
         switch try copies.publishFetched(fileID: fileID, from: downloaded) {
         case .found(let url):
@@ -451,6 +475,54 @@ final class DownloadManager {
     func removeBook(_ bookID: Int) {
         guard let book = book(bookID) else { return }
         remove(book.removable)
+    }
+
+    // MARK: - The top of To Read
+
+    /// Downloads the top of To Read as it changes, here, on the web, or on
+    /// another device, while the count is above 0.
+    private func watchToRead() {
+        toReadWatch?.cancel()
+        toReadWatch = nil
+        guard !stopped else { return }
+        let key = AccountData(accountID: accountID).toReadDownloadsKey
+        guard toReadCount > 0 else {
+            // Turned on again, it downloads the top as it is then.
+            UserDefaults.standard.removeObject(forKey: key)
+            return
+        }
+        let pool = store.pool
+        toReadWatch = Task { [weak self] in
+            let toRead = ValueObservation.tracking { db in
+                try CatalogStore.toReadDownloadables(db).map { ToReadEntry(bookID: $0.bookID, files: $0.files) }
+            }.removeDuplicates()
+            do {
+                for try await entries in toRead.values(in: pool) {
+                    self?.downloadTopOfToRead(entries)
+                }
+            } catch {}
+        }
+    }
+
+    private struct ToReadEntry: Equatable, Sendable {
+        let bookID: Int
+        let files: Int
+    }
+
+    private func downloadTopOfToRead(_ entries: [ToReadEntry]) {
+        guard toReadCount > 0, !stopped else { return }
+        let key = AccountData(accountID: accountID).toReadDownloadsKey
+        let handled = Set(UserDefaults.standard.array(forKey: key) as? [Int] ?? [])
+        let plan = ToReadDownloads.plan(toRead: entries.map(\.bookID), count: toReadCount, handled: handled)
+        // A Book whose Files haven't synced yet downloads once they have.
+        let waiting = Set(entries.filter { $0.files == 0 }.map(\.bookID))
+        let wanted = plan.download.filter { !waiting.contains($0) }
+        let fileIDs = wanted.flatMap { book($0)?.missing.map(\.fileID) ?? [] }
+        if !wanted.isEmpty {
+            log("the top of To Read: \(wanted.map { "book \($0)" }.joined(separator: ", "))")
+        }
+        UserDefaults.standard.set(Array(plan.handled.subtracting(waiting)).sorted(), forKey: key)
+        if !fileIDs.isEmpty { download(fileIDs) }
     }
 
     /// A File was listened to or read to its end, which finishes its
@@ -807,6 +879,7 @@ final class DownloadManager {
     func stop() {
         stopped = true
         retry?.cancel()
+        toReadWatch?.cancel()
         for continuation in backgroundEventsDone.values.joined() { continuation.resume() }
         backgroundEventsDone = [:]
         // Signed in to the same account again, whose new manager has taken
