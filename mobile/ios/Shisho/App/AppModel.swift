@@ -21,35 +21,22 @@ final class AccountSession {
     let capabilities: OSAllocatedUnfairLock<[String]>
 
     @MainActor
-    init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void,
-         onInstance: @escaping @Sendable (String) -> Void = { _ in }) throws {
+    init(account: Account, credential: String, onCapabilities: @escaping @Sendable ([String]) -> Void) throws {
         self.account = account
         let capabilities = OSAllocatedUnfairLock(initialState: account.capabilities)
         self.capabilities = capabilities
         client = APIClient(
-            baseURL: account.serverURL, credential: credential, instanceID: account.instanceID ?? "",
+            baseURL: account.serverURL, credential: credential, instanceID: account.instanceID,
             onCapabilities: { listed in
                 capabilities.withLock { $0 = listed }
                 onCapabilities(listed)
-            },
-            onInstance: onInstance
+            }
         )
         try FileManager.default.createDirectory(at: account.folder, withIntermediateDirectories: true)
         store = try CatalogStore(path: AccountData(accountID: account.id).catalogPath)
         sync = SyncEngine(client: client, store: store, deviceID: account.deviceID) { capabilities.withLock { $0 } }
         covers = CoverCache(client: client, accountID: account.id, renderKey: account.thumbnailRenderKey)
-        try? FileManager.default.removeItem(at: AccountData(accountID: account.id).legacyEbookFolder)
         downloads = DownloadManager(account: account, client: client, store: store)
-    }
-
-    /// The server lists sharing a File out with its current metadata.
-    var sharesFiles: Bool {
-        capabilities.withLock { $0.contains(Shishoapp.Capability.shareFiles.rawValue) }
-    }
-
-    /// The server sends a comic's or PDF's pages as thumbnails.
-    var sendsPageImages: Bool {
-        capabilities.withLock { $0.contains(Shishoapp.Capability.pageImages.rawValue) }
     }
 }
 
@@ -83,8 +70,8 @@ final class AppModel {
     }
     private(set) var syncStatus: SyncStatus = .idle
     /// The capabilities the signed-in account's server listed last, so a
-    /// feature that writes an event type it doesn't list stays hidden (ADR
-    /// 0024).
+    /// feature that needs one stays hidden on a server that doesn't list it
+    /// (ADR 0020). Protocol 1 has none beyond its baseline.
     private(set) var capabilities: Set<String> = []
     /// The signed-in account's audiobook player.
     private(set) var player: AudioPlayer?
@@ -567,9 +554,10 @@ final class AppModel {
         await syncNow()
     }
 
-    /// The account's server lists capability.
-    func offers(_ capability: Shishoapp.Capability) -> Bool {
-        capabilities.contains(capability.rawValue)
+    /// The account's server lists capability, by the name the server
+    /// lists it under.
+    func offers(_ capability: String) -> Bool {
+        capabilities.contains(capability)
     }
 
     /// Records a change to the user's reading record: it shows at once, and
@@ -577,7 +565,7 @@ final class AppModel {
     /// A List it makes returns its id here.
     @discardableResult
     func change(_ change: ReadingChange) -> Int? {
-        guard let session, offers(change.capability) else { return nil }
+        guard let session else { return nil }
         do {
             let made = try session.store.record(change)
             if case .clearPosition(let fileID) = change {
@@ -680,13 +668,8 @@ final class AppModel {
             id: UUID().uuidString.lowercased(), serverURL: address.url, username: response.user.username,
             userID: response.user.id, deviceID: response.deviceId, serverVersion: response.serverVersion,
             thumbnailRenderKey: response.server.thumbnailRenderKey, capabilities: response.server.capabilities,
-            signedOut: false
+            signedOut: false, instanceID: instanceID
         )
-        // An account saved before servers had an instance id adopts the
-        // first one it sees; a server too old to send one changes nothing.
-        if !instanceID.isEmpty {
-            account.instanceID = instanceID
-        }
         account.username = response.user.username
         account.deviceID = response.deviceId
         account.serverVersion = response.serverVersion
@@ -1056,14 +1039,11 @@ final class AppModel {
         }
     }
 
-    /// The account's session, whose responses keep its capabilities current,
-    /// and tell an account from before instance ids its server's.
+    /// The account's session, whose responses keep its capabilities current.
     private func openSession(account: Account, credential: String) throws -> AccountSession {
         let accountID = account.id
         return try AccountSession(account: account, credential: credential, onCapabilities: { [weak self] listed in
             Task { @MainActor in self?.recordCapabilities(listed, accountID: accountID) }
-        }, onInstance: { [weak self] instanceID in
-            Task { @MainActor in self?.recordInstance(instanceID, accountID: accountID) }
         })
     }
 
@@ -1071,7 +1051,7 @@ final class AppModel {
 
     /// Whether to download every cover on Wi-Fi, for every account on this
     /// device. Off until the user turns it on.
-    var prefetchesCovers = AppModel.storedPrefetchesCovers {
+    var prefetchesCovers = UserDefaults.standard.bool(forKey: AppModel.prefetchCoversKey) {
         didSet {
             guard prefetchesCovers != oldValue else { return }
             UserDefaults.standard.set(prefetchesCovers, forKey: AppModel.prefetchCoversKey)
@@ -1084,20 +1064,6 @@ final class AppModel {
     }
 
     private static let prefetchCoversKey = "prefetchCovers"
-
-    /// The setting, or, before it applied to every account, on when any
-    /// account had it on.
-    private static var storedPrefetchesCovers: Bool {
-        let defaults = UserDefaults.standard
-        if defaults.object(forKey: prefetchCoversKey) != nil {
-            return defaults.bool(forKey: prefetchCoversKey)
-        }
-        let before = defaults.dictionaryRepresentation().contains { key, value in
-            key.hasPrefix(prefetchCoversKey + ".") && (value as? Bool) == true
-        }
-        defaults.set(before, forKey: prefetchCoversKey)
-        return before
-    }
 
     @ObservationIgnored private var onWiFi = false
     /// The network as Downloads weigh it.
@@ -1178,17 +1144,8 @@ final class AppModel {
         if capabilities != Set(listed) {
             capabilities = Set(listed)
         }
-        player?.capabilitiesChanged(listed)
         guard account.capabilities != listed else { return }
         account.capabilities = listed
-        accounts.save(account, makeCurrent: false)
-    }
-
-    /// An account saved before servers had an instance id adopts the first
-    /// one its server's responses carry.
-    private func recordInstance(_ instanceID: String, accountID: String) {
-        guard var account = stored(accountID), account.instanceID?.isEmpty ?? true else { return }
-        account.instanceID = instanceID
         accounts.save(account, makeCurrent: false)
     }
 

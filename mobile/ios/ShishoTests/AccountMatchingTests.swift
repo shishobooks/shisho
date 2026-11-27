@@ -7,7 +7,7 @@ import XCTest
 final class AccountMatchingTests: XCTestCase {
     private let server = URL(string: "https://shisho.example.com")!
 
-    private func account(_ id: String, server: URL? = nil, userID: Int = 1, instanceID: String?) -> Account {
+    private func account(_ id: String, server: URL? = nil, userID: Int = 1, instanceID: String) -> Account {
         Account(id: id, serverURL: server ?? self.server, username: "robin", userID: userID, deviceID: "device",
                 serverVersion: "v1.0.0", thumbnailRenderKey: "r", capabilities: [], signedOut: false,
                 instanceID: instanceID)
@@ -37,27 +37,6 @@ final class AccountMatchingTests: XCTestCase {
         XCTAssertEqual(AccountStore.match([older, current], serverURL: server, userID: 1, instanceID: "two"), .same(current))
     }
 
-    func testAnAccountStoredWithoutAnInstanceIsTheSameAccount() {
-        let stored = account("a", instanceID: nil)
-        XCTAssertEqual(AccountStore.match([stored], serverURL: server, userID: 1, instanceID: "two"), .same(stored))
-    }
-
-    func testAServerWithoutAnInstanceIsNeverAChange() {
-        let stored = account("a", instanceID: "one")
-        XCTAssertEqual(AccountStore.match([stored], serverURL: server, userID: 1, instanceID: ""), .same(stored))
-    }
-
-    /// accounts.json saved before instance ids still loads.
-    func testDecodesAnAccountSavedWithoutAnInstance() throws {
-        let json = """
-        {"id":"a","serverURL":"https://shisho.example.com","username":"robin","userID":1,"deviceID":"d",
-         "serverVersion":"v1.0.0","thumbnailRenderKey":"r","capabilities":[],"signedOut":true}
-        """
-        let decoded = try JSONDecoder().decode(Account.self, from: Data(json.utf8))
-        XCTAssertNil(decoded.instanceID)
-        XCTAssertTrue(decoded.signedOut)
-    }
-
     /// Removing an account removes everything kept for it, and nothing of
     /// another account's.
     func testRemovingAnAccountRemovesEverythingKeptForIt() throws {
@@ -79,7 +58,6 @@ final class AccountMatchingTests: XCTestCase {
             try Keychain.setCredential("secret", for: id)
             defaults.set(3, forKey: data.libraryIDKey)
             defaults.set("title", forKey: data.sortKey(libraryID: 3))
-            defaults.set(true, forKey: data.prefetchCoversKey)
             defaults.set(7, forKey: data.lastFileKey)
             defaults.set(1.5, forKey: data.speedKey(fileID: 7))
         }
@@ -91,7 +69,7 @@ final class AccountMatchingTests: XCTestCase {
         }
         XCTAssertNil(Keychain.credential(for: removed))
         let gone = AccountData(accountID: removed)
-        for key in [gone.libraryIDKey, gone.sortKey(libraryID: 3), gone.prefetchCoversKey, gone.lastFileKey, gone.speedKey(fileID: 7)] {
+        for key in [gone.libraryIDKey, gone.sortKey(libraryID: 3), gone.lastFileKey, gone.speedKey(fileID: 7)] {
             XCTAssertNil(defaults.object(forKey: key), key)
         }
 

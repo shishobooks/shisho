@@ -137,8 +137,8 @@ final class PageReadingStoreTests: XCTestCase {
     /// then the feed's is the Book's, as the server kept it.
     func testAFlowChosenHereShowsUntilTheFeedBringsItBack() throws {
         func flow() throws -> PageFlow? { try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) } }
-        try store.choosePageFlow(.paginated, bookID: 1, at: now, sync: true)
-        try store.choosePageFlow(.scrolled, bookID: 1, at: now, sync: true)
+        try store.choosePageFlow(.paginated, bookID: 1, at: now)
+        try store.choosePageFlow(.scrolled, bookID: 1, at: now)
         XCTAssertEqual(try journalTypes(), ["page_flow"])
         let payload = try store.pool.read { try Data.fetchOne($0, sql: "SELECT payload FROM journal") }
         let sent = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(payload)) as? [String: Any])
@@ -162,16 +162,5 @@ final class PageReadingStoreTests: XCTestCase {
         {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"paginated"}}],"cursor":8}
         """))
         XCTAssertEqual(try flow(), .paginated)
-    }
-
-    /// A server that can't keep the flow gets no event for it: the choice
-    /// stays on the device, whatever the feed says.
-    func testAFlowAServerCantKeepStaysOnTheDevice() throws {
-        try store.choosePageFlow(.scrolled, bookID: 1, at: now, sync: false)
-        XCTAssertEqual(try journalTypes(), [])
-        try store.apply(page("""
-        {"entries":[{"kind":"user_book","id":1,"user_book":{"book_id":1,"page_flow":"paginated"}}],"cursor":6}
-        """))
-        XCTAssertEqual(try store.pool.read { try CatalogStore.pageFlow($0, bookID: 1) }, .scrolled)
     }
 }

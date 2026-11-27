@@ -37,8 +37,6 @@ struct ToReadView: View {
     @Environment(AppModel.self) private var model
     @State private var books: [BookSummary]?
 
-    private var editable: Bool { model.offers(.toRead) }
-
     var body: some View {
         Group {
             if let books, books.isEmpty {
@@ -57,47 +55,41 @@ struct ToReadView: View {
                         .listRowBackground(Theme.background)
                         .accessibilityIdentifier("toRead.row")
                         .accessibilityActions {
-                            if editable {
-                                if index > 0 {
-                                    Button(String(localized: "Move up")) { move(from: index, to: index - 1) }
-                                }
-                                if index < (books?.count ?? 0) - 1 {
-                                    Button(String(localized: "Move down")) { move(from: index, to: index + 1) }
-                                }
-                                Button(String(localized: "Remove from To Read")) { model.change(.removeFromToRead(book: book.id)) }
+                            if index > 0 {
+                                Button(String(localized: "Move up")) { move(from: index, to: index - 1) }
                             }
+                            if index < (books?.count ?? 0) - 1 {
+                                Button(String(localized: "Move down")) { move(from: index, to: index + 1) }
+                            }
+                            Button(String(localized: "Remove from To Read")) { model.change(.removeFromToRead(book: book.id)) }
                         }
                         .swipeActions {
-                            if editable {
-                                Button(role: .destructive) { model.change(.removeFromToRead(book: book.id)) } label: {
-                                    Label("Remove", menuIcon: .trash)
-                                }
-                                .accessibilityIdentifier("toRead.remove")
+                            Button(role: .destructive) { model.change(.removeFromToRead(book: book.id)) } label: {
+                                Label("Remove", menuIcon: .trash)
                             }
+                            .accessibilityIdentifier("toRead.remove")
                         }
                         .contextMenu {
-                            if editable {
-                                if index > 0 {
-                                    Button { move(from: index, to: 0) } label: { Label("Move to Top", menuIcon: .arrowUp) }
-                                        .accessibilityIdentifier("toRead.moveToTop")
-                                }
-                                if index < (books?.count ?? 0) - 1 {
-                                    Button { move(from: index, to: (books?.count ?? 1) - 1) } label: {
-                                        Label("Move to Bottom", menuIcon: .arrowDown)
-                                    }
-                                    .accessibilityIdentifier("toRead.moveToBottom")
-                                }
-                                Button(role: .destructive) { model.change(.removeFromToRead(book: book.id)) } label: {
-                                    Label("Remove from To Read", menuIcon: .trash)
-                                }
-                                .accessibilityIdentifier("toRead.menuRemove")
+                            if index > 0 {
+                                Button { move(from: index, to: 0) } label: { Label("Move to Top", menuIcon: .arrowUp) }
+                                    .accessibilityIdentifier("toRead.moveToTop")
                             }
+                            if index < (books?.count ?? 0) - 1 {
+                                Button { move(from: index, to: (books?.count ?? 1) - 1) } label: {
+                                    Label("Move to Bottom", menuIcon: .arrowDown)
+                                }
+                                .accessibilityIdentifier("toRead.moveToBottom")
+                            }
+                            Button(role: .destructive) { model.change(.removeFromToRead(book: book.id)) } label: {
+                                Label("Remove from To Read", menuIcon: .trash)
+                            }
+                            .accessibilityIdentifier("toRead.menuRemove")
                         }
                     }
-                    .onMove(perform: editable ? { source, destination in
+                    .onMove { source, destination in
                         guard let from = source.first else { return }
                         move(from: from, to: destination > from ? destination - 1 : destination)
-                    } : nil)
+                    }
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -109,7 +101,7 @@ struct ToReadView: View {
         .navigationTitle("To Read")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if editable, (books?.count ?? 0) > 1 {
+            if (books?.count ?? 0) > 1 {
                 ToolbarItem(placement: .topBarTrailing) {
                     EditButton()
                         .font(.geist(.body, weight: .medium))
@@ -196,17 +188,13 @@ struct ReadingHistoryView: View {
                         .listRowBackground(Theme.background)
                         .accessibilityIdentifier("history.row")
                         .swipeActions {
-                            if model.offers(.readingStatus) {
-                                Button(role: .destructive) { deleting = entry } label: {
-                                    Label("Delete", menuIcon: .trash)
-                                }
-                                .accessibilityIdentifier("history.delete")
+                            Button(role: .destructive) { deleting = entry } label: {
+                                Label("Delete", menuIcon: .trash)
                             }
+                            .accessibilityIdentifier("history.delete")
                         }
                         .accessibilityActions {
-                            if model.offers(.readingStatus) {
-                                Button(String(localized: "Delete Read-through")) { deleting = entry }
-                            }
+                            Button(String(localized: "Delete Read-through")) { deleting = entry }
                         }
                     }
                 }

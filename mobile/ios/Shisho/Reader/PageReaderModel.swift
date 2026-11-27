@@ -325,21 +325,13 @@ final class PageReaderModel: ImageSourceDelegate, Identifiable {
 
     // MARK: - Settings
 
-    /// The server keeps the flow chosen here for the Book; an older one
-    /// can't, so it's kept on this device alone.
-    var flowSyncs: Bool {
-        session.capabilities.withLock { $0.contains(Shishoapp.Capability.pageFlow.rawValue) }
-    }
-
     /// Picks the flow for this Book, kept with it on the server, so it's
-    /// the flow on the web and every device too, or on this device when the
-    /// server can't keep it.
+    /// the flow on the web and every device too.
     func choose(_ flow: PageFlow) {
         chosenFlow = flow
         do {
-            let sync = flowSyncs
-            try session.store.choosePageFlow(flow, bookID: file.book.id, at: Date(), sync: sync)
-            if sync { requestSync() }
+            try session.store.choosePageFlow(flow, bookID: file.book.id, at: Date())
+            requestSync()
         } catch {
             log("couldn't save the flow: \(Diagnostics.describe(error))")
         }

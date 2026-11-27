@@ -49,10 +49,9 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	g.GET("/books/:id/cover", h.cover, signedIn, h.requireProtocol)
 	g.GET("/files/:id/cover", h.fileCover, signedIn, h.requireProtocol)
 	g.POST("/journal", h.journal, h.requireInstance, signedIn, h.requireProtocol, h.recordAppVersion)
-	// The user's Reading Stats, which the app keeps a copy of to show offline
-	// (CapabilityReadingStats).
+	// The user's Reading Stats, which the app keeps a copy of to show offline.
 	g.GET("/stats", h.stats, signedIn, h.requireProtocol)
-	// Reading Stats' Calendar, a day at a time (CapabilityReadingCalendar).
+	// Reading Stats' Calendar, a day at a time.
 	g.GET("/stats/heatmap", h.statsHeatmap, signedIn, h.requireProtocol)
 	g.GET("/stats/calendar", h.statsCalendar, signedIn, h.requireProtocol)
 	g.GET("/stats/day", h.statsDay, signedIn, h.requireProtocol)
@@ -63,11 +62,11 @@ func registerRoutes(e *echo.Echo, h *handler, mw *devices.Middleware) {
 	g.GET("/files/:id/stream", h.stream, streamCookies, signedIn, h.requireProtocol)
 	g.HEAD("/files/:id/stream", h.stream, streamCookies, signedIn, h.requireProtocol)
 	// A File's Generated File, for sharing out of the app with Shisho's
-	// current metadata (CapabilityShareFiles).
+	// current metadata.
 	g.GET("/files/:id/share", h.share, signedIn, h.requireProtocol)
 	g.HEAD("/files/:id/share", h.share, signedIn, h.requireProtocol)
 	// A CBZ's or PDF's pages, as thumbnails for the page grid of a File
-	// that isn't downloaded (CapabilityPageImages). The reader draws its
-	// pages from the downloaded File (ADR 0025).
+	// that isn't downloaded. The reader draws its pages from the downloaded
+	// File (ADR 0025).
 	g.GET("/files/:id/pages/:page", h.page, signedIn, h.requireProtocol)
 }

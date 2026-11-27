@@ -157,7 +157,7 @@ final class ReadingCalendarRefreshStoreTests: XCTestCase {
         XCTAssertEqual(try count("calendar_cache"), 1)
     }
 
-    func testACalendarCopyHoldsBackWhatItDoesntCountWhileTheCalendarShows() throws {
+    func testACalendarCopyHoldsBackWhatItDoesntCount() throws {
         try store.saveCalendar(Shishoapp.StatsDayResponse(day: "2026-01-01", timeZone: "UTC"), key: .day("2026-01-01"),
                                fetchedAt: Date().addingTimeInterval(-90 * 86400))
         try listen("sit-1", seconds: 600, from: start)
@@ -168,11 +168,5 @@ final class ReadingCalendarRefreshStoreTests: XCTestCase {
         try store.saveStats(stats(zone: "UTC"), year: nil, fetchedAt: Date())
         try store.statsCaughtUp()
         XCTAssertEqual(try count("unstated_sessions"), 1, "the copy, not fetched again, doesn't count it")
-
-        // A server without the Calendar hides it, so it holds nothing back.
-        try store.statsCaughtUp(calendarHolds: false)
-        XCTAssertEqual(try count("unstated_sessions"), 0)
-        let counted = try store.pool.read { try Double.fetchOne($0, sql: "SELECT seconds FROM counted_sessions WHERE session_id = 'sit-1'") }
-        XCTAssertEqual(counted, 600)
     }
 }

@@ -29,18 +29,6 @@ enum ReadingChange: Equatable, Sendable {
     case removeFromList(id: Int, book: Int)
     case moveInList(id: Int, book: Int, after: Int?)
     case clearPosition(file: Int)
-
-    /// The capability a server lists for it (ADR 0024).
-    var capability: Shishoapp.Capability {
-        switch self {
-        case .start, .finish, .abandon, .pause, .resume, .notStarted, .deleteReadThrough, .markReference, .removeReference:
-            .readingStatus
-        case .rating: .ratings
-        case .addToRead, .removeFromToRead, .moveToRead: .toRead
-        case .createList, .renameList, .deleteList, .addToList, .removeFromList, .moveInList: .lists
-        case .clearPosition: .clearPosition
-        }
-    }
 }
 
 extension CatalogStore {

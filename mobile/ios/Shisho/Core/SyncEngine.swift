@@ -84,9 +84,8 @@ final class SyncEngine: Sendable {
 
     /// Fetches Reading Stats again for every range kept, and all time and
     /// this year always, so they count what the journal just sent (ADR
-    /// 0024). A server that doesn't list them keeps the copy as it was.
+    /// 0024).
     func fetchStats() async throws {
-        guard capabilities().contains(Shishoapp.Capability.readingStats.rawValue) else { return }
         var ranges = Set(try store.statsRanges())
         ranges.insert(nil)
         ranges.insert(Calendar.current.component(.year, from: Date()))
@@ -98,8 +97,8 @@ final class SyncEngine: Sendable {
             try store.saveStats(stats, year: year, fetchedAt: began)
             if let year { _ = wantedYears.withLock { $0.remove(year) } }
         }
-        let calendarShown = try await refreshCalendar()
-        try store.statsCaughtUp(calendarHolds: calendarShown)
+        try await refreshCalendar()
+        try store.statsCaughtUp()
     }
 
     /// Fetches every copy of Reading Stats' Calendar again once this device
@@ -107,12 +106,8 @@ final class SyncEngine: Sendable {
     /// copy, so each counts what the server took in before statsCaughtUp
     /// stops laying that over it. A copy the server refuses for good goes;
     /// one that can't come now stays as it was, and holds back what it
-    /// doesn't count, until a later sync fetches it. Returns whether the
-    /// server lists the Calendar: one that doesn't hides it, so its copies
-    /// hold nothing back meanwhile, and the changes stay noted for when it
-    /// does again.
-    private func refreshCalendar() async throws -> Bool {
-        guard capabilities().contains(Shishoapp.Capability.readingCalendar.rawValue) else { return false }
+    /// doesn't count, until a later sync fetches it.
+    private func refreshCalendar() async throws {
         let began = Date()
         var current = true
         for key in try store.calendarCopiesToRefresh() {
@@ -144,7 +139,6 @@ final class SyncEngine: Sendable {
             }
         }
         if current { try store.calendarRefreshed(before: began) }
-        return true
     }
 
     /// Sends the journal in batches until nothing sendable is left. Any

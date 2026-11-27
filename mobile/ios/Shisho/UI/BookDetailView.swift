@@ -472,9 +472,9 @@ private struct FileCard: View {
         .clearPositionConfirmation($clearing)
     }
 
-    /// The File has a saved place, and the server takes clearing it.
+    /// The File has a saved place to clear.
     private var canClear: Bool {
-        model.offers(.clearPosition) && progress != nil
+        progress != nil
     }
 
     private var actions: some View {
@@ -563,27 +563,6 @@ enum IdentifierLabel {
         case "google": "Google"
         default: type.replacingOccurrences(of: "_", with: " ").uppercased()
         }
-    }
-}
-
-/// A Rating in stars, from quarter stars, read only here.
-struct RatingStars: View {
-    let units: Int
-
-    private var stars: Double { Double(units) / 4 }
-
-    var body: some View {
-        HStack(spacing: 2) {
-            // Filled to the exact quarter, as the editable stars are.
-            PreciseStars(units: units, size: 17)
-            Text(stars.formatted(.number.precision(.fractionLength(0...2))))
-                .font(.geist(.subheadline))
-                .foregroundStyle(Theme.mutedForeground)
-                .padding(.leading, 4)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "Rated \(stars.formatted(.number.precision(.fractionLength(0...2)))) of 5 stars"))
-        .accessibilityIdentifier("book.detail.rating")
     }
 }
 

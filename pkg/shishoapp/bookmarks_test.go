@@ -56,15 +56,6 @@ func (f *fixture) bookmarks() []storedBookmark {
 	return out
 }
 
-// The server offers Bookmarks to the app.
-func TestCapabilities_ListBookmarks(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	rec := f.do(call{path: "/mobile/server", protocol: "1"})
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Header().Get(HeaderCapabilities), CapabilityBookmarks)
-}
-
 // The user's own Bookmarks travel in the feed, and nobody else's do. One
 // the app made carries the app's id for it, so the app knows it as its own.
 func TestFeed_CarriesTheUsersOwnBookmarks(t *testing.T) {

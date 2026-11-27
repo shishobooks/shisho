@@ -16,9 +16,8 @@ struct Account: Codable, Identifiable, Hashable {
     /// deactivated). The account keeps its data until it signs in again.
     var signedOut: Bool
     /// The server's instance id, which tells it apart from another server
-    /// set up again from scratch at the same address. Nil for an account
-    /// saved before servers had one, or on a server too old to send it.
-    var instanceID: String?
+    /// set up again from scratch at the same address.
+    var instanceID: String
 
     /// The folder holding this account's database.
     var folder: URL {
@@ -54,17 +53,9 @@ struct AccountData {
         folder.appendingPathComponent("catalog.sqlite").path
     }
 
-    /// Where ebooks opened without downloading were kept, before opening one
-    /// made it a Download: deleted when the account opens or is removed.
-    var legacyEbookFolder: URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Ebooks", isDirectory: true)
-            .appendingPathComponent(accountID, isDirectory: true)
-    }
-
     /// Every folder kept for the account: its database and its caches.
     var folders: [URL] {
-        [folder, CoverCache.folder(accountID: accountID), legacyEbookFolder]
+        [folder, CoverCache.folder(accountID: accountID)]
     }
 
     // The account's settings on this device, by key.
@@ -77,10 +68,6 @@ struct AccountData {
     /// form, or nil for the one the user saved on the web.
     func pickedSort(libraryID: Int) -> String? { UserDefaults.standard.string(forKey: sortKey(libraryID: libraryID)) }
     private var sortKeyPrefix: String { "sort.\(accountID)." }
-    /// Downloading every cover on Wi-Fi, from before the setting applied to
-    /// every account: read once to carry it over, and removed with the
-    /// account.
-    var prefetchCoversKey: String { "prefetchCovers.\(accountID)" }
     /// The audiobook File the player had open.
     var lastFileKey: String { "player.lastFile.\(accountID)" }
     /// The speed picked for an audiobook File.
@@ -103,7 +90,7 @@ struct AccountData {
 
     func removeCredentialAndSettings(defaults: UserDefaults = .standard) {
         Keychain.removeCredential(for: accountID)
-        let exact: Set = [libraryIDKey, prefetchCoversKey, lastFileKey]
+        let exact: Set = [libraryIDKey, lastFileKey]
         let prefixes = [sortKeyPrefix, speedKeyPrefix]
         for key in defaults.dictionaryRepresentation().keys
         where exact.contains(key) || prefixes.contains(where: { key.hasPrefix($0) }) {
@@ -179,19 +166,14 @@ final class AccountStore {
     }
 
     /// The account for a user on a server: the one with the same address
-    /// and user id, unless both it and the server have an instance id and
-    /// they differ. An account stored without one adopts the server's, and a
-    /// server too old to send one is never a change.
+    /// and user id, unless it was made on another instance of the server.
     static func match(_ accounts: [Account], serverURL: URL, userID: Int, instanceID: String) -> AccountMatch {
         let candidates = accounts.filter { $0.serverURL == serverURL && $0.userID == userID }
         // The account for this very instance wins over one it replaced.
-        guard let known = candidates.first(where: { !instanceID.isEmpty && $0.instanceID == instanceID }) ?? candidates.first else {
+        guard let known = candidates.first(where: { $0.instanceID == instanceID }) ?? candidates.first else {
             return .new
         }
-        guard !instanceID.isEmpty, let stored = known.instanceID, !stored.isEmpty, stored != instanceID else {
-            return .same(known)
-        }
-        return .replaced(known)
+        return known.instanceID == instanceID ? .same(known) : .replaced(known)
     }
 
     /// Saves account, and whether that reached the disk.

@@ -31,8 +31,9 @@ const (
 	HeaderCapabilities = "X-Shisho-Capabilities"
 
 	// HeaderInstance carries the server's instance id (pkg/serverinstance)
-	// on every sync response, so an account made before servers had one
-	// learns it. On a sync request it names the instance the app's account
+	// on every sync response, so the app refuses an answer from another
+	// instance even when something in front of the server dropped the one
+	// it named. On a sync request it names the instance the app's account
 	// was made on, and a server whose own differs refuses the request: the
 	// account's journal holds ids from another server's database.
 	HeaderInstance = "X-Shisho-Instance"
@@ -66,16 +67,14 @@ const (
 // server lists it, so a server from before the feature, or rolled back to
 // before it, never offers it. A protocol bump starts a new entry, since an
 // app on the new protocol assumes everything listed before it. Never remove
-// one while its protocol is accepted. Protocol 1's baseline is signing in,
-// the feed, covers, Original File downloads and streams, and the journal's
-// position and session events. A journal event type added later is a
-// capability (ADR 0024).
+// one while its protocol is accepted. Protocol 1's baseline is everything
+// the first release with the app shipped: signing in, server info, the
+// feed, covers, Original File downloads, streams, and shares, CBZ and PDF
+// page thumbnails, Reading Stats and its Calendar, and every journal event
+// type in types.go. A journal event type added later is a capability (ADR
+// 0024).
 var capabilities = map[int][]string{
-	1: {
-		CapabilityBookmarks, CapabilityShareFiles, CapabilityPageFlow, CapabilityPageImages,
-		CapabilityReadingStatus, CapabilityRatings, CapabilityToRead, CapabilityLists, CapabilityClearPosition,
-		CapabilityReadingStats, CapabilityReadingCalendar,
-	},
+	1: {},
 }
 
 // Contract is the range of app protocols this server accepts and what it

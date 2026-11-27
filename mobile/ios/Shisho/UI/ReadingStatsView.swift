@@ -26,23 +26,21 @@ struct ReadingStatsView: View {
         case overview, calendar
     }
 
-    /// The Calendar tab, for a server that has it.
-    private var calendar: Bool { tab == .calendar && model.offers(.readingCalendar) }
+    /// The Calendar tab.
+    private var calendar: Bool { tab == .calendar }
 
     var body: some View {
         ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if model.offers(.readingCalendar) {
-                    Picker(String(localized: "View"), selection: $tab) {
-                        Text("Overview").tag(Tab.overview)
-                        Text("Calendar").tag(Tab.calendar)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.top, 8)
-                    .padding(.bottom, 12)
-                    .accessibilityIdentifier("stats.tabs")
+                Picker(String(localized: "View"), selection: $tab) {
+                    Text("Overview").tag(Tab.overview)
+                    Text("Calendar").tag(Tab.calendar)
                 }
+                .pickerStyle(.segmented)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .accessibilityIdentifier("stats.tabs")
                 Text(calendar ? String(localized: "Your reading, day by day. Only you can see this.")
                     : String(localized: "Your reading for \(rangeLabel). Only you can see this."))
                     .font(.geist(.subheadline))

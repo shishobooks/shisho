@@ -73,7 +73,7 @@ struct FileView: View {
                     .opacity(scrolled ? 1 : 0)
                     .accessibilityHidden(!scrolled)
             }
-            if let file, model.offers(.clearPosition), file.progress != nil || (listen ?? nil).map({ $0.seconds > 1 }) == true {
+            if let file, file.progress != nil || (listen ?? nil).map({ $0.seconds > 1 }) == true {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button { clearing = file } label: {
@@ -223,7 +223,7 @@ struct FileView: View {
     // MARK: - Download and share
 
     /// Download, or where its Download stands, and Share, which sends the
-    /// File out with Shisho's current metadata when the server offers it.
+    /// File out with Shisho's current metadata.
     @ViewBuilder
     private func fileActions(_ file: BookDetail.File) -> some View {
         let supported = FileTypes.isKnown(file.fileType)
@@ -261,7 +261,7 @@ struct FileView: View {
                 .buttonStyle(OutlineButtonStyle(role: status == .downloaded ? .destructive : nil))
                 .accessibilityValue(DownloadWords.status(status) ?? "")
                 .accessibilityIdentifier("file.download")
-                if supported, model.session?.sharesFiles == true {
+                if supported, model.session != nil {
                     ShareFileButton(fileID: file.id, label: file.label)
                         // The server makes the copy it shares.
                         .modifier(NeedsConnection(available: model.connection == .online))

@@ -272,23 +272,18 @@ extension CatalogStore {
             """, arguments: [bookID, bookID]).flatMap(PageFlow.init(rawValue:))
     }
 
-    /// Saves the Page flow the user chose for bookID. With sync, the server
-    /// supports Page flow events (CapabilityPageFlow): it's queued for the
+    /// Saves the Page flow the user chose for bookID: it's queued for the
     /// server, which keeps it for the Book on the web too, and shows here
     /// until the feed brings the Book's record back after the server took it
-    /// in. Without, it's kept on this device alone. A later choice replaces
-    /// one not yet sent.
-    func choosePageFlow(_ flow: PageFlow, bookID: Int, at: Date, sync: Bool) throws {
+    /// in. A later choice replaces one not yet sent.
+    func choosePageFlow(_ flow: PageFlow, bookID: Int, at: Date) throws {
         let payload = Shishoapp.JournalPageFlowPayload(bookId: bookID, pageFlow: Models.PageFlow(rawValue: flow.rawValue))
         let data = try JSONEncoder().encode(payload)
         let key = "page_flow:\(bookID)"
         try pool.write { db in
             try db.execute(sql: "DELETE FROM journal WHERE coalesce_key = ? AND held_for IS NULL", arguments: [key])
-            var eventID: String?
-            if sync {
-                try CatalogStore.append(db, type: .pageFlow, at: at, payload: data, fileID: nil, coalesceKey: key)
-                eventID = try String.fetchOne(db, sql: "SELECT event_id FROM journal WHERE seq = last_insert_rowid()")
-            }
+            try CatalogStore.append(db, type: .pageFlow, at: at, payload: data, fileID: nil, coalesceKey: key)
+            let eventID = try String.fetchOne(db, sql: "SELECT event_id FROM journal WHERE seq = last_insert_rowid()")
             try db.execute(sql: """
                 INSERT INTO chosen_page_flows (book_id, page_flow, event_id, accepted) VALUES (?, ?, ?, FALSE)
                 ON CONFLICT (book_id) DO UPDATE SET page_flow = excluded.page_flow, event_id = excluded.event_id, accepted = FALSE

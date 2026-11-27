@@ -2,7 +2,6 @@ package shishoapp
 
 import (
 	"database/sql"
-	"net/http"
 	"testing"
 	"time"
 
@@ -19,15 +18,6 @@ func (f *fixture) pageFlow(userID, bookID int) sql.NullString {
 	}
 	require.NoError(f.t, err)
 	return flow
-}
-
-// The server takes the Page flow the app chooses for a Book.
-func TestCapabilities_ListPageFlow(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	rec := f.do(call{path: "/mobile/server", protocol: "1"})
-	require.Equal(t, http.StatusOK, rec.Code)
-	assert.Contains(t, rec.Header().Get(HeaderCapabilities), CapabilityPageFlow)
 }
 
 // The user's Page flow for a Book travels with their own record of it, so

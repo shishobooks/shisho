@@ -37,8 +37,6 @@ final class AudioPlayer {
     /// Going back a little after a long pause.
     private(set) var smartRewind = PlayerSettings.smartRewind
     private(set) var sleepTimer: SleepTimer = .off
-    /// The server lists Bookmarks, so they can be made and synced.
-    private(set) var bookmarksAvailable = false
 
     var chapterIndex: Int? {
         file.flatMap { AudioChapters.index(at: position, in: $0.chapters) }
@@ -123,7 +121,6 @@ final class AudioPlayer {
     init(session: AccountSession, requestSync: @escaping @MainActor () -> Void) {
         self.session = session
         self.requestSync = requestSync
-        bookmarksAvailable = AudioPlayer.listsBookmarks(session.capabilities.withLock { $0 })
         observeSystem()
         setUpRemoteCommands()
     }
@@ -547,18 +544,6 @@ final class AudioPlayer {
     }
 
     // MARK: - Bookmarks
-
-    private static func listsBookmarks(_ listed: [String]) -> Bool {
-        listed.contains(Shishoapp.Capability.bookmarks.rawValue)
-    }
-
-    /// Called with each capability list a response carries.
-    func capabilitiesChanged(_ listed: [String]) {
-        let available = AudioPlayer.listsBookmarks(listed)
-        if available != bookmarksAvailable {
-            bookmarksAvailable = available
-        }
-    }
 
     /// Bookmarks the open File at seconds, or where playback is, and queues
     /// it for the server. It returns the Bookmark, for a note added after.

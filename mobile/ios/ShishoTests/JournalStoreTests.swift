@@ -100,7 +100,7 @@ final class JournalStoreTests: XCTestCase {
 
         XCTAssertEqual(try journal().count, 1)
         XCTAssertTrue(try store.pendingJournal(capabilities: "", limit: 10).isEmpty)
-        XCTAssertEqual(try store.pendingJournal(capabilities: "bookmarks", limit: 10).map(\.eventID), [sent[3].eventID])
+        XCTAssertEqual(try store.pendingJournal(capabilities: "highlights", limit: 10).map(\.eventID), [sent[3].eventID])
         let notes = try store.pool.read(CatalogStore.journalNotes)
         XCTAssertEqual(notes.map(\.reason), ["The File was deleted."])
         try store.dismissJournalNotes()

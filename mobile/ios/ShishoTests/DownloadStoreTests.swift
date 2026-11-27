@@ -270,7 +270,8 @@ final class DownloadManagerTests: XCTestCase {
         removeWhenFinished = DownloadSettings.removeWhenFinished
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent("no-server-\(UUID().uuidString)", isDirectory: true)
         let account = Account(id: "test-\(UUID().uuidString)", serverURL: missing, username: "u", userID: 1,
-                              deviceID: "me", serverVersion: "dev", thumbnailRenderKey: "", capabilities: [], signedOut: false)
+                              deviceID: "me", serverVersion: "dev", thumbnailRenderKey: "", capabilities: [], signedOut: false,
+                              instanceID: "")
         session = try AccountSession(account: account, credential: "credential") { _ in }
         try session.store.startOverIfNeeded()
         try session.store.apply(makeShishoDecoder().decode(Shishoapp.FeedResponse.self, from: Data("""

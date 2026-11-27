@@ -34,46 +34,6 @@ type ServerInfo struct {
 	InstanceID string `json:"instance_id"`
 }
 
-// The capabilities a server can list (ServerInfo.Capabilities, and the
-// X-Shisho-Capabilities header). An app turns a feature on for a server only
-// when it lists the feature's capability.
-const (
-	//tygo:emit export type Capability = typeof CapabilityBookmarks | typeof CapabilityShareFiles | typeof CapabilityPageFlow | typeof CapabilityPageImages | typeof CapabilityReadingStatus | typeof CapabilityRatings | typeof CapabilityToRead | typeof CapabilityLists | typeof CapabilityClearPosition | typeof CapabilityReadingStats | typeof CapabilityReadingCalendar;
-	// CapabilityBookmarks is the Bookmark events in the journal and
-	// Bookmarks in the feed.
-	CapabilityBookmarks = "bookmarks"
-	// CapabilityShareFiles is the route that sends a File's Generated File
-	// for the app to share out of itself (ADR 0022).
-	CapabilityShareFiles = "share_files"
-	// CapabilityPageFlow is the Page flow event in the journal, which saves
-	// the flow the app chose for a Book.
-	CapabilityPageFlow = "page_flow"
-	// CapabilityPageImages is the route that sends a CBZ's or PDF's pages
-	// as thumbnails, for the app's page grid before the File is downloaded.
-	CapabilityPageImages = "page_images"
-	// CapabilityReadingStatus is the Read-through and Reference events in
-	// the journal: start, finish, abandon, pause, resume, delete, and
-	// marking or removing Reference.
-	CapabilityReadingStatus = "reading_status"
-	// CapabilityRatings is the Rating events in the journal.
-	CapabilityRatings = "ratings"
-	// CapabilityToRead is the To Read events in the journal: add, remove,
-	// and move.
-	CapabilityToRead = "to_read"
-	// CapabilityLists is the List events in the journal: create, rename,
-	// and delete a List, and add, remove, and move its Books.
-	CapabilityLists = "lists"
-	// CapabilityClearPosition is the event that clears the user's saved
-	// place in a File.
-	CapabilityClearPosition = "clear_position"
-	// CapabilityReadingStats is the route that sends the user's Reading
-	// Stats, which the app keeps a copy of to show offline.
-	CapabilityReadingStats = "reading_stats"
-	// CapabilityReadingCalendar is the routes that send Reading Stats'
-	// Calendar: the heatmap, a month's calendar, and a day's Sessions.
-	CapabilityReadingCalendar = "reading_calendar"
-)
-
 // SignInPayload signs an installation in with the user's username and
 // password, which creates a Shisho app Device for it.
 type SignInPayload struct {

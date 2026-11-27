@@ -61,9 +61,7 @@ struct HomeView: View {
                         }
                         VStack(spacing: 8) {
                             // In the web's user menu's order.
-                            if model.offers(.readingStats) {
-                                HomeLink(title: String(localized: "Reading Stats"), icon: .chartColumn, route: .stats, identifier: "reading.stats")
-                            }
+                            HomeLink(title: String(localized: "Reading Stats"), icon: .chartColumn, route: .stats, identifier: "reading.stats")
                             HomeLink(title: String(localized: "Reading History"), icon: .history, route: .history, identifier: "reading.history")
                         }
                         .padding(.horizontal, GridLayout.margin)

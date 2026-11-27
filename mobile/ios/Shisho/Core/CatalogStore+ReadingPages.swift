@@ -236,16 +236,16 @@ extension CatalogStore {
     }
 
     /// Folds the sessions every copy counts into counted_sessions: those the
-    /// server took in before the oldest copy of Reading Stats, and, while
-    /// the Calendar shows (calendarHolds), of the Calendar, was fetched. The
-    /// sync fetches every Calendar copy again after sending what can change
-    /// it (SyncEngine.refreshCalendar), and the device keeps few, so a copy
-    /// holds sessions back only until a sync reaches it.
-    func statsCaughtUp(calendarHolds: Bool = true) throws {
+    /// server took in before the oldest copy of Reading Stats, and of the
+    /// Calendar, was fetched. The sync fetches every Calendar copy again
+    /// after sending what can change it (SyncEngine.refreshCalendar), and
+    /// the device keeps few, so a copy holds sessions back only until a sync
+    /// reaches it.
+    func statsCaughtUp() throws {
         try pool.write { db in
             let decoder = makeShishoDecoder()
             guard let statsCutoff = try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM stats_cache") else { return }
-            let calendarCutoff = calendarHolds ? try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM calendar_cache") : nil
+            let calendarCutoff = try Double.fetchOne(db, sql: "SELECT MIN(fetched_at) FROM calendar_cache")
             let cutoff = min(statsCutoff, calendarCutoff ?? statsCutoff)
             for row in try Row.fetchAll(db, sql: "SELECT payload FROM unstated_sessions WHERE accepted_at < ?", arguments: [cutoff]) {
                 guard let session = try? decoder.decode(Shishoapp.JournalSessionPayload.self, from: row["payload"] as Data),

@@ -64,16 +64,14 @@ struct ListsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Lists"))
-                if model.offers(.lists) {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { making = true } label: {
-                            Icon(.plus, size: 20, relativeTo: nil)
-                                .foregroundStyle(Theme.foreground)
-                                .frame(minWidth: 44, minHeight: 44)
-                        }
-                        .accessibilityLabel(String(localized: "New List"))
-                        .accessibilityIdentifier("lists.new")
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { making = true } label: {
+                        Icon(.plus, size: 20, relativeTo: nil)
+                            .foregroundStyle(Theme.foreground)
+                            .frame(minWidth: 44, minHeight: 44)
                     }
+                    .accessibilityLabel(String(localized: "New List"))
+                    .accessibilityIdentifier("lists.new")
                 }
                 RootToolbar()
             }
@@ -161,10 +159,10 @@ struct ListDetailView: View {
     }
 
     private var canEditBooks: Bool {
-        model.offers(.lists) && ["owner", "editor", "manager"].contains(abilities?.permission ?? "")
+        ["owner", "editor", "manager"].contains(abilities?.permission ?? "")
     }
-    private var canRename: Bool { model.offers(.lists) && ["owner", "manager"].contains(abilities?.permission ?? "") }
-    private var canDelete: Bool { model.offers(.lists) && abilities?.permission == "owner" }
+    private var canRename: Bool { ["owner", "manager"].contains(abilities?.permission ?? "") }
+    private var canDelete: Bool { abilities?.permission == "owner" }
 
     var body: some View {
         GeometryReader { geometry in

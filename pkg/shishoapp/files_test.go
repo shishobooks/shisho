@@ -193,7 +193,6 @@ func TestShare_PreparesTheGeneratedFileAndServesRanges(t *testing.T) {
 	assert.Equal(t, "private, no-store", rec.Header().Get("Cache-Control"))
 	assert.Equal(t, "application/epub+zip", rec.Header().Get("Content-Type"))
 	assert.Contains(t, rec.Header().Get("Content-Disposition"), "attachment")
-	assert.Contains(t, rec.Header().Get(HeaderCapabilities), CapabilityShareFiles)
 
 	// A HEAD before anything was built prepares the file and knows its size.
 	rec = f.rangeCall(http.MethodHead, "/mobile/files/8/share", credential, "")
@@ -238,8 +237,8 @@ func TestShare_FallsBackToTheOriginal(t *testing.T) {
 }
 
 // A comic's or PDF's pages come as thumbnails, sized as covers are, for the
-// app's page grid before the File is downloaded (CapabilityPageImages), and
-// only from the user's Libraries.
+// app's page grid before the File is downloaded, and only from the user's
+// Libraries.
 func TestFiles_PageThumbnailsForTheGrid(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -267,7 +266,6 @@ func TestFiles_PageThumbnailsForTheGrid(t *testing.T) {
 		require.NoError(t, err, path)
 		assert.LessOrEqual(t, max(img.Width, img.Height), 256, path)
 	}
-	assert.Contains(t, f.do(call{path: "/mobile/server", credential: credential}).Header().Get(HeaderCapabilities), CapabilityPageImages)
 	// A page past the end, another user's Library, a File without pages,
 	// and no credential.
 	assert.Equal(t, http.StatusNotFound, f.do(call{path: "/mobile/files/5/pages/3?size=256", credential: credential}).Code)
