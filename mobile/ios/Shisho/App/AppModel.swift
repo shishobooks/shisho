@@ -167,6 +167,9 @@ final class AppModel {
     /// The account signed out because the server at its address is no longer
     /// the one it was made on, which the sign-in screen explains instead.
     private(set) var serverReplacedAccountID: String?
+    /// An account the server signed out while another took over, which the
+    /// tabs' notices say until dismissed or it signs in again.
+    private(set) var endedSignIn: Account?
 
     init() {
         ReaderPagePool.loadPreviewSupport()
@@ -737,6 +740,10 @@ final class AppModel {
         session = opened
         signedOutAccount = nil
         serverReplacedAccountID = nil
+        // Signed in again, or in its place on a server set up again.
+        if endedSignIn.map({ $0.id == account.id || $0.id == replaced?.id }) == true {
+            endedSignIn = nil
+        }
         addingAccount = false
         tab = .home
         // Changes that couldn't be counted are said too. Without a
@@ -823,7 +830,7 @@ final class AppModel {
             signedOutAccount = nil
             syncStatus = .idle
             // Another account still signed in takes over.
-            if let next = accounts.accounts.first(where: { !$0.signedOut && $0.id != accountID && Keychain.credential(for: $0.id) != nil }) {
+            if let next = AccountSwitching.next(after: accountID, in: accounts.accounts, hasCredential: { Keychain.credential(for: $0) != nil }) {
                 switchAccount(to: next.id)
             }
         }
@@ -899,18 +906,35 @@ final class AppModel {
     }
 
     /// The server ended the sign-in of session's account. Its data stays,
-    /// waiting for the same user to sign in again.
+    /// waiting for the same user to sign in again. Another account still
+    /// signed in takes over, as when the user signs out, with a notice
+    /// saying so; with none, the sign-in screen opens for it.
     private func handleSignedOut(_ ended: AccountSession, serverReplaced: Bool = false) {
         guard ended === session else { return }
         syncs.stop()
         guard var account = stored(ended.account.id) else { return }
         account.signedOut = true
         Keychain.removeCredential(for: account.id)
+        serverReplacedAccountID = serverReplaced ? account.id : nil
+        syncStatus = .idle
+        if let next = AccountSwitching.next(after: account.id, in: accounts.accounts, hasCredential: { Keychain.credential(for: $0) != nil }) {
+            accounts.save(account, makeCurrent: false)
+            endedSignIn = account
+            switchAccount(to: next.id)
+            return
+        }
         accounts.save(account)
         signedOutAccount = account
-        serverReplacedAccountID = serverReplaced ? account.id : nil
         session = nil
-        syncStatus = .idle
+    }
+
+    /// The accounts the sign-in screen offers to switch to instead.
+    var otherSignedInAccounts: [Account] {
+        AccountSwitching.signedIn(in: allAccounts, except: signedOutAccount?.id, hasCredential: { Keychain.credential(for: $0) != nil })
+    }
+
+    func dismissEndedSignIn() {
+        endedSignIn = nil
     }
 
     // MARK: - Syncing

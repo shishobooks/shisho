@@ -126,6 +126,16 @@
     "%@ of 5 stars" : {
 
     },
+    "%@ on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ on %2$@"
+          }
+        }
+      }
+    },
     "%@ pages per hour" : {
 
     },
@@ -1416,6 +1426,12 @@
     "Opens the player" : {
 
     },
+    "Opens this account" : {
+
+    },
+    "Or open another account" : {
+
+    },
     "Orange" : {
 
     },
@@ -2099,6 +2115,16 @@
     },
     "This device" : {
 
+    },
+    "This device was signed out of %@ on %@. Its library is still on this device; sign in again to keep syncing it." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This device was signed out of %1$@ on %2$@. Its library is still on this device; sign in again to keep syncing it."
+          }
+        }
+      }
     },
     "This device was signed out of %@ on %@. Sign in again to keep syncing. Everything on this device is still here." : {
 

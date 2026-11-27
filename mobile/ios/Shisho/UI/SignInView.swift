@@ -123,6 +123,10 @@ struct SignInView: View {
                             .foregroundStyle(Theme.mutedForeground)
                             .multilineTextAlignment(.center)
                     }
+
+                    if !addingAccount {
+                        OtherAccounts()
+                    }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 32)
@@ -242,6 +246,55 @@ struct SignInView: View {
                 failures += 1
             }
             busy = false
+        }
+    }
+}
+
+/// The accounts still signed in on this device, under the sign-in screen
+/// for an account whose sign-in ended, so the user's other libraries stay
+/// a tap away.
+private struct OtherAccounts: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let accounts = model.otherSignedInAccounts
+        if !accounts.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Or open another account")
+                    .font(.geist(.subheadline))
+                    .foregroundStyle(Theme.mutedForeground)
+                    .accessibilityAddTraits(.isHeader)
+                VStack(spacing: 0) {
+                    ForEach(Array(accounts.enumerated()), id: \.element.id) { index, account in
+                        if index > 0 { Divider().overlay(Theme.border) }
+                        Button { model.switchAccount(to: account.id) } label: {
+                            HStack(spacing: 12) {
+                                AccountAvatar(account: account, size: 32)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(account.username)
+                                        .font(.geist(.subheadline, weight: .semibold))
+                                        .foregroundStyle(Theme.foreground)
+                                    Text(account.serverURL.host() ?? account.serverURL.absoluteString)
+                                        .font(.geist(.footnote))
+                                        .foregroundStyle(Theme.mutedForeground)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Icon(.chevronRight, size: 16, relativeTo: .subheadline)
+                                    .foregroundStyle(Theme.mutedForeground)
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(minHeight: 56)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "\(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString)"))
+                        .accessibilityHint(String(localized: "Opens this account"))
+                        .accessibilityIdentifier("signin.otherAccount")
+                    }
+                }
+                .cardStyle()
+            }
         }
     }
 }

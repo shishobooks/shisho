@@ -10,10 +10,9 @@ final class CoverCacheTests: XCTestCase {
         let account = UUID().uuidString
         let unreachable = APIClient(baseURL: URL(string: "http://127.0.0.1:9")!, credential: nil)
         let cache = CoverCache(client: unreachable, accountID: account, renderKey: "1")
-        let folder = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Covers/\(account)/7", isDirectory: true)
+        let folder = CoverCache.folder(accountID: account).appendingPathComponent("7", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder.deletingLastPathComponent()) }
+        defer { AccountData(accountID: account).removeFolders() }
         let png = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 3)).pngData { context in
             UIColor.red.setFill()
             context.fill(CGRect(x: 0, y: 0, width: 2, height: 3))
@@ -24,5 +23,21 @@ final class CoverCacheTests: XCTestCase {
         XCTAssertNotNil(stand)
         let replaced = await cache.image(bookID: 7, version: "v2", size: 1024)
         XCTAssertNil(replaced)
+    }
+
+    /// Covers downloaded before a flight stay: iOS clears Caches when
+    /// storage runs low, so they're kept with the account's data, out of
+    /// iCloud backup since they can all be downloaded again.
+    func testCoversAreKeptWhereIOSDoesntClearThem() throws {
+        let account = UUID().uuidString
+        defer { AccountData(accountID: account).removeFolders() }
+        let folder = CoverCache.folder(accountID: account)
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        XCTAssertTrue(folder.path.hasPrefix(support.path), folder.path)
+        XCTAssertTrue(folder.path.hasPrefix(AccountData(accountID: account).folder.path), "removed with the account")
+
+        _ = CoverCache(client: APIClient(baseURL: URL(string: "http://127.0.0.1:9")!, credential: nil), accountID: account, renderKey: "1")
+        let values = try folder.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(values.isExcludedFromBackup, true)
     }
 }

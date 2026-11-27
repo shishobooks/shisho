@@ -14,7 +14,6 @@ struct LibraryView: View {
     /// Where the Library's heading sits in the page, which moves with the
     /// picker's wrapping, the banners above it, and the text size.
     @State private var headingTop: CGFloat = 110
-    @State private var notes: [JournalNote]?
     /// The sort saved on the web for the Library showing.
     @State private var savedSort: String?
     @State private var showingFilters = false
@@ -54,19 +53,9 @@ struct LibraryView: View {
                         }
                         .padding(.horizontal, GridLayout.margin)
                         .padding(.top, 8)
-                        SyncBanner()
+                        AppNotices()
                             .padding(.horizontal, GridLayout.margin)
-                            .padding(.top, 14)
-                        if let notice = model.replacedAccountNotice, notice.accountID == model.session?.account.id {
-                            ReplacedAccountBanner(removedChanges: notice.removedChanges) { model.dismissReplacedAccountNotice() }
-                                .padding(.horizontal, GridLayout.margin)
-                                .padding(.top, 10)
-                        }
-                        if let notes, !notes.isEmpty {
-                            JournalNotesBanner(notes: notes) { model.dismissJournalNotes() }
-                                .padding(.horizontal, GridLayout.margin)
-                                .padding(.top, 10)
-                        }
+                            .padding(.top, 4)
                         if let books {
                             sectionHeader(count: books.count)
                                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("libraryContent")).minY } action: {
@@ -116,9 +105,6 @@ struct LibraryView: View {
         }
         .tint(Theme.primary)
         .gallerySheets(showingFilters: $showingFilters, showingSort: $showingSort, sort: sort)
-        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
-            try CatalogStore.journalNotes(db)
-        }
         .observing(model.session?.store, id: BooksQuery(account: model.session?.account.id ?? "", libraryID: model.libraryID,
                                                          filter: model.filter, sort: model.sortSpec),
                    into: $books) { [libraryID, filter = model.filter, sort = model.sortSpec] db in
@@ -404,6 +390,73 @@ struct SyncBanner: View {
         .transition(.move(edge: .top).combined(with: .opacity))
         .animation(.spring(response: 0.35, dampingFraction: 0.85), value: model.syncStatus)
         .accessibilityIdentifier("sync.banner")
+    }
+}
+
+/// What the user has to know whichever tab they're on: why the device's
+/// copy can't be brought up to date (as the app or the server being too
+/// old), changes the server refused, and accounts signed out or replaced.
+/// Each tab's first screen shows it at its top.
+struct AppNotices: View {
+    @Environment(AppModel.self) private var model
+    @State private var notes: [JournalNote]?
+
+    /// Anything to say, so a screen with nothing to say keeps no gap.
+    private var showsAny: Bool {
+        let syncing = switch model.syncStatus {
+        case .idle, .offline: false
+        default: true
+        }
+        return syncing || model.endedSignIn != nil || model.replacedAccountNotice?.accountID == model.session?.account.id
+            || !(notes ?? []).isEmpty
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            SyncBanner()
+            if let ended = model.endedSignIn {
+                EndedSignInBanner(account: ended, signIn: { model.switchAccount(to: ended.id) },
+                                  dismiss: model.dismissEndedSignIn)
+            }
+            if let notice = model.replacedAccountNotice, notice.accountID == model.session?.account.id {
+                ReplacedAccountBanner(removedChanges: notice.removedChanges) { model.dismissReplacedAccountNotice() }
+            }
+            if let notes, !notes.isEmpty {
+                JournalNotesBanner(notes: notes) { model.dismissJournalNotes() }
+            }
+        }
+        .padding(.top, showsAny ? 10 : 0)
+        .observing(model.session?.store, id: model.session?.account.id ?? "", into: $notes) { db in
+            try CatalogStore.journalNotes(db)
+        }
+    }
+}
+
+/// The server ended this device's sign-in to another account, and one
+/// still signed in took over: says so, with a way to sign in again.
+struct EndedSignInBanner: View {
+    let account: Account
+    let signIn: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        NoticeCard(
+            text: String(localized: "This device was signed out of \(account.username) on \(account.serverURL.host() ?? account.serverURL.absoluteString). Its library is still on this device; sign in again to keep syncing it."),
+            icon: .userX,
+            tint: Theme.primary
+        ) {
+            HStack(spacing: 16) {
+                Button("Sign In", action: signIn)
+                    .font(.geist(.subheadline, weight: .semibold))
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("signedOut.signIn")
+                Button("Dismiss", action: dismiss)
+                    .font(.geist(.subheadline, weight: .semibold))
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("signedOut.dismiss")
+            }
+        }
+        .accessibilityIdentifier("signedOut.notice")
     }
 }
 

@@ -37,4 +37,26 @@ final class StreamCookiesTests: XCTestCase {
         storage.setCookies(client.streamCookies, for: client.streamURL(fileID: 3), mainDocumentURL: nil)
         XCTAssertEqual(storage.cookies(for: client.streamURL(fileID: 3))?.map(\.name).contains("shisho_app_credential"), true)
     }
+
+    /// The stream's cookies and every request's headers come from one list
+    /// (`APIClient.identity`), so a field added to one reaches the other.
+    func testEveryHeaderARequestCarriesHasACookieForTheStream() throws {
+        let client = APIClient(baseURL: URL(string: "https://books.example.com")!, credential: "secret-credential", instanceID: "instance-1")
+        let request = client.downloadRequest(fileID: 3)
+        let cookies = Dictionary(uniqueKeysWithValues: client.streamCookies.map { ($0.name, $0.value) })
+        XCTAssertFalse(client.identity.isEmpty)
+        for field in client.identity {
+            XCTAssertEqual(request.value(forHTTPHeaderField: field.header), field.headerValue, field.header)
+            XCTAssertEqual(cookies[field.cookie], field.cookieValue, field.cookie)
+        }
+        XCTAssertEqual(cookies["shisho_app_instance"], "instance-1", "the instance reaches the stream too")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret-credential")
+        XCTAssertEqual(cookies["shisho_app_credential"], "secret-credential")
+    }
+
+    func testAnEmptyInstanceIsntSent() throws {
+        let client = APIClient(baseURL: URL(string: "https://books.example.com")!, credential: "secret-credential")
+        XCTAssertNil(client.downloadRequest(fileID: 3).value(forHTTPHeaderField: "X-Shisho-Instance"))
+        XCTAssertFalse(client.streamCookies.contains { $0.name == "shisho_app_instance" })
+    }
 }

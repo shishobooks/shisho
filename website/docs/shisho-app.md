@@ -28,13 +28,13 @@ The app stays signed in until one of these happens:
 - The Device is deleted from **Devices**, by you or by an admin revoking it.
 - The user is deactivated.
 
-Changing your password doesn't sign the app out. A signed-out app asks you to sign in again and keeps what's on the device until you do.
+Changing your password doesn't sign the app out. A signed-out account keeps what's on the device until you sign in again. If another account in the app is still signed in, the app switches to it and says which account was signed out, with a button to sign in again; otherwise it asks you to sign in. The sign-in screen also lists your other signed-in accounts, so you can open one instead.
 
 Signing out in the app first sends changes it hasn't sent yet, such as listening done offline, when it can reach the server. Offline, it signs out at once and keeps those changes to send when you sign in again.
 
 ## Setting Up a Server Again
 
-The app tells a server apart from one set up again from scratch at the same address, such as a fresh install with a new database. An app still signed in finds out at its next sync: it sends that server nothing and asks you to sign in again. Signing in to that server again makes a new account in the app. The account the app had for the same user on the earlier server is removed with its copy of the libraries, its [downloads](#downloads), and any changes made in the app that hadn't reached that server yet, since they belong to a server that's gone. The app says how many changes were removed.
+The app tells a server apart from one set up again from scratch at the same address, such as a fresh install with a new database. An app still signed in finds out at its next sync: it sends that server nothing and asks you to sign in again, as described in [Staying Signed In](#staying-signed-in). Signing in to that server again makes a new account in the app. The account the app had for the same user on the earlier server is removed with its copy of the libraries, its [downloads](#downloads), and any changes made in the app that hadn't reached that server yet, since they belong to a server that's gone. The app says how many changes were removed.
 
 Restoring a [backup](./deployment-and-maintenance.md#restore-a-backup) taken since the app first signed in keeps the server's identity, so the app carries on as the same account and sends what it hasn't sent. A backup from a Shisho release before the app could tell servers apart has no identity yet, so an app that has synced with the server since it was upgraded treats the restored server as one set up again.
 

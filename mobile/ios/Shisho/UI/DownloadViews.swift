@@ -401,9 +401,14 @@ struct DownloadsView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         ScrollTopMarker(space: "downloads")
                             .id(ScrollTop.anchor)
-                        TabHeading(title: String(localized: "Downloads"))
-                            .padding(.top, 4)
-                            .padding(.bottom, -8)
+                        // With the heading, so they add no gap when there's
+                        // nothing to say.
+                        VStack(alignment: .leading, spacing: 0) {
+                            TabHeading(title: String(localized: "Downloads"))
+                                .padding(.top, 4)
+                            AppNotices()
+                        }
+                        .padding(.bottom, -8)
                         if let downloads {
                             summary(downloads)
                             if downloads.isEmpty {

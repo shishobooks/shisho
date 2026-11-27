@@ -53,9 +53,10 @@ struct AccountData {
         folder.appendingPathComponent("catalog.sqlite").path
     }
 
-    /// Every folder kept for the account: its database and its caches.
+    /// Every folder kept for the account: one, holding its database,
+    /// Downloads, and covers.
     var folders: [URL] {
-        [folder, CoverCache.folder(accountID: accountID)]
+        [folder]
     }
 
     // The account's settings on this device, by key.
@@ -235,5 +236,21 @@ final class AccountStore {
             Task { await Diagnostics.shared.log(.app, "couldn't save the accounts: \(Diagnostics.describe(error))") }
             return false
         }
+    }
+}
+
+/// Which account takes over when one's sign-in ends, by the user signing
+/// out or by the server ending it, so the user's other libraries stay in
+/// reach, and which the sign-in screen offers instead of signing in.
+enum AccountSwitching {
+    /// The accounts signed in on this device, other than except, in order:
+    /// not signed out, with their credential still in the Keychain.
+    static func signedIn(in accounts: [Account], except: String?, hasCredential: (String) -> Bool) -> [Account] {
+        accounts.filter { !$0.signedOut && $0.id != except && hasCredential($0.id) }
+    }
+
+    /// The account to open after ended's sign-in ends, or nil for none.
+    static func next(after ended: String, in accounts: [Account], hasCredential: (String) -> Bool) -> Account? {
+        signedIn(in: accounts, except: ended, hasCredential: hasCredential).first
     }
 }

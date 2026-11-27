@@ -19,6 +19,8 @@ struct ListsView: View {
                     TabHeading(title: String(localized: "Lists"))
                         .padding(.horizontal, GridLayout.margin)
                         .padding(.top, 4)
+                    AppNotices()
+                        .padding(.horizontal, GridLayout.margin)
                     Text("Organize your books into custom collections")
                         .font(.geist(.subheadline))
                         .foregroundStyle(Theme.mutedForeground)

@@ -1,7 +1,9 @@
 import Foundation
 import UIKit
 
-/// Covers, kept on disk as they're first seen so they show offline. Each is
+/// Covers, kept on disk as they're first seen so they show offline, in the
+/// account's folder in Application Support, which iOS never clears, unlike
+/// Caches, so ones downloaded for a trip stay. Each is
 /// keyed by its Book's cover version, so an edited cover is a new file, and
 /// each Book's covers have a folder of their own, so replacing one never
 /// lists every cover.
@@ -15,13 +17,23 @@ final class CoverCache: Sendable {
         self.client = client
         self.renderKey = renderKey
         folder = CoverCache.folder(accountID: accountID)
+        CoverCache.prepare(folder)
     }
 
     /// The folder an account's covers are kept in.
     static func folder(accountID: String) -> URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Covers", isDirectory: true)
-            .appendingPathComponent(accountID, isDirectory: true)
+        AccountData(accountID: accountID).folder.appendingPathComponent("Covers", isDirectory: true)
+    }
+
+    /// Makes the covers folder, kept out of iCloud backup as Downloads are:
+    /// every cover can be downloaded again.
+    private static func prepare(_ folder: URL) {
+        guard !FileManager.default.fileExists(atPath: folder.path) else { return }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        var folder = folder
+        try? folder.setResourceValues(values)
     }
 
     /// The cover thumbnail size, in pixels, for a view this many points

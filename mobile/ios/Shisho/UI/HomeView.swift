@@ -23,6 +23,8 @@ struct HomeView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ScrollTopMarker(space: "home")
                             .id(ScrollTop.anchor)
+                        AppNotices()
+                            .padding(.horizontal, GridLayout.margin)
                         if let current, let toRead, let reference, current.isEmpty, toRead.isEmpty, reference.isEmpty {
                             EmptyNotice(title: String(localized: "Nothing to pick up yet"),
                                         message: String(localized: "Books you're reading and Books on To Read appear here."),
