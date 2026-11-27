@@ -96,6 +96,13 @@ final class StatsFinishedTests: XCTestCase {
         XCTAssertEqual(entries.first?.endDay, "2026-08-15")
     }
 
+    func testTheCountIsOfBooksAsTheBreakdownRowsIs() throws {
+        let rereads = try store.pool.read { try CatalogStore.statsFinished($0, year: 2026, filter: .tag("Oxford")) }
+        XCTAssertEqual(StatsFinishedText.count(rereads), "1 book · 2 finishes", "one Book finished twice")
+        let once = try store.pool.read { try CatalogStore.statsFinished($0, year: 2026, filter: .genre("Comics")) }
+        XCTAssertEqual(StatsFinishedText.count(once), "1 book")
+    }
+
     func testTheTitleAndRangeReadAsTheBreakdownsDo() {
         XCTAssertEqual(StatsFinishedText.title(.genre("Mystery")), "Mystery")
         XCTAssertEqual(StatsFinishedText.title(.rating(4.5)), "4.5 stars")

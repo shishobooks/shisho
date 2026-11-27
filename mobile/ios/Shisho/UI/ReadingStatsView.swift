@@ -979,7 +979,7 @@ private struct CountList: View {
 
     private var list: some View {
         // Never less than a row's own count, so no bar overflows.
-        let total = Double(max(1, books ?? 0, rows.map(\.books).max() ?? 1))
+        let total = StatsText.BreakdownTotal(finished: books, largest: rows.map(\.books).max() ?? 0)
         return LazyVStack(alignment: .leading, spacing: 12) {
             ForEach(Array(shown.enumerated()), id: \.offset) { _, row in
                 if let route = row.opens {
@@ -1003,7 +1003,7 @@ private struct CountList: View {
         }
     }
 
-    private func rowContent(_ row: Row, total: Double, opens: Bool) -> some View {
+    private func rowContent(_ row: Row, total: StatsText.BreakdownTotal, opens: Bool) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline) {
                 Text(row.label)
@@ -1011,7 +1011,7 @@ private struct CountList: View {
                     .foregroundStyle(Theme.foreground)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                Text(verbatim: "\(Counts.books(row.books)) · \(StatsText.share(Double(row.books) / total))")
+                Text(verbatim: total.text(row.books))
                     .font(.geist(.caption))
                     .monospacedDigit()
                     .foregroundStyle(Theme.mutedForeground)
@@ -1022,14 +1022,14 @@ private struct CountList: View {
                         .accessibilityHidden(true)
                 }
             }
-            ShareBar(segments: [.init(share: Double(row.books) / total, color: StatsColors.reading)])
+            ShareBar(segments: [.init(share: total.share(row.books), color: StatsColors.reading)])
         }
         .contentShape(Rectangle())
     }
 
     /// A row as VoiceOver reads it: "Mystery, 2 books, 67%".
-    private func rowLabel(_ row: Row, total: Double) -> String {
-        "\(row.label), \(Counts.books(row.books)), \(StatsText.share(Double(row.books) / total))"
+    private func rowLabel(_ row: Row, total: StatsText.BreakdownTotal) -> String {
+        "\(row.label), \(total.text(row.books).replacingOccurrences(of: " · ", with: ", "))"
     }
 }
 
@@ -1102,6 +1102,27 @@ enum StatsText {
             parts.append(String(localized: "\(FileFacts.duration(Double(place.listeningSeconds))) listening"))
         }
         return parts.isEmpty ? FileFacts.duration(0) : parts.joined(separator: ", ")
+    }
+
+    /// What a breakdown's rows are shares of: the distinct finished books,
+    /// so 2 mysteries of 3 books fill two thirds, never less than a row's own
+    /// count, so no bar overflows. A server that doesn't say how many books
+    /// leaves only the largest row to measure against, which says nothing
+    /// as a percent, so the rows give their counts alone.
+    struct BreakdownTotal: Equatable {
+        let finished: Int?
+        let largest: Int
+
+        /// A row's share of the books, 0 to 1, for its bar.
+        func share(_ books: Int) -> Double {
+            Double(books) / Double(max(1, finished ?? 0, largest))
+        }
+
+        /// "2 books · 67%", or "2 books" without the books to measure by.
+        func text(_ books: Int) -> String {
+            guard finished != nil else { return Counts.books(books) }
+            return "\(Counts.books(books)) · \(StatsText.share(share(books)))"
+        }
     }
 
     /// A share of the whole, as "26%", or "<1%" for a sliver, as the web's.

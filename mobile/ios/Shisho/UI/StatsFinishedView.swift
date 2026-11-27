@@ -59,7 +59,7 @@ struct StatsFinishedView: View {
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.mutedForeground)
             if let entries {
-                Text(Counts.books(entries.count))
+                Text(StatsFinishedText.count(entries))
                     .font(.geist(.footnote, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(Theme.foreground)
@@ -74,6 +74,17 @@ struct StatsFinishedView: View {
 
 /// How the Finished page names its filter and range.
 enum StatsFinishedText {
+    /// How many Books the page lists, as the breakdown row counts them, each
+    /// once, with its finishes too when some Books were finished more than
+    /// once: "2 books · 3 finishes".
+    static func count(_ entries: [HistoryEntry]) -> String {
+        // A Book that isn't on the device counts by its Read-through.
+        let books = Set(entries.map { $0.book.map { "book-\($0.id)" } ?? "read-through-\($0.id)" }).count
+        guard entries.count > books else { return Counts.books(books) }
+        let finishes = String(AttributedString(localized: "^[\(entries.count) finish](inflect: true)").characters)
+        return "\(Counts.books(books)) · \(finishes)"
+    }
+
     static func title(_ filter: StatsFinishedFilter) -> String {
         switch filter {
         case .genre(let name), .tag(let name), .author(let name): name

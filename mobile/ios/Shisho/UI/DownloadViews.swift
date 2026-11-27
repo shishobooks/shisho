@@ -422,7 +422,12 @@ struct DownloadsView: View {
                     .frame(maxWidth: 680)
                     .frame(maxWidth: .infinity)
                 }
-                .onScrolledDistanceChange(space: "downloads") { scrolledBy = $0 }
+                .onScrolledDistanceChange(space: "downloads") { distance in
+                    // Only as far as the bar's logo or title changes, so the
+                    // page isn't redrawn on every frame of a long scroll.
+                    let settled = min(LogoToolbarItem.settledAfter, distance)
+                    if settled != scrolledBy { scrolledBy = settled }
+                }
                 .miniPlayerClearance()
                 .onChange(of: model.scrollToTop[.downloads]) { _, _ in
                     withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }

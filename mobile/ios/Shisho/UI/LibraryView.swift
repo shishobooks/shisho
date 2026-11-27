@@ -11,6 +11,9 @@ struct LibraryView: View {
     @State private var libraries: [LibrarySummary]?
     /// How far the content has scrolled up, which shrinks the logo.
     @State private var scrolledBy: CGFloat = 0
+    /// Where the Library's heading sits in the page, which moves with the
+    /// picker's wrapping, the banners above it, and the text size.
+    @State private var headingTop: CGFloat = 110
     @State private var notes: [JournalNote]?
     /// The sort saved on the web for the Library showing.
     @State private var savedSort: String?
@@ -66,6 +69,9 @@ struct LibraryView: View {
                         }
                         if let books {
                             sectionHeader(count: books.count)
+                                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("libraryContent")).minY } action: {
+                                    headingTop = $0
+                                }
                             if books.isEmpty, !model.filter.isEmpty {
                                 VStack(spacing: 14) {
                                     EmptyNotice(title: String(localized: "No Books match these filters"),
@@ -83,8 +89,14 @@ struct LibraryView: View {
                         }
                     }
                     .padding(.bottom, 32)
+                    .coordinateSpace(.named("libraryContent"))
                 }
-                .onScrolledDistanceChange(space: "library") { scrolledBy = $0 }
+                .onScrolledDistanceChange(space: "library") { distance in
+                    // Only as far as the bar's logo or title changes, so the
+                    // page isn't redrawn on every frame of a long scroll.
+                    let settled = min(LogoToolbarItem.settledAfter, distance)
+                    if settled != scrolledBy { scrolledBy = settled }
+                }
                 .miniPlayerClearance()
                 .onChange(of: model.scrollToTop[.library]) { _, _ in
                     withAnimation { proxy.scrollTo(ScrollTop.anchor, anchor: .top) }
@@ -95,8 +107,9 @@ struct LibraryView: View {
             .refreshable { await model.syncNow() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                // The Library's heading sits under its picker and browse links.
-                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Library"), titleAfter: 110)
+                // Once the Library's heading, under its picker and browse
+                // links, has scrolled under the bar.
+                LogoToolbarItem(scrolledBy: scrolledBy, title: String(localized: "Library"), titleAfter: headingTop + 20)
                 RootToolbar()
             }
             .routeDestinations()

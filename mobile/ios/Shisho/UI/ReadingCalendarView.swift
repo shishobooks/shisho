@@ -17,6 +17,10 @@ struct ReadingCalendarView: View {
     @State private var month: YearMonth?
     @State private var selectedDay: String?
     @State private var heatmap: CalendarShown<Shishoapp.StatsHeatmapResponse>??
+    /// The last heatmap shown, so a year picked with no copy, offline, still
+    /// offers the picker back and the month calendar, which has copies of
+    /// its own.
+    @State private var lastHeatmap: Shishoapp.StatsHeatmapResponse?
     @State private var calendar: CalendarShown<Shishoapp.StatsCalendarResponse>??
     @State private var detail: CalendarShown<CalendarDayDetail>??
     @State private var books: [Int: BookSummary]?
@@ -43,8 +47,12 @@ struct ReadingCalendarView: View {
         let deviceName = Installation.deviceName
         VStack(alignment: .leading, spacing: 0) {
             if case .some(.some(let shown)) = heatmap {
-                heatmapSection(shown.value, deviceOnly: shown.deviceOnly)
+                heatmapSection(shown.value, state: .shown(deviceOnly: shown.deviceOnly))
                 monthSection(shown.value)
+            } else if let lastHeatmap {
+                let unavailable = heatmap != nil && !waiting(for: heatmapKey)
+                heatmapSection(lastHeatmap, state: unavailable ? .unavailable : .waiting)
+                monthSection(lastHeatmap)
             } else if case .some(.none) = heatmap {
                 if waiting(for: heatmapKey) {
                     ProgressView()
@@ -60,6 +68,9 @@ struct ReadingCalendarView: View {
         }
         .observing(model.session?.store, id: heatmapYear, into: $heatmap) { [heatmapYear] db in
             try CatalogStore.calendarHeatmap(db, year: heatmapYear)
+        }
+        .onChange(of: heatmap) { _, shown in
+            if case .some(.some(let shown)) = shown { lastHeatmap = shown.value }
         }
         .observing(model.session?.store, id: shownMonth, into: $calendar) { [shownMonth] db in
             try CatalogStore.calendarMonth(db, year: shownMonth.year, month: shownMonth.month)
@@ -201,7 +212,17 @@ struct ReadingCalendarView: View {
         .accessibilityIdentifier("calendar.heatmapYear")
     }
 
-    private func heatmapSection(_ shown: Shishoapp.StatsHeatmapResponse, deviceOnly: Bool) -> some View {
+    /// What the heatmap's card holds: the heatmap, or, for a year with no
+    /// copy, a wait or a note under the picker, which stays to pick another.
+    private enum HeatmapState {
+        case shown(deviceOnly: Bool)
+        case waiting
+        case unavailable
+    }
+
+    /// The heatmap for shown, or, unless state is shown, a card in its place
+    /// with the picker beside it offering shown's years.
+    private func heatmapSection(_ shown: Shishoapp.StatsHeatmapResponse, state: HeatmapState) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center) {
                 Text("Reading by day")
@@ -210,13 +231,29 @@ struct ReadingCalendarView: View {
                 Spacer(minLength: 8)
                 heatmapPicker(shown)
             }
-            Heatmap(shown: shown, heatmapYear: heatmapYear, selectedDay: selectedDay) { day in
-                select(day, heatmap: shown)
+            switch state {
+            case .shown(let deviceOnly):
+                Heatmap(shown: shown, heatmapYear: heatmapYear, selectedDay: selectedDay) { day in
+                    select(day, heatmap: shown)
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .cardStyle(radius: Theme.radius + 2)
+                if deviceOnly { DeviceOnlyNote() }
+            case .waiting:
+                ProgressView()
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .cardStyle(radius: Theme.radius + 2)
+            case .unavailable:
+                Text("This heatmap shows once the app can reach your server.")
+                    .font(.geist(.subheadline))
+                    .foregroundStyle(Theme.mutedForeground)
+                    .multilineTextAlignment(.center)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .cardStyle(radius: Theme.radius + 2)
+                    .accessibilityIdentifier("calendar.heatmapUnavailable")
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .cardStyle(radius: Theme.radius + 2)
-            if deviceOnly { DeviceOnlyNote() }
         }
         .padding(.top, 16)
     }
@@ -1151,7 +1188,7 @@ private struct DeviceOnlyNote: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             PendingMark()
                 .accessibilityHidden(true)
-            Text("Only this device's reading shows here until the app syncs.")
+            Text("Only this device's reading sessions show here until the app syncs.")
                 .font(.geist(.caption))
                 .foregroundStyle(Theme.mutedForeground)
                 .fixedSize(horizontal: false, vertical: true)

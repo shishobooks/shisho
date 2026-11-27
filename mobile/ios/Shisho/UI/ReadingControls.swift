@@ -39,10 +39,10 @@ struct ReadingControlsState: Equatable, Sendable {
             """, arguments: [bookID]) ?? false
     }
 
-    /// The changes that set a Book's Reading Status.
+    /// The changes that set a Book's Reading Status, To Read's among them.
     private static let statusTypes: [Shishoapp.JournalEventType] = [
         .readThroughStart, .readThroughFinish, .readThroughAbandon, .readThroughPause, .readThroughResume,
-        .readThroughDelete, .referenceMark, .referenceRemove,
+        .readThroughDelete, .referenceMark, .referenceRemove, .toReadAdd, .toReadRemove,
     ]
 }
 
@@ -280,6 +280,7 @@ struct RatingControl: View {
     let set: (Int?) -> Void
 
     @State private var rating = false
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .body) private var starSize: CGFloat = 22
 
     var body: some View {
@@ -298,7 +299,9 @@ struct RatingControl: View {
             .accessibilityIdentifier("book.detail.rating")
             .sheet(isPresented: $rating) {
                 RatingSheet(title: title, initial: units, set: set)
-                    .presentationDetents([.height(330)])
+                    // Room for the stars and the steps, and all the screen
+                    // at the largest text sizes.
+                    .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.height(330), .large])
                     .presentationDragIndicator(.visible)
             }
         }
@@ -333,11 +336,28 @@ struct PreciseStars: View {
     }
 }
 
+/// The rules of the Rating sheet's stars, in quarter-star units, 1 to 20,
+/// and 0 for none.
+enum RatingRules {
+    /// The quarter star at fraction of the way across the stars: never
+    /// none, so a drag back past the first star doesn't unrate by accident.
+    static func units(at fraction: Double) -> Int {
+        max(1, min(20, Int((min(1, max(0, fraction)) * 20).rounded(.up))))
+    }
+
+    /// value moved by a quarter star at a time: below a quarter is none,
+    /// and five stars is the most.
+    static func step(_ value: Int, by: Int) -> Int {
+        let next = value + by
+        return next < 1 ? 0 : min(20, next)
+    }
+}
+
 /// Where a Rating is set in quarter stars: big stars to tap or drag across,
 /// a tick under the finger at each quarter, the number as it changes, and
 /// steps of a quarter either way. A sheet, since nothing scrolls under a
-/// drag here and the stars can be large enough for a finger. It saves once,
-/// as it closes.
+/// drag here and the stars can be large enough for a finger. Done saves it;
+/// Cancel, or swiping the sheet away, leaves the Rating as it was.
 struct RatingSheet: View {
     let title: String
     let initial: Int?
@@ -345,8 +365,9 @@ struct RatingSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var value: Int
-    @State private var cleared = false
     @ScaledMetric(relativeTo: .largeTitle) private var starSize: CGFloat = 42
+    /// The width the stars have, which caps how big each can be.
+    @State private var width: CGFloat = 0
     private let spacing: CGFloat = 6
 
     init(title: String, initial: Int?, set: @escaping (Int?) -> Void) {
@@ -356,57 +377,73 @@ struct RatingSheet: View {
         _value = State(initialValue: initial ?? 0)
     }
 
+    /// As big as the text size asks, but never wider than the sheet.
+    private var size: CGFloat {
+        guard width > 0 else { return starSize }
+        return min(starSize, (width - spacing * 4) / 5)
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 18) {
-                Text(value == 0 ? String(localized: "Not rated") : Ratings.text(value))
-                    .font(.geist(size: value == 0 ? 22 : 40, relativeTo: .largeTitle, weight: .bold))
-                    .monospacedDigit()
-                    .foregroundStyle(value == 0 ? Theme.mutedForeground : Theme.foreground)
-                    .contentTransition(.numericText(value: Double(value)))
-                    .frame(height: 48)
-                    .accessibilityHidden(true)
-                PreciseStars(units: value, size: starSize, spacing: spacing)
-                    .contentShape(Rectangle())
-                    .gesture(DragGesture(minimumDistance: 0).onChanged { pick(at: $0.location.x) })
-                    .accessibilityElement()
-                    .accessibilityLabel(String(localized: "Rating"))
-                    .accessibilityValue(value == 0 ? String(localized: "Not rated") : String(localized: "\(Ratings.text(value)) of 5 stars"))
-                    .accessibilityAdjustableAction { direction in
-                        switch direction {
-                        case .increment: step(1)
-                        case .decrement: step(-1)
-                        @unknown default: break
-                        }
-                    }
-                    .accessibilityIdentifier("rating.stars")
-                HStack(spacing: 28) {
-                    stepButton(-1, icon: .minus, label: String(localized: "A quarter star less"), identifier: "rating.less")
-                    Text("Tap or drag the stars")
-                        .font(.geist(.footnote))
-                        .foregroundStyle(Theme.mutedForeground)
+            ScrollView {
+                VStack(spacing: 18) {
+                    Text(value == 0 ? String(localized: "Not rated") : Ratings.text(value))
+                        .font(.geist(size: value == 0 ? 22 : 40, relativeTo: .largeTitle, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(value == 0 ? Theme.mutedForeground : Theme.foreground)
+                        .contentTransition(.numericText(value: Double(value)))
+                        .frame(minHeight: 48)
                         .accessibilityHidden(true)
-                    stepButton(1, icon: .plus, label: String(localized: "A quarter star more"), identifier: "rating.more")
+                    PreciseStars(units: value, size: size, spacing: spacing)
+                        .contentShape(Rectangle())
+                        .gesture(DragGesture(minimumDistance: 0).onChanged { drag in
+                            let units = RatingRules.units(at: drag.location.x / (size * 5 + spacing * 4))
+                            if units != value { value = units }
+                        })
+                        .accessibilityElement()
+                        .accessibilityLabel(String(localized: "Rating"))
+                        .accessibilityValue(value == 0 ? String(localized: "Not rated")
+                            : String(localized: "\(Ratings.text(value)) of 5 stars"))
+                        .accessibilityAdjustableAction { direction in
+                            switch direction {
+                            case .increment: value = RatingRules.step(value, by: 1)
+                            case .decrement: value = RatingRules.step(value, by: -1)
+                            @unknown default: break
+                            }
+                        }
+                        .accessibilityIdentifier("rating.stars")
+                    HStack(spacing: 28) {
+                        stepButton(-1, icon: .minus, label: String(localized: "A quarter star less"), identifier: "rating.less")
+                        Text("Tap or drag the stars")
+                            .font(.geist(.footnote))
+                            .foregroundStyle(Theme.mutedForeground)
+                            .multilineTextAlignment(.center)
+                            .accessibilityHidden(true)
+                        stepButton(1, icon: .plus, label: String(localized: "A quarter star more"), identifier: "rating.more")
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .frame(maxHeight: .infinity, alignment: .top)
+            .scrollBounceBehavior(.basedOnSize)
             .sensoryFeedback(.selection, trigger: value)
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Cancel")) {
-                        value = initial ?? 0
-                        dismiss()
-                    }
-                    .accessibilityIdentifier("rating.cancel")
+                    Button(String(localized: "Cancel")) { dismiss() }
+                        .accessibilityIdentifier("rating.cancel")
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done")) { dismiss() }
-                        .fontWeight(.semibold)
-                        .accessibilityIdentifier("rating.done")
+                    Button(String(localized: "Done")) {
+                        let chosen = value == 0 ? nil : value
+                        if chosen != initial { set(chosen) }
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                    .accessibilityIdentifier("rating.done")
                 }
                 ToolbarItem(placement: .bottomBar) {
                     if value != 0 {
@@ -416,29 +453,10 @@ struct RatingSheet: View {
                 }
             }
         }
-        .onDisappear {
-            // Once, as the sheet closes, however it closes.
-            let chosen = value == 0 ? nil : value
-            if chosen != initial { set(chosen) }
-        }
-    }
-
-    /// The quarter star under x, 1 to 20; left of the first star clears
-    /// nothing, so a drag back never unrates by accident.
-    private func pick(at x: CGFloat) {
-        let width = starSize * 5 + spacing * 4
-        let fraction = min(1, max(0, x / width))
-        let units = max(1, min(20, Int((fraction * 20).rounded(.up))))
-        if units != value { value = units }
-    }
-
-    private func step(_ by: Int) {
-        let next = value + by
-        value = next < 1 ? 0 : min(20, next)
     }
 
     private func stepButton(_ by: Int, icon: Lucide, label: String, identifier: String) -> some View {
-        Button { step(by) } label: {
+        Button { value = RatingRules.step(value, by: by) } label: {
             Icon(icon, size: 18, relativeTo: .body)
                 .foregroundStyle(Theme.foreground)
                 .frame(width: 44, height: 44)

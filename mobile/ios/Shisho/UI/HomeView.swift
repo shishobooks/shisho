@@ -33,7 +33,7 @@ struct HomeView: View {
                             ShelfHeading(title: String(localized: "Currently Reading"), count: current.count, route: .currentlyReading,
                                          identifier: "home.current")
                             Shelf(identifier: "home.current.shelf", equalHeights: true) {
-                                ForEach(current) { item in
+                                ForEach(current.prefix(20)) { item in
                                     ResumeTile(item: item, identifier: "home.current.tile", downloads: downloads?[item.book.id])
                                 }
                             }
@@ -73,7 +73,12 @@ struct HomeView: View {
                     .frame(maxWidth: 900)
                     .frame(maxWidth: .infinity)
                 }
-                .onScrolledDistanceChange(space: "home") { scrolledBy = $0 }
+                .onScrolledDistanceChange(space: "home") { distance in
+                    // Only as far as the bar's logo or title changes, so the
+                    // page isn't redrawn on every frame of a long scroll.
+                    let settled = min(LogoToolbarItem.settledAfter, distance)
+                    if settled != scrolledBy { scrolledBy = settled }
+                }
                 .miniPlayerClearance()
                 .accessibilityIdentifier("home.root")
                 .onChange(of: model.scrollToTop[.home]) { _, _ in
@@ -338,8 +343,7 @@ struct ResumeTile: View {
 }
 
 /// The resume cards in columns, for the pages Home's headings open: two
-/// across on a phone, more on an iPad, one at the largest text sizes. A
-/// Book being read is a handful at most, so they're all laid out at once.
+/// across on a phone, more on an iPad, one at the largest text sizes.
 struct ResumeGrid: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -356,16 +360,17 @@ struct ResumeGrid: View {
             : sizeClass == .regular ? max(2, Int((available + GridLayout.spacing) / 240)) : 2
         let cellWidth = ((available - GridLayout.spacing * CGFloat(columns - 1)) / CGFloat(columns)).rounded(.down)
         let rows = stride(from: 0, to: items.count, by: columns).map { Array(items[$0..<min($0 + columns, items.count)]) }
-        // A Grid rather than a lazy one, so each row is as tall as its
-        // tallest card and the cards in it match, as on Home's shelf.
-        Grid(alignment: .topLeading, horizontalSpacing: GridLayout.spacing, verticalSpacing: GridLayout.spacing) {
+        // Lazy by row, for a long list, and each row laid out at once, so
+        // its cards are as tall as its tallest, as on Home's shelf.
+        LazyVStack(alignment: .leading, spacing: GridLayout.spacing) {
             ForEach(rows, id: \.first?.id) { row in
-                GridRow {
+                HStack(alignment: .top, spacing: GridLayout.spacing) {
                     ForEach(row) { item in
                         ResumeTile(item: item, identifier: identifier, downloads: downloads?[item.book.id],
                                    width: cellWidth, remove: remove.map { remove in { remove(item) } })
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(.horizontal, GridLayout.margin)

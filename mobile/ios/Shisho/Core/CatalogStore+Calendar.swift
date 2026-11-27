@@ -19,6 +19,43 @@ enum CalendarCacheKey: Hashable, Sendable {
         case .day(let day): "day:" + day
         }
     }
+
+    /// The key whose raw is raw, or nil for one it can't be.
+    init?(raw: String) {
+        let parts = raw.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        switch parts[0] {
+        case "heatmap":
+            if parts[1] == "last" {
+                self = .heatmap(year: nil)
+            } else if let year = Int(parts[1]) {
+                self = .heatmap(year: year)
+            } else {
+                return nil
+            }
+        case "calendar":
+            let numbers = parts[1].split(separator: "-").compactMap { Int($0) }
+            guard numbers.count == 2 else { return nil }
+            self = .month(year: numbers[0], month: numbers[1])
+        case "day":
+            self = .day(parts[1])
+        default:
+            return nil
+        }
+    }
+
+    /// Whether the copy kept for this key shows day, so a change on it makes
+    /// the copy stale. The last 12 months' heatmap moves on to today as days
+    /// pass (CalendarLayering.heatmap), so it shows every day from its copy's
+    /// first, heatmapFrom, on; without that, every day.
+    func covers(_ day: String, heatmapFrom: String? = nil) -> Bool {
+        switch self {
+        case .heatmap(let year?): day.hasPrefix(String(format: "%04d-", year))
+        case .heatmap(nil): heatmapFrom.map { day >= $0 } ?? true
+        case .month(let year, let month): day.hasPrefix(String(format: "%04d-%02d-", year, month))
+        case .day(let shown): shown == day
+        }
+    }
 }
 
 /// A response of the calendar's as last fetched.
@@ -29,21 +66,109 @@ struct CalendarCopy<Value: Sendable & Equatable>: Sendable, Equatable {
 
 extension CatalogStore {
     /// Reading Stats' Calendar as the server last sent each part of it, by
-    /// CalendarCacheKey.
+    /// CalendarCacheKey, with the time zone Reading Stats said when it was
+    /// kept. And the days this device sent changes on since the copies were
+    /// last fetched again (markCalendarStale).
     static func migrateReadingCalendar(_ db: Database) throws {
         try db.create(table: "calendar_cache") { t in
             t.primaryKey("cache_key", .text)
             t.column("body", .blob).notNull()
             t.column("fetched_at", .double).notNull()
+            t.column("time_zone", .text).notNull()
+        }
+        try db.create(table: "calendar_stale") { t in
+            t.primaryKey("day", .text)
+            t.column("marked_at", .double).notNull()
         }
     }
 
-    /// Keeps a response of the calendar's, fetched at fetchedAt.
+    /// Keeps a response of the calendar's, fetched at fetchedAt, in the time
+    /// zone Reading Stats last said, which the device lays its reading over
+    /// it in.
     func saveCalendar(_ value: some Encodable & Sendable, key: CalendarCacheKey, fetchedAt: Date) throws {
         let body = try JSONEncoder().encode(value)
         try pool.write { db in
-            try db.execute(sql: "INSERT OR REPLACE INTO calendar_cache (cache_key, body, fetched_at) VALUES (?, ?, ?)",
-                           arguments: [key.raw, body, fetchedAt.timeIntervalSince1970])
+            try db.execute(sql: """
+                INSERT OR REPLACE INTO calendar_cache (cache_key, body, fetched_at, time_zone) VALUES (?, ?, ?, ?)
+                """, arguments: [key.raw, body, fetchedAt.timeIntervalSince1970, try CatalogStore.statsZone(db) ?? ""])
+        }
+    }
+
+    func deleteCalendar(_ key: CalendarCacheKey) throws {
+        try pool.write { db in
+            try db.execute(sql: "DELETE FROM calendar_cache WHERE cache_key = ?", arguments: [key.raw])
+        }
+    }
+
+    // MARK: - Keeping copies current
+
+    /// The event types that change what the calendar shows.
+    static let calendarEventTypes: Set<String> = Set([Shishoapp.JournalEventType.readingSession, .readThroughFinish,
+                                                      .readThroughAbandon, .readThroughDelete].map(\.rawValue))
+
+    /// Notes the days the changes in rows, about to be sent, fall on, so the
+    /// sync fetches again each calendar copy showing one of them once the
+    /// server has them (calendarCopiesToRefresh). It's noted before sending,
+    /// so a sync that stops after the server took them in still leaves the
+    /// days for the next one.
+    func markCalendarStale(_ rows: [JournalRow], at date: Date = Date()) throws {
+        let relevant = rows.filter { CatalogStore.calendarEventTypes.contains($0.type) }
+        guard !relevant.isEmpty else { return }
+        try pool.write { db in
+            let decoder = makeShishoDecoder()
+            let deleted = relevant.compactMap { row -> Int? in
+                guard row.type == Shishoapp.JournalEventType.readThroughDelete.rawValue else { return nil }
+                return (try? decoder.decode(Shishoapp.JournalReadThroughDeletePayload.self, from: row.payload))?.readThroughId
+            }
+            var endDays: [Int: String] = [:]
+            if !deleted.isEmpty {
+                let list = Set(deleted).map(String.init).joined(separator: ",")
+                for row in try Row.fetchAll(db, sql: """
+                    SELECT id, end_day FROM synced_read_throughs WHERE id IN (\(list)) AND end_day IS NOT NULL
+                    UNION ALL SELECT id, end_day FROM read_throughs WHERE id IN (\(list)) AND end_day IS NOT NULL
+                    """) {
+                    endDays[row["id"]] = row["end_day"]
+                }
+            }
+            for day in CalendarLayering.touchedDays(relevant, zone: try CatalogStore.calendarZone(db), endDays: endDays) {
+                try db.execute(sql: """
+                    INSERT INTO calendar_stale (day, marked_at) VALUES (?, ?)
+                    ON CONFLICT (day) DO UPDATE SET marked_at = excluded.marked_at
+                    """, arguments: [day, date.timeIntervalSince1970])
+            }
+        }
+    }
+
+    /// The calendar copies a sync fetches again: each showing a day noted by
+    /// markCalendarStale. First, when Reading Stats now say another time zone
+    /// than a copy was kept in, the copy goes, since its days are another
+    /// zone's than the device lays its reading over.
+    func calendarCopiesToRefresh() throws -> [CalendarCacheKey] {
+        try pool.write { db in
+            if let zone = try CatalogStore.statsZone(db) {
+                try db.execute(sql: "DELETE FROM calendar_cache WHERE time_zone != ?", arguments: [zone])
+            }
+            let days = try String.fetchAll(db, sql: "SELECT day FROM calendar_stale")
+            guard !days.isEmpty else { return [] }
+            let decoder = makeShishoDecoder()
+            var keys: [CalendarCacheKey] = []
+            for row in try Row.fetchAll(db, sql: "SELECT cache_key, body FROM calendar_cache ORDER BY cache_key") {
+                guard let key = CalendarCacheKey(raw: row["cache_key"]) else { continue }
+                var from: String?
+                if case .heatmap(nil) = key {
+                    from = (try? decoder.decode(Shishoapp.StatsHeatmapResponse.self, from: row["body"] as Data))?.from
+                }
+                if days.contains(where: { key.covers($0, heatmapFrom: from) }) { keys.append(key) }
+            }
+            return keys
+        }
+    }
+
+    /// Forgets the days noted before date, whose copies a sync has fetched
+    /// again or dropped.
+    func calendarRefreshed(before date: Date) throws {
+        try pool.write { db in
+            try db.execute(sql: "DELETE FROM calendar_stale WHERE marked_at < ?", arguments: [date.timeIntervalSince1970])
         }
     }
 
@@ -68,20 +193,21 @@ extension CatalogStore {
 
     // MARK: - This device's reading not synced yet
 
-    /// How long a calendar copy holds back folding the sessions it doesn't
-    /// count into counted_sessions, past the oldest copy of Reading Stats
-    /// (statsCaughtUp).
-    static let calendarHold: Double = 30 * 86400
-
     /// The time zone the server groups days in, from Reading Stats' copy,
     /// as the Overview places this device's reading; the device's own
     /// before any copy.
     static func calendarZone(_ db: Database) throws -> TimeZone {
+        try statsZone(db).flatMap(TimeZone.init(identifier:)) ?? .current
+    }
+
+    /// The time zone Reading Stats' copy names, as the server wrote it, or
+    /// nil before any copy.
+    static func statsZone(_ db: Database) throws -> String? {
         guard let body = try Data.fetchOne(db, sql: "SELECT body FROM stats_cache ORDER BY range_key LIMIT 1"),
               let stats = try? makeShishoDecoder().decode(Shishoapp.StatsResponse.self, from: body),
-              let zone = TimeZone(identifier: stats.timeZone)
-        else { return .current }
-        return zone
+              !stats.timeZone.isEmpty
+        else { return nil }
+        return stats.timeZone
     }
 
     /// This device's name as the server last said it, in Reading Stats'

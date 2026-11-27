@@ -1281,7 +1281,7 @@
     "Only for Paginated" : {
 
     },
-    "Only this device's reading shows here until the app syncs." : {
+    "Only this device's reading sessions show here until the app syncs." : {
 
     },
     "Open %@" : {
@@ -1965,6 +1965,9 @@
     "This device was signed out of your account. Sign in again." : {
 
     },
+    "This heatmap shows once the app can reach your server." : {
+
+    },
     "This is a Shisho demo server. The Shisho app doesn't connect to demo servers; sign in to your own Shisho server instead." : {
 
     },
@@ -2194,6 +2197,9 @@
 
     },
     "^[%lld file](inflect: true) narrated" : {
+
+    },
+    "^[%lld finish](inflect: true)" : {
 
     },
     "^[%lld page](inflect: true)" : {

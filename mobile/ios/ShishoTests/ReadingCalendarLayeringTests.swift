@@ -328,18 +328,33 @@ final class ReadingCalendarStoreTests: XCTestCase {
         XCTAssertEqual(shown.value.days.first?.listeningSeconds, 900, "not counted twice once the copy has it")
     }
 
-    func testAnOldCalendarCopyKeepsASessionReadingStatsAlreadyCount() throws {
-        // The month was fetched before the session synced; Reading Stats
-        // were fetched after and caught up, but the month still needs it.
+    func testAnOldCalendarCopyIsFetchedAgainBeforeReadingStatsStopLayingASessionOverIt() throws {
+        // The month was fetched before the session synced.
         let month = Shishoapp.StatsCalendarResponse(year: 2027, month: 1)
         try store.saveCalendar(month, key: .month(year: 2027, month: 1), fetchedAt: Date().addingTimeInterval(-60))
         try listen("sit-2", seconds: 600, from: start)
+        // The sync notes the session's days as it sends it.
+        try store.markCalendarStale(store.pendingJournal(capabilities: "", limit: 500))
         try answerAccepted()
+        func shownSeconds() throws -> Int? {
+            try XCTUnwrap(store.pool.read { try CatalogStore.calendarMonth($0, year: 2027, month: 1) }).value.days.first?.books.first?.seconds
+        }
+        XCTAssertEqual(try shownSeconds(), 600, "laid over the old copy until it's fetched again")
+
         let stats = try store.pool.read { try XCTUnwrap(CatalogStore.stats($0, year: nil, ownDeviceID: "me")) }.stats
         try store.saveStats(stats, year: nil, fetchedAt: Date())
+        XCTAssertEqual(try store.calendarCopiesToRefresh(), [.month(year: 2027, month: 1)])
+        // Fetched again, the month counts the session itself.
+        var fetched = month
+        fetched.books = [Shishoapp.StatsBookRef(key: "book-1", title: "Book 1", bookId: 1)]
+        fetched.days = [Shishoapp.StatsCalendarDay(day: "2027-01-15", books: [Shishoapp.StatsCalendarDayBook(key: "book-1", seconds: 600)])]
+        try store.saveCalendar(fetched, key: .month(year: 2027, month: 1), fetchedAt: Date())
+        try store.calendarRefreshed(before: Date().addingTimeInterval(1))
         try store.statsCaughtUp()
-        let shown = try XCTUnwrap(store.pool.read { try CatalogStore.calendarMonth($0, year: 2027, month: 1) })
-        XCTAssertEqual(shown.value.days.first?.books.first?.seconds, 600)
+
+        let unstated = try store.pool.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM unstated_sessions") }
+        XCTAssertEqual(unstated, 0, "the calendar holds nothing back")
+        XCTAssertEqual(try shownSeconds(), 600, "counted once")
     }
 
     func testADayNeverFetchedShowsThisDevicesReadingAndFinishes() throws {

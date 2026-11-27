@@ -574,17 +574,8 @@ struct RatingStars: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(0..<5, id: \.self) { index in
-                let fill = min(1, max(0, stars - Double(index)))
-                // As the web draws a rating: filled, half filled, or empty.
-                ZStack {
-                    Icon(fill >= 0.75 ? .starFill : .star, size: 17, relativeTo: nil)
-                    if fill >= 0.25, fill < 0.75 {
-                        Icon(.starHalfFill, size: 17, relativeTo: nil)
-                    }
-                }
-                .foregroundStyle(Theme.rating)
-            }
+            // Filled to the exact quarter, as the editable stars are.
+            PreciseStars(units: units, size: 17)
             Text(stars.formatted(.number.precision(.fractionLength(0...2))))
                 .font(.geist(.subheadline))
                 .foregroundStyle(Theme.mutedForeground)

@@ -24,7 +24,7 @@ struct BookDownloadButton: View {
                 // page isn't redrawn for other Books' transfers.
                 let phase = downloads.phase(progress: downloads.isDownloading ? model.session?.downloads.progress ?? [:] : [:])
                 if phase != .unavailable {
-                    control(phase)
+                    control(phase, stoppable: !downloads.cancellable.isEmpty)
                         .padding(.top, spacing)
                 }
             }
@@ -34,8 +34,10 @@ struct BookDownloadButton: View {
         }
     }
 
+    /// stoppable is false while only a replaced File's new copy is on its
+    /// way: stopping it would leave the old copy, so there's nothing to stop.
     @ViewBuilder
-    private func control(_ phase: BookDownloads.Phase) -> some View {
+    private func control(_ phase: BookDownloads.Phase, stoppable: Bool) -> some View {
         switch phase {
         case .unavailable:
             EmptyView()
@@ -60,7 +62,8 @@ struct BookDownloadButton: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(SmallOutlineStyle())
-            .accessibilityLabel(String(localized: "Stop downloading this Book"))
+            .allowsHitTesting(stoppable)
+            .accessibilityLabel(stoppable ? String(localized: "Stop downloading this Book") : String(localized: "Downloading"))
             .accessibilityValue(fraction.map { $0.formatted(.percent.precision(.fractionLength(0))) } ?? String(localized: "Downloading"))
             .accessibilityIdentifier("book.download")
             // On the button, so where iOS shows it as a popover, it points
@@ -128,7 +131,9 @@ struct BookDownloadMenu: View {
     }
 
     var body: some View {
-        let downloading = downloads?.isDownloading == true
+        // Not while only a replaced File's new copy is on its way, which
+        // Cancel would leave going.
+        let downloading = downloads.map { !$0.cancellable.isEmpty } ?? false
         if downloading {
             Button { model.session?.downloads.cancelBook(book.id) } label: {
                 Label("Cancel Download", menuIcon: .x)
@@ -178,10 +183,19 @@ struct FileDownloadMenu: View {
                 .accessibilityIdentifier("file.menu.download.\(fileID)")
             }
         case .waiting, .running:
-            Button { downloads?.remove([fileID]) } label: {
-                Label("Cancel Download", menuIcon: .x)
+            // A replaced File's new copy comes with its old one still here:
+            // stopping it means removing both, so say so.
+            if row?.replacing == true {
+                Button(role: .destructive) { downloads?.remove([fileID]) } label: {
+                    Label("Remove Download", menuIcon: .trash)
+                }
+                .accessibilityIdentifier("file.menu.removeDownload.\(fileID)")
+            } else {
+                Button { downloads?.remove([fileID]) } label: {
+                    Label("Cancel Download", menuIcon: .x)
+                }
+                .accessibilityIdentifier("file.menu.cancelDownload.\(fileID)")
             }
-            .accessibilityIdentifier("file.menu.cancelDownload.\(fileID)")
         case .downloaded:
             Button(role: .destructive) { downloads?.remove([fileID]) } label: {
                 Label("Remove Download", menuIcon: .trash)

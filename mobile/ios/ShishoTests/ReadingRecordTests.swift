@@ -1,5 +1,6 @@
 import GRDB
 import ShishoAPI
+import UIKit
 import XCTest
 @testable import Shisho
 
@@ -145,6 +146,10 @@ final class ReadingRecordTests: XCTestCase {
         XCTAssertTrue(try pending(2), "Mark as Reference, with no Read-through left to mark")
         try answer(.accepted)
         XCTAssertTrue(try pending(2), "until the feed brings it back")
+
+        XCTAssertFalse(try pending(3))
+        try store.record(.addToRead(book: 3), at: now)
+        XCTAssertTrue(try pending(3), "To Read is a status too")
     }
 
     func testAReadThroughStartedByReadingKeepsItsIDSaveToSave() throws {
@@ -389,6 +394,46 @@ final class ReadingWordingTests: XCTestCase {
         XCTAssertEqual(ChartTicks.roomy(1), [0, 1, 2], "a step more when the most is exactly the top tick")
         XCTAssertEqual(ChartTicks.roomy(5), [0, 2, 4, 6])
         XCTAssertEqual(ChartTicks.duration(4 * 3600, roomy: true).ticks, [0, 1, 2, 3, 4, 5])
+    }
+
+    func testOnlyADockedKeyboardOverTheTabBarCounts() {
+        let screen = CGRect(x: 0, y: 0, width: 402, height: 874)
+        func info(_ frame: CGRect, local: Bool = true) -> [AnyHashable: Any] {
+            [UIResponder.keyboardFrameEndUserInfoKey: NSValue(cgRect: frame), UIResponder.keyboardIsLocalUserInfoKey: local]
+        }
+        let docked = CGRect(x: 0, y: 538, width: 402, height: 336)
+        XCTAssertTrue(KeyboardRules.coversTabBar(info(docked), screen: screen, tabBar: 53))
+        XCTAssertFalse(KeyboardRules.coversTabBar(info(docked, local: false), screen: screen, tabBar: 53), "another app's")
+        XCTAssertFalse(KeyboardRules.coversTabBar(info(CGRect(x: 0, y: 830, width: 402, height: 44)), screen: screen, tabBar: 53),
+                       "a hardware keyboard's bar of shortcuts")
+        XCTAssertFalse(KeyboardRules.coversTabBar(info(CGRect(x: 40, y: 400, width: 320, height: 260)), screen: screen, tabBar: 53),
+                       "a floating keyboard")
+        XCTAssertFalse(KeyboardRules.coversTabBar(info(CGRect(x: 0, y: 874, width: 402, height: 336)), screen: screen, tabBar: 53),
+                       "off the screen, going away")
+    }
+
+    func testTheRatingSheetsStarsSetQuarterStars() {
+        XCTAssertEqual(RatingRules.units(at: 0), 1, "the start of the stars is a quarter star, never none")
+        XCTAssertEqual(RatingRules.units(at: -0.2), 1, "nor is a drag back past them")
+        XCTAssertEqual(RatingRules.units(at: 0.21), 5, "into the second star")
+        XCTAssertEqual(RatingRules.units(at: 1.3), 20)
+        XCTAssertEqual(RatingRules.step(0, by: 1), 1)
+        XCTAssertEqual(RatingRules.step(1, by: -1), 0, "below a quarter is none")
+        XCTAssertEqual(RatingRules.step(0, by: -1), 0)
+        XCTAssertEqual(RatingRules.step(20, by: 1), 20, "five stars is the most")
+    }
+
+    func testABreakdownRowIsAShareOfTheBooksFinished() {
+        let three = StatsText.BreakdownTotal(finished: 3, largest: 2)
+        XCTAssertEqual(three.text(2), "2 books · 67%", "2 mysteries of 3 books")
+        XCTAssertEqual(three.text(1), "1 book · 33%")
+        XCTAssertEqual(three.share(2), 2.0 / 3)
+        XCTAssertEqual(StatsText.BreakdownTotal(finished: 2, largest: 5).share(5), 1, "never past a whole")
+        let older = StatsText.BreakdownTotal(finished: nil, largest: 4)
+        XCTAssertEqual(older.text(2), "2 books", "no percent without the books to measure by")
+        XCTAssertEqual(older.share(2), 0.5, "the bar against the largest row, as before")
+        XCTAssertEqual(StatsText.share(0.004), "<1%")
+        XCTAssertEqual(StatsText.share(0.256), "26%")
     }
 
     func testRereadsAreCountedInWords() {

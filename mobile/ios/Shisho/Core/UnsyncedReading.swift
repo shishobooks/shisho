@@ -4,7 +4,8 @@ import ShishoAPI
 
 /// One snapshot of a sitting's Reading Session made on this device: waiting
 /// in the journal, or taken in by the server and kept in unstated_sessions
-/// until every copy of Reading Stats and the calendar counts it.
+/// until every copy of Reading Stats counts it. The calendar's copies count
+/// it by then too: the sync fetches again each one showing its days.
 struct SessionSnapshot: Equatable, Sendable {
     let eventID: String
     let payload: Shishoapp.JournalSessionPayload
@@ -73,7 +74,10 @@ enum UnsyncedReading {
         var parts: [(day: String, seconds: Double)] = []
         var current = start
         while current < end {
-            var next = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: current)) ?? end
+            // The day's own end, not a day after its start: a day that
+            // begins late, at 01:00 where clocks skip midnight, still ends at
+            // the next midnight.
+            var next = calendar.dateInterval(of: .day, for: current)?.end ?? end
             if next <= current { next = current.addingTimeInterval(3600) }
             if next > end { next = end }
             parts.append((day(current), total * next.timeIntervalSince(current) / span))

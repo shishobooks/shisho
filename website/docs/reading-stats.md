@@ -52,6 +52,8 @@ A kind shows a pace once its sessions can be judged and you have ten minutes of 
 - **Ratings**: how many of the books you finished have each rating.
 - **Where you read**: reading time in the **Shisho web reader**, listening time in the **Shisho web player**, and time on each of your devices, by name. Time from a device you've since removed, or recorded before Shisho kept track of which device it came from, shows as **Kobo** or **KOReader**, or **Shisho app reader** and **Shisho app player** for the Shisho app. Each place has a bar for its share of all your time, split into reading and listening.
 
+Each row of **Genres**, **Tags**, **Authors**, **Kind**, and **Ratings** has a bar and a percent for its share of the books you finished. A book can count under several genres, tags, or authors, so those shares can add up to more than the whole.
+
 Each breakdown shows its first few rows. **Show all** lists every one in a scrolling list with a search box, so even a library with hundreds of tags stays easy to browse.
 
 Select a row in **Genres**, **Tags**, **Authors**, **Kind**, or **Ratings** to list only those books under [Finished](#finished), such as the fantasy you read this year. Rows from different breakdowns combine, so a genre and a rating list the books that match both. Select the row again, or remove its chip above the list, to clear it.

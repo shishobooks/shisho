@@ -40,17 +40,38 @@ struct MainTabs: View {
         // screens still make room for the keyboard themselves.
         .ignoresSafeArea(.keyboard)
         .tint(Theme.primary)
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.25)) { model.keyboardShowing = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillChangeFrameNotification)) { note in
+            // The screen the keyboard is on, which the notification names.
+            let showing = KeyboardRules.coversTabBar(note.userInfo, screen: (note.object as? UIScreen)?.bounds,
+                                                     tabBar: AppTabBar.height)
+            guard showing != model.keyboardShowing else { return }
+            withAnimation(.easeOut(duration: 0.25)) { model.keyboardShowing = showing }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             withAnimation(.easeOut(duration: 0.25)) { model.keyboardShowing = false }
         }
+        // Gone with the tabs, as on signing out while typing.
+        .onDisappear { model.keyboardShowing = false }
         .sheet(isPresented: Binding(get: { model.showingAccount }, set: { model.showingAccount = $0 })) {
             AccountSheet()
         }
     }
 
+}
+
+/// When a keyboard counts as up for the mini player: this app's own, docked
+/// at the bottom of the screen, and tall enough to cover the tab bar. A
+/// hardware keyboard's bar of shortcuts, a floating or split one, and
+/// another app's beside this one leave the tab bar showing.
+enum KeyboardRules {
+    static func coversTabBar(_ info: [AnyHashable: Any]?, screen: CGRect?, tabBar: CGFloat) -> Bool {
+        guard let frame = (info?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
+              info?[UIResponder.keyboardIsLocalUserInfoKey] as? Bool ?? true, !frame.isEmpty
+        else { return false }
+        guard let screen else { return frame.height > tabBar + 1 }
+        let docked = frame.maxY >= screen.maxY - 1 && frame.width >= screen.width - 1
+        return docked && screen.maxY - max(frame.minY, screen.minY) > tabBar + 1
+    }
 }
 
 /// The tab bar of the prototype's native structure (variant E): across the
@@ -209,8 +230,6 @@ private struct TabPressStyle: ButtonStyle {
     }
 }
 
-/// The top right of each tab's first screen, as the prototype has it:
-/// search, which opens on top of the tab, and the account.
 /// The logo at the top left of a tab's first screen, as the web's top bar
 /// has it. On Home it shrinks a little as the page scrolls; on the other
 /// tabs the tab's name takes its place once the page's own heading has
@@ -221,6 +240,9 @@ struct LogoToolbarItem: ToolbarContent {
     var title: String?
     /// How far the page scrolls before its heading is under the bar.
     var titleAfter: CGFloat = 40
+
+    /// Past this, scrolling further changes nothing in the bar.
+    static let settledAfter: CGFloat = 400
 
     private var showsTitle: Bool { title != nil && scrolledBy > titleAfter }
 
@@ -281,6 +303,8 @@ struct TabHeading: View {
     }
 }
 
+/// The top right of each tab's first screen, as the prototype has it:
+/// search, which opens on top of the tab, and the account.
 struct RootToolbar: ToolbarContent {
     @Environment(AppModel.self) private var model
     /// The Downloads tab's: its settings, rarely changed, behind a gear.
