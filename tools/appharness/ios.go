@@ -230,10 +230,12 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	})
-	// The server comes back on the same address and seeded data. A flow that
-	// needs the server calls it first, in case an earlier flow left it
-	// offline or on a fresh database.
+	// The server comes back on the same address and seeded data, accepting
+	// its own range of app protocols. A flow that needs the server calls it
+	// first, in case an earlier flow left it offline, on a fresh database,
+	// or refusing the app.
 	mux.HandleFunc("POST /online", func(w http.ResponseWriter, r *http.Request) {
+		srv.ownAppProtocols()
 		if err := srv.seededDatabase(r.Context()); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -241,6 +243,21 @@ func startControl(ctx context.Context, srv *server) (*control, error) {
 		mu.Lock()
 		onlineAt = time.Now()
 		mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	})
+	// The server restarts accepting only the app protocols in ?range=, such
+	// as 2-2 to refuse the app as too old, or 0-0 to refuse it as too new
+	// for the server. POST /online puts its own range back.
+	mux.HandleFunc("POST /app-protocols", func(w http.ResponseWriter, r *http.Request) {
+		protocols := r.URL.Query().Get("range")
+		if protocols == "" {
+			http.Error(w, "range must be MIN-MAX, such as 2-2", http.StatusBadRequest)
+			return
+		}
+		if err := srv.acceptAppProtocols(r.Context(), protocols); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	})
 	// A server set up again from scratch at the same address: an empty

@@ -1,0 +1,26 @@
+# Shows the Library tab's first screen: a tap on the tab shows it, and a
+# tap while it shows goes back to its first screen. Not a flow of its own.
+# TEMPORARY: only reading_record_offline.yaml uses it, to see the sync
+# banner while that shows on the Library tab alone; delete it with those
+# steps once the banner shows above the tabs.
+appId: ${APP_ID}
+---
+- evalScript: ${output.libraryRoot = false}
+- repeat:
+    while:
+      true: ${!output.libraryRoot}
+    times: 4
+    commands:
+      - tapOn:
+          id: tab.library
+      - extendedWaitUntil:
+          visible:
+            id: library.grid
+          timeout: 3000
+          optional: true
+      - runFlow:
+          when:
+            visible:
+              id: library.grid
+          commands:
+            - evalScript: ${output.libraryRoot = true}

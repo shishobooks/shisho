@@ -1,0 +1,31 @@
+# Pulls the screen down to refresh it until ${TEXT}, a pattern, shows. A
+# stall can drop the swipe, and nothing else may sync meanwhile, so it
+# swipes again, a few times at most. The loop ends on a flag, as
+# pause_player.yaml's does, since a while on notVisible spends seconds
+# making sure. Not a flow of its own.
+appId: ${APP_ID}
+---
+- evalScript: ${output.refreshed = false}
+- repeat:
+    while:
+      true: ${!output.refreshed}
+    times: 3
+    commands:
+      - swipe:
+          start: 50%, 30%
+          end: 50%, 80%
+      - extendedWaitUntil:
+          visible:
+            text: ${TEXT}
+          timeout: 15000
+          optional: true
+      - runFlow:
+          when:
+            visible:
+              text: ${TEXT}
+          commands:
+            - evalScript: ${output.refreshed = true}
+- extendedWaitUntil:
+    visible:
+      text: ${TEXT}
+    timeout: 30000

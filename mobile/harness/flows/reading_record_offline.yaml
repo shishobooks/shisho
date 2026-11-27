@@ -1,6 +1,9 @@
-# With the server offline, mark a Book read, queue two Books on To Read and
-# move the second to the top, and make a List with a Book in it. Once the
-# server is back, it has each as it was left (#918).
+# With the server offline, mark a Book read, queue two Books on To Read, and
+# make a List with a Book in it. The server comes back refusing the app's
+# protocol, first as too new for the app and then as too old for it: the
+# banner says which, and the app keeps working, moving the second Book to
+# the top of To Read meanwhile (#906). Once the server accepts the app
+# again, it has each change as it was left (#918).
 appId: ${APP_ID}
 name: Change the reading record offline, then sync
 ---
@@ -80,9 +83,31 @@ name: Change the reading record offline, then sync
 - tapOn:
     id: addToList.done
 
-# The second Book queued moves to the top.
+# The server is back but too new for the app, and a refresh on Home says
+# so.
+- runScript:
+    file: scripts/accept_app_protocols.js
+    env:
+      CONTROL: ${CONTROL}
+      RANGE: 2-2
 - tapOn:
     id: tab.home
+# TEMPORARY: the banner shows only on the Library tab until it moves above
+# the tabs, app-wide; then remove each step marked TEMPORARY, and
+# subflows/library_root.yaml.
+- runFlow: subflows/library_root.yaml # TEMPORARY
+- runFlow:
+    file: subflows/refresh_until.yaml
+    env:
+      TEXT: ".*too old for this server.*"
+# The card holds the text, so the two are found apart.
+- assertVisible:
+    id: sync.banner
+- tapOn: # TEMPORARY
+    id: tab.home
+    retryTapIfNoChange: true
+
+# The second Book queued moves to the top while the server refuses the app.
 - tapOn:
     id: home.toRead.header
 - extendedWaitUntil:
@@ -102,7 +127,25 @@ name: Change the reading record offline, then sync
       text: "1.*Harness Webtoon.*"
     timeout: 30000
 
-# Back online, a refresh syncs; the script polls the server until it lands.
+# A server too old for the app refuses it the other way.
+- runScript:
+    file: scripts/accept_app_protocols.js
+    env:
+      CONTROL: ${CONTROL}
+      RANGE: 0-0
+- runFlow: subflows/library_root.yaml # TEMPORARY
+- runFlow:
+    file: subflows/refresh_until.yaml
+    env:
+      TEXT: ".*too old for this version of the app.*"
+- assertVisible:
+    id: sync.banner
+- tapOn: # TEMPORARY
+    id: tab.home
+    retryTapIfNoChange: true
+
+# Accepted again, a refresh syncs; the script polls the server until it
+# lands.
 - runScript:
     file: scripts/go_online.js
     env:
@@ -121,3 +164,9 @@ name: Change the reading record offline, then sync
 - assertTrue:
     condition: ${output.serverCheck == "ok"}
     label: What changed offline reached the server as it was left
+# The banner goes once a sync goes through.
+- runFlow: subflows/library_root.yaml # TEMPORARY
+- extendedWaitUntil:
+    notVisible:
+      id: sync.banner
+    timeout: 30000

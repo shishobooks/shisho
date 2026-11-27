@@ -163,4 +163,19 @@ final class BookDownloadsStoreTests: XCTestCase {
         XCTAssertTrue(books[1]?.isDownloading == true)
         XCTAssertEqual(books[3]?.phase(progress: [:]), .downloaded(files: 1, bytes: 3000))
     }
+
+    func testTheGridLeavesOutFileTypesItDoesntKnow() throws {
+        try store.queueDownloads([20])
+        let books = try store.pool.read(CatalogStore.booksDownloads)
+        XCTAssertEqual(books[2]?.files.map(\.fileID), [20], "the File of a type this version doesn't know isn't counted")
+        XCTAssertEqual(books[2]?.phase(progress: [:]), .downloading(nil))
+    }
+
+    func testABookOfOnlyFileTypesItDoesntKnowHasNothingToDownload() throws {
+        try store.apply(page(#"{"entries":[\#(book(4, files: [(40, "cbr", "main"), (41, "djvu", "supplement")]))],"cursor":4}"#))
+        let book = try store.pool.read { try CatalogStore.bookDownloads($0, bookID: 4) }
+        XCTAssertEqual(book.files, [])
+        XCTAssertEqual(book.phase(progress: [:]), .unavailable, "its Download button shows nothing")
+        XCTAssertEqual(try store.queueDownloads([40, 41]), [])
+    }
 }

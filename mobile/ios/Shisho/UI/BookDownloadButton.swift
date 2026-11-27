@@ -126,7 +126,7 @@ struct BookDownloadMenu: View {
     /// A Book with no Downloads at all can download when it has a File of a
     /// type this version knows.
     private var canDownload: Bool {
-        guard let downloads else { return book.fileTypes.contains(where: FileTypes.isKnown) }
+        guard let downloads else { return FileSupport.canDownloadBook(fileTypes: book.fileTypes) }
         return !downloads.missing.isEmpty
     }
 
@@ -168,18 +168,18 @@ extension View {
 struct FileDownloadMenu: View {
     @Environment(AppModel.self) private var model
     let fileID: Int
-    let supported: Bool
+    let support: FileSupport
     let row: DownloadRow?
 
     var body: some View {
         let downloads = model.session?.downloads
         switch downloads?.status(row) ?? .notDownloaded {
         case .notDownloaded, .failed:
-            if supported {
+            if support.isSupported {
                 Button { downloads?.download([fileID]) } label: {
                     Label("Download", menuIcon: .download)
                 }
-                .disabled(model.connection != .online)
+                .disabled(!support.canDownload(online: model.connection == .online))
                 .accessibilityIdentifier("file.menu.download.\(fileID)")
             }
         case .waiting, .running:

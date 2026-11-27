@@ -60,7 +60,7 @@ struct DownloadControl: View {
     @Environment(AppModel.self) private var model
     let fileID: Int
     let label: String
-    let supported: Bool
+    let support: FileSupport
     let row: DownloadRow?
 
     private var status: DownloadStatus {
@@ -73,14 +73,14 @@ struct DownloadControl: View {
             case .notDownloaded, .failed:
                 Button { model.session?.downloads.download([fileID]) } label: {
                     Icon(.download, size: 18, relativeTo: nil)
-                        .foregroundStyle(supported ? Theme.primary : Theme.mutedForeground)
-                        .controlCircle(tinted: supported)
+                        .foregroundStyle(support.isSupported ? Theme.primary : Theme.mutedForeground)
+                        .controlCircle(tinted: support.isSupported)
                 }
-                .disabled(!supported)
-                .accessibilityLabel(supported ? String(localized: "Download \(label)") : String(localized: "Download \(label), not supported in this version of the app"))
+                .disabled(!support.isSupported)
+                .accessibilityLabel(support.downloadLabel(label))
                 .accessibilityValue(DownloadWords.status(status) ?? "")
                 // Downloading needs the server, as listening and reading do.
-                .modifier(NeedsConnection(available: !supported || model.connection == .online))
+                .modifier(NeedsConnection(available: !support.needsConnection(online: model.connection == .online)))
             case .waiting, .running:
                 let ring = DownloadRing(fraction: { if case .running(let fraction) = status { return fraction } else { return nil } }())
                     .controlCircle(tinted: true)
