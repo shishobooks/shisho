@@ -92,10 +92,6 @@ name: Change the reading record offline, then sync
       RANGE: 2-2
 - tapOn:
     id: tab.home
-# TEMPORARY: the banner shows only on the Library tab until it moves above
-# the tabs, app-wide; then remove each step marked TEMPORARY, and
-# subflows/library_root.yaml.
-- runFlow: subflows/library_root.yaml # TEMPORARY
 - runFlow:
     file: subflows/refresh_until.yaml
     env:
@@ -103,9 +99,6 @@ name: Change the reading record offline, then sync
 # The card holds the text, so the two are found apart.
 - assertVisible:
     id: sync.banner
-- tapOn: # TEMPORARY
-    id: tab.home
-    retryTapIfNoChange: true
 
 # The second Book queued moves to the top while the server refuses the app.
 - tapOn:
@@ -133,16 +126,21 @@ name: Change the reading record offline, then sync
     env:
       CONTROL: ${CONTROL}
       RANGE: 0-0
-- runFlow: subflows/library_root.yaml # TEMPORARY
+# Back to Home's first screen, where the notices show: a tap on the tab
+# showing goes back to it.
+- tapOn:
+    id: tab.home
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: home.toRead.header
+    timeout: 30000
 - runFlow:
     file: subflows/refresh_until.yaml
     env:
       TEXT: ".*too old for this version of the app.*"
 - assertVisible:
     id: sync.banner
-- tapOn: # TEMPORARY
-    id: tab.home
-    retryTapIfNoChange: true
 
 # Accepted again, a refresh syncs; the script polls the server until it
 # lands.
@@ -165,7 +163,6 @@ name: Change the reading record offline, then sync
     condition: ${output.serverCheck == "ok"}
     label: What changed offline reached the server as it was left
 # The banner goes once a sync goes through.
-- runFlow: subflows/library_root.yaml # TEMPORARY
 - extendedWaitUntil:
     notVisible:
       id: sync.banner
