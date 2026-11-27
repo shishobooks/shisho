@@ -12,3 +12,5 @@ X.permissions.test.tsx  # app/AGENTS.md: placeholder file name
 ios/ShishoAPI/Sources/ShishoAPI/Generated/  # mobile/AGENTS.md: gitignored output of mise tygo
 android/api/src/main/kotlin/generated/  # mobile/AGENTS.md: gitignored output of mise tygo
 performAccessibilityAudit  # mobile/AGENTS.md: XCTest API for a throwaway audit target
+com.apple.SwiftUI.AsyncRenderer  # mobile/AGENTS.md: SwiftUI thread name in crash reports
+ForEachState.item(at:offset:)  # mobile/AGENTS.md: SwiftUI frame in crash reports
