@@ -1,16 +1,16 @@
 import Foundation
 
 /// Downloading the top of To Read: the first few Books on it download, so
-/// what's next is on the device before it's needed. A Book downloads once
-/// each time it comes into the top: one whose Download the user removed
-/// isn't downloaded again while it stays on To Read, and nothing is removed
-/// when a Book moves down or the count goes down.
+/// what's next is on the device before it's needed. A Book downloads each
+/// time it comes into the top: one whose Download the user removed isn't
+/// downloaded again while it stays there, and nothing is removed when a
+/// Book moves down or the count goes down.
 enum ToReadDownloads {
     struct Plan: Equatable {
         /// The Books to download now, in their order on To Read.
         let download: [Int]
-        /// The Books downloaded since they came into the top and still on
-        /// To Read, to remember for next time.
+        /// The Books in the top now, downloaded since they came into it, to
+        /// remember for next time.
         let handled: Set<Int>
     }
 
@@ -19,9 +19,8 @@ enum ToReadDownloads {
     static func plan(toRead: [Int], count: Int, handled: Set<Int>) -> Plan {
         guard count > 0 else { return Plan(download: [], handled: []) }
         let top = toRead.prefix(count)
-        // A Book that left To Read is forgotten, so it downloads again if
-        // it's put back on.
-        let still = handled.intersection(toRead)
-        return Plan(download: top.filter { !still.contains($0) }, handled: still.union(top))
+        // A Book that left the top is forgotten, so it downloads again when
+        // it comes back.
+        return Plan(download: top.filter { !handled.contains($0) }, handled: Set(top))
     }
 }

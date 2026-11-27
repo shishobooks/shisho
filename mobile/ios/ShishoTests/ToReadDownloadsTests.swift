@@ -16,23 +16,32 @@ final class ToReadDownloadsTests: XCTestCase {
         XCTAssertEqual(plan.handled, [], "turning it on again downloads the top as it is then")
     }
 
-    func testABookDownloadedOnceIsntDownloadedAgain() {
-        // The user removed 5's Download: it stays removed while it's on To Read.
+    func testARemovedDownloadStaysRemovedWhileTheBookStaysInTheTop() {
+        // The user removed 5's Download.
         let plan = ToReadDownloads.plan(toRead: [5, 3, 9], count: 2, handled: [5, 3])
         XCTAssertEqual(plan.download, [])
+    }
+
+    func testABookComingBackIntoTheTopDownloadsAgain() {
+        // 3 moved down out of the top, and its Download was removed there.
+        let down = ToReadDownloads.plan(toRead: [5, 9, 3], count: 2, handled: [5, 3])
+        XCTAssertEqual(down.download, [9])
+        XCTAssertEqual(down.handled, [5, 9], "3 is forgotten once it leaves the top")
+        let back = ToReadDownloads.plan(toRead: [3, 5, 9], count: 2, handled: down.handled)
+        XCTAssertEqual(back.download, [3])
     }
 
     func testABookMovingIntoTheTopDownloads() {
         let plan = ToReadDownloads.plan(toRead: [9, 5, 3], count: 2, handled: [5, 3])
         XCTAssertEqual(plan.download, [9])
-        XCTAssertEqual(plan.handled, [9, 5, 3], "3 moved down but is still on To Read, so it isn't downloaded again if it comes back up")
+        XCTAssertEqual(plan.handled, [9, 5])
     }
 
     func testABookLeavingToReadIsForgotten() {
         // Starting 5 took it off To Read; 9 moves up into the top two.
         let plan = ToReadDownloads.plan(toRead: [3, 9], count: 2, handled: [5, 3])
         XCTAssertEqual(plan.download, [9])
-        XCTAssertEqual(plan.handled, [3, 9], "5 downloads again if it's put back on To Read")
+        XCTAssertEqual(plan.handled, [3, 9], "5 downloads again if it's put back in the top")
     }
 
     func testRaisingTheCountDownloadsTheNextBooks() {
@@ -41,8 +50,9 @@ final class ToReadDownloadsTests: XCTestCase {
     }
 
     func testLoweringTheCountKeepsWhatsDownloaded() {
+        // Nothing is removed: the plan only ever downloads.
         let plan = ToReadDownloads.plan(toRead: [5, 3, 9], count: 1, handled: [5, 3])
         XCTAssertEqual(plan.download, [])
-        XCTAssertEqual(plan.handled, [5, 3], "nothing is removed, and lowering then raising it doesn't download 3 again")
+        XCTAssertEqual(plan.handled, [5])
     }
 }
